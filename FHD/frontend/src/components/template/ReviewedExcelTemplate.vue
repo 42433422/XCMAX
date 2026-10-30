@@ -8,7 +8,7 @@ type Proposal = { version: string; parent_version: string | null; candidates: Ca
 type LayoutCell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 type Layout = { sheet: string; widths: number[]; rows: { height: number; cells: LayoutCell[] }[]; truncated: boolean }
 type Review = { review_id: string; sha256: string; cells: Cell[]; sheets: string[]; model: string; proposal: Proposal; versions?: Proposal[]; layout?: Layout[]; layout_truncated?: boolean; selected_region?: { print_area_mode?: string; source_print_areas?: { sheet: string; value: string }[]; derived_print_area?: string | null } | null }
-type ClassificationRegion = { value_extent?: string | null; suggested_labels?: string[]; context_warning?: string; reason?: string; continuation_context?: { parent_range: string; parent_header_row: number; header_row: number; matched_columns: number[] } | null; range: string; original_range?: string; labels: string[]; label_source?: string; range_source?: string; modified?: boolean; checked_cells: number; parent_heading: string; dependency_status: string; needs_confirmation: boolean; header_cells: { cell: string; value: string }[]; merged_ranges: string[]; dependencies?: { sheet: string; cell: string }[]; possible_shared_context: { cell: string; kind: string }[]; evidence: { label: string; cell: string; matched: string }[] }
+type ClassificationRegion = { splitDraft?: string; value_extent?: string | null; suggested_labels?: string[]; context_warning?: string; reason?: string; continuation_context?: { parent_range: string; parent_header_row: number; header_row: number; matched_columns: number[] } | null; range: string; original_range?: string; labels: string[]; label_source?: string; range_source?: string; modified?: boolean; checked_cells: number; parent_heading: string; dependency_status: string; needs_confirmation: boolean; header_cells: { cell: string; value: string }[]; merged_ranges: string[]; dependencies?: { sheet: string; cell: string }[]; possible_shared_context: { cell: string; kind: string }[]; evidence: { label: string; cell: string; matched: string }[] }
 type ClassificationSheet = { sheet: string; labels: string[]; checked_cells: number; evidence: { label: string; cell: string; matched: string }[]; regions: ClassificationRegion[] }
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
@@ -16,7 +16,8 @@ type SuggestedDocument = { document_id: string; fragments: { sheet: string; rang
 type Checkpoint = { phase: 'ready' | 'paused' | 'inflight'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
 type Classification = { template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
 type RecentClassification = { archive_version_id?: string | null; template_write_state?: string; checkpoint?: Checkpoint | null; classification_id: string; name: string; sha256: string; latest: { version: string; confirmed: boolean; model_status: string; sheets: ClassificationSheet[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; coverage?: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] } | null }
-const emit = defineEmits<{ saved: [] }>()
+const props = withDefaults(defineProps<{ archiveOnSelect?: boolean }>(), { archiveOnSelect: false })
+const emit = defineEmits<{ saved: []; stage: [stage: string] }>()
 const file = ref<File | null>(null)
 const files = ref<File[]>([])
 const archiveKeys = ref<string[]>([])
@@ -33,13 +34,14 @@ const classificationSampleAuthorized = ref(false)
 const classificationOwnFileAuthorized = ref(false)
 const cancelAnalysis = ref(false)
 const analysisProgress = ref('')
+const classificationNotice = ref('')
 const analysisErrors = ref<Record<string, string>>({})
 const recentClassifications = ref<RecentClassification[]>([])
 const selectedRegion = ref('')
 const selectedRegionCoordinates = ref<{ sheet: string; range: string } | null>(null)
 const selectedPrintArea = ref(false)
 const batchLabel = ref('unknown')
-const labelNames: Record<string, string> = { quotation: '报价', delivery: '送货', purchase: '采购', attendance: '考勤', template: '模板', unknown: '未知/待理解' }
+const labelNames: Record<string, string> = { quotation: '报价', delivery: '送货', purchase: '采购', attendance: '考勤', production: '生产', process: '工艺', material: '原料', inspection: '检验', template: '模板', unknown: '未知/待理解' }
 function classificationStatus(item: { confirmed?: boolean; model_status?: string; sheets: ClassificationSheet[] } | null) {
   if (!item) return '待确认'
   const unknown = item.sheets.some((sheet) => sheet.regions.some((region) => region.labels.includes('unknown')))
@@ -81,7 +83,9 @@ function cellStyle(cell: LayoutCell): CSSProperties {
 }
 function switchVersion(index: number) { selectedVersion.value = index; candidateIndex.value = 0 }
 function choose(event: Event) {
-  files.value = Array.from((event.target as HTMLInputElement).files || [])
+  const input = event.target as HTMLInputElement
+  files.value = Array.from(input.files || [])
+  input.value = ''
   archiveKeys.value = files.value.map(() => crypto.randomUUID())
   archiveProgress.value = ''
   file.value = null
@@ -107,28 +111,38 @@ function choose(event: Event) {
   savedModelStatus.value = ''
   error.value = files.value.length > 200 ? '一次最多上传 200 个文件，请分批上传' : ''
   analysisProgress.value = ''; analysisErrors.value = {}
+  classificationNotice.value = ''
+  emit('stage', 'archive')
+  if (props.archiveOnSelect) void classify()
 }
 async function classify() {
-  if (!files.value.length || files.value.length > 200) return
+  if (busy.value || !files.value.length || files.value.length > 200) return
   if (files.value.reduce((sum, item) => sum + item.size, 0) > 50 * 1024 * 1024) {
     error.value = '本批文件超过 50 MB，请分批上传'; return
   }
   busy.value = true; error.value = ''
+  emit('stage', 'classification')
   try {
+    const previousSelection = file.value
     const results: Classification[] = []
     for (const [index, item] of files.value.entries()) {
+      const existing = props.archiveOnSelect ? classifications.value[index] : undefined
+      if (existing?.status === 'classified') { results.push(existing); continue }
       archiveProgress.value = `归档及分类 ${index + 1}/${files.value.length}：${item.name}`
       try {
         const form = new FormData(); form.append('file', item); form.append('request_key', archiveKeys.value[index])
         results.push(await templatePreviewApi.archiveClassifyExcel(form) as Classification)
       } catch (err) {
-        results.push({ name: item.name, status: 'unsupported', sheets: [], message: err instanceof Error ? err.message : '归档失败，请核对后重试' })
+        results.push({ name: item.name, status: 'unsupported', sheets: [], message: `${err instanceof Error ? err.message : '归档或分类未完成'}；请先查看原件档案核对，勿重新选择文件重复上传。` })
       }
     }
     classifications.value = results
-    archiveProgress.value = '本批处理结束；失败或结果未知的文件不可继续，请核对后重试。'
+    archiveProgress.value = props.archiveOnSelect && results.every((item) => item.status === 'classified')
+      ? '原件已归档并完成规则预筛，请继续核对单据分类、片段边界和续表关系。'
+      : '本批处理结束；失败或结果未知的文件不可继续，请核对后重试。'
     const index = results.findIndex((item) => item.status === 'classified')
-    if (index >= 0) selectFile(index)
+    if (index >= 0 && (!props.archiveOnSelect || !previousSelection || results[files.value.indexOf(previousSelection)]?.status !== 'classified')) selectFile(index)
+    if (index >= 0) emit('stage', classificationConfirmed.value ? review.value ? 'template' : 'cleaning' : 'fragments')
   } catch (err) { error.value = err instanceof Error ? err.message : '分类失败' }
   finally { busy.value = false }
 }
@@ -198,12 +212,13 @@ function selectFile(index: number) {
   file.value = files.value[index]
   classificationOwnFileAuthorized.value = false
   selectedPrintArea.value = false
-  sampleAuthorized.value = false; templateOwnFileAuthorized.value = false; consent.value = false
+  sampleAuthorized.value = false; templateOwnFileAuthorized.value = false; consent.value = false; publishToTenant.value = false
   name.value = file.value.name.replace(/\.xlsx$/i, '')
   const firstSheet = classifications.value[index]?.sheets[0]
   selectedRegion.value = firstSheet?.regions[0] ? `${firstSheet.sheet} / ${firstSheet.regions[0].range}` : ''
   selectedRegionCoordinates.value = firstSheet?.regions[0] ? { sheet: firstSheet.sheet, range: firstSheet.regions[0].range } : null
   review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0; savedId.value = ''
+  emit('stage', classifications.value[index].confirmed ? 'cleaning' : 'fragments')
 }
 function selectRegion(i: number, j: number, k: number) {
   if (file.value !== files.value[i]) selectFile(i)
@@ -211,10 +226,29 @@ function selectRegion(i: number, j: number, k: number) {
   selectedRegion.value = `${sheet.sheet} / ${sheet.regions[k].range}`
   selectedRegionCoordinates.value = { sheet: sheet.sheet, range: sheet.regions[k].range }
   selectedPrintArea.value = false
+  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0; savedId.value = ''
+  sampleAuthorized.value = false; templateOwnFileAuthorized.value = false; consent.value = false; publishToTenant.value = false
+  if (props.archiveOnSelect) name.value = `${file.value?.name.replace(/\.xlsx$/i, '')} · ${sheet.sheet} ${sheet.regions[k].range}`
+  emit('stage', classifications.value[i].confirmed ? 'cleaning' : 'fragments')
+}
+function splitRegion(item: Classification, sheet: ClassificationSheet, region: ClassificationRegion) {
+  const ranges = (region.splitDraft || '').split(/\r?\n/).map((value) => value.trim().toUpperCase()).filter(Boolean)
+  if (ranges.length < 2 || ranges.length > 200 || ranges.some((value) => !/^[A-Z]{1,3}[1-9]\d*:[A-Z]{1,3}[1-9]\d*$/.test(value))) {
+    error.value = '请逐行填写 2 至 200 个完整区域，如 A1:F12；拆分须完整覆盖原片段，不能重叠或切断合并单元格。'
+    return
+  }
+  sheet.regions.splice(sheet.regions.indexOf(region), 1, ...ranges.map((range) => ({ ...region, range,
+    original_range: region.original_range || region.range, labels: [...region.labels], modified: true, splitDraft: undefined })))
+  item.confirmed = false; item.fragment_links = undefined; item.logical_documents = []; item.confirmed_document_count = null
+  selectedRows.value = []; review.value = null; proposals.value = []; publishToTenant.value = false
+  classificationNotice.value = '片段边界已编辑，须提交分类核对；服务端校验通过后，还需重新核对新片段与续表关系并再次确认。'
+  error.value = ''
+  const i = classifications.value.indexOf(item), j = item.sheets.indexOf(sheet)
+  selectRegion(i, j, sheet.regions.findIndex((entry) => entry.original_range === (region.original_range || region.range)))
 }
 function toggleLabel(sheet: ClassificationRegion, label: string, checked: boolean) {
   sheet.modified = true
-  for (const item of classifications.value) if (item.sheets.some((entry) => entry.regions.includes(sheet))) item.confirmed = false
+  for (const item of classifications.value) if (item.sheets.some((entry) => entry.regions.includes(sheet))) invalidateClassification(item)
   const next = new Set(sheet.labels)
   if (checked) next.add(label)
   else next.delete(label)
@@ -226,7 +260,7 @@ function changeRegionRange(region: ClassificationRegion, sheet: ClassificationSh
   const oldRange = region.range
   if (!region.original_range) region.original_range = oldRange
   region.range = value; region.modified = true
-  for (const item of classifications.value) if (item.sheets.includes(sheet)) item.confirmed = false
+  for (const item of classifications.value) if (item.sheets.includes(sheet)) invalidateClassification(item)
   if (selectedRegionCoordinates.value?.sheet === sheet.sheet && selectedRegionCoordinates.value.range === oldRange) {
     selectedRegionCoordinates.value = { sheet: sheet.sheet, range: value }
     selectedRegion.value = `${sheet.sheet} / ${value}`
@@ -234,8 +268,16 @@ function changeRegionRange(region: ClassificationRegion, sheet: ClassificationSh
 }
 function applyBatchLabel() {
   classifications.value.forEach((item, i) => item.sheets.forEach((sheet, j) => sheet.regions.forEach((region, k) => {
-    if (selectedRows.value.includes(`${i}:${j}:${k}`)) { region.labels = [batchLabel.value]; region.modified = true; item.confirmed = false }
+    if (selectedRows.value.includes(`${i}:${j}:${k}`)) { region.labels = [batchLabel.value]; region.modified = true; invalidateClassification(item) }
   })))
+}
+function invalidateClassification(item: Classification) {
+  item.confirmed = false
+  if (item === classifications.value[files.value.indexOf(file.value as File)]) {
+    review.value = null; proposals.value = []; publishToTenant.value = false; consent.value = false
+    sampleAuthorized.value = false; templateOwnFileAuthorized.value = false
+    emit('stage', 'fragments')
+  }
 }
 async function analyzeClassifications() {
   if (classificationSampleAuthorized.value === classificationOwnFileAuthorized.value) return
@@ -287,9 +329,12 @@ async function confirmClassifications() {
       const labels = item.sheets.flatMap((sheet) => sheet.regions.map((region) => ({ sheet: sheet.sheet, original_range: region.original_range || region.range, range: region.range, labels: region.labels })))
       const links = item.sheets.some((sheet) => sheet.regions.some((region) => region.modified)) ? [] : (item.fragment_links?.items || []).filter((link) => link.selected).map(({ sheet, first, second }) => ({ sheet, first, second }))
       const form = new FormData(); form.append('version', item.version); form.append('labels_json', JSON.stringify(labels)); form.append('links_json', JSON.stringify(links)); form.append('independent_confirmed', String(!!item.independent_confirmed))
-      const result = await templatePreviewApi.confirmClassification(item.classification_id, form) as { version: string; confirmed: boolean; sheets: ClassificationSheet[]; fragment_links?: FragmentLinks; logical_documents?: LogicalDocument[]; confirmed_document_count?: number | null; document_count_status?: string; coverage?: Classification['coverage'] }
+      const result = await templatePreviewApi.confirmClassification(item.classification_id, form) as { message?: string; version: string; confirmed: boolean; sheets: ClassificationSheet[]; fragment_links?: FragmentLinks; logical_documents?: LogicalDocument[]; confirmed_document_count?: number | null; document_count_status?: string; coverage?: Classification['coverage'] }
       item.version = result.version; item.confirmed = result.confirmed; item.sheets = result.sheets; item.fragment_links = result.fragment_links; item.logical_documents = result.logical_documents; item.confirmed_document_count = result.confirmed_document_count; item.document_count_status = result.document_count_status; item.coverage = result.coverage
+      if (!result.confirmed) classificationNotice.value = result.message || '拆分已保存。请核对新的文档片段和续表关系，再次确认后才能清理模板。'
     }
+    if (classificationConfirmed.value) { classificationNotice.value = ''; emit('stage', 'cleaning') }
+    else emit('stage', 'fragments')
   } catch (err) { error.value = err instanceof Error ? err.message : '分类确认失败，请刷新后重试' }
   finally { busy.value = false }
 }
@@ -318,7 +363,7 @@ async function restoreClassification(item: RecentClassification) {
   finally { busy.value = false }
 }
 async function preview() {
-  if (!file.value) return
+  if (!file.value || !classificationConfirmed.value || (props.archiveOnSelect && !selectedRegionCoordinates.value)) return
   busy.value = true
   error.value = ''
   try {
@@ -338,11 +383,12 @@ async function preview() {
     selectedVersion.value = proposals.value.length - 1
     candidateIndex.value = 0
     review.value = result
+    emit('stage', 'template')
   } catch (err) { error.value = err instanceof Error ? err.message : '预览失败' }
   finally { busy.value = false }
 }
 async function save() {
-  if (!file.value || !review.value || !name.value.trim()) return
+  if (!file.value || !classificationConfirmed.value || !review.value || !name.value.trim()) return
   busy.value = true
   error.value = ''
   try {
@@ -435,12 +481,13 @@ async function downloadCandidate(index: number) {
     </div>
     <p>分类先做规则预筛；可选择模型分析。分类仅供确认，不关联业务库或写入业务数据。依据及未读范围需核对，不表示理解全部语义。</p>
     <input type="file" accept=".xlsx" multiple :disabled="busy" @change="choose">
-    <p class="reviewed-template__limits">模板归档流水线：每批最多 200 个文件，单个不超过 20 MB，整批不超过 50 MB（与数据对接中心导入单文件 100 MB 上限不同）；超出请分批。</p>
-    <button type="button" :disabled="!files.length || files.length > 200 || busy" @click="classify">归档并分类所选文件</button>
+    <p class="reviewed-template__limits">模板归档流水线：每批最多 200 个文件，单个不超过 20 MB，整批不超过 50 MB<span v-if="!archiveOnSelect">（与旧业务导入单文件 100 MB 上限不同）</span>；超出请分批。</p>
+    <button v-if="!archiveOnSelect || classifications.some((item) => item.status !== 'classified')" type="button" :disabled="!files.length || files.length > 200 || busy" @click="classify">{{ archiveOnSelect ? '重试未完成文件' : '归档并分类所选文件' }}</button>
     <p v-if="archiveProgress" role="status">{{ archiveProgress }}</p>
     </div>
     <div class="reviewed-template__step">
     <h3>第二步：文件分类</h3>
+    <p v-if="classificationNotice" role="status">{{ classificationNotice }}</p>
     <button type="button" :disabled="busy" @click="loadRecentClassifications">查看已保存分类</button>
     <details v-if="recentClassifications.length"><summary>已保存分类（归档来源可直接恢复；旧记录需选择相同原文件）</summary>
       <div v-for="item in recentClassifications" :key="item.sha256"><p>{{ item.name }} · {{ item.sha256 }} · {{ classificationStatus(item.latest) }}</p>
@@ -473,11 +520,11 @@ async function downloadCandidate(index: number) {
         </template>
         <div v-if="item.fragment_links?.items.length && !item.sheets.some((sheet) => sheet.regions.some((region) => region.modified))">
           <p>可能的片段关联（仅供核对，尚未确认或合并）：</p>
-          <p v-for="link in item.fragment_links.items" :key="`${link.sheet}:${link.first}:${link.second}`"><label><input v-model="link.selected" type="checkbox" :disabled="busy || link.status !== 'candidate'" @change="item.confirmed = false"> 同一文档</label> {{ link.sheet }}：{{ link.first }} ↔ {{ link.second }}；{{ link.model_group_suggested ? '模型建议同组；' : '' }}{{ link.repeated_header_observed ? '观察到重复表头；' : '' }}{{ link.shared_dependencies.length ? `模型共同引用 ${link.shared_dependencies.map((ref) => `${ref.sheet}!${ref.cell}`).join('、')}；` : '' }}{{ link.status === 'identity_conflict' ? '单据身份信息不一致，不能按续表合并，请核对。' : '关联仍待确认。' }}</p>
+          <p v-for="link in item.fragment_links.items" :key="`${link.sheet}:${link.first}:${link.second}`"><label><input v-model="link.selected" type="checkbox" :disabled="busy || link.status !== 'candidate'" @change="invalidateClassification(item)"> 同一文档</label> {{ link.sheet }}：{{ link.first }} ↔ {{ link.second }}；{{ link.model_group_suggested ? '模型建议同组；' : '' }}{{ link.repeated_header_observed ? '观察到重复表头；' : '' }}{{ link.shared_dependencies.length ? `模型共同引用 ${link.shared_dependencies.map((ref) => `${ref.sheet}!${ref.cell}`).join('、')}；` : '' }}{{ link.status === 'identity_conflict' ? '单据身份信息不一致，不能按续表合并，请核对。' : '关联仍待确认。' }}</p>
           <p v-if="item.fragment_links.omitted">还有 {{ item.fragment_links.omitted }} 条候选未展示。</p>
         </div>
         <p v-else-if="item.fragment_links?.items.length">区域已修改，之前的关联候选不再适用，请重新核对。</p>
-        <label v-if="item.model_status === 'returned'"><input v-model="item.independent_confirmed" type="checkbox" :disabled="busy" @change="item.confirmed = false"> 我已核对未勾选关联的有内容片段各自是独立文档；仅完整覆盖且无未知内容时计算总数。</label>
+        <label v-if="item.model_status === 'returned'"><input v-model="item.independent_confirmed" type="checkbox" :disabled="busy" @change="invalidateClassification(item)"> 我已核对未勾选关联的有内容片段各自是独立文档；仅完整覆盖且无未知内容时计算总数。</label>
         <p v-for="group in item.logical_documents || []" :key="group.logical_document_id">已确认同一文档：{{ group.fragments.map((part) => `${part.sheet}!${part.range}`).join('、') }}；取消勾选后重新确认可拆分。</p>
         <details v-if="item.input_summaries?.length"><summary>查看模型输入摘要及来源坐标（不含正文）</summary><pre>{{ JSON.stringify(item.input_summaries, null, 2) }}</pre></details>
         <details v-if="item.input_messages?.length"><summary>历史记录中的模型输入正文（旧记录未自动清理）</summary><pre>{{ JSON.stringify(item.input_messages, null, 2) }}</pre></details>
@@ -508,6 +555,11 @@ async function downloadCandidate(index: number) {
               <p>合并范围：{{ region.merged_ranges.join('，') || '无' }}</p>
               <p>可能的图例或说明：{{ region.possible_shared_context.map((c) => c.cell).join('，') || '未识别' }}；关联需人工确认。</p>
               <p v-if="region.dependencies?.length">模型建议依赖：{{ region.dependencies.map((c) => `${c.sheet}!${c.cell}`).join('，') }}；需人工确认。</p>
+              <template v-if="archiveOnSelect">
+                <label>拆分当前片段（每行一个完整区域）<textarea v-model="region.splitDraft" :disabled="busy" rows="3" placeholder="A1:F12&#10;A13:F26"></textarea></label>
+                <small>新片段须完整覆盖当前范围，不得重叠、越界或切断合并单元格。提交校验后需要重新确认续表关系，原件不变。</small>
+                <button type="button" :disabled="busy || !region.splitDraft?.trim()" @click="splitRegion(item, sheet, region)">拆分此片段</button>
+              </template>
             </details>
           </div>
         </div>
@@ -528,7 +580,7 @@ async function downloadCandidate(index: number) {
     <label><input v-model="initialModel" type="checkbox" :disabled="busy"> 首轮使用模型生成三个候选</label>
     <label><input v-model="sampleAuthorized" type="checkbox" :disabled="busy"> 确认此文件是获准发送的合成或公开样本，同意发送有界文本及结构概览</label>
     <label v-if="file"><input v-model="templateOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的所选文档发送至 MiMo：最多 100 个非空单元格、每格最多 160 字，以及结构与反馈；可能包含敏感数据。</label>
-    <button type="button" :disabled="!file || !classificationConfirmed || busy || (initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview">预览清理候选</button>
+    <button type="button" :disabled="!file || !classificationConfirmed || (archiveOnSelect && !selectedRegionCoordinates) || busy || (initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview">预览清理候选</button>
     <p v-if="error" role="alert">{{ error }}</p>
     <div v-if="review">
       <p v-if="review.selected_region?.print_area_mode === 'selected'">已按您的选择设置派生打印范围：原范围 {{ review.selected_region.source_print_areas?.map((area) => area.value).join('；') || '未设置' }} → 派生范围 {{ review.selected_region.derived_print_area || '未设置' }}；原件不变。</p>

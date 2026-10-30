@@ -1,5 +1,5 @@
 /**
- * 数据对接中心共享状态（拆分自 views/EtlCenterView.vue，行为保持一致）。
+ * 资料整理流程步骤与已有业务导入任务的审阅状态。
  */
 import { getCurrentScope, onScopeDispose, reactive, ref, watch } from 'vue'
 import type { EtlCapabilities, EtlFieldMapping, EtlRun, EtlRunRow, EtlTargetConfig, EtlTemplate } from '@/api/etl'
@@ -7,15 +7,23 @@ import type { EtlRunTab } from '@/utils/etlRunView'
 
 export type TabId = EtlRunTab
 
-export const ETL_CENTER_TABS: Array<{ id: TabId; step: string; label: string }> = [
-  { id: 'upload', step: '1', label: '上传文件' },
+export const ETL_CENTER_TABS = [
+  { id: 'archive', label: '上传归档原件' },
+  { id: 'classification', label: '识别单据' },
+  { id: 'fragments', label: '切片与续表确认' },
+  { id: 'cleaning', label: '逐片清理' },
+  { id: 'template', label: '选择并保存模板' },
+] as const
+
+export const ETL_RUN_TABS: Array<{ id: TabId; step: string; label: string }> = [
+  { id: 'upload', step: '1', label: '处理进度' },
   { id: 'mapping', step: '2', label: '字段映射' },
   { id: 'preview', step: '3', label: '核对写入' },
   { id: 'history', step: '4', label: '运行历史' },
 ]
 
 export function createEtlCenterState() {
-  const activeTab = ref<TabId>('upload')
+  const activeTab = ref<TabId>('history')
   const capabilities = ref<EtlCapabilities | null>(null)
   const templates = ref<EtlTemplate[]>([])
   const targetConfigs = ref<EtlTargetConfig[]>([])
