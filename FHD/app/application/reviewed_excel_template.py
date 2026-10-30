@@ -247,7 +247,7 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
     return entries
 
 
-def inspect_workbook(body: bytes) -> dict:
+def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
     if not body or len(body) > MAX_BYTES:
         raise ReviewedExcelError("文件为空或超过 20 MB")
     try:
@@ -260,7 +260,7 @@ def inspect_workbook(body: bytes) -> dict:
             ):
                 raise ReviewedExcelError("含嵌入附件或宏，未读取或执行")
             unsupported = (
-                "xl/drawings/",
+                *(("xl/drawings/",) if not allow_drawings else ()),
                 "xl/charts/",
                 "xl/media/",
                 "xl/embeddings/",
@@ -274,6 +274,11 @@ def inspect_workbook(body: bytes) -> dict:
             )
             if any(item.filename.startswith(unsupported) for item in entries):
                 raise ReviewedExcelError("工作簿含暂不支持保真的对象或扩展")
+            drawing_evidence = []
+            if allow_drawings and any(item.filename.startswith("xl/drawings/") for item in entries):
+                from app.application.reviewed_excel_drawing import extract_drawing_evidence
+
+                drawing_evidence = extract_drawing_evidence(archive)
         with warnings.catch_warnings(record=True) as found:
             warnings.simplefilter("always")
             wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
@@ -389,7 +394,27 @@ def inspect_workbook(body: bytes) -> dict:
                         "truncated": sheet.max_row > max_row or sheet.max_column > max_col,
                     }
                 )
+        drawing_boundaries, drawing_columns = {}, {}
+        if len(cells) + len(drawing_evidence) > MAX_CELLS:
+            raise ReviewedExcelError("单元格和绘图对象超过安全预算")
+        if drawing_evidence:
+            from app.application.reviewed_excel_drawing import (
+                drawing_row_boundaries,
+                set_drawing_columns,
+            )
+
+            for sheet in wb.worksheets:
+                objects = [obj for obj in drawing_evidence if obj["sheet"] == sheet.title]
+                drawing_columns[sheet.title] = set_drawing_columns(sheet, objects)
+                drawing_boundaries[sheet.title] = (
+                    []
+                    if any(obj.get("geometry_error") for obj in objects)
+                    else drawing_row_boundaries(sheet, objects)
+                )
+                if drawing_columns[sheet.title] * sheet.max_row > 100_000:
+                    raise ReviewedExcelError("绘图工作表范围过大，暂不能安全预览")
         return {
+            "drawing_evidence": drawing_evidence,
             "sha256": hashlib.sha256(body).hexdigest(),
             "read_only_print_areas": read_only_print_areas,
             "cells": cells,
@@ -398,7 +423,8 @@ def inspect_workbook(body: bytes) -> dict:
                 {
                     "sheet": s.title,
                     "rows": s.max_row,
-                    "columns": s.max_column,
+                    "columns": drawing_columns.get(s.title, s.max_column),
+                    "drawing_row_boundaries": drawing_boundaries.get(s.title, []),
                     "merged_ranges": len(s.merged_cells.ranges),
                     "merged_regions": [str(item) for item in s.merged_cells.ranges],
                     "print_area": s.print_area,
@@ -519,9 +545,12 @@ def derive_document_workbook(
             raise ReviewedExcelError("文档片段坐标无效") from None
         rectangles.append(bounds)
 
+    from app.application.reviewed_excel_drawing import rectangles_cover, select_drawing_objects
+
+    selected_drawings = select_drawing_objects(info, sheet_name, rectangles)
+
     def contained(bounds):
-        c1, r1, c2, r2 = bounds
-        return any(x1 <= c1 <= c2 <= x2 and y1 <= r1 <= r2 <= y2 for x1, y1, x2, y2 in rectangles)
+        return rectangles_cover(bounds, rectangles)
 
     def intersects(bounds):
         c1, r1, c2, r2 = bounds
@@ -687,6 +716,10 @@ def derive_document_workbook(
                     raise ReviewedExcelError("派生打印区域写出后核验失败")
         finally:
             checked.close()
+        if selected_drawings:
+            from app.application.reviewed_excel_drawing import restore_drawing_parts
+
+            result = restore_drawing_parts(body, result, selected_drawings)
         # ZIP member timestamps otherwise vary between saves, preventing a
         # verified re-derivation of exactly the same temporary document later.
         normalized = BytesIO()
@@ -755,6 +788,10 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
         if found:
             raise ReviewedExcelError("保存时发现无法保证保真的内容，已停止")
         result = output.getvalue()
+        if inspection.get("drawing_evidence"):
+            from app.application.reviewed_excel_drawing import restore_drawing_parts
+
+            result = restore_drawing_parts(body, result, inspection["drawing_evidence"])
         if inspection["read_only_print_areas"]:
             result = _restore_print_areas(result, inspection["read_only_print_areas"])
         return result

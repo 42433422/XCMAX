@@ -10,8 +10,11 @@ from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 
 
-def reference_contract(cells: list[dict], original_schema: dict) -> tuple[list[dict], dict, dict]:
-    if not cells or len(cells) > 500:
+def reference_contract(
+    cells: list[dict], original_schema: dict, drawings: list[dict] | None = None
+) -> tuple[list[dict], dict, dict]:
+    drawings = drawings or []
+    if not cells or len(cells) + len(drawings) > 500:
         raise ReviewedExcelError("证据数量超出范围")
     references: dict[str, dict] = {}
     presented = []
@@ -52,6 +55,22 @@ def reference_contract(cells: list[dict], original_schema: dict) -> tuple[list[d
         "primary_id",
         "reason",
     ]
+    if drawings:
+        drawing_ids = []
+        for index, drawing in enumerate(drawings, 1):
+            key = f"D{index:04d}"
+            ref = {k: drawing[k] for k in ("sheet", "part", "object_id")}
+            if any(entry["ref"] == ref for entry in references.values()):
+                raise ReviewedExcelError("绘图证据身份重复")
+            references[key] = {"ref": ref, "primary": True, "drawing": True}
+            drawing_ids.append(key)
+        props.pop("drawing_evidence")
+        props["drawing_ids"] = {
+            "type": "array",
+            "maxItems": 100,
+            "items": {"type": "string", "enum": drawing_ids},
+        }
+        region["required"].append("drawing_ids")
     return presented, references, schema
 
 
@@ -78,6 +97,11 @@ def normalize_reference_ids(
             c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
         ):
             raise ReviewedExcelError("模型区域没有区域内主体证据")
+        if "drawing_ids" in region:
+            identifiers = region.pop("drawing_ids")
+            if len(set(identifiers)) != len(identifiers):
+                raise ReviewedExcelError("模型绘图证据编号重复")
+            region["drawing_evidence"] = [deepcopy(references[key]["ref"]) for key in identifiers]
         for old, new in [("evidence_ids", "evidence"), ("dependency_ids", "dependencies")]:
             identifiers = region.pop(old)
             if len(set(identifiers)) != len(identifiers):
@@ -95,7 +119,14 @@ def prepare_reference_messages(messages: list[dict], schema: dict) -> tuple[dict
 
     neutralize_messages(messages)
     payload = json.loads(messages[1]["content"])
-    payload["cells"], references, provider_schema = reference_contract(payload["cells"], schema)
+    payload["cells"], references, provider_schema = reference_contract(
+        payload["cells"], schema, payload.get("drawing_evidence")
+    )
+    if payload.get("drawing_evidence"):
+        payload["drawing_evidence"] = [
+            {**drawing, "drawing_id": f"D{index:04d}"}
+            for index, drawing in enumerate(payload["drawing_evidence"], 1)
+        ]
     payload["output_schema"] = provider_schema
     payload["integrity_constraints"] = integrity_constraints(payload["cells"], payload["sheets"])
     for coverage in payload["batch_coverage"]:
@@ -104,7 +135,9 @@ def prepare_reference_messages(messages: list[dict], schema: dict) -> tuple[dict
         coverage["context_only"] = len(selected) - coverage["sent_nonempty"]
         coverage["unread_nonempty"] = coverage["total_nonempty"] - coverage["sent_nonempty"]
     messages[1]["content"] = json.dumps(payload, ensure_ascii=False)
-    messages[0]["content"] = IDENTIFY_PROMPT
+    messages[0]["content"] = (
+        DRAWING_IDENTIFY_PROMPT if payload.get("drawing_evidence") else IDENTIFY_PROMPT
+    )
     return references, provider_schema
 
 
@@ -136,7 +169,12 @@ def add_reference_trace(summary: dict, raw: dict, references: dict) -> None:
     used = {
         identifier
         for region in raw["physical_regions"]
-        for identifier in [region["primary_id"], *region["evidence_ids"], *region["dependency_ids"]]
+        for identifier in [
+            region["primary_id"],
+            *region["evidence_ids"],
+            *region["dependency_ids"],
+            *region.get("drawing_ids", []),
+        ]
     }
     summary["reference_response"] = raw
     summary["reference_index"] = {key: references[key] for key in sorted(used)}
@@ -324,6 +362,12 @@ IDENTIFY_PROMPT = (
     "including isolated headers, footnotes, and formulas; do not include unread cells to fill gaps. "
     "Unresolved references and omitted merges require caution; unread cells are not evidence."
 )
+DRAWING_IDENTIFY_PROMPT = IDENTIFY_PROMPT + (
+    " When drawing_evidence is present, use only supplied drawing_id values in drawing_ids. "
+    "Drawing text and anchors are source evidence; last_col and last_row are conservative outer bounds, not document suggestions. "
+    "Every drawing must be wholly inside one region; do not cut objects horizontally or vertically. "
+    "Choose two-dimensional rectangles independently; transport batches do not prescribe document boundaries."
+)
 GROUP_PROMPT = (
     "Group only fragments that belong to the same business document. "
     "A standalone fragment can be one group. Do not group merely because fragments are adjacent, "
@@ -332,6 +376,10 @@ GROUP_PROMPT = (
     "using sent values. Use only supplied region_id and evidence_id values. "
     "Fragment boundaries are fixed; do not invent ranges or cells. "
     "Return exactly one JSON object matching output_schema."
+)
+DRAWING_GROUP_PROMPT = GROUP_PROMPT + (
+    " When drawing_evidence is present, cite only supplied drawing_id values in drawing_ids; "
+    "each cited object must be wholly contained in one of the group's fixed fragments."
 )
 
 
@@ -344,17 +392,21 @@ def contract_hashes(schema: dict, phase: str) -> dict:
         for key in ("evidence_ids", "dependency_ids"):
             props[key]["items"]["enum"] = ["<SOURCE_EVIDENCE_IDS>"]
         props["primary_id"]["enum"] = ["<PRIMARY_EVIDENCE_IDS>"]
-        prompt = IDENTIFY_PROMPT
+        if "drawing_ids" in props:
+            props["drawing_ids"]["items"]["enum"] = ["<SOURCE_DRAWING_IDS>"]
+        prompt = DRAWING_IDENTIFY_PROMPT if "drawing_ids" in props else IDENTIFY_PROMPT
     elif phase == "group":
         props = template["properties"]["groups"]["items"]["properties"]
         props["fragment_ids"]["items"]["enum"] = ["<MODEL_FRAGMENT_IDS>"]
         props["evidence_ids"]["items"]["enum"] = ["<SOURCE_EVIDENCE_IDS>"]
-        prompt = GROUP_PROMPT
+        if "drawing_ids" in props:
+            props["drawing_ids"]["items"]["enum"] = ["<SOURCE_DRAWING_IDS>"]
+        prompt = DRAWING_GROUP_PROMPT if "drawing_ids" in props else GROUP_PROMPT
     else:
         raise ValueError("unknown contract phase")
     canonical = json.dumps(template, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return {
-        "version": CONTRACT_VERSION,
+        "version": "independent-excel-v2-drawing" if "drawing_ids" in props else CONTRACT_VERSION,
         "phase": phase,
         "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
         "schema_template_sha256": hashlib.sha256(canonical.encode()).hexdigest(),
@@ -370,6 +422,14 @@ _EXPECTED = {
         "440a63ab70be709c7825a4e6374ef3c1f3e52687a3e8b4f3f5927235459ee22e",
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
+    "identify_drawing": (
+        "e31a404a374524b18cbe75a2745e5c7fd96b0706b19f457c06da8420afaf82b5",
+        "544e978d9e1b964e64b14c9f7a5fe5ffcd5bec9670dcdc463836c10a0e33e5ee",
+    ),
+    "group_drawing": (
+        "49665c8535ed2aa9ba6a4dfc047fe360ccf97ddcead5063b20f05314f097c4b8",
+        "47042d8477ddf0eb59819d512ead64c7213fc4210351687df0bedea6403129df",
+    ),
 }
 
 
@@ -379,7 +439,17 @@ def verify_contract(prompt: str, schema: dict, phase: str) -> dict:
     try:
         hashes = contract_hashes(schema, phase)
         actual_prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
-        if (actual_prompt_hash, hashes["schema_template_sha256"]) != _EXPECTED[phase]:
+        key = phase + (
+            "_drawing"
+            if "drawing_ids"
+            in (
+                schema["properties"]["physical_regions" if phase == "identify" else "groups"][
+                    "items"
+                ]["properties"]
+            )
+            else ""
+        )
+        if (actual_prompt_hash, hashes["schema_template_sha256"]) != _EXPECTED[key]:
             raise ReviewedExcelError("模型输入契约已改变，未调用模型")
     except (KeyError, TypeError, ValueError):
         raise ReviewedExcelError("模型输入契约无效，未调用模型") from None

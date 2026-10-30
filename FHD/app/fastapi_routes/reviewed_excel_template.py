@@ -585,6 +585,7 @@ def _auto_slices(db, classification_id, version, tenant, owner):
             "model_status": latest["model_status"],
             "regions": regions,
             "suggested_documents": latest.get("suggested_documents", []),
+            "coverage": latest.get("coverage", []),
         },
     ), latest.get("coverage", [])
 
@@ -1083,6 +1084,11 @@ async def reviewed_excel_classification_analyze(
                             "header_cells": headers,
                             "merged_ranges": merged,
                             "dependencies": region["dependencies"],
+                            **(
+                                {"drawing_evidence": region["drawing_evidence"]}
+                                if "drawing_evidence" in region
+                                else {}
+                            ),
                             "possible_shared_context": [
                                 {
                                     "cell": ref["cell"],

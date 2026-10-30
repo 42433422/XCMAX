@@ -12,7 +12,12 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
         raise ReviewedExcelError("分组来源与原件不一致")
     coverage = classification.get("coverage", [])
     if len(coverage) != len(review["sheets"]) or any(
-        row.get("unread") or row.get("unassigned") or row.get("merged_omitted") for row in coverage
+        row.get("unread")
+        or row.get("unassigned")
+        or row.get("merged_omitted")
+        or row.get("drawing_unread")
+        or row.get("drawing_unassigned")
+        for row in coverage
     ):
         raise ReviewedExcelError("文件覆盖不完整，不能进行最终分组")
     regions = classification.get("regions", [])
@@ -55,7 +60,12 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
     cells = list(chosen.values())
     if len(cells) > 500 or sum(len(c["value"].encode("utf-8")) + 64 for c in cells) > 96_000:
         raise ReviewedExcelError("分组证据超过本轮安全预算")
-    return {"source_sha256": review["sha256"], "fragments": fragments, "cells": cells}
+    output = {"source_sha256": review["sha256"], "fragments": fragments, "cells": cells}
+    if review.get("drawing_evidence"):
+        from app.application.reviewed_excel_drawing import grouping_drawings
+
+        output["drawing_evidence"] = grouping_drawings(review, fragments, cells)
+    return output
 
 
 def validate_grouping(group_input: dict, data: dict) -> list[dict]:
@@ -78,7 +88,7 @@ def validate_grouping(group_input: dict, data: dict) -> list[dict]:
             "fragments",
             "evidence",
             "reason",
-        }:
+        } | ({"drawing_evidence"} if group_input.get("drawing_evidence") else set()):
             raise ReviewedExcelError("模型分组结构无效")
         docid = group["document_id"]
         parts = group["fragments"]
@@ -128,8 +138,17 @@ def validate_grouping(group_input: dict, data: dict) -> list[dict]:
                 for ref in validated
             ):
                 raise ReviewedExcelError("模型分组缺少片段内证据")
+        if group_input.get("drawing_evidence"):
+            from app.application.reviewed_excel_drawing import validate_group_drawings
+
+            validate_group_drawings(group_input, group)
         result.append(
             {
+                **(
+                    {"drawing_evidence": group["drawing_evidence"]}
+                    if group_input.get("drawing_evidence")
+                    else {}
+                ),
                 "document_id": docid,
                 "fragments": refs,
                 "evidence": validated,
@@ -154,11 +173,16 @@ def group_semantic_fragments(
     group_input = prepare_grouping(review, classification)
     fragments = {f"R{i:04d}": part for i, part in enumerate(group_input["fragments"], 1)}
     cells = {f"E{i:04d}": cell for i, cell in enumerate(group_input["cells"], 1)}
+    drawings = {
+        f"D{i:04d}": obj for i, obj in enumerate(group_input.get("drawing_evidence", []), 1)
+    }
     shown = {
         **group_input,
         "fragments": [{**part, "region_id": key} for key, part in fragments.items()],
         "cells": [{**cell, "evidence_id": key} for key, cell in cells.items()],
     }
+    if drawings:
+        shown["drawing_evidence"] = [{**obj, "drawing_id": key} for key, obj in drawings.items()]
     group = {
         "type": "object",
         "required": ["document_id", "fragment_ids", "evidence_ids", "reason"],
@@ -180,16 +204,23 @@ def group_semantic_fragments(
             "reason": {"type": "string"},
         },
     }
+    if drawings:
+        group["required"].append("drawing_ids")
+        group["properties"]["drawing_ids"] = {
+            "type": "array",
+            "maxItems": 100,
+            "items": {"type": "string", "enum": list(drawings)},
+        }
     schema = {
         "type": "object",
         "required": ["groups"],
         "additionalProperties": False,
         "properties": {"groups": {"type": "array", "maxItems": 100, "items": group}},
     }
-    from app.application.reviewed_excel_reference_ids import GROUP_PROMPT
+    from app.application.reviewed_excel_reference_ids import DRAWING_GROUP_PROMPT, GROUP_PROMPT
 
     messages = [
-        {"role": "system", "content": GROUP_PROMPT},
+        {"role": "system", "content": DRAWING_GROUP_PROMPT if drawings else GROUP_PROMPT},
         {
             "role": "user",
             "content": json.dumps({"output_schema": schema, **shown}, ensure_ascii=False),
@@ -213,6 +244,16 @@ def group_semantic_fragments(
     normalized = {
         "groups": [
             {
+                **(
+                    {
+                        "drawing_evidence": [
+                            {k: drawings[key][k] for k in ("sheet", "part", "object_id")}
+                            for key in item["drawing_ids"]
+                        ]
+                    }
+                    if drawings
+                    else {}
+                ),
                 "document_id": item["document_id"],
                 "fragments": [
                     {"sheet": fragments[key]["sheet"], "range": fragments[key]["range"]}
@@ -230,6 +271,7 @@ def group_semantic_fragments(
     result = validate_grouping(group_input, normalized)
     for item, raw in zip(result, response.data["groups"], strict=True):
         item["reference_ids"] = {
+            **({"drawing_ids": raw["drawing_ids"]} if drawings else {}),
             "fragment_ids": raw["fragment_ids"],
             "evidence_ids": raw["evidence_ids"],
         }

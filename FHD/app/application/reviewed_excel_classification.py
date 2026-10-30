@@ -211,10 +211,14 @@ def _classify_semantic_batch(
 
     structure_map = review.get("full_structure_map") or build_structure_map(review, rules)
     chosen = list(review["cells"])
+    drawings = [d for cell in chosen for d in cell.get("drawing_evidence", [])]
     if (
-        len(chosen) > MAX_MODEL_CELLS
+        len(chosen) + len(drawings) > MAX_MODEL_CELLS
         or any(len(cell["value"]) > MAX_VALUE_CHARS for cell in chosen)
-        or sum(map(_model_cell_cost, chosen)) > MAX_MODEL_TEXT_BYTES
+        or any(len(d["text"]) > MAX_VALUE_CHARS for d in drawings)
+        or sum(map(_model_cell_cost, chosen))
+        + sum(len(json.dumps(d, ensure_ascii=False).encode()) + 64 for d in drawings)
+        > MAX_MODEL_TEXT_BYTES
     ):
         raise ReviewedExcelError("本批模型证据超过安全预算，未调用模型")
     sent = {(c["sheet"], c["cell"]): c for c in chosen}
@@ -266,6 +270,18 @@ def _classify_semantic_batch(
             "reason": {"type": "string"},
         },
     }
+    if drawings:
+        region_schema["required"].append("drawing_evidence")
+        region_schema["properties"]["drawing_evidence"] = {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+                "type": "object",
+                "required": ["sheet", "part", "object_id"],
+                "additionalProperties": False,
+                "properties": {key: {"type": "string"} for key in ("sheet", "part", "object_id")},
+            },
+        }
     fragment_schema = {
         "type": "object",
         "required": ["sheet", "range"],
@@ -335,35 +351,7 @@ def _classify_semantic_batch(
     messages = [
         {
             "role": "system",
-            "content": (
-                "Identify business document regions. Return exactly one JSON object matching output_schema, no extra fields. "
-                "physical_regions are geometric fragments, not document counts. logical_documents group physical fragments only when supported; "
-                "A supported standalone fragment is also a logical document with one fragment. "
-                "Use distinct document_id values and leave uncertain fragments ungrouped. Do not provide a document count; software calculates it. "
-                "layout_references contain only exact merged ranges from sheets.merged, including blank anchors; they are not semantic evidence. "
-                "Evidence and dependencies are objects with sheet and cell fields; cell MUST be a bare coordinate like A1, never append a value or explanation. "
-                "Structure coordinates are only an index, not evidence: classify only from cell values actually sent. "
-                "For each region, every evidence coordinate MUST be inside that region and on the same sheet; "
-                "external headings, shared legends and context belong ONLY in dependencies, never in evidence. "
-                "Do not split merged cells or overlap regions. A repeated table header can be a continuation of the preceding document; "
-                "it is not by itself evidence of a new document or different business category. "
-                "Each non-unknown label needs positive category-specific evidence within the region. "
-                "Generic item, quantity, price and amount headers alone do not establish a purchase order or other category. "
-                "Each request may contain only part of a workbook; do not assume cells outside this batch were read. "
-                "Cells marked context_only are repeated context, not part of this batch's primary consecutive rows; "
-                "use them as dependencies where relevant and do not create a new document solely from them. "
-                "Each region needs a sent primary cell; never create context-only or unread-only regions. "
-                "Cover every sent non-context primary cell exactly once, including isolated text and formulas. "
-                "Do not overlap regions or use unread cells to fill gaps. "
-                "Use primary cells as evidence, not context_only cells. "
-                "For each region, choose at most 20 concise evidence cells and at most 20 dependencies; do not list every cell. "
-                "If evidence is insufficient or the relevant cells were not sent, use unknown; do not guess. "
-                "Use relationship_context as observations, not proof: adjacency, identical or shifted headers, titles and shared notes "
-                "may suggest continuation but may also occur in different documents. For a category change, cite category-specific "
-                "support from sent cells inside the new region; otherwise use unknown and explain missing context. "
-                "External parent titles or shared notes can be dependencies, never inside-region evidence. "
-                "Dependencies may reference sent shared context. Do not infer database targets."
-            ),
+            "content": "",  # Populated only by the independent evidence contract below.
         },
         {
             "role": "user",
@@ -407,6 +395,10 @@ def _classify_semantic_batch(
     ]
     from app.application.reviewed_excel_template import _template_mimo_complete
 
+    if drawings:
+        payload = json.loads(messages[1]["content"])
+        payload["drawing_evidence"] = drawings
+        messages[1]["content"] = json.dumps(payload, ensure_ascii=False)
     provider_schema = schema
     references: dict = {}
     if reference_ids:
@@ -462,7 +454,7 @@ def _classify_semantic_batch(
             "evidence",
             "dependencies",
             "reason",
-        }:
+        } | ({"drawing_evidence"} if drawings else set()):
             raise ReviewedExcelError("模型区域格式无效，原分类未改变")
         sheet, area, labels = region["sheet"], region["range"], region["labels"]
         original_area = area
@@ -551,6 +543,10 @@ def _classify_semantic_batch(
                         c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
                     ):
                         raise ReviewedExcelError("模型证据不在区域内，原分类未改变")
+        if drawings:
+            from app.application.reviewed_excel_drawing import validate_region_drawings
+
+            validate_region_drawings(review, drawings, region)
         accepted.append({**region, **fragment_metadata, "needs_confirmation": True})
         range_map[(sheet, original_area)] = (sheet, area)
     suggested_documents, layout_references = [], []
@@ -618,6 +614,9 @@ def _classify_semantic_batch(
         model=response.model,
         max_output_tokens=max_output_tokens,
     )
+    input_summary["sent_drawing_objects"] = [
+        {k: d[k] for k in ("sheet", "part", "object_id")} for d in drawings
+    ]
     if raw_reference_response is not None:
         from app.application.reviewed_excel_reference_ids import add_reference_trace
 
@@ -709,8 +708,11 @@ def combine_semantic_batches(
             for cell in row_cells
             if cell["cell"] in unread
         ]
+        from app.application.reviewed_excel_drawing import drawing_coverage
+
         coverage.append(
             {
+                **drawing_coverage(review, batches, name, rectangles.get(name, [])),
                 "sheet": name,
                 "total": len(cells),
                 "sent": len(cells) - len(unread),
