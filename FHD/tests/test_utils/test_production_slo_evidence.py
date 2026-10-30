@@ -436,4 +436,3 @@ def test_empty_coverage_fails_preflight_gate(tmp_path: Path, monkeypatch) -> Non
     assert payload["source_status"] == "available"
     assert payload["coverage"] == 0
     assert mod.telemetry_admissible(payload) is False
-
