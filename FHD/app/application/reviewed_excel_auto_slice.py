@@ -94,8 +94,8 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
         for fragment in fragments:
             region = known[(fragment["sheet"], fragment["range"])]
             for ref in region.get("dependencies", []):
-                col, row = coordinate_from_string(ref["cell"])
-                col = column_index_from_string(col)
+                column, row = coordinate_from_string(ref["cell"])
+                col = column_index_from_string(column)
                 if not any(
                     ref["sheet"] == part["sheet"] and c1 <= col <= c2 and r1 <= row <= r2
                     for part in fragments

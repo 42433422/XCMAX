@@ -211,7 +211,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     ):
         raise ReviewedExcelError("本批模型证据超过安全预算，未调用模型")
     sent = {(c["sheet"], c["cell"]): c for c in chosen}
-    primary = {}
+    primary: dict[str, list[tuple[int, int]]] = {}
     primary_keys = {(c["sheet"], c["cell"]) for c in chosen if not c.get("context_only")}
     for cell in chosen:
         if not cell.get("context_only"):
