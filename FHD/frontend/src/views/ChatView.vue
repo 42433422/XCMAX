@@ -265,7 +265,7 @@ import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
-import { useProactiveReplySuggestions, PROACTIVE_SUGGESTIONS_STORAGE_KEY } from '@/composables/useProactiveReplySuggestions'
+import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
@@ -295,12 +295,6 @@ const { currentIndustryId } = storeToRefs(industryStore)
 // Chat toolbar「主动意识」uses proactive suggestions storage — NOT starred WeChat polling.
 // Keep WeChat star-refresh forced off here so old checkbox events cannot misfire workflow polls.
 const autoRefreshStarredWechat = ref(false)
-try {
-  // Do not migrate old WeChat key into proactive; start from proactive key only.
-  void PROACTIVE_SUGGESTIONS_STORAGE_KEY
-} catch {
-  /* ignore */
-}
 const isTaskPaneResizable = ref(true)
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
@@ -419,7 +413,7 @@ const messageInput = ref('')
 const composerDragOver = ref(false)
 let composerDragDepth = 0
 
-const COMPOSER_ACCEPT_RE = /\.(xlsx|xlsm|pdf)$/i
+const COMPOSER_ACCEPT_RE = /\.(xlsx|xlsm|pdf|jpe?g|png|webp|gif)$/i
 const COMPOSER_ACCEPT_MIME = /^(image\/(jpeg|png|webp|gif)|application\/pdf)/i
 
 function filesFromDataTransfer(dt: DataTransfer | null): File[] {
@@ -438,7 +432,7 @@ function onComposerDragEnter(e: DragEvent) {
 }
 
 function onComposerDragOver(e: DragEvent) {
-  if (!e.dataTransfer) return
+  if (!e.dataTransfer?.types?.includes('Files')) return
   e.dataTransfer.dropEffect = 'copy'
   composerDragOver.value = true
 }
@@ -451,24 +445,16 @@ function onComposerDragLeave() {
 async function onComposerDrop(e: DragEvent) {
   composerDragDepth = 0
   composerDragOver.value = false
+  if (isLoading.value || excelAnalyzeUploading.value) return
   const files = filesFromDataTransfer(e.dataTransfer)
   if (!files.length) return
   const accepted = files.filter(isComposerAcceptedFile)
-  const rejected = files.length - accepted.length
   if (!accepted.length) {
     await addAndSaveMessage('[附件] 不支持的文件类型，请拖入 Excel、图片或 PDF', 'ai')
     return
   }
-  if (rejected > 0) {
-    await addAndSaveMessage(`[附件] 已忽略 ${rejected} 个不支持的文件`, 'ai')
-  }
-  // Reuse the same picker pipeline (xlsx → excel analyze; images/pdf → onMultimodalFileChange).
-  const dt = new DataTransfer()
-  for (const f of accepted) dt.items.add(f)
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.files = dt.files
-  await onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+  // The picker snapshots these files and applies the existing session/identity guard.
+  await onExcelAnalyzeFileChange({ target: { files: accepted, value: '' } } as unknown as Event)
 }
 
 const {
@@ -611,8 +597,10 @@ const {
   persistProactiveEnabled,
   pickProactiveSuggestion,
 } = useProactiveReplySuggestions({
-  messages: messages as any,
+  messages,
   messageInput,
+  isLoading,
+  scopeKey: messageSessionKey,
 })
 
 function onProactiveSuggestionsChange(enabled: boolean) {

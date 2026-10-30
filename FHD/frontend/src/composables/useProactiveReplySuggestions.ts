@@ -1,5 +1,4 @@
 import { ref, watch, type Ref } from 'vue'
-import { apiFetch } from '@/utils/apiBase'
 
 export const PROACTIVE_SUGGESTIONS_STORAGE_KEY = 'xcagi_proactive_suggestions'
 
@@ -84,150 +83,46 @@ export function buildLocalProactiveSuggestions(messages: ChatLikeMessage[]): Pro
   return out.slice(0, 3).map((text, i) => ({ id: `local-${i}-${text.slice(0, 8)}`, text }))
 }
 
-async function fetchAiProactiveSuggestions(messages: ChatLikeMessage[], signal: AbortSignal): Promise<ProactiveSuggestion[] | null> {
-  const recent = (messages || []).slice(-6).map((m) => ({
-    role: isUser(m) ? 'user' : isAssistant(m) ? 'assistant' : 'system',
-    content: messageText(m).slice(0, 500),
-  })).filter((m) => m.content)
-  if (!recent.length) return null
-
-  const prompt =
-    '根据当前对话，给出用户接下来可能回复或想做的三件事。' +
-    '只返回 JSON 数组，恰好 3 条中文字符串，不要执行任何工具，不要编号外的说明。'
-
-  try {
-    const response = await apiFetch('/api/ai/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: prompt,
-        messages: recent,
-        stream: false,
-        mode: 'proactive_suggestions',
-        max_tokens: 200,
-      }),
-      signal,
-      timeoutMs: 8_000,
-    })
-    if (!response.ok) return null
-    const raw = await response.text()
-    let data: Record<string, unknown> | null = null
-    try {
-      data = raw ? JSON.parse(raw) : null
-    } catch {
-      return null
-    }
-    const candidates: unknown[] = []
-    const reply = String((data as any)?.data?.reply || (data as any)?.reply || (data as any)?.data?.text || (data as any)?.message || raw || '')
-    const jsonMatch = reply.match(/\[[\s\S]*\]/)
-    if (jsonMatch) {
-      try {
-        const arr = JSON.parse(jsonMatch[0])
-        if (Array.isArray(arr)) candidates.push(...arr)
-      } catch {
-        /* fall through */
-      }
-    }
-    if (!candidates.length && Array.isArray((data as any)?.data?.suggestions)) {
-      candidates.push(...((data as any).data.suggestions as unknown[]))
-    }
-    const texts = candidates.map((c) => String(c || '').trim()).filter(Boolean).slice(0, 3)
-    if (texts.length < 3) return null
-    return texts.map((text, i) => ({ id: `ai-${i}-${text.slice(0, 8)}`, text }))
-  } catch {
-    return null
-  }
-}
-
 export interface UseProactiveReplySuggestionsDeps {
   messages: Ref<ChatLikeMessage[]>
   messageInput: Ref<string>
-  /** When false, clear chips and do not fetch. */
   enabled?: Ref<boolean>
+  isLoading?: Ref<boolean>
+  scopeKey?: Ref<string>
 }
 
-/**
- * 「主动意识启用」：基于当前对话给出三条可能的下一步回复/动作；
- * 用户点选后填入输入框，**绝不自动发送或执行**。
- * Storage: xcagi_proactive_suggestions（与星标微信 xcagi_auto_refresh_starred_wechat 隔离）。
- */
+/** Suggestions stay local; choosing one only fills the composer. */
 export function useProactiveReplySuggestions(deps: UseProactiveReplySuggestionsDeps) {
   const enabled = deps.enabled || ref(readEnabled())
-  if (!deps.enabled) {
-    // Keep local ref in sync if caller did not pass one.
-    enabled.value = readEnabled()
-  }
   const suggestions = ref<ProactiveSuggestion[]>([])
   const loading = ref(false)
-  let abort: AbortController | null = null
-  let gen = 0
+
+  function refreshSuggestions() {
+    suggestions.value = enabled.value && !deps.isLoading?.value
+      && deps.messages.value.some(isAssistant)
+      ? buildLocalProactiveSuggestions(deps.messages.value) : []
+  }
 
   function persistEnabled(next: boolean) {
     enabled.value = next
     writeEnabled(next)
-    // Explicitly do NOT touch xcagi_auto_refresh_starred_wechat / wechat polling events.
   }
 
-  function clearSuggestions() {
-    suggestions.value = []
-  }
-
-  async function refreshSuggestions() {
-    if (!enabled.value) {
-      clearSuggestions()
-      return
-    }
-    const token = ++gen
-    abort?.abort()
-    abort = new AbortController()
-    loading.value = true
-    try {
-      const ai = await fetchAiProactiveSuggestions(deps.messages.value || [], abort.signal)
-      if (token !== gen) return
-      suggestions.value = ai && ai.length >= 3 ? ai : buildLocalProactiveSuggestions(deps.messages.value || [])
-    } finally {
-      if (token === gen) loading.value = false
-    }
-  }
-
-  /** Apply chosen suggestion into the composer only — never auto-send. */
   function pickSuggestion(item: ProactiveSuggestion | string) {
-    const text = typeof item === 'string' ? item : item.text
-    const trimmed = String(text || '').trim()
-    if (!trimmed) return
+    if (!enabled.value) return
+    const text = (typeof item === 'string' ? item : item.text).trim()
+    if (!text) return
     const existing = deps.messageInput.value.trimEnd()
-    deps.messageInput.value = existing ? `${existing}\n${trimmed}` : trimmed
-    const input = document.getElementById('messageInput') as HTMLTextAreaElement | null
-    input?.focus()
+    deps.messageInput.value = existing ? `${existing}\n${text}` : text
+    document.getElementById('messageInput')?.focus()
   }
 
-  watch(
-    enabled,
-    (on) => {
-      if (!on) {
-        abort?.abort()
-        clearSuggestions()
-        return
-      }
-      void refreshSuggestions()
-    },
-    { immediate: true },
-  )
-
-  watch(
-    () => {
-      const list = deps.messages.value || []
-      const last = list[list.length - 1]
-      return `${list.length}:${messageText(last || {})}:${String(last?.role || last?.type || '')}`
-    },
-    () => {
-      if (!enabled.value) return
-      // Debounce lightly via microtask batching of rapid stream updates.
-      window.setTimeout(() => {
-        void refreshSuggestions()
-      }, 400)
-    },
-  )
+  watch([enabled, () => deps.isLoading?.value, () => {
+    const list = deps.messages.value
+    const last = list[list.length - 1]
+    return `${list.length}:${messageText(last || {})}:${last?.role || last?.type || ''}`
+  }], refreshSuggestions, { immediate: true })
+  watch(() => deps.scopeKey?.value, () => { suggestions.value = [] }, { flush: 'sync' })
 
   return {
     proactiveEnabled: enabled,
