@@ -38,13 +38,14 @@ def _slice_filename(fragments: list[dict], cells: list[dict], used: set[str]) ->
         *(f"LPT{i}" for i in range(1, 10)),
     }:
         title = "切片"
-    number = 1
-    while True:
+    # At most len(used) candidate names can be occupied; the next one is free.
+    # Keep the allocation explicitly bounded for review and denial-of-service safety.
+    for number in range(1, len(used) + 2):
         name = f"{title}_{number}.xlsx" if title == "切片" or number > 1 else f"{title}.xlsx"
         if name.casefold() not in used:
             used.add(name.casefold())
             return name
-        number += 1
+    raise ReviewedExcelError("无法分配唯一切片文件名")
 
 
 def derive_classified_documents(body: bytes, classification: dict) -> list[dict]:

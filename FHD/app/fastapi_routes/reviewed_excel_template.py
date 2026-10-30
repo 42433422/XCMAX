@@ -538,11 +538,30 @@ def _auto_slices(db, classification_id, version, tenant, owner):
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
     body = _source(db, run, tenant, owner)
     coverage = latest.get("coverage")
+    sheets = latest.get("sheets", [])
+    source_names = (
+        [sheet.get("sheet") for sheet in sheets if isinstance(sheet, dict)]
+        if isinstance(sheets, list)
+        else []
+    )
+    coverage_names = (
+        [item.get("sheet") for item in coverage if isinstance(item, dict)]
+        if isinstance(coverage, list)
+        else []
+    )
     if (
-        not isinstance(coverage, list)
-        or not coverage
+        not source_names
+        or len(source_names) != len(sheets)
+        or len(set(source_names)) != len(source_names)
+        or len(coverage_names) != len(source_names)
+        or set(coverage_names) != set(source_names)
         or any(
-            item.get("unread")
+            not isinstance(item, dict)
+            or not isinstance(item.get("total"), int)
+            or not isinstance(item.get("sent"), int)
+            or item["total"] < 0
+            or item["sent"] != item["total"]
+            or item.get("unread")
             or item.get("unassigned")
             or item.get("merged_omitted")
             or item.get("value_truncated")

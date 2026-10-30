@@ -5507,3 +5507,54 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
         ).status_code
         == 404
     )
+
+def test_auto_slice_refuses_unassigned_source_cells_in_list_and_download(review_store, monkeypatch):
+    """An apparently valid model group must not silently omit source cells."""
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", sample())},
+    ).json()["files"][0]
+    base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+
+    def incomplete(messages, schema, tokens):
+        return LlmAssistResult(
+            used_llm=True,
+            model="synthetic",
+            data={
+                "physical_regions": [
+                    {
+                        "sheet": "报价",
+                        "range": "A1:A1",
+                        "labels": ["unknown"],
+                        "evidence": [],
+                        "dependencies": [],
+                        "reason": "仅分类首格，其余原件不可静默遗漏",
+                    }
+                ],
+                "logical_documents": [
+                    {"document_id": "only-first", "fragments": [{"sheet": "报价", "range": "A1:A1"}]}
+                ],
+                "layout_references": [],
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_mimo_complete", incomplete
+    )
+    response = client.post(
+        base + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["coverage"][0]["unassigned"]
+    endpoint = base + "/auto-slices/" + result["version"]
+    listing = client.get(endpoint)
+    assert listing.status_code == 400 and "完整覆盖" in listing.text
+    download = client.get(endpoint + "/0")
+    assert download.status_code == 400 and "完整覆盖" in download.text
+
