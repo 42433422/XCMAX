@@ -312,11 +312,6 @@ jobs:
         if: needs.classify.outputs.backend_skip != 'true'
         run: ruff format --check app/ tests/
 
-      - name: Show Ruff formatting diff for policy test (temporary diagnostic)
-        if: failure()
-        continue-on-error: true
-        run: ruff format --diff tests/release_gate/test_gitleaks_ignore_policy.py
-
       - name: Run mypy type checking
         if: needs.classify.outputs.backend_skip != 'true'
         run: mypy app/ --no-error-summary

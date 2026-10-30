@@ -41,9 +41,7 @@ def test_gitleaks_exceptions_are_exact_and_unique() -> None:
 def test_credential_incident_sources_are_not_silenced() -> None:
     register = json.loads(INCIDENTS.read_text(encoding="utf-8"))
     incident_paths = {
-        source
-        for incident in register["incidents"]
-        for source in incident["source_locations"]
+        source for incident in register["incidents"] for source in incident["source_locations"]
     }
     for _, path in _exceptions():
         assert path not in incident_paths, (
