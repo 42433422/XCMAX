@@ -382,18 +382,12 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
-        # Provider, model, prompt metadata and token usage can all reveal
-        # tenant-private routing or workload details.  Keep operational logs
-        # value-free; request tracing belongs in the redacted audit layer.
         logger.debug("LLM completion request started")
 
         client = await self._get_client()
         response = await client.post(url, headers=headers, json=payload)
         if audit_response is not None:
-            raw_body = response.content
-            if self._api_key and self._api_key.encode() in raw_body:
-                raise ValueError("模型响应包含敏感凭据，未归档")
-            audit_response(raw_body, response.status_code, response.headers.get("x-request-id"))
+            self._capture_reviewed_excel_response(response, audit_response)
         response.raise_for_status()
 
         result = response.json()
@@ -408,6 +402,13 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         logger.debug("LLM completion request succeeded")
 
         return cast("dict[str, Any]", result)
+
+    def _capture_reviewed_excel_response(self, response: Any, callback: Any) -> None:
+        """Verify raw response before parsing; never log tenant values or credentials."""
+        raw_body = response.content
+        if self._api_key and self._api_key.encode() in raw_body:
+            raise ValueError("模型响应包含敏感凭据，未归档")
+        callback(raw_body, response.status_code, response.headers.get("x-request-id"))
 
     async def stream_chat_completion(
         self,

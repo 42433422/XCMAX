@@ -5508,7 +5508,7 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
         == 404
     )
 
-def test_auto_slice_refuses_unassigned_source_cells_in_list_and_download(review_store, monkeypatch):
+def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
     """An apparently valid model group must not silently omit source cells."""
     from app.application.etl.llm_assist_runtime import LlmAssistResult
 
@@ -5537,7 +5537,10 @@ def test_auto_slice_refuses_unassigned_source_cells_in_list_and_download(review_
                     }
                 ],
                 "logical_documents": [
-                    {"document_id": "only-first", "fragments": [{"sheet": "报价", "range": "A1:C1"}]}
+                    {
+                        "document_id": "only-first",
+                        "fragments": [{"sheet": "报价", "range": "A1:C1"}],
+                    }
                 ],
                 "layout_references": [],
             },
