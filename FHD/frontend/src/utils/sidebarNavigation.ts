@@ -102,15 +102,16 @@ async function ensureModRoutesRegisteredUnlessStale(
 ): Promise<void> {
   if (isStale()) return
   const pending = ensureModRoutesRegistered(router, getModRoutes)
-  while (true) {
-    if (isStale()) return
-    const settled = await Promise.race([
-      pending.then(() => true),
-      new Promise<boolean>((resolve) => {
-        globalThis.setTimeout(() => resolve(false), 40)
+  let timer: ReturnType<typeof setInterval> | undefined
+  try {
+    await Promise.race([
+      pending,
+      new Promise<void>((resolve) => {
+        timer = globalThis.setInterval(() => { if (isStale()) resolve() }, 40)
       }),
     ])
-    if (settled) return
+  } finally {
+    globalThis.clearInterval(timer)
   }
 }
 
@@ -251,14 +252,10 @@ export function navigateFromSidebarKey(router: Router, viewKey: string, options:
 
   queuedSidebarViewKey = normalized
   queuedSidebarOptions = options
-  const myGeneration = ++sidebarNavGeneration
+  sidebarNavGeneration += 1
 
   if (!sidebarNavDrain) {
     sidebarNavDrain = drainSidebarNavigationQueue(router)
   }
-  return sidebarNavDrain.then(async (applied) => {
-    if (myGeneration === sidebarNavGeneration) return applied
-    if (sidebarNavDrain) return sidebarNavDrain
-    return myGeneration < sidebarNavGeneration
-  })
+  return sidebarNavDrain
 }

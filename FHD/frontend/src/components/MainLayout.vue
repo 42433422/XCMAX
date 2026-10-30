@@ -237,6 +237,7 @@ const pendingSidebarView = ref('')
 const routeNavInFlight = ref(false)
 const showRouteNavFeedback = ref(false)
 let routeNavFeedbackTimer = 0
+let routeNavGeneration = 0
 const displayedActiveView = computed(() => pendingSidebarView.value || currentRouteName.value)
 
 function clearRouteNavFeedbackTimer() {
@@ -256,7 +257,7 @@ function syncPendingSidebarWithRoute() {
   }
 }
 
-watch(currentRouteName, () => {
+watch([currentRouteName, routeChunkErrorPath], () => {
   syncPendingSidebarWithRoute()
 })
 
@@ -313,6 +314,7 @@ const currentViewTitle = computed(() => {
 async function navigateToView(viewKey) {
   const normalized = String(viewKey || '').trim()
   if (!normalized) return
+  const generation = ++routeNavGeneration
   // Optimistic: highlight immediately so cold chunk / mod-route wait does not look like a dead click.
   pendingSidebarView.value = normalized
   routeNavInFlight.value = true
@@ -330,8 +332,8 @@ async function navigateToView(viewKey) {
       getModRoutes: () => modsStore.modRoutes,
     })
   } finally {
-    syncPendingSidebarWithRoute()
-    if (!pendingSidebarView.value) {
+    if (generation === routeNavGeneration) {
+      pendingSidebarView.value = ''
       routeNavInFlight.value = false
       showRouteNavFeedback.value = false
       clearRouteNavFeedbackTimer()
@@ -341,7 +343,7 @@ async function navigateToView(viewKey) {
 
 const handleViewChange = (viewKey) => {
   // Fire-and-forget: do not serialize UI behind a prior slow navigate promise.
-  void navigateToView(viewKey)
+  void navigateToView(viewKey).catch((error) => console.warn('[MainLayout] 页面切换失败', error))
 }
 
 function openSettings() {
