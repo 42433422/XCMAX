@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.dev.change_classifier import CATEGORY_MODE, RELEVANT, decide
+from scripts.dev.change_classifier import CATEGORY_MODE, RELEVANT, _changed_files, decide
 from scripts.dev.change_classifier import main as classifier_main
 
 DOCS_ONLY = ["docs/CI_SSOT.md", "FHD/docs/WINDOWS_RELEASE_SSOT.md"]
@@ -38,6 +38,10 @@ MACOS_ONLY = [
 ]
 MOBILE_ONLY = ["FHD/mobile-flutter-poc/lib/main.dart"]
 ETL_OUTPUT_SECURITY = ["FHD/app/application/shipment_excel_etl_security.py"]
+METRIC_SNAPSHOTS = [
+    "FHD/metrics/dora-20261029.json",
+    "FHD/metrics/slo-production/20261029T150013Z-40896990546-1.json",
+]
 
 
 class SkipIfAllIrrelevantTests(unittest.TestCase):
@@ -70,6 +74,109 @@ class SkipIfAllIrrelevantTests(unittest.TestCase):
     def test_unknown_path_is_fail_open(self) -> None:
         self.assertTrue(decide("backend", ["some/new/area/file.bin"]))
         self.assertTrue(decide("frontend", ["some/new/area/file.bin"]))
+
+
+class MetricSnapshotFastPathTests(unittest.TestCase):
+    """快照精确放行；配置、代码及形似路径不得绕过完整 CI。"""
+
+    def test_pr_2775_snapshot_plus_docs_skips_heavy_runtime_suites(self) -> None:
+        changed = DOCS_ONLY + METRIC_SNAPSHOTS
+        for category in ("backend", "frontend", "release"):
+            with self.subTest(category=category):
+                self.assertFalse(decide(category, changed))
+        self.assertTrue(decide("docs", changed))
+
+    def test_snapshot_files_without_docs_skip_runtime_suites(self) -> None:
+        for path in METRIC_SNAPSHOTS:
+            for category in ("backend", "frontend", "release"):
+                with self.subTest(path=path, category=category):
+                    self.assertFalse(decide(category, [path]))
+
+    def test_operational_inputs_and_near_misses_remain_fail_open(self) -> None:
+        unsafe = [
+            "FHD/metrics/backend_test_timings.json",
+            "FHD/metrics/intent_benchmark_latest.json",
+            "FHD/metrics/slo-production/config.json",
+            "FHD/metrics/dora-20261029.json.bak",
+            "FHD/metrics/dora-2026102x.json",
+            "FHD/metrics/dora-20261029.json/extra",
+            "FHD/metrics/slo-production/20261029T150013Z-40896990546.json",
+            "FHD/metrics/slo-production/20261029T150013Z-run-1.json",
+            "FHD/scripts/ci/backend_shards.py",
+            "FHD/requirements-server-api.txt",
+        ]
+        for path in unsafe:
+            for category in ("backend", "frontend", "release"):
+                with self.subTest(path=path, category=category):
+                    self.assertTrue(decide(category, [path]))
+
+    def test_snapshot_plus_backend_change_runs_backend(self) -> None:
+        changed = METRIC_SNAPSHOTS + BACKEND_ONLY
+        self.assertTrue(decide("backend", changed))
+        self.assertTrue(decide("release", changed))
+
+    def test_snapshot_plus_frontend_change_runs_frontend(self) -> None:
+        changed = METRIC_SNAPSHOTS + FRONTEND_ONLY
+        self.assertTrue(decide("frontend", changed))
+
+
+class MetricSnapshotRenameTests(unittest.TestCase):
+    RUNTIME_PATHS = (
+        ("FHD/app/runtime.py", ("backend", "release")),
+        ("FHD/config/runtime.json", ("backend", "release")),
+        ("FHD/requirements-server-api.txt", ("backend", "frontend", "release")),
+        ("FHD/frontend/package-lock.json", ("frontend",)),
+    )
+
+    def renamed_paths(self, old: str, new: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+
+            def git(*args: str) -> str:
+                return subprocess.check_output(
+                    ["git", "-C", str(repo), *args], text=True, stderr=subprocess.PIPE
+                ).strip()
+
+            git("init", "--quiet")
+            git("config", "user.email", "classifier-test@example.invalid")
+            git("config", "user.name", "Classifier regression")
+            git("config", "diff.renames", "true")
+            source = repo / old
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text('{"same_bytes": "rename regression"}\n', encoding="utf-8")
+            git("add", "--", old)
+            git("commit", "--quiet", "-m", "before rename")
+            before = git("rev-parse", "HEAD")
+            (repo / new).parent.mkdir(parents=True, exist_ok=True)
+            git("mv", "--", old, new)
+            git("commit", "--quiet", "-m", "after rename")
+            after = git("rev-parse", "HEAD")
+            self.assertEqual(
+                git("diff", "--name-status", "--find-renames=100%", before, after),
+                f"R100\t{old}\t{new}",
+            )
+            with patch("scripts.dev.change_classifier.REPO_ROOT", repo):
+                return _changed_files(before, after)
+
+    def test_runtime_rename_into_snapshot_runs_affected_suites(self) -> None:
+        for path, categories in self.RUNTIME_PATHS:
+            changed = self.renamed_paths(path, METRIC_SNAPSHOTS[0])
+            for category in categories:
+                with self.subTest(path=path, category=category):
+                    self.assertTrue(decide(category, changed))
+
+    def test_snapshot_rename_to_runtime_runs_affected_suites(self) -> None:
+        for path, categories in self.RUNTIME_PATHS:
+            changed = self.renamed_paths(METRIC_SNAPSHOTS[1], path)
+            for category in categories:
+                with self.subTest(path=path, category=category):
+                    self.assertTrue(decide(category, changed))
+
+    def test_snapshot_to_snapshot_rename_keeps_fast_path(self) -> None:
+        changed = self.renamed_paths(*METRIC_SNAPSHOTS)
+        for category in ("backend", "frontend", "release"):
+            with self.subTest(category=category):
+                self.assertFalse(decide(category, changed))
 
 
 class RunIfAnyRelevantTests(unittest.TestCase):
