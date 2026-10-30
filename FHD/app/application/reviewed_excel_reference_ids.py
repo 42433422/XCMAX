@@ -33,6 +33,25 @@ def source_cell_ids(cells: list[dict], prefixes: list[dict]) -> list[str]:
     return identifiers
 
 
+def source_layout_schema(sheets: list[dict]) -> dict:
+    """Source merge references have their own schema, never document fragment aliases."""
+    props: dict = {"sheet": {"type": "string"}, "range": {"type": "string"}}
+    ranges = sorted({area for sheet in sheets for area in sheet["merged"]})
+    if ranges:
+        props["sheet"]["enum"] = sorted({sheet["sheet"] for sheet in sheets if sheet["merged"]})
+        props["range"]["enum"] = ranges
+    return {
+        "type": "array",
+        "maxItems": 100 if ranges else 0,
+        "items": {
+            "type": "object",
+            "required": ["sheet", "range"],
+            "additionalProperties": False,
+            "properties": props,
+        },
+    }
+
+
 def reference_contract(
     cells: list[dict],
     original_schema: dict,
@@ -68,7 +87,7 @@ def reference_contract(
     props["evidence_ids"] = {
         "type": "array",
         "maxItems": 100,
-        "items": {"type": "string", "enum": valid},
+        "items": {"type": "string", "enum": list(primary)},
     }
     props["dependency_ids"] = {
         "type": "array",
@@ -184,15 +203,7 @@ def neutralize_messages(messages: list[dict]) -> None:
         coverage["context_only"] = len(selected) - coverage["sent_nonempty"]
         coverage["unread_nonempty"] = coverage["total_nonempty"] - coverage["sent_nonempty"]
     messages[1]["content"] = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    messages[0]["content"] = (
-        "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
-        "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
-        "Leave uncertain fragments ungrouped. Do not use unread content as evidence. "
-        "Keep merged cells intact; every evidence coordinate MUST be inside its region and on the same sheet. "
-        "External context belongs in dependencies. A repeated table header is an observation, not proof "
-        "of continuation or a business category. Treat structural observations, not proof, as context only. "
-        "Return exactly one JSON object matching output_schema, without extra fields."
-    )
+    messages[0]["content"] = SOURCE_PROTOCOL
 
 
 def add_reference_trace(summary: dict, raw: dict, references: dict) -> None:
@@ -373,8 +384,8 @@ def neutral_transport_batches(review: dict) -> list[list[dict]]:
     return result
 
 
-CONTRACT_VERSION = "independent-excel-v4-complete-merges"
-IDENTIFY_PROMPT = (
+CONTRACT_VERSION = "independent-excel-v5-source-protocol"
+SOURCE_PROTOCOL = (
     "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
     "Leave uncertain fragments ungrouped. Do not use unread content as evidence. "
@@ -382,6 +393,25 @@ IDENTIFY_PROMPT = (
     "External context belongs in dependencies. A repeated table header is an observation, not proof "
     "of continuation or a business category. Treat structural observations, not proof, as context only. "
     "Return exactly one JSON object matching output_schema, without extra fields."
+    " physical_regions are non-overlapping geometric fragments, not document counts. "
+    "Every supplied non-context nonempty cell must lie in exactly one physical region. "
+    "A physical region must contain its own supplied non-context nonempty evidence; "
+    "blank cells may be included, but blank layout, formatting or merge metadata alone cannot form a region. "
+    "Any region intersecting a merged range must contain that entire merged range. "
+    "Use two-dimensional rectangles where needed, not just whole-row cuts; "
+    "never cut a merge or borrow unread nonempty cells to complete a rectangle. "
+    "context_only cells may be dependencies, never primary or classification evidence. "
+    "Formula target coordinates and merge metadata describe source structure, not additional supplied cells. "
+    "A formula target is available evidence only if it is explicitly present in cells. "
+    "logical_documents.fragments must copy exact sheet/range pairs from this response's physical_regions; "
+    "do not invent larger document bounding boxes. Assign each fragment to at most one document, "
+    "without duplicate fragments. document_id must be nonblank, unique and at most 80 characters. "
+    "Ungrouped fragments are allowed and logical_documents may be []. "
+    "layout_references contains only exact sheet/range pairs from sheets[].merged on the same sheet, "
+    "not physical-region or document bounding boxes. It is an optional subset of source layout references, "
+    "not a merge-coverage ledger: use [] when none is needed, not an enumeration of every merge."
+)
+IDENTIFY_PROMPT = SOURCE_PROTOCOL + (
     " Use only supplied evidence_id values for evidence_ids, dependency_ids and primary_id. "
     "Evidence IDs encode source_sheet_prefixes and source coordinates, not sequence numbers. "
     "The primary_id must identify a non-context cell inside its region. "
@@ -399,7 +429,9 @@ IDENTIFY_PROMPT = (
     "Full primary-cell coverage does not require enumerating all cells as evidence: "
     "choose 1 to 8 representative evidence_ids per region. "
     "Check each selected ID against its supplied sheet and coordinate; "
-    "related references outside the region belong only in dependency_ids."
+    "related references outside the region belong only in dependency_ids. "
+    "Never synthesize evidence IDs from formula targets or other metadata coordinates; "
+    "only cells[].evidence_id values are available, with context_only IDs restricted to dependency_ids."
 )
 DRAWING_IDENTIFY_PROMPT = IDENTIFY_PROMPT + (
     " When drawing_evidence is present, use only supplied drawing_id values in drawing_ids. "
@@ -427,12 +459,31 @@ def contract_hashes(schema: dict, phase: str) -> dict:
     template = deepcopy(schema)
     if phase == "identify":
         props = template["properties"]["physical_regions"]["items"]["properties"]
+        if props["evidence_ids"]["items"]["enum"] != props["primary_id"]["enum"]:
+            raise ValueError("classification evidence must use the primary source whitelist")
         props["sheet"]["enum"] = ["<SOURCE_SHEETS>"]
-        for key in ("evidence_ids", "dependency_ids"):
-            props[key]["items"]["enum"] = ["<SOURCE_EVIDENCE_IDS>"]
+        props["evidence_ids"]["items"]["enum"] = ["<PRIMARY_EVIDENCE_IDS>"]
+        props["dependency_ids"]["items"]["enum"] = ["<SOURCE_EVIDENCE_IDS>"]
         props["primary_id"]["enum"] = ["<PRIMARY_EVIDENCE_IDS>"]
         if "drawing_ids" in props:
             props["drawing_ids"]["items"]["enum"] = ["<SOURCE_DRAWING_IDS>"]
+        layout = template["properties"]["layout_references"]
+        layout_props = layout["items"]["properties"]
+        if type(layout["maxItems"]) is not int:
+            raise ValueError("invalid layout source bound")
+        if layout["maxItems"] == 0:
+            if any("enum" in layout_props[key] for key in ("sheet", "range")):
+                raise ValueError("empty layout source has unexpected enums")
+            layout["maxItems"] = 100
+        elif layout["maxItems"] != 100 or any(
+            not isinstance(layout_props[key].get("enum"), list)
+            or not layout_props[key]["enum"]
+            or any(not isinstance(value, str) or not value for value in layout_props[key]["enum"])
+            for key in ("sheet", "range")
+        ):
+            raise ValueError("invalid source layout enum contract")
+        layout_props["sheet"]["enum"] = ["<SOURCE_MERGE_SHEETS>"]
+        layout_props["range"]["enum"] = ["<SOURCE_MERGE_RANGES>"]
         prompt = DRAWING_IDENTIFY_PROMPT if "drawing_ids" in props else IDENTIFY_PROMPT
     elif phase == "group":
         props = template["properties"]["groups"]["items"]["properties"]
@@ -454,16 +505,16 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "bc3cb2f15272d8836e7e8d901f08e68a498d528965012a378a0ff111f22ca9e0",
-        "e2e1ceb650586cdc2954e2e622e6807a03a3fec251aa122dc17d1fdd6dc01b4a",
+        "d8d43e957f0856b5f3aa71fdaeff1156cbaeb52ac485af9ccd57b53b790bfd48",
+        "bb4c8dca5c9e7fa2815e2066ea4ff82af17ef3cf1e9c4067bae8ff8a8021bc80",
     ),
     "group": (
         "440a63ab70be709c7825a4e6374ef3c1f3e52687a3e8b4f3f5927235459ee22e",
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "408312653f628e6e79865b17e0bdaee17e636cfa902573cda6a1620ec56dc097",
-        "544e978d9e1b964e64b14c9f7a5fe5ffcd5bec9670dcdc463836c10a0e33e5ee",
+        "1fb743fe18dc55f5096467618dd5a0571c2832b70ffae8ee7714ae68d391c845",
+        "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (
         "49665c8535ed2aa9ba6a4dfc047fe360ccf97ddcead5063b20f05314f097c4b8",

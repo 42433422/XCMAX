@@ -309,7 +309,7 @@ def _classify_semantic_batch(
         "required": ["document_id", "fragments"],
         "additionalProperties": False,
         "properties": {
-            "document_id": {"type": "string"},
+            "document_id": {"type": "string", "minLength": 1, "maxLength": 80},
             "fragments": {
                 "type": "array",
                 "minItems": 1,
@@ -318,6 +318,8 @@ def _classify_semantic_batch(
             },
         },
     }
+    from app.application.reviewed_excel_reference_ids import source_layout_schema
+
     schema = {
         "type": "object",
         "required": ["physical_regions", "logical_documents", "layout_references"],
@@ -330,7 +332,7 @@ def _classify_semantic_batch(
                 "items": region_schema,
             },
             "logical_documents": {"type": "array", "maxItems": 100, "items": document_schema},
-            "layout_references": {"type": "array", "maxItems": 100, "items": fragment_schema},
+            "layout_references": source_layout_schema(overview),
         },
     }
     structure_regions = []

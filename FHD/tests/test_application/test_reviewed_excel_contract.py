@@ -49,7 +49,7 @@ def test_independent_contract_is_identical_for_unseen_structures(monkeypatch):
     assert hashes[0] == hashes[1] == hashes[2]
     assert (
         hashes[0]["schema_template_sha256"]
-        == "e2e1ceb650586cdc2954e2e622e6807a03a3fec251aa122dc17d1fdd6dc01b4a"
+        == "bb4c8dca5c9e7fa2815e2066ea4ff82af17ef3cf1e9c4067bae8ff8a8021bc80"
     )
     with pytest.raises(ReviewedExcelError, match="契约"):
         verify_contract(IDENTIFY_PROMPT + " changed", prepared["schema"], "identify")
@@ -118,3 +118,151 @@ def test_identification_and_grouping_keep_workbook_prefix_when_batch_skips_first
     grouping_payload = json.loads(grouping["messages"][1]["content"])
     assert grouping_payload["source_sheet_prefixes"] == prefixes
     assert [cell["evidence_id"] for cell in grouping_payload["cells"]] == ["S2:C17"]
+
+
+def source_protocol_review():
+    book = Workbook()
+    first = book.active
+    first.title = "O'Brien ! 表"
+    first["A1"] = "=Z99"
+    first.merge_cells("A1:A2")
+    second = book.create_sheet("其他")
+    second["C1"] = "source"
+    second.merge_cells("C1:C2")
+    stream = BytesIO()
+    book.save(stream)
+    return inspect_workbook(stream.getvalue())
+
+
+@pytest.mark.parametrize("reference_ids", [False, True])
+def test_final_source_protocol_defines_layout_documents_and_context(reference_ids):
+    request = _classify_semantic_batch(
+        source_protocol_review(), prepare_only=True, reference_ids=reference_ids
+    )
+    prompt = request["messages"][0]["content"]
+    for clause in (
+        "logical_documents.fragments must copy exact sheet/range pairs",
+        "Assign each fragment to at most one document",
+        "layout_references contains only exact sheet/range pairs from sheets[].merged",
+        "not a merge-coverage ledger",
+        "context_only cells may be dependencies, never primary or classification evidence",
+        "Any region intersecting a merged range must contain that entire merged range",
+        "never cut a merge or borrow unread nonempty cells",
+        "A formula target is available evidence only if it is explicitly present in cells",
+    ):
+        assert clause in prompt
+    payload = json.loads(request["messages"][1]["content"])
+    assert payload["output_schema"] == request["schema"]
+    layout = request["schema"]["properties"]["layout_references"]
+    fragments = request["schema"]["properties"]["logical_documents"]["items"]["properties"][
+        "fragments"
+    ]["items"]
+    assert layout["items"] is not fragments
+    assert "enum" not in fragments["properties"]["range"]
+    assert layout["items"]["properties"]["range"]["enum"] == ["A1:A2", "C1:C2"]
+    assert layout["items"]["properties"]["sheet"]["enum"] == ["O'Brien ! 表", "其他"]
+    if reference_ids:
+        assert (
+            "S1:Z99"
+            not in request["schema"]["properties"]["physical_regions"]["items"]["properties"][
+                "dependency_ids"
+            ]["items"]["enum"]
+        )
+        assert payload["integrity_constraints"]["formula_references"][0]["references"] == [
+            {"sheet": "O'Brien ! 表", "range": "Z99"}
+        ]
+
+
+def test_layout_source_enums_do_not_replace_sheet_range_pair_guard(monkeypatch):
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_template import _validate_template_schema
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    review = source_protocol_review()
+    request = _classify_semantic_batch(review, prepare_only=True, reference_ids=True)
+    data = {
+        "physical_regions": [
+            {
+                "sheet": sheet,
+                "range": area,
+                "evidence_ids": [identifier],
+                "primary_id": identifier,
+                "dependency_ids": [],
+                "reason": "source",
+            }
+            for sheet, area, identifier in [
+                ("O'Brien ! 表", "A1:A2", "S1:A1"),
+                ("其他", "C1:C2", "S2:C1"),
+            ]
+        ],
+        "logical_documents": [],
+        "layout_references": [{"sheet": "O'Brien ! 表", "range": "C1:C2"}],
+    }
+    assert _validate_template_schema(request["schema"], data)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_mimo_complete",
+        lambda *args: LlmAssistResult(used_llm=True, data=data),
+    )
+    with pytest.raises(ReviewedExcelError, match="布局引用"):
+        _classify_semantic_batch(review, reference_ids=True)
+    data["layout_references"][0]["range"] = "A1:A2"
+    assert len(_classify_semantic_batch(review, reference_ids=True)["regions"]) == 2
+    data["layout_references"] = []
+    assert _classify_semantic_batch(review, reference_ids=True)["layout_references"] == []
+    data["logical_documents"] = [
+        {"document_id": "d", "fragments": [{"sheet": "O'Brien ! 表", "range": "A1:A2"}]},
+        {"document_id": "e", "fragments": [{"sheet": "O'Brien ! 表", "range": "A1:A2"}]},
+    ]
+    with pytest.raises(ReviewedExcelError, match="重复"):
+        _classify_semantic_batch(review, reference_ids=True)
+    data["logical_documents"].pop()
+    data["logical_documents"][0]["fragments"][0]["range"] = "A1:C2"
+    with pytest.raises(ReviewedExcelError, match="片段来源"):
+        _classify_semantic_batch(review, reference_ids=True)
+
+
+def test_empty_merge_source_allows_only_empty_layout_and_preserves_contract():
+    from app.application.reviewed_excel_template import _validate_template_schema
+
+    book = Workbook()
+    book.active["A1"] = "source"
+    stream = BytesIO()
+    book.save(stream)
+    request = _classify_semantic_batch(
+        inspect_workbook(stream.getvalue()), prepare_only=True, reference_ids=True
+    )
+    layout = request["schema"]["properties"]["layout_references"]
+    assert layout["maxItems"] == 0
+    assert _validate_template_schema(layout, [])
+    assert not _validate_template_schema(layout, [{"sheet": "Sheet", "range": "A1"}])
+    assert verify_contract(IDENTIFY_PROMPT, request["schema"], "identify") == verify_contract(
+        IDENTIFY_PROMPT,
+        _classify_semantic_batch(source_protocol_review(), prepare_only=True, reference_ids=True)[
+            "schema"
+        ],
+        "identify",
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation", ["bound", "bound_boolean", "required", "document_length", "evidence_role"]
+)
+def test_source_normalization_does_not_hide_protocol_mutations(mutation):
+    schema = _classify_semantic_batch(
+        source_protocol_review(), prepare_only=True, reference_ids=True
+    )["schema"]
+    props = schema["properties"]
+    if mutation == "bound":
+        props["layout_references"]["maxItems"] = 99
+    elif mutation == "bound_boolean":
+        props["layout_references"]["maxItems"] = False
+    elif mutation == "required":
+        props["layout_references"]["items"]["required"] = ["sheet"]
+    elif mutation == "document_length":
+        props["logical_documents"]["items"]["properties"]["document_id"]["maxLength"] = 81
+    else:
+        props["physical_regions"]["items"]["properties"]["evidence_ids"]["items"]["enum"].append(
+            "S1:Z99"
+        )
+    with pytest.raises(ReviewedExcelError, match="契约"):
+        verify_contract(IDENTIFY_PROMPT, schema, "identify")

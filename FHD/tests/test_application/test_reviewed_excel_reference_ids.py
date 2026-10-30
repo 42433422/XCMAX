@@ -86,7 +86,7 @@ def test_rejects_sheet_as_cell_and_unread_phantom_region():
         normalize_reference_ids(wrong, refs, id_schema, schema)
     wrong = deepcopy(data)
     wrong["physical_regions"][0]["evidence_ids"] = ["S1:D11"]
-    with pytest.raises(ReviewedExcelError, match="分类证据不能只来自上下文"):
+    with pytest.raises(ReviewedExcelError, match="白名单"):
         normalize_reference_ids(wrong, refs, id_schema, schema)
 
 
