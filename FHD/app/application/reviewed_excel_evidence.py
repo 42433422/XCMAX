@@ -604,3 +604,62 @@ def plan_complete_batches(review: dict, rules: list[dict]) -> list[list[dict]]:
             if queue:
                 fair.append(queue.popleft())
     return fair
+
+
+def observe_fragment_relationships(review: dict, sheets: list[dict]) -> dict:
+    """Attach source observations and unselected candidate edges, never approve a relationship."""
+    regions = [
+        {
+            **region,
+            "sheet": sheet["sheet"],
+            "evidence": [{"sheet": sheet["sheet"], **ref} for ref in region["evidence"]],
+        }
+        for sheet in sheets
+        for region in sheet["regions"]
+    ]
+    for region in regions:
+        region.pop("continuation_context", None)
+    observed = flag_repeated_header_conflicts(regions, review["cells"])
+    by_region = {(region["sheet"], region["range"]): region for region in observed}
+    for sheet in sheets:
+        for region in sheet["regions"]:
+            observation = by_region[(sheet["sheet"], region["range"])]
+            region.pop("continuation_context", None)
+            for field in ("continuation_context", "context_warning"):
+                if field in observation:
+                    region[field] = observation[field]
+            if region.get("context_warning"):
+                region["context_warning"] = (
+                    region["context_warning"]
+                    .replace("模型分类", "分类")
+                    .replace("模型建议", "分类建议")
+                )
+    for region in regions:
+        observation = by_region[(region["sheet"], region["range"])]
+        if "continuation_context" in observation:
+            region["continuation_context"] = observation["continuation_context"]
+    links = candidate_fragment_links(regions, review["cells"])
+    for link in links["items"]:
+        link["selected"] = False
+    return links
+
+
+def plan_semantic_batches(
+    review: dict, max_calls: int | None = None
+) -> tuple[list[list[dict]], int]:
+    """Analyze bounded batches sequentially; fail closed on conflicting model regions."""
+    import os
+
+    from app.application.reviewed_excel_classification import classify_review_workbook
+
+    try:
+        max_calls = (
+            int(os.environ.get("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1"))
+            if max_calls is None
+            else max_calls
+        )
+    except ValueError:
+        raise ReviewedExcelError("分类模型调用预算无效") from None
+    if not 1 <= max_calls <= 4:
+        raise ReviewedExcelError("分类模型调用预算必须为 1 至 4")
+    return plan_complete_batches(review, classify_review_workbook(review)), max_calls
