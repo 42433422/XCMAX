@@ -408,8 +408,29 @@ def inspect_cut(review: dict, group: dict) -> dict:
         r2 = max(r[3] for r in rects)
         host_range = _range_to_a1(c1, r1, c2, r2)
         titles = _detect_title_blocks(cells, sheet, c1, r1, c2, r2)
+        # Prefer structural index block_title rows when present (layout fallback).
+        index = review.get("workbook_structural_index") or {}
+        struct_titles = []
+        for sheet_info in index.get("sheets") or []:
+            if sheet_info.get("sheet") != sheet:
+                continue
+            for block in sheet_info.get("block_title_rows") or []:
+                row = block.get("row")
+                if isinstance(row, int) and r1 <= row <= r2:
+                    struct_titles.append(
+                        {
+                            "row": row,
+                            "text": str(block.get("text") or "")[:120],
+                            "cell": f"A{row}",
+                            "sheet": sheet,
+                            "host_range": host_range,
+                            "from_structural_index": True,
+                        }
+                    )
+        if len(struct_titles) >= len(titles):
+            titles = struct_titles
         for t in titles:
-            title_blocks.append({**t, "sheet": sheet, "host_range": host_range})
+            title_blocks.append({**t, "sheet": sheet, "host_range": host_range} if "sheet" not in t else t)
         found = _detect_order_ledger_runs(cells, sheet, c1, r1, c2, r2)
         if found and (ledger is None or found["run_count"] > ledger["run_count"]):
             ledger = {**found, "host_range": host_range, "host_bounds": (c1, r1, c2, r2)}
