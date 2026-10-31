@@ -1,5 +1,5 @@
 {
-  "lines": 2404496,
+  "lines": 2404672,
   "updated": "2026-10-31",
-  "note": "feat/#2858 收口：自动入库进度API、黄绿胶囊UI、审批列表mock与能力中心/路由拆分后的最终行数基线。"
+  "note": "feat/#2858：structure gates G2 基线抬升（etl_auto_ingest 顶层拆分）+ BOUNDARY_ERRORS 收口后的最终行数。"
 }
