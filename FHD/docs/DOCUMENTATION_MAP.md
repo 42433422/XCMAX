@@ -42,3 +42,7 @@
 | [../tools/debug/README.md](../tools/debug/README.md) | 诊断脚本（如 `diagnose_pro_mode.py`、`diagnose_routes.py`） |
 | [../scripts/README.md](../scripts/README.md) | 根级脚本约定与 launchers |
 | [../tools/frontend-oneoffs/README.md](../tools/frontend-oneoffs/README.md) | 前端一次性修补历史说明 |
+
+## Regression fixtures
+
+- [ELT / MIMO intake samples](../testdata/elt-intake-samples/README.md) — synthetic xlsx/csv for drop-file → ingest → KB QA

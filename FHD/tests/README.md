@@ -30,3 +30,7 @@
 ## collect_ignore
 
 遗留/未落地用例暂从采集排除；收尾见 [`docs/reports/COVERAGE_RAMP.md`](docs/reports/COVERAGE_RAMP.md) ④-B。
+
+## ELT intake sample pack
+
+Synthetic MIMO/丢文件 fixtures: [`../testdata/elt-intake-samples/`](../testdata/elt-intake-samples/README.md).
