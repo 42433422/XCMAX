@@ -1,5 +1,5 @@
 {
-  "lines": 2405246,
+  "lines": 2405305,
   "updated": "2026-10-31",
-  "note": "ELT product rename (/api/elt; etl_* tables; etl.* perms) rebased onto #2856 inline docking template"
+  "note": "主人要求：归档配额未配置时默认 10 GiB（10737418240 字节）无额外硬顶；含 _ensure_tenant_quota、GET 回显 using_default、CHANGELOG 与对应测试，净增约 59 行"
 }
