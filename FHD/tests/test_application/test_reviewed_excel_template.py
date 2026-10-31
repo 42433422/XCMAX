@@ -5085,9 +5085,7 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
     assert disk.startswith(_ENVELOPE_MAGIC) and body not in disk
     with review_store.engine.connect() as connection:
         row = connection.execute(
-            text(
-                "SELECT size_bytes, sha256 FROM etl_archive_versions WHERE storage_path = :p"
-            ),
+            text("SELECT size_bytes, sha256 FROM etl_archive_versions WHERE storage_path = :p"),
             {"p": str(originals[0])},
         ).one()
     version = EtlArchiveVersion(size_bytes=row.size_bytes, sha256=row.sha256)

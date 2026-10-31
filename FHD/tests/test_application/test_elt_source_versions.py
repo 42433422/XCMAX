@@ -71,9 +71,7 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(path_utils, "get_business_archive_dir", lambda **_: str(archive_root))
     monkeypatch.setattr(archive_store, "get_business_archive_dir", lambda **_: str(archive_root))
     monkeypatch.setattr(archive_store, "default_archive_root", lambda: archive_root)
-    yield SimpleNamespace(
-        engine=engine, factory=factory, root=archive_root, service=EtlService()
-    )
+    yield SimpleNamespace(engine=engine, factory=factory, root=archive_root, service=EtlService())
     engine.dispose()
 
 

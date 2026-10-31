@@ -305,8 +305,7 @@ def _archive_cipher(archive_root: Path) -> Fernet:
     group-chat desktop key-file pattern.
     """
     secret = (
-        os.environ.get("SECRET_KEY", "").strip()
-        or os.environ.get("XCAGI_SECRET_KEY", "").strip()
+        os.environ.get("SECRET_KEY", "").strip() or os.environ.get("XCAGI_SECRET_KEY", "").strip()
     )
     if not secret:
         secret = _load_or_create_key_file(archive_root)
