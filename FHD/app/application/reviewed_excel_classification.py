@@ -291,9 +291,11 @@ def _classify_semantic_batch(
     }
     if drawings:
         region_schema["required"].append("drawing_evidence")
+        from app.application.reviewed_excel_reference_ids import MAX_DRAWING_IDS_PER_REGION
+
         region_schema["properties"]["drawing_evidence"] = {
             "type": "array",
-            "maxItems": 100,
+            "maxItems": MAX_DRAWING_IDS_PER_REGION,
             "items": {
                 "type": "object",
                 "required": ["sheet", "part", "object_id"],

@@ -7,6 +7,9 @@ from copy import deepcopy
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
 from app.application.etl.errors import ReviewedExcelError
+
+# Provider cite cap for drawing_ids; dense sheets may approach this in one region.
+MAX_DRAWING_IDS_PER_REGION = 300
 from app.application.reviewed_excel_evidence import bounded_range
 from app.application.reviewed_excel_partition import (
     _normalize_atom_ids,
@@ -130,7 +133,7 @@ def reference_contract(
         props.pop("drawing_evidence")
         props["drawing_ids"] = {
             "type": "array",
-            "maxItems": 100,
+            "maxItems": min(MAX_DRAWING_IDS_PER_REGION, max(100, len(drawing_ids))),
             "items": {"type": "string", "enum": drawing_ids},
         }
         region["required"].append("drawing_ids")
@@ -623,7 +626,7 @@ DRAWING_IDENTIFY_PROMPT = LEGACY_IDENTIFY_PROMPT + (
     "Drawing text and anchors are source evidence; last_col and last_row are conservative outer bounds resolved from worksheet dimension records when available — geometry facts, not document suggestions. "
     "Every drawing must be wholly inside one region; do not cut objects horizontally or vertically. "
     "Widen each physical_region rectangle so every cited drawing's full last_col/last_row outer bounds lie inside that same rectangle; never cite a drawing whose outer bounds stick outside. "
-    "drawing_ids accepts at most 100 ids per physical region; when decorations are denser, split into multiple regions so each cite list stays within that limit rather than packing every drawing into one oversized region. "
+    "drawing_ids maxItems is in output_schema (at least 100, up to the supplied drawing count capped generally); cite every drawing that belongs in a region when the list fits, otherwise split into multiple regions so each cite list respects maxItems. "
     "Prefer covering every supplied drawing geometrically inside some region even when citing only a representative subset of drawing_ids. "
     "Merged ranges that intersect a region must be wholly contained — extend the rectangle using sheets[].merged / integrity constraints, never clip a merge to fit a period cut. "
     "Choose two-dimensional rectangles independently; transport batches do not prescribe document boundaries."
@@ -644,7 +647,7 @@ GROUP_PROMPT = (
 DRAWING_GROUP_PROMPT = GROUP_PROMPT + (
     " When drawing_evidence is present, cite only supplied drawing_id values in drawing_ids; "
     "each cited object must be wholly contained in one of the group's fixed fragments; "
-    "cite at most 100 drawing_ids per group."
+    "cite at most output_schema drawing_ids.maxItems per group."
 )
 
 
@@ -714,6 +717,11 @@ def contract_hashes(schema: dict, phase: str) -> dict:
             props["primary_id"]["enum"] = ["<PRIMARY_EVIDENCE_IDS>"]
             if "drawing_ids" in props:
                 props["drawing_ids"]["items"]["enum"] = ["<SOURCE_DRAWING_IDS>"]
+                if type(props["drawing_ids"].get("maxItems")) is not int or not (
+                    100 <= props["drawing_ids"]["maxItems"] <= MAX_DRAWING_IDS_PER_REGION
+                ):
+                    raise ValueError("invalid drawing_ids source bound")
+                props["drawing_ids"]["maxItems"] = 100  # template placeholder; live bound is source-sized
             layout = template["properties"]["layout_references"]
             layout_props = layout["items"]["properties"]
             if type(layout["maxItems"]) is not int:
@@ -740,6 +748,11 @@ def contract_hashes(schema: dict, phase: str) -> dict:
         props["evidence_ids"]["items"]["enum"] = ["<SOURCE_EVIDENCE_IDS>"]
         if "drawing_ids" in props:
             props["drawing_ids"]["items"]["enum"] = ["<SOURCE_DRAWING_IDS>"]
+            if type(props["drawing_ids"].get("maxItems")) is not int or not (
+                100 <= props["drawing_ids"]["maxItems"] <= MAX_DRAWING_IDS_PER_REGION
+            ):
+                raise ValueError("invalid drawing_ids source bound")
+            props["drawing_ids"]["maxItems"] = 100  # template placeholder; live bound is source-sized
         prompt = DRAWING_GROUP_PROMPT if "drawing_ids" in props else GROUP_PROMPT
     else:
         raise ValueError("unknown contract phase")
@@ -770,11 +783,11 @@ _EXPECTED = {
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "9938aea07e9b96e619cc377475f5eedcb2e08d1de7915b9628bda1d4087ed131",
+        "d958af79df02376e61bc8c0016fdc287b8ebc19c94efde50680faa7a6727995b",
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (
-        "c6328a3808c652231dc47c3f319aa162f62857e94bfada2d4a4276f25594179c",
+        "2f020fe675072c380d2ec9f714917b8214a41c7c97d04cb272fc05364308c4cb",
         "47042d8477ddf0eb59819d512ead64c7213fc4210351687df0bedea6403129df",
     ),
 }

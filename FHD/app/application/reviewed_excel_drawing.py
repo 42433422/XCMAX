@@ -740,6 +740,7 @@ def restore_drawing_parts(source: bytes, derived: bytes, selected: list[dict]) -
 
 def validate_region_drawings(review: dict, sent: list[dict], region: dict) -> None:
     from app.application.reviewed_excel_evidence import bounded_range
+    from app.application.reviewed_excel_reference_ids import MAX_DRAWING_IDS_PER_REGION
 
     selected = select_drawing_objects(review, region["sheet"], [bounded_range(region["range"])])
     known = {(d["sheet"], d["part"], d["object_id"]) for d in sent}
@@ -749,7 +750,7 @@ def validate_region_drawings(review: dict, sent: list[dict], region: dict) -> No
     refs = region["drawing_evidence"]
     if (
         not isinstance(refs, list)
-        or len(refs) > 100
+        or len(refs) > MAX_DRAWING_IDS_PER_REGION
         or any(
             not isinstance(ref, dict)
             or set(ref) != {"sheet", "part", "object_id"}
@@ -811,7 +812,8 @@ def validate_group_drawings(group_input: dict, group: dict) -> None:
 
     known = {(d["sheet"], d["part"], d["object_id"]): d for d in group_input["drawing_evidence"]}
     refs = group["drawing_evidence"]
-    if not isinstance(refs, list) or len(refs) > 100:
+    from app.application.reviewed_excel_reference_ids import MAX_DRAWING_IDS_PER_REGION
+    if not isinstance(refs, list) or len(refs) > MAX_DRAWING_IDS_PER_REGION:
         raise ReviewedExcelError("模型分组绘图证据格式无效")
     seen = set()
     for ref in refs:

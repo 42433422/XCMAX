@@ -113,13 +113,22 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
     """Build a bounded evidence index; never infer relationships from coordinates alone."""
     if review["sha256"] != classification.get("source_sha256"):
         raise ReviewedExcelError("分组来源与原件不一致")
+    sheet_states = {
+        overview["sheet"]: overview.get("sheet_state", "visible")
+        for overview in review.get("sheet_overview", [])
+    }
     coverage = classification.get("coverage", [])
     if len(coverage) != len(review["sheets"]) or any(
-        row.get("unread")
-        or row.get("unassigned")
-        or row.get("merged_omitted")
-        or row.get("drawing_unread")
-        or row.get("drawing_unassigned")
+        (
+            sheet_states.get(row.get("sheet"), "visible") not in {"hidden", "veryHidden"}
+            and (
+                row.get("unread")
+                or row.get("unassigned")
+                or row.get("merged_omitted")
+                or row.get("drawing_unread")
+                or row.get("drawing_unassigned")
+            )
+        )
         for row in coverage
     ):
         raise ReviewedExcelError("文件覆盖不完整，不能进行最终分组")
@@ -135,8 +144,17 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
     chosen = {}
     fragments = []
     fragment_structure = []
+    omitted_hidden_fragments = []
     for region in regions:
         sheet, area = region["sheet"], region["range"]
+        state = sheet_states.get(sheet, "visible")
+        if state in {"hidden", "veryHidden"}:
+            # Independent extract rejects hidden sheets; keep them out of final
+            # grouping so models may omit them without coverage failure.
+            omitted_hidden_fragments.append(
+                {"sheet": sheet, "range": area, "sheet_state": state, "reason": region.get("reason", "")[:1000]}
+            )
+            continue
         c1, r1, c2, r2 = bounded_range(area)
         inside = []
         for cell in source_cells:
@@ -170,6 +188,7 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
             {
                 "sheet": sheet,
                 "range": area,
+                "sheet_state": state,
                 "reason": region.get("reason", "")[:1000],
             }
         )
@@ -190,6 +209,7 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
             {
                 "sheet": sheet,
                 "range": area,
+                "sheet_state": state,
                 "nonempty_cells": len(inside),
                 "first_nonempty_row": first_row,
                 "last_nonempty_row": last_row,
@@ -199,13 +219,15 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
                 "reason": region.get("reason", "")[:1000],
             }
         )
+    if not fragments:
+        raise ReviewedExcelError("可见工作表没有可分组片段")
     cells = list(chosen.values())
     # Cross-fragment formula facts must not depend on structure sampling: otherwise
     # filter-aware aggregates (e.g. SUBTOTAL) that sit outside the sample never reach
     # the model. Scan every formula cell that falls inside a fragment.
     formula_pool = []
-    for region in regions:
-        sheet, area = region["sheet"], region["range"]
+    for part in fragments:
+        sheet, area = part["sheet"], part["range"]
         c1, r1, c2, r2 = bounded_range(area)
         for cell in source_cells:
             if cell.get("kind") != "formula" or cell["sheet"] != sheet:
@@ -232,6 +254,7 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
         "cross_fragment_formulas": cross_fragment_formulas,
         "sheet_filters": sheet_filters,
         "source_sheet_prefixes": source_sheet_prefixes(review["sheets"]),
+        "omitted_hidden_fragments": omitted_hidden_fragments,
     }
     if review.get("drawing_evidence"):
         from app.application.reviewed_excel_drawing import grouping_drawings
@@ -341,6 +364,7 @@ def _range_group_input(group_input: dict) -> tuple[dict, dict]:
         shown_ranges.append(
             {
                 "sheet_name": part["sheet"],
+                "sheet_state": part.get("sheet_state", "visible"),
                 "row_start": r1,
                 "row_end": r2,
                 "column_start": c1,
@@ -475,9 +499,11 @@ def group_semantic_fragments(
     }
     if drawings:
         group["required"].append("drawing_ids")
+        from app.application.reviewed_excel_reference_ids import MAX_DRAWING_IDS_PER_REGION
+
         group["properties"]["drawing_ids"] = {
             "type": "array",
-            "maxItems": 100,
+            "maxItems": min(MAX_DRAWING_IDS_PER_REGION, max(100, len(drawings))),
             "items": {"type": "string", "enum": list(drawings)},
         }
     schema = {
