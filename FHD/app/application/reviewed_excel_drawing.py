@@ -543,26 +543,26 @@ def _extent_last_cell(sheet, start: dict, cx: int, cy: int) -> tuple[int, int]:
     last_row = int(start["row"]) + 1
     remain_x = float(start.get("colOff") or 0) + float(cx)
     remain_y = float(start.get("rowOff") or 0) + float(cy)
-    guard = 0
-    while True:
-        guard += 1
-        if guard > 1024 or last_col > int(sheet.max_column) + 64:
+    for _ in range(1024):
+        if last_col > int(sheet.max_column) + 64:
             raise ReviewedExcelError("绘图水平范围超出可核验列")
         width = _col_width_emu(sheet, last_col)
         if remain_x <= width:
             break
         remain_x -= width
         last_col += 1
-    guard = 0
-    while True:
-        guard += 1
-        if guard > 1024 or last_row > int(sheet.max_row) + 64:
+    else:
+        raise ReviewedExcelError("绘图水平范围超出可核验列")
+    for _ in range(1024):
+        if last_row > int(sheet.max_row) + 64:
             raise ReviewedExcelError("绘图垂直范围超出可核验行")
         height = _row_height_emu(sheet, last_row)
         if remain_y <= height:
             break
         remain_y -= height
         last_row += 1
+    else:
+        raise ReviewedExcelError("绘图垂直范围超出可核验行")
     return last_row, last_col
 
 
