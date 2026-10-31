@@ -517,7 +517,7 @@ CONTRACT_VERSION = "independent-excel-v10-document-ranges"
 SOURCE_PROTOCOL = (
     "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
-    "sheets[].sheet_state may be visible, hidden, or veryHidden: prefer leaving fragments on hidden or veryHidden sheets ungrouped and out of logical_documents for independent extraction unless the operator explicitly requires those sheets; never invent workbook-title-specific rules. "
+    "sheets[].sheet_state may be visible, hidden, or veryHidden: do not emit physical regions or logical_documents on hidden or veryHidden sheets for independent extraction — leave that content uncovered unless the operator explicitly requires those sheets; never invent workbook-title-specific rules. "
     "Leave uncertain fragments ungrouped. Do not use unread content as evidence. "
     "Keep merged cells intact; every evidence coordinate MUST be inside its region and on the same sheet. "
     "External context belongs in dependencies. A repeated table header is an observation, not proof "
@@ -585,7 +585,7 @@ ATOM_IDENTIFY_PROMPT = (
     "logical_documents.fragments contains the primary_id values of returned physical regions, each region at most once; "
     "document_id must be nonblank, unique and at most 80 characters. Leave uncertain fragments ungrouped. "
     "layout_references is an optional subset of supplied M-prefixed merge IDs, not a coverage ledger; [] is valid. "
-    "sheets[].sheet_state may be visible, hidden, or veryHidden: prefer not creating physical regions or logical_documents on hidden or veryHidden sheets; leave that content ungrouped unless explicitly required; never invent workbook-title-specific rules. "
+    "sheets[].sheet_state may be visible, hidden, or veryHidden: do not create physical regions or logical_documents on hidden or veryHidden sheets; leave that content ungrouped unless explicitly required; never invent workbook-title-specific rules. "
     "Transport batches, sheet boundaries, adjacency and repeated headers do not establish a business document. "
     "Return exactly one JSON object matching output_schema with no extra fields."
 )
@@ -598,7 +598,7 @@ IDENTIFY_PROMPT = (
     "Invalid ranges are rejected, never clipped, expanded or repaired. Formula targets and merge metadata are source facts, not additional supplied cells or business boundaries. "
     "Use multiple ranges in one document only when the source supports that relationship. Technical batches are not documents. "
     "Sheet boundaries, adjacency and repeated headers alone do not prove one business document. "
-    "Prefer omitting hidden or veryHidden sheets (sheets[].sheet_state) from documents unless explicitly required; never invent workbook-title-specific rules. "
+    "Do not place hidden or veryHidden sheets (sheets[].sheet_state) into documents unless explicitly required; never invent workbook-title-specific rules. "
     "Export fidelity: when a document contains filter-aware aggregate formulas (for example SUBTOTAL), "
     "every cell those formulas reference on the same sheet must lie inside that document's rectangles; "
     "if the sheet carries an active AutoFilter, include that AutoFilter's full reference rectangle in the same document "
@@ -611,7 +611,7 @@ RANGE_GROUP_PROMPT = (
     "Copy each supplied sheet_name and integer boundary tuple exactly once across all documents; never expand, shrink, duplicate or omit a range. "
     "cells, fragment_structure and cross_fragment_formulas provide middle-row samples and cross-fragment formula facts; use them to judge continuity. "
     "Do not auto-merge merely because ranges are adjacent or share a sheet; only group when supplied content supports one business document. "
-    "Prefer omitting ranges on hidden or veryHidden sheets unless explicitly required. "
+    "Omit ranges on hidden or veryHidden sheets unless explicitly required; sheet_state on each supplied range is authoritative. "
     "sheet_filters (when present) lists each sheet's active AutoFilter reference rectangle as a source fact. "
     "Export fidelity: if cross_fragment_formulas show a filter-aware aggregate (for example SUBTOTAL) whose referenced cells sit in another fragment, "
     "put the hosting fragment and every referenced fragment in the same document so those dependencies stay inside one export. "
@@ -635,7 +635,7 @@ GROUP_PROMPT = (
     "Group only fragments that belong to the same business document. "
     "A standalone fragment can be one group. Do not group merely because fragments are adjacent, "
     "have similar headers, or share a category. Leave uncertain fragments ungrouped. "
-    "Prefer not forcing groups whose only purpose is to extract hidden or veryHidden sheets. "
+    "Do not group fragments solely to extract hidden or veryHidden sheets; sheet_state on fragments is authoritative. "
     "For every grouped fragment cite at least one sent cell within it and explain the relationship "
     "using sent values. Use only supplied region_id and evidence_id values. "
     "Fragment boundaries are fixed; do not invent ranges or cells. "
@@ -767,27 +767,27 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "fe750f97254a7bdce2c8158d6dbb4e861c163b96694d2d46a7fbbdea3f265a28",
+        "1ba5c016787b6515b78980afc58b4c00589b0e105263c2db6a810dc61ea66557",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "group_ranges": (
-        "2e5113ae50e6445b3086adfd58d6ade3175c4dbc049de43c1af983dd5b8e33a6",
+        "5c56d4b5b75cbc78787ab5472774d20367d7791acbc0a0082443b2854eb4a6db",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "identify_atoms": (
-        "fbe19d61e212772c1763d41a4efeb310e61bbfdbf08f110e58397671f8003972",
+        "681768c2961ea4575978ab01ab904f2e39d8ee7b3f7b28f5de690703425f0ce0",
         "ffab0241efd5e7fba5087b4ca32774b3ba3b2ccb95124709f624d095ddd0adc0",
     ),
     "group": (
-        "30bc484b520ebfb64779fa59828491d73cfc6d074c632e0025764c83861378fb",
+        "a4d1aa17b9f8c7ee6d219832fe38eadd1442b05feb202f2d88d96ce2ba75a1d2",
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "d958af79df02376e61bc8c0016fdc287b8ebc19c94efde50680faa7a6727995b",
+        "c538accb443bc1fa957bfc05142df52ee32f4fb3e54f1f8084630837225074bb",
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (
-        "2f020fe675072c380d2ec9f714917b8214a41c7c97d04cb272fc05364308c4cb",
+        "987579139cd3d94dbf8373ae7c2afff608aceaadfd5a659723018d8d0b951d78",
         "47042d8477ddf0eb59819d512ead64c7213fc4210351687df0bedea6403129df",
     ),
 }
