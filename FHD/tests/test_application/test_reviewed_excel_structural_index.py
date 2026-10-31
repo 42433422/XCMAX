@@ -75,7 +75,10 @@ def test_index_schema_is_generic_and_includes_hidden():
         >= 3
     )
     assert index["cross_sheet_edges"]
-    blob = json.dumps(index, ensure_ascii=False)
+    # Exclude content-addressing hash: hex digests may coincidentally contain
+    # digit substrings we use as customer-hardcode sentinels (e.g. "165").
+    content = {k: v for k, v in index.items() if k != "source_sha256"}
+    blob = json.dumps(content, ensure_ascii=False)
     assert "澜宇" not in blob
     assert "165" not in blob
 

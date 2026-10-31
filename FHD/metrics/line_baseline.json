@@ -1,5 +1,5 @@
 {
-  "lines": 2405409,
+  "lines": 2405412,
   "updated": "2026-10-31",
-  "note": "选模板直达私有入库（P0-2）：ReviewedExcelTemplate 接线+EltCenterView/FE/BE 测试+CHANGELOG；约+160 行产品门闸修复，审批撤回与 /api/elt 不变"
+  "note": "选模板直达私有入库（P0-2）+ 修复 structural_index 测试误把 SHA 子串当硬编码；line_baseline 随 PR 抬升"
 }
