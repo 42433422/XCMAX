@@ -161,3 +161,28 @@ describe('etlApi', () => {
     })
   })
 })
+
+
+describe('etl auto-ingest approval withdraw', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+    primeCsrfCookieMock.mockReset()
+    primeCsrfCookieMock.mockResolvedValue(undefined)
+    apiFetchMock.mockImplementation(async () => response({ success: true, data: { batch_id: 'aib-1', status: 'withdrawn' } }))
+  })
+
+  it('posts withdraw for an auto-ingest batch', async () => {
+    await etlApi.withdrawAutoIngestBatch('aib/1')
+    expect(apiFetchMock).toHaveBeenCalledWith(
+      '/api/etl/auto-ingest/batches/aib%2F1/withdraw',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('lists auto-ingest batches', async () => {
+    apiFetchMock.mockImplementation(async () => response({ success: true, data: [{ batch_id: 'aib-1', status: 'applied' }] }))
+    const items = await etlApi.autoIngestBatches(20, true)
+    expect(items).toEqual([{ batch_id: 'aib-1', status: 'applied' }])
+    expect(String(apiFetchMock.mock.calls[0][0])).toContain('/api/etl/auto-ingest/batches?limit=20&mine=true')
+  })
+})

@@ -5,6 +5,7 @@
       <p class="subtitle">处理待审批事项，跟踪审批进度</p>
     </div>
 
+    <AwEtlAutoIngestList />
     <AwStatsCards v-if="!fullListType" :tm="tm" />
     <nav v-else class="section-actions approval-list-pages" aria-label="完整审批列表">
       <button type="button" class="btn-link" @click="closeFullList">返回工作台</button>
@@ -26,6 +27,7 @@
 <script setup lang="ts">
 // 原超大 SFC 已拆分至 ./approval-workspace/（子组件 + composables + 独立 CSS）；
 // 入口保持对外路径/默认导出不变，仅做组装。
+import AwEtlAutoIngestList from './approval-workspace/AwEtlAutoIngestList.vue'
 import AwStatsCards from './approval-workspace/AwStatsCards.vue'
 import AwPendingList from './approval-workspace/AwPendingList.vue'
 import AwInitiatedList from './approval-workspace/AwInitiatedList.vue'

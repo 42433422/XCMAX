@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import hashlib
 import json
 import os
@@ -1776,7 +1780,46 @@ async def reviewed_excel_save(
                 # The legacy library commits in a separate transaction; do not retry or remove
                 # files when its outcome may have succeeded but its receipt was lost.
                 raise
-        return {"success": True, "template_id": template_id, "replayed": False}
+        auto_ingest = None
+        try:
+            from app.application.etl.auto_ingest_service import get_auto_ingest_service
+            from app.infrastructure.tenant_scope import tenant_scope
+
+            labels: list[str] = []
+            summary = load_json(run.summary_json, {})
+            selected_region = summary.get("selected_region") or {}
+            for key in ("document_type", "semantic_label", "label", "sheet"):
+                val = selected_region.get(key) or summary.get(key)
+                if val:
+                    labels.append(str(val))
+            with tenant_scope(tenant), get_db() as ingest_db:
+                auto_ingest = get_auto_ingest_service().run(
+                    ingest_db,
+                    owner_user_id=owner,
+                    tenant_id=tenant,
+                    source_path=str(path),
+                    file_name=name.strip() or Path(path).name,
+                    template_id=str(template_id),
+                    review_id=review_id,
+                    classification_id=str(summary.get("classification_id") or ""),
+                    composer_note="",
+                    labels=labels,
+                )
+                ingest_db.commit()
+        except Exception as exc:  # noqa: BLE001 — intake save must not roll back on ingest faults
+            # Template save already succeeded; surface ingest failure without undoing save.
+            logger.exception(
+                "auto-ingest after reviewed-excel save failed review_id=%s err=%s",
+                review_id,
+                type(exc).__name__,
+            )
+            auto_ingest = {"success": False, "error": "auto_ingest_failed"}
+        return {
+            "success": True,
+            "template_id": template_id,
+            "replayed": False,
+            "auto_ingest": auto_ingest,
+        }
     except (ValueError, TypeError, EtlError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 

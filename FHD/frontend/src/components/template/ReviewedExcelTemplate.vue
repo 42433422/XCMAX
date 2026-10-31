@@ -761,7 +761,12 @@ async function save() {
     const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string }
     if (!current()) return
     savedId.value = result.template_id
-    savedModelStatus.value = proposal.value.candidates[candidateIndex.value].id.startsWith('model_') ? '已选择模型建议，并以本次确认的清理范围保存。' : '本次保存使用规则或人工选择。'
+    const ingest = (result as { auto_ingest?: { batch_id?: string; status?: string; knowledge?: { match_ref?: string }; business?: { target_type?: string; run_id?: string } } }).auto_ingest
+    if (ingest?.batch_id) {
+      savedModelStatus.value = `已自动入库（批次 ${ingest.batch_id}，状态 ${ingest.status || 'applied'}）。可在审批中心撤回。`
+    } else {
+      savedModelStatus.value = proposal.value.candidates[candidateIndex.value].id.startsWith('model_') ? '已选择模型建议，并以本次确认的清理范围保存。' : '本次保存使用规则或人工选择。'
+    }
     review.value = null
     emit('saved')
   } catch (err) { if (!current()) return; error.value = `${err instanceof Error ? err.message : '保存失败'}；如果结果未知，请先核对模板库和分类记录，勿重复提交。` }
