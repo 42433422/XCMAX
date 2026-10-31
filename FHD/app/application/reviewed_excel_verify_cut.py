@@ -396,12 +396,14 @@ def inspect_cut(review: dict, group: dict) -> dict:
     sticky_titles = len(title_blocks) >= _MIN_TITLE_BLOCKS_FOR_STICKY
     single_title = len(title_blocks) == 1  # retained for receipts / future heuristics
     _ = single_title
-    # Prefer atomic order/date runs: two or more distinct runs inside one cut
-    # are sticky even when a single banner title sits above the ledger.
+    # Prefer atomic order/date runs for untitled shipment ledgers.
+    # Titled period/documents (any title_blocks) stay period-scoped — do not
+    # resplit them by inner date/order-looking columns.
     sticky_ledger = bool(
         ledger
         and ledger["run_count"] >= _MIN_ORDER_RUNS_FOR_STICKY
         and not sticky_titles
+        and not title_blocks
     )
     sticky = sticky_titles or sticky_ledger
     status = "ok"
