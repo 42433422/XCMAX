@@ -593,12 +593,9 @@ def validate_conversion(book, converted, styles, records=()):
         target.close()
 
 
-def prepare_archive_workbook(body: bytes, *, legacy_test_only=False, legacy_source_sha256=""):
-    if not body.startswith(OLE_MAGIC):
-        return body, inspect_workbook(body)
+def _convert_legacy_body(body: bytes, *, purpose: str):
+    """Shared fail-closed XLS→XLSX convert used by archive consent and slice entry."""
     digest = hashlib.sha256(body).hexdigest()
-    if legacy_test_only is not True or legacy_source_sha256 != digest:
-        _error("请明确确认仅数据/模板测试并绑定原件 SHA-256；打印未验证，不可正式发布")
     book, records, used, warnings = inspect_legacy(body)
     try:
         converted, styles = _derive(book, records, used, warnings, digest)
@@ -614,7 +611,7 @@ def prepare_archive_workbook(body: bytes, *, legacy_test_only=False, legacy_sour
             "source_sha256": digest,
             "derived_sha256": hashlib.sha256(converted).hexdigest(),
             "converter": "bounded xlrd/openpyxl data-test converter v1",
-            "purpose": "data_template_test_only",
+            "purpose": purpose,
             "print_layout_verified": False,
             "warnings": warnings,
             "validation": validation,
@@ -626,3 +623,36 @@ def prepare_archive_workbook(body: bytes, *, legacy_test_only=False, legacy_sour
         raise ReviewedExcelError("旧 XLS 转换校验失败；不会生成正式模板") from exc
     finally:
         book.release_resources()
+
+
+def convert_xls_to_xlsx_for_slice(body: bytes):
+    """Convert OLE/BIFF8 XLS for classify→group→slice without archive HTTP consent.
+
+    Reuses the same xlrd/openpyxl converter and fail-closed admission checks as
+    prepare_archive_workbook. Returns (xlsx_bytes, conversion_receipt). Archive
+    HTTP still requires legacy_test_only + matching SHA via prepare_archive_workbook.
+    """
+    if not body.startswith(OLE_MAGIC):
+        _error("文件不是受支持的 OLE/BIFF8 XLS 或超过 20 MB")
+    converted, review = _convert_legacy_body(body, purpose="slice_pipeline_auto_convert")
+    return converted, review["conversion_receipt"]
+
+
+def ensure_slice_workbook(body: bytes):
+    """Return XLSX bytes for the slicing pipeline; auto-convert OLE XLS first.
+
+    Non-OLE bodies pass through unchanged with receipt=None. OLE bodies are
+    converted under the slice purpose and return the conversion receipt.
+    """
+    if not body.startswith(OLE_MAGIC):
+        return body, None
+    return convert_xls_to_xlsx_for_slice(body)
+
+
+def prepare_archive_workbook(body: bytes, *, legacy_test_only=False, legacy_source_sha256=""):
+    if not body.startswith(OLE_MAGIC):
+        return body, inspect_workbook(body)
+    digest = hashlib.sha256(body).hexdigest()
+    if legacy_test_only is not True or legacy_source_sha256 != digest:
+        _error("请明确确认仅数据/模板测试并绑定原件 SHA-256；打印未验证，不可正式发布")
+    return _convert_legacy_body(body, purpose="data_template_test_only")

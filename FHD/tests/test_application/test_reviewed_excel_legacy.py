@@ -421,3 +421,42 @@ def test_valid_mulblank_and_mulrk_records_remain_supported():
     sheet = load_workbook(BytesIO(output)).active
     assert sheet["A1"].value == 7 and sheet["B1"].value == 8
     assert sheet["A2"].value is None and sheet["B2"].value is None
+
+
+def test_convert_xls_to_xlsx_for_slice_enters_inspect_path():
+    """Slice helper converts without archive consent and feeds inspect/fit_transport."""
+    from app.application.reviewed_excel_template import inspect_workbook
+    from app.application.reviewed_excel_budget import fit_transport_batches
+    from app.application.reviewed_excel_classification import plan_semantic_batches
+
+    body = fixture()
+    converted, receipt = legacy.convert_xls_to_xlsx_for_slice(body)
+    assert receipt["purpose"] == "slice_pipeline_auto_convert"
+    assert receipt["source_sha256"] == hashlib.sha256(body).hexdigest()
+    assert receipt["derived_sha256"] == hashlib.sha256(converted).hexdigest()
+    assert receipt["print_layout_verified"] is False
+    assert receipt["warnings"]
+    review = inspect_workbook(converted)
+    assert review["sheets"]
+    assert len(review["cells"]) >= 1
+    batches, _ = plan_semantic_batches(review, max_calls=4, neutral=True)
+    fitted = fit_transport_batches(review, batches)
+    assert fitted and sum(len(b) for b in fitted) == len(review["cells"])
+
+
+def test_ensure_slice_workbook_passthrough_and_convert():
+    from tests.fixtures.etl_template.sources.generate import sample
+
+    xlsx = sample()
+    out, receipt = legacy.ensure_slice_workbook(xlsx)
+    assert out == xlsx and receipt is None
+    body = fixture()
+    converted, receipt = legacy.ensure_slice_workbook(body)
+    assert receipt["purpose"] == "slice_pipeline_auto_convert"
+    assert converted != body and converted[:2] == b"PK"
+
+
+def test_slice_convert_still_fail_closed_on_unsupported(monkeypatch):
+    monkeypatch.setattr(legacy, "_derive", lambda *a: pytest.fail("no output before admission"))
+    with pytest.raises(ReviewedExcelError):
+        legacy.convert_xls_to_xlsx_for_slice(fixture(record(0x6)))

@@ -6,6 +6,7 @@ from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
 from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_legacy import ensure_slice_workbook
 from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook
 
 
@@ -53,7 +54,10 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
 
     This internal function expects the output of classify_semantic_workbook, not
     arbitrary client data. It does not record user confirmation or modify the source.
+    OLE/BIFF8 XLS bodies are converted to XLSX via ensure_slice_workbook before
+    openpyxl load and document derivation.
     """
+    body, _receipt = ensure_slice_workbook(body)
     source = inspect_workbook(body)
     if classification.get("source_sha256") != source["sha256"]:
         raise ReviewedExcelError("分类结果与原件不一致")

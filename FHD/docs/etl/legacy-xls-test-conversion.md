@@ -45,3 +45,12 @@ summary。转换产物计入归档配额，读取受租户/所有者与原件版
 合成 BIFF fixtures 在测试目录，不含客户原件。
 运行专项：`python -m pytest tests/test_application/test_reviewed_excel_legacy.py`。
 发布仍需父 PR 整合、CI、部署与客户端实测；本地通过不代表已上线。
+
+## 切片链自动转换
+
+本地/自动切片入口使用 `convert_xls_to_xlsx_for_slice` / `ensure_slice_workbook`：
+在 classify→group→slice 前将 OLE/BIFF8 `.xls` 转为派生 XLSX，再走普通 openpyxl
+检视与 2000 格 / 384KB 传输包路径。收据 `purpose=slice_pipeline_auto_convert`。
+归档 HTTP 仍要求 `legacy_test_only` + 原件 SHA；上传模板默认 `allow_legacy=False`
+继续拒绝未确认的 raw `.xls`。
+
