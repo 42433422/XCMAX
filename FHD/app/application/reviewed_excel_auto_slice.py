@@ -10,7 +10,8 @@ from app.application.reviewed_excel_legacy import ensure_slice_workbook
 from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook
 
 
-def _slice_filename(fragments: list[dict], cells: list[dict], used: set[str]) -> str:
+def _slice_filename(fragments: list[dict], cells: list[dict], used: set[str], reason: str = "") -> str:
+    """Prefer a Chinese descriptive title from cells; else sheet + short reason (no A1-range codes)."""
     title = ""
     for part in fragments:
         c1, r1, c2, r2 = bounded_range(part["range"])
@@ -29,6 +30,15 @@ def _slice_filename(fragments: list[dict], cells: list[dict], used: set[str]) ->
                 break
         if title:
             break
+    if not title:
+        sheet = (fragments[0].get("sheet") if fragments else "") or "文档"
+        ym = re.search(r"(20\d{2}\s*年\s*\d{1,2}\s*月)", reason or "")
+        short = re.sub(r"\s+", "", ym.group(1)) if ym else ""
+        if not short and reason:
+            clause = re.split(r"[，。；;]", reason)[0]
+            clause = re.sub(r"[A-Za-z].*", "", clause).strip()
+            short = clause[:24]
+        title = f"{sheet}_{short}" if short else sheet
     title = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", title).strip(" ._")[:40] or "切片"
     if title.upper() in {
         "CON",
@@ -103,12 +113,13 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
                 raise ReviewedExcelError("模型分组片段来源无效或重复")
             assigned.add(key)
             group.append(dict(fragment))
-        groups.append((group, "model_group"))
+        reason = document.get("reason") if isinstance(document.get("reason"), str) else ""
+        groups.append((group, "model_group", reason))
     if len(assigned) != len(known):
         raise ReviewedExcelError("模型尚未确定所有区域的独立单据关系，不能自动切片")
     results = []
     used_names: set[str] = set()
-    for fragments, basis in groups:
+    for fragments, basis, reason in groups:
         for fragment in fragments:
             region = known[(fragment["sheet"], fragment["range"])]
             for ref in region.get("dependencies", []):
@@ -137,7 +148,7 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
                 "basis": basis,
                 "confirmed": False,
                 "source_sha256": source["sha256"],
-                "filename": _slice_filename(fragments, source["cells"], used_names),
+                "filename": _slice_filename(fragments, source["cells"], used_names, reason=reason),
                 "workbook": output,
             }
         )
