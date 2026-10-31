@@ -598,6 +598,7 @@ IDENTIFY_PROMPT = (
     "Invalid ranges are rejected, never clipped, expanded or repaired. Formula targets and merge metadata are source facts, not additional supplied cells or business boundaries. "
     "Use multiple ranges in one document only when the source supports that relationship. Technical batches are not documents. "
     "Sheet boundaries, adjacency and repeated headers alone do not prove one business document. "
+    "After cuts are proposed, the server verifies each document against cross-sheet or out-of-range formula references, AutoFilter/SUBTOTAL closure, circular self-refs, and signals of over-merged ledgers (many distinct order/date blocks or repeated titled period headers inside one rectangle). Prefer atomic documents: one titled period/block or one order/date shipment — not an entire continuous ledger. "
     "Do not place hidden or veryHidden sheets (sheets[].sheet_state) into documents unless explicitly required; never invent workbook-title-specific rules. "
     "Export fidelity: when a document contains filter-aware aggregate formulas (for example SUBTOTAL), "
     "every cell those formulas reference on the same sheet must lie inside that document's rectangles; "
@@ -618,6 +619,7 @@ RANGE_GROUP_PROMPT = (
     "If a document would keep SUBTOTAL (or similar filter-aware aggregates) but omit the sheet_filters rectangle that covers them, "
     "also group in the fragment that covers that AutoFilter reference when one was supplied. "
     "fragment_structure.has_filter_aware_aggregates and covers_sheet_filter are source facts for that decision. "
+    "Server verify-after-cut: after you return documents, each cut is checked for outbound formula refs, circular self-refs, AutoFilter/SUBTOTAL closure, and over-merged ledgers (multiple titled blocks or many distinct date+order runs inside one document). Prefer keeping atomic documents separate; do not merge merely to satisfy a distant aggregate when that would glue unrelated orders together. "
     "Technical batches are not document boundaries. Adjacency, sheet membership and repeated headers alone do not prove document identity. "
     "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return exactly output_schema."
 )
@@ -642,6 +644,7 @@ GROUP_PROMPT = (
     "If supplied evidence shows a filter-aware aggregate formula (for example SUBTOTAL) whose referenced "
     "cells live in another fragment, group those fragments together so the dependency stays in one document. "
     "When sheet_filters are supplied, keep AutoFilter-covered fragments with any grouped SUBTOTAL that needs that filter. "
+    "The server will verify each returned group for outbound formula references and over-merged multi-order or multi-title cuts; prefer one business document per group. "
     "Return exactly one JSON object matching output_schema."
 )
 DRAWING_GROUP_PROMPT = GROUP_PROMPT + (
@@ -767,11 +770,11 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "1ba5c016787b6515b78980afc58b4c00589b0e105263c2db6a810dc61ea66557",
+        "891b2e2a660d06b1fd5f70bac345165d6d05fa8c8c826d0194646cf7d4b5a5f4",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "group_ranges": (
-        "5c56d4b5b75cbc78787ab5472774d20367d7791acbc0a0082443b2854eb4a6db",
+        "92c5797d18ab9e1a4f862890f98a03b55d1103c2f138586b90735a5be9322774",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "identify_atoms": (
@@ -779,7 +782,7 @@ _EXPECTED = {
         "ffab0241efd5e7fba5087b4ca32774b3ba3b2ccb95124709f624d095ddd0adc0",
     ),
     "group": (
-        "a4d1aa17b9f8c7ee6d219832fe38eadd1442b05feb202f2d88d96ce2ba75a1d2",
+        "b1f917464cda760f733f99e88487bf32c4f59e053f42d4ac9e0e32dca4f365b0",
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
@@ -787,7 +790,7 @@ _EXPECTED = {
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (
-        "987579139cd3d94dbf8373ae7c2afff608aceaadfd5a659723018d8d0b951d78",
+        "09c3a75a5ca5cb4fa67db361f0c018c496e55c913ba9097fd06f34d0c62bd097",
         "47042d8477ddf0eb59819d512ead64c7213fc4210351687df0bedea6403129df",
     ),
 }

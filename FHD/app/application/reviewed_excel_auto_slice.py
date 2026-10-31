@@ -31,14 +31,19 @@ def _slice_filename(fragments: list[dict], cells: list[dict], used: set[str], re
         if title:
             break
     if not title:
-        sheet = (fragments[0].get("sheet") if fragments else "") or "文档"
+        raw_sheet = (fragments[0].get("sheet") if fragments else "") or ""
+        # Only keep sheet names that already carry Chinese descriptive text.
+        sheet = raw_sheet if any("一" <= ch <= "鿿" for ch in raw_sheet) else ""
         ym = re.search(r"(20\d{2}\s*年\s*\d{1,2}\s*月)", reason or "")
         short = re.sub(r"\s+", "", ym.group(1)) if ym else ""
         if not short and reason:
             clause = re.split(r"[，。；;]", reason)[0]
             clause = re.sub(r"[A-Za-z].*", "", clause).strip()
-            short = clause[:24]
-        title = f"{sheet}_{short}" if short else sheet
+            short = clause[:24] if any("一" <= ch <= "鿿" for ch in clause) else ""
+        if sheet and short and short not in sheet and sheet not in short:
+            title = f"{sheet}_{short}"
+        else:
+            title = short or sheet or "切片"
     title = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", title).strip(" ._")[:40] or "切片"
     if title.upper() in {
         "CON",
@@ -117,6 +122,25 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
         groups.append((group, "model_group", reason))
     if len(assigned) != len(known):
         raise ReviewedExcelError("模型尚未确定所有区域的独立单据关系，不能自动切片")
+    from app.application.reviewed_excel_verify_cut import verify_after_cut
+
+    verified = verify_after_cut(
+        source,
+        [
+            {
+                "document_id": f"export-{i}",
+                "fragments": frags,
+                "evidence": [],
+                "reason": reason,
+            }
+            for i, (frags, _basis, reason) in enumerate(groups)
+        ],
+        resplit=True,
+    )
+    groups = [
+        (item["fragments"], "model_group", item.get("reason") or "")
+        for item in verified["groups"]
+    ]
     results = []
     used_names: set[str] = set()
     for fragments, basis, reason in groups:
