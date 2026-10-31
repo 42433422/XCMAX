@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -330,7 +331,41 @@ def test_desktop_package_includes_commercial_safe_office_employee_runtimes() -> 
     assert '"reportlab>=5,<6"' in pyproject
     assert "PyMuPDF" not in pyproject
     assert "collect_submodules(module)" in spec
-    assert 'for module in ["docx", "openpyxl", "pptx", "xlsxwriter", "pypdf", "reportlab"]' in spec
+    required = {"docx", "openpyxl", "xlrd", "pptx", "xlsxwriter", "pypdf", "reportlab"}
+    collected = set()
+    for loop in ast.walk(ast.parse(spec)):
+        if not (
+            isinstance(loop, ast.For)
+            and isinstance(loop.target, ast.Name)
+            and isinstance(loop.iter, (ast.List, ast.Tuple, ast.Set))
+        ):
+            continue
+        for call in ast.walk(loop):
+            if not (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "hiddenimports"
+                and call.func.attr == "extend"
+                and len(call.args) == 1
+            ):
+                continue
+            collector = call.args[0]
+            if (
+                isinstance(collector, ast.Call)
+                and isinstance(collector.func, ast.Name)
+                and collector.func.id == "collect_submodules"
+                and len(collector.args) == 1
+                and isinstance(collector.args[0], ast.Name)
+                and collector.args[0].id == loop.target.id
+            ):
+                collected.update(
+                    item.value
+                    for item in loop.iter.elts
+                    if isinstance(item, ast.Constant) and isinstance(item.value, str)
+                )
+    assert required <= collected, f"Missing collected office runtimes: {required - collected}"
+    assert '"xlrd>=2.0.1"' in pyproject
     assert '"app.application.office_plaintext_generate"' in spec
     assert '"python-docx>=1.1.0"' in pyproject
     assert "openpyxl==3.1.5" in pyproject

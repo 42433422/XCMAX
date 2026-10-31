@@ -19,6 +19,44 @@ def bounded_range(value: str) -> tuple[int, int, int, int]:
     return c1, r1, c2, r2
 
 
+def prepare_auto_slice_review(review: dict, *, skip_hidden_sheets: bool = False) -> dict:
+    """Optional general filter: drop hidden/veryHidden worksheets from a review.
+
+    Default is off — the model receives sheet_state and decides via prompt guidance.
+    Pass skip_hidden_sheets=True only as an explicit operator/general option.
+    Explicit derive_document_workbook still rejects extracting a hidden sheet alone.
+    """
+    if not skip_hidden_sheets:
+        return review
+    overview = review.get("sheet_overview") or []
+    if not overview:
+        return review
+    hidden = {
+        sheet["sheet"]
+        for sheet in overview
+        if sheet.get("sheet_state", "visible") in {"hidden", "veryHidden"}
+    }
+    if not hidden:
+        return review
+    visible_sheets = [name for name in review.get("sheets", []) if name not in hidden]
+    return {
+        **review,
+        "sheets": visible_sheets,
+        "cells": [cell for cell in review.get("cells", []) if cell.get("sheet") not in hidden],
+        "sheet_overview": [sheet for sheet in overview if sheet.get("sheet") not in hidden],
+        "layout": [item for item in review.get("layout", []) if item.get("sheet") not in hidden],
+        "drawing_evidence": [
+            obj for obj in review.get("drawing_evidence", []) if obj.get("sheet") not in hidden
+        ],
+        "read_only_print_areas": [
+            area
+            for area in review.get("read_only_print_areas", [])
+            if area.get("sheet") not in hidden
+        ],
+        "skipped_hidden_sheets": sorted(hidden),
+    }
+
+
 def summarize_model_input(
     messages: list[dict],
     cells: list[dict],
@@ -411,7 +449,12 @@ def value_extent(region: dict, cells: list[dict]) -> str | None:
     return f"{get_column_letter(min(c for c, _ in points))}{min(r for _, r in points)}:{get_column_letter(max(c for c, _ in points))}{max(r for _, r in points)}"
 
 
-def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None = None) -> dict:
+def candidate_fragment_links(
+    regions: list[dict],
+    sent_cells: list[dict] | None = None,
+    *,
+    model_pairs: set[tuple[str, str, str]] | None = None,
+) -> dict:
     """Suggest reviewable relations from shared dependencies or observed headers, never labels alone."""
     from openpyxl.utils.cell import (
         column_index_from_string,
@@ -467,7 +510,10 @@ def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None 
                 first_context.get("parent_range") == second["range"]
                 or second_context.get("parent_range") == first["range"]
             )
-            if not shared and not repeated:
+            model_suggested = (first["sheet"], first["range"], second["range"]) in (
+                model_pairs or set()
+            )
+            if not shared and not repeated and not model_suggested:
                 continue
             left_identity, right_identity = identity_cache[index], identity_cache[second_index]
             matches: list[dict] = []
@@ -490,6 +536,7 @@ def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None 
                         ],
                         "dependencies_omitted": max(0, len(shared) - 20),
                         "repeated_header_observed": repeated,
+                        "model_group_suggested": model_suggested,
                         "identity_matches": matches,
                         "identity_conflicts": conflicts,
                         "status": "identity_conflict" if conflicts else "candidate",
@@ -498,8 +545,8 @@ def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None 
     return {"items": links, "omitted": total - len(links)}
 
 
-MAX_MODEL_CELLS = 500
-MAX_MODEL_TEXT_BYTES = 96_000
+MAX_MODEL_CELLS = 2000
+MAX_MODEL_TEXT_BYTES = 384_000  # raised with 2000-cell packs; product envelope ~256–384KB
 MAX_VALUE_CHARS = 4000
 
 
@@ -604,3 +651,111 @@ def plan_complete_batches(review: dict, rules: list[dict]) -> list[list[dict]]:
             if queue:
                 fair.append(queue.popleft())
     return fair
+
+
+def observe_fragment_relationships(review: dict, sheets: list[dict]) -> dict:
+    """Attach source observations and unselected candidate edges, never approve a relationship."""
+    regions = [
+        {
+            **region,
+            "sheet": sheet["sheet"],
+            "evidence": [{"sheet": sheet["sheet"], **ref} for ref in region["evidence"]],
+        }
+        for sheet in sheets
+        for region in sheet["regions"]
+    ]
+    for region in regions:
+        region.pop("continuation_context", None)
+    observed = flag_repeated_header_conflicts(regions, review["cells"])
+    by_region = {(region["sheet"], region["range"]): region for region in observed}
+    for sheet in sheets:
+        for region in sheet["regions"]:
+            observation = by_region[(sheet["sheet"], region["range"])]
+            region.pop("continuation_context", None)
+            for field in ("continuation_context", "context_warning"):
+                if field in observation:
+                    region[field] = observation[field]
+            if region.get("context_warning"):
+                region["context_warning"] = (
+                    region["context_warning"]
+                    .replace("模型分类", "分类")
+                    .replace("模型建议", "分类建议")
+                )
+    for region in regions:
+        observation = by_region[(region["sheet"], region["range"])]
+        if "continuation_context" in observation:
+            region["continuation_context"] = observation["continuation_context"]
+    links = candidate_fragment_links(regions, review["cells"])
+    for link in links["items"]:
+        link["selected"] = False
+    return links
+
+
+def plan_semantic_batches(
+    review: dict,
+    max_calls: int | None = None,
+    *,
+    neutral: bool = False,
+    skip_hidden_sheets: bool | None = None,
+) -> tuple[list[list[dict]], int]:
+    """Analyze bounded batches sequentially; fail closed on conflicting model regions.
+
+    When skip_hidden_sheets is True, omit hidden/veryHidden worksheets from packing
+    (explicit general option). Default False so the model sees sheet_state.
+    """
+    import os
+
+    from app.application.reviewed_excel_classification import classify_review_workbook
+
+    if skip_hidden_sheets is None:
+        skip_hidden_sheets = False
+    if skip_hidden_sheets:
+        review = prepare_auto_slice_review(review, skip_hidden_sheets=True)
+    try:
+        max_calls = (
+            int(os.environ.get("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1"))
+            if max_calls is None
+            else max_calls
+        )
+    except ValueError:
+        raise ReviewedExcelError("分类模型调用预算无效") from None
+    if not 1 <= max_calls <= 4:
+        raise ReviewedExcelError("分类模型调用预算必须为 1 至 4")
+    if review.get("drawing_evidence"):
+        from app.application.reviewed_excel_budget import fit_transport_batches
+        from app.application.reviewed_excel_drawing import plan_drawing_batches
+
+        return fit_transport_batches(review, plan_drawing_batches(review)), max_calls
+    if neutral:
+        from app.application.reviewed_excel_budget import fit_transport_batches
+        from app.application.reviewed_excel_reference_ids import neutral_transport_batches
+
+        return fit_transport_batches(review, neutral_transport_batches(review)), max_calls
+    return plan_complete_batches(review, classify_review_workbook(review)), max_calls
+
+
+def build_rule_hints(rules: list[dict], sent: dict) -> list[dict]:
+    rule_hints = []
+    for sheet in rules:
+        regions = []
+        for region in sheet["regions"]:
+            evidence = [ref for ref in region["evidence"] if (sheet["sheet"], ref["cell"]) in sent]
+            regions.append(
+                {
+                    "range": region["range"],
+                    "labels": [ref["label"] for ref in evidence] or ["unknown"],
+                    "evidence": evidence,
+                    "headers": [
+                        ref
+                        for ref in region["header_cells"]
+                        if (sheet["sheet"], ref["cell"]) in sent
+                    ],
+                    "possible_shared_context": [
+                        ref
+                        for ref in region["possible_shared_context"]
+                        if (sheet["sheet"], ref["cell"]) in sent
+                    ],
+                }
+            )
+        rule_hints.append({"sheet": sheet["sheet"], "regions": regions})
+    return rule_hints

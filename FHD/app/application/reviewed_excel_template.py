@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import warnings
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile, ZipFile
 
@@ -22,7 +22,7 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED = 100 * 1024 * 1024
-MAX_CELLS = 5000
+MAX_CELLS = 20_000
 
 
 from app.application.reviewed_excel_classification import (
@@ -46,12 +46,14 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
         "minLength",
         "maxLength",
         "enum",
+        "minimum",
+        "maximum",
     }
 
     def supported(rule, depth=0):
         if not isinstance(rule, dict) or depth > 16 or set(rule) - permitted:
             return False
-        if rule.get("type") not in {"object", "array", "string"}:
+        if rule.get("type") not in {"object", "array", "string", "integer"}:
             return False
         props = rule.get("properties", {})
         if not isinstance(props, dict) or any(
@@ -72,7 +74,7 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
             return False
         return all(
             key not in rule or (type(rule[key]) is int and rule[key] >= 0)
-            for key in ("minItems", "maxItems", "minLength", "maxLength")
+            for key in ("minItems", "maxItems", "minLength", "maxLength", "minimum", "maximum")
         )
 
     def matches(rule, value):
@@ -101,6 +103,13 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
                 return False
             if "items" in rule and any(not matches(rule["items"], item) for item in value):
                 return False
+        elif kind == "integer":
+            if (
+                type(value) is not int
+                or value < rule.get("minimum", value)
+                or value > rule.get("maximum", value)
+            ):
+                return False
         elif (
             not isinstance(value, str)
             or len(value) < rule.get("minLength", 0)
@@ -112,13 +121,117 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
     return bool(supported(schema) and matches(schema, payload))
 
 
+def configured_template_llm_provider() -> str:
+    """Return the live template LLM route: platform by default, MiMo only when explicitly mapped."""
+    import os
+
+    raw = os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower()
+    if raw == "mimo":
+        return "mimo"
+    if raw in {"", "platform", "modstore", "etl_default"}:
+        return "platform"
+    return raw
+
+
+def template_llm_model_label() -> str:
+    """Audit / claim label for the configured template route (never invent private aliases)."""
+    import os
+
+    provider = configured_template_llm_provider()
+    if provider == "mimo":
+        return os.environ.get("FHD_TEMPLATE_MIMO_MODEL", "").strip() or "mimo-unconfigured"
+    return os.environ.get("FHD_TEMPLATE_PLATFORM_MODEL", "").strip() or "platform-default"
+
+
+def _template_platform_complete(
+    messages: list[dict], schema: dict, max_tokens: int, *, owner_id: int | None = None
+):
+    """Template route through the software platform default model (market session)."""
+    import asyncio
+    import logging
+
+    from app.application.etl import llm_assist
+    from app.application.etl.llm_assist_runtime import etl_llm_mode, etl_llm_timeout_seconds
+    from app.application.etl.llm_session_provider import (
+        bind_etl_llm_owner,
+        current_owner_market_provider,
+        reset_etl_llm_owner,
+    )
+    from app.application.reviewed_excel_audit import ModelRequestNotSent, response_capture
+    from app.application.reviewed_excel_budget import template_timeout_seconds
+    from app.infrastructure.llm.structured_output import extract_json
+    from app.utils.operational_errors import BOUNDARY_ERRORS
+
+    if llm_assist.etl_llm_mode() == "off" or etl_llm_mode() == "off":
+        raise ModelRequestNotSent("模板平台模型已关闭；未调用模型")
+    token = None
+    if owner_id is not None:
+        token = bind_etl_llm_owner(int(owner_id))
+    try:
+        timeout_seconds = template_timeout_seconds()
+        provider = current_owner_market_provider(timeout_seconds=etl_llm_timeout_seconds())
+        if provider is None or not provider.is_configured:
+            raise ModelRequestNotSent("平台模型未登录或不可用；未调用模型")
+        audit_callback = response_capture()
+
+        async def call():
+            return await asyncio.wait_for(
+                provider.chat_completion(
+                    messages,
+                    temperature=0.0,
+                    max_tokens=max_tokens,
+                    **(
+                        {"_reviewed_excel_audit_response": audit_callback} if audit_callback else {}
+                    ),
+                ),
+                timeout=timeout_seconds,
+            )
+
+        try:
+            response = asyncio.run(call())
+            choice = (response or {}).get("choices", [])[0]
+            finish = choice.get("finish_reason")
+            if finish not in {None, "stop"}:
+                raise ReviewedExcelError("incomplete")
+            data = extract_json(str((choice.get("message") or {}).get("content") or ""))
+            if data is None or not _validate_template_schema(schema, data):
+                raise ReviewedExcelError("invalid")
+            model = str((response or {}).get("model") or template_llm_model_label())
+            return llm_assist.LlmAssistResult(
+                used_llm=True, model=model, data=data, provider="platform"
+            )
+        except BOUNDARY_ERRORS:
+            logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
+            raise ReviewedExcelError(
+                "模型调用失败或结果不完整，可能已产生费用；未自动重试"
+            ) from None
+    finally:
+        if token is not None:
+            reset_etl_llm_owner(token)
+
+
+def _template_llm_complete(
+    messages: list[dict], schema: dict, max_tokens: int, *, owner_id: int | None = None
+):
+    """Dispatch template calls to platform models by default; keep explicit MiMo mapping."""
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+    provider = configured_template_llm_provider()
+    if provider == "mimo":
+        return _template_mimo_complete(messages, schema, max_tokens)
+    if provider == "platform":
+        return _template_platform_complete(messages, schema, max_tokens, owner_id=owner_id)
+    raise ModelRequestNotSent("模板模型供应商配置不受支持；未调用模型")
+
+
 def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int):
-    """Explicit template-only MiMo route; one bounded request, without telemetry payloads."""
+    """Explicit template-only MiMo route; kept when platform config still maps to MiMo ids."""
     import asyncio
     import logging
     import os
 
     from app.application.etl import llm_assist
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
     from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
     from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
     from app.infrastructure.llm.structured_output import extract_json
@@ -131,19 +244,32 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
         or base != "https://token-plan-cn.xiaomimimo.com/v1"
         or model not in {"mimo-v2.6-flash", "mimo-v2.6-pro"}
     ):
-        raise ReviewedExcelError("模板 MiMo 配置未完成或不受支持；未调用模型")
+        raise ModelRequestNotSent("模板 MiMo 配置未完成或不受支持；未调用模型")
+    from app.application.reviewed_excel_budget import template_timeout_seconds
+
+    timeout_seconds = template_timeout_seconds()
     adapter = OpenAICompatibleAdapter(provider="xiaomi", model=model, base_url=base)
     if not adapter.is_configured:
-        raise ReviewedExcelError("模板 MiMo 凭据未配置；未调用模型")
+        raise ModelRequestNotSent("模板 MiMo 凭据未配置；未调用模型")
     provider = XiaomiMimoProvider(adapter)
+    from app.application.reviewed_excel_audit import response_capture
+
+    audit_callback = response_capture()
 
     async def call():
         try:
             return await asyncio.wait_for(
                 provider.chat_completion(
-                    messages, temperature=0.0, max_tokens=max_tokens, thinking={"type": "disabled"}
+                    messages,
+                    temperature=0.0,
+                    max_tokens=max_tokens,
+                    thinking={"type": "disabled"},
+                    _reviewed_excel_transport_timeout=timeout_seconds,
+                    **(
+                        {"_reviewed_excel_audit_response": audit_callback} if audit_callback else {}
+                    ),
                 ),
-                timeout=llm_assist.etl_llm_timeout_seconds(),
+                timeout=timeout_seconds,
             )
         finally:
             await adapter.close()
@@ -160,7 +286,7 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
         # Never log the provider exception, request, response or credential.
         logging.getLogger(__name__).info("template MiMo call failed: %s", type(exc).__name__)
         raise ReviewedExcelError("模型调用失败或结果不完整，可能已产生费用；未自动重试") from None
-    return llm_assist.LlmAssistResult(used_llm=True, model=model, data=data)
+    return llm_assist.LlmAssistResult(used_llm=True, model=model, data=data, provider="mimo")
 
 
 def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
@@ -237,7 +363,7 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
     return entries
 
 
-def inspect_workbook(body: bytes) -> dict:
+def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
     if not body or len(body) > MAX_BYTES:
         raise ReviewedExcelError("文件为空或超过 20 MB")
     try:
@@ -250,7 +376,7 @@ def inspect_workbook(body: bytes) -> dict:
             ):
                 raise ReviewedExcelError("含嵌入附件或宏，未读取或执行")
             unsupported = (
-                "xl/drawings/",
+                *(("xl/drawings/",) if not allow_drawings else ()),
                 "xl/charts/",
                 "xl/media/",
                 "xl/embeddings/",
@@ -264,6 +390,11 @@ def inspect_workbook(body: bytes) -> dict:
             )
             if any(item.filename.startswith(unsupported) for item in entries):
                 raise ReviewedExcelError("工作簿含暂不支持保真的对象或扩展")
+            drawing_evidence = []
+            if allow_drawings and any(item.filename.startswith("xl/drawings/") for item in entries):
+                from app.application.reviewed_excel_drawing import extract_drawing_evidence
+
+                drawing_evidence = extract_drawing_evidence(archive)
         with warnings.catch_warnings(record=True) as found:
             warnings.simplefilter("always")
             wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
@@ -295,7 +426,7 @@ def inspect_workbook(body: bytes) -> dict:
                     if isinstance(cell, MergedCell) or cell.value is None:
                         continue
                     if len(cells) >= MAX_CELLS:
-                        raise ReviewedExcelError("非空单元格超过 5000 个，暂不能完整预览")
+                        raise ReviewedExcelError("非空单元格超过 20000 个，暂不能完整预览")
                     formula = cell.data_type == "f"
                     cells.append(
                         {
@@ -379,7 +510,30 @@ def inspect_workbook(body: bytes) -> dict:
                         "truncated": sheet.max_row > max_row or sheet.max_column > max_col,
                     }
                 )
+        drawing_boundaries, drawing_columns = {}, {}
+        if len(cells) + len(drawing_evidence) > MAX_CELLS:
+            raise ReviewedExcelError("单元格和绘图对象超过安全预算")
+        if drawing_evidence:
+            from app.application.reviewed_excel_drawing import (
+                drawing_row_boundaries,
+                set_drawing_columns,
+            )
+
+            for sheet in wb.worksheets:
+                objects = [obj for obj in drawing_evidence if obj["sheet"] == sheet.title]
+                drawing_columns[sheet.title] = set_drawing_columns(sheet, objects)
+                drawing_boundaries[sheet.title] = (
+                    []
+                    if any(obj.get("geometry_error") for obj in objects)
+                    else drawing_row_boundaries(sheet, objects)
+                )
+                if drawing_columns[sheet.title] * sheet.max_row > 100_000:
+                    raise ReviewedExcelError("绘图工作表范围过大，暂不能安全预览")
         return {
+            "usage_restrictions": ["仅供数据/模板测试；打印版式未验证，不得发布到企业模板库"]
+            if "ELTUsageRestriction" in cast(Any, wb).custom_doc_props.names
+            else [],
+            "drawing_evidence": drawing_evidence,
             "sha256": hashlib.sha256(body).hexdigest(),
             "read_only_print_areas": read_only_print_areas,
             "cells": cells,
@@ -388,7 +542,8 @@ def inspect_workbook(body: bytes) -> dict:
                 {
                     "sheet": s.title,
                     "rows": s.max_row,
-                    "columns": s.max_column,
+                    "columns": drawing_columns.get(s.title, s.max_column),
+                    "drawing_row_boundaries": drawing_boundaries.get(s.title, []),
                     "merged_ranges": len(s.merged_cells.ranges),
                     "merged_regions": [str(item) for item in s.merged_cells.ranges],
                     "print_area": s.print_area,
@@ -407,6 +562,11 @@ def inspect_workbook(body: bytes) -> dict:
                         for key, dim in s.column_dimensions.items()
                         if dim.hidden
                     ],
+                    "auto_filter_ref": (
+                        str(s.auto_filter.ref)
+                        if s.auto_filter is not None and s.auto_filter.ref
+                        else None
+                    ),
                 }
                 for s in wb.worksheets
             ],
@@ -471,13 +631,41 @@ def _restore_print_areas(body: bytes, areas: list[dict]) -> bytes:
     return result
 
 
+def _flatten_cut_merge(ws: Worksheet, merge) -> None:
+    """Unmerge a range that a selection cuts; copy corner value/style into members.
+
+    Visual layout of the kept selection is preserved as far as openpyxl styles
+    allow (value + style on every former merge member). Outside-selection cells
+    are cleared later by the normal derive path.
+    """
+    from copy import copy
+
+    mc1, mr1, mc2, mr2 = merge.min_col, merge.min_row, merge.max_col, merge.max_row
+    corner = ws.cell(mr1, mc1)
+    value = corner.value
+    style = copy(corner._style) if corner.has_style else None  # type: ignore[union-attr]
+    number_format = corner.number_format
+    ws.unmerge_cells(str(merge))
+    for row in range(mr1, mr2 + 1):
+        for col in range(mc1, mc2 + 1):
+            cell = ws.cell(row, col)
+            if cell.value is None:
+                cell.value = value
+            if style is not None:
+                cell._style = copy(style)  # type: ignore[union-attr]
+            if number_format:
+                cell.number_format = number_format
+
+
 def derive_document_workbook(
-    body: bytes, fragments: list[dict], *, print_area_mode: str = "source"
+    body: bytes,
+    fragments: list[dict],
+    *,
+    print_area_mode: str = "source",
+    object_receipt: dict | None = None,
 ) -> bytes:
     """Create one isolated sheet at source coordinates; reject unprovable dependencies."""
     import re
-
-    from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
 
     info = inspect_workbook(body)
     if print_area_mode not in {"source", "selected"}:
@@ -509,13 +697,28 @@ def derive_document_workbook(
             raise ReviewedExcelError("文档片段坐标无效") from None
         rectangles.append(bounds)
 
+    from app.application.reviewed_excel_drawing import rectangles_cover, select_drawing_objects
+
+    selected_drawings = select_drawing_objects(info, sheet_name, rectangles)
+    from app.application.reviewed_excel_range_objects import (
+        plan_range_objects,
+        restore_range_objects,
+    )
+
+    range_plan = plan_range_objects(body, sheet_name, fragments)
+
     def contained(bounds):
-        c1, r1, c2, r2 = bounds
-        return any(x1 <= c1 <= c2 <= x2 and y1 <= r1 <= r2 <= y2 for x1, y1, x2, y2 in rectangles)
+        return rectangles_cover(bounds, rectangles)
 
     def intersects(bounds):
         c1, r1, c2, r2 = bounds
         return any(c1 <= x2 and x1 <= c2 and r1 <= y2 and y1 <= r2 for x1, y1, x2, y2 in rectangles)
+
+    from app.application.reviewed_excel_formula_support import (
+        install_formula_support,
+        plan_formula_support,
+        verify_preserved_subtotals,
+    )
 
     with warnings.catch_warnings(record=True) as found:
         warnings.simplefilter("always")
@@ -536,9 +739,7 @@ def derive_document_workbook(
             or ws.print_title_rows
             or ws.print_title_cols
             or ws.data_validations.count
-            or len(ws.conditional_formatting)
             or ws.tables
-            or ws.auto_filter.ref
         ):
             raise ReviewedExcelError("工作簿存在未验证的名称或区域依赖，暂不能提取")
         header_names = (
@@ -567,55 +768,46 @@ def derive_document_workbook(
             ws.print_area = [item["range"] for item in fragments]
         for merge in list(ws.merged_cells.ranges):
             bounds = bounded_range(str(merge))
-            if intersects(bounds) and not contained(bounds):
-                raise ReviewedExcelError("所选范围切断合并单元格")
             if not intersects(bounds):
                 ws.unmerge_cells(str(merge))
+                continue
+            if contained(bounds):
+                continue
+            # Selection cuts a merge (common after sticky row-band resplit).
+            # Flatten: unmerge and propagate corner value/style so each cell in
+            # the selection still carries the merged content without rejecting.
+            _flatten_cut_merge(ws, merge)
+        formula_plan = plan_formula_support(body, fragments)
+        clear_cells = []
         for row in ws.iter_rows():
             for cell in row:
                 if isinstance(cell, MergedCell):
                     continue
                 if not contained((cell.column, cell.row, cell.column, cell.row)):
-                    cell.value = None
-                    cell.comment = None
-                    cell.hyperlink = None
+                    clear_cells.append(cell)
                     continue
                 if cell.hyperlink:
                     raise ReviewedExcelError("文档包含未核验的链接，暂不能提取")
-                if cell.data_type == "f":
-                    try:
-                        tokens = Tokenizer(cell.value).items
-                    except (TokenizerError, TypeError):
-                        raise ReviewedExcelError("公式引用无法核验") from None
-                    for token in tokens:
-                        if token.type == "OPERAND" and token.subtype == "ERROR":
-                            raise ReviewedExcelError("公式含错误引用，暂不能提取")
-                        if (
-                            token.type == "FUNC"
-                            and token.subtype == "OPEN"
-                            and token.value[:-1].upper()
-                            not in {
-                                "SUM",
-                                "AVERAGE",
-                                "MIN",
-                                "MAX",
-                                "ROUND",
-                                "IF",
-                                "IFERROR",
-                                "COUNT",
-                                "COUNTA",
-                            }
-                        ):
-                            raise ReviewedExcelError("公式函数依赖无法核验")
-                        if token.type == "OPERAND" and token.subtype == "RANGE":
-                            if not re.fullmatch(
-                                r"\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?", token.value
-                            ):
-                                raise ReviewedExcelError("公式含外部或名称引用，暂不能提取")
-                            if not contained(bounded_range(token.value.replace("$", ""))):
-                                raise ReviewedExcelError("公式引用跨越所选文档，暂不能提取")
+        support_sheet = install_formula_support(wb, formula_plan)
+        support_values = (
+            {
+                address: wb[support_sheet][address].value
+                for address in formula_plan["support_cells"] + formula_plan["proxy_cells"]
+            }
+            if support_sheet
+            else {}
+        )
+        formula_values = {
+            address: ws[address].value
+            for address in formula_plan["formula_references"]
+            if contained((ws[address].column, ws[address].row, ws[address].column, ws[address].row))
+        }
+        for cell in clear_cells:
+            cell.value = None
+            cell.comment = None
+            cell.hyperlink = None
         for name in list(wb.sheetnames):
-            if name != sheet_name:
+            if name not in {sheet_name, support_sheet}:
                 del wb[name]
         wb.active = 0
         output = BytesIO()
@@ -627,9 +819,19 @@ def derive_document_workbook(
         result = output.getvalue()
         checked = load_workbook(BytesIO(result), data_only=False, keep_links=True, rich_text=True)
         try:
+            verify_preserved_subtotals(checked, formula_plan)
             saved_sheet = checked[sheet_name]
             if not isinstance(saved_sheet, Worksheet):
                 raise ReviewedExcelError("派生对象不是工作表")
+            if any(
+                saved_sheet[address].value != value for address, value in formula_values.items()
+            ):
+                raise ReviewedExcelError("派生公式写出后核验失败")
+            if support_sheet and any(
+                checked[support_sheet][address].value != value
+                for address, value in support_values.items()
+            ):
+                raise ReviewedExcelError("支撑数据写出后核验失败")
             if headers != {
                 name: str(getattr(saved_sheet, name)) for name in header_names
             } or print_settings != (
@@ -647,6 +849,38 @@ def derive_document_workbook(
                     raise ReviewedExcelError("派生打印区域写出后核验失败")
         finally:
             checked.close()
+        if selected_drawings:
+            from app.application.reviewed_excel_drawing import restore_drawing_parts
+
+            result = restore_drawing_parts(body, result, selected_drawings)
+        result = restore_range_objects(result, range_plan)
+        if formula_plan.get("preserved_subtotal_cells"):
+            final_checked = load_workbook(
+                BytesIO(result), data_only=False, keep_links=True, rich_text=True
+            )
+            try:
+                # Atomic cuts may narrow AutoFilter to selection∩filter; SUBTOTAL
+                # fidelity then compares against the restored filter, not the
+                # whole-sheet source signature.
+                if any(
+                    item.get("type") == "autoFilter" and item.get("narrowed_ref")
+                    for item in range_plan["receipt"].get("retained", [])
+                ):
+                    from app.application.reviewed_excel_formula_support import (
+                        _filter_signature,
+                    )
+
+                    formula_plan = dict(formula_plan)
+                    formula_plan["subtotal_filter"] = _filter_signature(final_checked[sheet_name])
+                verify_preserved_subtotals(final_checked, formula_plan)
+            finally:
+                final_checked.close()
+
+        if object_receipt is not None:
+            object_receipt.update(range_plan["receipt"])
+            warnings_list = formula_plan.get("formula_error_operand_warnings") or []
+            if warnings_list:
+                object_receipt["formula_error_operand_warnings"] = warnings_list
         # ZIP member timestamps otherwise vary between saves, preventing a
         # verified re-derivation of exactly the same temporary document later.
         normalized = BytesIO()
@@ -675,8 +909,11 @@ def derive_document_workbook(
 
 def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) -> bytes:
     inspection = inspect_workbook(body)
+    from app.application.reviewed_excel_range_objects import require_cleanable_range_metadata
+
     if inspection["sha256"] != expected_sha256:
         raise ReviewedExcelError("文件与预览不一致，请重新预览")
+    require_cleanable_range_metadata(body)
     allowed = {
         (item["sheet"], item["cell"]) for item in inspection["cells"] if item["kind"] == "review"
     }
@@ -715,6 +952,10 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
         if found:
             raise ReviewedExcelError("保存时发现无法保证保真的内容，已停止")
         result = output.getvalue()
+        if inspection.get("drawing_evidence"):
+            from app.application.reviewed_excel_drawing import restore_drawing_parts
+
+            result = restore_drawing_parts(body, result, inspection["drawing_evidence"])
         if inspection["read_only_print_areas"]:
             result = _restore_print_areas(result, inspection["read_only_print_areas"])
         return result
@@ -860,10 +1101,9 @@ def refine_proposal(
     current: list | None = None,
     initial: bool = False,
 ) -> dict:
-    """Use the existing ETL provider for a bounded, explicitly requested revision."""
+    """Use the configured platform (or mapped) template LLM for a bounded revision."""
     import json
 
-    from app.application.etl import llm_assist
     from app.application.etl.llm_session_provider import bind_etl_llm_owner, reset_etl_llm_owner
 
     base = make_proposals(review)
@@ -970,15 +1210,7 @@ def refine_proposal(
     ]
     token = bind_etl_llm_owner(owner_id)
     try:
-        import os
-
-        configured_provider = os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower()
-        if configured_provider == "mimo":
-            result = _template_mimo_complete(messages, schema, 1400)
-        elif configured_provider:
-            raise ReviewedExcelError("模板模型供应商配置不受支持；未调用模型")
-        else:
-            result = llm_assist._complete(messages, schema=schema, max_tokens=1400)
+        result = _template_llm_complete(messages, schema, 1400, owner_id=owner_id)
     finally:
         reset_etl_llm_owner(token)
     if not result.used_llm or result.degraded:
@@ -1047,7 +1279,7 @@ def refine_proposal(
         messages,
         bounded,
         source_sha256=review["sha256"],
-        provider=configured_provider or "etl_default",
+        provider=configured_template_llm_provider(),
         model=result.model,
         max_output_tokens=1400,
     )

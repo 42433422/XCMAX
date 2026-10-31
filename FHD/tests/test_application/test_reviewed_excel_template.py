@@ -15,6 +15,7 @@ from app.application.reviewed_excel_template import clean_workbook, inspect_work
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from tests.fixtures.etl_template.sources.generate import large_quotation, sample
+from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
 
 
 def input_digest(messages):
@@ -219,7 +220,9 @@ def test_template_mimo_is_explicit_scoped_and_single_call(monkeypatch, caplog):
         await asyncio.sleep(1)
 
     monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", slow)
-    monkeypatch.setattr("app.application.etl.llm_assist.etl_llm_timeout_seconds", lambda: 0.01)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_budget.template_timeout_seconds", lambda: 0.01
+    )
     with pytest.raises(ValueError, match="未自动重试"):
         refine_proposal(
             review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
@@ -1530,7 +1533,7 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
     out = BytesIO()
     wb.save(out)
     review = inspect_workbook(out.getvalue())
-    monkeypatch.delenv("FHD_TEMPLATE_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "unsupported-vendor")
     with pytest.raises(ValueError, match="未进行模型分类"):
         classify_semantic_workbook(review)
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -1542,8 +1545,16 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
         "dependencies": [],
         "reason": "报价",
     }
+    # Merge-cutting ranges are accepted with merge_cut_flattened_on_export (export flattens).
+    flatten_ok = [{**valid, "range": "A1:B4"}]
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_mimo_complete",
+        lambda *a, **k: LlmAssistResult(used_llm=True, data={"regions": flatten_ok}),
+    )
+    flattened = classify_semantic_workbook(review)
+    assert flattened["regions"][0]["merge_cut_flattened_on_export"] is True
+
     invalid = [
-        [{**valid, "range": "A1:B4"}],
         [{**valid, "range": "A1:E4"}],
         [valid, valid],
         [{**valid, "evidence": [{"sheet": "报价", "cell": "Z99"}]}],
@@ -1874,7 +1885,10 @@ def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monk
     fake = LlmAssistResult(
         used_llm=True, data={"clear": [{"sheet": "报价", "cell": "B2"}], "reason": "测试建议"}
     )
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", lambda *args, **kwargs: fake)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *args, **kwargs: fake,
+    )
     revised = service.refine_proposal(review, base["version"], "清除客户", owner_id=7)
     assert revised["parent_version"] == base["version"] and revised["version"] != base["version"]
     assert revised["candidates"][2]["clear"] == [{"sheet": "报价", "cell": "B2"}]
@@ -1886,7 +1900,8 @@ def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monk
     with pytest.raises(ValueError):
         service.refine_proposal(review, base["version"], "清除固定说明", owner_id=7)
     monkeypatch.setattr(
-        "app.application.etl.llm_assist._complete", lambda *args, **kwargs: LlmAssistResult()
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *args, **kwargs: LlmAssistResult(),
     )
     with pytest.raises(ValueError, match="模型未调用"):
         service.refine_proposal(review, base["version"], "清除客户", owner_id=7)
@@ -1899,7 +1914,7 @@ def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, rev
 
     calls = []
 
-    def stub(messages, **_kwargs):
+    def stub(messages, schema=None, max_tokens=None, **_kwargs):
         calls.append(messages)
         return LlmAssistResult(
             used_llm=True,
@@ -1912,7 +1927,7 @@ def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, rev
             },
         )
 
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", stub)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", stub)
     client = review_store.client
     source = sample()
     upload = {
@@ -1977,9 +1992,9 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
 
     calls = []
 
-    def stub(messages, **kwargs):
+    def stub(messages, schema=None, max_tokens=None, **kwargs):
         calls.append(messages)
-        assert "candidates" in kwargs["schema"]["properties"]
+        assert "candidates" in schema["properties"]
         return LlmAssistResult(
             used_llm=True,
             data={
@@ -1991,7 +2006,7 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
             },
         )
 
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", stub)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", stub)
     client = review_store.client
     source = sample()
     upload = {
@@ -2023,33 +2038,54 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
     assert "input_messages" not in proposal["model"]
 
 
-def test_owner_file_template_authorization_is_bound_to_mimo(monkeypatch, review_store):
+def test_owner_file_template_authorization_uses_platform_by_default(monkeypatch, review_store):
     from app.application.etl.llm_assist_runtime import LlmAssistResult
 
     calls = []
 
     def fake(*args, **kwargs):
-        calls.append(1)
+        calls.append(kwargs.get("owner_id"))
         return LlmAssistResult(
-            used_llm=True, data={"candidates": [{"clear": [], "reason": "合成"} for _ in range(3)]}
+            used_llm=True,
+            data={"candidates": [{"clear": [], "reason": "合成"} for _ in range(3)]},
+            provider="platform",
+            model="platform-default",
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", fake)
     monkeypatch.delenv("FHD_TEMPLATE_LLM_PROVIDER", raising=False)
     client = review_store.client
     data = {"model_opt_in": "true", "own_file_authorized": "true", "expected_actor": "1:7"}
     source = sample()
     upload = {"file": ("synthetic.xlsx", source)}
-    rejected = client.post("/api/templates/reviewed-excel/preview", files=upload, data=data)
-    assert rejected.status_code == 400 and "供应商不匹配" in rejected.json()["detail"] and not calls
+    accepted = client.post("/api/templates/reviewed-excel/preview", files=upload, data=data)
+    assert accepted.status_code == 200, accepted.text
+    auth = accepted.json()["proposal"]["model"]["authorization"]
+    assert (
+        auth["kind"] == "owner_file"
+        and auth["provider"] == "platform"
+        and auth["owner_user_id"] == 7
+    )
+    assert auth["source_sha256"] == hashlib.sha256(source).hexdigest() and calls == [7]
+
+    # Explicit MiMo mapping remains available when product still maps platform → MiMo ids.
+    calls.clear()
+
+    def mimo_fake(*args, **kwargs):
+        calls.append(1)
+        return LlmAssistResult(
+            used_llm=True, data={"candidates": [{"clear": [], "reason": "合成"} for _ in range(3)]}
+        )
+
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", mimo_fake)
     accepted = client.post("/api/templates/reviewed-excel/preview", files=upload, data=data)
     assert accepted.status_code == 200, accepted.text
     auth = accepted.json()["proposal"]["model"]["authorization"]
     assert (
         auth["kind"] == "owner_file" and auth["provider"] == "mimo" and auth["owner_user_id"] == 7
     )
-    assert auth["source_sha256"] == hashlib.sha256(source).hexdigest() and calls == [1]
+    assert calls == [1]
     refine_data = {
         "review_id": accepted.json()["review_id"],
         "parent_version": accepted.json()["proposal"]["version"],
@@ -2091,11 +2127,11 @@ def test_model_input_spreads_across_sheets_and_reports_uncovered(monkeypatch):
     initial = service.make_proposals(review)
     seen = []
 
-    def stub(messages, **_kwargs):
+    def stub(messages, schema=None, max_tokens=None, **_kwargs):
         seen.append(json.loads(messages[1]["content"]))
         return LlmAssistResult(used_llm=True, data={"clear": [], "reason": "保留"})
 
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", stub)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", stub)
     revised = service.refine_proposal(review, initial["version"], "检查范围", owner_id=7)
     assert any(c["sheet"] == "第二页" for c in seen[0]["cells"])
     assert any(c["sheet"] == "第一页" and c["cell"] == "A120" for c in seen[0]["cells"])
@@ -2234,7 +2270,9 @@ def test_revocation_during_model_or_before_write_never_commits(review_store, mon
             used_llm=True, data={"candidates": [{"clear": [], "reason": "保留"} for _ in range(3)]}
         )
 
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", revoke_model)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete", revoke_model
+    )
     form = {
         "review_id": preview["review_id"],
         "parent_version": preview["proposal"]["version"],
@@ -2539,8 +2577,8 @@ def test_semantic_large_workbook_discloses_unread_regions_and_merge_omissions(mo
         and f"A{business_row}" in coverage["unassigned"]
     )
     assert f"A{legend_row}" not in coverage["unread"] and f"A{legend_row}" in coverage["unassigned"]
-    assert coverage["merged_sent"] == 100 and coverage["merged_omitted"] == 10
-    assert len(seen[0]["sheets"][0]["merged"]) == 100
+    assert coverage["merged_sent"] == 110 and coverage["merged_omitted"] == 0
+    assert len(seen[0]["sheets"][0]["merged"]) == 110
     assert {f"A{business_row}", f"A{legend_row}"} <= {cell["cell"] for cell in seen[0]["cells"]}
     assert result["budget"]["unread"] == 0
 
@@ -2586,7 +2624,7 @@ def test_semantic_sequential_batches_budget_and_conflict(monkeypatch):
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
-    review = inspect_workbook(large_quotation(rows=2001))
+    review = inspect_workbook(large_quotation(rows=8001))
     calls = []
     region = {
         "sheet": "报价",
@@ -2607,7 +2645,7 @@ def test_semantic_sequential_batches_budget_and_conflict(monkeypatch):
     result = classify_semantic_workbook(review)
     assert len(calls) == result["budget"]["calls"] == 4
     assert result["budget"]["unread"] > 0
-    assert result["coverage"][0]["sent"] + result["budget"]["unread"] == 2001
+    assert result["coverage"][0]["sent"] + result["budget"]["unread"] == 8001
     assert len(result["regions"]) == 1
     assert len(result["input_summaries"]) == 4
     assert all("input_sha256" in summary for summary in result["input_summaries"])
@@ -2698,7 +2736,7 @@ def test_multibatch_failure_does_not_commit_partial_history(review_store, monkey
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
-    source = large_quotation()
+    source = large_quotation(rows=4001)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -2753,10 +2791,20 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     from datetime import UTC, datetime, timedelta
 
     from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_evidence import plan_semantic_batches
+    from app.fastapi_routes import reviewed_excel_template as routes
 
+    original_planner = routes.plan_semantic_batches
+    planning_calls = []
+
+    def plan_once(*args, **kwargs):
+        planning_calls.append(1)
+        return original_planner(*args, **kwargs)
+
+    monkeypatch.setattr(routes, "plan_semantic_batches", plan_once)
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
-    source = large_quotation()
+    source = large_quotation(rows=4001)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -2797,11 +2845,20 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     assert len(checkpoint_state["results"][0]["input_summary"]["input_sha256"]) == 64
     # Ending the request is a batch-boundary stop. The persisted checkpoint survives a new client/session.
     history = client.get(url).json()
-    assert history["checkpoint"]["phase"] == "ready" and history["checkpoint"]["total"] == 2
+    expected_total = len(plan_semantic_batches(inspect_workbook(source), 2, neutral=True)[0])
+    assert history["checkpoint"]["phase"] == "ready"
+    assert history["checkpoint"]["total"] == expected_total
+    assert expected_total >= 2
     assert len(calls) == 1
     resumed = client.post(url + "/analyze", data=data)
-    assert resumed.status_code == 200 and resumed.json()["budget"]["calls"] == 2
-    assert len(calls) == 2 and client.get(url).json()["checkpoint"] is None
+    assert resumed.status_code == 200 and len(calls) == 2
+    for completed in range(2, expected_total):
+        resumed = client.post(url + "/analyze", data={**data, "continue_authorized": "true"})
+        assert resumed.status_code == 200 and len(calls) == completed + 1
+    assert len(calls) == expected_total and client.get(url).json()["checkpoint"] is None
+    assert (
+        len(planning_calls) == 1
+    )  # Continuations restore coordinates, not expensive full planning.
     # A separate checkpoint cannot resume after the original upload expires.
     item2 = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -2822,7 +2879,8 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
             },
         )
     assert client.post(url2 + "/analyze", data=data2).status_code == 410
-    assert len(calls) == 3
+    assert len(calls) == expected_total + 1
+    assert len(planning_calls) == 2
 
 
 def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatch):
@@ -2833,7 +2891,7 @@ def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatc
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
-    source = large_quotation()
+    source = large_quotation(rows=4001)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -2885,7 +2943,7 @@ def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkey
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
+    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
     wb = Workbook()
     ws = wb.active
     ws.title = "往来资料"
@@ -2933,27 +2991,23 @@ def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkey
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
     payload, output_tokens = captured[0]
-    sent = {cell["cell"] for cell in payload["cells"]}
+    sent = {cell["cell"] for payload, _ in captured for cell in payload["cells"]}
     assert set(tail) <= sent
-    assert {"A1:M40", "A41:M45"} == {
-        region["range"] for region in payload["structure_map"][0]["regions"]
-    }
-    assert payload["structure_map"][0]["regions_omitted"] == 0
+    assert "structure_map" not in payload and "rule_hints" not in payload
     assert "实际发送" not in payload["cells"][0]["value"]
     assert not result["coverage"][0]["unread"] and len(sent) == 442
-    assert (
-        payload["batch_coverage"][0]["sent_nonempty"]
-        == payload["batch_coverage"][0]["total_nonempty"]
-        == 442
-    )
+    assert sum(p["batch_coverage"][0]["sent_nonempty"] for p, _ in captured) == 442
+    assert all(p["batch_coverage"][0]["total_nonempty"] == 442 for p, _ in captured)
     source_values = {
         (cell["sheet"], cell["cell"]): cell["value"]
         for cell in inspect_workbook(out.getvalue())["cells"]
     }
     assert {
-        (cell["sheet"], cell["cell"]): cell["value"] for cell in payload["cells"]
+        (cell["sheet"], cell["cell"]): cell["value"]
+        for payload, _ in captured
+        for cell in payload["cells"]
     } == source_values
-    assert 3000 <= output_tokens <= 4000
+    assert all(4000 <= tokens <= 16000 for _, tokens in captured)
 
 
 def test_semantic_finish_length_rejected_without_retry(monkeypatch):
@@ -3201,24 +3255,11 @@ def test_relationship_payload_shows_observed_header_positions_without_guessing(
 
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
-    context = captured[0]["relationship_context"]
-    assert context["kind"] == "structural_observations_only"
-    sheet = context["sheets"][0]
-    match = next(
-        item
-        for item in sheet["sent_row_matches"]
-        if item["first_row"] == 5 and item["second_row"] == 22
-    )
-    pairs = {
-        (item["first_cell"], item["second_cell"], item["same_column"]) for item in match["matches"]
-    }
-    assert ("C5", "C22", True) in pairs
-    assert (("B5", "D22", False) in pairs) == (shifted_value == "参数")
-    assert sheet["candidate_adjacencies"] and "H41:M43" in sheet["merged_ranges"]
-    assert any(
-        ref["cell"] == "H41" and ref["kind"] == "possible_shared_note"
-        for ref in sheet["possible_context_refs"]
-    )
+    assert "relationship_context" not in captured[0]
+    sent = {cell["cell"]: cell["value"] for cell in captured[0]["cells"]}
+    assert sent["C5"] == sent["C22"] == "数量"
+    assert sent["D22"] == shifted_value and sent["H41"] == "共享图例"
+    assert "H41:M43" in captured[0]["sheets"][0]["merged"]
     assert result["regions"][0]["labels"] == ["unknown"]
 
 
@@ -3327,43 +3368,20 @@ def test_adjacent_unrelated_suggestions_are_not_merged_or_relabelled():
     assert len(observed) == 2 and all(region["needs_confirmation"] for region in observed)
 
 
-def test_overlong_cell_is_deferred_and_unread_region_stays_unknown(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+def test_overlong_cell_refuses_whole_plan_without_dropping_evidence(monkeypatch):
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
     wb = Workbook()
     ws = wb.active
-    ws.title = "表"
-    ws["A1"], ws["A2"], ws["A3"] = "报价单", "长" * 4001, "末尾"
+    ws["A1"], ws["A2"], ws["A3"] = "title", "x" * 4001, "tail"
     out = BytesIO()
     wb.save(out)
-
-    def fake(messages, schema, tokens):
-        return LlmAssistResult(
-            used_llm=True,
-            data={
-                "regions": [
-                    {
-                        "sheet": "表",
-                        "range": "A1:A3",
-                        "labels": ["quotation"],
-                        "evidence": [{"sheet": "表", "cell": "A1"}],
-                        "dependencies": [],
-                        "reason": "标题",
-                    }
-                ]
-            },
-        )
-
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
-    result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
-    assert result["coverage"][0]["deferred_large_values"] == ["A2"]
-    assert "A2" in result["coverage"][0]["unread"]
-    assert result["regions"][0]["labels"] == ["unknown"]
-    assert result["regions"][0]["suggested_labels"] == ["quotation"]
-    assert "未发送" in result["regions"][0]["context_warning"]
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_mimo_complete",
+        lambda *args: pytest.fail("oversized plan must not call provider"),
+    )
+    with pytest.raises(ValueError, match="单行"):
+        classify_semantic_workbook(inspect_workbook(out.getvalue()))
 
 
 def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monkeypatch):
@@ -3371,7 +3389,7 @@ def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monke
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
-    source = large_quotation()
+    source = large_quotation(rows=4001)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -3403,11 +3421,17 @@ def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monke
     data = {"version": item["version"], "sample_authorized": "true"}
     first = client.post(url + "/analyze", data=data)
     assert first.status_code == 200 and first.json()["phase"] == "paused"
-    assert first.json()["checkpoint"]["remaining"] == 1 and len(calls) == 1
+    total = first.json()["checkpoint"]["total"]
+    assert first.json()["checkpoint"]["remaining"] == total - 1 and len(calls) == 1
     assert client.post(url + "/analyze", data=data).status_code == 409 and len(calls) == 1
     second = client.post(url + "/analyze", data={**data, "continue_authorized": "true"})
-    assert second.status_code == 200 and second.json()["budget"]["calls"] == 2
-    assert second.json()["coverage"][0]["sent"] == 601 and len(calls) == 2
+    assert second.status_code == 200 and len(calls) == 2
+    for completed in range(2, total):
+        assert client.post(url + "/analyze", data=data).status_code == 409
+        assert len(calls) == completed
+        second = client.post(url + "/analyze", data={**data, "continue_authorized": "true"})
+        assert second.status_code == 200 and len(calls) == completed + 1
+    assert second.json()["coverage"][0]["sent"] == 4001 and len(calls) == total
 
 
 def test_oversized_single_row_refused_before_provider_and_checkpoint(review_store, monkeypatch):
@@ -3443,13 +3467,13 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
+    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
     wb = Workbook()
     ws = wb.active
     ws.title = "大表"
-    for row in range(1, 602):
+    for row in range(1, 4002):
         ws.cell(row, 1, f"合成记录{row}")
-    ws["A1"], ws["H602"] = "报价单", "图例：单位为件"
+    ws["A1"], ws["H4002"] = "报价单", "图例：单位为件"
     out = BytesIO()
     wb.save(out)
     captured = []
@@ -3465,7 +3489,7 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
                         "range": "A1:A1",
                         "labels": ["quotation"],
                         "evidence": [{"sheet": "大表", "cell": "A1"}],
-                        "dependencies": [{"sheet": "大表", "cell": "H602"}],
+                        "dependencies": [{"sheet": "大表", "cell": "H4002"}],
                         "reason": "标题和图例",
                     }
                 ]
@@ -3474,28 +3498,33 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
 
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
-    assert len(captured) == 2 and result["budget"]["unread"] == 0
-    assert all({"A1", "H602"} <= {cell["cell"] for cell in batch["cells"]} for batch in captured)
-    assert next(cell["context_only"] for cell in captured[0]["cells"] if cell["cell"] == "H602")
+    assert 2 <= len(captured) <= 4 and result["budget"]["unread"] == 0
+    assert all({"A1", "H4002"} <= {cell["cell"] for cell in batch["cells"]} for batch in captured)
+    assert next(cell["context_only"] for cell in captured[0]["cells"] if cell["cell"] == "H4002")
     assert next(cell["context_only"] for cell in captured[1]["cells"] if cell["cell"] == "A1")
-    assert all(len(batch["cells"]) <= 500 for batch in captured)
-    assert result["coverage"][0]["sent"] == 602
+    from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
+
+    assert all(len(batch["cells"]) <= MAX_MODEL_CELLS for batch in captured)
+    assert result["coverage"][0]["sent"] == 4002
 
 
 def test_full_width_row_does_not_create_empty_batch_or_drop_cells():
     from app.application.reviewed_excel_classification import plan_semantic_batches
+    from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
 
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "报价单"
-    for col in range(1, 501):
+    for col in range(1, MAX_MODEL_CELLS + 1):
         ws.cell(2, col, f"值{col}")
     ws["A3"] = "图例：合成"
     out = BytesIO()
     wb.save(out)
     batches, _ = plan_semantic_batches(inspect_workbook(out.getvalue()), 2)
-    assert all(batches) and all(len(batch) <= 500 for batch in batches)
-    assert any(sum(cell["cell"].endswith("2") for cell in batch) == 500 for batch in batches)
+    assert all(batches) and all(len(batch) <= MAX_MODEL_CELLS for batch in batches)
+    assert any(
+        sum(cell["cell"].endswith("2") for cell in batch) == MAX_MODEL_CELLS for batch in batches
+    )
 
 
 def test_fragment_links_are_candidates_not_label_based_merges():
@@ -4041,7 +4070,9 @@ def test_product_saves_document_outside_original_print_with_explicit_choice(
 
 def _nine_batch_workbook():
     wb = Workbook()
-    for index, count in enumerate((1900, 600, 600, 265)):
+    # Counts sized for MAX_MODEL_CELLS=2000 to keep the historical 9-batch fairness shape
+    # (was 1900/600/600/265 under the prior 500-cell pack budget).
+    for index, count in enumerate((7600, 2400, 2400, 1060)):
         ws = wb.active if index == 0 else wb.create_sheet()
         ws.title = f"表{index}"
         if index == 0:
@@ -4116,7 +4147,14 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
     ).json()["files"][0]
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     form = {"version": item["version"], "own_file_authorized": "true"}
-    for index in range(9):
+    from app.application.reviewed_excel_evidence import plan_semantic_batches
+
+    planned, _ = plan_semantic_batches(
+        inspect_workbook(_nine_batch_workbook()), per_round, neutral=True
+    )
+    total = len(planned)
+    assert total >= 9
+    for index in range(total):
         if index and index % per_round == 0:
             assert client.post(url + "/analyze", data=form).status_code == 409
             assert (
@@ -4138,21 +4176,22 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
             },
         )
         assert response.status_code == 200, response.text
-        if index < 8 and (index + 1) % per_round == 0:
+        if index < total - 1 and (index + 1) % per_round == 0:
             assert (
                 response.json()["phase"] == "paused"
-                and response.json()["checkpoint"]["remaining"] == 8 - index
+                and response.json()["checkpoint"]["remaining"] == total - 1 - index
             )
-        elif index < 8:
+        elif index < total - 1:
             assert response.json()["phase"] == "pending"
         if index == 1:
             assert client.get(url).json()["checkpoint"]["completed"] == 2
     result = response.json()
-    assert len(calls) == 9 and [sheet for sheet, _ in calls[:4]] == ["表0", "表1", "表2", "表3"]
+    assert len(calls) == total
+    assert [sheet for sheet, _ in calls] == [batch[0]["sheet"] for batch in planned]
     assert (
         result["suggested_document_count"] is None and result["document_count_status"] == "partial"
     )
-    assert len({doc["document_id"] for doc in result["suggested_documents"]}) == 9
+    assert len({doc["document_id"] for doc in result["suggested_documents"]}) == total
     assert all(not item["unread"] for item in result["coverage"])
     authorization = client.get(url).json()["versions"][-1]["model_authorization"]
     assert (
@@ -4172,7 +4211,7 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
         },
     )
     assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.json()["confirmed_document_count"] == 9
+    assert confirmed.json()["confirmed_document_count"] == total
 
 
 def test_nine_batch_concurrent_resume_does_not_resend(review_store, monkeypatch):
@@ -4600,8 +4639,14 @@ def test_document_derivation_preserves_coordinates_layout_and_rejects_external_r
     ws["C2"] = "=B8*2"
     changed = BytesIO()
     wb.save(changed)
-    with pytest.raises(ValueError, match="引用"):
-        derive_document_workbook(changed.getvalue(), [{"sheet": "混合", "range": "A1:C3"}])
+    supported = load_workbook(
+        BytesIO(
+            derive_document_workbook(changed.getvalue(), [{"sheet": "混合", "range": "A1:C3"}])
+        ),
+        data_only=False,
+    )
+    assert supported["混合"]["C2"].value == "='依赖支撑'!B8*2"
+    assert supported["依赖支撑"]["B8"].value == "不应出现"
 
 
 def test_document_derivation_blocks_uncertain_print_merge_and_dynamic_formula():
@@ -4629,8 +4674,9 @@ def test_document_derivation_blocks_uncertain_print_merge_and_dynamic_formula():
     ws.merge_cells("B3:B5")
     out = BytesIO()
     wb.save(out)
-    with pytest.raises(ValueError, match="合并"):
-        derive_document_workbook(out.getvalue(), part)
+    # Partial merge overlap is exported with flatten receipt, not a hard reject.
+    flattened = derive_document_workbook(out.getvalue(), part)
+    assert isinstance(flattened, (bytes, bytearray)) and len(flattened) > 0
 
 
 def test_model_document_to_template_library_roundtrip(review_store, monkeypatch):
@@ -5070,3 +5116,600 @@ def test_reviewed_excel_never_returns_underlying_exception_payload(
             assert response.json()["proposal"]["model"]["status"] == "unavailable"
     assert sensitive not in response.text
     assert "文件或请求无法处理" in response.text
+
+
+def test_auto_slice_api_without_confirmation_and_owner_isolation(review_store, monkeypatch):
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    source = sample()
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("sample.xlsx", source)},
+    ).json()["files"][0]
+    path = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+
+    def fake(messages, schema, max_tokens):
+        data = {
+            "physical_regions": [
+                {
+                    "sheet": "报价",
+                    "range": "A1:C4",
+                    "labels": ["unknown"],
+                    "evidence": [],
+                    "dependencies": [],
+                    "reason": "不确定类型",
+                }
+            ],
+            "logical_documents": [
+                {"document_id": "fixture", "fragments": [{"sheet": "报价", "range": "A1:C4"}]}
+            ],
+            "layout_references": [],
+        }
+        return LlmAssistResult(used_llm=True, data=data)
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    analyzed = client.post(
+        path + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
+    )
+    assert analyzed.status_code == 200, analyzed.text
+    value = analyzed.json()
+    assert not value["confirmed"]
+    route = path + "/auto-slices/" + value["version"]
+    listing = client.get(route)
+    assert listing.status_code == 200, listing.text
+    result = listing.json()["slices"]
+    assert len(result) == 1 and result[0]["basis"] == "model_group" and not result[0]["confirmed"]
+    download = client.get(route + "/0")
+    assert download.status_code == 200
+    assert result[0]["filename"].endswith(".xlsx")
+    assert "filename*=UTF-8''" in download.headers["content-disposition"]
+    assert hashlib.sha256(download.content).hexdigest() == result[0]["sha256"]
+    assert load_workbook(BytesIO(download.content)).sheetnames == ["报价"]
+    assert client.get(path + "/auto-slices/" + item["version"]).status_code == 409
+    review_store.actor["tenant"] = 2
+    assert client.get(route).status_code == 404
+    review_store.actor["tenant"] = 1
+    review_store.actor["read"] = False
+    assert client.get(route + "/0").status_code == 403
+
+
+def test_model_cannot_create_region_or_evidence_from_context_only(monkeypatch):
+    from app.application.etl.errors import ReviewedExcelError
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_classification import _classify_semantic_batch
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    review = inspect_workbook(sample())
+    first = next(cell for cell in review["cells"] if cell["cell"] == "A1")
+    second = next(cell for cell in review["cells"] if cell["cell"] == "B2")
+    third = next(cell for cell in review["cells"] if cell["cell"] == "A3")
+    review["cells"] = [first, {**second, "context_only": True}]
+    region = {
+        "sheet": "报价",
+        "range": "B2:B2",
+        "labels": ["unknown"],
+        "evidence": [],
+        "dependencies": [],
+        "reason": "仅重复上下文",
+    }
+
+    def fake(messages, schema, tokens):
+        return LlmAssistResult(
+            used_llm=True,
+            data={"physical_regions": [region], "logical_documents": [], "layout_references": []},
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    with pytest.raises(ReviewedExcelError, match="仅包含上下文或未读内容"):
+        _classify_semantic_batch(review)
+    region.update(range="A1:C4", evidence=[{"sheet": "报价", "cell": "B2"}])
+    review["full_cells"] = [first]
+    with pytest.raises(ReviewedExcelError, match="证据仅为重复上下文"):
+        _classify_semantic_batch(review)
+    region["evidence"] = []
+    review["full_cells"] = [first, second]
+    clipped = _classify_semantic_batch(review)["regions"][0]
+    assert clipped["range"] == "A1:C1" and clipped["model_original_range"] == "A1:C4"
+    assert clipped["open_fragment"]
+    review["cells"].append(third)
+    review["full_cells"].append(third)
+    with pytest.raises(ReviewedExcelError, match="包含本批未读内容"):
+        _classify_semantic_batch(review)
+
+
+@pytest.mark.parametrize("group_not_sent", [False, True])
+def test_auto_group_resume_budget_and_download_multibatch(
+    review_store, monkeypatch, group_not_sent
+):
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
+    calls = []
+
+    def fake(messages, schema, tokens):
+        payload = json.loads(messages[1]["content"])
+        if "ranges" in payload:
+            if group_not_sent and "not_sent" not in calls:
+                from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+                calls.append("not_sent")
+                raise ModelRequestNotSent("配置未完成；未调用模型")
+            calls.append("group")
+        else:
+            calls.append("batch")
+        return LlmAssistResult(used_llm=True, data=synthetic_document_answer(payload))
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("batch.xlsx", large_quotation(rows=2001))},
+    ).json()["files"][0]
+    path = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    form = {"version": item["version"], "sample_authorized": "true", "auto_group": "true"}
+    first = client.post(path + "/analyze", data=form)
+    assert first.status_code == 200 and first.json()["phase"] == "pending"
+    second = client.post(path + "/analyze", data=form)
+    assert second.status_code == 200 and second.json()["phase"] == "paused"
+    assert calls == ["batch", "batch"]
+    assert client.post(path + "/analyze", data=form).status_code == 409
+    from app.application.reviewed_excel_evidence import plan_semantic_batches
+
+    total = len(
+        plan_semantic_batches(inspect_workbook(large_quotation(rows=2001)), 2, neutral=True)[0]
+    )
+    done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
+    while done.status_code == 200 and done.json().get("phase") in {"pending", "paused"}:
+        done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
+    if group_not_sent:
+        assert done.status_code == 400, done.text
+        checkpoint = client.get(path).json()["checkpoint"]
+        assert checkpoint["phase"] == "ready" and checkpoint["completed"] == total
+        assert checkpoint["calls_in_round"] == total % 2
+        done = client.post(path + "/analyze", data=form)
+        calls.remove("not_sent")
+    assert done.status_code == 200, done.text
+    data = done.json()
+    assert calls == ["batch"] * total + ["group"]
+    assert data["budget"]["grouping_calls"] == 1 and not data["confirmed"]
+    assert all(
+        summary["reference_response"] and summary["reference_index"]
+        for summary in data["input_summaries"]
+    )
+    assert len(data["suggested_documents"]) == 1
+    url = path + "/auto-slices/" + data["version"]
+    listing = client.get(url)
+    assert listing.status_code == 200, listing.text
+    assert len(listing.json()["slices"]) == 1
+    download = client.get(url + "/0")
+    assert download.status_code == 200
+    book = load_workbook(BytesIO(download.content))
+    assert book["报价"]["A2001"].value is not None
+
+
+def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_store, monkeypatch):
+    import base64
+
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import response_capture
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", sample())},
+    ).json()["files"][0]
+    raw = b'{"usage":{"total_tokens":12},"choices":[]}'
+
+    def fake(messages, schema, tokens):
+        response_capture()(raw, 200, "synthetic-req")
+        return LlmAssistResult(
+            used_llm=True,
+            provider="openai",
+            model="synthetic-model",
+            data={
+                "regions": [
+                    {
+                        "sheet": "报价",
+                        "range": "A1:C4",
+                        "labels": ["unknown"],
+                        "evidence": [],
+                        "dependencies": [],
+                        "reason": "fixture",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    result = client.post(
+        url + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["actual_model_providers"] == ["openai"]
+    assert result.json()["input_summaries"][0]["model"] == "synthetic-model"
+    assert result.json()["structure_map_source"] == "program_observation_not_sent_to_model"
+    with review_store.engine.connect() as conn:
+        persisted = conn.execute(
+            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+        ).scalar_one()
+    record = json.loads(persisted)["model_audit"][0]
+    assert record["state"] == "response_received" and record["request_id"] == "synthetic-req"
+    assert base64.b64decode(record["response_base64"]) == raw
+    assert record["usage"] == {"total_tokens": 12}
+    assert record["classification_version"] == item["version"]
+    assert "Authorization" not in persisted
+    review_store.actor["tenant"] = 2
+    assert client.get(url).status_code == 404
+
+
+def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
+    from fastapi import HTTPException
+
+    from app.application.reviewed_excel_audit import response_capture
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", sample())},
+    ).json()["files"][0]
+    real_cas = routes._classification_cas
+
+    def fail_response(db, run, old, state):
+        if (
+            state.get("model_audit", [])
+            and state["model_audit"][-1]["state"] == "response_received"
+        ):
+            raise HTTPException(status_code=409, detail="synthetic write failure")
+        return real_cas(db, run, old, state)
+
+    monkeypatch.setattr(routes, "_classification_cas", fail_response)
+    calls = []
+
+    def fake(messages, schema, tokens):
+        calls.append(1)
+        response_capture()(b'{"choices":[]}', 200, "synthetic-req")
+        raise AssertionError("must stop on failed audit")
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/analyze"
+    data = {"version": item["version"], "sample_authorized": "true"}
+    assert client.post(url, data=data).status_code == 409
+    assert client.post(url, data=data).status_code == 409
+    assert len(calls) == 1
+    with review_store.engine.connect() as conn:
+        persisted = conn.execute(
+            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+        ).scalar_one()
+    assert json.loads(persisted)["model_audit"][-1]["state"] == "inflight"
+
+
+def test_completed_invalid_response_is_counted_and_requires_explicit_retry(
+    review_store, monkeypatch
+):
+    from app.application.etl.errors import ReviewedExcelError
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import response_capture
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", large_quotation(rows=4001))},
+    ).json()["files"][0]
+    calls = []
+
+    def fake(messages, schema, tokens):
+        calls.append(1)
+        response_capture()(b'{"choices":[],"usage":{"total_tokens":1}}', 200, "synthetic")
+        if len(calls) > 1:
+            raise ReviewedExcelError("synthetic incomplete")
+        return LlmAssistResult(
+            used_llm=True,
+            data={
+                "regions": [
+                    {
+                        "sheet": "报价",
+                        "range": "A1:A1",
+                        "labels": ["quotation"],
+                        "evidence": [{"sheet": "报价", "cell": "A1"}],
+                        "dependencies": [],
+                        "reason": "fixture",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    form = {"version": item["version"], "sample_authorized": "true"}
+    assert client.post(base + "/analyze", data=form).status_code == 200
+    assert client.post(base + "/analyze", data=form).status_code == 400
+    checkpoint = client.get(base).json()["checkpoint"]
+    assert checkpoint["phase"] == "failed" and checkpoint["completed"] == 1
+    assert checkpoint["calls_in_round"] == 2
+    assert client.post(base + "/analyze", data=form).status_code == 409
+    assert (
+        client.post(base + "/analyze", data={**form, "retry_authorized": "true"}).status_code == 409
+    )
+    assert len(calls) == 2
+    retry = client.post(
+        base + "/analyze", data={**form, "retry_authorized": "true", "continue_authorized": "true"}
+    )
+    assert retry.status_code == 400 and len(calls) == 3
+    resumed = client.get(base).json()["checkpoint"]
+    assert resumed["phase"] == "failed" and resumed["completed"] == 1
+    assert resumed["calls_in_round"] == 1
+
+
+def test_archived_model_slice_can_be_selected_for_template_without_coordinate_confirmation(
+    review_store, monkeypatch
+):
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import response_capture
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    with review_store.engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+            )
+        )
+    body = sample()
+    client = review_store.client
+    archived = client.post(
+        "/api/templates/reviewed-excel/archive-classify",
+        data={"expected_actor": "1:7", "request_key": "synthetic-auto-flow"},
+        files={"file": ("合成.xlsx", body)},
+    )
+    assert archived.status_code == 200, archived.text
+    item = archived.json()
+
+    def fake(messages, schema, tokens):
+        data = synthetic_document_answer(json.loads(messages[1]["content"]))
+        response_capture()(
+            json.dumps({"choices": [], "usage": {}}, ensure_ascii=False).encode(), 200, "synthetic"
+        )
+        return LlmAssistResult(used_llm=True, model="synthetic", provider="synthetic", data=data)
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    path = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    analyzed = client.post(
+        path + "/analyze",
+        data={"version": item["version"], "sample_authorized": "true", "auto_group": "true"},
+    )
+    assert analyzed.status_code == 200, analyzed.text
+    latest = analyzed.json()
+    assert not latest["confirmed"]
+    slices = client.get(path + "/auto-slices/" + latest["version"])
+    assert slices.status_code == 200 and len(slices.json()["slices"]) == 1
+    params = {
+        "expected_actor": "1:7",
+        "classification_id": item["classification_id"],
+        "classification_version": latest["version"],
+        "auto_slice_index": "0",
+    }
+    preview = client.post(
+        "/api/templates/reviewed-excel/preview", data=params, files={"file": ("合成.xlsx", body)}
+    )
+    assert preview.status_code == 200, preview.text
+    review = preview.json()
+    assert review["selected_region"]["selection_basis"] == "model_group"
+    assert review["selected_region"]["archive_version_id"]
+    candidate = review["proposal"]["candidates"][0]
+    saved = client.post(
+        "/api/templates/reviewed-excel/save",
+        data={
+            "review_id": review["review_id"],
+            "proposal_version": review["proposal"]["version"],
+            "candidate_id": candidate["id"],
+            "selections": json.dumps(candidate["clear"]),
+            "name": "合成模板",
+            "publish_to_tenant": "true",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    template_id = saved.json()["template_id"].split(":")[-1]
+    output = client.get("/api/templates/reviewed-excel/" + template_id + "/download")
+    assert output.status_code == 200
+    assert load_workbook(BytesIO(output.content)).sheetnames == ["报价"]
+    assert client.get(path).json()["versions"][-1]["confirmed"] is False
+    review_store.actor["tenant"] = 2
+    assert (
+        client.post(
+            "/api/templates/reviewed-excel/preview",
+            data={**params, "expected_actor": "2:7"},
+            files={"file": ("合成.xlsx", body)},
+        ).status_code
+        == 404
+    )
+
+
+def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
+    """An apparently valid model group must not silently omit source cells."""
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", sample())},
+    ).json()["files"][0]
+    base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+
+    def incomplete(messages, schema, tokens):
+        return LlmAssistResult(
+            used_llm=True,
+            model="synthetic",
+            data={
+                "physical_regions": [
+                    {
+                        "sheet": "报价",
+                        "range": "A1:C1",
+                        "labels": ["unknown"],
+                        "evidence": [],
+                        "dependencies": [],
+                        "reason": "仅分类首格，其余原件不可静默遗漏",
+                    }
+                ],
+                "logical_documents": [
+                    {
+                        "document_id": "only-first",
+                        "fragments": [{"sheet": "报价", "range": "A1:C1"}],
+                    }
+                ],
+                "layout_references": [],
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_mimo_complete", incomplete
+    )
+    response = client.post(
+        base + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["coverage"][0]["unassigned"]
+    endpoint = base + "/auto-slices/" + result["version"]
+    listing = client.get(endpoint)
+    assert listing.status_code == 400 and "完整覆盖" in listing.text
+    download = client.get(endpoint + "/0")
+    assert download.status_code == 400 and "完整覆盖" in download.text
+
+
+@pytest.mark.parametrize("fault", ["off", "missing_key", "invalid_base", "invalid_model"])
+def test_unsent_model_configuration_does_not_lock_classification(review_store, monkeypatch, fault):
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import response_capture
+    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_TEMPLATE_MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1")
+    monkeypatch.setenv("FHD_TEMPLATE_MIMO_MODEL", "mimo-v2.6-flash")
+    monkeypatch.setenv("MIMO_API_KEY", "synthetic-placeholder")
+    if fault == "off":
+        monkeypatch.setenv("FHD_ETL_LLM", "off")
+    elif fault == "invalid_base":
+        monkeypatch.setenv("FHD_TEMPLATE_MIMO_BASE_URL", "https://unsupported.invalid/v1")
+    elif fault == "invalid_model":
+        monkeypatch.setenv("FHD_TEMPLATE_MIMO_MODEL", "unsupported")
+    else:
+        monkeypatch.setattr(OpenAICompatibleAdapter, "is_configured", property(lambda self: False))
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("synthetic.xlsx", sample())},
+    ).json()["files"][0]
+    base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    form = {"version": item["version"], "sample_authorized": "true"}
+    failed = client.post(base + "/analyze", data=form)
+    assert failed.status_code == 400 and "未调用模型" in failed.json()["detail"]
+    checkpoint = client.get(base).json()["checkpoint"]
+    assert checkpoint["phase"] == "ready" and checkpoint["calls_in_round"] == 0
+    with review_store.engine.connect() as conn:
+        state = json.loads(
+            conn.execute(
+                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                {"id": item["classification_id"]},
+            ).scalar_one()
+        )
+    assert state["model_audit"][-1]["state"] == "not_sent"
+    assert "未调用模型" in state["model_audit"][-1]["reason"]
+
+    def repaired(messages, schema, tokens):
+        response_capture()(b'{"choices":[]}', 200, "synthetic")
+        return LlmAssistResult(
+            used_llm=True,
+            data={
+                "regions": [
+                    {
+                        "sheet": "报价",
+                        "range": "A1:C4",
+                        "labels": ["unknown"],
+                        "evidence": [],
+                        "dependencies": [],
+                        "reason": "synthetic",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", repaired)
+    retry = client.post(base + "/analyze", data=form)
+    assert retry.status_code == 200, retry.text
+
+
+@pytest.mark.parametrize(
+    "budget_version", [None, "previous-budget", "missing-plan", "tampered-plan"]
+)
+def test_checkpoint_budget_change_is_409_preserving_original_audit(
+    review_store, monkeypatch, budget_version
+):
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("synthetic.xlsx", large_quotation())},
+    ).json()["files"][0]
+    calls = []
+
+    def unknown(*args):
+        calls.append(1)
+        raise ValueError("synthetic unknown outcome")
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", unknown)
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/analyze"
+    data = {"version": item["version"], "sample_authorized": "true"}
+    assert client.post(url, data=data).status_code == 400
+    with review_store.engine.begin() as conn:
+        raw = conn.execute(
+            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+        ).scalar_one()
+        state = json.loads(raw)
+        if budget_version == "missing-plan":
+            state["analysis_checkpoint"]["phase"] = "ready"
+            state["analysis_checkpoint"].pop("coordinate_plan")
+        elif budget_version == "tampered-plan":
+            state["analysis_checkpoint"]["phase"] = "ready"
+            state["analysis_checkpoint"]["coordinate_plan"][0][0][1] = "Z9999"
+        elif budget_version is None:
+            state["analysis_checkpoint"].pop("budget_version")
+        else:
+            state["analysis_checkpoint"]["budget_version"] = budget_version
+        original = json.dumps(state, ensure_ascii=False)
+        conn.execute(
+            text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
+            {"draft": original, "id": item["classification_id"]},
+        )
+    result = client.post(
+        url, data={**data, "continue_authorized": "true", "retry_authorized": "true"}
+    )
+    assert result.status_code == 409
+    assert (
+        "坐标计划" if budget_version in {"missing-plan", "tampered-plan"} else "预算版本"
+    ) in result.json()["detail"]
+    assert len(calls) == 1
+    with review_store.engine.connect() as conn:
+        assert (
+            conn.execute(
+                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                {"id": item["classification_id"]},
+            ).scalar_one()
+            == original
+        )

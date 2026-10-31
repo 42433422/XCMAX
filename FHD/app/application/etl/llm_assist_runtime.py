@@ -23,6 +23,7 @@ class LlmAssistResult:
     model: str = ""
     billing: dict[str, Any] = field(default_factory=dict)
     data: dict[str, Any] = field(default_factory=dict)
+    provider: str = ""
 
     def public_metadata(self) -> dict[str, Any]:
         result: dict[str, Any] = {

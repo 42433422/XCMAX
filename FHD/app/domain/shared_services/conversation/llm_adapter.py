@@ -8,6 +8,7 @@
 
 import asyncio
 import logging
+import math
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, cast
@@ -365,9 +366,19 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         if not self._api_key:
             raise ValueError(f"[{self.provider}] API Key未配置")
 
+        has_template_timeout = "_reviewed_excel_transport_timeout" in kwargs
+        template_timeout = kwargs.pop("_reviewed_excel_transport_timeout", None)
+        if has_template_timeout and (
+            self.provider != "xiaomi"
+            or type(template_timeout) not in (int, float)
+            or not 1 <= template_timeout <= 180
+            or not math.isfinite(template_timeout)
+        ):
+            raise ValueError("Invalid bounded template transport timeout")
         if self._is_minimax_token_plan():
             return await self._chat_minimax_token_plan(messages, max_tokens=max_tokens)
 
+        audit_response = kwargs.pop("_reviewed_excel_audit_response", None)
         base_url = self._normalize_base_url()
         url = f"{base_url}/chat/completions"
 
@@ -381,13 +392,20 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
-        # Provider, model, prompt metadata and token usage can all reveal
-        # tenant-private routing or workload details.  Keep operational logs
-        # value-free; request tracing belongs in the redacted audit layer.
         logger.debug("LLM completion request started")
 
         client = await self._get_client()
-        response = await client.post(url, headers=headers, json=payload)
+        if template_timeout is None:
+            response = await client.post(url, headers=headers, json=payload)
+        else:
+            response = await client.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=httpx.Timeout(template_timeout, connect=min(10.0, template_timeout)),
+            )
+        if audit_response is not None:
+            self._capture_reviewed_excel_response(response, audit_response)
         response.raise_for_status()
 
         result = response.json()
@@ -402,6 +420,13 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         logger.debug("LLM completion request succeeded")
 
         return cast("dict[str, Any]", result)
+
+    def _capture_reviewed_excel_response(self, response: Any, callback: Any) -> None:
+        """Verify raw response before parsing; never log tenant values or credentials."""
+        raw_body = response.content
+        if self._api_key and self._api_key.encode() in raw_body:
+            raise ValueError("模型响应包含敏感凭据，未归档")
+        callback(raw_body, response.status_code, response.headers.get("x-request-id"))
 
     async def stream_chat_completion(
         self,

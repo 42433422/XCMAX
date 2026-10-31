@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
-from openpyxl.utils import get_column_letter
+from typing import Any
 
 from app.application.etl.errors import ReviewedExcelError
+from app.application.reviewed_excel_basic_classification import (
+    classify_review_workbook as classify_review_workbook,
+)
 from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_evidence import (
+    observe_fragment_relationships as observe_fragment_relationships,
+)
+from app.application.reviewed_excel_evidence import (
+    plan_semantic_batches as plan_semantic_batches,
+)
+from app.application.reviewed_excel_evidence import (
+    prepare_auto_slice_review as prepare_auto_slice_review,
+)
 from app.application.reviewed_excel_partition import (
     DOCUMENT_LABELS as DOCUMENT_LABELS,
 )
@@ -14,245 +26,76 @@ from app.application.reviewed_excel_partition import (
 )
 
 
-def classify_review_workbook(review: dict) -> list[dict]:
-    """Suggest non-exclusive document labels from inspected cell text only."""
-    import re
-
-    from openpyxl.utils.cell import coordinate_from_string
-
-    from app.application.etl.target_detection import _ATTENDANCE_RE, _DELIVERY_RE, _PURCHASE_RE
-
-    patterns = {
-        "quotation": re.compile(r"报价|報價|quotation|sales quote", re.I),
-        "delivery": _DELIVERY_RE,
-        "purchase": _PURCHASE_RE,
-        "attendance": _ATTENDANCE_RE,
-    }
-    results = []
-    for sheet in review["sheets"]:
-        cells = [cell for cell in review["cells"] if cell["sheet"] == sheet]
-        evidence = []
-        for label, pattern in patterns.items():
-            for cell in cells:
-                match = pattern.search(cell["value"])
-                if match is not None:
-                    evidence.append(
-                        {"label": label, "cell": cell["cell"], "matched": match.group(0)}
-                    )
-                    break
-        headings = {
-            "quotation": re.compile(r"^(报价单|報價單|quotation|sales quote)$", re.I),
-            "delivery": re.compile(r"^(送货单|发货单|出货单|delivery note)$", re.I),
-            "purchase": re.compile(r"^(采购订单|purchase order)$", re.I),
-            "attendance": re.compile(r"^(考勤表|attendance sheet)$", re.I),
-        }
-        anchors: dict[int, list[dict]] = {}
-        for cell in cells:
-            for label, pattern in headings.items():
-                if pattern.fullmatch(cell["value"].strip()):
-                    row = coordinate_from_string(cell["cell"])[1]
-                    anchors.setdefault(row, []).append(
-                        {"label": label, "cell": cell["cell"], "matched": cell["value"]}
-                    )
-        dimensions: dict = next(
-            (item for item in review["sheet_overview"] if item["sheet"] == sheet), {}
-        )
-        max_row = max(1, int(dimensions.get("rows", 1)))
-        max_col = max(1, int(dimensions.get("columns", 1)))
-        merges = dimensions.get("merged_regions", [])
-        section_headings = {
-            "production": r"生产(?:任务|计划)?单|production (?:order|sheet)",
-            "process": r"工艺(?:流程|说明|要求)?|工序(?:说明|要求)?|process(?: instructions?| sheet)?",
-            "material": r"原(?:辅)?料(?:清单|明细)?|物料(?:清单|明细)|materials?(?: list)?|bill of materials",
-            "inspection": r"检验(?:说明|要求|标准|记录|结果)?|质检(?:说明|要求|标准|记录)?|inspection(?: instructions?| standards?| report)?",
-        }
-        rows_of_cells: dict[int, list[dict]] = {}
-        for cell in cells:
-            rows_of_cells.setdefault(coordinate_from_string(cell["cell"])[1], []).append(cell)
-        merged_titles = {
-            f"{get_column_letter(c1)}{r1}"
-            for c1, r1, c2, _r2 in map(bounded_range, merges)
-            if c2 > c1
-        }
-        for cell in cells:
-            column, row = coordinate_from_string(cell["cell"])
-            merged_title = cell["cell"] in merged_titles
-            sparse_title = (
-                column == "A"
-                and len(rows_of_cells[row]) == 1
-                and any(
-                    len(rows_of_cells.get(next_row, [])) >= 2 for next_row in (row + 1, row + 2)
-                )
-            )
-            if cell.get("kind") == "formula" or not (merged_title or sparse_title):
-                continue
-            value = cell["value"].strip().rstrip(":：")
-            for label, section_pattern in section_headings.items():
-                if re.fullmatch(section_pattern, value, re.I):
-                    item = {"label": label, "cell": cell["cell"], "matched": cell["value"]}
-                    anchors.setdefault(row, []).append(item)
-                    if not any(ref["label"] == label for ref in evidence):
-                        evidence.append(item)
-        rows = sorted(anchors)
-        if (
-            len(rows) > 1
-            and {item["label"] for item in anchors[rows[0]]} == {"production"}
-            and any(
-                item["label"] in {"process", "material", "inspection"} for item in anchors[rows[1]]
-            )
-        ):
-            # A workbook title remains in the first section, rather than becoming a title-only slice.
-            rows = rows[1:]
-        split = len(rows) > 1 and all(b - a >= 3 for a, b in zip(rows, rows[1:]))
-        if split and any(
-            min_row < boundary <= max_row_of_merge
-            for merged in merges
-            for _min_col, min_row, _max_col, max_row_of_merge in [bounded_range(merged)]
-            for boundary in rows[1:]
-        ):
-            split = False
-        possible_shared = [
-            {"cell": cell["cell"], "kind": "可能的图例或说明，关联待确认"}
-            for cell in cells
-            if re.search(r"图例|圖例|legend|说明|說明|备注|備註", cell["value"], re.I)
-        ]
-        header_pattern = re.compile(
-            r"^(产品名称|商品名称|品名|数量|单价|金额|合计|客户|供应商|姓名|日期|product|quantity|price|amount|customer|supplier|date)$",
-            re.I,
-        )
-        boundaries = [1] + rows[1:] if split else [1]
-        regions = []
-        for index, start in enumerate(boundaries):
-            end = boundaries[index + 1] - 1 if index + 1 < len(boundaries) else max_row
-            region_cells = [
-                cell for cell in cells if start <= coordinate_from_string(cell["cell"])[1] <= end
-            ]
-            region_evidence = [
-                item for row, items in anchors.items() if start <= row <= end for item in items
-            ]
-            region_labels = list(dict.fromkeys(item["label"] for item in region_evidence)) or [
-                "unknown"
-            ]
-            header_cells = [
-                {"cell": cell["cell"], "value": cell["value"]}
-                for cell in region_cells
-                if header_pattern.fullmatch(cell["value"].strip())
-            ]
-            merged_in_region = []
-            for merged in merges:
-                _min_col, min_row, _max_col, max_row_of_merge = bounded_range(merged)
-                if min_row <= end and max_row_of_merge >= start:
-                    merged_in_region.append(merged)
-            regions.append(
-                {
-                    "range": f"A{start}:{get_column_letter(max_col)}{end}",
-                    "labels": region_labels,
-                    "label_source": "rule",
-                    "range_source": "rule",
-                    "evidence": region_evidence,
-                    "parent_heading": region_evidence[0]["matched"] if region_evidence else "",
-                    "header_cells": header_cells,
-                    "merged_ranges": merged_in_region,
-                    "possible_shared_context": possible_shared,
-                    "checked_cells": len(region_cells),
-                    "needs_confirmation": True,
-                    "dependency_status": "跨区图例和依赖未分析，边界需确认",
-                }
-            )
-        results.append(
-            {
-                "sheet": sheet,
-                "labels": [item["label"] for item in evidence] or ["unknown"],
-                "evidence": evidence,
-                "checked_cells": len(cells),
-                "regions": regions,
-            }
-        )
-    return results
-
-
-def observe_fragment_relationships(review: dict, sheets: list[dict]) -> dict:
-    """Attach source observations and unselected candidate edges, never approve a relationship."""
-    from app.application.reviewed_excel_evidence import (
-        candidate_fragment_links,
-        flag_repeated_header_conflicts,
-    )
-
-    regions = [
-        {
-            **region,
-            "sheet": sheet["sheet"],
-            "evidence": [{"sheet": sheet["sheet"], **ref} for ref in region["evidence"]],
-        }
-        for sheet in sheets
-        for region in sheet["regions"]
-    ]
-    for region in regions:
-        region.pop("continuation_context", None)
-    observed = flag_repeated_header_conflicts(regions, review["cells"])
-    by_region = {(region["sheet"], region["range"]): region for region in observed}
-    for sheet in sheets:
-        for region in sheet["regions"]:
-            observation = by_region[(sheet["sheet"], region["range"])]
-            region.pop("continuation_context", None)
-            for field in ("continuation_context", "context_warning"):
-                if field in observation:
-                    region[field] = observation[field]
-            if region.get("context_warning"):
-                region["context_warning"] = (
-                    region["context_warning"]
-                    .replace("模型分类", "分类")
-                    .replace("模型建议", "分类建议")
-                )
-    for region in regions:
-        observation = by_region[(region["sheet"], region["range"])]
-        if "continuation_context" in observation:
-            region["continuation_context"] = observation["continuation_context"]
-    links = candidate_fragment_links(regions, review["cells"])
-    for link in links["items"]:
-        link["selected"] = False
-    return links
-
-
-def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dict:
+def _classify_semantic_batch(
+    review: dict,
+    *,
+    prepare_only: bool = False,
+    reference_ids: bool = False,
+    expected_request_sha256: str | None = None,
+    owner_id: int | None = None,
+) -> dict:
     """Request bounded semantic regions; validate every reference before adoption."""
     import json
-    import os
 
     from openpyxl.utils.cell import (
         column_index_from_string,
         coordinate_from_string,
+        get_column_letter,
     )
 
-    if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo":
+    from app.application.reviewed_excel_template import configured_template_llm_provider
+
+    if not prepare_only and configured_template_llm_provider() not in {"mimo", "platform"}:
         raise ReviewedExcelError("模板模型供应商未配置，未进行模型分类，未调用模型")
 
     allowed_labels = DOCUMENT_LABELS
-    rules = classify_review_workbook(review)
+    rules = [] if reference_ids else classify_review_workbook(review)
     from app.application.reviewed_excel_evidence import (
         MAX_MODEL_CELLS,
         MAX_MODEL_TEXT_BYTES,
         MAX_VALUE_CHARS,
         _model_cell_cost,
         build_relationship_context,
+        build_rule_hints,
         build_structure_map,
     )
 
-    structure_map = review.get("full_structure_map") or build_structure_map(review, rules)
+    if reference_ids:
+        source_cells = review.get("full_cells", review["cells"])
+        structure_map = [
+            {
+                **sheet,
+                "regions": [],
+                "nonempty_cells": sum(c["sheet"] == sheet["sheet"] for c in source_cells),
+            }
+            for sheet in review["sheet_overview"]
+        ]
+    else:
+        structure_map = review.get("full_structure_map") or build_structure_map(review, rules)
     chosen = list(review["cells"])
+    drawings = [d for cell in chosen for d in cell.get("drawing_evidence", [])]
     if (
-        len(chosen) > MAX_MODEL_CELLS
+        len(chosen) + len(drawings) > MAX_MODEL_CELLS
         or any(len(cell["value"]) > MAX_VALUE_CHARS for cell in chosen)
-        or sum(map(_model_cell_cost, chosen)) > MAX_MODEL_TEXT_BYTES
+        or any(len(d["text"]) > MAX_VALUE_CHARS for d in drawings)
+        or sum(map(_model_cell_cost, chosen))
+        + sum(len(json.dumps(d, ensure_ascii=False).encode()) + 64 for d in drawings)
+        > MAX_MODEL_TEXT_BYTES
     ):
         raise ReviewedExcelError("本批模型证据超过安全预算，未调用模型")
     sent = {(c["sheet"], c["cell"]): c for c in chosen}
+    primary: dict[str, list[tuple[int, int]]] = {}
+    primary_keys = {(c["sheet"], c["cell"]) for c in chosen if not c.get("context_only")}
+    for cell in chosen:
+        if not cell.get("context_only"):
+            col, row = coordinate_from_string(cell["cell"])
+            primary.setdefault(cell["sheet"], []).append((column_index_from_string(col), row))
     overview = []
-    merge_budget = 100
     for sheet in review["sheet_overview"]:
         merges = sheet.get("merged_regions", [])
-        included = merges[:merge_budget]
-        merge_budget -= len(included)
+        # Complete structural facts are budgeted with the full prepared request.
+        # Never silently omit later source merges and then claim full coverage.
+        included = list(merges)
         overview.append(
             {
                 "sheet": sheet["sheet"],
@@ -269,36 +112,14 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                 "hidden_columns_omitted": max(0, len(sheet.get("hidden_column_ranges", [])) - 100),
             }
         )
-    rule_hints = []
-    for sheet in rules:
-        regions = []
-        for region in sheet["regions"]:
-            evidence = [ref for ref in region["evidence"] if (sheet["sheet"], ref["cell"]) in sent]
-            regions.append(
-                {
-                    "range": region["range"],
-                    "labels": [ref["label"] for ref in evidence] or ["unknown"],
-                    "evidence": evidence,
-                    "headers": [
-                        ref
-                        for ref in region["header_cells"]
-                        if (sheet["sheet"], ref["cell"]) in sent
-                    ],
-                    "possible_shared_context": [
-                        ref
-                        for ref in region["possible_shared_context"]
-                        if (sheet["sheet"], ref["cell"]) in sent
-                    ],
-                }
-            )
-        rule_hints.append({"sheet": sheet["sheet"], "regions": regions})
+    rule_hints = build_rule_hints(rules, sent)
     cell_schema = {
         "type": "object",
         "required": ["sheet", "cell"],
         "additionalProperties": False,
         "properties": {"sheet": {"type": "string"}, "cell": {"type": "string"}},
     }
-    region_schema = {
+    region_schema: dict[str, Any] = {
         "type": "object",
         "required": ["sheet", "range", "labels", "evidence", "dependencies", "reason"],
         "additionalProperties": False,
@@ -311,6 +132,20 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
             "reason": {"type": "string"},
         },
     }
+    if drawings:
+        region_schema["required"].append("drawing_evidence")
+        from app.application.reviewed_excel_reference_ids import MAX_DRAWING_IDS_PER_REGION
+
+        region_schema["properties"]["drawing_evidence"] = {
+            "type": "array",
+            "maxItems": MAX_DRAWING_IDS_PER_REGION,
+            "items": {
+                "type": "object",
+                "required": ["sheet", "part", "object_id"],
+                "additionalProperties": False,
+                "properties": {key: {"type": "string"} for key in ("sheet", "part", "object_id")},
+            },
+        }
     fragment_schema = {
         "type": "object",
         "required": ["sheet", "range"],
@@ -322,7 +157,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
         "required": ["document_id", "fragments"],
         "additionalProperties": False,
         "properties": {
-            "document_id": {"type": "string"},
+            "document_id": {"type": "string", "minLength": 1, "maxLength": 80},
             "fragments": {
                 "type": "array",
                 "minItems": 1,
@@ -331,6 +166,8 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
             },
         },
     }
+    from app.application.reviewed_excel_reference_ids import source_layout_schema
+
     schema = {
         "type": "object",
         "required": ["physical_regions", "logical_documents", "layout_references"],
@@ -343,7 +180,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                 "items": region_schema,
             },
             "logical_documents": {"type": "array", "maxItems": 100, "items": document_schema},
-            "layout_references": {"type": "array", "maxItems": 100, "items": fragment_schema},
+            "layout_references": source_layout_schema(overview),
         },
     }
     structure_regions = []
@@ -380,29 +217,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     messages = [
         {
             "role": "system",
-            "content": (
-                "Identify business document regions. Return exactly one JSON object matching output_schema, no extra fields. "
-                "physical_regions are geometric fragments, not document counts. logical_documents group physical fragments only when supported; "
-                "use distinct document_id values and leave uncertain fragments ungrouped. Do not provide a document count; software calculates it. "
-                "layout_references contain only exact merged ranges from sheets.merged, including blank anchors; they are not semantic evidence. "
-                "Evidence and dependencies are objects with sheet and cell fields; cell MUST be a bare coordinate like A1, never append a value or explanation. "
-                "Structure coordinates are only an index, not evidence: classify only from cell values actually sent. "
-                "For each region, every evidence coordinate MUST be inside that region and on the same sheet; "
-                "external headings, shared legends and context belong ONLY in dependencies, never in evidence. "
-                "Do not split merged cells or overlap regions. A repeated table header can be a continuation of the preceding document; "
-                "it is not by itself evidence of a new document or different business category. "
-                "Each non-unknown label needs positive category-specific evidence within the region. "
-                "Generic item, quantity, price and amount headers alone do not establish a purchase order or other category. "
-                "Each request may contain only part of a workbook; do not assume cells outside this batch were read. "
-                "Cells marked context_only are repeated context, not part of this batch's primary consecutive rows; "
-                "use them as dependencies where relevant and do not create a new document solely from them. "
-                "If evidence is insufficient or the relevant cells were not sent, use unknown; do not guess. "
-                "Use relationship_context as observations, not proof: adjacency, identical or shifted headers, titles and shared notes "
-                "may suggest continuation but may also occur in different documents. For a category change, cite category-specific "
-                "support from sent cells inside the new region; otherwise use unknown and explain missing context. "
-                "External parent titles or shared notes can be dependencies, never inside-region evidence. "
-                "Dependencies may reference sent shared context. Do not infer database targets."
-            ),
+            "content": "",  # Populated only by the independent evidence contract below.
         },
         {
             "role": "user",
@@ -439,21 +254,63 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                         for c in chosen
                     ],
                     "rule_hints": rule_hints,
+                    **(
+                        {"workbook_structural_index": review["workbook_structural_index_for_model"]}
+                        if isinstance(review.get("workbook_structural_index_for_model"), dict)
+                        and review.get("workbook_structural_index_for_model")
+                        else {}
+                    ),
                 },
                 ensure_ascii=False,
             ),
         },
     ]
-    from app.application.reviewed_excel_template import _template_mimo_complete
+    from app.application.reviewed_excel_template import _template_llm_complete
 
-    if sum(len(message["content"].encode("utf-8")) for message in messages) > 180_000:
-        raise ReviewedExcelError("本批结构与证据超过模型输入安全预算，未调用模型")
+    if drawings:
+        payload = json.loads(messages[1]["content"])
+        payload["drawing_evidence"] = drawings
+        messages[1]["content"] = json.dumps(payload, ensure_ascii=False)
+    provider_schema = schema
+    references: dict = {}
+    if reference_ids:
+        from app.application.reviewed_excel_reference_ids import prepare_reference_messages
+
+        references, provider_schema = prepare_reference_messages(messages, schema, review=review)
+    else:
+        from app.application.reviewed_excel_reference_ids import neutralize_messages
+
+        neutralize_messages(messages)
+
+    if reference_ids:
+        from app.application.reviewed_excel_reference_ids import verify_contract
+
+        verify_contract(messages[0]["content"], provider_schema, "identify")
+    from app.application.reviewed_excel_budget import output_budget, validate_request_budget
+
+    max_output_tokens = output_budget(chosen)
+    audit_request = {
+        "messages": messages,
+        "schema": provider_schema,
+        "max_tokens": max_output_tokens,
+    }
+    validate_request_budget(audit_request)
     if prepare_only:
-        return {"preflight_ok": True}
-    expected_regions = sum(len(sheet["regions"]) for sheet in structure_regions)
-    max_output_tokens = min(4000, 3000 + 125 * min(expected_regions, 8))
-    response = _template_mimo_complete(messages, schema, max_output_tokens)
+        return audit_request
+    if expected_request_sha256 is not None:
+        from app.application.reviewed_excel_audit import verify_request
+
+        verify_request(audit_request, expected_request_sha256)
+    response = _template_llm_complete(
+        messages, provider_schema, max_output_tokens, owner_id=owner_id
+    )
     data = response.data
+    raw_reference_response = None
+    if reference_ids:
+        from app.application.reviewed_excel_reference_ids import normalize_reference_ids
+
+        raw_reference_response = data
+        data = normalize_reference_ids(data, references, provider_schema, schema, review=review)
     if not isinstance(data, dict):
         raise ReviewedExcelError("模型区域结构无效，原分类未改变")
     # Legacy in-process replays contain only regions; the live provider receives
@@ -467,6 +324,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     by_dimensions = {s["sheet"]: s for s in review["sheet_overview"]}
     rects: dict[str, list[tuple[int, int, int, int]]] = {}
     accepted = []
+    range_map = {}
     for region in physical:
         if not isinstance(region, dict) or set(region) != {
             "sheet",
@@ -475,9 +333,10 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
             "evidence",
             "dependencies",
             "reason",
-        }:
+        } | ({"drawing_evidence"} if drawings else set()):
             raise ReviewedExcelError("模型区域格式无效，原分类未改变")
         sheet, area, labels = region["sheet"], region["range"], region["labels"]
+        original_area = area
         if (
             not isinstance(sheet, str)
             or sheet not in by_dimensions
@@ -502,15 +361,47 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                 raise ReviewedExcelError("bounds")
         except (ValueError, TypeError):
             raise ReviewedExcelError("模型区域坐标越界，原分类未改变") from None
+        if not legacy and not any(
+            c1 <= col <= c2 and r1 <= row <= r2 for col, row in primary.get(sheet, [])
+        ):
+            raise ReviewedExcelError("模型区域仅包含上下文或未读内容，原分类未改变")
+        fragment_metadata = {}
+        if not legacy:
+            unread_in_region = []
+            for cell in review.get("full_cells", review["cells"]):
+                if cell["sheet"] != sheet or (sheet, cell["cell"]) in primary_keys:
+                    continue
+                col, row = coordinate_from_string(cell["cell"])
+                if c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2:
+                    unread_in_region.append(row)
+            if unread_in_region:
+                observed_rows = [
+                    row
+                    for col, row in primary.get(sheet, [])
+                    if c1 <= col <= c2 and r1 <= row <= r2
+                ]
+                first, last = min(observed_rows), max(observed_rows)
+                if any(first <= row <= last for row in unread_in_region):
+                    raise ReviewedExcelError("模型区域包含本批未读内容，原分类未改变")
+                fragment_metadata = {"model_original_range": area, "open_fragment": True}
+                r1, r2 = first, last
+                area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+                region = {**region, "range": area}
         for old_c1, old_r1, old_c2, old_r2 in rects.setdefault(sheet, []):
             if c1 <= old_c2 and old_c1 <= c2 and r1 <= old_r2 and old_r1 <= r2:
                 raise ReviewedExcelError("模型区域重叠，原分类未改变")
         rects[sheet].append((c1, r1, c2, r2))
+        # Merge cuts are tolerated here; derive_document_workbook flattens them
+        # on export so sticky/row-band regions remain sliceable.
         for merge in dimensions.get("merged_regions", []):
             mc1, mr1, mc2, mr2 = bounded_range(merge)
             intersects = c1 <= mc2 and mc1 <= c2 and r1 <= mr2 and mr1 <= r2
             if intersects and not (c1 <= mc1 and mc2 <= c2 and r1 <= mr1 and mr2 <= r2):
-                raise ReviewedExcelError("模型区域切断合并单元格，原分类未改变")
+                fragment_metadata = {
+                    **fragment_metadata,
+                    "merge_cut_flattened_on_export": True,
+                }
+                break
         for field in ("evidence", "dependencies"):
             refs = region[field]
             if (
@@ -531,11 +422,18 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                     raise ReviewedExcelError("模型分类缺少依据，原分类未改变")
                 for ref in refs:
                     col, row = coordinate_from_string(ref["cell"])
+                    if not legacy and sent[(ref["sheet"], ref["cell"])].get("context_only"):
+                        raise ReviewedExcelError("模型分类证据仅为重复上下文，原分类未改变")
                     if ref["sheet"] != sheet or not (
                         c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
                     ):
                         raise ReviewedExcelError("模型证据不在区域内，原分类未改变")
-        accepted.append({**region, "needs_confirmation": True})
+        if drawings:
+            from app.application.reviewed_excel_drawing import validate_region_drawings
+
+            validate_region_drawings(review, drawings, region)
+        accepted.append({**region, **fragment_metadata, "needs_confirmation": True})
+        range_map[(sheet, original_area)] = (sheet, area)
     suggested_documents, layout_references = [], []
     if not legacy:
         documents, layout = data["logical_documents"], data["layout_references"]
@@ -570,11 +468,11 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                     or not isinstance(ref["range"], str)
                 ):
                     raise ReviewedExcelError("模型文档片段格式无效，原分类未改变")
-                key = (ref["sheet"], ref["range"])
+                key = range_map.get((ref["sheet"], ref["range"]), (ref["sheet"], ref["range"]))
                 if key not in known or key in assigned:
                     raise ReviewedExcelError("模型文档片段来源无效或重复，原分类未改变")
                 assigned.add(key)
-                refs.append(ref)
+                refs.append({"sheet": key[0], "range": key[1]})
             suggested_documents.append(
                 {"document_id": document["document_id"], "fragments": refs, "status": "candidate"}
             )
@@ -597,12 +495,26 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
         messages,
         chosen,
         source_sha256=review["sha256"],
-        provider="mimo",
+        provider=getattr(response, "provider", "") or "unreported",
         model=response.model,
         max_output_tokens=max_output_tokens,
     )
+    input_summary["sent_drawing_objects"] = [
+        {k: d[k] for k in ("sheet", "part", "object_id")} for d in drawings
+    ]
+    if raw_reference_response is not None:
+        from app.application.reviewed_excel_reference_ids import add_reference_trace
+
+        add_reference_trace(input_summary, raw_reference_response, references)
     # Final coverage is computed from the source and all accepted batches by the combiner.
-    coverage = [{"sheet": item["sheet"], "merged_sent": len(item["merged"])} for item in overview]
+    coverage = [
+        {
+            "sheet": item["sheet"],
+            "merged_sent": len(item["merged"]),
+            "merged_ranges": list(item["merged"]),
+        }
+        for item in overview
+    ]
     return {
         "regions": accepted,
         "coverage": coverage,
@@ -612,28 +524,6 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
         "layout_references": layout_references,
         "contract": "legacy_regions" if legacy else "physical_logical_v2",
     }
-
-
-def plan_semantic_batches(
-    review: dict, max_calls: int | None = None
-) -> tuple[list[list[dict]], int]:
-    """Analyze bounded batches sequentially; fail closed on conflicting model regions."""
-    import os
-
-    from app.application.reviewed_excel_evidence import plan_complete_batches
-
-    try:
-        max_calls = (
-            int(os.environ.get("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1"))
-            if max_calls is None
-            else max_calls
-        )
-    except ValueError:
-        raise ReviewedExcelError("分类模型调用预算无效") from None
-    if not 1 <= max_calls <= 4:
-        raise ReviewedExcelError("分类模型调用预算必须为 1 至 4")
-    batches = plan_complete_batches(review, classify_review_workbook(review))
-    return batches, max_calls
 
 
 def combine_semantic_batches(
@@ -646,15 +536,30 @@ def combine_semantic_batches(
     accepted = []
     rectangles: dict[str, list[tuple[int, int, int, int, dict]]] = {}
     sent: set[tuple[str, str]] = set()
+    primary_sent: set[tuple[str, str]] = set()
     input_summaries = []
-    merge_sent: dict[str, int] = {}
+    source_merges = {
+        sheet["sheet"]: set(sheet.get("merged_regions", [])) for sheet in review["sheet_overview"]
+    }
+    merge_sent: dict[str, set[str]] = {}
     for batch, result in zip(batches, results, strict=True):
         input_summaries.append(result["input_summary"])
         sent.update((cell["sheet"], cell["cell"]) for cell in batch)
+        primary_sent.update(
+            (cell["sheet"], cell["cell"]) for cell in batch if not cell.get("context_only")
+        )
         for coverage in result["coverage"]:
-            merge_sent[coverage["sheet"]] = max(
-                merge_sent.get(coverage["sheet"], 0), coverage["merged_sent"]
-            )
+            name = coverage["sheet"]
+            identities = coverage.get("merged_ranges", [])
+            if (
+                name not in source_merges
+                or not isinstance(identities, list)
+                or any(not isinstance(area, str) for area in identities)
+                or not set(identities) <= source_merges[name]
+            ):
+                raise ReviewedExcelError("合并单元格覆盖身份不在源工作簿中")
+            # Legacy counts are not proof that any specific source merge was sent.
+            merge_sent.setdefault(name, set()).update(identities)
         for region in result["regions"]:
             c1, r1, c2, r2 = bounded_range(region["range"])
             prior = rectangles.setdefault(region["sheet"], [])
@@ -675,7 +580,7 @@ def combine_semantic_batches(
     coverage = []
     for name in review["sheets"]:
         cells = [cell for cell in review["cells"] if cell["sheet"] == name]
-        unread = [cell["cell"] for cell in cells if (name, cell["cell"]) not in sent]
+        unread = [cell["cell"] for cell in cells if (name, cell["cell"]) not in primary_sent]
         unassigned = []
         for cell in cells:
             col, row = coordinate_from_string(cell["cell"])
@@ -706,15 +611,19 @@ def combine_semantic_batches(
             for cell in row_cells
             if cell["cell"] in unread
         ]
+        from app.application.reviewed_excel_drawing import drawing_coverage
+
         coverage.append(
             {
+                **drawing_coverage(review, batches, name, rectangles.get(name, [])),
                 "sheet": name,
                 "total": len(cells),
                 "sent": len(cells) - len(unread),
                 "unread": unread,
                 "unassigned": unassigned,
-                "merged_sent": merge_sent.get(name, 0),
-                "merged_omitted": merges_total - merge_sent.get(name, 0),
+                "merged_sent": len(merge_sent.get(name, set())),
+                "merged_ranges": sorted(merge_sent.get(name, set())),
+                "merged_omitted": merges_total - len(merge_sent.get(name, set())),
                 "value_truncated": [],
                 "deferred_large_values": [
                     cell["cell"] for cell in cells if len(cell["value"]) > MAX_VALUE_CHARS
@@ -742,7 +651,7 @@ def combine_semantic_batches(
             col, row = coordinate_from_string(cell["cell"])
             if c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2:
                 region_keys.add((cell["sheet"], cell["cell"]))
-        unread_region = region_keys - sent
+        unread_region = region_keys - primary_sent
         if unread_region:
             if region["labels"] != ["unknown"]:
                 region.setdefault("suggested_labels", region["labels"])
@@ -780,17 +689,11 @@ def combine_semantic_batches(
                 if key in existing:
                     continue
                 pair = [dict(by_ref[(ref["sheet"], ref["range"])]) for ref in (first, second)]
-                refs = [
-                    {(ref["sheet"], ref["cell"]) for ref in region.get("dependencies", [])}
-                    for region in pair
-                ]
-                for region in pair:
-                    region["dependencies"] = [{"sheet": first["sheet"], "cell": "A1"}]
-                item = candidate_fragment_links(pair, sent_cells)["items"][0]
-                item["shared_dependencies"] = [
-                    {"sheet": sheet, "cell": cell} for sheet, cell in sorted(refs[0] & refs[1])[:20]
-                ]
-                item["model_group_suggested"] = True
+                item = candidate_fragment_links(
+                    pair,
+                    sent_cells,
+                    model_pairs={(first["sheet"], first["range"], second["range"])},
+                )["items"][0]
                 existing.add(key)
                 if len(links["items"]) < 200:
                     links["items"].append(item)
@@ -810,18 +713,31 @@ def combine_semantic_batches(
         "coverage": coverage,
         "input_summaries": input_summaries,
         "structure_map": build_structure_map(review, rules),
+        "structure_map_source": "program_observation_not_sent_to_model",
+        "workbook_structural_index": review.get("workbook_structural_index"),
+        "workbook_structural_index_for_model": review.get("workbook_structural_index_for_model"),
+        "workbook_structural_index_source": (
+            "program_built_sent_to_model"
+            if review.get("workbook_structural_index_for_model")
+            else "absent"
+        ),
         "budget": {
             "calls": len(batches),
             "max_calls": max_calls,
-            "cells_per_call": 500,
+            "cells_per_call": MAX_MODEL_CELLS,
             "unread": sum(len(item["unread"]) for item in coverage),
         },
     }
 
 
-def classify_semantic_workbook(review: dict) -> dict:
-    """Run the bounded standalone path, used by isolated replay and tests."""
-    batches, max_calls = plan_semantic_batches(review)
+def classify_semantic_workbook(review: dict, *, skip_hidden_sheets: bool = False) -> dict:
+    """Run the bounded standalone path, used by isolated replay and tests.
+
+    Default keeps all sheets; pass skip_hidden_sheets=True only as an explicit
+    general option. Prompt guidance steers the model using sheet_state.
+    """
+    review = prepare_auto_slice_review(review, skip_hidden_sheets=skip_hidden_sheets)
+    batches, max_calls = plan_semantic_batches(review, neutral=True, skip_hidden_sheets=False)
     from app.application.reviewed_excel_evidence import build_structure_map
 
     full_structure_map = build_structure_map(review, classify_review_workbook(review))
@@ -829,7 +745,12 @@ def classify_semantic_workbook(review: dict) -> dict:
     for batch in batches[:max_calls]:
         results.append(
             _classify_semantic_batch(
-                {**review, "cells": batch, "full_structure_map": full_structure_map}
+                {
+                    **review,
+                    "cells": batch,
+                    "full_cells": review["cells"],
+                    "full_structure_map": full_structure_map,
+                }
             )
         )
         combined = combine_semantic_batches(review, batches[: len(results)], results, max_calls)

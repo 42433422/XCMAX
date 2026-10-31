@@ -8,10 +8,14 @@ import os
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 from uuid import uuid4
+from xml.etree.ElementTree import ParseError
+from zipfile import BadZipFile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
@@ -22,6 +26,7 @@ from app.application.etl.archive_store import (
 from app.application.etl.errors import EtlError, ReviewedExcelError, public_excel_error
 from app.application.etl.service_support import dump_json, load_json, new_id, utcnow
 from app.application.etl.service_uploads import UploadServiceMixin
+from app.application.reviewed_excel_audit import ModelRequestNotSent, record_not_sent
 from app.application.reviewed_excel_classification import (
     _classify_semantic_batch,
     apply_classification_corrections,
@@ -37,7 +42,6 @@ from app.application.reviewed_excel_classification_store import (
 )
 from app.application.reviewed_excel_evidence import (
     bounded_range,
-    build_structure_map,
     unresolved_fragments,
 )
 from app.application.reviewed_excel_template import (
@@ -55,6 +59,29 @@ from app.infrastructure.auth.dependencies import require_permission
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
+
+
+def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
+    """Persist a compact workbook structural index on classification draft_json."""
+    try:
+        from app.application.reviewed_excel_structural_index import (
+            attach_structural_index_to_draft,
+            build_workbook_structural_index,
+        )
+
+        return attach_structural_index_to_draft(draft, build_workbook_structural_index(body))
+    except (
+        EtlError,
+        OSError,
+        KeyError,
+        TypeError,
+        ValueError,
+        BadZipFile,
+        InvalidFileException,
+        ParseError,
+    ):
+        return draft
+
 
 router = APIRouter()
 _manage = require_permission("etl.template.manage")
@@ -123,7 +150,9 @@ def _run(db, review_id, tenant, owner):
 
 
 def _source(db, run, tenant, owner):
-    archive_version_id = load_json(run.summary_json, {}).get("archive_version_id")
+    summary = load_json(run.summary_json, {})
+    archive_version_id = summary.get("archive_version_id")
+    conversion = summary.get("conversion_receipt")
     if archive_version_id:
         try:
             content = read_original(
@@ -134,9 +163,13 @@ def _source(db, run, tenant, owner):
             )
         except ArchivePolicyError as exc:
             raise HTTPException(status_code=409, detail=public_excel_error(exc)) from None
-        if hashlib.sha256(content).hexdigest() != run.file_sha256:
+        source_sha = conversion.get("source_sha256") if conversion else run.file_sha256
+        if hashlib.sha256(content).hexdigest() != source_sha:
             raise HTTPException(status_code=409, detail="归档来源版本已改变")
-        return content
+        if not conversion:
+            return content
+        if conversion.get("derived_sha256") != run.file_sha256:
+            raise HTTPException(status_code=409, detail="转换副本与归档收据不一致")
     upload = (
         db.query(EtlUpload)
         .filter(
@@ -186,6 +219,9 @@ def _rebuild_archived_document(db, run, tenant, owner):
             version_id=scope["archive_version_id"],
             root=Path(get_app_data_dir()) / "etl" / "archive",
         )
+        classification = _classification_run(db, scope["classification_id"], tenant, owner)
+        if load_json(classification.summary_json, {}).get("conversion_receipt"):
+            original = _source(db, classification, tenant, owner)
         derived = derive_document_workbook(
             original, scope["fragments"], print_area_mode=scope["print_area_mode"]
         )
@@ -196,6 +232,20 @@ def _rebuild_archived_document(db, run, tenant, owner):
     if hashlib.sha256(derived).hexdigest() != run.file_sha256:
         raise HTTPException(status_code=409, detail="重建结果与原预览不一致，请重新预览")
     return derived
+
+
+def _usage_restrictions(db, run, tenant, owner):
+    """Server-side immutable source lineage, not just removable workbook metadata."""
+    summary = load_json(run.summary_json, {})
+    restrictions = list(summary.get("usage_restrictions", []))
+    conversion = summary.get("conversion_receipt") or {}
+    if conversion.get("purpose") == "data_template_test_only":
+        restrictions.append("仅供数据/模板测试；打印版式未验证，不得发布到企业模板库")
+    scope = summary.get("selected_region") or {}
+    if scope.get("classification_id"):
+        classification = _classification_run(db, scope["classification_id"], tenant, owner)
+        restrictions.extend(_usage_restrictions(db, classification, tenant, owner))
+    return list(dict.fromkeys(restrictions))
 
 
 def _review_source_version(db, run, tenant, owner):
@@ -210,7 +260,11 @@ def _review_source_version(db, run, tenant, owner):
     if (
         classification.file_sha256 != scope["source_sha256"]
         or latest.get("version") != scope["version"]
-        or not latest.get("confirmed")
+        or (
+            latest.get("model_status") != "returned"
+            if scope.get("selection_basis") == "model_group"
+            else not latest.get("confirmed")
+        )
         or run.file_sha256 != scope["derived_sha256"]
     ):
         raise HTTPException(status_code=409, detail="文档分类或原件已变化，请重新生成候选")
@@ -307,8 +361,9 @@ def _cas(db, run, old_draft, **values):
     db.commit()
 
 
-async def _body(file):
-    if not (file.filename or "").lower().endswith(".xlsx"):
+async def _body(file, *, allow_legacy=False):
+    extensions = (".xlsx", ".xls") if allow_legacy else (".xlsx",)
+    if not (file.filename or "").lower().endswith(extensions):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx；其他格式暂不能保证保真")
     body = await file.read(MAX_BYTES + 1)
     if len(body) > MAX_BYTES:
@@ -344,6 +399,7 @@ async def reviewed_excel_classify(
                 "sheets": classify_review_workbook(review),
                 "model_status": "not_called",
                 "read_only_print_areas": review["read_only_print_areas"],
+                "usage_restrictions": list(review.get("usage_restrictions", [])),
             }
             result["fragment_links"] = observe_fragment_relationships(review, result["sheets"])
             results.append(result)
@@ -409,20 +465,31 @@ async def reviewed_excel_classify(
                         stage=_CLASS_READY,
                         file_sha256=result["sha256"],
                         draft_json=dump_json(
+                            _draft_with_structural_index(
+                                {
+                                    "versions": [
+                                        {
+                                            "version": version,
+                                            "sheets": result["sheets"],
+                                            "fragment_links": result["fragment_links"],
+                                            "model_status": "not_called",
+                                            "confirmed": False,
+                                            "read_only_print_areas": result[
+                                                "read_only_print_areas"
+                                            ],
+                                            "usage_restrictions": result["usage_restrictions"],
+                                        }
+                                    ]
+                                },
+                                body,
+                            )
+                        ),
+                        summary_json=dump_json(
                             {
-                                "versions": [
-                                    {
-                                        "version": version,
-                                        "sheets": result["sheets"],
-                                        "fragment_links": result["fragment_links"],
-                                        "model_status": "not_called",
-                                        "confirmed": False,
-                                        "read_only_print_areas": result["read_only_print_areas"],
-                                    }
-                                ]
+                                "kind": "classification",
+                                "usage_restrictions": result["usage_restrictions"],
                             }
                         ),
-                        summary_json=dump_json({"kind": "classification"}),
                     )
                 )
             commit_attempted = True
@@ -441,6 +508,7 @@ def _checkpoint_view(checkpoint):
     phase = checkpoint["phase"]
     message = {
         "inflight": "结果未知，不可重发；需人工核对，当前无解锁入口",
+        "failed": "已收到响应但校验失败；可明确授权重试，保留已完成批次",
         "paused": "本轮预算已用完；确认后可继续剩余批次",
         "ready": "可继续剩余批次",
     }[phase]
@@ -484,6 +552,8 @@ def reviewed_excel_recent_classifications(user=Depends(_read)):
                     "sha256": run.file_sha256,
                     "latest": versions[-1] if versions else None,
                     "archive_version_id": load_json(run.summary_json, {}).get("archive_version_id"),
+                    "conversion_receipt": load_json(run.summary_json, {}).get("conversion_receipt"),
+                    "usage_restrictions": _usage_restrictions(db, run, tenant, owner),
                     "template_write_state": "locked"
                     if run.status == _CLASS_SAVING
                     else "available",
@@ -516,10 +586,121 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
         return {
             "classification_id": run.id,
             "sha256": run.file_sha256,
+            "usage_restrictions": _usage_restrictions(db, run, tenant, owner),
+            "conversion_receipt": load_json(run.summary_json, {}).get("conversion_receipt"),
             "template_write_state": "locked" if run.status == _CLASS_SAVING else "available",
             "versions": state.get("versions", []),
             "checkpoint": _checkpoint_view(state.get("analysis_checkpoint")),
         }
+
+
+def _auto_slices(db, classification_id, version, tenant, owner):
+    from app.application.reviewed_excel_auto_slice import derive_classified_documents
+
+    run = _classification_run(db, classification_id, tenant, owner)
+    versions = load_json(run.draft_json, {}).get("versions", [])
+    latest = versions[-1] if versions else {}
+    if latest.get("version") != version or latest.get("model_status") != "returned":
+        raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
+    body = _source(db, run, tenant, owner)
+    coverage = latest.get("coverage")
+    sheets = latest.get("sheets", [])
+    source_names = (
+        [sheet.get("sheet") for sheet in sheets if isinstance(sheet, dict)]
+        if isinstance(sheets, list)
+        else []
+    )
+    coverage_names = (
+        [item.get("sheet") for item in coverage if isinstance(item, dict)]
+        if isinstance(coverage, list)
+        else []
+    )
+    if (
+        not source_names
+        or len(source_names) != len(sheets)
+        or len(set(source_names)) != len(source_names)
+        or len(coverage_names) != len(source_names)
+        or set(coverage_names) != set(source_names)
+        or any(
+            not isinstance(item, dict)
+            or not isinstance(item.get("total"), int)
+            or not isinstance(item.get("sent"), int)
+            or item["total"] < 0
+            or item["sent"] != item["total"]
+            or item.get("unread")
+            or item.get("unassigned")
+            or item.get("merged_omitted")
+            or item.get("value_truncated")
+            or item.get("deferred_large_values")
+            or item.get("deferred_oversized_rows")
+            for item in coverage
+        )
+    ):
+        raise ReviewedExcelError("模型尚未完整覆盖原件，不能生成自动切片")
+    regions = [
+        {**region, "sheet": sheet["sheet"]}
+        for sheet in latest.get("sheets", [])
+        for region in sheet.get("regions", [])
+        if region.get("range_source") == "model"
+    ]
+    return derive_classified_documents(
+        body,
+        {
+            "source_sha256": run.file_sha256,
+            "model_status": latest["model_status"],
+            "regions": regions,
+            "suggested_documents": latest.get("suggested_documents", []),
+            "coverage": latest.get("coverage", []),
+        },
+    ), latest.get("coverage", [])
+
+
+@router.get(
+    "/api/templates/reviewed-excel/classifications/{classification_id}/auto-slices/{version}"
+)
+def reviewed_excel_auto_slices(classification_id: str, version: str, user=Depends(_read)):
+    tenant, owner = _identity(user)
+    try:
+        with tenant_scope(tenant), get_db() as db:
+            slices, coverage = _auto_slices(db, classification_id, version, tenant, owner)
+        return {
+            "classification_id": classification_id,
+            "version": version,
+            "coverage": coverage,
+            "slices": [
+                {
+                    **{key: value for key, value in item.items() if key != "workbook"},
+                    "index": index,
+                    "sha256": hashlib.sha256(item["workbook"]).hexdigest(),
+                }
+                for index, item in enumerate(slices)
+            ],
+        }
+    except (ValueError, TypeError, EtlError) as exc:
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
+
+
+@router.get(
+    "/api/templates/reviewed-excel/classifications/{classification_id}/auto-slices/{version}/{index}"
+)
+def reviewed_excel_auto_slice_download(
+    classification_id: str, version: str, index: int, user=Depends(_read)
+):
+    tenant, owner = _identity(user)
+    try:
+        with tenant_scope(tenant), get_db() as db:
+            slices, _coverage = _auto_slices(db, classification_id, version, tenant, owner)
+        if index < 0 or index >= len(slices):
+            raise HTTPException(status_code=404, detail="切片不存在")
+        return Response(
+            slices[index]["workbook"],
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(slices[index]['filename'])}"
+            },
+        )
+    except (ValueError, TypeError, EtlError) as exc:
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
 @router.post("/api/templates/reviewed-excel/classifications/{classification_id}/confirm")
@@ -632,6 +813,29 @@ def reviewed_excel_classification_confirm(
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
+def _call_with_response_audit(function, callback, *args, **kwargs):
+    from app.application.reviewed_excel_audit import capture_response
+
+    with capture_response(callback):
+        return function(*args, **kwargs)
+
+
+def _response_audit_writer(state, claimed_draft, classification_id, tenant, owner, request_sha):
+    """Commit the provider body before parsing; failed CAS keeps the call inflight."""
+    from app.application.reviewed_excel_audit import record_response
+
+    holder = [claimed_draft]
+
+    def save(body, status, request_id):
+        with tenant_scope(tenant), get_db() as audit_db:
+            audit_run = _classification_run(audit_db, classification_id, tenant, owner)
+            record_response(state, request_sha, body, status, request_id)
+            _classification_cas(audit_db, audit_run, holder[0], state)
+            holder[0] = dump_json(state)
+
+    return holder, save
+
+
 @router.post("/api/templates/reviewed-excel/classifications/{classification_id}/analyze")
 async def reviewed_excel_classification_analyze(
     classification_id: str,
@@ -640,6 +844,8 @@ async def reviewed_excel_classification_analyze(
     sample_authorized: bool = Form(False),
     own_file_authorized: bool = Form(False),
     continue_authorized: bool = Form(False),
+    retry_authorized: bool = Form(False),
+    auto_group: bool = Form(False),
     user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
@@ -656,6 +862,16 @@ async def reviewed_excel_classification_analyze(
             body = _source(db, run, tenant, owner)
             review = inspect_workbook(body)
             checkpoint = state.get("analysis_checkpoint")
+            from app.application.reviewed_excel_budget import (
+                BUDGET_VERSION,
+                validate_checkpoint_budget,
+                validate_remaining_audit_budget,
+            )
+
+            try:
+                validate_checkpoint_budget(checkpoint)
+            except ReviewedExcelError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
             authorization_kind = "owner_file" if own_file_authorized else "authorized_sample"
             if checkpoint and (
                 checkpoint.get("version") != version
@@ -670,20 +886,50 @@ async def reviewed_excel_classification_analyze(
                 != authorization_kind
             ):
                 raise HTTPException(status_code=409, detail="授权范围已改变，请核对已有批次")
+            if checkpoint and checkpoint.get("auto_group", False) != auto_group:
+                raise HTTPException(status_code=409, detail="分组模式已改变，请核对已有批次")
             if checkpoint and checkpoint.get("phase") == "inflight":
                 raise HTTPException(
                     status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发"
                 )
+            if checkpoint and checkpoint.get("phase") == "failed":
+                if not retry_authorized:
+                    raise HTTPException(status_code=409, detail="已收到失败响应，需明确授权重试")
+                if checkpoint.get("calls_in_round", 0) >= checkpoint["max_calls"]:
+                    if not continue_authorized:
+                        raise HTTPException(
+                            status_code=409, detail="本轮预算已用完，需明确确认继续"
+                        )
+                    checkpoint["calls_in_round"] = 0
+                checkpoint["phase"] = "ready"
             if checkpoint and checkpoint.get("phase") == "paused":
                 if not continue_authorized:
                     raise HTTPException(status_code=409, detail="本轮预算已用完，需明确确认继续")
                 checkpoint["phase"] = "ready"
                 checkpoint["calls_in_round"] = 0
+            from app.application.reviewed_excel_plan import (
+                restore_coordinate_plan,
+                store_coordinate_plan,
+            )
+
             if checkpoint:
-                batches, max_calls = plan_semantic_batches(review, checkpoint["max_calls"])
+                try:
+                    batches = restore_coordinate_plan(review, checkpoint)
+                except ReviewedExcelError as exc:
+                    raise HTTPException(status_code=409, detail=str(exc)) from exc
+                max_calls = checkpoint["max_calls"]
             else:
-                batches, max_calls = plan_semantic_batches(review)
+                batches, max_calls = await run_in_threadpool(
+                    plan_semantic_batches, review, neutral=True
+                )
+                from app.application.reviewed_excel_template import (
+                    configured_template_llm_provider,
+                    template_llm_model_label,
+                )
+
+                template_provider = configured_template_llm_provider()
                 checkpoint = {
+                    "budget_version": BUDGET_VERSION,
                     "version": version,
                     "source_sha256": run.file_sha256,
                     "phase": "ready",
@@ -691,67 +937,181 @@ async def reviewed_excel_classification_analyze(
                     "total": len(batches),
                     "max_calls": max_calls,
                     "calls_in_round": 0,
+                    "auto_group": auto_group,
                     "authorization": {
                         "kind": authorization_kind,
                         "tenant_id": tenant,
                         "owner_user_id": owner,
                         "source_sha256": run.file_sha256,
-                        "provider": "mimo",
+                        "provider": template_provider,
+                        "provider_basis": "configured_before_call",
                         "scope": "this_file_bounded_cells_and_structure",
                         "authorized_at": utcnow().isoformat(),
                     },
                 }
-            plan_digest = hashlib.sha256(
-                dump_json(
-                    [
-                        [
-                            (cell["sheet"], cell["cell"], bool(cell.get("context_only")))
-                            for cell in batch
-                        ]
-                        for batch in batches
-                    ]
-                ).encode()
-            ).hexdigest()
-            if checkpoint.get("plan_digest", plan_digest) != plan_digest or checkpoint[
-                "total"
-            ] != len(batches):
-                raise HTTPException(status_code=409, detail="分析计划已改变，请重新核对")
+                store_coordinate_plan(checkpoint, batches)
+            validate_remaining_audit_budget(state, checkpoint, len(batches))
+            plan_digest = checkpoint["plan_digest"]
             index = len(checkpoint["results"])
-            if index >= len(batches):
+            if index > len(batches):
                 raise HTTPException(status_code=409, detail="分析批次状态无效")
-            full_structure_map = build_structure_map(review, classify_review_workbook(review))
-            batch_review = {
-                **review,
-                "cells": batches[index],
-                "full_structure_map": full_structure_map,
-            }
-            # A budget failure is known to occur before any provider request; do not create an uncertain checkpoint.
-            await run_in_threadpool(_classify_semantic_batch, batch_review, prepare_only=True)
-            checkpoint.update({"phase": "inflight", "plan_digest": plan_digest})
-            state["analysis_checkpoint"] = checkpoint
-            _recheck(request, (tenant, owner))
-            _classification_cas(db, run, old, state)
-            claimed_draft = dump_json(state)
-            batch_result = await run_in_threadpool(_classify_semantic_batch, batch_review)
-            _recheck(request, (tenant, owner))
-            _source(db, run, tenant, owner)
-            checkpoint["results"].append(batch_result)
-            checkpoint["calls_in_round"] = checkpoint.get("calls_in_round", 0) + 1
-            checkpoint["phase"] = "ready"
-            # Validate all accumulated results, including cross-batch conflicts, before persistence.
-            result = combine_semantic_batches(
-                review, batches[: index + 1], checkpoint["results"], max_calls
-            )
-            if index + 1 < len(batches):
-                if checkpoint["calls_in_round"] >= max_calls:
-                    checkpoint["phase"] = "paused"
-                _classification_cas(db, run, claimed_draft, state)
-                return {
-                    "classification_id": classification_id,
-                    "version": version,
-                    "phase": "paused" if checkpoint["phase"] == "paused" else "pending",
-                    "checkpoint": _checkpoint_view(checkpoint),
+            if index < len(batches):
+                batch_review = {
+                    **review,
+                    "cells": batches[index],
+                    "full_cells": review["cells"],
                 }
+                prepared = await run_in_threadpool(
+                    _classify_semantic_batch,
+                    batch_review,
+                    prepare_only=True,
+                    reference_ids=auto_group,
+                )
+
+                from app.application.reviewed_excel_audit import claim_request
+                from app.application.reviewed_excel_template import (
+                    configured_template_llm_provider,
+                    template_llm_model_label,
+                )
+                from app.build_identity import build_identity
+
+                request_sha = claim_request(
+                    state,
+                    prepared,
+                    source_sha256=run.file_sha256,
+                    version=version,
+                    classification_id=classification_id,
+                    code_version=build_identity()["git_sha"] or "unavailable",
+                    model=template_llm_model_label(),
+                    phase="classification",
+                )
+                checkpoint.update({"phase": "inflight", "plan_digest": plan_digest})
+                state["analysis_checkpoint"] = checkpoint
+                _recheck(request, (tenant, owner))
+                _classification_cas(db, run, old, state)
+                claimed_draft = dump_json(state)
+                audit_holder, save_response = _response_audit_writer(
+                    state, claimed_draft, classification_id, tenant, owner, request_sha
+                )
+                previous_calls = checkpoint.get("calls_in_round", 0)
+                audit_draft_before_response = claimed_draft
+                try:
+                    batch_result = await run_in_threadpool(
+                        _call_with_response_audit,
+                        _classify_semantic_batch,
+                        save_response,
+                        batch_review,
+                        reference_ids=auto_group,
+                        expected_request_sha256=request_sha,
+                        owner_id=owner,
+                    )
+                    claimed_draft = audit_holder[0]
+                    _recheck(request, (tenant, owner))
+                    _source(db, run, tenant, owner)
+                    checkpoint["results"].append(batch_result)
+                    checkpoint["calls_in_round"] = previous_calls + 1
+                    checkpoint["phase"] = "ready"
+                    result = combine_semantic_batches(
+                        review, batches[: index + 1], checkpoint["results"], max_calls
+                    )
+                except ModelRequestNotSent as exc:
+                    record_not_sent(state, request_sha, exc.public_message)
+                    _classification_cas(db, run, claimed_draft, state)
+                    raise
+                except (ValueError, TypeError, EtlError):
+                    if audit_holder[0] != audit_draft_before_response:
+                        checkpoint["results"] = checkpoint["results"][:index]
+                        checkpoint["phase"] = "failed"
+                        checkpoint["calls_in_round"] = previous_calls + 1
+                        _classification_cas(db, run, audit_holder[0], state)
+                    raise
+                if index + 1 < len(batches):
+                    if checkpoint["calls_in_round"] >= max_calls:
+                        checkpoint["phase"] = "paused"
+                    _classification_cas(db, run, claimed_draft, state)
+                    return {
+                        "classification_id": classification_id,
+                        "version": version,
+                        "phase": "paused" if checkpoint["phase"] == "paused" else "pending",
+                        "checkpoint": _checkpoint_view(checkpoint),
+                    }
+            else:
+                if not auto_group or len(batches) <= 1:
+                    raise HTTPException(status_code=409, detail="分析批次状态无效")
+                claimed_draft = old
+                result = combine_semantic_batches(review, batches, checkpoint["results"], max_calls)
+            if auto_group and len(batches) > 1:
+                from app.application.reviewed_excel_grouping import group_semantic_fragments
+
+                # Persist complete fragment results before beginning a separate model request.
+                if index < len(batches):
+                    if checkpoint["calls_in_round"] >= max_calls:
+                        checkpoint["phase"] = "paused"
+                    _classification_cas(db, run, claimed_draft, state)
+                    claimed_draft = dump_json(state)
+                    if checkpoint["phase"] == "paused":
+                        return {
+                            "classification_id": classification_id,
+                            "version": version,
+                            "phase": "paused",
+                            "checkpoint": _checkpoint_view(checkpoint),
+                        }
+                grouping_request: dict | list[dict] = await run_in_threadpool(
+                    group_semantic_fragments, review, result, prepare_only=True
+                )
+                if not isinstance(grouping_request, dict):
+                    raise ReviewedExcelError("分组请求格式无效")
+
+                from app.application.reviewed_excel_audit import claim_request
+                from app.application.reviewed_excel_template import (
+                    configured_template_llm_provider,
+                    template_llm_model_label,
+                )
+                from app.build_identity import build_identity
+
+                request_sha = claim_request(
+                    state,
+                    grouping_request,
+                    source_sha256=run.file_sha256,
+                    version=version,
+                    classification_id=classification_id,
+                    code_version=build_identity()["git_sha"] or "unavailable",
+                    model=template_llm_model_label(),
+                    phase="grouping",
+                )
+                checkpoint["phase"] = "inflight"
+                _recheck(request, (tenant, owner))
+                _classification_cas(db, run, claimed_draft, state)
+                claimed_draft = dump_json(state)
+                audit_holder, save_response = _response_audit_writer(
+                    state, claimed_draft, classification_id, tenant, owner, request_sha
+                )
+                previous_calls = checkpoint.get("calls_in_round", 0)
+                try:
+                    result["suggested_documents"] = await run_in_threadpool(
+                        _call_with_response_audit,
+                        group_semantic_fragments,
+                        save_response,
+                        review,
+                        result,
+                        expected_request_sha256=request_sha,
+                        owner_id=owner,
+                    )
+                except ModelRequestNotSent as exc:
+                    record_not_sent(state, request_sha, exc.public_message)
+                    _classification_cas(db, run, claimed_draft, state)
+                    raise
+                except (ValueError, TypeError, EtlError):
+                    if audit_holder[0] != claimed_draft:
+                        checkpoint["phase"] = "failed"
+                        checkpoint["calls_in_round"] = previous_calls + 1
+                        _classification_cas(db, run, audit_holder[0], state)
+                    raise
+                claimed_draft = audit_holder[0]
+                _recheck(request, (tenant, owner))
+                _source(db, run, tenant, owner)
+                checkpoint["calls_in_round"] = checkpoint.get("calls_in_round", 0) + 1
+                result["budget"]["grouping_calls"] = 1
             old = claimed_draft
             state.pop("analysis_checkpoint", None)
             rule_sheets = classify_review_workbook(review)
@@ -795,7 +1155,7 @@ async def reviewed_excel_classification_analyze(
                         {
                             "range": region["range"],
                             "labels": region["labels"],
-                            "label_source": "model",
+                            "label_source": "not_classified" if auto_group else "model",
                             "range_source": "model",
                             "evidence": [
                                 {
@@ -809,6 +1169,11 @@ async def reviewed_excel_classification_analyze(
                             "header_cells": headers,
                             "merged_ranges": merged,
                             "dependencies": region["dependencies"],
+                            **(
+                                {"drawing_evidence": region["drawing_evidence"]}
+                                if "drawing_evidence" in region
+                                else {}
+                            ),
                             "possible_shared_context": [
                                 {
                                     "cell": ref["cell"],
@@ -820,6 +1185,8 @@ async def reviewed_excel_classification_analyze(
                             "needs_confirmation": True,
                             "checked_cells": 0,
                             "reason": region["reason"],
+                            "open_fragment": region.get("open_fragment", False),
+                            "model_original_range": region.get("model_original_range"),
                             "suggested_labels": region.get("suggested_labels", []),
                             "context_warning": region.get("context_warning", ""),
                             "continuation_context": region.get("continuation_context"),
@@ -836,11 +1203,15 @@ async def reviewed_excel_classification_analyze(
                         unresolved_fragments(candidate, regions, dimensions["merged_regions"])
                     )
                 sheets.append({**rule_sheet, "regions": regions})
+            actual_providers = sorted(
+                {item.get("provider", "unreported") for item in result["input_summaries"]}
+            )
             latest = {
                 "parent_version": version,
                 "sheets": sheets,
                 "model_status": "returned",
                 "model_authorization": checkpoint.get("authorization"),
+                "actual_model_providers": actual_providers,
                 "read_only_print_areas": review["read_only_print_areas"],
                 "suggested_documents": result["suggested_documents"],
                 "suggested_document_count": result["suggested_document_count"],
@@ -849,6 +1220,7 @@ async def reviewed_excel_classification_analyze(
                 "coverage": result["coverage"],
                 "input_summaries": result["input_summaries"],
                 "structure_map": result["structure_map"],
+                "structure_map_source": result["structure_map_source"],
                 "budget": result["budget"],
                 "fragment_links": result["fragment_links"],
                 "confirmed": False,
@@ -876,6 +1248,7 @@ async def reviewed_excel_preview(
     classification_version: str = Form("", max_length=64),
     region_sheet: str = Form("", max_length=200),
     region_range: str = Form("", max_length=60),
+    auto_slice_index: int = Form(-1),
     print_area_mode: str = Form("source", max_length=16),
     user=Depends(_manage),
 ):
@@ -884,8 +1257,44 @@ async def reviewed_excel_preview(
     try:
         body = await _body(file)
         review = inspect_workbook(body)
+        source_restrictions = list(review.get("usage_restrictions", []))
         selected_region: dict[str, Any] | None = None
-        if classification_id:
+        if auto_slice_index >= 0:
+            if not classification_id or not classification_version or region_sheet or region_range:
+                raise ReviewedExcelError("自动切片选择无效")
+            with tenant_scope(tenant), get_db() as db:
+                classification = _classification_run(db, classification_id, tenant, owner)
+                if classification.file_sha256 != review["sha256"]:
+                    raise HTTPException(status_code=409, detail="分类来源已改变，请重新选择")
+                archive_version_id = load_json(classification.summary_json, {}).get(
+                    "archive_version_id"
+                )
+                if not archive_version_id:
+                    raise ReviewedExcelError("自动切片须先归档原件")
+                slices, _coverage = _auto_slices(
+                    db, classification_id, classification_version, tenant, owner
+                )
+                if auto_slice_index >= len(slices):
+                    raise HTTPException(status_code=404, detail="切片不存在")
+                selected_slice = slices[auto_slice_index]
+                if selected_slice["basis"] != "model_group":
+                    raise ReviewedExcelError("模型尚未确定此单据的完整关系")
+                body = selected_slice["workbook"]
+                review = inspect_workbook(body)
+                fragments = selected_slice["fragments"]
+                selected_region = {
+                    "classification_id": classification_id,
+                    "version": classification_version,
+                    "selection_basis": "model_group",
+                    "auto_slice_index": auto_slice_index,
+                    "range_objects_receipt": selected_slice["range_objects_receipt"],
+                    "archive_version_id": archive_version_id,
+                    "source_sha256": classification.file_sha256,
+                    "fragments": fragments,
+                    "print_area_mode": "source",
+                    "derived_sha256": review["sha256"],
+                }
+        elif classification_id:
             with tenant_scope(tenant), get_db() as db:
                 classification = _classification_run(db, classification_id, tenant, owner)
                 _source(db, classification, tenant, owner)
@@ -966,7 +1375,11 @@ async def reviewed_excel_preview(
                             {"sheet": region_sheet, "value": original_print}
                         ]
                 selected_region["print_area_mode"] = print_area_mode
-                body = derive_document_workbook(body, fragments, print_area_mode=print_area_mode)
+                object_receipt: dict = {}
+                body = derive_document_workbook(
+                    body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+                )
+                selected_region["range_objects_receipt"] = object_receipt
                 review = inspect_workbook(body)
                 selected_region["derived_print_area"] = next(
                     sheet["print_area"]
@@ -979,11 +1392,15 @@ async def reviewed_excel_preview(
         if model_opt_in:
             if sample_authorized == own_file_authorized:
                 raise ReviewedExcelError("请明确选择获授权样本或授权本人文件发送模型")
-            if (
-                own_file_authorized
-                and os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo"
-            ):
-                raise ReviewedExcelError("本人文件仅授权 MiMo；当前供应商不匹配，未调用模型")
+            from app.application.reviewed_excel_template import configured_template_llm_provider
+
+            if own_file_authorized and configured_template_llm_provider() not in {
+                "mimo",
+                "platform",
+            }:
+                raise ReviewedExcelError(
+                    "本人文件仅授权已配置的平台模型；当前供应商不受支持，未调用模型"
+                )
             try:
                 with tenant_scope(tenant):
                     proposal = await run_in_threadpool(
@@ -999,9 +1416,7 @@ async def reviewed_excel_preview(
                 proposal["model"] = {"status": "unavailable", "message": public_excel_error(exc)}
             proposal["model"]["authorization"] = {
                 "kind": "owner_file" if own_file_authorized else "authorized_sample",
-                "provider": "mimo"
-                if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() == "mimo"
-                else "etl_default",
+                "provider": configured_template_llm_provider(),
                 "tenant_id": tenant,
                 "owner_user_id": owner,
                 "source_sha256": (selected_region or {}).get("source_sha256", review["sha256"]),
@@ -1018,13 +1433,19 @@ async def reviewed_excel_preview(
                     db, selected_region["classification_id"], tenant, owner
                 )
                 _source(db, current, tenant, owner)
+                source_restrictions.extend(_usage_restrictions(db, current, tenant, owner))
                 current_versions = load_json(current.draft_json, {}).get("versions", [])
                 if (
                     not current_versions
                     or current_versions[-1].get("version") != selected_region["version"]
-                    or not current_versions[-1].get("confirmed")
+                    or (
+                        current_versions[-1].get("model_status") != "returned"
+                        if selected_region.get("selection_basis") == "model_group"
+                        else not current_versions[-1].get("confirmed")
+                    )
                 ):
                     raise HTTPException(status_code=409, detail="文档分类已变化，请重新生成候选")
+            review["usage_restrictions"] = list(dict.fromkeys(source_restrictions))
             upload = UploadServiceMixin().save_upload(
                 db,
                 owner_user_id=owner,
@@ -1045,7 +1466,11 @@ async def reviewed_excel_preview(
                 file_sha256=review["sha256"],
                 draft_json=dump_json({"versions": versions}),
                 summary_json=dump_json(
-                    {"kind": "reviewed_excel", "selected_region": selected_region}
+                    {
+                        "kind": "reviewed_excel",
+                        "selected_region": selected_region,
+                        "usage_restrictions": review["usage_restrictions"],
+                    }
                 ),
             )
             db.add(run)
@@ -1073,6 +1498,7 @@ def reviewed_excel_history(review_id: str, user=Depends(_read)):
             "success": True,
             "review_id": run.id,
             "source_sha256": run.file_sha256,
+            "usage_restrictions": _usage_restrictions(db, run, tenant, owner),
             "status": run.status,
             "versions": versions,
             "confirmation": state.get("confirmation"),
@@ -1103,7 +1529,10 @@ def reviewed_excel_candidate_download(
         if proposal is None or not candidate or not proposal.get("result_previews"):
             raise HTTPException(status_code=404, detail="候选模板不存在")
         body = _source(db, run, tenant, owner)
-        cleaned = clean_workbook(body, run.file_sha256, candidate["clear"])
+        try:
+            cleaned = clean_workbook(body, run.file_sha256, candidate["clear"])
+        except ReviewedExcelError as exc:
+            raise HTTPException(status_code=409, detail=public_excel_error(exc)) from None
     return Response(
         cleaned,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1126,12 +1555,12 @@ async def reviewed_excel_refine(
     tenant, owner = _identity(user)
     if not consent or sample_authorized == own_file_authorized:
         raise HTTPException(status_code=400, detail="请明确选择获授权样本或授权本人文件发送模型")
-    if (
-        own_file_authorized
-        and os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo"
-    ):
+    from app.application.reviewed_excel_template import configured_template_llm_provider
+
+    if own_file_authorized and configured_template_llm_provider() not in {"mimo", "platform"}:
         raise HTTPException(
-            status_code=400, detail="本人文件仅授权 MiMo；当前供应商不匹配，未调用模型"
+            status_code=400,
+            detail="本人文件仅授权已配置的平台模型；当前供应商不受支持，未调用模型",
         )
     try:
         current_cells = json.loads(current)
@@ -1159,9 +1588,7 @@ async def reviewed_excel_refine(
             source_scope = load_json(run.summary_json, {}).get("selected_region") or {}
             proposal["model"]["authorization"] = {
                 "kind": "owner_file" if own_file_authorized else "authorized_sample",
-                "provider": "mimo"
-                if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() == "mimo"
-                else "etl_default",
+                "provider": configured_template_llm_provider(),
                 "tenant_id": tenant,
                 "owner_user_id": owner,
                 "source_sha256": source_scope.get("source_sha256", run.file_sha256),
@@ -1204,6 +1631,11 @@ async def reviewed_excel_save(
         with tenant_scope(tenant), get_db() as db:
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
+            if _usage_restrictions(db, run, tenant, owner):
+                raise HTTPException(
+                    status_code=409,
+                    detail="此来源仅供数据/模板测试，打印版式未验证；可预览和下载测试候选，不得发布到企业模板库",
+                )
             state, versions = _proposals(run)
             request_key = hashlib.sha256(
                 dump_json(

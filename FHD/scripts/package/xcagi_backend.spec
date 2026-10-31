@@ -220,7 +220,8 @@ for module in ["ctranslate2", "av"]:
 # CSV, PDF and presentation capabilities as the checked source tree. pypdf and
 # ReportLab are permissively licensed; do not replace them with the AGPL
 # PyMuPDF/fitz runtime unless a separate commercial license is recorded.
-for module in ["docx", "openpyxl", "pptx", "xlsxwriter", "pypdf", "reportlab"]:
+# xlrd is also required by consent-bound ELT legacy XLS data-test conversion.
+for module in ["docx", "openpyxl", "xlrd", "pptx", "xlsxwriter", "pypdf", "reportlab"]:
     try:
         hiddenimports.extend(collect_submodules(module))
     except Exception:

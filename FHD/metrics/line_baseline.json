@@ -1,5 +1,5 @@
 {
-  "lines": 2388084,
-  "updated": "2026-10-30",
-  "note": "PR #2802 历史安全复核仅保留 50 条已检查的合成/公开指纹豁免，23 条可能有效凭据及未核实资产不豁免并由 Issue #2808 独立跟踪。3 项 fail-closed 安全回归测试使代码/文档行数初始净增 56；Ruff 格式修复折行 +4、按工具精确 diff 收拢集合推导 -2，最终本轮额外净增 2 行，基线由 2388082 调至 2388084。依照 check_net_deletion.py --update --force --reason 的可审查例外记录，不改变 Gitleaks 全历史扫描、发布安全门禁、真实凭据处置状态或 required checks。"
+  "lines": 2402936,
+  "updated": "2026-10-31",
+  "note": "PR#2805: catch print-area warnings in structural index + align platform-LLM/budget/merge-cut tests"
 }

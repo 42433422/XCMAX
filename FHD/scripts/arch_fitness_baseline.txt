@@ -11,7 +11,7 @@
 [domain->infrastructure] app/domain/shared_services/conversation/api_llm.py:82
 [domain->infrastructure] app/domain/shared_services/conversation/context.py:159
 [domain->infrastructure] app/domain/shared_services/conversation/context.py:6
-[domain->infrastructure] app/domain/shared_services/conversation/llm_adapter.py:396
+[domain->infrastructure] app/domain/shared_services/conversation/llm_adapter.py:414
 [domain->infrastructure] app/domain/shared_services/conversation/manager.py:139
 [domain->infrastructure] app/domain/shared_services/conversation/manager.py:418
 [domain->infrastructure] app/domain/shared_services/conversation/manager.py:443

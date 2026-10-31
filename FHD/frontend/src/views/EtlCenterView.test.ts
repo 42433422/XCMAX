@@ -58,7 +58,7 @@ describe('data docking archive-first workflow', () => {
     expect(archive.archiveClassifyExcel).toHaveBeenCalledTimes(1)
     expect(wrapper.findAll('.classification-region')).toHaveLength(3)
     expect(wrapper.text()).toContain('工艺'); expect(wrapper.text()).toContain('原料'); expect(wrapper.text()).toContain('检验')
-    expect(wrapper.find('[aria-current="step"]')?.text()).toContain('切片与续表确认')
+    expect(wrapper.find('[aria-current="step"]')?.text()).toContain('切片分类')
     expect(legacy.upload).not.toHaveBeenCalled(); expect(legacy.preview).not.toHaveBeenCalled(); expect(legacy.execute).not.toHaveBeenCalled()
     wrapper.unmount()
   })
