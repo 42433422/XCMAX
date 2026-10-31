@@ -952,7 +952,7 @@ async function downloadCandidate(index: number) {
       </div>
     </details>
 
-      <div v-show="classifications.length && !archiveOnSelect">
+      <div v-if="classifications.length && !archiveOnSelect">
 
     <div class="reviewed-template__step" data-etl-stage="classification">
     <h3 v-if="!archiveOnSelect">第二步：文件分类</h3>
