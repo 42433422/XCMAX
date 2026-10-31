@@ -29,13 +29,13 @@ from app.application.reviewed_excel_evidence import bounded_range
 
 # General title / period-block cues (language-agnostic keywords + Chinese ledger labels).
 _TITLE_HINT = re.compile(
-    r"(购货明细|回款明细|出货明细|送货单|出货单|报价单|对账单|明细表|"
+    r"(购货明细|回款明细|出货明细|送货单|退货单|出货单|报价单|对账单|明细表|"
     r"invoice|statement|receipt)",
     re.IGNORECASE,
 )
 _DATEISH = re.compile(
     r"(20\d{2}|19\d{2}).{0,6}(\d{1,2}).{0,6}(\d{1,2})|"
-    r"(\d{1,2})\s*[月/\-.]|"
+    r"(\d{1,2})\s*月|"
     r"起|至|截止",
 )
 _ORDER_HEADER = re.compile(
@@ -89,15 +89,21 @@ def _as_number(value: Any) -> float | None:
 
 
 def _looks_date_value(value: Any) -> bool:
+    """Hard date only: Excel serials, ISO-like dates, or year/month cues — not SKUs."""
     if value is None:
         return False
     num = _as_number(value)
     if num is not None and _EXCEL_DATE_LO <= num <= _EXCEL_DATE_HI:
         return True
     text = str(value).strip()
-    if not text:
+    if not text or len(text) > 40:
         return False
-    return bool(_DATEISH.search(text)) or bool(re.fullmatch(r"\d{4}[-/.]\d{1,2}([-/.]\d{1,2})?", text))
+    # Reject product/SKU tokens like 260-1（背色） that soft-match digit-dash.
+    if re.search(r"[A-Za-z]|（|）|\(|\)", text) and not re.search(r"(20\d{2}|19\d{2}|月)", text):
+        return False
+    if re.fullmatch(r"\d{4}[-/.]\d{1,2}([-/.]\d{1,2})?", text):
+        return True
+    return bool(_DATEISH.search(text))
 
 
 def _looks_order_value(value: Any) -> bool:
@@ -263,7 +269,24 @@ def _detect_order_ledger_runs(
             runs = [run for run in _run_boundaries(keyed) if run[2] is not None]
             if len(runs) < _MIN_ORDER_RUNS_FOR_STICKY:
                 continue
-            score = len(runs) * 10 + d_hits + o_hits
+            # Prefer real Excel-serial / year-bearing date columns over SKU
+            # false positives that inflate run_count via soft gaps.
+            serial_hits = sum(
+                1
+                for r in rows
+                if (_as_number(dvals.get(r)) is not None)
+                and _EXCEL_DATE_LO <= float(_as_number(dvals.get(r))) <= _EXCEL_DATE_HI
+            )
+            year_hits = sum(
+                1
+                for r in rows
+                if isinstance(dvals.get(r), str)
+                and re.search(r"(20\d{2}|19\d{2})", str(dvals.get(r)))
+            )
+            date_quality = serial_hits * 5 + year_hits * 3 + d_hits
+            # Hard separators = distinct (date, order) keys on a quality date col.
+            # Do not reward soft over-splits from weak date columns.
+            score = date_quality * 20 + min(len(runs), 30) + o_hits
             cand = {
                 "sheet": sheet,
                 "date_col": dcol,
@@ -271,6 +294,7 @@ def _detect_order_ledger_runs(
                 "run_count": len(runs),
                 "runs": [{"row_start": a, "row_end": b, "key": k} for a, b, k in runs],
                 "score": score,
+                "date_quality": date_quality,
             }
             if best is None or cand["score"] > best["score"]:
                 best = cand

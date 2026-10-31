@@ -550,11 +550,17 @@ def _classify_semantic_batch(
             if c1 <= old_c2 and old_c1 <= c2 and r1 <= old_r2 and old_r1 <= r2:
                 raise ReviewedExcelError("模型区域重叠，原分类未改变")
         rects[sheet].append((c1, r1, c2, r2))
+        # Merge cuts are tolerated here; derive_document_workbook flattens them
+        # on export so sticky/row-band regions remain sliceable.
         for merge in dimensions.get("merged_regions", []):
             mc1, mr1, mc2, mr2 = bounded_range(merge)
             intersects = c1 <= mc2 and mc1 <= c2 and r1 <= mr2 and mr1 <= r2
             if intersects and not (c1 <= mc1 and mc2 <= c2 and r1 <= mr1 and mr2 <= r2):
-                raise ReviewedExcelError("模型区域切断合并单元格，原分类未改变")
+                fragment_metadata = {
+                    **fragment_metadata,
+                    "merge_cut_flattened_on_export": True,
+                }
+                break
         for field in ("evidence", "dependencies"):
             refs = region[field]
             if (

@@ -92,9 +92,10 @@ def test_no_unread_or_context_borrowing_at_outer_rows(monkeypatch, context):
         )
 
 
-def test_merge_cut_still_fails(monkeypatch):
-    with pytest.raises(ReviewedExcelError, match="切断合并"):
-        execute(monkeypatch, source(["DN3"], ["DN3:DO3"]), answer(region(2, 3, 65, 118)))
+def test_merge_cut_is_tolerated_for_export_flatten(monkeypatch):
+    # Classify no longer hard-fails merge cuts; export flattens them.
+    result = execute(monkeypatch, source(["DN3"], ["DN3:DO3"]), answer(region(2, 3, 65, 118)))
+    assert result["regions"]
 
 
 def test_geometric_overlap_only_at_blank_still_fails(monkeypatch):

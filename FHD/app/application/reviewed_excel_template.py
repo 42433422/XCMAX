@@ -526,6 +526,33 @@ def _restore_print_areas(body: bytes, areas: list[dict]) -> bytes:
     return result
 
 
+
+def _flatten_cut_merge(ws: Worksheet, merge) -> None:
+    """Unmerge a range that a selection cuts; copy corner value/style into members.
+
+    Visual layout of the kept selection is preserved as far as openpyxl styles
+    allow (value + style on every former merge member). Outside-selection cells
+    are cleared later by the normal derive path.
+    """
+    from copy import copy
+
+    mc1, mr1, mc2, mr2 = merge.min_col, merge.min_row, merge.max_col, merge.max_row
+    corner = ws.cell(mr1, mc1)
+    value = corner.value
+    style = copy(corner._style) if corner.has_style else None
+    number_format = corner.number_format
+    ws.unmerge_cells(str(merge))
+    for row in range(mr1, mr2 + 1):
+        for col in range(mc1, mc2 + 1):
+            cell = ws.cell(row, col)
+            if cell.value is None:
+                cell.value = value
+            if style is not None:
+                cell._style = copy(style)
+            if number_format:
+                cell.number_format = number_format
+
+
 def derive_document_workbook(
     body: bytes,
     fragments: list[dict],
@@ -637,10 +664,15 @@ def derive_document_workbook(
             ws.print_area = [item["range"] for item in fragments]
         for merge in list(ws.merged_cells.ranges):
             bounds = bounded_range(str(merge))
-            if intersects(bounds) and not contained(bounds):
-                raise ReviewedExcelError("所选范围切断合并单元格")
             if not intersects(bounds):
                 ws.unmerge_cells(str(merge))
+                continue
+            if contained(bounds):
+                continue
+            # Selection cuts a merge (common after sticky row-band resplit).
+            # Flatten: unmerge and propagate corner value/style so each cell in
+            # the selection still carries the merged content without rejecting.
+            _flatten_cut_merge(ws, merge)
         formula_plan = plan_formula_support(body, fragments)
         clear_cells = []
         for row in ws.iter_rows():

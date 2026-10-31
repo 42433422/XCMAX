@@ -20,6 +20,9 @@ from io import BytesIO
 from typing import Any
 
 from openpyxl import load_workbook
+
+from app.application.etl.errors import ReviewedExcelError
+from app.application.reviewed_excel_evidence import bounded_range
 from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
 from openpyxl.utils.cell import get_column_letter
 
@@ -28,7 +31,7 @@ SCHEMA_VERSION = "workbook-structural-index-v1"
 STRUCTURAL_INDEX_MODEL_BUDGET_BYTES = 40_000
 
 _TITLE_HINT = re.compile(
-    r"(购货明细|回款明细|出货明细|送货单|出货单|报价|对账|明细表|"
+    r"(购货明细|回款明细|出货明细|送货单|退货单|出货单|报价|对账|明细表|"
     r"invoice|statement|receipt|delivery)",
     re.IGNORECASE,
 )
@@ -610,3 +613,183 @@ def ensure_review_structural_index(review: dict[str, Any], body: bytes | None = 
     review["workbook_structural_index"] = index
     review["workbook_structural_index_for_model"] = compress_structural_index_for_model(index)
     return index
+
+
+def iter_visible_structural_candidates(index: dict[str, Any]) -> list[dict[str, Any]]:
+    """Yield visible-sheet layout/date-block atoms (skip hidden + whole_sheet fillers)."""
+    out: list[dict[str, Any]] = []
+    for sheet in index.get("sheets") or []:
+        state = sheet.get("sheet_state") or "visible"
+        if state in {"hidden", "veryHidden"}:
+            continue
+        name = sheet.get("sheet")
+        if not isinstance(name, str) or not name:
+            continue
+        columns = max(1, int(sheet.get("columns") or 1))
+        for cand in sheet.get("candidate_row_ranges") or []:
+            basis = cand.get("basis") or ""
+            if basis == "whole_sheet":
+                continue
+            try:
+                start = int(cand["start_row"])
+                end = int(cand["end_row"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if end < start:
+                continue
+            out.append(
+                {
+                    "sheet": name,
+                    "start_row": start,
+                    "end_row": end,
+                    "basis": basis,
+                    "columns": columns,
+                    "kind_hint": cand.get("kind_hint") or "",
+                    "title_text": cand.get("title_text") or "",
+                    "date": cand.get("date") or "",
+                    "order_key": cand.get("order_key") or "",
+                }
+            )
+    return out
+
+
+def classification_from_structural_index(
+    review: dict[str, Any],
+    *,
+    index: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a classify-shaped result from layout + date-block structural candidates.
+
+    Used when model/keyword classify misses: each visible candidate becomes one
+    region and one suggested document (atomic). No workbook-title hardcodes.
+    """
+    from openpyxl.utils.cell import get_column_letter
+
+    index = index or review.get("workbook_structural_index") or {}
+    if not isinstance(index, dict) or not index.get("sheets"):
+        raise ValueError("structural index missing")
+    sheet_states = {
+        overview["sheet"]: overview.get("sheet_state", "visible")
+        for overview in review.get("sheet_overview", [])
+    }
+    candidates = iter_visible_structural_candidates(index)
+    # Drop candidates on sheets the review already marked hidden.
+    candidates = [
+        c
+        for c in candidates
+        if sheet_states.get(c["sheet"], "visible") not in {"hidden", "veryHidden"}
+    ]
+    if not candidates:
+        raise ValueError("no visible structural candidates")
+    regions: list[dict] = []
+    suggested: list[dict] = []
+    for i, cand in enumerate(candidates, 1):
+        c2 = cand["columns"]
+        area = f"A{cand['start_row']}:{get_column_letter(c2)}{cand['end_row']}"
+        reason = (
+            f"结构索引{cand['basis']}原子"
+            + (f"（{cand['title_text'][:40]}）" if cand.get("title_text") else "")
+            + (f" date={cand['date']} order={cand['order_key']}" if cand.get("date") or cand.get("order_key") else "")
+        )
+        region = {
+            "sheet": cand["sheet"],
+            "range": area,
+            "labels": ["unknown"],
+            "evidence": [],
+            "dependencies": [],
+            "reason": reason[:1000],
+            "needs_confirmation": True,
+            "label_source": "structural_index",
+            "range_source": "structural_index",
+            "structural_basis": cand["basis"],
+        }
+        regions.append(region)
+        suggested.append(
+            {
+                "document_id": f"structural-{i:04d}",
+                "fragments": [{"sheet": cand["sheet"], "range": area}],
+                "status": "candidate",
+                "reason": reason[:1000],
+            }
+        )
+    coverage = []
+    for overview in review.get("sheet_overview", []):
+        name = overview["sheet"]
+        state = overview.get("sheet_state", "visible")
+        coverage.append(
+            {
+                "sheet": name,
+                "unread": [],
+                "unassigned": [],
+                "merged_omitted": [],
+                "drawing_unread": [],
+                "drawing_unassigned": [],
+                "merged_sent": len(overview.get("merged_regions") or []),
+                "merged_ranges": list(overview.get("merged_regions") or []),
+                "sheet_state": state,
+            }
+        )
+    return {
+        "source_sha256": review.get("sha256"),
+        "model_status": "returned",
+        "regions": regions,
+        "suggested_documents": suggested,
+        "logical_documents": suggested,
+        "coverage": coverage,
+        "layout_references": [],
+        "contract": "structural_layout_dateblock_v1",
+        "workbook_structural_index_source": "layout_dateblock_fallback",
+        "input_summary": {
+            "provider": "structural_index",
+            "model": "layout_dateblock_fallback",
+            "candidate_count": len(candidates),
+        },
+    }
+
+
+def prefer_structural_classification_if_undersegmented(
+    review: dict[str, Any],
+    classification: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Prefer layout/date-block atoms when keyword/model classify under-segments.
+
+    Triggers when classify is missing, or visible structural candidates exceed
+    model regions by a clear margin (or a title sheet has orphan 1x1 slices).
+    """
+    index = review.get("workbook_structural_index") or {}
+    candidates = iter_visible_structural_candidates(index) if index else []
+    sheet_states = {
+        overview["sheet"]: overview.get("sheet_state", "visible")
+        for overview in review.get("sheet_overview", [])
+    }
+    candidates = [
+        c
+        for c in candidates
+        if sheet_states.get(c["sheet"], "visible") not in {"hidden", "veryHidden"}
+    ]
+    if not candidates:
+        if classification is None:
+            raise ReviewedExcelError("无结构索引候选且模型分类不可用")
+        return classification
+
+    if classification is None:
+        return classification_from_structural_index(review, index=index)
+
+    regions = classification.get("regions") or []
+    model_n = len(regions)
+    struct_n = len(candidates)
+    orphan_singles = 0
+    for region in regions:
+        try:
+            c1, r1, c2, r2 = bounded_range(region["range"])
+        except Exception:
+            continue
+        if c1 == c2 and r1 == r2:
+            orphan_singles += 1
+
+    # Severe under-segmentation (cash-like) or title-sheet orphans (qicai-like).
+    severe = struct_n >= model_n + 10 or (model_n > 0 and struct_n >= int(model_n * 1.8))
+    orphan_gap = orphan_singles >= 2 and struct_n >= model_n + 2
+    if severe or orphan_gap or model_n == 0:
+        return classification_from_structural_index(review, index=index)
+    return classification
