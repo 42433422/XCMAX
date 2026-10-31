@@ -1783,7 +1783,6 @@ async def reviewed_excel_save(
         auto_ingest = None
         try:
             from app.application.etl.auto_ingest_service import get_auto_ingest_service
-            from app.infrastructure.tenant_scope import tenant_scope
 
             labels: list[str] = []
             summary = load_json(run.summary_json, {})
@@ -1792,20 +1791,18 @@ async def reviewed_excel_save(
                 val = selected_region.get(key) or summary.get(key)
                 if val:
                     labels.append(str(val))
-            with tenant_scope(tenant), get_db() as ingest_db:
-                auto_ingest = get_auto_ingest_service().run(
-                    ingest_db,
-                    owner_user_id=owner,
-                    tenant_id=tenant,
-                    source_path=str(path),
-                    file_name=name.strip() or Path(path).name,
-                    template_id=str(template_id),
-                    review_id=review_id,
-                    classification_id=str(summary.get("classification_id") or ""),
-                    composer_note="",
-                    labels=labels,
-                )
-                ingest_db.commit()
+            # Background ingest so FE can poll /auto-ingest/batches/{id}/progress for true bars.
+            auto_ingest = get_auto_ingest_service().start_background(
+                owner_user_id=owner,
+                tenant_id=tenant,
+                source_path=str(path),
+                file_name=name.strip() or Path(path).name,
+                template_id=str(template_id),
+                review_id=review_id,
+                classification_id=str(summary.get("classification_id") or ""),
+                composer_note="",
+                labels=labels,
+            )
         except Exception as exc:  # noqa: BLE001 — intake save must not roll back on ingest faults
             # Template save already succeeded; surface ingest failure without undoing save.
             logger.exception(

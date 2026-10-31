@@ -179,6 +179,21 @@ describe('etl auto-ingest approval withdraw', () => {
     )
   })
 
+  it('reads auto-ingest progress for true bars', async () => {
+    apiFetchMock.mockImplementation(async () => response({
+      success: true,
+      data: {
+        batch_id: 'aib-1',
+        status: 'running',
+        kb_progress: { stage: 'writing', pct: 55 },
+        business_progress: { stage: 'preview', pct: 45 },
+      },
+    }))
+    const progress = await etlApi.autoIngestProgress('aib/1')
+    expect(progress.kb_progress?.pct).toBe(55)
+    expect(String(apiFetchMock.mock.calls[0][0])).toContain('/api/etl/auto-ingest/batches/aib%2F1/progress')
+  })
+
   it('lists auto-ingest batches', async () => {
     apiFetchMock.mockImplementation(async () => response({ success: true, data: [{ batch_id: 'aib-1', status: 'applied' }] }))
     const items = await etlApi.autoIngestBatches(20, true)

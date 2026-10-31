@@ -10,6 +10,7 @@ vi.mock('@/api/core', () => ({ api: { get, post: vi.fn(), delete: vi.fn() } }))
 vi.mock('@/api/auth', () => ({ authApi: { validateSession } }))
 vi.mock('@/utils/approvalPaths', () => ({ resolveApprovalApiPath: (path: string) => path }))
 vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn(), appPrompt: vi.fn(), appConfirm: vi.fn() }))
+vi.mock('@/api/etl', () => ({ etlApi: { autoIngestBatches: vi.fn(async () => []), withdrawAutoIngestBatch: vi.fn(), autoIngestProgress: vi.fn() } }))
 
 function response(type: string, page: number) {
   return { success: true, pagination: { page, page_size: 50, total: 101 }, data: [{

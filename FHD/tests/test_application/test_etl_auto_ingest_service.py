@@ -126,3 +126,38 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(rag_service, ledger_roo
     fake_etl.rollback.assert_called_once()
     docs_after = rag_service.status(dataset_id="office-docking", tenant_id="9")["documents"]
     assert all(d.get("document_id") != doc_id for d in docs_after)
+
+
+def test_auto_ingest_progress_tracks_real_stages(rag_service, ledger_root, tmp_path, monkeypatch):
+    xlsx = _shipment_xlsx(tmp_path / "progress.xlsx")
+    fake_etl = MagicMock()
+    fake_etl.save_upload.return_value = {"upload_id": "up-p"}
+    fake_etl.create_preview.return_value = {
+        "id": "run-p",
+        "status": "preview_ready",
+        "preview_revision": "rev-p",
+    }
+    fake_etl.execute.return_value = {
+        "id": "run-p",
+        "status": "completed",
+        "summary": {"new": 1, "update": 0, "skip": 0, "error": 0, "executed": 1},
+    }
+    monkeypatch.setattr("app.application.etl.service.get_etl_service", lambda: fake_etl)
+
+    service = AutoIngestService()
+    with tenant_scope(7):
+        batch = service.run(
+            MagicMock(),
+            owner_user_id=3,
+            tenant_id=7,
+            source_path=xlsx,
+            file_name="progress.xlsx",
+            labels=["出货"],
+        )
+        progress = service.get_progress(tenant_id=7, owner_user_id=3, batch_id=batch["batch_id"])
+
+    assert progress["status"] == "applied"
+    assert progress["kb_progress"]["pct"] == 100
+    assert progress["business_progress"]["pct"] == 100
+    assert progress["kb_progress"]["stage"] in {"done", "skipped"}
+    assert progress["business_progress"]["stage"] == "done"

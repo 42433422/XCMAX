@@ -59,6 +59,32 @@ def _save_ledger(tenant_id: int | str, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+
+def _progress(stage: str, pct: int, *, message: str = "", error: str | None = None) -> dict[str, Any]:
+    pct = max(0, min(100, int(pct)))
+    out: dict[str, Any] = {
+        "stage": stage,
+        "pct": pct,
+        "message": message,
+        "updated_at": _utcnow(),
+    }
+    if error:
+        out["error"] = error
+    return out
+
+
+def _patch_batch(tenant_id: int | str, batch_id: str, **fields: Any) -> dict[str, Any] | None:
+    with _LOCK:
+        ledger = _load_ledger(tenant_id)
+        batch = (ledger.get("batches") or {}).get(batch_id)
+        if not isinstance(batch, dict):
+            return None
+        batch.update(fields)
+        batch["updated_at"] = _utcnow()
+        ledger.setdefault("batches", {})[batch_id] = batch
+        _save_ledger(tenant_id, ledger)
+        return dict(batch)
+
 def _extract_text(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xlsm"}:
@@ -97,61 +123,17 @@ class AutoIngestService:
         classification_id: str = "",
         composer_note: str = "",
         labels: list[str] | None = None,
+        batch_id: str | None = None,
     ) -> dict[str, Any]:
         path = Path(source_path).expanduser().resolve()
         if not path.is_file():
             raise EtlError("ETL_AUTO_INGEST_SOURCE_MISSING", "自动入库找不到源文件")
         safe_name = (file_name or path.name).strip() or path.name
-        batch_id = f"aib-{uuid4().hex[:16]}"
+        batch_id = batch_id or f"aib-{uuid4().hex[:16]}"
         run_token = f"auto-ingest:{batch_id}"
-        text = _extract_text(path)
-        detection = detect_etl_target(path, suffix=path.suffix.lower())
-        # Prefer explicit labels for domain hint
-        label_blob = " ".join(labels or [])
-        if any(tok in label_blob for tok in ("出货", "送货", "发货", "shipment")):
-            detection = {
-                **detection,
-                "target_type": "shipment_records",
-                "reason": "classification_label_shipment",
-                "confidence": max(float(detection.get("confidence") or 0), 0.9),
-            }
-        elif any(tok in label_blob for tok in ("考勤", "attendance")):
-            detection = {
-                **detection,
-                "target_type": "attendance",
-                "reason": "classification_label_attendance",
-                "confidence": max(float(detection.get("confidence") or 0), 0.9),
-            }
-        elif any(tok in label_blob for tok in ("物料", "材料", "material")):
-            detection = {
-                **detection,
-                "target_type": "products",
-                "reason": "classification_label_material",
-                "confidence": max(float(detection.get("confidence") or 0), 0.85),
-            }
-
-        content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        kb_receipt = self._ingest_knowledge(
-            text=text,
-            source_key=safe_name,
-            run_id=run_token,
-            owner_user_id=owner_user_id,
-            content_hash=content_hash,
-            note=composer_note,
-            tenant_id=tenant_id,
-        )
-        business = self._ingest_business(
-            db,
-            owner_user_id=owner_user_id,
-            path=path,
-            file_name=safe_name,
-            target_type=str(detection.get("target_type") or "customer_products"),
-            batch_id=batch_id,
-        )
-
         batch = {
             "batch_id": batch_id,
-            "status": "applied",
+            "status": "running",
             "created_at": _utcnow(),
             "updated_at": _utcnow(),
             "tenant_id": int(tenant_id),
@@ -161,16 +143,204 @@ class AutoIngestService:
             "classification_id": classification_id,
             "file_name": safe_name,
             "composer_note": composer_note,
-            "detection": detection,
-            "knowledge": kb_receipt,
-            "business": business,
+            "detection": {},
+            "knowledge": {},
+            "business": {},
+            "kb_progress": _progress("queued", 0, message="等待写入知识库"),
+            "business_progress": _progress("queued", 0, message="等待写入业务域"),
             "withdrawn_at": None,
         }
         with _LOCK:
             ledger = _load_ledger(tenant_id)
             ledger.setdefault("batches", {})[batch_id] = batch
             _save_ledger(tenant_id, ledger)
-        return batch
+
+        try:
+            _patch_batch(
+                tenant_id,
+                batch_id,
+                kb_progress=_progress("extracting", 10, message="提取文档正文"),
+                business_progress=_progress("waiting_kb", 0, message="等待知识库完成"),
+            )
+            text = _extract_text(path)
+            detection = detect_etl_target(path, suffix=path.suffix.lower())
+            label_blob = " ".join(labels or [])
+            if any(tok in label_blob for tok in ("出货", "送货", "发货", "shipment")):
+                detection = {
+                    **detection,
+                    "target_type": "shipment_records",
+                    "reason": "classification_label_shipment",
+                    "confidence": max(float(detection.get("confidence") or 0), 0.9),
+                }
+            elif any(tok in label_blob for tok in ("考勤", "attendance")):
+                detection = {
+                    **detection,
+                    "target_type": "attendance",
+                    "reason": "classification_label_attendance",
+                    "confidence": max(float(detection.get("confidence") or 0), 0.9),
+                }
+            elif any(tok in label_blob for tok in ("物料", "材料", "material")):
+                detection = {
+                    **detection,
+                    "target_type": "products",
+                    "reason": "classification_label_material",
+                    "confidence": max(float(detection.get("confidence") or 0), 0.85),
+                }
+            _patch_batch(
+                tenant_id,
+                batch_id,
+                detection=detection,
+                kb_progress=_progress("writing", 55, message="写入知识库"),
+            )
+            content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            kb_receipt = self._ingest_knowledge(
+                text=text,
+                source_key=safe_name,
+                run_id=run_token,
+                owner_user_id=owner_user_id,
+                content_hash=content_hash,
+                note=composer_note,
+                tenant_id=tenant_id,
+            )
+            kb_done = _progress(
+                "done" if kb_receipt.get("action") != "skip" else "skipped",
+                100,
+                message=str(kb_receipt.get("reason") or "知识库已写入"),
+            )
+            _patch_batch(
+                tenant_id,
+                batch_id,
+                knowledge=kb_receipt,
+                kb_progress=kb_done,
+                business_progress=_progress("uploading", 15, message="上传业务文件"),
+            )
+            business = self._ingest_business(
+                db,
+                owner_user_id=owner_user_id,
+                path=path,
+                file_name=safe_name,
+                target_type=str(detection.get("target_type") or "customer_products"),
+                batch_id=batch_id,
+                progress_cb=lambda stage, pct, message="": _patch_batch(
+                    tenant_id,
+                    batch_id,
+                    business_progress=_progress(stage, pct, message=message),
+                ),
+            )
+            if business.get("skipped"):
+                biz_prog = _progress("skipped", 100, message=str(business.get("reason") or "跳过业务域"))
+            elif business.get("failed") or business.get("pending_preview"):
+                biz_prog = _progress(
+                    "failed" if business.get("failed") else "pending",
+                    70 if business.get("pending_preview") else 40,
+                    message=str(business.get("message") or business.get("error") or "业务写入未完成"),
+                    error=str(business.get("error") or "") or None,
+                )
+            else:
+                biz_prog = _progress("done", 100, message="业务域已写入")
+            final = _patch_batch(
+                tenant_id,
+                batch_id,
+                status="applied",
+                detection=detection,
+                knowledge=kb_receipt,
+                business=business,
+                kb_progress=kb_done,
+                business_progress=biz_prog,
+            )
+            return final or batch
+        except Exception as exc:  # noqa: BLE001 — persist failure into ledger for progress API
+            _patch_batch(
+                tenant_id,
+                batch_id,
+                status="failed",
+                kb_progress=_progress(
+                    "failed",
+                    0,
+                    message="自动入库失败",
+                    error=type(exc).__name__,
+                ),
+                business_progress=_progress(
+                    "failed",
+                    0,
+                    message="自动入库失败",
+                    error=type(exc).__name__,
+                ),
+                error=type(exc).__name__,
+            )
+            if isinstance(exc, EtlError):
+                raise
+            raise EtlError("ETL_AUTO_INGEST_FAILED", f"自动入库失败：{type(exc).__name__}") from exc
+
+    def start_background(
+        self,
+        *,
+        owner_user_id: int,
+        tenant_id: int,
+        source_path: str | Path,
+        file_name: str = "",
+        template_id: str = "",
+        review_id: str = "",
+        classification_id: str = "",
+        composer_note: str = "",
+        labels: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Create ledger row and finish ingest off-request so FE can poll true progress."""
+        path = Path(source_path).expanduser().resolve()
+        if not path.is_file():
+            raise EtlError("ETL_AUTO_INGEST_SOURCE_MISSING", "自动入库找不到源文件")
+        batch_id = f"aib-{uuid4().hex[:16]}"
+        safe_name = (file_name or path.name).strip() or path.name
+        batch = {
+            "batch_id": batch_id,
+            "status": "running",
+            "created_at": _utcnow(),
+            "updated_at": _utcnow(),
+            "tenant_id": int(tenant_id),
+            "owner_user_id": int(owner_user_id),
+            "template_id": template_id,
+            "review_id": review_id,
+            "classification_id": classification_id,
+            "file_name": safe_name,
+            "composer_note": composer_note,
+            "detection": {},
+            "knowledge": {},
+            "business": {},
+            "kb_progress": _progress("queued", 0, message="排队写入知识库"),
+            "business_progress": _progress("queued", 0, message="排队写入业务域"),
+            "withdrawn_at": None,
+            "source_path": str(path),
+        }
+        with _LOCK:
+            ledger = _load_ledger(tenant_id)
+            ledger.setdefault("batches", {})[batch_id] = batch
+            _save_ledger(tenant_id, ledger)
+
+        def _worker() -> None:
+            from app.db.session import get_db
+            from app.infrastructure.tenant_scope import tenant_scope
+
+            try:
+                with tenant_scope(tenant_id), get_db() as db:
+                    self.run(
+                        db,
+                        owner_user_id=owner_user_id,
+                        tenant_id=tenant_id,
+                        source_path=path,
+                        file_name=safe_name,
+                        template_id=template_id,
+                        review_id=review_id,
+                        classification_id=classification_id,
+                        composer_note=composer_note,
+                        labels=labels,
+                        batch_id=batch_id,
+                    )
+                    db.commit()
+            except Exception:  # noqa: BLE001 — progress already persisted in run()
+                logger.exception("background auto-ingest failed batch_id=%s", batch_id)
+
+        threading.Thread(target=_worker, name=f"auto-ingest-{batch_id}", daemon=True).start()
+        return dict(batch)
 
     def list_batches(
         self, *, tenant_id: int, owner_user_id: int | None = None, limit: int = 50
@@ -188,6 +358,28 @@ class AutoIngestService:
             ledger = _load_ledger(tenant_id)
         item = (ledger.get("batches") or {}).get(batch_id)
         return dict(item) if isinstance(item, dict) else None
+
+    def get_progress(
+        self, *, tenant_id: int, owner_user_id: int, batch_id: str
+    ) -> dict[str, Any]:
+        batch = self.get_batch(tenant_id=tenant_id, batch_id=batch_id)
+        if batch is None:
+            raise EtlError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
+        if int(batch.get("owner_user_id") or 0) != int(owner_user_id):
+            raise EtlError("ETL_AUTO_INGEST_FORBIDDEN", "无权查看该批次", status_code=403)
+        kb = batch.get("kb_progress") if isinstance(batch.get("kb_progress"), dict) else _progress("unknown", 0)
+        biz = (
+            batch.get("business_progress")
+            if isinstance(batch.get("business_progress"), dict)
+            else _progress("unknown", 0)
+        )
+        return {
+            "batch_id": batch_id,
+            "status": batch.get("status"),
+            "kb_progress": kb,
+            "business_progress": biz,
+            "updated_at": batch.get("updated_at"),
+        }
 
     def withdraw(
         self,
@@ -317,16 +509,27 @@ class AutoIngestService:
         target_type: str,
         batch_id: str,
         poll_seconds: float = 30.0,
+        progress_cb=None,
     ) -> dict[str, Any]:
         import time
 
         from app.application.etl.service import get_etl_service
 
+        def _notify(stage: str, pct: int, message: str = "") -> None:
+            if progress_cb is None:
+                return
+            try:
+                progress_cb(stage, pct, message)
+            except RECOVERABLE_ERRORS:
+                logger.debug("auto-ingest progress_cb failed", exc_info=True)
+
         # Knowledge-only targets: KB path already covered.
         if target_type == "knowledge":
+            _notify("skipped", 100, "knowledge_only_target")
             return {"skipped": True, "reason": "knowledge_only_target", "target_type": target_type}
 
         service = get_etl_service()
+        _notify("uploading", 20, "上传业务文件")
         with path.open("rb") as handle:
             upload = service.save_upload(
                 db,
@@ -338,6 +541,7 @@ class AutoIngestService:
                 relative_path=file_name,
             )
         upload_id = str(upload.get("upload_id") or "")
+        _notify("preview", 45, "生成业务预演")
         run = service.create_preview(
             db,
             owner_user_id=owner_user_id,
@@ -372,6 +576,7 @@ class AutoIngestService:
                 "message": "业务预演尚未完成；知识库已写入，可稍后在历史任务中执行或撤回",
             }
         preview_revision = current.get("preview_revision")
+        _notify("executing", 80, "执行业务写入")
         executed = service.execute(
             db,
             run_id=run_id,

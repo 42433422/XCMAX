@@ -264,6 +264,14 @@ export const etlApi = {
       `/api/etl/auto-ingest/batches/${encodeURIComponent(batchId)}/withdraw`,
       { method: 'POST' },
     ),
+  autoIngestProgress: (batchId: string) =>
+    request<{
+      batch_id: string
+      status?: string
+      kb_progress?: { stage?: string; pct?: number; message?: string; error?: string }
+      business_progress?: { stage?: string; pct?: number; message?: string; error?: string }
+      updated_at?: string
+    }>(`/api/etl/auto-ingest/batches/${encodeURIComponent(batchId)}/progress`),
   templates: () => request<EtlTemplate[]>('/api/etl/templates'),
   createTemplate: (body: {
     name: string
