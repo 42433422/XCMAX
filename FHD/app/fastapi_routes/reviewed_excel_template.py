@@ -32,20 +32,6 @@ from app.application.reviewed_excel_classification import (
     plan_semantic_batches,
 )
 from app.application.reviewed_excel_classification_store import (
-
-def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
-    """Persist a compact workbook structural index on classification draft_json."""
-    try:
-        from app.application.reviewed_excel_structural_index import (
-            attach_structural_index_to_draft,
-            build_workbook_structural_index,
-        )
-
-        return attach_structural_index_to_draft(draft, build_workbook_structural_index(body))
-    except Exception:
-        return draft
-
-
     _CLASS_READY,
     _classification_cas,
     _classification_run,
@@ -70,6 +56,20 @@ from app.infrastructure.auth.dependencies import require_permission
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
+
+
+def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
+    """Persist a compact workbook structural index on classification draft_json."""
+    try:
+        from app.application.reviewed_excel_structural_index import (
+            attach_structural_index_to_draft,
+            build_workbook_structural_index,
+        )
+
+        return attach_structural_index_to_draft(draft, build_workbook_structural_index(body))
+    except Exception:
+        return draft
+
 
 router = APIRouter()
 _manage = require_permission("etl.template.manage")

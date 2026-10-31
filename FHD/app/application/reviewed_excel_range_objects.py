@@ -1,8 +1,10 @@
 """Preserve supported, source-bound conditional formats and filters in sheet slices.
 
-Coordinates are never translated or clipped. An entire multi-range duplicate
-comparison set belongs to one document or is rejected; disjoint objects are
-explicitly excluded from that derivative, not removed from the source.
+Cell coordinates are never translated. Conditional-format comparison sets are
+kept whole or rejected. AutoFilter refs stay at source coordinates, but may be
+narrowed to the selection∩filter rectangle when an atomic cut is a solid band
+inside a larger sheet filter that has no active filterColumn criteria; disjoint
+objects are excluded from that derivative, not removed from the source.
 """
 
 from copy import deepcopy
@@ -153,6 +155,47 @@ def _blank_snapshot(body, sheet_name, tail):
         }
     finally:
         wb.close()
+
+
+
+def _format_bounds(bounds):
+    from openpyxl.utils.cell import get_column_letter
+
+    c1, r1, c2, r2 = bounds
+    return f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+
+
+def _filter_covered_intersection(af_bounds, rectangles):
+    """Solid AutoFilter∩selection rectangle fully covered by the cut, or None.
+
+    Enables atomic documents inside a whole-sheet AutoFilter: when the cut covers
+    a hole-free band of the filter (no active criteria — caller already verified),
+    export may narrow autoFilter/@ref to that intersection instead of failing on
+    uncovered sibling rows. Blank right-hand tails still prefer the existing
+    preserve-original-ref path.
+    """
+    inter = []
+    ac1, ar1, ac2, ar2 = af_bounds
+    for rectangle in rectangles:
+        x1 = max(ac1, rectangle[0])
+        y1 = max(ar1, rectangle[1])
+        x2 = min(ac2, rectangle[2])
+        y2 = min(ar2, rectangle[3])
+        if x1 <= x2 and y1 <= y2:
+            inter.append((x1, y1, x2, y2))
+    if not inter:
+        return None
+    narrowed = (
+        min(item[0] for item in inter),
+        min(item[1] for item in inter),
+        max(item[2] for item in inter),
+        max(item[3] for item in inter),
+    )
+    if not rectangles_cover(narrowed, rectangles):
+        return None
+    if not rectangles_cover(narrowed, inter):
+        return None
+    return narrowed
 
 
 def _filter_blank_tail(body, sheet_name, area, rectangles, conditional_formats):
@@ -319,13 +362,28 @@ def plan_range_objects(body, sheet_name, fragments):
                 _fail("过滤条件、排序或未知过滤扩展尚未核验")
             bounds = _bounds(af.get("ref"))
             evidence = None
+            narrowed_bounds = None
+            retained_af = deepcopy(af)
             if not rectangles_cover(bounds, rectangles) and any(
                 _intersects(bounds, r) for r in rectangles
             ):
-                evidence = _filter_blank_tail(
-                    body, sheet_name, af.get("ref"), rectangles, originals["conditionalFormatting"]
-                )
-                tail_proofs.append(evidence)
+                # Prefer keeping the original ref when only a blank right-hand
+                # column tail sticks out; otherwise narrow to the covered band.
+                try:
+                    evidence = _filter_blank_tail(
+                        body,
+                        sheet_name,
+                        af.get("ref"),
+                        rectangles,
+                        originals["conditionalFormatting"],
+                    )
+                except ReviewedExcelError as blank_exc:
+                    narrowed_bounds = _filter_covered_intersection(bounds, rectangles)
+                    if narrowed_bounds is None:
+                        raise blank_exc
+                    retained_af.set("ref", _format_bounds(narrowed_bounds))
+                else:
+                    tail_proofs.append(evidence)
                 kind = "retained"
             else:
                 kind = disposition([af.get("ref")])
@@ -351,9 +409,14 @@ def plan_range_objects(body, sheet_name, fragments):
                     "no_other_range_dependencies",
                     "source_row_column_geometry_unchanged",
                 ]
+            if narrowed_bounds is not None:
+                entry["narrowed_ref"] = _format_bounds(narrowed_bounds)
+                entry["reason"] = (
+                    "source_autofilter_narrowed_to_selection_intersection_without_active_criteria"
+                )
             receipt[kind].append(entry)
             if kind == "retained":
-                nodes["autoFilter"].append(deepcopy(af))
+                nodes["autoFilter"].append(retained_af)
         return {
             "sheet": sheet_name,
             "nodes": nodes,

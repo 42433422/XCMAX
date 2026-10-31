@@ -723,6 +723,21 @@ def derive_document_workbook(
                 BytesIO(result), data_only=False, keep_links=True, rich_text=True
             )
             try:
+                # Atomic cuts may narrow AutoFilter to selection∩filter; SUBTOTAL
+                # fidelity then compares against the restored filter, not the
+                # whole-sheet source signature.
+                if any(
+                    item.get("type") == "autoFilter" and item.get("narrowed_ref")
+                    for item in range_plan["receipt"].get("retained", [])
+                ):
+                    from app.application.reviewed_excel_formula_support import (
+                        _filter_signature,
+                    )
+
+                    formula_plan = dict(formula_plan)
+                    formula_plan["subtotal_filter"] = _filter_signature(
+                        final_checked[sheet_name]
+                    )
                 verify_preserved_subtotals(final_checked, formula_plan)
             finally:
                 final_checked.close()

@@ -484,3 +484,66 @@ def test_conditional_format_with_unselected_real_data_is_rejected():
     body = sample(area="A1:D4", filter_area=None, outside=False, duplicate=False)
     with pytest.raises(ReviewedExcelError, match="真实数据|空白上下文|跨越"):
         derive_document_workbook(body, fragments("A1:C4"))
+
+
+def test_autofilter_row_band_narrows_to_selection_intersection():
+    """Whole-sheet AutoFilter + atomic row band: narrow ref, do not fail-closed."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Synthetic"
+    for row in sheet.iter_rows(min_row=1, max_row=12, min_col=1, max_col=4):
+        for cell in row:
+            cell.value = cell.row
+    sheet.auto_filter.ref = "A1:D12"
+    out = BytesIO()
+    book.save(out)
+
+    def wps(root):
+        af = root.find(f"{{{S}}}autoFilter")
+        af.set(_WPS_FOLLOW, "0")
+        ET.SubElement(af, f"{{{S}}}extLst")
+
+    body = rewrite(out.getvalue(), "xl/worksheets/sheet1.xml", wps)
+    chosen = fragments("A5:D8")
+    receipt = {}
+    output = derive_document_workbook(body, chosen, object_receipt=receipt)
+    item = next(x for x in receipt["retained"] if x["type"] == "autoFilter")
+    assert item["ranges"] == ["A1:D12"]
+    assert item["narrowed_ref"] == "A5:D8"
+    assert "narrowed_to_selection_intersection" in item["reason"]
+    saved = load_workbook(BytesIO(output)).active
+    assert str(saved.auto_filter.ref) == "A5:D8"
+    verify_range_objects(output, plan_range_objects(body, "Synthetic", chosen))
+
+
+def test_autofilter_row_band_with_hole_still_fail_closed():
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Synthetic"
+    for row in sheet.iter_rows(min_row=1, max_row=12, min_col=1, max_col=4):
+        for cell in row:
+            cell.value = cell.row
+    sheet.auto_filter.ref = "A1:D12"
+    out = BytesIO()
+    book.save(out)
+
+    def wps(root):
+        af = root.find(f"{{{S}}}autoFilter")
+        af.set(_WPS_FOLLOW, "0")
+        ET.SubElement(af, f"{{{S}}}extLst")
+
+    body = rewrite(out.getvalue(), "xl/worksheets/sheet1.xml", wps)
+    with pytest.raises(ReviewedExcelError, match="过滤器跨界|跨越"):
+        derive_document_workbook(body, fragments("A5:D6", "A8:D9"))
+
+
+def test_blank_filter_tail_still_preferred_over_narrowing():
+    """Empty right-hand columns keep original AutoFilter ref (existing contract)."""
+    source = empty_tail_sample()
+    chosen = fragments("A1:C4")
+    receipt = {}
+    output = derive_document_workbook(source, chosen, object_receipt=receipt)
+    item = next(x for x in receipt["retained"] if x["type"] == "autoFilter")
+    assert item["ranges"] == ["A1:D4"]
+    assert "narrowed_ref" not in item
+    assert str(load_workbook(BytesIO(output)).active.auto_filter.ref) == "A1:D4"
