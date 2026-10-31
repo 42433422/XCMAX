@@ -622,6 +622,10 @@ DRAWING_IDENTIFY_PROMPT = LEGACY_IDENTIFY_PROMPT + (
     " When drawing_evidence is present, use only supplied drawing_id values in drawing_ids. "
     "Drawing text and anchors are source evidence; last_col and last_row are conservative outer bounds resolved from worksheet dimension records when available — geometry facts, not document suggestions. "
     "Every drawing must be wholly inside one region; do not cut objects horizontally or vertically. "
+    "Widen each physical_region rectangle so every cited drawing's full last_col/last_row outer bounds lie inside that same rectangle; never cite a drawing whose outer bounds stick outside. "
+    "drawing_ids accepts at most 100 ids per physical region; when decorations are denser, split into multiple regions so each cite list stays within that limit rather than packing every drawing into one oversized region. "
+    "Prefer covering every supplied drawing geometrically inside some region even when citing only a representative subset of drawing_ids. "
+    "Merged ranges that intersect a region must be wholly contained — extend the rectangle using sheets[].merged / integrity constraints, never clip a merge to fit a period cut. "
     "Choose two-dimensional rectangles independently; transport batches do not prescribe document boundaries."
 )
 GROUP_PROMPT = (
@@ -639,7 +643,8 @@ GROUP_PROMPT = (
 )
 DRAWING_GROUP_PROMPT = GROUP_PROMPT + (
     " When drawing_evidence is present, cite only supplied drawing_id values in drawing_ids; "
-    "each cited object must be wholly contained in one of the group's fixed fragments."
+    "each cited object must be wholly contained in one of the group's fixed fragments; "
+    "cite at most 100 drawing_ids per group."
 )
 
 
@@ -765,11 +770,11 @@ _EXPECTED = {
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "7a778c6b35f388c06960bbeb0713c06e4fce748de13ac907f9ca7cba98e12480",
+        "9938aea07e9b96e619cc377475f5eedcb2e08d1de7915b9628bda1d4087ed131",
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (
-        "1d064115ea3043d4b868dcd33c51bb6c5150e11367b465352fe375972d84c172",
+        "c6328a3808c652231dc47c3f319aa162f62857e94bfada2d4a4276f25594179c",
         "47042d8477ddf0eb59819d512ead64c7213fc4210351687df0bedea6403129df",
     ),
 }
