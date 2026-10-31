@@ -81,24 +81,42 @@ def auto_ingest(
             status_code=400,
             detail={"code": "ETL_AUTO_INGEST_PATH_REQUIRED", "message": "source_path 必填"},
         )
-    labels = body.get("labels") if isinstance(body.get("labels"), list) else []
+    raw_labels = body.get("labels")
+    labels = [str(x) for x in raw_labels] if isinstance(raw_labels, list) else []
     async_mode = bool(body.get("async"))
     service = get_auto_ingest_service()
-    kwargs = {
-        "owner_user_id": _user_id(user),
-        "tenant_id": int(tenant_id_for_write()),
-        "source_path": source_path,
-        "file_name": str(body.get("file_name") or ""),
-        "template_id": str(body.get("template_id") or ""),
-        "review_id": str(body.get("review_id") or ""),
-        "classification_id": str(body.get("classification_id") or ""),
-        "composer_note": str(body.get("composer_note") or ""),
-        "labels": [str(x) for x in labels],
-    }
+    owner_user_id = _user_id(user)
+    tenant_id = int(tenant_id_for_write())
+    file_name = str(body.get("file_name") or "")
+    template_id = str(body.get("template_id") or "")
+    review_id = str(body.get("review_id") or "")
+    classification_id = str(body.get("classification_id") or "")
+    composer_note = str(body.get("composer_note") or "")
     if async_mode:
-        batch = service.start_background(**kwargs)
+        batch = service.start_background(
+            owner_user_id=owner_user_id,
+            tenant_id=tenant_id,
+            source_path=source_path,
+            file_name=file_name,
+            template_id=template_id,
+            review_id=review_id,
+            classification_id=classification_id,
+            composer_note=composer_note,
+            labels=labels,
+        )
     else:
-        batch = service.run(db, **kwargs)
+        batch = service.run(
+            db,
+            owner_user_id=owner_user_id,
+            tenant_id=tenant_id,
+            source_path=source_path,
+            file_name=file_name,
+            template_id=template_id,
+            review_id=review_id,
+            classification_id=classification_id,
+            composer_note=composer_note,
+            labels=labels,
+        )
     return {"success": True, "data": batch}
 
 

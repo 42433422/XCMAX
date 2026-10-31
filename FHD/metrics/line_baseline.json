@@ -1,5 +1,5 @@
 {
-  "lines": 2404682,
+  "lines": 2404700,
   "updated": "2026-10-31",
-  "note": "feat/#2858 重建 erp-etl 能力页对齐 Marketing/SSOT --check"
+  "note": "feat/#2858 mypy 显式传参收口"
 }
