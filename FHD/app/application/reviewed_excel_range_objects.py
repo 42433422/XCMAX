@@ -109,13 +109,19 @@ def _blank_snapshot(body, sheet_name, tail):
             _fail("空白上下文存在尚未验证的区域依赖")
         if any(_intersects(_bounds(str(merge)), tail) for merge in ws.merged_cells.ranges):
             _fail("空白上下文包含合并单元格")
+        styled_empty = []
         for row in range(tail[1], tail[3] + 1):
             for col in range(tail[0], tail[2] + 1):
                 cell = ws._cells.get((row, col))
-                if cell is not None and (
-                    cell.value is not None or cell.has_style or cell.comment or cell.hyperlink
-                ):
-                    _fail("空白上下文含值、公式、样式或关联对象")
+                if cell is None:
+                    continue
+                if cell.value is not None or cell.comment or cell.hyperlink:
+                    _fail("空白上下文含值、公式或关联对象")
+                if cell.has_style:
+                    # Painted borders/fonts in empty gaps are not business data.
+                    styled_empty.append(
+                        (row, col, tuple(cell._style) if cell._style is not None else None)
+                    )
         rows = []
         for index, dim in ws.row_dimensions.items():
             if tail[1] <= index <= tail[3]:
@@ -143,6 +149,7 @@ def _blank_snapshot(body, sheet_name, tail):
             "columns": cols,
             "sheet_format": dict(ws.sheet_format),
             "tail": tail,
+            "styled_empty_cells": styled_empty,
         }
     finally:
         wb.close()

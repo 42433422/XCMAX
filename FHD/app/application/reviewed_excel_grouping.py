@@ -9,7 +9,11 @@ from app.application.reviewed_excel_evidence import bounded_range
 
 
 def _structure_sample_cells(inside: list[dict]) -> list[dict]:
-    """Sample first/middle/last structure rows and formulas; not only first/last cells."""
+    """Sample first/middle/last structure rows and a capped formula set.
+
+    Keep middle-structure enrichment for final grouping, but stay inside the
+    prepare_grouping cell budget (500 / 96KB) on multi-fragment workbooks.
+    """
     by_row: dict[int, list[dict]] = {}
     for cell in inside:
         _, row = coordinate_from_string(cell["cell"])
@@ -21,10 +25,20 @@ def _structure_sample_cells(inside: list[dict]) -> list[dict]:
             chosen_rows.add(rows[int((len(rows) - 1) * fraction)])
     selected: list[dict] = []
     for row in sorted(chosen_rows):
-        selected.extend(by_row[row][:4])
-    for cell in inside:
-        if cell.get("kind") == "formula":
-            selected.append(cell)
+        # 3 cells/row (was 4): enough for headers/keys without blowing the
+        # global 500-cell grouping budget across many fragments.
+        selected.extend(by_row[row][:3])
+    formulas = [cell for cell in inside if cell.get("kind") == "formula"]
+    formula_cap = 8
+    if len(formulas) <= formula_cap:
+        selected.extend(formulas)
+    else:
+        step = max(1, len(formulas) // formula_cap)
+        picked = formulas[::step][:formula_cap]
+        for edge in (formulas[0], formulas[-1]):
+            if edge not in picked:
+                picked.append(edge)
+        selected.extend(picked[:formula_cap])
     return selected
 
 
