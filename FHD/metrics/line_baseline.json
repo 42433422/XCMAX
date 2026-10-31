@@ -1,5 +1,5 @@
 {
-  "lines": 2405724,
+  "lines": 2405805,
   "updated": "2026-11-01",
-  "note": "P1-4 KB 检索回答中文产品口径 + FE normalizeAnswer 保留摘录与 vitest（+74）"
+  "note": "P2-4 合成 ELT/MIMO 入库样例包 README/MANIFEST/CSV/文档入口（+81；xlsx 不计入文本行）"
 }
