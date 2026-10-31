@@ -1623,6 +1623,7 @@ async def reviewed_excel_save(
     name: str = Form(..., max_length=160),
     publish_to_tenant: bool = Form(False),
     private_intake: bool = Form(False),
+    composer_note: str = Form("", max_length=4000),
     user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
@@ -1799,6 +1800,9 @@ async def reviewed_excel_save(
                 val = selected_region.get(key) or summary.get(key)
                 if val:
                     labels.append(str(val))
+            note = (composer_note or "").strip()[:4000]
+            if note:
+                labels.append(note)
             # Background ingest so FE can poll /auto-ingest/batches/{id}/progress for true bars.
             auto_ingest = get_auto_ingest_service().start_background(
                 owner_user_id=owner,
@@ -1808,7 +1812,7 @@ async def reviewed_excel_save(
                 template_id=str(template_id),
                 review_id=review_id,
                 classification_id=str(summary.get("classification_id") or ""),
-                composer_note="",
+                composer_note=note,
                 labels=labels,
             )
         except BOUNDARY_ERRORS as exc:  # intake save must not roll back on ingest faults

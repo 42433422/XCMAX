@@ -1911,6 +1911,7 @@ def test_private_intake_save_skips_enterprise_publish_gate(review_store, monkeyp
             "publish_to_tenant": "false",
             "private_intake": "true",
             "selections": "[]",
+            "composer_note": "整理要求：保留客户与单号",
         },
     )
     assert saved.status_code == 200, saved.text
@@ -1921,6 +1922,8 @@ def test_private_intake_save_skips_enterprise_publish_gate(review_store, monkeyp
     assert "auto_ingest" in payload
     if started:
         assert started.get("review_id") == body["review_id"]
+        assert started.get("composer_note") == "整理要求：保留客户与单号"
+        assert "整理要求：保留客户与单号" in (started.get("labels") or [])
 
 
 def test_quotation_proposals_identify_table_and_identity_without_touching_rules():
