@@ -20,11 +20,11 @@ from io import BytesIO
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
+from openpyxl.utils.cell import get_column_letter
 
 from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
-from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
-from openpyxl.utils.cell import get_column_letter
 
 SCHEMA_VERSION = "workbook-structural-index-v1"
 # Reserved budget for the model-facing summary inside each classify/group request.
@@ -178,9 +178,14 @@ def _infer_ledger_cols(ws) -> dict[str, int] | None:
                 serial_hits[col] += 1
             elif isinstance(value, str) and 1 <= len(value.strip()) <= 12 and not _title_like(value):
                 short_name[col] += 1
-            elif isinstance(value, (int, float)) and not _is_excel_serial(value) and abs(value) < 100000:
-                short_token[col] += 1
-            elif isinstance(value, str) and re.fullmatch(r"\d{1,5}|.?\d{1,4}号?", value.strip()):
+            elif (
+                isinstance(value, (int, float))
+                and not _is_excel_serial(value)
+                and abs(value) < 100000
+            ) or (
+                isinstance(value, str)
+                and re.fullmatch(r"\d{1,5}|.?\d{1,4}号?", value.strip())
+            ):
                 short_token[col] += 1
     if not serial_hits:
         return None
@@ -855,7 +860,7 @@ def prefer_structural_classification_if_undersegmented(
     for region in regions:
         try:
             c1, r1, c2, r2 = bounded_range(region["range"])
-        except Exception:
+        except (ReviewedExcelError, TypeError, ValueError):
             continue
         if c1 == c2 and r1 == r2:
             orphan_singles += 1
