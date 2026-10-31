@@ -1,5 +1,5 @@
 {
-  "lines": 2405307,
+  "lines": 2405316,
   "updated": "2026-10-31",
-  "note": "对齐默认 10 GiB 归档配额：更新 elt_sources 用例为 bootstrap 断言，并收敛配额 UI 文案分支"
+  "note": "对齐默认 10 GiB：拆分未配置配额 bootstrap 用例，去掉 archive-classify 预失败断言"
 }

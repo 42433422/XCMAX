@@ -1047,7 +1047,7 @@ def test_archive_classification_receipt_survives_expired_temporary_upload(review
     body = sample()
     data = {"expected_actor": "1:7", "request_key": "synthetic-request"}
     url = "/api/templates/reviewed-excel/archive-classify"
-    assert client.post(url, data=data, files={"file": ("sample.xlsx", body)}).status_code == 400
+    # Unset quota now bootstraps the 10 GiB default; explicit row still fine for the receipt path.
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
