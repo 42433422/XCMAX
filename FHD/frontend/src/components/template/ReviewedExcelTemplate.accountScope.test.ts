@@ -27,6 +27,9 @@ async function choose(names: string[]) {
   const input = wrapper!.get('input[type="file"][multiple]')
   Object.defineProperty(input.element, 'files', { configurable: true, value: names.map(name => new File(['private source'], name)) })
   await input.trigger('change'); await flushPromises()
+  const start = wrapper!.findAll('button').find(button => button.text() === '开始处理')
+  if (!start) throw new Error('missing start processing button')
+  await start.trigger('click'); await flushPromises()
 }
 beforeEach(() => {
   vi.clearAllMocks(); invalidateEnterpriseSessionCache(); account('A')

@@ -36,6 +36,9 @@ describe('archive selection through the actual kept-alive docking route', () => 
     const choose = async (files: string[]) => {
       Object.defineProperty(input.element, 'files', { configurable: true, value: files.map(name => new File(['生产资料'], name)) })
       await input.trigger('change'); await flushPromises()
+      const start = wrapper!.findAll('button').find(button => button.text() === '开始处理')
+      if (!start) throw new Error('missing start processing button')
+      await start.trigger('click'); await flushPromises()
     }
     await choose(['production.xlsx'])
     expect(archive.archiveClassifyExcel).toHaveBeenCalledTimes(1)

@@ -1,5 +1,5 @@
 {
-  "lines": 2402936,
+  "lines": 2403523,
   "updated": "2026-10-31",
-  "note": "PR#2805: catch print-area warnings in structural index + align platform-LLM/budget/merge-cut tests"
+  "note": "PR#2855：数据对接中心对话式导入与 A4 三卡片选模板 UI（ReviewedExcelTemplate/EtlCenter 前端改写）；同步 mods-bridge 能力页日期戳与对话式流程单测；用户批准合入。"
 }
