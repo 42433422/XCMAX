@@ -393,14 +393,10 @@ async function loadArchiveQuota() {
   const current = captureOperation()
   if (!current()) return
   try {
-    const quota = await templatePreviewApi.archiveQuota() as { configured: boolean; using_default?: boolean; limit_bytes: number | null; reserved_bytes: number }
+    const quota = await templatePreviewApi.archiveQuota() as { configured: boolean; using_default?: boolean; limit_bytes: number; reserved_bytes: number }
     if (!current()) return
-    if (quota.limit_bytes == null) {
-      archiveQuotaInfo.value = '尚未设置配额，不能归档'
-    } else {
-      const prefix = quota.using_default || !quota.configured ? '默认 10 GiB：' : ''
-      archiveQuotaInfo.value = `${prefix}已预留 ${quota.reserved_bytes} / ${quota.limit_bytes} 字节`
-    }
+    const prefix = quota.using_default || !quota.configured ? '默认 10 GiB：' : ''
+    archiveQuotaInfo.value = `${prefix}已预留 ${quota.reserved_bytes} / ${quota.limit_bytes} 字节`
   } catch (err) { if (!current()) return; archiveQuotaInfo.value = err instanceof Error ? err.message : '无法读取配额' }
 }
 async function saveArchiveQuota() {

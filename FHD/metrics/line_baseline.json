@@ -1,5 +1,5 @@
 {
-  "lines": 2405305,
+  "lines": 2405307,
   "updated": "2026-10-31",
-  "note": "主人要求：归档配额未配置时默认 10 GiB（10737418240 字节）无额外硬顶；含 _ensure_tenant_quota、GET 回显 using_default、CHANGELOG 与对应测试，净增约 59 行"
+  "note": "对齐默认 10 GiB 归档配额：更新 elt_sources 用例为 bootstrap 断言，并收敛配额 UI 文案分支"
 }

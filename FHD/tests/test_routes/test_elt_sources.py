@@ -263,7 +263,10 @@ def test_append_requires_positive_current_version_and_preserves_original_on_conf
         assert db.query(EltUpload).count() == 0
 
 
-def test_sources_require_configured_archive_quota(source_client):
+def test_sources_bootstrap_default_archive_quota_when_unset(source_client):
+    from app.application.elt.archive_store import DEFAULT_ARCHIVE_QUOTA_BYTES
+    from app.db.models.elt_archive import EltArchiveQuota
+
     store = source_client
     store.actor.user = SimpleNamespace(id=7, tenant_id=3, is_active=True)
     response = store.client.post(
@@ -271,10 +274,13 @@ def test_sources_require_configured_archive_quota(source_client):
         data={"request_key": str(uuid4())},
         files={"file": ("unfunded.csv", ORIGINAL)},
     )
-    assert response.status_code == 409, response.text
+    assert response.status_code == 201, response.text
     with tenant_scope(3), store.factory() as db:
-        assert db.query(EltArchiveAsset).count() == db.query(EltArchiveVersion).count() == 0
-    assert not (store.root / "business-archive" / "3").exists()
+        assert db.query(EltArchiveAsset).count() == db.query(EltArchiveVersion).count() == 1
+        quota = db.get(EltArchiveQuota, 3)
+        assert quota is not None
+        assert quota.limit_bytes == DEFAULT_ARCHIVE_QUOTA_BYTES
+        assert quota.reserved_bytes == len(ORIGINAL)
 
 
 def test_request_key_replay_reuses_archive_identity_and_quota(source_client):
