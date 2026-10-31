@@ -1,5 +1,5 @@
 {
-  "lines": 2405246,
+  "lines": 2405316,
   "updated": "2026-10-31",
-  "note": "ELT product rename (/api/elt; etl_* tables; etl.* perms) rebased onto #2856 inline docking template"
+  "note": "对齐默认 10 GiB：拆分未配置配额 bootstrap 用例，去掉 archive-classify 预失败断言"
 }

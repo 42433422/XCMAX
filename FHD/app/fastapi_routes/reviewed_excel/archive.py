@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.application.elt.archive_policy import ArchivePolicyError
 from app.application.elt.archive_store import (
+    DEFAULT_ARCHIVE_QUOTA_BYTES,
     append_original_version,
     create_original,
     default_archive_root,
@@ -55,10 +56,18 @@ def archive_quota(user=Depends(_archive_admin)):
     tenant, _owner = _identity(user)
     with tenant_scope(tenant), get_db() as db:
         quota = db.get(EltArchiveQuota, tenant)
+        if quota is None:
+            return {
+                "configured": False,
+                "using_default": True,
+                "limit_bytes": DEFAULT_ARCHIVE_QUOTA_BYTES,
+                "reserved_bytes": 0,
+            }
         return {
-            "configured": quota is not None,
-            "limit_bytes": quota.limit_bytes if quota else None,
-            "reserved_bytes": quota.reserved_bytes if quota else 0,
+            "configured": True,
+            "using_default": False,
+            "limit_bytes": quota.limit_bytes,
+            "reserved_bytes": quota.reserved_bytes,
         }
 
 
