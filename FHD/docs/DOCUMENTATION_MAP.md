@@ -20,6 +20,7 @@
 | [guides/DEPENDENCY_LOCKS.md](guides/DEPENDENCY_LOCKS.md) | uv / Poetry 依赖锁定与 CI 安装说明 |
 | [DELIVERABLE_PRODUCT.md](DELIVERABLE_PRODUCT.md) | **可交付产品**：交付物清单、验收 API、发版自检命令 |
 | [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md) | **客户交付**：版本与安装包对齐、升级/回滚、日志与诊断包、SLA 话术模板 |
+| [XCAGI-客户使用说明书.md](XCAGI-客户使用说明书.md) | **客户上手**：桌面版安装、主界面、对话派活、数据对接与本机数据说明（面向老板/业务员） |
 
 ## 子项目入口
 
