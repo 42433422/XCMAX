@@ -1,0 +1,22 @@
+{
+  "pack_id": "elt-intake-samples",
+  "version": 1,
+  "pii": "synthetic-only",
+  "samples": [
+    {
+      "path": "demo-delivery-note-xingguang.xlsx",
+      "labels": ["delivery", "a4-template", "xlsx"],
+      "expect_substrings": ["DEMO-PO-20261010-001", "星光涂料示例厂", "七彩家私示例店", "PE特清底漆"]
+    },
+    {
+      "path": "demo-purchase-order-qicai.xlsx",
+      "labels": ["purchase", "xlsx"],
+      "expect_substrings": ["DEMO-CG-20261011-045", "七彩乐园示例贸易", "水性面漆示例色"]
+    },
+    {
+      "path": "demo-shipment-lines.csv",
+      "labels": ["shipment", "csv"],
+      "expect_substrings": ["DEMO-SHIP-4", "DEMO-SHIP-45", "星光贸易示例"]
+    }
+  ]
+}
