@@ -1,5 +1,5 @@
 {
-  "lines": 2402724,
+  "lines": 2402918,
   "updated": "2026-10-31",
-  "note": "PR#2805：mypy 修 ELT 结构索引/verify_cut/template；multipack 对 mypy 2.4 INTERNAL ERROR 加 ignore_errors（owner voice 授权合入）"
+  "note": "PR#2805: ELT 数据对接中心 platform-default LLM route (+frontend label); legitimate feature growth on V3 slicing branch"
 }
