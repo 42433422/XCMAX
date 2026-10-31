@@ -460,7 +460,9 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                         if dim.hidden
                     ],
                     "auto_filter_ref": (
-                        str(s.auto_filter.ref) if s.auto_filter is not None and s.auto_filter.ref else None
+                        str(s.auto_filter.ref)
+                        if s.auto_filter is not None and s.auto_filter.ref
+                        else None
                     ),
                 }
                 for s in wb.worksheets
@@ -524,7 +526,6 @@ def _restore_print_areas(body: bytes, areas: list[dict]) -> bytes:
     ):
         raise ReviewedExcelError("打印区域写回后核验失败，已停止")
     return result
-
 
 
 def _flatten_cut_merge(ws: Worksheet, merge) -> None:
@@ -767,9 +768,7 @@ def derive_document_workbook(
                     )
 
                     formula_plan = dict(formula_plan)
-                    formula_plan["subtotal_filter"] = _filter_signature(
-                        final_checked[sheet_name]
-                    )
+                    formula_plan["subtotal_filter"] = _filter_signature(final_checked[sheet_name])
                 verify_preserved_subtotals(final_checked, formula_plan)
             finally:
                 final_checked.close()

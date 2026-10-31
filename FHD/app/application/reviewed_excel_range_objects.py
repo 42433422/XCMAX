@@ -157,7 +157,6 @@ def _blank_snapshot(body, sheet_name, tail):
         wb.close()
 
 
-
 def _format_bounds(bounds):
     from openpyxl.utils.cell import get_column_letter
 

@@ -60,8 +60,10 @@ def _cell_text(value: Any, limit: int = 120) -> str:
 
 
 def _is_excel_serial(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and (
-        _EXCEL_DATE_LO <= float(value) <= _EXCEL_DATE_HI
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and (_EXCEL_DATE_LO <= float(value) <= _EXCEL_DATE_HI)
     )
 
 
@@ -176,16 +178,15 @@ def _infer_ledger_cols(ws) -> dict[str, int] | None:
             value = ws.cell(row, col).value
             if _is_excel_serial(value) or isinstance(value, (datetime, date)):
                 serial_hits[col] += 1
-            elif isinstance(value, str) and 1 <= len(value.strip()) <= 12 and not _title_like(value):
+            elif (
+                isinstance(value, str) and 1 <= len(value.strip()) <= 12 and not _title_like(value)
+            ):
                 short_name[col] += 1
             elif (
                 isinstance(value, (int, float))
                 and not _is_excel_serial(value)
                 and abs(value) < 100000
-            ) or (
-                isinstance(value, str)
-                and re.fullmatch(r"\d{1,5}|.?\d{1,4}号?", value.strip())
-            ):
+            ) or (isinstance(value, str) and re.fullmatch(r"\d{1,5}|.?\d{1,4}号?", value.strip())):
                 short_token[col] += 1
     if not serial_hits:
         return None
@@ -472,7 +473,11 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
                 for index, title in enumerate(block_titles):
                     if index in skip_indices:
                         continue
-                    end = (rows[index + 1] - 1) if index + 1 < len(rows) else (ws.max_row or title["row"])
+                    end = (
+                        (rows[index + 1] - 1)
+                        if index + 1 < len(rows)
+                        else (ws.max_row or title["row"])
+                    )
                     kind = title["kind_hint"]
                     if (
                         _is_document_heading_text(title["text"])
@@ -578,7 +583,11 @@ def compress_structural_index_for_model(
             "rows": sheet.get("rows"),
             "columns": sheet.get("columns"),
             "block_title_rows": [
-                {"row": t.get("row"), "kind_hint": t.get("kind_hint"), "text": (t.get("text") or "")[:100]}
+                {
+                    "row": t.get("row"),
+                    "kind_hint": t.get("kind_hint"),
+                    "text": (t.get("text") or "")[:100],
+                }
                 for t in (sheet.get("block_title_rows") or [])[:40]
             ],
             "order_key_columns": [
@@ -663,7 +672,9 @@ def compress_structural_index_for_model(
     return summary
 
 
-def attach_structural_index_to_draft(draft: dict[str, Any], index: dict[str, Any]) -> dict[str, Any]:
+def attach_structural_index_to_draft(
+    draft: dict[str, Any], index: dict[str, Any]
+) -> dict[str, Any]:
     """Product path: persist compact index on an EtlRun draft_json object (mutates+returns)."""
     if not isinstance(draft, dict):
         draft = {}
@@ -673,7 +684,9 @@ def attach_structural_index_to_draft(draft: dict[str, Any], index: dict[str, Any
     return draft
 
 
-def ensure_review_structural_index(review: dict[str, Any], body: bytes | None = None) -> dict[str, Any]:
+def ensure_review_structural_index(
+    review: dict[str, Any], body: bytes | None = None
+) -> dict[str, Any]:
     """Attach full+compressed index onto a review dict when missing."""
     existing = review.get("workbook_structural_index")
     if isinstance(existing, dict) and existing.get("schema_version"):
@@ -764,7 +777,11 @@ def classification_from_structural_index(
         reason = (
             f"结构索引{cand['basis']}原子"
             + (f"（{cand['title_text'][:40]}）" if cand.get("title_text") else "")
-            + (f" date={cand['date']} order={cand['order_key']}" if cand.get("date") or cand.get("order_key") else "")
+            + (
+                f" date={cand['date']} order={cand['order_key']}"
+                if cand.get("date") or cand.get("order_key")
+                else ""
+            )
         )
         region = {
             "sheet": cand["sheet"],

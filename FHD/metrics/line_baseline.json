@@ -1,5 +1,5 @@
 {
-  "lines": 2402658,
+  "lines": 2402718,
   "updated": "2026-10-31",
-  "note": "PR#2805 ELT V3：结构索引/多包缝合/校验切片与通用过拆护栏；测试按 2000 格包与 AutoFilter 收窄合同对齐；合入前 CI 红修复后重计净增（owner voice 授权）"
+  "note": "PR#2805：ruff format 对齐 ELT 相关 20 文件（CI backend-quality format --check）；基线随格式化换行净增（owner voice 授权合入）"
 }

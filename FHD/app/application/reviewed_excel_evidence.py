@@ -19,7 +19,6 @@ def bounded_range(value: str) -> tuple[int, int, int, int]:
     return c1, r1, c2, r2
 
 
-
 def prepare_auto_slice_review(review: dict, *, skip_hidden_sheets: bool = False) -> dict:
     """Optional general filter: drop hidden/veryHidden worksheets from a review.
 
@@ -45,9 +44,7 @@ def prepare_auto_slice_review(review: dict, *, skip_hidden_sheets: bool = False)
         "sheets": visible_sheets,
         "cells": [cell for cell in review.get("cells", []) if cell.get("sheet") not in hidden],
         "sheet_overview": [sheet for sheet in overview if sheet.get("sheet") not in hidden],
-        "layout": [
-            item for item in review.get("layout", []) if item.get("sheet") not in hidden
-        ],
+        "layout": [item for item in review.get("layout", []) if item.get("sheet") not in hidden],
         "drawing_evidence": [
             obj for obj in review.get("drawing_evidence", []) if obj.get("sheet") not in hidden
         ],

@@ -152,7 +152,12 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
             # Independent extract rejects hidden sheets; keep them out of final
             # grouping so models may omit them without coverage failure.
             omitted_hidden_fragments.append(
-                {"sheet": sheet, "range": area, "sheet_state": state, "reason": region.get("reason", "")[:1000]}
+                {
+                    "sheet": sheet,
+                    "range": area,
+                    "sheet_state": state,
+                    "reason": region.get("reason", "")[:1000],
+                }
             )
             continue
         c1, r1, c2, r2 = bounded_range(area)
@@ -173,7 +178,9 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
         # Always surface a capped set of filter-aware aggregates so the model can
         # see them even when structure sampling omitted those rows.
         subtotal_cells = [
-            c for c in inside if c.get("kind") == "formula" and "SUBTOTAL" in str(c.get("value", "")).upper()
+            c
+            for c in inside
+            if c.get("kind") == "formula" and "SUBTOTAL" in str(c.get("value", "")).upper()
         ]
         for cell in subtotal_cells[:12]:
             if cell not in selected:
@@ -195,7 +202,8 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
         first_row = coordinate_from_string(inside[0]["cell"])[1]
         last_row = coordinate_from_string(inside[-1]["cell"])[1]
         has_filter_aware = any(
-            c.get("kind") == "formula" and "SUBTOTAL" in str(c.get("value", "")).upper() for c in inside
+            c.get("kind") == "formula" and "SUBTOTAL" in str(c.get("value", "")).upper()
+            for c in inside
         )
         covers_sheet_filter = False
         for filt in sheet_filters_early:
@@ -234,9 +242,7 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
                 continue
             col, row = coordinate_from_string(cell["cell"])
             if c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2:
-                formula_pool.append(
-                    {k: cell[k] for k in ("sheet", "cell", "value", "kind")}
-                )
+                formula_pool.append({k: cell[k] for k in ("sheet", "cell", "value", "kind")})
     cross_fragment_formulas = _cross_fragment_formula_links(formula_pool, fragments)
     if (
         len(cells) > MAX_MODEL_CELLS

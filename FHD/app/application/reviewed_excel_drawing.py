@@ -813,6 +813,7 @@ def validate_group_drawings(group_input: dict, group: dict) -> None:
     known = {(d["sheet"], d["part"], d["object_id"]): d for d in group_input["drawing_evidence"]}
     refs = group["drawing_evidence"]
     from app.application.reviewed_excel_reference_ids import MAX_DRAWING_IDS_PER_REGION
+
     if not isinstance(refs, list) or len(refs) > MAX_DRAWING_IDS_PER_REGION:
         raise ReviewedExcelError("模型分组绘图证据格式无效")
     seen = set()

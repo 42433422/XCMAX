@@ -10,7 +10,9 @@ from app.application.reviewed_excel_legacy import ensure_slice_workbook
 from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook
 
 
-def _slice_filename(fragments: list[dict], cells: list[dict], used: set[str], reason: str = "") -> str:
+def _slice_filename(
+    fragments: list[dict], cells: list[dict], used: set[str], reason: str = ""
+) -> str:
     """Prefer a Chinese descriptive title from cells; else sheet + short reason (no A1-range codes)."""
     title = ""
     for part in fragments:
@@ -138,8 +140,7 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
         resplit=True,
     )
     groups = [
-        (item["fragments"], "model_group", item.get("reason") or "")
-        for item in verified["groups"]
+        (item["fragments"], "model_group", item.get("reason") or "") for item in verified["groups"]
     ]
     results = []
     used_names: set[str] = set()

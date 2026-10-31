@@ -3476,6 +3476,7 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
     assert next(cell["context_only"] for cell in captured[0]["cells"] if cell["cell"] == "H4002")
     assert next(cell["context_only"] for cell in captured[1]["cells"] if cell["cell"] == "A1")
     from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
+
     assert all(len(batch["cells"]) <= MAX_MODEL_CELLS for batch in captured)
     assert result["coverage"][0]["sent"] == 4002
 
@@ -5232,7 +5233,9 @@ def test_auto_group_resume_budget_and_download_multibatch(
     assert client.post(path + "/analyze", data=form).status_code == 409
     from app.application.reviewed_excel_evidence import plan_semantic_batches
 
-    total = len(plan_semantic_batches(inspect_workbook(large_quotation(rows=2001)), 2, neutral=True)[0])
+    total = len(
+        plan_semantic_batches(inspect_workbook(large_quotation(rows=2001)), 2, neutral=True)[0]
+    )
     done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
     while done.status_code == 200 and done.json().get("phase") in {"pending", "paused"}:
         done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})

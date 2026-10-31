@@ -30,9 +30,14 @@ def test_dependency_closure_preserves_formula_graph_and_limits_support_to_requir
 def test_cycles_external_refs_unsupported_functions_and_large_ranges_fail_closed():
     part = [{"sheet": "表", "range": "A1:A1"}]
     # Mutual cycles are quarantined (isolate), not whole-segment fail-closed.
-    mutual = plan_formula_support(workbook({"A1": "=B1", "B1": "=A1", "C1": 1}), [{"sheet": "表", "range": "A1:C1"}])
+    mutual = plan_formula_support(
+        workbook({"A1": "=B1", "B1": "=A1", "C1": 1}), [{"sheet": "表", "range": "A1:C1"}]
+    )
     assert mutual["circular_quarantine"]
-    assert {item["action"] for item in mutual["circular_quarantine"]} <= {"isolate_as_text", "rewrite_exclude_self"}
+    assert {item["action"] for item in mutual["circular_quarantine"]} <= {
+        "isolate_as_text",
+        "rewrite_exclude_self",
+    }
     with pytest.raises(ReviewedExcelError, match="外部"):
         plan_formula_support(workbook({"A1": "='[外部.xlsx]表'!A1"}), part)
     with pytest.raises(ReviewedExcelError, match="函数依赖"):

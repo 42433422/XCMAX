@@ -610,7 +610,9 @@ def contract_hashes(schema: dict, phase: str) -> dict:
                     100 <= props["drawing_ids"]["maxItems"] <= MAX_DRAWING_IDS_PER_REGION
                 ):
                     raise ValueError("invalid drawing_ids source bound")
-                props["drawing_ids"]["maxItems"] = 100  # template placeholder; live bound is source-sized
+                props["drawing_ids"]["maxItems"] = (
+                    100  # template placeholder; live bound is source-sized
+                )
             layout = template["properties"]["layout_references"]
             layout_props = layout["items"]["properties"]
             if type(layout["maxItems"]) is not int:
@@ -641,7 +643,9 @@ def contract_hashes(schema: dict, phase: str) -> dict:
                 100 <= props["drawing_ids"]["maxItems"] <= MAX_DRAWING_IDS_PER_REGION
             ):
                 raise ValueError("invalid drawing_ids source bound")
-            props["drawing_ids"]["maxItems"] = 100  # template placeholder; live bound is source-sized
+            props["drawing_ids"]["maxItems"] = (
+                100  # template placeholder; live bound is source-sized
+            )
         prompt = DRAWING_GROUP_PROMPT if "drawing_ids" in props else GROUP_PROMPT
     else:
         raise ValueError("unknown contract phase")

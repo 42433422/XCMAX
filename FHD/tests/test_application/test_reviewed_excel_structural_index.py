@@ -26,7 +26,17 @@ def _sample_workbook() -> bytes:
     ws["C1"] = "单号"
     ws["D1"] = "型号"
     # excel-ish serial dates + order keys
-    rows = [(45000, 10), (45000, 10), (45001, 11), (45002, 12), (45003, 13), (45003, 13), (45004, 14), (45005, 15), (45006, 16)]
+    rows = [
+        (45000, 10),
+        (45000, 10),
+        (45001, 11),
+        (45002, 12),
+        (45003, 13),
+        (45003, 13),
+        (45004, 14),
+        (45005, 15),
+        (45006, 16),
+    ]
     for i, (serial, order) in enumerate(rows, start=2):
         ws[f"A{i}"] = "甲厂"
         ws[f"B{i}"] = serial
@@ -60,7 +70,10 @@ def test_index_schema_is_generic_and_includes_hidden():
     assert any(r["basis"] == "block_title" for r in names["期间块"]["candidate_row_ranges"])
     assert names["出货台账"]["ledger_run_hint_count"] >= 3
     assert any(r["basis"] == "ledger_key_run" for r in names["出货台账"]["candidate_row_ranges"])
-    assert sum(1 for r in names["出货台账"]["candidate_row_ranges"] if r["basis"] == "ledger_key_run") >= 3
+    assert (
+        sum(1 for r in names["出货台账"]["candidate_row_ranges"] if r["basis"] == "ledger_key_run")
+        >= 3
+    )
     assert index["cross_sheet_edges"]
     blob = json.dumps(index, ensure_ascii=False)
     assert "澜宇" not in blob
@@ -98,7 +111,6 @@ def test_neutralize_keeps_structural_index_drops_structure_map():
     assert "structure_map" not in kept
     assert "rule_hints" not in kept
     assert "labels" not in kept
-
 
 
 def test_prefer_structural_when_strictly_more_atoms():

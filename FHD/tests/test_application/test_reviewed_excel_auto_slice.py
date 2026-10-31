@@ -143,6 +143,7 @@ def test_workbook_nonempty_cell_limit_and_full_batch_coverage(count, accepted):
     ]
     assert len(primary) == len(set(primary)) == count
     from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
+
     assert all(len(batch) <= MAX_MODEL_CELLS for batch in batches)
     assert budget == 4
 

@@ -93,9 +93,7 @@ def test_planner_accounts_for_multiple_drawings_at_same_cell_and_fails_on_uncove
         "sheets": ["表"],
         "cells": cells,
         "drawing_evidence": drawings,
-        "sheet_overview": [
-            {"sheet": "表", "drawing_row_boundaries": list(range(1, n_cells + 2))}
-        ],
+        "sheet_overview": [{"sheet": "表", "drawing_row_boundaries": list(range(1, n_cells + 2))}],
     }
     batches = plan_drawing_batches(review)
     assert len(batches) == 2

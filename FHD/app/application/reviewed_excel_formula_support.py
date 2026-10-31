@@ -19,13 +19,12 @@ _SUBTOTAL = re.compile(
 )
 _CELL_RANGE = re.compile(r"\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?\Z")
 
+
 def _beyond_sheet_dimensions(col: int, row: int, sheet) -> bool:
     """True when a referenced cell lies outside the worksheet's used dimensions."""
     max_col = max(1, int(sheet.max_column or 1))
     max_row = max(1, int(sheet.max_row or 1))
     return col < 1 or row < 1 or col > max_col or row > max_row
-
-
 
 
 def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int = 20_000) -> dict:
@@ -325,7 +324,9 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                         {
                             "sheet": sheet_name,
                             "cell": node,
-                            "original_formula": (value if isinstance(value, str) else str(value))[:200],
+                            "original_formula": (value if isinstance(value, str) else str(value))[
+                                :200
+                            ],
                             "action": "isolate_as_text",
                             "new_formula": None,
                             "reason": "残留循环公式已隔离为文本，其余单元格照常导出",

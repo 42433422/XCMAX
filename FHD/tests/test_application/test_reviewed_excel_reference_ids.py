@@ -216,6 +216,7 @@ def test_neutral_batches_do_not_invoke_business_prefilter(monkeypatch):
     ]
     assert len(keys) == len(set(keys)) == len(review["cells"])
     from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
+
     assert all(len(batch) <= MAX_MODEL_CELLS for batch in batches) and budget == 4
 
 

@@ -256,11 +256,7 @@ def _classify_semantic_batch(
                     ],
                     "rule_hints": rule_hints,
                     **(
-                        {
-                            "workbook_structural_index": review[
-                                "workbook_structural_index_for_model"
-                            ]
-                        }
+                        {"workbook_structural_index": review["workbook_structural_index_for_model"]}
                         if isinstance(review.get("workbook_structural_index_for_model"), dict)
                         and review.get("workbook_structural_index_for_model")
                         else {}
@@ -718,9 +714,7 @@ def combine_semantic_batches(
         "structure_map": build_structure_map(review, rules),
         "structure_map_source": "program_observation_not_sent_to_model",
         "workbook_structural_index": review.get("workbook_structural_index"),
-        "workbook_structural_index_for_model": review.get(
-            "workbook_structural_index_for_model"
-        ),
+        "workbook_structural_index_for_model": review.get("workbook_structural_index_for_model"),
         "workbook_structural_index_source": (
             "program_built_sent_to_model"
             if review.get("workbook_structural_index_for_model")
@@ -742,9 +736,7 @@ def classify_semantic_workbook(review: dict, *, skip_hidden_sheets: bool = False
     general option. Prompt guidance steers the model using sheet_state.
     """
     review = prepare_auto_slice_review(review, skip_hidden_sheets=skip_hidden_sheets)
-    batches, max_calls = plan_semantic_batches(
-        review, neutral=True, skip_hidden_sheets=False
-    )
+    batches, max_calls = plan_semantic_batches(review, neutral=True, skip_hidden_sheets=False)
     from app.application.reviewed_excel_evidence import build_structure_map
 
     full_structure_map = build_structure_map(review, classify_review_workbook(review))

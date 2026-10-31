@@ -474,7 +474,9 @@ async def reviewed_excel_classify(
                                             "fragment_links": result["fragment_links"],
                                             "model_status": "not_called",
                                             "confirmed": False,
-                                            "read_only_print_areas": result["read_only_print_areas"],
+                                            "read_only_print_areas": result[
+                                                "read_only_print_areas"
+                                            ],
                                             "usage_restrictions": result["usage_restrictions"],
                                         }
                                     ]

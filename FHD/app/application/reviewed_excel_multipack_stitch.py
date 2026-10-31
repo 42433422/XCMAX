@@ -168,10 +168,7 @@ def build_overlapped_sheet_packs(
                 overlap_lo = max(row_start, prev_end - overlap_rows + 1)
                 overlap_hi = min(row_end, prev_end)
                 overlap_rows_set = {r for r in range(overlap_lo, overlap_hi + 1)}
-                fp_rows = set(
-                    sorted(overlap_rows_set)[:ANCHOR_FINGERPRINT_ROWS]
-                    or [row_start]
-                )
+                fp_rows = set(sorted(overlap_rows_set)[:ANCHOR_FINGERPRINT_ROWS] or [row_start])
                 overlap_meta = {
                     "overlap_row_start": overlap_lo,
                     "overlap_row_end": overlap_hi,
@@ -260,7 +257,10 @@ def programmatic_merge_inventories(inventories: list[dict]) -> dict:
             )
             # Prefer order_key dedupe when present
             soft = (sheet, (doc.get("order_key") or "").strip())
-            if key in seen or (soft[1] and soft in {(d.get("sheet"), (d.get("order_key") or "").strip()) for d in docs}):
+            if key in seen or (
+                soft[1]
+                and soft in {(d.get("sheet"), (d.get("order_key") or "").strip()) for d in docs}
+            ):
                 continue
             seen.add(key)
             docs.append(doc)

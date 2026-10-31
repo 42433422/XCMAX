@@ -167,7 +167,9 @@ def _is_document_heading_text(text: str) -> bool:
     )
 
 
-def _detect_title_blocks(cells: list[dict], sheet: str, c1: int, r1: int, c2: int, r2: int) -> list[dict]:
+def _detect_title_blocks(
+    cells: list[dict], sheet: str, c1: int, r1: int, c2: int, r2: int
+) -> list[dict]:
     """Rows whose leftmost nonempty text looks like a titled document block."""
     by_row: dict[int, list[dict]] = {}
     for cell in cells:
@@ -180,7 +182,10 @@ def _detect_title_blocks(cells: list[dict], sheet: str, c1: int, r1: int, c2: in
         by_row.setdefault(row, []).append(cell)
     titles: list[dict] = []
     for row in sorted(by_row):
-        ordered = sorted(by_row[row], key=lambda c: column_index_from_string(coordinate_from_string(c["cell"])[0]))
+        ordered = sorted(
+            by_row[row],
+            key=lambda c: column_index_from_string(coordinate_from_string(c["cell"])[0]),
+        )
         text = str(ordered[0].get("value") or "").strip()
         if _is_title_row_text(text):
             titles.append({"row": row, "text": text[:120], "cell": ordered[0]["cell"]})
@@ -280,7 +285,9 @@ def _detect_order_ledger_runs(
             if d_hits < max(4, int(0.55 * nonempty)) or o_hits < max(4, int(0.55 * nonempty)):
                 continue
             order_also_dates = sum(
-                1 for r in rows if _looks_date_value(ovals.get(r)) and _looks_order_value(ovals.get(r))
+                1
+                for r in rows
+                if _looks_date_value(ovals.get(r)) and _looks_order_value(ovals.get(r))
             )
             if order_also_dates > o_hits * 0.5:
                 continue
@@ -328,9 +335,7 @@ def _detect_order_ledger_runs(
     return best
 
 
-def _formula_outbound_and_circular(
-    cells: list[dict], fragments: list[dict]
-) -> dict:
+def _formula_outbound_and_circular(cells: list[dict], fragments: list[dict]) -> dict:
     """Scan formula cells inside fragments for outbound same-sheet refs and obvious self-SUM cycles."""
     rects_by_sheet: dict[str, list[tuple[int, int, int, int]]] = {}
     for part in fragments:
@@ -340,7 +345,9 @@ def _formula_outbound_and_circular(
             continue
 
     def selected(sheet: str, col: int, row: int) -> bool:
-        return any(c1 <= col <= c2 and r1 <= row <= r2 for c1, r1, c2, r2 in rects_by_sheet.get(sheet, []))
+        return any(
+            c1 <= col <= c2 and r1 <= row <= r2 for c1, r1, c2, r2 in rects_by_sheet.get(sheet, [])
+        )
 
     outbound: list[dict] = []
     circular: list[dict] = []
@@ -489,8 +496,7 @@ def inspect_cut(review: dict, group: dict) -> dict:
     elif sticky_titles:
         status = "sticky_titles"
         reason = (
-            f"切片内检出 {len(title_blocks)} 个独立标题块，疑似多段单据粘连，"
-            "需按标题拆分或重新识别"
+            f"切片内检出 {len(title_blocks)} 个独立标题块，疑似多段单据粘连，需按标题拆分或重新识别"
         )
     elif sticky_ledger:
         status = "sticky_ledger"
@@ -530,7 +536,9 @@ def inspect_cut(review: dict, group: dict) -> dict:
 
 def _new_document_id(fragments: list[dict]) -> str:
     payload = [{"sheet": f["sheet"], "range": f["range"]} for f in fragments]
-    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
     return "source-" + digest[:24]
 
 
@@ -647,10 +655,21 @@ def verify_after_cut(
         receipt = {
             "document_id": group.get("document_id"),
             "fragments": deepcopy(group.get("fragments") or []),
-            **{k: inspection[k] for k in (
-                "ok", "status", "reason", "sticky", "needs_reidentify",
-                "title_blocks", "ledger", "formula", "fragment_count", "cell_count",
-            )},
+            **{
+                k: inspection[k]
+                for k in (
+                    "ok",
+                    "status",
+                    "reason",
+                    "sticky",
+                    "needs_reidentify",
+                    "title_blocks",
+                    "ledger",
+                    "formula",
+                    "fragment_count",
+                    "cell_count",
+                )
+            },
             "action": "keep",
         }
         if inspection["status"] in ("circular", "circular_quarantine"):

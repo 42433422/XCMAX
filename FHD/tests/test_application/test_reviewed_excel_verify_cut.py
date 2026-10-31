@@ -182,6 +182,7 @@ def test_two_order_runs_resplit_atomic():
 
 def test_delivery_note_agreement_lines_do_not_sticky_resplit():
     """One contiguous 送货单 with agreement/meta lines stays one document after verify."""
+
     def build(book):
         ws = book.active
         ws.title = "送货"
@@ -199,6 +200,7 @@ def test_delivery_note_agreement_lines_do_not_sticky_resplit():
     review = inspect_workbook(body)
     # Attach structural index so verify sees agreement lines as block_title_rows.
     from app.application.reviewed_excel_structural_index import ensure_review_structural_index
+
     ensure_review_structural_index(review, body)
     groups = [
         {
