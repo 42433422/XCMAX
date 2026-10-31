@@ -384,9 +384,16 @@ def drawing_row_boundaries(sheet, drawings: list[dict]) -> list[int]:
         first = obj["from"]["row"] + 1
         if not 1 <= first <= max_row:
             raise ReviewedExcelError("绘图锚点超出工作表范围")
-        if obj.get("geometry_error") or not obj.get("last_row") or not obj.get("last_col"):
+        if obj.get("geometry_error"):
             raise ReviewedExcelError("绘图边界尚未核验")
-        last = int(obj["last_row"])
+        if obj.get("last_row"):
+            last = int(obj["last_row"])
+        elif obj.get("to") is not None:
+            last = int(obj["to"]["row"]) + 1
+            obj["last_row"] = last
+            obj["last_col"] = int(obj["to"]["col"]) + 1
+        else:
+            raise ReviewedExcelError("绘图边界尚未核验")
         if last > max_row:
             raise ReviewedExcelError("绘图超出工作表范围，无法安全确定边界")
         unsafe.update(range(first + 1, last + 1))
