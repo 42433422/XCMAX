@@ -260,9 +260,9 @@ def _detect_order_ledger_runs(
             keyed = []
             for row in rows:
                 dv, ov = dvals.get(row), ovals.get(row)
-                if dv is None and ov is None:
-                    keyed.append((row, None))
-                elif not (_looks_date_value(dv) and _looks_order_value(ov)):
+                if (dv is None and ov is None) or not (
+                    _looks_date_value(dv) and _looks_order_value(ov)
+                ):
                     keyed.append((row, None))
                 else:
                     keyed.append((row, (str(dv), str(ov))))
