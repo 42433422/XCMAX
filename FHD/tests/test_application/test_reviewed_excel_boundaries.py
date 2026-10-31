@@ -165,9 +165,17 @@ def synthetic_source_region(payload):
 
 
 def synthetic_document_answer(payload):
-    return answer(
-        *(payload["ranges"] if "ranges" in payload else [synthetic_source_region(payload)])
-    )
+    if "ranges" in payload:
+        # Group input may annotate sheet_state for the model; schema forbids extras.
+        ranges = [
+            {
+                key: part[key]
+                for key in ("sheet_name", "row_start", "row_end", "column_start", "column_end")
+            }
+            for part in payload["ranges"]
+        ]
+        return answer(*ranges)
+    return answer(synthetic_source_region(payload))
 
 
 @pytest.mark.parametrize("mutation", ["duplicate", "omit", "expand", "shrink", "unknown", "bool"])

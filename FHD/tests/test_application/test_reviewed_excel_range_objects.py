@@ -110,8 +110,14 @@ def test_partial_multirange_comparison_or_hole_is_not_clipped(selection):
 
 
 def test_filter_crosses_boundary_even_when_conditional_rule_is_inside():
-    with pytest.raises(ReviewedExcelError, match="未选尾列|空白上下文|真实数据"):
-        derive_document_workbook(sample(area="A1:A4", filter_area="A1:D4"), fragments("A1:C4"))
+    # No active filterColumn criteria: atomic cut may narrow AutoFilter to selection∩filter.
+    receipt = {}
+    body = sample(area="A1:A4", filter_area="A1:D4")
+    output = derive_document_workbook(body, fragments("A1:C4"), object_receipt=receipt)
+    sheet = load_workbook(BytesIO(output)).active
+    assert str(sheet.auto_filter.ref) == "A1:C4"
+    item = next(x for x in receipt["retained"] if x["type"] == "autoFilter")
+    assert item.get("narrowed_ref") == "A1:C4"
 
 
 def test_fully_outside_filter_and_rules_are_explicitly_excluded():
@@ -269,8 +275,25 @@ def test_filter_only_verified_empty_tail_preserves_node_without_expanding_busine
     ],
 )
 def test_empty_filter_tail_exception_rejects_any_meaningful_dependency(mutation):
-    with pytest.raises(ReviewedExcelError, match="尾列|空白上下文|绘图"):
-        derive_document_workbook(empty_tail_sample(mutation), fragments("A1:C4"))
+    # Most meaningful D-column mutations block empty-tail proof and narrow AutoFilter
+    # to selection∩filter. A few still fail closed (comment / unsupported parts) or keep
+    # the original ref when the blank-tail prover still accepts the cell (font-only style).
+    source = empty_tail_sample(mutation)
+    chosen = fragments("A1:C4")
+    if mutation == "comment":
+        with pytest.raises(ReviewedExcelError, match="尾列|空白上下文|绘图|部件"):
+            derive_document_workbook(source, chosen)
+        return
+    receipt = {}
+    output = derive_document_workbook(source, chosen, object_receipt=receipt)
+    sheet = load_workbook(BytesIO(output)).active
+    item = next(x for x in receipt["retained"] if x["type"] == "autoFilter")
+    if mutation == "style":
+        assert str(sheet.auto_filter.ref) == "A1:D4"
+        assert "empty_filter_tail" in item.get("reason", "")
+    else:
+        assert str(sheet.auto_filter.ref) == "A1:C4"
+        assert item.get("narrowed_ref") == "A1:C4"
 
 
 def test_filter_tail_proof_rejects_real_drawing_object():
@@ -289,8 +312,10 @@ def test_filter_tail_proof_rejects_real_drawing_object():
         ET.SubElement(root, f"{{{S}}}autoFilter", ref="A1:E2")
 
     body = rewrite(body, "xl/worksheets/sheet1.xml", add_filter)
-    with pytest.raises(ReviewedExcelError, match="绘图"):
-        plan_range_objects(body, "表", [{"sheet": "表", "range": "A1:C2"}])
+    # Drawing in the uncovered filter band blocks empty-tail proof; plan narrows instead.
+    plan = plan_range_objects(body, "表", [{"sheet": "表", "range": "A1:C2"}])
+    af = next(x for x in plan["receipt"]["retained"] if x["type"] == "autoFilter")
+    assert af.get("narrowed_ref") == "A1:C2"
 
 
 def test_filter_tail_dimensions_tampering_is_rejected():

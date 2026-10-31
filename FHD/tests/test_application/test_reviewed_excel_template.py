@@ -1545,8 +1545,16 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
         "dependencies": [],
         "reason": "报价",
     }
+    # Merge-cutting ranges are accepted with merge_cut_flattened_on_export (export flattens).
+    flatten_ok = [{**valid, "range": "A1:B4"}]
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_mimo_complete",
+        lambda *a, **k: LlmAssistResult(used_llm=True, data={"regions": flatten_ok}),
+    )
+    flattened = classify_semantic_workbook(review)
+    assert flattened["regions"][0]["merge_cut_flattened_on_export"] is True
+
     invalid = [
-        [{**valid, "range": "A1:B4"}],
         [{**valid, "range": "A1:E4"}],
         [valid, valid],
         [{**valid, "evidence": [{"sheet": "报价", "cell": "Z99"}]}],
@@ -2589,7 +2597,7 @@ def test_semantic_sequential_batches_budget_and_conflict(monkeypatch):
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
-    review = inspect_workbook(large_quotation(rows=2001))
+    review = inspect_workbook(large_quotation(rows=8001))
     calls = []
     region = {
         "sheet": "报价",
@@ -2610,7 +2618,7 @@ def test_semantic_sequential_batches_budget_and_conflict(monkeypatch):
     result = classify_semantic_workbook(review)
     assert len(calls) == result["budget"]["calls"] == 4
     assert result["budget"]["unread"] > 0
-    assert result["coverage"][0]["sent"] + result["budget"]["unread"] == 2001
+    assert result["coverage"][0]["sent"] + result["budget"]["unread"] == 8001
     assert len(result["regions"]) == 1
     assert len(result["input_summaries"]) == 4
     assert all("input_sha256" in summary for summary in result["input_summaries"])
@@ -2701,7 +2709,7 @@ def test_multibatch_failure_does_not_commit_partial_history(review_store, monkey
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
-    source = large_quotation()
+    source = large_quotation(rows=4001)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -2769,7 +2777,7 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     monkeypatch.setattr(routes, "plan_semantic_batches", plan_once)
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
-    source = large_quotation()
+    source = large_quotation(rows=4001)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -2856,7 +2864,7 @@ def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatc
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
-    source = large_quotation()
+    source = large_quotation(rows=4001)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -3354,7 +3362,7 @@ def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monke
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
-    source = large_quotation()
+    source = large_quotation(rows=4001)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -3396,7 +3404,7 @@ def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monke
         assert len(calls) == completed
         second = client.post(url + "/analyze", data={**data, "continue_authorized": "true"})
         assert second.status_code == 200 and len(calls) == completed + 1
-    assert second.json()["coverage"][0]["sent"] == 601 and len(calls) == total
+    assert second.json()["coverage"][0]["sent"] == 4001 and len(calls) == total
 
 
 def test_oversized_single_row_refused_before_provider_and_checkpoint(review_store, monkeypatch):
@@ -3436,9 +3444,9 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
     wb = Workbook()
     ws = wb.active
     ws.title = "大表"
-    for row in range(1, 602):
+    for row in range(1, 4002):
         ws.cell(row, 1, f"合成记录{row}")
-    ws["A1"], ws["H602"] = "报价单", "图例：单位为件"
+    ws["A1"], ws["H4002"] = "报价单", "图例：单位为件"
     out = BytesIO()
     wb.save(out)
     captured = []
@@ -3454,7 +3462,7 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
                         "range": "A1:A1",
                         "labels": ["quotation"],
                         "evidence": [{"sheet": "大表", "cell": "A1"}],
-                        "dependencies": [{"sheet": "大表", "cell": "H602"}],
+                        "dependencies": [{"sheet": "大表", "cell": "H4002"}],
                         "reason": "标题和图例",
                     }
                 ]
@@ -3464,12 +3472,12 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
     assert 2 <= len(captured) <= 4 and result["budget"]["unread"] == 0
-    assert all({"A1", "H602"} <= {cell["cell"] for cell in batch["cells"]} for batch in captured)
-    assert next(cell["context_only"] for cell in captured[0]["cells"] if cell["cell"] == "H602")
+    assert all({"A1", "H4002"} <= {cell["cell"] for cell in batch["cells"]} for batch in captured)
+    assert next(cell["context_only"] for cell in captured[0]["cells"] if cell["cell"] == "H4002")
     assert next(cell["context_only"] for cell in captured[1]["cells"] if cell["cell"] == "A1")
     from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
     assert all(len(batch["cells"]) <= MAX_MODEL_CELLS for batch in captured)
-    assert result["coverage"][0]["sent"] == 602
+    assert result["coverage"][0]["sent"] == 4002
 
 
 def test_full_width_row_does_not_create_empty_batch_or_drop_cells():
@@ -4034,7 +4042,9 @@ def test_product_saves_document_outside_original_print_with_explicit_choice(
 
 def _nine_batch_workbook():
     wb = Workbook()
-    for index, count in enumerate((1900, 600, 600, 265)):
+    # Counts sized for MAX_MODEL_CELLS=2000 to keep the historical 9-batch fairness shape
+    # (was 1900/600/600/265 under the prior 500-cell pack budget).
+    for index, count in enumerate((7600, 2400, 2400, 1060)):
         ws = wb.active if index == 0 else wb.create_sheet()
         ws.title = f"表{index}"
         if index == 0:
@@ -4636,8 +4646,9 @@ def test_document_derivation_blocks_uncertain_print_merge_and_dynamic_formula():
     ws.merge_cells("B3:B5")
     out = BytesIO()
     wb.save(out)
-    with pytest.raises(ValueError, match="合并"):
-        derive_document_workbook(out.getvalue(), part)
+    # Partial merge overlap is exported with flatten receipt, not a hard reject.
+    flattened = derive_document_workbook(out.getvalue(), part)
+    assert isinstance(flattened, (bytes, bytearray)) and len(flattened) > 0
 
 
 def test_model_document_to_template_library_roundtrip(review_store, monkeypatch):
@@ -5209,7 +5220,7 @@ def test_auto_group_resume_budget_and_download_multibatch(
     item = client.post(
         "/api/templates/reviewed-excel/classify",
         data={"expected_actor": "1:7"},
-        files={"files": ("batch.xlsx", large_quotation())},
+        files={"files": ("batch.xlsx", large_quotation(rows=2001))},
     ).json()["files"][0]
     path = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     form = {"version": item["version"], "sample_authorized": "true", "auto_group": "true"}
@@ -5221,7 +5232,7 @@ def test_auto_group_resume_budget_and_download_multibatch(
     assert client.post(path + "/analyze", data=form).status_code == 409
     from app.application.reviewed_excel_evidence import plan_semantic_batches
 
-    total = len(plan_semantic_batches(inspect_workbook(large_quotation()), 2, neutral=True)[0])
+    total = len(plan_semantic_batches(inspect_workbook(large_quotation(rows=2001)), 2, neutral=True)[0])
     done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
     while done.status_code == 200 and done.json().get("phase") in {"pending", "paused"}:
         done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
@@ -5248,7 +5259,7 @@ def test_auto_group_resume_budget_and_download_multibatch(
     download = client.get(url + "/0")
     assert download.status_code == 200
     book = load_workbook(BytesIO(download.content))
-    assert book["报价"]["A601"].value is not None
+    assert book["报价"]["A2001"].value is not None
 
 
 def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_store, monkeypatch):
@@ -5365,7 +5376,7 @@ def test_completed_invalid_response_is_counted_and_requires_explicit_retry(
     item = client.post(
         "/api/templates/reviewed-excel/classify",
         data={"expected_actor": "1:7"},
-        files={"files": ("合成.xlsx", large_quotation())},
+        files={"files": ("合成.xlsx", large_quotation(rows=4001))},
     ).json()["files"][0]
     calls = []
 
