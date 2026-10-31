@@ -1,5 +1,5 @@
 {
-  "lines": 2405246,
+  "lines": 2405409,
   "updated": "2026-10-31",
-  "note": "ELT product rename (/api/elt; etl_* tables; etl.* perms) rebased onto #2856 inline docking template"
+  "note": "选模板直达私有入库（P0-2）：ReviewedExcelTemplate 接线+EltCenterView/FE/BE 测试+CHANGELOG；约+160 行产品门闸修复，审批撤回与 /api/elt 不变"
 }

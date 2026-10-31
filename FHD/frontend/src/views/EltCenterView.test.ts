@@ -79,12 +79,17 @@ describe('data docking user-only intake', () => {
   })
 
   it('auto-previews and saves the selected A4 candidate', async () => {
-    const { wrapper, choose, button } = await setup(); await choose()
+    const { wrapper, choose } = await setup(); await choose()
     expect((archive.reviewExcel.mock.calls[0][0] as FormData).get('region_range')).toBe('A1:D4')
     const dispatch = vi.spyOn(window, 'dispatchEvent')
-    await wrapper.findAll('input[type="checkbox"]').find(input => input.element.closest('label')?.textContent?.includes('发布清理后的文件'))!.setValue(true)
-    await button('保存所选模板').trigger('click'); await flushPromises()
-    expect((archive.saveReviewedExcel.mock.calls[0][0] as FormData).get('review_id')).toBe('A1:D4')
+    // User intake: pick capsule → private_intake save (no enterprise publish checkbox).
+    await wrapper.findAll('.reviewed-template__preview--a4')[1].trigger('click'); await flushPromises()
+    expect(archive.saveReviewedExcel).toHaveBeenCalledTimes(1)
+    const form = archive.saveReviewedExcel.mock.calls[0][0] as FormData
+    expect(form.get('review_id')).toBe('A1:D4')
+    expect(form.get('private_intake')).toBe('true')
+    expect(form.get('publish_to_tenant')).toBe('false')
+    expect(form.get('candidate_id')).toBe('candidate-1')
     expect(dispatch.mock.calls.map(([e]) => e).filter(e => e.type === 'xcagi:templates-updated')).toHaveLength(1)
     wrapper.unmount()
   })
