@@ -13,6 +13,7 @@ from app.application.reviewed_excel_structural_index import (
     attach_structural_index_to_draft,
     build_workbook_structural_index,
     compress_structural_index_for_model,
+    prefer_structural_classification_if_undersegmented,
 )
 
 
@@ -97,3 +98,59 @@ def test_neutralize_keeps_structural_index_drops_structure_map():
     assert "structure_map" not in kept
     assert "rule_hints" not in kept
     assert "labels" not in kept
+
+
+
+def test_prefer_structural_when_strictly_more_atoms():
+    """Generic rule: promote when struct_n > model_n; keep model when equal or model has more."""
+    review = {
+        "sheet_overview": [{"sheet": "期间块", "sheet_state": "visible", "merged_regions": []}],
+        "workbook_structural_index": {
+            "schema_version": SCHEMA_VERSION,
+            "sheets": [
+                {
+                    "sheet": "期间块",
+                    "sheet_state": "visible",
+                    "columns": 4,
+                    "candidate_row_ranges": [
+                        {"start_row": 1, "end_row": 9, "basis": "block_title"},
+                        {"start_row": 10, "end_row": 20, "basis": "block_title"},
+                        {"start_row": 21, "end_row": 30, "basis": "block_title"},
+                    ],
+                }
+            ],
+        },
+        "sha256": "x",
+    }
+    # model under-segments (1 region vs 3 structural) → promote
+    under = {"regions": [{"sheet": "期间块", "range": "A1:D30"}]}
+    promoted = prefer_structural_classification_if_undersegmented(review, under)
+    assert promoted.get("workbook_structural_index_source") == "layout_dateblock_fallback"
+    assert len(promoted["regions"]) == 3
+
+    # equal counts → keep model
+    equal = {
+        "regions": [
+            {"sheet": "期间块", "range": "A1:D9"},
+            {"sheet": "期间块", "range": "A10:D20"},
+            {"sheet": "期间块", "range": "A21:D30"},
+        ]
+    }
+    kept = prefer_structural_classification_if_undersegmented(review, equal)
+    assert kept is equal
+
+    # model has more → keep model
+    over = {
+        "regions": [
+            {"sheet": "期间块", "range": "A1:D5"},
+            {"sheet": "期间块", "range": "A6:D9"},
+            {"sheet": "期间块", "range": "A10:D20"},
+            {"sheet": "期间块", "range": "A21:D30"},
+        ]
+    }
+    kept2 = prefer_structural_classification_if_undersegmented(review, over)
+    assert kept2 is over
+
+    # missing classification → structural
+    from_none = prefer_structural_classification_if_undersegmented(review, None)
+    assert len(from_none["regions"]) == 3

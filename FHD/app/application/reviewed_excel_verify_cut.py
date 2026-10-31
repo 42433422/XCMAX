@@ -408,22 +408,20 @@ def inspect_cut(review: dict, group: dict) -> dict:
         r2 = max(r[3] for r in rects)
         host_range = _range_to_a1(c1, r1, c2, r2)
         titles = _detect_title_blocks(cells, sheet, c1, r1, c2, r2)
-        # Structural block_title_rows may refine boundaries only when local
-        # heuristics already see stickiness (>=2 titles). Using them alone would
-        # over-split a single delivery note's agreement lines (breaks 26鑫顺 6/6
-        # while matching over-split GT atoms on similar sheets).
+        # Structural block_title_rows refine a cut whenever any fall inside the
+        # cut range (structural authority). Local heuristic title count is not a
+        # gate for consulting the index.
         index = review.get("workbook_structural_index") or {}
-        if len(titles) >= _MIN_TITLE_BLOCKS_FOR_STICKY:
-            struct_rows = {
-                block.get("row")
-                for sheet_info in index.get("sheets") or []
-                if sheet_info.get("sheet") == sheet
-                for block in sheet_info.get("block_title_rows") or []
-                if isinstance(block.get("row"), int) and r1 <= block["row"] <= r2
-            }
-            for row in sorted(struct_rows):
-                if not any(t.get("row") == row for t in titles):
-                    titles.append({"row": row, "text": "", "cell": f"A{row}"})
+        struct_rows = {
+            block.get("row")
+            for sheet_info in index.get("sheets") or []
+            if sheet_info.get("sheet") == sheet
+            for block in sheet_info.get("block_title_rows") or []
+            if isinstance(block.get("row"), int) and r1 <= block["row"] <= r2
+        }
+        for row in sorted(struct_rows):
+            if not any(t.get("row") == row for t in titles):
+                titles.append({"row": row, "text": "", "cell": f"A{row}"})
         for t in titles:
             title_blocks.append({**t, "sheet": sheet, "host_range": host_range})
         found = _detect_order_ledger_runs(cells, sheet, c1, r1, c2, r2)

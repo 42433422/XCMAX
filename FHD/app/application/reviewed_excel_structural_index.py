@@ -31,7 +31,7 @@ SCHEMA_VERSION = "workbook-structural-index-v1"
 STRUCTURAL_INDEX_MODEL_BUDGET_BYTES = 40_000
 
 _TITLE_HINT = re.compile(
-    r"(购货明细|回款明细|出货明细|送货单|出货单|报价|对账|明细表|"
+    r"(购货明细|回款明细|出货明细|送货单|退货单|出货单|报价|对账|明细表|"
     r"invoice|statement|receipt|delivery)",
     re.IGNORECASE,
 )
@@ -753,8 +753,11 @@ def prefer_structural_classification_if_undersegmented(
 ) -> dict[str, Any]:
     """Prefer layout/date-block atoms when keyword/model classify under-segments.
 
-    Triggers when classify is missing, or visible structural candidates exceed
-    model regions by a clear margin (or a title sheet has orphan 1x1 slices).
+    Structural index is an independent atom inventory. Prefer it when classify is
+    missing, model produced zero regions, or visible structural candidates strictly
+    outnumber model regions (under-segmentation). Also prefer it when the model
+    left multiple 1x1 orphan slices while structural has strictly more atoms.
+    No workbook-specific count thresholds.
     """
     index = review.get("workbook_structural_index") or {}
     candidates = iter_visible_structural_candidates(index) if index else []
@@ -787,12 +790,8 @@ def prefer_structural_classification_if_undersegmented(
         if c1 == c2 and r1 == r2:
             orphan_singles += 1
 
-    # Severe under-segmentation (cash-like) or title-sheet orphans (qicai-like).
-    severe = struct_n >= model_n + 10 or (model_n > 0 and struct_n >= int(model_n * 1.8))
-    orphan_gap = orphan_singles >= 2 and struct_n >= model_n + 2
-    # Mild gap on already-large multi-sheet ledgers (迎扬 45→49): promote without
-    # catching small delivery+ledger books like 26鑫顺 (7 vs 10).
-    mild_large = model_n >= 40 and 2 <= (struct_n - model_n) <= 8
-    if severe or orphan_gap or mild_large or model_n == 0:
+    undersegmented = struct_n > model_n
+    orphan_promote = orphan_singles >= 2 and struct_n > model_n
+    if undersegmented or orphan_promote or model_n == 0:
         return classification_from_structural_index(review, index=index)
     return classification
