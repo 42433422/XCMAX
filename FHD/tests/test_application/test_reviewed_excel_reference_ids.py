@@ -111,7 +111,7 @@ def test_grouping_uses_only_validated_region_and_evidence_ids(monkeypatch):
         "reason": "主体",
     }
     monkeypatch.setattr(
-        template, "_template_mimo_complete", lambda *a: SimpleNamespace(data={"documents": [group]})
+        template, "_template_llm_complete", lambda *a, **k: SimpleNamespace(data={"documents": [group]})
     )
     result = grouping.group_semantic_fragments({}, {})
     assert result[0]["fragments"] == [{"sheet": "表", "range": "A1:A2"}]

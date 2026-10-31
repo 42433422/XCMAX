@@ -456,13 +456,18 @@ def _normalize_range_groups(group_input: dict, data: dict) -> list[dict]:
 
 
 def group_semantic_fragments(
-    review: dict, classification: dict, *, prepare_only=False, expected_request_sha256=None
+    review: dict,
+    classification: dict,
+    *,
+    prepare_only=False,
+    expected_request_sha256=None,
+    owner_id: int | None = None,
 ) -> list[dict] | dict:
     """Ask the configured model to group only fully read, validated fragments."""
     import json
 
     from app.application.reviewed_excel_template import (
-        _template_mimo_complete,
+        _template_llm_complete,
         _validate_template_schema,
     )
 
@@ -554,7 +559,9 @@ def group_semantic_fragments(
         from app.application.reviewed_excel_audit import verify_request
 
         verify_request(audit_request, expected_request_sha256)
-    response = _template_mimo_complete(messages, schema, max_output_tokens)
+    response = _template_llm_complete(
+        messages, schema, max_output_tokens, owner_id=owner_id
+    )
     if not _validate_template_schema(schema, response.data):
         raise ReviewedExcelError("模型分组编号不在白名单")
     if not drawings:

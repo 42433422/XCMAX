@@ -1533,7 +1533,7 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
     out = BytesIO()
     wb.save(out)
     review = inspect_workbook(out.getvalue())
-    monkeypatch.delenv("FHD_TEMPLATE_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "unsupported-vendor")
     with pytest.raises(ValueError, match="未进行模型分类"):
         classify_semantic_workbook(review)
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -1885,7 +1885,10 @@ def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monk
     fake = LlmAssistResult(
         used_llm=True, data={"clear": [{"sheet": "报价", "cell": "B2"}], "reason": "测试建议"}
     )
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", lambda *args, **kwargs: fake)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *args, **kwargs: fake,
+    )
     revised = service.refine_proposal(review, base["version"], "清除客户", owner_id=7)
     assert revised["parent_version"] == base["version"] and revised["version"] != base["version"]
     assert revised["candidates"][2]["clear"] == [{"sheet": "报价", "cell": "B2"}]
@@ -1897,7 +1900,8 @@ def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monk
     with pytest.raises(ValueError):
         service.refine_proposal(review, base["version"], "清除固定说明", owner_id=7)
     monkeypatch.setattr(
-        "app.application.etl.llm_assist._complete", lambda *args, **kwargs: LlmAssistResult()
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *args, **kwargs: LlmAssistResult(),
     )
     with pytest.raises(ValueError, match="模型未调用"):
         service.refine_proposal(review, base["version"], "清除客户", owner_id=7)
@@ -1910,7 +1914,7 @@ def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, rev
 
     calls = []
 
-    def stub(messages, **_kwargs):
+    def stub(messages, schema=None, max_tokens=None, **_kwargs):
         calls.append(messages)
         return LlmAssistResult(
             used_llm=True,
@@ -1923,7 +1927,7 @@ def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, rev
             },
         )
 
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", stub)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", stub)
     client = review_store.client
     source = sample()
     upload = {
@@ -1988,9 +1992,9 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
 
     calls = []
 
-    def stub(messages, **kwargs):
+    def stub(messages, schema=None, max_tokens=None, **kwargs):
         calls.append(messages)
-        assert "candidates" in kwargs["schema"]["properties"]
+        assert "candidates" in schema["properties"]
         return LlmAssistResult(
             used_llm=True,
             data={
@@ -2002,7 +2006,7 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
             },
         )
 
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", stub)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", stub)
     client = review_store.client
     source = sample()
     upload = {
@@ -2034,33 +2038,54 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
     assert "input_messages" not in proposal["model"]
 
 
-def test_owner_file_template_authorization_is_bound_to_mimo(monkeypatch, review_store):
+def test_owner_file_template_authorization_uses_platform_by_default(monkeypatch, review_store):
     from app.application.etl.llm_assist_runtime import LlmAssistResult
 
     calls = []
 
     def fake(*args, **kwargs):
-        calls.append(1)
+        calls.append(kwargs.get("owner_id"))
         return LlmAssistResult(
-            used_llm=True, data={"candidates": [{"clear": [], "reason": "合成"} for _ in range(3)]}
+            used_llm=True,
+            data={"candidates": [{"clear": [], "reason": "合成"} for _ in range(3)]},
+            provider="platform",
+            model="platform-default",
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", fake)
     monkeypatch.delenv("FHD_TEMPLATE_LLM_PROVIDER", raising=False)
     client = review_store.client
     data = {"model_opt_in": "true", "own_file_authorized": "true", "expected_actor": "1:7"}
     source = sample()
     upload = {"file": ("synthetic.xlsx", source)}
-    rejected = client.post("/api/templates/reviewed-excel/preview", files=upload, data=data)
-    assert rejected.status_code == 400 and "供应商不匹配" in rejected.json()["detail"] and not calls
+    accepted = client.post("/api/templates/reviewed-excel/preview", files=upload, data=data)
+    assert accepted.status_code == 200, accepted.text
+    auth = accepted.json()["proposal"]["model"]["authorization"]
+    assert (
+        auth["kind"] == "owner_file"
+        and auth["provider"] == "platform"
+        and auth["owner_user_id"] == 7
+    )
+    assert auth["source_sha256"] == hashlib.sha256(source).hexdigest() and calls == [7]
+
+    # Explicit MiMo mapping remains available when product still maps platform → MiMo ids.
+    calls.clear()
+
+    def mimo_fake(*args, **kwargs):
+        calls.append(1)
+        return LlmAssistResult(
+            used_llm=True, data={"candidates": [{"clear": [], "reason": "合成"} for _ in range(3)]}
+        )
+
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", mimo_fake)
     accepted = client.post("/api/templates/reviewed-excel/preview", files=upload, data=data)
     assert accepted.status_code == 200, accepted.text
     auth = accepted.json()["proposal"]["model"]["authorization"]
     assert (
         auth["kind"] == "owner_file" and auth["provider"] == "mimo" and auth["owner_user_id"] == 7
     )
-    assert auth["source_sha256"] == hashlib.sha256(source).hexdigest() and calls == [1]
+    assert calls == [1]
     refine_data = {
         "review_id": accepted.json()["review_id"],
         "parent_version": accepted.json()["proposal"]["version"],
@@ -2084,6 +2109,7 @@ def test_owner_file_template_authorization_is_bound_to_mimo(monkeypatch, review_
     )
 
 
+
 def test_model_input_spreads_across_sheets_and_reports_uncovered(monkeypatch):
     import json
 
@@ -2102,11 +2128,11 @@ def test_model_input_spreads_across_sheets_and_reports_uncovered(monkeypatch):
     initial = service.make_proposals(review)
     seen = []
 
-    def stub(messages, **_kwargs):
+    def stub(messages, schema=None, max_tokens=None, **_kwargs):
         seen.append(json.loads(messages[1]["content"]))
         return LlmAssistResult(used_llm=True, data={"clear": [], "reason": "保留"})
 
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", stub)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", stub)
     revised = service.refine_proposal(review, initial["version"], "检查范围", owner_id=7)
     assert any(c["sheet"] == "第二页" for c in seen[0]["cells"])
     assert any(c["sheet"] == "第一页" and c["cell"] == "A120" for c in seen[0]["cells"])
@@ -2245,7 +2271,7 @@ def test_revocation_during_model_or_before_write_never_commits(review_store, mon
             used_llm=True, data={"candidates": [{"clear": [], "reason": "保留"} for _ in range(3)]}
         )
 
-    monkeypatch.setattr("app.application.etl.llm_assist._complete", revoke_model)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", revoke_model)
     form = {
         "review_id": preview["review_id"],
         "parent_version": preview["proposal"]["version"],

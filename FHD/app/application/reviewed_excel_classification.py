@@ -32,10 +32,10 @@ def _classify_semantic_batch(
     prepare_only: bool = False,
     reference_ids: bool = False,
     expected_request_sha256: str | None = None,
+    owner_id: int | None = None,
 ) -> dict:
     """Request bounded semantic regions; validate every reference before adoption."""
     import json
-    import os
 
     from openpyxl.utils.cell import (
         column_index_from_string,
@@ -43,10 +43,9 @@ def _classify_semantic_batch(
         get_column_letter,
     )
 
-    if (
-        not prepare_only
-        and os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo"
-    ):
+    from app.application.reviewed_excel_template import configured_template_llm_provider
+
+    if not prepare_only and configured_template_llm_provider() not in {"mimo", "platform"}:
         raise ReviewedExcelError("模板模型供应商未配置，未进行模型分类，未调用模型")
 
     allowed_labels = DOCUMENT_LABELS
@@ -266,7 +265,7 @@ def _classify_semantic_batch(
             ),
         },
     ]
-    from app.application.reviewed_excel_template import _template_mimo_complete
+    from app.application.reviewed_excel_template import _template_llm_complete
 
     if drawings:
         payload = json.loads(messages[1]["content"])
@@ -302,7 +301,9 @@ def _classify_semantic_batch(
         from app.application.reviewed_excel_audit import verify_request
 
         verify_request(audit_request, expected_request_sha256)
-    response = _template_mimo_complete(messages, provider_schema, max_output_tokens)
+    response = _template_llm_complete(
+        messages, provider_schema, max_output_tokens, owner_id=owner_id
+    )
     data = response.data
     raw_reference_response = None
     if reference_ids:

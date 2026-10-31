@@ -2,6 +2,11 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), downloadClassificationSource: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
+vi.mock('@/api/xcmaxMarketProxy', () => ({
+  default: {
+    llmResolveChatDefault: vi.fn().mockResolvedValue({ ok: true, provider: 'platform', model: 'default-chat' }),
+  },
+}))
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 const layout = (value: string) => [{ sheet: '报价', widths: [20], rows: [{ height: 20, cells: [{ cell: 'B2', value, formula: false, rowspan: 1, colspan: 1, bold: false, italic: false, font_size: 11, font_color: '', fill: '', align: 'left' }] }], truncated: false }]
 const candidates = [
@@ -235,7 +240,22 @@ describe('reviewed Excel template', () => {
     expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
     expect(api.analyzeClassification.mock.calls.at(-1)![0]).toBe('cancel2')
   })
-  it('authorizes only the selected owner file for MiMo classification', async () => {
+  it('shows platform model authorization copy instead of MiMo/Luna/Terra aliases', async () => {
+    const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
+    api.classifyExcel.mockResolvedValue({ files: [{ name: '1.xlsx', status: 'classified', classification_id: 'p1', version: 'v1', sheets: [sheet] }] })
+    const wrapper = mount(ReviewedExcelTemplate)
+    const input = wrapper.find('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], '1.xlsx')] })
+    await input.trigger('change')
+    await wrapper.findAll('button').find((b) => b.text().includes('分类所选'))!.trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('模型调用走软件当前平台默认模型')
+    expect(wrapper.text()).toContain('发送至平台模型')
+    expect(wrapper.text()).toContain('platform/default-chat')
+    expect(wrapper.text()).not.toContain('发送至 MiMo')
+    expect(wrapper.text()).toContain('Luna/Terra 私有别名不作为本页默认')
+    wrapper.unmount()
+  })
+  it('authorizes only the selected owner file for platform-model classification', async () => {
     const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
     api.classifyExcel.mockResolvedValue({ files: [1, 2].map((n) => ({ name: `${n}.xlsx`, status: 'classified', classification_id: `own${n}`, version: 'v1', sheets: [sheet] })) })
     api.analyzeClassification.mockReset().mockResolvedValue({ version: 'v2', model_status: 'returned', sheets: [sheet] })
@@ -537,7 +557,7 @@ describe('reviewed Excel template', () => {
     const checkbox = (label: string) => wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes(label))!
     await slices()[0].trigger('click'); await flushPromises()
     await checkbox('首轮使用模型').setValue(true)
-    await checkbox('的所选文档发送至 MiMo').setValue(true)
+    await checkbox('的所选文档发送至平台模型').setValue(true)
     await slices()[0].trigger('click'); await flushPromises()
     let form = api.reviewExcel.mock.calls.at(-1)![0] as FormData
     expect(form.get('model_opt_in')).toBe('true'); expect(form.get('own_file_authorized')).toBe('true')
@@ -547,7 +567,7 @@ describe('reviewed Excel template', () => {
     expect(form.get('own_file_authorized')).toBe('false'); expect(form.get('sample_authorized')).toBe('false')
     expect((checkbox('首轮使用模型').element as HTMLInputElement).checked).toBe(false)
     await checkbox('首轮使用模型').setValue(true)
-    await checkbox('的所选文档发送至 MiMo').setValue(true)
+    await checkbox('的所选文档发送至平台模型').setValue(true)
     await slices()[1].trigger('click'); await flushPromises()
     form = api.reviewExcel.mock.calls.at(-1)![0] as FormData
     expect(form.get('auto_slice_index')).toBe('1')

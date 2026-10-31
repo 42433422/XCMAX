@@ -40,6 +40,7 @@ def claim_request(
     code_version: str,
     model: str,
     phase: str,
+    provider: str | None = None,
 ) -> str:
     """Stage pre-send evidence in the same state as the caller's DB CAS claim.
 
@@ -52,7 +53,10 @@ def claim_request(
         (source_sha256, version, classification_id, code_version, model)
     ):
         raise ReviewedExcelError("归档身份信息不完整，未调用模型")
+    from app.application.reviewed_excel_template import configured_template_llm_provider
+
     digest = request_digest(request)
+    resolved_provider = provider or configured_template_llm_provider()
     record = {
         "phase": phase,
         "state": "inflight",
@@ -60,13 +64,14 @@ def claim_request(
         "classification_version": version,
         "source_sha256": source_sha256,
         "code_version": code_version,
-        "provider": "mimo",
+        "provider": resolved_provider,
         "model": model,
         "temperature": 0.0,
-        "thinking": {"type": "disabled"},
         "request": deepcopy(request),
         "request_sha256": digest,
     }
+    if resolved_provider == "mimo":
+        record["thinking"] = {"type": "disabled"}
     existing = state.setdefault("model_audit", [])
     if not isinstance(existing, list) or len(existing) >= 100:
         raise ReviewedExcelError("模型归档次数超过安全预算，未调用模型")

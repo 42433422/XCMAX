@@ -121,8 +121,109 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
     return bool(supported(schema) and matches(schema, payload))
 
 
+def configured_template_llm_provider() -> str:
+    """Return the live template LLM route: platform by default, MiMo only when explicitly mapped."""
+    import os
+
+    raw = os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower()
+    if raw == "mimo":
+        return "mimo"
+    if raw in {"", "platform", "modstore", "etl_default"}:
+        return "platform"
+    return raw
+
+
+def template_llm_model_label() -> str:
+    """Audit / claim label for the configured template route (never invent private aliases)."""
+    import os
+
+    provider = configured_template_llm_provider()
+    if provider == "mimo":
+        return os.environ.get("FHD_TEMPLATE_MIMO_MODEL", "").strip() or "mimo-unconfigured"
+    return os.environ.get("FHD_TEMPLATE_PLATFORM_MODEL", "").strip() or "platform-default"
+
+
+def _template_platform_complete(
+    messages: list[dict], schema: dict, max_tokens: int, *, owner_id: int | None = None
+):
+    """Template route through the software platform default model (market session)."""
+    import asyncio
+    import logging
+
+    from app.application.etl import llm_assist
+    from app.application.etl.llm_assist_runtime import etl_llm_mode, etl_llm_timeout_seconds
+    from app.application.etl.llm_session_provider import (
+        bind_etl_llm_owner,
+        current_owner_market_provider,
+        reset_etl_llm_owner,
+    )
+    from app.application.reviewed_excel_audit import ModelRequestNotSent, response_capture
+    from app.application.reviewed_excel_budget import template_timeout_seconds
+    from app.infrastructure.llm.structured_output import extract_json
+    from app.utils.operational_errors import BOUNDARY_ERRORS
+
+    if llm_assist.etl_llm_mode() == "off" or etl_llm_mode() == "off":
+        raise ModelRequestNotSent("模板平台模型已关闭；未调用模型")
+    token = None
+    if owner_id is not None:
+        token = bind_etl_llm_owner(int(owner_id))
+    try:
+        timeout_seconds = template_timeout_seconds()
+        provider = current_owner_market_provider(timeout_seconds=etl_llm_timeout_seconds())
+        if provider is None or not provider.is_configured:
+            raise ModelRequestNotSent("平台模型未登录或不可用；未调用模型")
+        audit_callback = response_capture()
+
+        async def call():
+            return await asyncio.wait_for(
+                provider.chat_completion(
+                    messages,
+                    temperature=0.0,
+                    max_tokens=max_tokens,
+                    **(
+                        {"_reviewed_excel_audit_response": audit_callback} if audit_callback else {}
+                    ),
+                ),
+                timeout=timeout_seconds,
+            )
+
+        try:
+            response = asyncio.run(call())
+            choice = (response or {}).get("choices", [])[0]
+            finish = choice.get("finish_reason")
+            if finish not in {None, "stop"}:
+                raise ReviewedExcelError("incomplete")
+            data = extract_json(str((choice.get("message") or {}).get("content") or ""))
+            if data is None or not _validate_template_schema(schema, data):
+                raise ReviewedExcelError("invalid")
+            model = str((response or {}).get("model") or template_llm_model_label())
+            return llm_assist.LlmAssistResult(
+                used_llm=True, model=model, data=data, provider="platform"
+            )
+        except BOUNDARY_ERRORS:
+            logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
+            raise ReviewedExcelError("模型调用失败或结果不完整，可能已产生费用；未自动重试") from None
+    finally:
+        if token is not None:
+            reset_etl_llm_owner(token)
+
+
+def _template_llm_complete(
+    messages: list[dict], schema: dict, max_tokens: int, *, owner_id: int | None = None
+):
+    """Dispatch template calls to platform models by default; keep explicit MiMo mapping."""
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+    provider = configured_template_llm_provider()
+    if provider == "mimo":
+        return _template_mimo_complete(messages, schema, max_tokens)
+    if provider == "platform":
+        return _template_platform_complete(messages, schema, max_tokens, owner_id=owner_id)
+    raise ModelRequestNotSent("模板模型供应商配置不受支持；未调用模型")
+
+
 def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int):
-    """Explicit template-only MiMo route; one bounded request, without telemetry payloads."""
+    """Explicit template-only MiMo route; kept when platform config still maps to MiMo ids."""
     import asyncio
     import logging
     import os
@@ -998,10 +1099,9 @@ def refine_proposal(
     current: list | None = None,
     initial: bool = False,
 ) -> dict:
-    """Use the existing ETL provider for a bounded, explicitly requested revision."""
+    """Use the configured platform (or mapped) template LLM for a bounded revision."""
     import json
 
-    from app.application.etl import llm_assist
     from app.application.etl.llm_session_provider import bind_etl_llm_owner, reset_etl_llm_owner
 
     base = make_proposals(review)
@@ -1108,15 +1208,7 @@ def refine_proposal(
     ]
     token = bind_etl_llm_owner(owner_id)
     try:
-        import os
-
-        configured_provider = os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower()
-        if configured_provider == "mimo":
-            result = _template_mimo_complete(messages, schema, 1400)
-        elif configured_provider:
-            raise ReviewedExcelError("模板模型供应商配置不受支持；未调用模型")
-        else:
-            result = llm_assist._complete(messages, schema=schema, max_tokens=1400)
+        result = _template_llm_complete(messages, schema, 1400, owner_id=owner_id)
     finally:
         reset_etl_llm_owner(token)
     if not result.used_llm or result.degraded:
@@ -1185,7 +1277,7 @@ def refine_proposal(
         messages,
         bounded,
         source_sha256=review["sha256"],
-        provider=configured_provider or "etl_default",
+        provider=configured_template_llm_provider(),
         model=result.model,
         max_output_tokens=1400,
     )

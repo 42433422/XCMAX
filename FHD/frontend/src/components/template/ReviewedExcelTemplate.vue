@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCache'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import templatePreviewApi from '@/api/templatePreview'
+import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
@@ -36,6 +37,29 @@ const selectedRows = ref<string[]>([])
 const classificationConfirmed = computed(() => !!file.value && !!classifications.value[files.value.indexOf(file.value)]?.confirmed)
 const classificationSampleAuthorized = ref(false)
 const classificationOwnFileAuthorized = ref(false)
+/** Live product route: platform default model (not Luna/Terra private aliases). */
+const platformModelProvider = ref('')
+const platformModelId = ref('')
+const platformModelLabel = computed(() => {
+  const model = platformModelId.value.trim()
+  const provider = platformModelProvider.value.trim()
+  if (model && provider) return `平台模型（${provider}/${model}）`
+  if (model) return `平台模型（${model}）`
+  return '平台模型'
+})
+async function refreshPlatformModel() {
+  try {
+    const route = await xcmaxMarketProxy.llmResolveChatDefault() as {
+      ok?: boolean; provider?: string; model?: string; display_name?: string
+    } | null
+    if (!route || route.ok === false) return
+    platformModelProvider.value = String(route.provider || '').trim()
+    platformModelId.value = String(route.model || route.display_name || '').trim()
+  } catch {
+    /* Keep generic「平台模型」 when resolve is unavailable for this session. */
+  }
+}
+onMounted(() => { void refreshPlatformModel() })
 const cancelAnalysis = ref(false)
 const analysisProgress = ref('')
 const classificationNotice = ref('')
@@ -803,7 +827,8 @@ async function downloadCandidate(index: number) {
     </details>
     <div v-if="classifications.length" class="classification-results">
       <label><input v-model="classificationSampleAuthorized" type="checkbox" :disabled="busy"> 确认所有待分析文件为获准发送的合成或公开样本，同意发送有界单元格及结构（每文件每轮默认一次，按服务配置最多四次，逐次执行；预算用完需再次确认）</label>
-      <label v-if="file"><input v-model="classificationOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的内容发送至 MiMo：每批最多 500 个单元格的文本、公式和结构坐标可能包含敏感数据；仅发送当前文件，逐批分析，每轮最多四次。</label>
+      <label v-if="file"><input v-model="classificationOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的内容发送至{{ platformModelLabel }}：每批最多 500 个单元格的文本、公式和结构坐标可能包含敏感数据；仅发送当前文件，逐批分析，每轮最多四次。</label>
+      <p class="reviewed-template__platform-model" role="status">模型调用走软件当前平台默认模型<span v-if="platformModelId">：{{ platformModelProvider ? `${platformModelProvider}/` : '' }}{{ platformModelId }}</span>；可在系统设置的平台模型配置中调整。离线批测用的 Luna/Terra 私有别名不作为本页默认。</p>
       <button type="button" :disabled="busy || classificationSampleAuthorized === classificationOwnFileAuthorized" @click="analyzeClassifications()">模型分析已分类文件</button>
       <button v-if="busy && analysisProgress" type="button" @click="cancelAnalysis = true">停止后续分析</button>
       <p v-if="analysisProgress">{{ analysisProgress }}</p>
@@ -902,7 +927,7 @@ async function downloadCandidate(index: number) {
     <label>模板名称 <input v-model="name" :disabled="busy"></label>
     <label><input v-model="initialModel" type="checkbox" :disabled="busy"> 首轮使用模型生成三个候选</label>
     <label><input v-model="sampleAuthorized" type="checkbox" :disabled="busy"> 确认此文件是获准发送的合成或公开样本，同意发送有界文本及结构概览</label>
-    <label v-if="file"><input v-model="templateOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的所选文档发送至 MiMo：最多 100 个非空单元格、每格最多 160 字，以及结构与反馈；可能包含敏感数据。</label>
+    <label v-if="file"><input v-model="templateOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的所选文档发送至{{ platformModelLabel }}：最多 100 个非空单元格、每格最多 160 字，以及结构与反馈；可能包含敏感数据。</label>
     <button type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview()">预览清理候选</button>
     <p v-if="error" role="alert">{{ error }}</p>
     <div v-if="review">

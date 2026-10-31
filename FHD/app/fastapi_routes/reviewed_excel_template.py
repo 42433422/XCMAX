@@ -922,6 +922,12 @@ async def reviewed_excel_classification_analyze(
                 batches, max_calls = await run_in_threadpool(
                     plan_semantic_batches, review, neutral=True
                 )
+                from app.application.reviewed_excel_template import (
+                    configured_template_llm_provider,
+                    template_llm_model_label,
+                )
+
+                template_provider = configured_template_llm_provider()
                 checkpoint = {
                     "budget_version": BUDGET_VERSION,
                     "version": version,
@@ -937,7 +943,7 @@ async def reviewed_excel_classification_analyze(
                         "tenant_id": tenant,
                         "owner_user_id": owner,
                         "source_sha256": run.file_sha256,
-                        "provider": "mimo",
+                        "provider": template_provider,
                         "provider_basis": "configured_before_call",
                         "scope": "this_file_bounded_cells_and_structure",
                         "authorized_at": utcnow().isoformat(),
@@ -966,6 +972,11 @@ async def reviewed_excel_classification_analyze(
                 from app.application.reviewed_excel_audit import claim_request
                 from app.build_identity import build_identity
 
+                from app.application.reviewed_excel_template import (
+                    configured_template_llm_provider,
+                    template_llm_model_label,
+                )
+
                 request_sha = claim_request(
                     state,
                     prepared,
@@ -973,7 +984,7 @@ async def reviewed_excel_classification_analyze(
                     version=version,
                     classification_id=classification_id,
                     code_version=build_identity()["git_sha"] or "unavailable",
-                    model=os.environ.get("FHD_TEMPLATE_MIMO_MODEL", "").strip() or "unconfigured",
+                    model=template_llm_model_label(),
                     phase="classification",
                 )
                 checkpoint.update({"phase": "inflight", "plan_digest": plan_digest})
@@ -994,6 +1005,7 @@ async def reviewed_excel_classification_analyze(
                         batch_review,
                         reference_ids=auto_group,
                         expected_request_sha256=request_sha,
+                        owner_id=owner,
                     )
                     claimed_draft = audit_holder[0]
                     _recheck(request, (tenant, owner))
@@ -1056,6 +1068,11 @@ async def reviewed_excel_classification_analyze(
                 from app.application.reviewed_excel_audit import claim_request
                 from app.build_identity import build_identity
 
+                from app.application.reviewed_excel_template import (
+                    configured_template_llm_provider,
+                    template_llm_model_label,
+                )
+
                 request_sha = claim_request(
                     state,
                     grouping_request,
@@ -1063,7 +1080,7 @@ async def reviewed_excel_classification_analyze(
                     version=version,
                     classification_id=classification_id,
                     code_version=build_identity()["git_sha"] or "unavailable",
-                    model=os.environ.get("FHD_TEMPLATE_MIMO_MODEL", "").strip() or "unconfigured",
+                    model=template_llm_model_label(),
                     phase="grouping",
                 )
                 checkpoint["phase"] = "inflight"
@@ -1082,6 +1099,7 @@ async def reviewed_excel_classification_analyze(
                         review,
                         result,
                         expected_request_sha256=request_sha,
+                        owner_id=owner,
                     )
                 except ModelRequestNotSent as exc:
                     record_not_sent(state, request_sha, exc.public_message)
@@ -1378,11 +1396,15 @@ async def reviewed_excel_preview(
         if model_opt_in:
             if sample_authorized == own_file_authorized:
                 raise ReviewedExcelError("请明确选择获授权样本或授权本人文件发送模型")
+            from app.application.reviewed_excel_template import configured_template_llm_provider
+
             if (
                 own_file_authorized
-                and os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo"
+                and configured_template_llm_provider() not in {"mimo", "platform"}
             ):
-                raise ReviewedExcelError("本人文件仅授权 MiMo；当前供应商不匹配，未调用模型")
+                raise ReviewedExcelError(
+                    "本人文件仅授权已配置的平台模型；当前供应商不受支持，未调用模型"
+                )
             try:
                 with tenant_scope(tenant):
                     proposal = await run_in_threadpool(
@@ -1398,9 +1420,7 @@ async def reviewed_excel_preview(
                 proposal["model"] = {"status": "unavailable", "message": public_excel_error(exc)}
             proposal["model"]["authorization"] = {
                 "kind": "owner_file" if own_file_authorized else "authorized_sample",
-                "provider": "mimo"
-                if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() == "mimo"
-                else "etl_default",
+                "provider": configured_template_llm_provider(),
                 "tenant_id": tenant,
                 "owner_user_id": owner,
                 "source_sha256": (selected_region or {}).get("source_sha256", review["sha256"]),
@@ -1539,12 +1559,12 @@ async def reviewed_excel_refine(
     tenant, owner = _identity(user)
     if not consent or sample_authorized == own_file_authorized:
         raise HTTPException(status_code=400, detail="请明确选择获授权样本或授权本人文件发送模型")
-    if (
-        own_file_authorized
-        and os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo"
-    ):
+    from app.application.reviewed_excel_template import configured_template_llm_provider
+
+    if own_file_authorized and configured_template_llm_provider() not in {"mimo", "platform"}:
         raise HTTPException(
-            status_code=400, detail="本人文件仅授权 MiMo；当前供应商不匹配，未调用模型"
+            status_code=400,
+            detail="本人文件仅授权已配置的平台模型；当前供应商不受支持，未调用模型",
         )
     try:
         current_cells = json.loads(current)
@@ -1572,9 +1592,7 @@ async def reviewed_excel_refine(
             source_scope = load_json(run.summary_json, {}).get("selected_region") or {}
             proposal["model"]["authorization"] = {
                 "kind": "owner_file" if own_file_authorized else "authorized_sample",
-                "provider": "mimo"
-                if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() == "mimo"
-                else "etl_default",
+                "provider": configured_template_llm_provider(),
                 "tenant_id": tenant,
                 "owner_user_id": owner,
                 "source_sha256": source_scope.get("source_sha256", run.file_sha256),
