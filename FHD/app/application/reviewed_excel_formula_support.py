@@ -13,6 +13,10 @@ from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 
 _SAFE_FUNCTIONS = {"SUM", "AVERAGE", "MIN", "MAX", "ROUND", "IF", "IFERROR", "COUNT", "COUNTA"}
+_SUBTOTAL = re.compile(
+    r"=SUBTOTAL\(\s*9\s*,\s*(\$?[A-Za-z]{1,3}\$?\d+:\$?[A-Za-z]{1,3}\$?\d+)\s*\)\Z",
+    re.IGNORECASE,
+)
 _CELL_RANGE = re.compile(r"\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?\Z")
 
 
@@ -74,6 +78,7 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
         inside: set[str] = set()
         proxies: set[str] = set()
         edges: dict[str, set[str]] = {}
+        subtotals: set[str] = set()
         while pending:
             address = pending.pop()
             if address in visited:
@@ -84,6 +89,20 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                 tokens = Tokenizer(value).items
             except (TypeError, TokenizerError):
                 raise ReviewedExcelError("公式无法静态解析") from None
+            has_subtotal = any(
+                token.type == "FUNC"
+                and token.subtype == "OPEN"
+                and token.value[:-1].upper() == "SUBTOTAL"
+                for token in tokens
+            )
+            if has_subtotal:
+                match = _SUBTOTAL.fullmatch(value)
+                if not match:
+                    raise ReviewedExcelError("SUBTOTAL仅支持9和单个同表静态竖向范围")
+                c1, r1, c2, r2 = bounded_range(match[1].replace("$", ""))
+                if c1 != c2 or r1 > r2:
+                    raise ReviewedExcelError("SUBTOTAL仅支持静态竖向范围")
+                subtotals.add(address)
             direct = []
             edges[address] = set()
             for token in tokens:
@@ -93,6 +112,7 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                     token.type == "FUNC"
                     and token.subtype == "OPEN"
                     and token.value[:-1].upper() not in _SAFE_FUNCTIONS
+                    and not (has_subtotal and token.value[:-1].upper() == "SUBTOTAL")
                 ):
                     raise ReviewedExcelError("公式函数依赖尚无法保真")
                 if token.type != "OPERAND" or token.subtype != "RANGE":
@@ -148,7 +168,34 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                 visiting.add(node)
                 stack.append((node, True))
                 stack.extend((child, False) for child in edges.get(node, set()))
+        # SUBTOTAL skips nested subtotals and filtered-out rows. Moving even a
+        # transitive dependency to the support sheet can change those semantics.
+        preserved: set[str] = set()
+        pending = list(subtotals)
+        while pending:
+            address = pending.pop()
+            if address in preserved:
+                continue
+            preserved.add(address)
+            cell = sheet[address]
+            if not selected(cell.column, cell.row):
+                raise ReviewedExcelError("SUBTOTAL依赖必须完整保留于同一文档原坐标")
+            for target in references.get(address, []):
+                c1, r1, c2, r2 = bounded_range(target.replace("$", ""))
+                pending.extend(
+                    f"{get_column_letter(col)}{row}"
+                    for row in range(r1, r2 + 1)
+                    for col in range(c1, c2 + 1)
+                )
         return {
+            "preserved_subtotal_cells": {
+                address: sheet[address].value for address in sorted(preserved)
+            },
+            "subtotal_hidden_rows": {
+                sheet[address].row: bool(sheet.row_dimensions[sheet[address].row].hidden)
+                for address in preserved
+            },
+            "subtotal_filter": _filter_signature(sheet) if preserved else None,
             "source_sha256": hashlib.sha256(body).hexdigest(),
             "sheet": sheet_name,
             "fragments": fragments,
@@ -171,6 +218,7 @@ def install_formula_support(book, plan: dict) -> str | None:
 
     from openpyxl.utils.cell import quote_sheetname
 
+    verify_preserved_subtotals(book, plan)
     support_cells = plan["support_cells"]
     if not support_cells:
         return None
@@ -221,4 +269,30 @@ def install_formula_support(book, plan: dict) -> str | None:
         book.calculation = CalcProperties()
     book.calculation.fullCalcOnLoad = True
     book.calculation.forceFullCalc = True
+    verify_preserved_subtotals(book, plan)
     return title
+
+
+def _filter_signature(sheet):
+    from openpyxl.xml.functions import tostring
+
+    return tostring(sheet.auto_filter.to_tree())
+
+
+def verify_preserved_subtotals(book, plan: dict) -> None:
+    """Fail closed if export changes any SUBTOTAL dependency or filter state."""
+    cells = plan.get("preserved_subtotal_cells", {})
+    if not cells:
+        return
+    if plan["sheet"] not in book.sheetnames:
+        raise ReviewedExcelError("SUBTOTAL来源工作表未保留")
+    sheet = book[plan["sheet"]]
+    if (
+        any(sheet[address].value != value for address, value in cells.items())
+        or any(
+            bool(sheet.row_dimensions[row].hidden) != hidden
+            for row, hidden in plan["subtotal_hidden_rows"].items()
+        )
+        or _filter_signature(sheet) != plan["subtotal_filter"]
+    ):
+        raise ReviewedExcelError("SUBTOTAL原坐标依赖或隐藏/筛选状态未保真")

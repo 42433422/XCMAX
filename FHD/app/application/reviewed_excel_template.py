@@ -524,12 +524,14 @@ def _restore_print_areas(body: bytes, areas: list[dict]) -> bytes:
 
 
 def derive_document_workbook(
-    body: bytes, fragments: list[dict], *, print_area_mode: str = "source"
+    body: bytes,
+    fragments: list[dict],
+    *,
+    print_area_mode: str = "source",
+    object_receipt: dict | None = None,
 ) -> bytes:
     """Create one isolated sheet at source coordinates; reject unprovable dependencies."""
     import re
-
-    from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
 
     info = inspect_workbook(body)
     if print_area_mode not in {"source", "selected"}:
@@ -564,6 +566,12 @@ def derive_document_workbook(
     from app.application.reviewed_excel_drawing import rectangles_cover, select_drawing_objects
 
     selected_drawings = select_drawing_objects(info, sheet_name, rectangles)
+    from app.application.reviewed_excel_range_objects import (
+        plan_range_objects,
+        restore_range_objects,
+    )
+
+    range_plan = plan_range_objects(body, sheet_name, fragments)
 
     def contained(bounds):
         return rectangles_cover(bounds, rectangles)
@@ -575,6 +583,7 @@ def derive_document_workbook(
     from app.application.reviewed_excel_formula_support import (
         install_formula_support,
         plan_formula_support,
+        verify_preserved_subtotals,
     )
 
     with warnings.catch_warnings(record=True) as found:
@@ -596,9 +605,7 @@ def derive_document_workbook(
             or ws.print_title_rows
             or ws.print_title_cols
             or ws.data_validations.count
-            or len(ws.conditional_formatting)
             or ws.tables
-            or ws.auto_filter.ref
         ):
             raise ReviewedExcelError("工作簿存在未验证的名称或区域依赖，暂不能提取")
         header_names = (
@@ -642,36 +649,6 @@ def derive_document_workbook(
                     continue
                 if cell.hyperlink:
                     raise ReviewedExcelError("文档包含未核验的链接，暂不能提取")
-                if cell.data_type == "f":
-                    try:
-                        tokens = Tokenizer(cell.value).items
-                    except (TokenizerError, TypeError):
-                        raise ReviewedExcelError("公式引用无法核验") from None
-                    for token in tokens:
-                        if token.type == "OPERAND" and token.subtype == "ERROR":
-                            raise ReviewedExcelError("公式含错误引用，暂不能提取")
-                        if (
-                            token.type == "FUNC"
-                            and token.subtype == "OPEN"
-                            and token.value[:-1].upper()
-                            not in {
-                                "SUM",
-                                "AVERAGE",
-                                "MIN",
-                                "MAX",
-                                "ROUND",
-                                "IF",
-                                "IFERROR",
-                                "COUNT",
-                                "COUNTA",
-                            }
-                        ):
-                            raise ReviewedExcelError("公式函数依赖无法核验")
-                        if token.type == "OPERAND" and token.subtype == "RANGE":
-                            if not re.fullmatch(
-                                r"\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?", token.value
-                            ):
-                                raise ReviewedExcelError("公式含外部或名称引用，暂不能提取")
         support_sheet = install_formula_support(wb, formula_plan)
         support_values = (
             {
@@ -703,6 +680,7 @@ def derive_document_workbook(
         result = output.getvalue()
         checked = load_workbook(BytesIO(result), data_only=False, keep_links=True, rich_text=True)
         try:
+            verify_preserved_subtotals(checked, formula_plan)
             saved_sheet = checked[sheet_name]
             if not isinstance(saved_sheet, Worksheet):
                 raise ReviewedExcelError("派生对象不是工作表")
@@ -736,6 +714,18 @@ def derive_document_workbook(
             from app.application.reviewed_excel_drawing import restore_drawing_parts
 
             result = restore_drawing_parts(body, result, selected_drawings)
+        result = restore_range_objects(result, range_plan)
+        if formula_plan.get("preserved_subtotal_cells"):
+            final_checked = load_workbook(
+                BytesIO(result), data_only=False, keep_links=True, rich_text=True
+            )
+            try:
+                verify_preserved_subtotals(final_checked, formula_plan)
+            finally:
+                final_checked.close()
+
+        if object_receipt is not None:
+            object_receipt.update(range_plan["receipt"])
         # ZIP member timestamps otherwise vary between saves, preventing a
         # verified re-derivation of exactly the same temporary document later.
         normalized = BytesIO()
@@ -764,8 +754,11 @@ def derive_document_workbook(
 
 def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) -> bytes:
     inspection = inspect_workbook(body)
+    from app.application.reviewed_excel_range_objects import require_cleanable_range_metadata
+
     if inspection["sha256"] != expected_sha256:
         raise ReviewedExcelError("文件与预览不一致，请重新预览")
+    require_cleanable_range_metadata(body)
     allowed = {
         (item["sheet"], item["cell"]) for item in inspection["cells"] if item["kind"] == "review"
     }

@@ -1242,6 +1242,7 @@ async def reviewed_excel_preview(
                     "version": classification_version,
                     "selection_basis": "model_group",
                     "auto_slice_index": auto_slice_index,
+                    "range_objects_receipt": selected_slice["range_objects_receipt"],
                     "archive_version_id": archive_version_id,
                     "source_sha256": classification.file_sha256,
                     "fragments": fragments,
@@ -1329,7 +1330,11 @@ async def reviewed_excel_preview(
                             {"sheet": region_sheet, "value": original_print}
                         ]
                 selected_region["print_area_mode"] = print_area_mode
-                body = derive_document_workbook(body, fragments, print_area_mode=print_area_mode)
+                object_receipt: dict = {}
+                body = derive_document_workbook(
+                    body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+                )
+                selected_region["range_objects_receipt"] = object_receipt
                 review = inspect_workbook(body)
                 selected_region["derived_print_area"] = next(
                     sheet["print_area"]
@@ -1477,7 +1482,10 @@ def reviewed_excel_candidate_download(
         if proposal is None or not candidate or not proposal.get("result_previews"):
             raise HTTPException(status_code=404, detail="候选模板不存在")
         body = _source(db, run, tenant, owner)
-        cleaned = clean_workbook(body, run.file_sha256, candidate["clear"])
+        try:
+            cleaned = clean_workbook(body, run.file_sha256, candidate["clear"])
+        except ReviewedExcelError as exc:
+            raise HTTPException(status_code=409, detail=public_excel_error(exc)) from None
     return Response(
         cleaned,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

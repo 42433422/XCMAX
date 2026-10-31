@@ -460,9 +460,11 @@ def test_auto_slice_preserves_source_print_area_or_rejects_without_implicit_cons
     original_derive = auto_slice.derive_document_workbook
     modes = []
 
-    def checked_derive(body, fragments, *, print_area_mode):
+    def checked_derive(body, fragments, *, print_area_mode, object_receipt=None):
         modes.append(print_area_mode)
-        return original_derive(body, fragments, print_area_mode=print_area_mode)
+        return original_derive(
+            body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+        )
 
     monkeypatch.setattr(auto_slice, "derive_document_workbook", checked_derive)
     with pytest.raises(ReviewedExcelError, match="打印区域跨越所选文档"):

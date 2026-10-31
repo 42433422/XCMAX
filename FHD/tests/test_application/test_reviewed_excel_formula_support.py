@@ -79,3 +79,101 @@ def test_actual_derivation_preserves_needed_formula_support_only():
     assert saved["依赖支撑"]["D1"].value == 4
     assert saved["依赖支撑"]["E1"].value is None
     assert saved["表"]["C1"].value is None
+
+
+def test_subtotal_nested_formulas_keep_original_coordinates_across_fragment_union():
+    from openpyxl import load_workbook
+
+    from app.application.reviewed_excel_formula_support import (
+        install_formula_support,
+        verify_preserved_subtotals,
+    )
+
+    original = workbook(
+        {
+            "A1": 2,
+            "A2": 3,
+            "A3": "=SUBTOTAL(9,A1:A2)",
+            "A4": "=SUBTOTAL(9,$A$1:$A$3)",
+            "B1": "=C1",
+            "C1": 7,
+        }
+    )
+    fragments = [{"sheet": "表", "range": "A1:B2"}, {"sheet": "表", "range": "A3:A4"}]
+    plan = plan_formula_support(original, fragments)
+    assert plan["support_cells"] == ["C1"]
+    assert set(plan["preserved_subtotal_cells"]) == {"A1", "A2", "A3", "A4"}
+    book = load_workbook(BytesIO(original))
+    install_formula_support(book, plan)
+    output = BytesIO()
+    book.save(output)
+    saved = load_workbook(BytesIO(output.getvalue()))
+    verify_preserved_subtotals(saved, plan)
+    assert saved["表"]["A4"].value == "=SUBTOTAL(9,$A$1:$A$3)"
+    assert saved["表"]["A3"].value == "=SUBTOTAL(9,A1:A2)"
+    assert saved["表"]["B1"].value == "='依赖支撑'!C1"
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "=SUBTOTAL(109,A1:A2)",
+        "=SUBTOTAL(9,A1:B1)",
+        "=SUBTOTAL(9,A1,A2)",
+        "=SUBTOTAL(9,A1)",
+        "=SUBTOTAL(9,表!A1:A2)",
+        '=SUBTOTAL(9,INDIRECT("A1:A2"))',
+        "=SUBTOTAL(9,A1:A2)+1",
+        "=SUM(SUBTOTAL(9,A1:A2))",
+        "=SUBTOTAL(9,#REF!)",
+    ],
+)
+def test_unsupported_subtotal_forms_fail_closed(formula):
+    with pytest.raises(ReviewedExcelError):
+        plan_formula_support(
+            workbook({"A1": 2, "A2": 3, "A3": formula}), [{"sheet": "表", "range": "A1:A3"}]
+        )
+
+
+@pytest.mark.parametrize(
+    "values, selected",
+    [
+        ({"A1": 1, "A2": 2, "A3": "=SUBTOTAL(9,A1:A2)"}, "A2:A3"),
+        ({"A1": "=B1", "A2": 2, "A3": "=SUBTOTAL(9,A1:A2)", "B1": 1}, "A1:A3"),
+        ({"A1": 1, "A2": 2, "A3": "=SUBTOTAL(9,A1:A2)", "B3": "=A3"}, "B3:B3"),
+    ],
+)
+def test_subtotal_cannot_use_support_cells_even_transitively(values, selected):
+    with pytest.raises(ReviewedExcelError, match="SUBTOTAL依赖必须完整保留"):
+        plan_formula_support(workbook(values), [{"sheet": "表", "range": selected}])
+
+
+@pytest.mark.parametrize("change", ["value", "formula", "hidden", "filter", "sheet"])
+def test_subtotal_export_guard_rejects_changed_source_semantics(change):
+    from openpyxl import load_workbook
+
+    from app.application.reviewed_excel_formula_support import verify_preserved_subtotals
+
+    book = load_workbook(
+        BytesIO(workbook({"A1": 1, "A2": "=SUBTOTAL(9,A1:A1)", "A3": "=SUBTOTAL(9,A1:A2)"}))
+    )
+    sheet = book["表"]
+    sheet.row_dimensions[1].hidden = True
+    sheet.auto_filter.ref = "A1:A3"
+    sheet.auto_filter.add_filter_column(0, ["1"])
+    output = BytesIO()
+    book.save(output)
+    plan = plan_formula_support(output.getvalue(), [{"sheet": "表", "range": "A1:A3"}])
+    verify_preserved_subtotals(book, plan)
+    if change == "value":
+        sheet["A1"] = 99
+    elif change == "formula":
+        sheet["A2"] = "=SUM(A1:A1)"
+    elif change == "hidden":
+        sheet.row_dimensions[1].hidden = False
+    elif change == "filter":
+        sheet.auto_filter.ref = "A1:A2"
+    else:
+        sheet.title = "不同表"
+    with pytest.raises(ReviewedExcelError, match="SUBTOTAL"):
+        verify_preserved_subtotals(book, plan)

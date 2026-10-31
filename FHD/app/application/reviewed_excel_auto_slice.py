@@ -121,10 +121,14 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
         # Listing/downloading automatic slices must never silently choose selected.
         if source.get("drawing_evidence") and source.get("read_only_print_areas"):
             raise ReviewedExcelError("原打印区域无法安全映射，暂不能自动裁切")
-        output = derive_document_workbook(body, fragments, print_area_mode=print_area_mode)
+        object_receipt: dict = {}
+        output = derive_document_workbook(
+            body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
+        )
         results.append(
             {
                 "print_area_mode": print_area_mode,
+                "range_objects_receipt": object_receipt,
                 "fragments": fragments,
                 "basis": basis,
                 "confirmed": False,
