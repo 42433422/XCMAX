@@ -86,7 +86,7 @@ def _cross_fragment_formula_links(cells: list[dict], fragments: list[dict]) -> l
                 tc1, tr1, tc2, tr2 = range_boundaries(target.replace("$", ""))
             except (TypeError, ValueError):
                 continue
-            if None in (tc1, tr1, tc2, tr2):
+            if tc1 is None or tr1 is None or tc2 is None or tr2 is None:
                 continue
             for fsheet, farea, c1, r1, c2, r2 in bounds:
                 if fsheet != sheet or (fsheet, farea) == owner:
