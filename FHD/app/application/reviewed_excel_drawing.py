@@ -391,7 +391,7 @@ def drawing_row_boundaries(sheet, drawings: list[dict]) -> list[int]:
         elif obj.get("to") is not None:
             last = int(obj["to"]["row"]) + 1
             obj["last_row"] = last
-            obj["last_col"] = int(obj["to"]["col"]) + 1
+            obj["last_col"] = int(obj["to"].get("col", 0)) + 1
         else:
             raise ReviewedExcelError("绘图边界尚未核验")
         if last > max_row:
