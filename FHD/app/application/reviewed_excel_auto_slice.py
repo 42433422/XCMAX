@@ -5,7 +5,7 @@ import re
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
 from app.application.etl.errors import ReviewedExcelError
-from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_evidence import bounded_range, prepare_auto_slice_review
 from app.application.reviewed_excel_legacy import ensure_slice_workbook
 from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook
 
@@ -58,9 +58,10 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
     openpyxl load and document derivation.
     """
     body, _receipt = ensure_slice_workbook(body)
-    source = inspect_workbook(body)
+    source = prepare_auto_slice_review(inspect_workbook(body), skip_hidden_sheets=True)
     if classification.get("source_sha256") != source["sha256"]:
         raise ReviewedExcelError("分类结果与原件不一致")
+    visible = set(source["sheets"])
     if source.get("drawing_evidence"):
         from app.application.reviewed_excel_drawing import grouping_drawings
 
@@ -82,18 +83,24 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
         raise ReviewedExcelError("没有可提取的模型区域")
     known = {}
     for region in regions:
+        if region.get("sheet") not in visible:
+            continue
         if region.get("open_fragment"):
             raise ReviewedExcelError("模型片段仍跨越未读边界，不能作为完整单据切片")
         key = (region["sheet"], region["range"])
         if key in known:
             raise ReviewedExcelError("模型区域重复")
         known[key] = region
+    if not known:
+        raise ReviewedExcelError("没有可提取的模型区域")
     assigned = set()
     groups = []
     for document in classification.get("suggested_documents", []):
         fragments = document.get("fragments")
         if not isinstance(fragments, list) or not fragments:
             raise ReviewedExcelError("模型分组无片段")
+        if any(fragment.get("sheet") not in visible for fragment in fragments):
+            continue
         group = []
         for fragment in fragments:
             if not isinstance(fragment, dict) or set(fragment) != {"sheet", "range"}:

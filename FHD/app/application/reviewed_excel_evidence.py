@@ -19,6 +19,48 @@ def bounded_range(value: str) -> tuple[int, int, int, int]:
     return c1, r1, c2, r2
 
 
+
+def prepare_auto_slice_review(review: dict, *, skip_hidden_sheets: bool = True) -> dict:
+    """Default auto classify→group→slice view: drop hidden/veryHidden worksheets.
+
+    Hidden sheets are skipped entirely — not packed, not suggested as documents,
+    and not fail-closed for extraction. Explicit derive_document_workbook still
+    rejects extracting a hidden sheet alone. Pass skip_hidden_sheets=False to
+    keep the full inspect review (legacy/debug only).
+    """
+    if not skip_hidden_sheets:
+        return review
+    overview = review.get("sheet_overview") or []
+    if not overview:
+        return review
+    hidden = {
+        sheet["sheet"]
+        for sheet in overview
+        if sheet.get("sheet_state", "visible") in {"hidden", "veryHidden"}
+    }
+    if not hidden:
+        return review
+    visible_sheets = [name for name in review.get("sheets", []) if name not in hidden]
+    return {
+        **review,
+        "sheets": visible_sheets,
+        "cells": [cell for cell in review.get("cells", []) if cell.get("sheet") not in hidden],
+        "sheet_overview": [sheet for sheet in overview if sheet.get("sheet") not in hidden],
+        "layout": [
+            item for item in review.get("layout", []) if item.get("sheet") not in hidden
+        ],
+        "drawing_evidence": [
+            obj for obj in review.get("drawing_evidence", []) if obj.get("sheet") not in hidden
+        ],
+        "read_only_print_areas": [
+            area
+            for area in review.get("read_only_print_areas", [])
+            if area.get("sheet") not in hidden
+        ],
+        "skipped_hidden_sheets": sorted(hidden),
+    }
+
+
 def summarize_model_input(
     messages: list[dict],
     cells: list[dict],
@@ -654,13 +696,26 @@ def observe_fragment_relationships(review: dict, sheets: list[dict]) -> dict:
 
 
 def plan_semantic_batches(
-    review: dict, max_calls: int | None = None, *, neutral: bool = False
+    review: dict,
+    max_calls: int | None = None,
+    *,
+    neutral: bool = False,
+    skip_hidden_sheets: bool | None = None,
 ) -> tuple[list[list[dict]], int]:
-    """Analyze bounded batches sequentially; fail closed on conflicting model regions."""
+    """Analyze bounded batches sequentially; fail closed on conflicting model regions.
+
+    When skip_hidden_sheets is True (default for neutral/auto-slice), hidden and
+    veryHidden worksheets are omitted from packing. Callers should pass the same
+    filtered review from prepare_auto_slice_review into classify/group/slice.
+    """
     import os
 
     from app.application.reviewed_excel_classification import classify_review_workbook
 
+    if skip_hidden_sheets is None:
+        skip_hidden_sheets = bool(neutral)
+    if skip_hidden_sheets:
+        review = prepare_auto_slice_review(review, skip_hidden_sheets=True)
     try:
         max_calls = (
             int(os.environ.get("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1"))

@@ -506,7 +506,8 @@ def test_nonzero_row_offset_is_not_a_proven_boundary():
     shape = {
         "sheet": "Sheet",
         "from": {"row": 0, "rowOff": 0, "col": 0, "colOff": 0},
-        "to": {"row": 1, "rowOff": 250000, "col": 1, "colOff": 0},
+        "to": None,
+        "extent": None,
     }
     set_drawing_columns(ws, [shape])
     assert shape["geometry_error"]
@@ -573,11 +574,22 @@ def test_archive_accepts_unsupported_geometry_without_allowing_model_or_derivati
     try:
         assert_archive_roundtrip(store, body)
         review = inspect_workbook(body)
-        assert "geometry_error" in review["drawing_evidence"][0]
-        with pytest.raises(ReviewedExcelError, match="字体指标"):
-            plan_drawing_batches(review)
-        with pytest.raises(ReviewedExcelError, match="字体指标"):
-            derive_document_workbook(body, [{"sheet": "表", "range": "A1:B2"}])
+        # twoCell marker bounds remain usable with sub-cell offsets.
+        assert "geometry_error" not in review["drawing_evidence"][0]
+        assert review["drawing_evidence"][0]["last_row"] >= 1
+        plan_drawing_batches(review)
+        # oneCell without extent still fail-closes
+        bare = {
+            "sheet": "表",
+            "from": {"row": 0, "col": 0, "colOff": 0, "rowOff": 0},
+            "to": None,
+            "extent": None,
+        }
+        from openpyxl import Workbook
+        from app.application.reviewed_excel_drawing import set_drawing_columns
+
+        set_drawing_columns(Workbook().active, [bare])
+        assert "geometry_error" in bare
     finally:
         try:
             next(fixture)
@@ -601,15 +613,16 @@ def test_two_dimensional_selection_rejects_horizontal_cut_and_holes():
 def test_nonzero_transform_is_readable_but_not_derivable():
     from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook
 
+    # Ordinary xfrm is allowed; unmeasured visual overflow (effectLst) still fail-closes.
     body = rewrite_drawing(
         synthetic_workbook_with_shape(),
         lambda b: b.replace(
             b"<x:spPr/>",
-            b'<x:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="999999" cy="999999"/></a:xfrm></x:spPr>',
+            b"<x:spPr><a:effectLst/></x:spPr>",
         ),
     )
     assert inspect_workbook(body)["drawing_evidence"][0]["geometry_error"]
-    with pytest.raises(ReviewedExcelError, match="独立变换"):
+    with pytest.raises(ReviewedExcelError, match="独立变换|视觉外溢"):
         derive_document_workbook(body, [{"sheet": "表", "range": "A1:B2"}])
 
 

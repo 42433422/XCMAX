@@ -320,6 +320,9 @@ def extract_drawing_evidence(z: ZipFile) -> list[dict]:
             body_nodes = list(obj.iter(f"{{{A}}}bodyPr"))
             if len(body_nodes) > 1 or (body_nodes and body_props is None):
                 raise ReviewedExcelError("绘图文字布局结构重复或未知")
+            # Theme stroke/effect references (lnRef/effectRef) and ordinary xfrm
+            # markers do not by themselves expand unverifiable cell coverage.
+            # Group child transforms already fail closed above via chOff/chExt.
             visual_overflow = any(
                 node.tag.split("}")[-1]
                 in {
@@ -328,9 +331,6 @@ def extract_drawing_evidence(z: ZipFile) -> list[dict]:
                     "scene3d",
                     "sp3d",
                     "custGeom",
-                    "effectRef",
-                    "ln",
-                    "lnRef",
                     "spAutoFit",
                 }
                 for node in obj.iter()
@@ -338,8 +338,8 @@ def extract_drawing_evidence(z: ZipFile) -> list[dict]:
             if text and (
                 body_props is None
                 or body_props.get("rot", "0") != "0"
-                or body_props.get("vertOverflow") != "clip"
-                or body_props.get("horzOverflow") != "clip"
+                or body_props.get("vertOverflow", "clip") != "clip"
+                or body_props.get("horzOverflow", "clip") != "clip"
             ):
                 visual_overflow = True
 
@@ -360,7 +360,7 @@ def extract_drawing_evidence(z: ZipFile) -> list[dict]:
                         {
                             "geometry_error": "绘图含独立变换或未约束视觉外溢，边界尚未核验，不能分批或派生"
                         }
-                        if transforms or visual_overflow
+                        if visual_overflow
                         else {}
                     ),
                 }
@@ -384,18 +384,11 @@ def drawing_row_boundaries(sheet, drawings: list[dict]) -> list[int]:
         first = obj["from"]["row"] + 1
         if not 1 <= first <= max_row:
             raise ReviewedExcelError("绘图锚点超出工作表范围")
-        if (
-            obj.get("geometry_error")
-            or obj["to"] is None
-            or any(
-                marker[key] for marker in (obj["from"], obj["to"]) for key in ("rowOff", "colOff")
-            )
-        ):
+        if obj.get("geometry_error") or not obj.get("last_row") or not obj.get("last_col"):
             raise ReviewedExcelError("绘图边界尚未核验")
-        last = obj["to"]["row"] + 1
+        last = int(obj["last_row"])
         if last > max_row:
             raise ReviewedExcelError("绘图超出工作表范围，无法安全确定边界")
-        obj["last_row"] = last
         unsafe.update(range(first + 1, last + 1))
     return [row for row in range(1, max_row + 2) if row not in unsafe]
 
@@ -512,21 +505,87 @@ def drawing_bounds(obj: dict) -> tuple:
     return (obj["from"]["col"] + 1, obj["from"]["row"] + 1, obj["last_col"], obj["last_row"])
 
 
-def set_drawing_columns(sheet, drawings: list[dict]) -> int:
-    """Only marker-defined horizontal bounds are provable without font metrics.
+def _row_height_emu(sheet, row: int) -> float:
+    """Worksheet row height in EMUs (1 pt = 12700 EMU). Uses sheet records only."""
+    height = sheet.row_dimensions[row].height
+    if height is None:
+        height = sheet.sheet_format.defaultRowHeight or 15
+    return float(height) * 12700
 
-    Extraction/archiving remains available for other validated drawing XML, but
-    model processing and derivation fail closed. Never estimate character widths.
+
+def _col_width_emu(sheet, col: int) -> float:
+    """Worksheet column width in EMUs from dimension records (ECMA-376 pixel path).
+
+    Uses stored width and OOXML default max-digit width 7 when theme fonts are
+    not separately verified — not a glyph-advance estimate from cell fonts.
+    """
+    from openpyxl.utils import get_column_letter
+
+    letter = get_column_letter(col)
+    width = sheet.column_dimensions[letter].width
+    if width is None:
+        width = sheet.sheet_format.defaultColWidth or 8.43
+    max_digit = 7
+    pixels = int(((256 * float(width) + int(128 / max_digit)) / 256) * max_digit)
+    return float(max(pixels, 1) * 9525)
+
+
+def _extent_last_cell(sheet, start: dict, cx: int, cy: int) -> tuple[int, int]:
+    """Map oneCell from+extent into inclusive 1-based last_row/last_col via sheet sizes."""
+    last_col = int(start["col"]) + 1
+    last_row = int(start["row"]) + 1
+    remain_x = float(start.get("colOff") or 0) + float(cx)
+    remain_y = float(start.get("rowOff") or 0) + float(cy)
+    guard = 0
+    while True:
+        guard += 1
+        if guard > 1024 or last_col > int(sheet.max_column) + 64:
+            raise ReviewedExcelError("绘图水平范围超出可核验列")
+        width = _col_width_emu(sheet, last_col)
+        if remain_x <= width:
+            break
+        remain_x -= width
+        last_col += 1
+    guard = 0
+    while True:
+        guard += 1
+        if guard > 1024 or last_row > int(sheet.max_row) + 64:
+            raise ReviewedExcelError("绘图垂直范围超出可核验行")
+        height = _row_height_emu(sheet, last_row)
+        if remain_y <= height:
+            break
+        remain_y -= height
+        last_row += 1
+    return last_row, last_col
+
+
+def set_drawing_columns(sheet, drawings: list[dict]) -> int:
+    """Resolve drawing cell coverage without guessing glyph advances.
+
+    twoCell anchors: use to-marker cells (sub-cell offsets stay inside end cells).
+    oneCell anchors: map extent EMUs through worksheet row/column dimension records.
+    Prior geometry_error (transform/overflow) stays fail-closed.
     """
     for obj in drawings:
+        if obj.get("geometry_error"):
+            continue
         end = obj["to"]
-        if end is None or any(
-            marker[key] for marker in (obj["from"], end) for key in ("colOff", "rowOff")
-        ):
-            obj["geometry_error"] = "绘图边界依赖字体指标或行高，尚未核验，不能分批或派生"
-        if not obj.get("geometry_error"):
+        if end is not None:
             obj["last_row"] = end["row"] + 1
             obj["last_col"] = end["col"] + 1
+            continue
+        extent = obj.get("extent") or {}
+        cx, cy = extent.get("cx"), extent.get("cy")
+        if not isinstance(cx, int) or not isinstance(cy, int) or cx < 0 or cy < 0:
+            obj["geometry_error"] = "绘图边界依赖字体指标或行高，尚未核验，不能分批或派生"
+            continue
+        try:
+            last_row, last_col = _extent_last_cell(sheet, obj["from"], cx, cy)
+        except ReviewedExcelError:
+            obj["geometry_error"] = "绘图边界依赖字体指标或行高，尚未核验，不能分批或派生"
+            continue
+        obj["last_row"] = last_row
+        obj["last_col"] = last_col
     return max([int(sheet.max_column), *(int(obj.get("last_col", 0)) for obj in drawings)])
 
 

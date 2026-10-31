@@ -14,6 +14,9 @@ from app.application.reviewed_excel_evidence import (
 from app.application.reviewed_excel_evidence import (
     plan_semantic_batches as plan_semantic_batches,
 )
+from app.application.reviewed_excel_evidence import (
+    prepare_auto_slice_review as prepare_auto_slice_review,
+)
 from app.application.reviewed_excel_partition import (
     DOCUMENT_LABELS as DOCUMENT_LABELS,
 )
@@ -861,9 +864,15 @@ def combine_semantic_batches(
     }
 
 
-def classify_semantic_workbook(review: dict) -> dict:
-    """Run the bounded standalone path, used by isolated replay and tests."""
-    batches, max_calls = plan_semantic_batches(review, neutral=True)
+def classify_semantic_workbook(review: dict, *, skip_hidden_sheets: bool = True) -> dict:
+    """Run the bounded standalone path, used by isolated replay and tests.
+
+    Default skip_hidden_sheets=True: auto-slice only sees visible worksheets.
+    """
+    review = prepare_auto_slice_review(review, skip_hidden_sheets=skip_hidden_sheets)
+    batches, max_calls = plan_semantic_batches(
+        review, neutral=True, skip_hidden_sheets=False
+    )
     from app.application.reviewed_excel_evidence import build_structure_map
 
     full_structure_map = build_structure_map(review, classify_review_workbook(review))
