@@ -241,6 +241,37 @@ export const etlApi = {
   retry: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
   replay: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/replay`, { method: 'POST' }),
   rollback: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
+  autoIngest: (body: {
+    source_path: string
+    file_name?: string
+    template_id?: string
+    review_id?: string
+    classification_id?: string
+    composer_note?: string
+    labels?: string[]
+  }) =>
+    request<Record<string, unknown>>('/api/etl/auto-ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  autoIngestBatches: (limit = 50, mine = true) =>
+    request<Array<Record<string, unknown>>>(
+      `/api/etl/auto-ingest/batches?limit=${limit}&mine=${mine ? 'true' : 'false'}`,
+    ),
+  withdrawAutoIngestBatch: (batchId: string) =>
+    request<Record<string, unknown>>(
+      `/api/etl/auto-ingest/batches/${encodeURIComponent(batchId)}/withdraw`,
+      { method: 'POST' },
+    ),
+  autoIngestProgress: (batchId: string) =>
+    request<{
+      batch_id: string
+      status?: string
+      kb_progress?: { stage?: string; pct?: number; message?: string; error?: string }
+      business_progress?: { stage?: string; pct?: number; message?: string; error?: string }
+      updated_at?: string
+    }>(`/api/etl/auto-ingest/batches/${encodeURIComponent(batchId)}/progress`),
   templates: () => request<EtlTemplate[]>('/api/etl/templates'),
   createTemplate: (body: {
     name: string

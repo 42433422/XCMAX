@@ -240,6 +240,13 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "etl_auto_ingest",
+        lambda: __import__("app.fastapi_routes.etl_auto_ingest", fromlist=["router"]).router,
+        priority=13,
+        required_in_ci=True,
+    )
+    _mount(
+        registry,
         "etl_targets",
         lambda: __import__("app.fastapi_routes.etl_targets", fromlist=["router"]).router,
         priority=13,

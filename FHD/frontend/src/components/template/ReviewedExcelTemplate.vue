@@ -4,6 +4,7 @@ import { captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCach
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import templatePreviewApi from '@/api/templatePreview'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
+import { etlApi } from '@/api/etl'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
@@ -124,6 +125,45 @@ const error = ref('')
 const busy = ref(false)
 const savedId = ref('')
 const savedModelStatus = ref('')
+const ingestBatchId = ref('')
+const kbProgress = ref<{ stage?: string; pct?: number; message?: string; error?: string } | null>(null)
+const businessProgress = ref<{ stage?: string; pct?: number; message?: string; error?: string } | null>(null)
+let ingestPollTimer: ReturnType<typeof setInterval> | null = null
+function stopIngestPoll() {
+  if (ingestPollTimer) {
+    clearInterval(ingestPollTimer)
+    ingestPollTimer = null
+  }
+}
+async function pollIngestProgress() {
+  const id = ingestBatchId.value
+  if (!id) return
+  try {
+    const data = await etlApi.autoIngestProgress(id)
+    kbProgress.value = data.kb_progress || null
+    businessProgress.value = data.business_progress || null
+    const kbDone = Number(data.kb_progress?.pct || 0) >= 100
+    const bizDone = Number(data.business_progress?.pct || 0) >= 100
+    const terminal = ['applied', 'failed', 'withdrawn'].includes(String(data.status || ''))
+    if ((kbDone && bizDone) || terminal) {
+      stopIngestPoll()
+      savedModelStatus.value = `自动入库批次 ${id}（状态 ${data.status || 'unknown'}）。可在审批中心撤回。`
+    }
+  } catch (err) {
+    businessProgress.value = {
+      stage: 'error',
+      pct: Number(businessProgress.value?.pct || 0),
+      message: err instanceof Error ? err.message : '进度读取失败',
+      error: 'poll_failed',
+    }
+  }
+}
+function startIngestPoll(batchId: string) {
+  stopIngestPoll()
+  ingestBatchId.value = batchId
+  void pollIngestProgress()
+  ingestPollTimer = setInterval(() => { void pollIngestProgress() }, 800)
+}
 function layoutFor(index: number) { return index === 0 ? review.value?.layout?.[sheetIndex.value] : proposal.value?.result_previews?.[index - 1]?.layout?.[sheetIndex.value] }
 function equivalentTo(index: number): number | null {
   const candidates = proposal.value?.candidates || []
@@ -153,7 +193,7 @@ function clearTemplateModelAuthorization() {
 }
 function resetReview() {
   review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0
-  savedId.value = ''; savedModelStatus.value = ''; sheetIndex.value = 0
+  savedId.value = ''; savedModelStatus.value = ''; ingestBatchId.value = ''; kbProgress.value = null; businessProgress.value = null; stopIngestPoll(); sheetIndex.value = 0
   feedback.value = ''; consent.value = false; publishToTenant.value = false
 }
 function resetSelectionState() {
@@ -192,6 +232,7 @@ watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
   error.value = hadWork ? '登录身份已变化，已停止后续原件处理；请在当前账号重新选择文件，已发出的请求请在原账号核对。' : ''
   emit('stage', 'archive')
 }, { flush: 'sync' })
+onBeforeUnmount(() => { stopIngestPoll() })
 onBeforeUnmount(() => { alive = false; operationEpoch += 1; selectionEpoch += 1 })
 function openFilePicker() {
   if (!alive || busy.value) return
@@ -761,7 +802,15 @@ async function save() {
     const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string }
     if (!current()) return
     savedId.value = result.template_id
-    savedModelStatus.value = proposal.value.candidates[candidateIndex.value].id.startsWith('model_') ? '已选择模型建议，并以本次确认的清理范围保存。' : '本次保存使用规则或人工选择。'
+    const ingest = (result as { auto_ingest?: { batch_id?: string; status?: string; kb_progress?: { pct?: number }; business_progress?: { pct?: number } } }).auto_ingest
+    if (ingest?.batch_id) {
+      kbProgress.value = ingest.kb_progress || { stage: 'queued', pct: 0, message: '排队写入知识库' }
+      businessProgress.value = ingest.business_progress || { stage: 'queued', pct: 0, message: '排队写入业务域' }
+      savedModelStatus.value = `正在自动入库（批次 ${ingest.batch_id}，状态 ${ingest.status || 'running'}）…`
+      startIngestPoll(String(ingest.batch_id))
+    } else {
+      savedModelStatus.value = proposal.value.candidates[candidateIndex.value].id.startsWith('model_') ? '已选择模型建议，并以本次确认的清理范围保存。' : '本次保存使用规则或人工选择。'
+    }
     review.value = null
     emit('saved')
   } catch (err) { if (!current()) return; error.value = `${err instanceof Error ? err.message : '保存失败'}；如果结果未知，请先核对模板库和分类记录，勿重复提交。` }
@@ -1017,8 +1066,12 @@ async function downloadCandidate(index: number) {
         <div
           v-for="(candidate, index) in proposal.candidates"
           :key="candidate.id"
-          class="reviewed-template__preview reviewed-template__preview--a4"
-          :class="{ 'reviewed-template__preview--selected': candidateIndex === index }"
+          class="reviewed-template__preview reviewed-template__preview--a4 reviewed-template__preview--capsule"
+          :class="{
+            'reviewed-template__preview--selected': candidateIndex === index,
+            'reviewed-template__preview--capsule-green': candidateIndex === index,
+            'reviewed-template__preview--capsule-yellow': candidateIndex !== index,
+          }"
           role="option"
           :aria-selected="candidateIndex === index"
           tabindex="0"
@@ -1042,7 +1095,7 @@ async function downloadCandidate(index: number) {
           </span>
         </div>
       </div>
-      <p class="reviewed-template__a4-hint">点选卡片选用；蓝框为当前所选。</p>
+      <p class="reviewed-template__a4-hint">点选卡片选用；黄胶囊=未选，绿胶囊=已选。</p>
       <p>版本 {{ selectedVersion + 1 }} · {{ proposal.model.status === 'returned' ? '模型已返回建议，尚待用户确认' : proposal.model.status === 'unavailable' ? '模型不可用，显示确定性规则建议' : '确定性规则建议，未调用模型' }}<span v-if="proposal.model.status === 'returned'"> · 输入 {{ proposal.model.cells_sent }}/{{ proposal.model.cells_total }} 格{{ proposal.model.truncated ? '（已截断）' : '' }}</span></p>
       <details v-if="proposal.model.input_summary"><summary>查看模型输入摘要及来源坐标（不含正文）</summary><pre>{{ JSON.stringify(proposal.model.input_summary, null, 2) }}</pre></details>
       <details v-if="proposal.model.input_messages"><summary>历史记录中的模型输入正文（旧记录未自动清理）</summary><pre>{{ JSON.stringify(proposal.model.input_messages, null, 2) }}</pre></details>
@@ -1056,6 +1109,22 @@ async function downloadCandidate(index: number) {
       <button type="button" :disabled="publicationRestricted || !name.trim() || !publishToTenant || busy || selectedVersion !== proposals.length - 1 || proposal.result_previews?.length !== 3" @click="save">保存所选模板</button>
     </div>
     <p v-if="savedId">已保存到模板库。{{ savedModelStatus }} 可再次预览当前原件并保存新模板，已有模板不会被覆盖。<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
+    <div v-if="ingestBatchId" class="etl-ingest-progress" aria-label="自动入库真实进度">
+      <div class="etl-ingest-progress__row">
+        <span>知识库</span>
+        <div class="etl-ingest-progress__track" role="progressbar" :aria-valuenow="Number(kbProgress?.pct || 0)" aria-valuemin="0" aria-valuemax="100">
+          <div class="etl-ingest-progress__fill etl-ingest-progress__fill--kb" :style="{ width: `${Number(kbProgress?.pct || 0)}%` }" />
+        </div>
+        <small>{{ Number(kbProgress?.pct || 0) }}% · {{ kbProgress?.message || kbProgress?.stage || '…' }}</small>
+      </div>
+      <div class="etl-ingest-progress__row">
+        <span>业务域</span>
+        <div class="etl-ingest-progress__track" role="progressbar" :aria-valuenow="Number(businessProgress?.pct || 0)" aria-valuemin="0" aria-valuemax="100">
+          <div class="etl-ingest-progress__fill etl-ingest-progress__fill--biz" :style="{ width: `${Number(businessProgress?.pct || 0)}%` }" />
+        </div>
+        <small>{{ Number(businessProgress?.pct || 0) }}% · {{ businessProgress?.message || businessProgress?.stage || '…' }}</small>
+      </div>
+    </div>
     </div>
 
       </div>
@@ -1475,4 +1544,44 @@ async function downloadCandidate(index: number) {
       "hint hint";
   }
 }
+
+.reviewed-template__preview--capsule-yellow {
+  border-color: #e6b422;
+  background: linear-gradient(180deg, #fff8e1 0%, #f3f5f8 55%);
+  box-shadow: 0 0 0 2px rgb(230 180 34 / 28%);
+}
+.reviewed-template__preview--capsule-green {
+  border-color: #1f9d55;
+  background: linear-gradient(180deg, #e8f8ef 0%, #f3f8fc 55%);
+  box-shadow: 0 0 0 3px rgb(31 157 85 / 28%);
+}
+.etl-ingest-progress {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  border: 1px solid #d9e0e8;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+.etl-ingest-progress__row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr auto;
+  gap: 0.55rem;
+  align-items: center;
+  font-size: 12px;
+}
+.etl-ingest-progress__track {
+  height: 10px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+.etl-ingest-progress__fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+.etl-ingest-progress__fill--kb { background: #2563eb; }
+.etl-ingest-progress__fill--biz { background: #059669; }
 </style>
