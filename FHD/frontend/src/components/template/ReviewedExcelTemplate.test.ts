@@ -666,4 +666,34 @@ describe('reviewed Excel template', () => {
     await next.trigger('click'); await flushPromises(); expect(wrapper.text()).toContain('模型已返回建议'); expect(wrapper.findAll('.reviewed-template__preview')).toHaveLength(4)
     await wrapper.findAll('button').find((b) => b.text().includes('查看版本 1'))!.trigger('click'); expect(wrapper.text()).toContain('确定性规则建议')
   })
+
+  it('composer drag-drop stages files without archiving until start', async () => {
+    api.archiveClassifyExcel.mockResolvedValue({ name: 'drag.xlsx', status: 'classified', classification_id: 'd1', version: 'v1', sheets: [{ sheet: 'S', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['unknown'], checked_cells: 1, parent_heading: '', dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }] })
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const composer = wrapper.get('.etl-composer')
+      const file = new File(['x'], 'drag.xlsx')
+      await composer.trigger('dragenter', { dataTransfer: { files: [file] } })
+      expect(wrapper.find('.etl-composer--dragover').exists()).toBe(true)
+      await composer.trigger('dragleave', { relatedTarget: null })
+      await composer.trigger('drop', { dataTransfer: { files: [file] } })
+      await flushPromises()
+      expect(api.archiveClassifyExcel).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain('drag.xlsx')
+      await wrapper.get('.etl-composer__start').trigger('click'); await flushPromises()
+      expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(1)
+      expect(wrapper.find('.etl-intake-empty').exists()).toBe(false)
+    } finally { wrapper.unmount() }
+  })
+
+  it('opens the hidden file picker from the attach control', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const input = wrapper.get('input.etl-composer__file-input').element as HTMLInputElement
+      const click = vi.spyOn(input, 'click').mockImplementation(() => undefined)
+      await wrapper.get('.etl-composer__attach').trigger('click')
+      expect(click).toHaveBeenCalledTimes(1)
+    } finally { wrapper.unmount() }
+  })
+
 })

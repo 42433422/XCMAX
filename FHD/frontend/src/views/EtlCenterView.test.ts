@@ -218,4 +218,38 @@ describe('data docking archive-first workflow', () => {
     expect(archive.archiveClassifyExcel).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
+
+  it('returns from history run deep-link to archive without recreating import', async () => {
+    legacy.runs.mockResolvedValue([])
+    const { wrapper, router, button } = await setup('run-42')
+    expect(wrapper.find('button.active').text()).toContain('历史导入任务')
+    await button('原件归档与模板整理').trigger('click'); await flushPromises()
+    expect(router.currentRoute.value.query.run_id).toBeUndefined()
+    expect(wrapper.find('button.active').text()).toContain('原件归档与模板整理')
+    expect(wrapper.text()).toContain('导入文件 → 开始处理 → 选模板')
+    wrapper.unmount()
+  })
+
+  it('shows chatlike empty composer guidance before files are chosen', async () => {
+    const { wrapper } = await setup()
+    expect(wrapper.text()).toContain('导入 Excel，开始整理')
+    expect(wrapper.text()).toContain('把文件拖到底部对话框')
+    expect(wrapper.find('.etl-composer__start').text()).toContain('开始处理')
+    expect(wrapper.find('.etl-composer__start').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('selects an A4 candidate card in the template picker after preview', async () => {
+    const { wrapper, choose, button } = await setup(); await choose()
+    await button('确认分类并继续').trigger('click'); await flushPromises()
+    await button('预览清理候选').trigger('click'); await flushPromises()
+    const cards = wrapper.findAll('.reviewed-template__preview--a4')
+    expect(cards).toHaveLength(3)
+    expect(cards[0].attributes('aria-selected')).toBe('true')
+    await cards[2].trigger('click')
+    expect(cards[2].attributes('aria-selected')).toBe('true')
+    expect(wrapper.text()).toContain('点选卡片选用')
+    wrapper.unmount()
+  })
+
 })
