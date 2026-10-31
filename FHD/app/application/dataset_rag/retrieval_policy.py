@@ -114,10 +114,13 @@ def _tokenize_for_rerank(text: str) -> list[str]:
 
 
 def _deterministic_answer(query: str, chunks: list[RetrievedChunk]) -> str:
+    """Customer-facing fallback when no LLM is wired (知识库 / 智能对话 tone)."""
     if not chunks:
         return ""
     excerpt = chunks[0].text.strip().replace("\n", " ")
     if len(excerpt) > 320:
         excerpt = excerpt[:317].rstrip() + "..."
-    prefix = f"Based on the retrieved dataset evidence for {query!r}: " if query else ""
+    # Align with Chinese product UX (智能对话 / Persy 知识库); keep [1] citation marker.
+    q = str(query or "").strip()
+    prefix = f"根据知识库资料，关于「{q}」：" if q else "根据知识库资料："
     return f"{prefix}{excerpt} [1]"
