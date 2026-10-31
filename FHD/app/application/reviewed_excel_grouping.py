@@ -5,14 +5,20 @@ from typing import Any
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
 from app.application.etl.errors import ReviewedExcelError
-from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_evidence import (
+    MAX_MODEL_CELLS,
+    MAX_MODEL_TEXT_BYTES,
+    bounded_range,
+)
 
 
 def _structure_sample_cells(inside: list[dict]) -> list[dict]:
     """Sample first/middle/last structure rows and a capped formula set.
 
-    Keep middle-structure enrichment for final grouping, but stay inside the
-    prepare_grouping cell budget (500 / 96KB) on multi-fragment workbooks.
+    Classification transport may send up to MAX_MODEL_CELLS (2000) per pack;
+    grouping still samples structure only — never dumps full packs unsampled.
+    Gate in prepare_grouping uses the shared cell/byte caps so multi-fragment
+    samples (previously failing at 617 > 500) fit after sampling.
     """
     by_row: dict[int, list[dict]] = {}
     for cell in inside:
@@ -26,7 +32,7 @@ def _structure_sample_cells(inside: list[dict]) -> list[dict]:
     selected: list[dict] = []
     for row in sorted(chosen_rows):
         # 3 cells/row (was 4): enough for headers/keys without blowing the
-        # global 500-cell grouping budget across many fragments.
+        # sampled grouping budget across many fragments.
         selected.extend(by_row[row][:3])
     formulas = [cell for cell in inside if cell.get("kind") == "formula"]
     formula_cap = 8
@@ -169,7 +175,10 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
         )
     cells = list(chosen.values())
     cross_fragment_formulas = _cross_fragment_formula_links(cells, fragments)
-    if len(cells) > 500 or sum(len(c["value"].encode("utf-8")) + 64 for c in cells) > 96_000:
+    if (
+        len(cells) > MAX_MODEL_CELLS
+        or sum(len(c["value"].encode("utf-8")) + 64 for c in cells) > MAX_MODEL_TEXT_BYTES
+    ):
         raise ReviewedExcelError("分组证据超过本轮安全预算")
     from app.application.reviewed_excel_reference_ids import source_sheet_prefixes
 

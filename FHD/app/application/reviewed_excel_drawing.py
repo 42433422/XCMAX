@@ -728,11 +728,13 @@ def grouping_drawings(review: dict, fragments: list[dict], cells: list[dict]) ->
     if len(chosen) != len(review["drawing_evidence"]):
         raise ReviewedExcelError("绘图证据覆盖不完整，不能分组")
     drawings = list(chosen.values())
+    from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS, MAX_MODEL_TEXT_BYTES
+
     if (
-        len(cells) + len(drawings) > 500
+        len(cells) + len(drawings) > MAX_MODEL_CELLS
         or sum(len(c["value"].encode()) + 64 for c in cells)
         + sum(len(json.dumps(obj, ensure_ascii=False).encode()) + 64 for obj in drawings)
-        > 96_000
+        > MAX_MODEL_TEXT_BYTES
     ):
         raise ReviewedExcelError("分组绘图证据超过安全预算")
     return drawings

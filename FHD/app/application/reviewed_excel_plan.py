@@ -6,6 +6,7 @@ from typing import NoReturn
 
 from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_budget import BUDGET_VERSION, MAX_CLASSIFICATION_BATCHES
+from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
 
 MAX_PLAN_BYTES = 3_000_000
 
@@ -64,7 +65,7 @@ def restore_coordinate_plan(review: dict, checkpoint: dict) -> list[list[dict]]:
     result: list[list[dict]] = []
     primary: set[tuple[str, str]] = set()
     for batch in plan:
-        if not isinstance(batch, list) or not 1 <= len(batch) <= 500:
+        if not isinstance(batch, list) or not 1 <= len(batch) <= MAX_MODEL_CELLS:
             invalid()
         rebuilt = []
         seen: set[tuple[str, str]] = set()

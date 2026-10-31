@@ -73,7 +73,9 @@ def reference_contract(
     sheets: list | None = None,
 ) -> tuple[list[dict], dict, dict]:
     drawings = drawings or []
-    if not cells or len(cells) + len(drawings) > 500:
+    from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
+
+    if not cells or len(cells) + len(drawings) > MAX_MODEL_CELLS:
         raise ReviewedExcelError("证据数量超出范围")
     references: dict[str, dict] = {}
     presented = []

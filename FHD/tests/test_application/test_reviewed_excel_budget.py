@@ -22,6 +22,7 @@ from app.application.reviewed_excel_budget import (
 )
 from app.application.reviewed_excel_classification import _classify_semantic_batch
 from app.application.reviewed_excel_evidence import (
+    MAX_MODEL_CELLS,
     MAX_MODEL_TEXT_BYTES,
     _model_cell_cost,
     plan_semantic_batches,
@@ -44,7 +45,9 @@ def workbook_review(rows=120, *, formulas=True):
 
 def test_complete_request_includes_dense_formulas_schema_and_preserves_all_cells(monkeypatch):
     monkeypatch.delenv("FHD_TEMPLATE_LLM_PROVIDER", raising=False)
-    review = workbook_review()
+    # 300 dense formula rows still exceed the raised ~384KB request envelope as one call,
+    # while staying under MAX_MODEL_TEXT_BYTES so transport packing (not cell-count) splits.
+    review = workbook_review(300)
     assert sum(map(_model_cell_cost, review["cells"])) < MAX_MODEL_TEXT_BYTES
     with pytest.raises(RequestBudgetExceeded):
         _classify_semantic_batch(review, prepare_only=True, reference_ids=True)
@@ -199,22 +202,23 @@ def test_old_cell_chunk_boundaries_do_not_change_neutral_packing():
 def test_full_width_primary_row_is_not_rejected_for_optional_context(monkeypatch):
     from openpyxl.utils.cell import get_column_letter
 
+    width = MAX_MODEL_CELLS
     review = {
         "sheets": ["S"],
         "cells": [
             {"sheet": "S", "cell": f"{get_column_letter(c)}2", "value": "x", "kind": "review"}
-            for c in range(1, 501)
+            for c in range(1, width + 1)
         ]
         + [{"sheet": "S", "cell": "A3", "value": "tail", "kind": "review"}],
     }
     monkeypatch.setattr(
         "app.application.reviewed_excel_classification._classify_semantic_batch", lambda *a, **k: {}
     )
-    fitted = fit_transport_batches(review, [review["cells"][:500], review["cells"][500:]])
+    fitted = fit_transport_batches(review, [review["cells"][:width], review["cells"][width:]])
     assert len(fitted) == 2
-    assert sum(not c.get("context_only") for c in fitted[0]) == 500
-    assert sum(not c.get("context_only") for b in fitted for c in b) == 501
-    assert all(len(b) <= 500 for b in fitted)
+    assert sum(not c.get("context_only") for c in fitted[0]) == width
+    assert sum(not c.get("context_only") for b in fitted for c in b) == width + 1
+    assert all(len(b) <= MAX_MODEL_CELLS for b in fitted)
 
 
 def saved_plan(review, batches):

@@ -855,7 +855,7 @@ def combine_semantic_batches(
         "budget": {
             "calls": len(batches),
             "max_calls": max_calls,
-            "cells_per_call": 500,
+            "cells_per_call": MAX_MODEL_CELLS,
             "unread": sum(len(item["unread"]) for item in coverage),
         },
     }

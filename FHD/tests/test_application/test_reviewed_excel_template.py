@@ -3467,24 +3467,28 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
     assert all({"A1", "H602"} <= {cell["cell"] for cell in batch["cells"]} for batch in captured)
     assert next(cell["context_only"] for cell in captured[0]["cells"] if cell["cell"] == "H602")
     assert next(cell["context_only"] for cell in captured[1]["cells"] if cell["cell"] == "A1")
-    assert all(len(batch["cells"]) <= 500 for batch in captured)
+    from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
+    assert all(len(batch["cells"]) <= MAX_MODEL_CELLS for batch in captured)
     assert result["coverage"][0]["sent"] == 602
 
 
 def test_full_width_row_does_not_create_empty_batch_or_drop_cells():
     from app.application.reviewed_excel_classification import plan_semantic_batches
+    from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
 
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "报价单"
-    for col in range(1, 501):
+    for col in range(1, MAX_MODEL_CELLS + 1):
         ws.cell(2, col, f"值{col}")
     ws["A3"] = "图例：合成"
     out = BytesIO()
     wb.save(out)
     batches, _ = plan_semantic_batches(inspect_workbook(out.getvalue()), 2)
-    assert all(batches) and all(len(batch) <= 500 for batch in batches)
-    assert any(sum(cell["cell"].endswith("2") for cell in batch) == 500 for batch in batches)
+    assert all(batches) and all(len(batch) <= MAX_MODEL_CELLS for batch in batches)
+    assert any(
+        sum(cell["cell"].endswith("2") for cell in batch) == MAX_MODEL_CELLS for batch in batches
+    )
 
 
 def test_fragment_links_are_candidates_not_label_based_merges():

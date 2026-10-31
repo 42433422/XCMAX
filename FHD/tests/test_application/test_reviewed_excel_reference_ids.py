@@ -215,7 +215,8 @@ def test_neutral_batches_do_not_invoke_business_prefilter(monkeypatch):
         if not cell.get("context_only")
     ]
     assert len(keys) == len(set(keys)) == len(review["cells"])
-    assert all(len(batch) <= 500 for batch in batches) and budget == 4
+    from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
+    assert all(len(batch) <= MAX_MODEL_CELLS for batch in batches) and budget == 4
 
 
 def test_source_coordinate_ids_are_stable_across_batches_and_special_sheet_names():

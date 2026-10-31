@@ -5,8 +5,8 @@ from collections import deque
 
 from app.application.etl.errors import ReviewedExcelError
 
-BUDGET_VERSION = "full-request-plan-v10-document-ranges"
-MAX_REQUEST_BYTES = 96_000
+BUDGET_VERSION = "full-request-plan-v11-2000-cells"
+MAX_REQUEST_BYTES = 384_000  # aligned with MAX_MODEL_TEXT_BYTES for ~2000-cell packs
 MAX_OUTPUT_TOKENS = 16_000
 MAX_CLASSIFICATION_BATCHES = 99  # Reserve one of the 100 audit slots for grouping.
 
