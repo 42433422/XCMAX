@@ -740,6 +740,8 @@ class TestDeterministicAnswerBoundary:
         assert "query" in result
         assert "short text" in result
         assert "[1]" in result
+        assert result.startswith("根据知识库资料，关于「query」：")
+        assert "Based on the retrieved" not in result
 
     def test_long_excerpt_truncated(self):
         long_text = "x" * 500
@@ -753,6 +755,7 @@ class TestDeterministicAnswerBoundary:
         result = _deterministic_answer("", [chunk])
         assert "some text" in result
         assert "[1]" in result
+        assert result.startswith("根据知识库资料：")
 
     def test_newlines_replaced(self):
         chunk = _make_chunk(text="line1\nline2\nline3")

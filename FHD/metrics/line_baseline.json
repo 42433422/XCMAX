@@ -1,5 +1,5 @@
 {
-  "lines": 2405650,
+  "lines": 2405724,
   "updated": "2026-11-01",
-  "note": "P1-2 AwEtlAutoIngestList list+withdraw vitest; keep withdraw error without hiding loaded batches"
+  "note": "P1-4 KB 检索回答中文产品口径 + FE normalizeAnswer 保留摘录与 vitest（+74）"
 }

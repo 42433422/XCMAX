@@ -1172,6 +1172,23 @@ def test_deterministic_answer_long_excerpt():
     )
     result = _deterministic_answer("q", [chunk])
     assert "..." in result
+    assert result.startswith("根据知识库资料，关于「q」：")
+    assert "Based on the retrieved" not in result
+
+
+def test_deterministic_answer_chinese_product_tone():
+    chunk = RetrievedChunk(
+        text="客户：星光贸易；订单号：PO-DEMO-001",
+        score=1.0,
+        source="s",
+        chunk_index=0,
+        char_start=0,
+        char_end=20,
+    )
+    result = _deterministic_answer("订单号是什么？", [chunk])
+    assert result.startswith("根据知识库资料，关于「订单号是什么？」：")
+    assert "PO-DEMO-001" in result
+    assert result.endswith("[1]")
 
 
 def test_tokenize_for_rerank():
