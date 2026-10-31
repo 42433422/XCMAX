@@ -59,8 +59,9 @@ def _save_ledger(tenant_id: int | str, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-
-def _progress(stage: str, pct: int, *, message: str = "", error: str | None = None) -> dict[str, Any]:
+def _progress(
+    stage: str, pct: int, *, message: str = "", error: str | None = None
+) -> dict[str, Any]:
     pct = max(0, min(100, int(pct)))
     out: dict[str, Any] = {
         "stage": stage,
@@ -84,6 +85,7 @@ def _patch_batch(tenant_id: int | str, batch_id: str, **fields: Any) -> dict[str
         ledger.setdefault("batches", {})[batch_id] = batch
         _save_ledger(tenant_id, ledger)
         return dict(batch)
+
 
 def _extract_text(path: Path) -> str:
     suffix = path.suffix.lower()
@@ -228,12 +230,16 @@ class AutoIngestService:
                 ),
             )
             if business.get("skipped"):
-                biz_prog = _progress("skipped", 100, message=str(business.get("reason") or "跳过业务域"))
+                biz_prog = _progress(
+                    "skipped", 100, message=str(business.get("reason") or "跳过业务域")
+                )
             elif business.get("failed") or business.get("pending_preview"):
                 biz_prog = _progress(
                     "failed" if business.get("failed") else "pending",
                     70 if business.get("pending_preview") else 40,
-                    message=str(business.get("message") or business.get("error") or "业务写入未完成"),
+                    message=str(
+                        business.get("message") or business.get("error") or "业务写入未完成"
+                    ),
                     error=str(business.get("error") or "") or None,
                 )
             else:
@@ -359,15 +365,17 @@ class AutoIngestService:
         item = (ledger.get("batches") or {}).get(batch_id)
         return dict(item) if isinstance(item, dict) else None
 
-    def get_progress(
-        self, *, tenant_id: int, owner_user_id: int, batch_id: str
-    ) -> dict[str, Any]:
+    def get_progress(self, *, tenant_id: int, owner_user_id: int, batch_id: str) -> dict[str, Any]:
         batch = self.get_batch(tenant_id=tenant_id, batch_id=batch_id)
         if batch is None:
             raise EtlError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
         if int(batch.get("owner_user_id") or 0) != int(owner_user_id):
             raise EtlError("ETL_AUTO_INGEST_FORBIDDEN", "无权查看该批次", status_code=403)
-        kb = batch.get("kb_progress") if isinstance(batch.get("kb_progress"), dict) else _progress("unknown", 0)
+        kb = (
+            batch.get("kb_progress")
+            if isinstance(batch.get("kb_progress"), dict)
+            else _progress("unknown", 0)
+        )
         biz = (
             batch.get("business_progress")
             if isinstance(batch.get("business_progress"), dict)
@@ -395,7 +403,9 @@ class AutoIngestService:
             if not isinstance(batch, dict):
                 raise EtlError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
             if int(batch.get("owner_user_id") or 0) != int(owner_user_id):
-                raise EtlError("ETL_AUTO_INGEST_FORBIDDEN", "只能撤回自己的入库批次", status_code=403)
+                raise EtlError(
+                    "ETL_AUTO_INGEST_FORBIDDEN", "只能撤回自己的入库批次", status_code=403
+                )
             if batch.get("status") == "withdrawn":
                 return batch
             if batch.get("status") != "applied":

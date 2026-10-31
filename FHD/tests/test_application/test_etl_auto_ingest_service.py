@@ -44,7 +44,9 @@ def _shipment_xlsx(path: Path) -> Path:
     return path
 
 
-def test_auto_ingest_writes_knowledge_and_records_business(rag_service, ledger_root, tmp_path, monkeypatch):
+def test_auto_ingest_writes_knowledge_and_records_business(
+    rag_service, ledger_root, tmp_path, monkeypatch
+):
     xlsx = _shipment_xlsx(tmp_path / "26鑫顺.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-1"}
@@ -58,9 +60,7 @@ def test_auto_ingest_writes_knowledge_and_records_business(rag_service, ledger_r
         "status": "completed",
         "summary": {"new": 1, "update": 0, "skip": 0, "error": 0, "executed": 1},
     }
-    monkeypatch.setattr(
-        "app.application.etl.service.get_etl_service", lambda: fake_etl
-    )
+    monkeypatch.setattr("app.application.etl.service.get_etl_service", lambda: fake_etl)
 
     service = AutoIngestService()
     with tenant_scope(42):
@@ -92,7 +92,9 @@ def test_auto_ingest_writes_knowledge_and_records_business(rag_service, ledger_r
     assert listed[0]["batch_id"] == batch["batch_id"]
 
 
-def test_auto_ingest_withdraw_rolls_back_kb_and_business(rag_service, ledger_root, tmp_path, monkeypatch):
+def test_auto_ingest_withdraw_rolls_back_kb_and_business(
+    rag_service, ledger_root, tmp_path, monkeypatch
+):
     xlsx = _shipment_xlsx(tmp_path / "ship.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-2"}

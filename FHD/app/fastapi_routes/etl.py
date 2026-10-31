@@ -277,8 +277,6 @@ def rollback_run(
     }
 
 
-
-
 @router.get("/runs/{run_id}/download")
 def download_run_export(
     run_id: str,
