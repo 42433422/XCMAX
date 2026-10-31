@@ -114,11 +114,13 @@ def test_circular_self_sum_detected():
         "reason": "period",
     }
     inspection = inspect_cut(review, group)
-    assert inspection["status"] == "circular"
+    assert inspection["status"] == "circular_quarantine"
     assert inspection["formula"]["circular_count"] >= 1
+    assert inspection["ok"] is True
     out = verify_after_cut(review, [group], resplit=True)
     assert out["stats"]["circular_caught"] == 1
-    assert out["groups"][0].get("verify_fail_closed") is True
+    assert out["groups"][0].get("circular_quarantine") is True
+    assert out["groups"][0].get("verify_fail_closed") is False
 
 
 def test_atomic_single_title_passes():
@@ -140,3 +142,39 @@ def test_atomic_single_title_passes():
     inspection = inspect_cut(review, group)
     assert inspection["ok"] is True
     assert inspection["sticky"] is False
+
+
+def test_two_order_runs_resplit_atomic():
+    def build(book):
+        ws = book.active
+        ws.title = "ship"
+        # Detector needs >=6 data rows and majority date/order hits.
+        rows = [
+            (2, 46080, 9),
+            (3, 46080, 9),
+            (4, 46080, 9),
+            (5, 46082, "2号"),
+            (6, 46082, "2号"),
+            (7, 46082, "2号"),
+        ]
+        for r, d, o in rows:
+            ws.cell(r, 1, value="客户")
+            ws.cell(r, 2, value=d)
+            ws.cell(r, 3, value=o)
+
+    body = _book_bytes(build)
+    review = inspect_workbook(body)
+    groups = [
+        {
+            "document_id": "source-two-runs",
+            "fragments": [{"sheet": "ship", "range": "A1:C7"}],
+            "evidence": [],
+            "reason": "glued",
+        }
+    ]
+    inspection = inspect_cut(review, groups[0])
+    assert inspection["status"] == "sticky_ledger"
+    assert inspection["ledger"]["run_count"] == 2
+    out = verify_after_cut(review, groups, resplit=True)
+    assert out["stats"]["resplit_groups"] == 1
+    assert len(out["groups"]) == 2

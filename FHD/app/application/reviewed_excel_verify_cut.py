@@ -44,7 +44,7 @@ _ORDER_HEADER = re.compile(
 )
 # Excel serial dates roughly 1990-01-01 .. 2100-01-01
 _EXCEL_DATE_LO, _EXCEL_DATE_HI = 32874, 73050
-_MIN_ORDER_RUNS_FOR_STICKY = 3
+_MIN_ORDER_RUNS_FOR_STICKY = 2
 _MIN_TITLE_BLOCKS_FOR_STICKY = 2
 
 
@@ -394,19 +394,26 @@ def inspect_cut(review: dict, group: dict) -> dict:
     # Only treat ledger runs as stickiness when the cut lacks a single covering title
     # (continuous untitled / weakly-titled shipment ledgers).
     sticky_titles = len(title_blocks) >= _MIN_TITLE_BLOCKS_FOR_STICKY
-    single_title = len(title_blocks) == 1
+    single_title = len(title_blocks) == 1  # retained for receipts / future heuristics
+    _ = single_title
+    # Prefer atomic order/date runs: two or more distinct runs inside one cut
+    # are sticky even when a single banner title sits above the ledger.
     sticky_ledger = bool(
         ledger
         and ledger["run_count"] >= _MIN_ORDER_RUNS_FOR_STICKY
         and not sticky_titles
-        and not single_title
     )
     sticky = sticky_titles or sticky_ledger
     status = "ok"
     reason = "切后交叉引用复核通过"
     if formula["circular_count"]:
-        status = "circular"
-        reason = "公式引用存在循环，暂不能保真"
+        # Export path quarantines circular cells; verify only warns — do not
+        # abandon the whole segment here.
+        status = "circular_quarantine"
+        reason = (
+            f"检出 {formula['circular_count']} 处循环/自引用公式，"
+            "导出时将隔离这些单元格，其余内容照常切出"
+        )
     elif sticky_titles:
         status = "sticky_titles"
         reason = (
@@ -425,7 +432,7 @@ def inspect_cut(review: dict, group: dict) -> dict:
         reason = f"切片内有 {formula['outbound_count']} 处公式引用落在切出范围外（交叉引用）"
 
     return {
-        "ok": status == "ok",
+        "ok": status in ("ok", "circular_quarantine", "outbound_refs"),
         "status": status,
         "reason": reason,
         "sticky": sticky,
@@ -574,7 +581,7 @@ def verify_after_cut(
             )},
             "action": "keep",
         }
-        if inspection["status"] == "circular":
+        if inspection["status"] in ("circular", "circular_quarantine"):
             circular_caught += 1
         if inspection.get("formula", {}).get("outbound_count"):
             outbound_flagged += 1
@@ -626,8 +633,9 @@ def verify_after_cut(
         tagged = deepcopy(group)
         tagged["verify_status"] = inspection["status"]
         tagged["verify_reason"] = inspection["reason"]
-        if inspection["status"] == "circular":
-            tagged["verify_fail_closed"] = True
+        if inspection["status"] in ("circular", "circular_quarantine"):
+            tagged["circular_quarantine"] = True
+            tagged["verify_fail_closed"] = False
         out_groups.append(tagged)
         receipts.append(receipt)
 

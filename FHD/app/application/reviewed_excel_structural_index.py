@@ -181,28 +181,47 @@ def _distinct_approx(ws, col: int, start_row: int, cap: int = 500) -> int:
 
 
 def _ledger_run_hint(ws, date_c: int, order_c: int, start_row: int) -> tuple[int, list[dict]]:
-    """Count consecutive (date, order) runs; return hint count + sparse boundary samples."""
-    runs = 0
+    """Return consecutive (date, order) runs with start/end rows for atomic candidates.
+
+    Each run is one atomic order/date block. Caps stored runs for envelope size;
+    run count itself is exact.
+    """
+    runs: list[dict] = []
     current: tuple[str, str] | None = None
-    boundaries: list[dict] = []
+    start: int | None = None
+    last_data_row: int | None = None
     for row in range(start_row, (ws.max_row or 0) + 1):
         date_text = _cell_text(ws.cell(row, date_c).value, 32)
         order_text = _cell_text(ws.cell(row, order_c).value, 32)
         if not date_text and not order_text:
             continue
         key = (date_text, order_text)
+        last_data_row = row
         if key != current:
-            runs += 1
-            if len(boundaries) < 40:
-                boundaries.append(
+            if current is not None and start is not None:
+                runs.append(
                     {
-                        "row": row,
-                        "date": date_text,
-                        "order_key": order_text,
+                        "start_row": start,
+                        "end_row": row - 1,
+                        "date": current[0],
+                        "order_key": current[1],
                     }
                 )
             current = key
-    return runs, boundaries
+            start = row
+    if current is not None and start is not None and last_data_row is not None:
+        runs.append(
+            {
+                "start_row": start,
+                "end_row": last_data_row,
+                "date": current[0],
+                "order_key": current[1],
+            }
+        )
+    # Fix end_row of each run to the row before next run's start (gap-aware).
+    for i in range(len(runs) - 1):
+        runs[i]["end_row"] = max(runs[i]["start_row"], runs[i + 1]["start_row"] - 1)
+    return len(runs), runs
 
 
 def _cross_sheet_refs(ws, sheet_name: str, cap: int = 40) -> list[dict]:
@@ -337,15 +356,37 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
                             "distinct_approx": _distinct_approx(ws, meta["col_index"], start),
                         }
                     )
-                ledger_run_hint, boundaries = _ledger_run_hint(ws, date_c, order_c, start)
-                if boundaries:
+                ledger_run_hint, run_rows = _ledger_run_hint(ws, date_c, order_c, start)
+                # Prefer atomic per-run candidates so identify/group can cut by
+                # 单号 + date boundaries instead of one glued ledger rectangle.
+                max_atomic = 120
+                for run in run_rows[:max_atomic]:
                     candidate_ranges.append(
                         {
-                            "start_row": boundaries[0]["row"],
-                            "end_row": (ws.max_row or boundaries[0]["row"]),
+                            "start_row": run["start_row"],
+                            "end_row": run["end_row"],
+                            "basis": "ledger_key_run",
+                            "date": run.get("date") or "",
+                            "order_key": (run.get("order_key") or "")[:32],
+                        }
+                    )
+                if ledger_run_hint > max_atomic and run_rows:
+                    # Summary remainder hint when capped.
+                    candidate_ranges.append(
+                        {
+                            "start_row": run_rows[max_atomic]["start_row"],
+                            "end_row": run_rows[-1]["end_row"],
+                            "basis": "ledger_key_runs_remainder",
+                            "run_hint_count": ledger_run_hint - max_atomic,
+                        }
+                    )
+                elif not run_rows and ledger_run_hint:
+                    candidate_ranges.append(
+                        {
+                            "start_row": start,
+                            "end_row": ws.max_row or start,
                             "basis": "ledger_key_runs",
                             "run_hint_count": ledger_run_hint,
-                            "run_boundary_samples": boundaries[:20],
                         }
                     )
             else:
@@ -428,7 +469,7 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
             },
             "notes": [
                 "Program-built structural facts only; not a business document inventory.",
-                "ledger_run_hint_count is a weak consecutive (date, order_key) run length hint.",
+                "ledger_run_hint_count is the count of consecutive (date, order_key) runs; candidate_row_ranges with basis ledger_key_run are atomic cut hints.",
                 "Do not treat transport packet boundaries as document boundaries.",
                 "Include hidden/veryHidden sheets as sheet_state facts for the operator/model.",
             ],
@@ -492,12 +533,17 @@ def compress_structural_index_for_model(
             if "run_hint_count" in rng:
                 compact["run_hint_count"] = rng["run_hint_count"]
                 compact["run_boundary_samples"] = (rng.get("run_boundary_samples") or [])[:12]
+            if rng.get("basis") == "ledger_key_run":
+                if rng.get("order_key"):
+                    compact["order_key"] = str(rng.get("order_key"))[:24]
+                if rng.get("date"):
+                    compact["date"] = str(rng.get("date"))[:24]
             if "kind_hint" in rng:
                 compact["kind_hint"] = rng["kind_hint"]
             if "title_text" in rng:
                 compact["title_text"] = (rng.get("title_text") or "")[:80]
             entry["candidate_row_ranges"].append(compact)
-            if len(entry["candidate_row_ranges"]) >= 40:
+            if len(entry["candidate_row_ranges"]) >= 80:
                 break
         summary["sheets"].append(entry)
 

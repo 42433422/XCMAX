@@ -58,6 +58,8 @@ def test_index_schema_is_generic_and_includes_hidden():
     assert names["期间块"]["candidate_row_ranges"]
     assert any(r["basis"] == "block_title" for r in names["期间块"]["candidate_row_ranges"])
     assert names["出货台账"]["ledger_run_hint_count"] >= 3
+    assert any(r["basis"] == "ledger_key_run" for r in names["出货台账"]["candidate_row_ranges"])
+    assert sum(1 for r in names["出货台账"]["candidate_row_ranges"] if r["basis"] == "ledger_key_run") >= 3
     assert index["cross_sheet_edges"]
     blob = json.dumps(index, ensure_ascii=False)
     assert "澜宇" not in blob

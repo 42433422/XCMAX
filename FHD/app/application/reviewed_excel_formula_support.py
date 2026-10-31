@@ -165,8 +165,9 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                         if len(inside) + len(outside) > max_cells:
                             raise ReviewedExcelError("公式依赖总量超出安全预算")
                         if sheet[ref].data_type == "f":
-                            edges[address].add(ref)
-                            if ref not in visited:
+                            if ref != address:
+                                edges[address].add(ref)
+                            if ref not in visited and ref != address:
                                 pending.append(ref)
                 if beyond:
                     error_operand_warnings.append(
@@ -184,6 +185,127 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                 ):
                     proxies.update(selected_refs)
             references[address] = direct
+        # Circular / self-inclusive formulas: quarantine cells, do NOT abandon the
+        # whole selection. Prefer rewriting self-inclusive aggregates (SUM/… that
+        # include the formula cell); otherwise isolate the circular cell as text.
+        circular_quarantine: list[dict] = []
+        rewrites: dict[str, str] = {}
+
+        def _self_inclusive_rewrite(address: str, formula: str) -> str | None:
+            match = re.match(
+                r"^=\s*(SUM|AVERAGE|MIN|MAX|COUNT|COUNTA)\s*\(\s*"
+                r"(\$?[A-Za-z]{1,3}\$?\d+:\$?[A-Za-z]{1,3}\$?\d+)\s*\)\s*$",
+                formula,
+                re.IGNORECASE,
+            )
+            if not match:
+                return None
+            try:
+                c1, r1, c2, r2 = bounded_range(match.group(2).replace("$", ""))
+                acol, arow = coordinate_from_string(address)
+                acol_i = column_index_from_string(acol)
+            except (TypeError, ValueError):
+                return None
+            if not (c1 <= acol_i <= c2 and r1 <= arow <= r2):
+                return None
+            # Shrink the end that contains the formula cell (common self-SUM mistake).
+            if c1 == c2 == acol_i:
+                if arow == r2 and r2 > r1:
+                    new_range = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2 - 1}"
+                elif arow == r1 and r2 > r1:
+                    new_range = f"{get_column_letter(c1)}{r1 + 1}:{get_column_letter(c2)}{r2}"
+                else:
+                    return None
+            elif r1 == r2 == arow:
+                if acol_i == c2 and c2 > c1:
+                    new_range = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2 - 1)}{r2}"
+                elif acol_i == c1 and c2 > c1:
+                    new_range = f"{get_column_letter(c1 + 1)}{r1}:{get_column_letter(c2)}{r2}"
+                else:
+                    return None
+            else:
+                return None
+            fn = match.group(1).upper()
+            return f"={fn}({new_range})"
+
+        # Pass 1: rewrite obvious self-inclusive aggregates and drop self-edges.
+        for address in list(edges):
+            value = sheet[address].value
+            if not isinstance(value, str):
+                continue
+            rewritten = _self_inclusive_rewrite(address, value)
+            if rewritten is None:
+                # Also drop trivial self-loops even without rewrite.
+                edges[address].discard(address)
+                continue
+            rewrites[address] = rewritten
+            circular_quarantine.append(
+                {
+                    "sheet": sheet_name,
+                    "cell": address,
+                    "original_formula": value[:200],
+                    "action": "rewrite_exclude_self",
+                    "new_formula": rewritten,
+                    "reason": "合计区间含自身单元格，已缩窄区间以隔离循环",
+                }
+            )
+            edges[address].discard(address)
+            # After rewrite, formula no longer refs itself as a formula edge target
+            # within the old range end; clear edges to rebuild is unnecessary for DAG
+            # check if self-loop was the only cycle contributor.
+
+        def _cycle_nodes(graph: dict[str, set[str]]) -> set[str]:
+            found: set[str] = set()
+            done: set[str] = set()
+            for start in graph:
+                if start in done:
+                    continue
+                visiting: set[str] = set()
+                stack = [(start, False)]
+                path: list[str] = []
+                while stack:
+                    node, leaving = stack.pop()
+                    if leaving:
+                        visiting.remove(node)
+                        if path and path[-1] == node:
+                            path.pop()
+                        done.add(node)
+                        continue
+                    if node in visiting:
+                        # mark the cycle slice
+                        if node in path:
+                            found.update(path[path.index(node) :])
+                        found.add(node)
+                        continue
+                    if node in done:
+                        continue
+                    visiting.add(node)
+                    path.append(node)
+                    stack.append((node, True))
+                    stack.extend((child, False) for child in graph.get(node, set()))
+            return found
+
+        remaining_cycles = _cycle_nodes(edges) - set(rewrites)
+        for address in sorted(remaining_cycles):
+            value = sheet[address].value
+            original = value if isinstance(value, str) else str(value)
+            circular_quarantine.append(
+                {
+                    "sheet": sheet_name,
+                    "cell": address,
+                    "original_formula": original[:200],
+                    "action": "isolate_as_text",
+                    "new_formula": None,
+                    "reason": "互相引用循环公式已隔离为文本，其余单元格照常导出",
+                }
+            )
+            edges.pop(address, None)
+            for targets in edges.values():
+                targets.discard(address)
+            # Drop from formula reference chase so install skips rewriting it as live formula
+            references.pop(address, None)
+
+        # Final DAG check — should be clean after quarantine.
         done: set[str] = set()
         for start in edges:
             if start in done:
@@ -197,7 +319,25 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                     done.add(node)
                     continue
                 if node in visiting:
-                    raise ReviewedExcelError("公式引用存在循环，暂不能保真")
+                    # Absolute last resort: isolate and continue
+                    value = sheet[node].value
+                    circular_quarantine.append(
+                        {
+                            "sheet": sheet_name,
+                            "cell": node,
+                            "original_formula": (value if isinstance(value, str) else str(value))[:200],
+                            "action": "isolate_as_text",
+                            "new_formula": None,
+                            "reason": "残留循环公式已隔离为文本，其余单元格照常导出",
+                        }
+                    )
+                    edges.pop(node, None)
+                    for targets in edges.values():
+                        targets.discard(node)
+                    references.pop(node, None)
+                    visiting.clear()
+                    stack.clear()
+                    break
                 if node in done:
                     continue
                 visiting.add(node)
@@ -240,6 +380,8 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
             "selected_reference_cells": sorted(inside),
             "proxy_cells": sorted(proxies),
             "formula_error_operand_warnings": error_operand_warnings,
+            "circular_quarantine": circular_quarantine,
+            "circular_rewrites": rewrites,
         }
     finally:
         book.close()
@@ -256,10 +398,24 @@ def install_formula_support(book, plan: dict) -> str | None:
     from openpyxl.utils.cell import quote_sheetname
 
     verify_preserved_subtotals(book, plan)
+    sheet = book[plan["sheet"]]
+    # Apply circular quarantine before support-sheet wiring.
+    for item in plan.get("circular_quarantine") or []:
+        address = item.get("cell")
+        if not isinstance(address, str) or not address.strip():
+            continue
+        action = item.get("action")
+        if action == "rewrite_exclude_self" and item.get("new_formula"):
+            sheet[address].value = item["new_formula"]
+        elif action == "isolate_as_text":
+            original = item.get("original_formula") or sheet[address].value
+            sheet[address].value = f"[循环已隔离] {original}"
+    for address, formula in (plan.get("circular_rewrites") or {}).items():
+        if isinstance(address, str) and formula:
+            sheet[address].value = formula
     support_cells = plan["support_cells"]
     if not support_cells:
         return None
-    sheet = book[plan["sheet"]]
     title = "依赖支撑"
     number = 1
     while title in book.sheetnames:

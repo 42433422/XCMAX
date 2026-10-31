@@ -29,14 +29,40 @@ def test_dependency_closure_preserves_formula_graph_and_limits_support_to_requir
 
 def test_cycles_external_refs_unsupported_functions_and_large_ranges_fail_closed():
     part = [{"sheet": "表", "range": "A1:A1"}]
-    with pytest.raises(ReviewedExcelError, match="循环"):
-        plan_formula_support(workbook({"A1": "=B1", "B1": "=A1"}), part)
+    # Mutual cycles are quarantined (isolate), not whole-segment fail-closed.
+    mutual = plan_formula_support(workbook({"A1": "=B1", "B1": "=A1", "C1": 1}), [{"sheet": "表", "range": "A1:C1"}])
+    assert mutual["circular_quarantine"]
+    assert {item["action"] for item in mutual["circular_quarantine"]} <= {"isolate_as_text", "rewrite_exclude_self"}
     with pytest.raises(ReviewedExcelError, match="外部"):
         plan_formula_support(workbook({"A1": "='[外部.xlsx]表'!A1"}), part)
     with pytest.raises(ReviewedExcelError, match="函数依赖"):
         plan_formula_support(workbook({"A1": '=INDIRECT("B1")'}), part)
     with pytest.raises(ReviewedExcelError, match="范围超出安全预算"):
         plan_formula_support(workbook({"A1": "=SUM(B1:D1)"}), part, max_cells=2)
+
+
+def test_self_inclusive_sum_rewritten_and_segment_exports():
+    from openpyxl import load_workbook
+
+    from app.application.reviewed_excel_template import derive_document_workbook
+
+    body = workbook(
+        {
+            "A1": "购货明细",
+            "C2": 1,
+            "C3": 2,
+            "C4": 3,
+            "C5": "=SUM(C2:C5)",
+            "D2": 10,
+        }
+    )
+    plan = plan_formula_support(body, [{"sheet": "表", "range": "A1:D5"}])
+    assert plan["circular_quarantine"]
+    assert any(item["action"] == "rewrite_exclude_self" for item in plan["circular_quarantine"])
+    assert plan["circular_rewrites"]["C5"] == "=SUM(C2:C4)"
+    result = derive_document_workbook(body, [{"sheet": "表", "range": "A1:D5"}])
+    saved = load_workbook(__import__("io").BytesIO(result), data_only=False)
+    assert saved["表"]["C5"].value == "=SUM(C2:C4)"
 
 
 def test_support_sheet_keeps_only_needed_values_and_links_back_to_editable_main_cells():
