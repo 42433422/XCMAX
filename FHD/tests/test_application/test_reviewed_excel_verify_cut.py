@@ -178,3 +178,39 @@ def test_two_order_runs_resplit_atomic():
     out = verify_after_cut(review, groups, resplit=True)
     assert out["stats"]["resplit_groups"] == 1
     assert len(out["groups"]) == 2
+
+
+def test_delivery_note_agreement_lines_do_not_sticky_resplit():
+    """One contiguous 送货单 with agreement/meta lines stays one document after verify."""
+    def build(book):
+        ws = book.active
+        ws.title = "送货"
+        ws["A1"] = "成都某公司送货单"
+        ws["A2"] = "购货单位（乙方）：甲厂    联系人：李    日期：2026年01月01日   订单编号：26-1"
+        ws["A5"] = "品名"
+        ws["B5"] = "数量"
+        ws["A6"] = "漆"
+        ws["B6"] = 2
+        ws["A16"] = "销售协议 | 1.甲方所供上列产品均属检验合格产品，送货单一式四联"
+        ws["A18"] = "法律效力，必须按期付清货款（月结三十天），由甲方所在地方人民法院受理起诉。"
+        ws["A19"] = "3.本送货单一式四联，白色联为存根联，粉红色为客户联"
+
+    body = _book_bytes(build)
+    review = inspect_workbook(body)
+    # Attach structural index so verify sees agreement lines as block_title_rows.
+    from app.application.reviewed_excel_structural_index import ensure_review_structural_index
+    ensure_review_structural_index(review, body)
+    groups = [
+        {
+            "document_id": "source-delivery",
+            "fragments": [{"sheet": "送货", "range": "A1:B19"}],
+            "evidence": [],
+            "reason": "one delivery note",
+        }
+    ]
+    inspection = inspect_cut(review, groups[0])
+    assert inspection["sticky"] is False
+    assert inspection["status"] == "ok"
+    out = verify_after_cut(review, groups, resplit=True)
+    assert out["stats"]["resplit_groups"] == 0
+    assert len(out["groups"]) == 1

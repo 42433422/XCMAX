@@ -77,6 +77,8 @@ def _title_like(text: str) -> bool:
 
 def _kind_hint(text: str) -> str:
     lower = text.casefold()
+    if "退货" in text or "return" in lower:
+        return "return_note"
     if "送货" in text or "delivery" in lower:
         return "delivery_note"
     if "回款" in text or "payment" in lower or "receipt" in lower:
@@ -88,6 +90,50 @@ def _kind_hint(text: str) -> str:
     if "出货" in text:
         return "shipment_block"
     return "other"
+
+
+_DOC_TYPE_PRIMARY = re.compile(
+    r"(送货单|退货单|出货单|购货明细|回款明细|出货明细|报价单|对账单|"
+    r"invoice|statement|receipt|delivery)",
+    re.IGNORECASE,
+)
+_FORM_META = re.compile(r"(购货单位|联系人：|联系人:|订单编号)")
+_TITLE_BOILERPLATE = re.compile(
+    r"(销售协议|一式\s*四联|一式四联|法律效力|联为|签字|验收|如有异议|按期付清|人民法院)"
+)
+
+
+def _primary_title_segment(text: str) -> str:
+    return (text or "").split("|", 1)[0].strip()
+
+
+def _is_document_heading_text(text: str) -> bool:
+    """True for a standalone document header row (送货单/退货单/期间明细...), not body lines.
+
+    Agreement clauses, multi-copy legends, and 购货单位 meta bands are title-*like*
+    for scanning but are not independent document heads.
+    """
+    primary = _primary_title_segment(text)
+    if len(primary) < 4 or len(primary) > 80:
+        return False
+    if _TITLE_BOILERPLATE.search(primary):
+        return False
+    if re.match(r"^\d+[\.、．]", primary):
+        return False
+    if not _DOC_TYPE_PRIMARY.search(primary):
+        return False
+    # Form-meta rows that merely mention a doc type in a side clause stay non-heads.
+    if _FORM_META.search(primary) and not _DOC_TYPE_PRIMARY.search(primary[:20]):
+        return False
+    return True
+
+
+def _is_form_meta_text(text: str) -> bool:
+    """购货单位 / 联系人 / 订单编号 band without being a document-type header."""
+    primary = _primary_title_segment(text)
+    if not primary or _is_document_heading_text(text):
+        return False
+    return bool(_FORM_META.search(primary))
 
 
 def _detect_header_roles(ws, max_scan: int = 8) -> dict[str, dict]:
@@ -411,14 +457,38 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
 
             if block_titles:
                 rows = [t["row"] for t in block_titles]
+                # First document heading on a sheet keeps fine-grained title atoms
+                # (agreement / meta lines remain separate structural cues).
+                # A later document heading (e.g. mid-sheet 退货单 after a 送货单)
+                # absorbs its immediate form-meta band so header+party lines are
+                # one atom — not a phantom extra document.
+                skip_indices: set[int] = set()
+                document_headings_seen = 0
                 for index, title in enumerate(block_titles):
+                    if index in skip_indices:
+                        continue
                     end = (rows[index + 1] - 1) if index + 1 < len(rows) else (ws.max_row or title["row"])
+                    kind = title["kind_hint"]
+                    if (
+                        _is_document_heading_text(title["text"])
+                        and document_headings_seen >= 1
+                        and index + 1 < len(block_titles)
+                        and _is_form_meta_text(block_titles[index + 1]["text"])
+                    ):
+                        skip_indices.add(index + 1)
+                        if index + 2 < len(rows):
+                            end = rows[index + 2] - 1
+                        else:
+                            end = ws.max_row or title["row"]
+                        kind = title["kind_hint"] or _kind_hint(title["text"])
+                    if _is_document_heading_text(title["text"]):
+                        document_headings_seen += 1
                     candidate_ranges.append(
                         {
                             "start_row": title["row"],
                             "end_row": max(end, title["row"]),
                             "basis": "block_title",
-                            "kind_hint": title["kind_hint"],
+                            "kind_hint": kind,
                             "title_text": title["text"][:120],
                         }
                     )

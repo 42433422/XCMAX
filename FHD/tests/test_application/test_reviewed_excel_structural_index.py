@@ -154,3 +154,34 @@ def test_prefer_structural_when_strictly_more_atoms():
     # missing classification → structural
     from_none = prefer_structural_classification_if_undersegmented(review, None)
     assert len(from_none["regions"]) == 3
+
+
+def test_additional_return_note_absorbs_form_meta():
+    """Mid-sheet 退货单 heading + following 购货单位 meta = one block_title atom.
+
+    Keeps 退货单 as a real title word without inventing a phantom extra document
+    relative to a sheet that already has a prior delivery-note form.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "客户表"
+    ws["A1"] = "成都某公司送货单"
+    ws["A2"] = "购货单位（乙方）：甲厂    联系人：张    日期：2026年01月01日   订单编号：26-1"
+    ws["A10"] = "销售协议 | 1.甲方所供上列产品均属检验合格产品，送货单一式四联"
+    ws["A12"] = "3.本送货单一式四联，白色联为存根联"
+    ws["A20"] = "成都某公司退货单"
+    ws["A21"] = "购货单位（乙方）：甲厂    联系人：张    日期：2025年08月01日   订单编号：25-1"
+    ws["B22"] = "item"
+    buf = BytesIO()
+    wb.save(buf)
+    index = build_workbook_structural_index(buf.getvalue())
+    sheet = next(s for s in index["sheets"] if s["sheet"] == "客户表")
+    title_cands = [c for c in sheet["candidate_row_ranges"] if c.get("basis") == "block_title"]
+    starts = [c["start_row"] for c in title_cands]
+    # First form keeps fine grain (送货单 + meta + agreement lines as separate cues).
+    assert 1 in starts and 2 in starts
+    # Second form: 退货单 present as heading, meta absorbed (no separate start at 21).
+    assert 20 in starts
+    assert 21 not in starts
+    ret = next(c for c in title_cands if c["start_row"] == 20)
+    assert ret["end_row"] >= 21

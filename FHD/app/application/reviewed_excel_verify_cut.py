@@ -126,17 +126,44 @@ def _is_title_row_text(text: str) -> bool:
     if len(text) < 4 or len(text) > 120:
         return False
     # Footers, totals, and boilerplate contract lines are not document titles.
-    if re.search(r"(合计|总计|小计|价税合计|金额合计|一式|协议|联为|签字)", text):
+    if re.search(r"(合计|总计|小计|价税合计|金额合计|一式|协议|联为|签字|法律效力|人民法院)", text):
         return False
     if re.match(r"^\d+[\.、．]", text):
         return False
     if not _TITLE_HINT.search(text):
         return False
-    # Period/start cue, or a short standalone document-type title (e.g. 送货单).
+    # Period/start cue, or a short standalone document-type title (e.g. 送货单/退货单).
     if bool(_DATEISH.search(text)) or ("起" in text) or ("至" in text):
         return True
     return len(text) <= 40 and bool(
-        re.search(r"(送货单|购货明细|回款明细|报价单|对账单|invoice|receipt)", text, re.I)
+        re.search(
+            r"(送货单|退货单|出货单|购货明细|回款明细|报价单|对账单|invoice|receipt)",
+            text,
+            re.I,
+        )
+    )
+
+
+def _is_document_heading_text(text: str) -> bool:
+    """Standalone document header — not agreement/meta lines inside one form."""
+    primary = (text or "").split("|", 1)[0].strip()
+    if len(primary) < 4 or len(primary) > 80:
+        return False
+    if re.search(r"(销售协议|一式|法律效力|联为|签字|人民法院|如有异议|按期付清)", primary):
+        return False
+    if re.match(r"^\d+[\.、．]", primary):
+        return False
+    if re.search(r"(购货单位|联系人：|联系人:|订单编号)", primary) and not re.search(
+        r"(送货单|退货单|出货单|购货明细|回款明细)", primary[:24]
+    ):
+        return False
+    return bool(
+        re.search(
+            r"(送货单|退货单|出货单|购货明细|回款明细|出货明细|报价单|对账单|"
+            r"invoice|statement|receipt|delivery)",
+            primary,
+            re.I,
+        )
     )
 
 
@@ -408,20 +435,25 @@ def inspect_cut(review: dict, group: dict) -> dict:
         r2 = max(r[3] for r in rects)
         host_range = _range_to_a1(c1, r1, c2, r2)
         titles = _detect_title_blocks(cells, sheet, c1, r1, c2, r2)
-        # Structural block_title_rows refine a cut whenever any fall inside the
-        # cut range (structural authority). Local heuristic title count is not a
-        # gate for consulting the index.
+        # Structural block_title_rows may refine a cut, but only document-heading
+        # rows count. Agreement / multi-copy / 购货单位 meta lines inside one
+        # contiguous delivery note must not force sticky title resplit.
         index = review.get("workbook_structural_index") or {}
-        struct_rows = {
-            block.get("row")
-            for sheet_info in index.get("sheets") or []
-            if sheet_info.get("sheet") == sheet
-            for block in sheet_info.get("block_title_rows") or []
-            if isinstance(block.get("row"), int) and r1 <= block["row"] <= r2
-        }
-        for row in sorted(struct_rows):
-            if not any(t.get("row") == row for t in titles):
-                titles.append({"row": row, "text": "", "cell": f"A{row}"})
+        for sheet_info in index.get("sheets") or []:
+            if sheet_info.get("sheet") != sheet:
+                continue
+            for block in sheet_info.get("block_title_rows") or []:
+                row = block.get("row")
+                if not isinstance(row, int) or not (r1 <= row <= r2):
+                    continue
+                text = str(block.get("text") or "").strip()
+                if not text:
+                    continue
+                if not (_is_document_heading_text(text) or _is_title_row_text(text)):
+                    continue
+                if any(t.get("row") == row for t in titles):
+                    continue
+                titles.append({"row": row, "text": text[:120], "cell": f"A{row}"})
         for t in titles:
             title_blocks.append({**t, "sheet": sheet, "host_range": host_range})
         found = _detect_order_ledger_runs(cells, sheet, c1, r1, c2, r2)
