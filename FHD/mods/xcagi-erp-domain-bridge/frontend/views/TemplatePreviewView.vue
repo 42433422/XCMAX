@@ -3,14 +3,13 @@
     <div class="page-content">
       <div class="page-header">
         <h2>模板预览</h2>
-        <p class="muted" style="margin:0;font-size:13px;">浏览并管理已保存的 Excel / Word 导出模板：可按业务分组，也可「自定义」新建。从原件导入清洗请使用数据对接中心。</p>
+        <p class="muted" style="margin:0;font-size:13px;">浏览并管理已保存的 Excel / Word 导出模板：可按业务分组，也可「自定义」新建。</p>
       </div>
 
       <section class="template-library-intake-note" aria-label="模板库说明">
         <p class="muted" style="margin:0 0 12px;font-size:13px;line-height:1.5;">
-          模板库只负责查看、管理已保存模板。从 Excel 原件导入并生成模板，请到
-          <a href="/business-docking">数据对接中心</a>
-          （导入 → 开始处理 → 选模板）。
+          模板库只浏览管理已保存模板。从 Excel 原件导入并生成模板，请到
+          <a href="/business-docking">数据对接中心</a>。
         </p>
       </section>
 

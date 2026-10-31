@@ -1004,20 +1004,45 @@ async function downloadCandidate(index: number) {
         <p>基于实际生成的候选工作簿属性的布局近似预览，不是 Excel 像素截图；公式显示表达式，未计算结果。保存时原公式缓存值会清除，需在支持计算的表格软件中打开重算。仅展示每表前 40 行、20 列和前 20 张表；超出范围请下载核对。</p>
       </details>
       <label v-if="review.layout?.length">工作表 <select v-model.number="sheetIndex"><option v-for="(sheet, i) in review.layout" :key="sheet.sheet" :value="i">{{ sheet.sheet }}{{ sheet.truncated ? '（预览截断）' : '' }}</option></select></label>
-      <div class="reviewed-template__previews">
-        <div v-for="index in 4" :key="index" class="reviewed-template__preview">
-          <strong v-if="index === 1">原件中的所选文档（派生副本）</strong>
-          <label v-else><input v-model="candidateIndex" type="radio" :value="index - 2"> 模板 {{ index - 1 }}：{{ proposal.candidates[index - 2].label }}</label>
-          <small v-if="index > 1 && equivalentTo(index - 2)">与模板 {{ equivalentTo(index - 2) }} 清理结果相同</small>
-          <template v-if="layoutFor(index - 1)"><table><colgroup><col v-for="(width, col) in layoutFor(index - 1)!.widths" :key="col" :style="{ width: `${width * 7}px` }"></colgroup><tbody>
-            <tr v-for="(row, rowIndex) in layoutFor(index - 1)!.rows" :key="rowIndex" :style="{ height: `${row.height * 1.333}px` }">
+      <details class="reviewed-template__source-ref"><summary>查看原件派生副本</summary>
+        <div class="reviewed-template__preview reviewed-template__preview--source">
+          <template v-if="layoutFor(0)"><table><colgroup><col v-for="(width, col) in layoutFor(0)!.widths" :key="col" :style="{ width: `${width * 7}px` }"></colgroup><tbody>
+            <tr v-for="(row, rowIndex) in layoutFor(0)!.rows" :key="rowIndex" :style="{ height: `${row.height * 1.333}px` }">
               <td v-for="cell in row.cells" :key="cell.cell" :rowspan="cell.rowspan" :colspan="cell.colspan" :style="cellStyle(cell)">{{ cell.value }}</td>
             </tr></tbody></table></template>
           <small v-else>此版本无成品布局预览，请重新生成后核对。</small>
-          <button v-if="index > 1 && proposal.result_previews?.[index - 2]" type="button" :disabled="busy" @click="downloadCandidate(index - 2)">下载候选核对</button>
-          <details v-if="index > 1"><summary>查看差异与理由</summary><p>{{ proposal.candidates[index - 2].explanation }}</p><p>清除 {{ proposal.candidates[index - 2].clear.length }} 格；不确定内容保留。{{ proposal.candidates[index - 2].clear.length ? '' : '与原件相同，待确认。' }}</p></details>
+        </div>
+      </details>
+      <div class="reviewed-template__previews reviewed-template__previews--a4" role="listbox" aria-label="候选模板">
+        <div
+          v-for="(candidate, index) in proposal.candidates"
+          :key="candidate.id"
+          class="reviewed-template__preview reviewed-template__preview--a4"
+          :class="{ 'reviewed-template__preview--selected': candidateIndex === index }"
+          role="option"
+          :aria-selected="candidateIndex === index"
+          tabindex="0"
+          @click="!busy && (candidateIndex = index)"
+          @keydown.enter.prevent="!busy && (candidateIndex = index)"
+          @keydown.space.prevent="!busy && (candidateIndex = index)"
+        >
+          <span class="reviewed-template__a4-label">模板 {{ index + 1 }}：{{ candidate.label }}</span>
+          <span class="reviewed-template__a4-page">
+            <template v-if="layoutFor(index + 1)"><table><colgroup><col v-for="(width, col) in layoutFor(index + 1)!.widths" :key="col" :style="{ width: `${width * 7}px` }"></colgroup><tbody>
+              <tr v-for="(row, rowIndex) in layoutFor(index + 1)!.rows" :key="rowIndex" :style="{ height: `${row.height * 1.333}px` }">
+                <td v-for="cell in row.cells" :key="cell.cell" :rowspan="cell.rowspan" :colspan="cell.colspan" :style="cellStyle(cell)">{{ cell.value }}</td>
+              </tr></tbody></table></template>
+            <small v-else>此版本无成品布局预览，请重新生成后核对。</small>
+          </span>
+          <small v-if="equivalentTo(index)" class="reviewed-template__a4-meta">与模板 {{ equivalentTo(index) }} 清理结果相同</small>
+          <small v-else class="reviewed-template__a4-meta">{{ candidate.explanation }}</small>
+          <span class="reviewed-template__a4-actions" @click.stop>
+            <button v-if="proposal.result_previews?.[index]" type="button" :disabled="busy" @click="downloadCandidate(index)">下载候选核对</button>
+            <details><summary>查看差异与理由</summary><p>{{ candidate.explanation }}</p><p>清除 {{ candidate.clear.length }} 格；不确定内容保留。{{ candidate.clear.length ? '' : '与原件相同，待确认。' }}</p></details>
+          </span>
         </div>
       </div>
+      <p class="reviewed-template__a4-hint">点选卡片选用；蓝框为当前所选。</p>
       <p>版本 {{ selectedVersion + 1 }} · {{ proposal.model.status === 'returned' ? '模型已返回建议，尚待用户确认' : proposal.model.status === 'unavailable' ? '模型不可用，显示确定性规则建议' : '确定性规则建议，未调用模型' }}<span v-if="proposal.model.status === 'returned'"> · 输入 {{ proposal.model.cells_sent }}/{{ proposal.model.cells_total }} 格{{ proposal.model.truncated ? '（已截断）' : '' }}</span></p>
       <details v-if="proposal.model.input_summary"><summary>查看模型输入摘要及来源坐标（不含正文）</summary><pre>{{ JSON.stringify(proposal.model.input_summary, null, 2) }}</pre></details>
       <details v-if="proposal.model.input_messages"><summary>历史记录中的模型输入正文（旧记录未自动清理）</summary><pre>{{ JSON.stringify(proposal.model.input_messages, null, 2) }}</pre></details>
@@ -1342,11 +1367,25 @@ async function downloadCandidate(index: number) {
   font-size: 13px;
 }
 .etl-template-picker {
-  border: 1px solid #c5d3e3;
-  border-radius: 12px;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgb(15 23 42 / 45%);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.etl-template-picker > .reviewed-template__step {
+  width: min(56rem, 96vw);
+  max-height: min(92vh, 46rem);
+  overflow: auto;
+  margin: 0;
   background: #fff;
-  box-shadow: 0 12px 32px rgb(22 53 95 / 12%);
-  padding: 0.25rem;
+  box-shadow: 0 20px 50px rgb(0 0 0 / 20%);
 }
 .etl-template-picker__bar {
   display: flex;
@@ -1537,6 +1576,89 @@ async function downloadCandidate(index: number) {
 .reviewed-template__preview small { display: block; }
 .reviewed-template__preview table { border-collapse: collapse; table-layout: fixed; }
 .reviewed-template__preview td { border: 1px solid #ddd; white-space: pre-wrap; min-width: 24px; font-size: 11px; }
+.reviewed-template__previews--a4 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  overflow: visible;
+}
+.reviewed-template__preview--a4 {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
+  margin: 0;
+  max-height: none;
+  padding: 0.65rem;
+  text-align: left;
+  cursor: pointer;
+  border: 2px solid #d9e0e8;
+  border-radius: 10px;
+  background: #f3f5f8;
+  color: inherit;
+  font: inherit;
+  overflow: hidden;
+}
+.reviewed-template__preview--a4:hover { border-color: #9bb6d0; }
+.reviewed-template__preview--selected {
+  border-color: #235d8c;
+  box-shadow: 0 0 0 3px rgb(35 93 140 / 22%);
+  background: #f3f8fc;
+}
+.reviewed-template__a4-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #16355f;
+  overflow-wrap: anywhere;
+}
+.reviewed-template__a4-page {
+  aspect-ratio: 210 / 297;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #111;
+  box-shadow: 0 1px 0 #111, 2px 3px 0 rgb(0 0 0 / 6%);
+  padding: 6% 5% 7%;
+  overflow: auto;
+  display: block;
+}
+.reviewed-template__a4-page table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.reviewed-template__a4-page td {
+  border: 1px solid #111;
+  white-space: pre-wrap;
+  min-width: 18px;
+  font-size: 9px;
+  color: #111;
+}
+.reviewed-template__a4-meta {
+  font-size: 11px;
+  color: #5f6f7e;
+  line-height: 1.35;
+}
+.reviewed-template__a4-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+.reviewed-template__a4-hint {
+  margin: 0.25rem 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+.reviewed-template__source-ref {
+  margin: 0.25rem 0 0.5rem;
+}
+.reviewed-template__preview--source {
+  max-height: 12rem;
+}
+@media (max-width: 720px) {
+  .reviewed-template__previews--a4 { grid-template-columns: 1fr; }
+}
 .reviewed-template__cells { max-height: 25rem; overflow: auto; display: grid; gap: 0.4rem; margin: 0.8rem 0; }
 .reviewed-template__cells label { display: block; overflow-wrap: anywhere; }
 @media (max-width: 720px) {
