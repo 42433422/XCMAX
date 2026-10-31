@@ -46,7 +46,6 @@ from app.fastapi_routes.reviewed_excel_template import (
 )
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS
-from app.utils.path_io.path_utils import get_app_data_dir
 
 router = APIRouter()
 

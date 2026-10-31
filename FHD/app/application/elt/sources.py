@@ -9,7 +9,7 @@ from typing import Any, BinaryIO
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.application.etl import archive_store, service_uploads
+from app.application.etl import archive_store
 from app.application.etl.archive_policy import ArchivePolicyError
 from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
 from app.application.etl.service_support import MAX_FILE_BYTES
