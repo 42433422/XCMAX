@@ -1,7 +1,9 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), downloadClassificationSource: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
+const etl = vi.hoisted(() => ({ autoIngestProgress: vi.fn(), autoIngestBatches: vi.fn(), withdrawAutoIngestBatch: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
+vi.mock('@/api/etl', () => ({ etlApi: etl }))
 vi.mock('@/api/xcmaxMarketProxy', () => ({
   default: {
     llmResolveChatDefault: vi.fn().mockResolvedValue({ ok: true, provider: 'platform', model: 'default-chat' }),
@@ -37,7 +39,10 @@ describe('reviewed Excel template', () => {
   it('offers legacy XLS through the archive conversion boundary in chatlike intake', () => {
     const archived = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     expect(archived.find('input[type=file]').attributes('accept')).toBe('.xlsx,.xls')
-    expect(archived.text()).toContain('打印版式未验证，不可发布企业模板库')
+    expect(archived.find('.etl-admin-panel').exists()).toBe(false)
+    expect(archived.find('.etl-composer__input').exists()).toBe(true)
+    expect(archived.text()).toContain('上传文件，挑选模板')
+    expect(archived.text()).not.toContain('管理员与档案')
     archived.unmount()
   })
   it.each([false, true])('binds limited XLS consent to the exact file hash (accepted=%s)', async accepted => {
@@ -154,6 +159,17 @@ describe('reviewed Excel template', () => {
     await wrapper.findAll('button').find((b) => b.text() === '重试未完成文件')!.trigger('click'); await flushPromises()
     const second = api.archiveClassifyExcel.mock.calls[1][0] as FormData
     expect(first.get('request_key')).toEqual(second.get('request_key'))
+  })
+  it('keeps administrator panel only outside chatlike intake', () => {
+    expect(mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } }).find('.etl-admin-panel').exists()).toBe(false)
+    expect(mount(ReviewedExcelTemplate).find('.etl-admin-panel').exists()).toBe(true)
+  })
+  it('records composer requirement text on user intake', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    await wrapper.get('.etl-composer__input').setValue('保留客户栏，清理空白行')
+    await wrapper.get('.etl-composer__send').trigger('click')
+    expect(wrapper.text()).toContain('整理要求：保留客户栏，清理空白行')
+    wrapper.unmount()
   })
   it('shows administrator quota and a dependency-blocked archive withdrawal', async () => {
     api.archiveQuota.mockResolvedValue({ configured: true, limit_bytes: 1000, reserved_bytes: 300 })
@@ -692,6 +708,73 @@ describe('reviewed Excel template', () => {
       await wrapper.get('.etl-composer__attach').trigger('click')
       expect(click).toHaveBeenCalledTimes(1)
     } finally { wrapper.unmount() }
+  })
+
+  it('marks composer drag-over on dragover and clears on leave', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const composer = wrapper.get('.etl-composer')
+      await composer.trigger('dragover', { dataTransfer: { files: [] } })
+      expect(wrapper.find('.etl-composer--dragover').exists()).toBe(true)
+      await composer.trigger('dragleave', { relatedTarget: null })
+      expect(wrapper.find('.etl-composer--dragover').exists()).toBe(false)
+    } finally { wrapper.unmount() }
+  })
+
+  it('polls auto-ingest progress until terminal and surfaces poll errors', async () => {
+    vi.useFakeTimers()
+    etl.autoIngestProgress
+      .mockResolvedValueOnce({ status: 'running', kb_progress: { pct: 40, stage: 'write', message: '写入中' }, business_progress: { pct: 10, stage: 'queued', message: '排队' } })
+      .mockResolvedValueOnce({ status: 'applied', kb_progress: { pct: 100, stage: 'done', message: '完成' }, business_progress: { pct: 100, stage: 'done', message: '完成' } })
+      .mockRejectedValueOnce(new Error('进度读取失败'))
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const state = wrapper.vm.$.setupState as Record<string, unknown>
+      state.savedId = 'tpl-ingest'
+      ;(state.startIngestPoll as (id: string) => void)('batch-1')
+      await flushPromises()
+      expect(etl.autoIngestProgress).toHaveBeenCalledWith('batch-1')
+      expect(wrapper.find('[aria-label="自动入库真实进度"]').exists()).toBe(true)
+      expect(wrapper.text()).toContain('写入中')
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+      expect(wrapper.text()).toContain('自动入库批次 batch-1')
+      ;(state.startIngestPoll as (id: string) => void)('batch-err')
+      await flushPromises()
+      expect(wrapper.text()).toContain('进度读取失败')
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('downloads a candidate workbook from the A4 picker', async () => {
+    api.archiveClassifyExcel.mockResolvedValue({ name: 'cand.xlsx', status: 'classified', classification_id: 'c-cand', version: 'v1', confirmed: true, sheets: [{ sheet: 'S', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['unknown'], checked_cells: 1, parent_heading: '', dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }] })
+    api.confirmClassification.mockResolvedValue({ version: 'confirmed-version', confirmed: true, sheets: [{ sheet: 'S', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['unknown'], checked_cells: 1, parent_heading: '', dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }] })
+    api.reviewExcel.mockResolvedValue({ review_id: 'r-cand', sha256: 'sha', sheets: ['S'], cells: [], proposal: proposal('v1') })
+    api.downloadReviewedCandidate.mockResolvedValue({ blob: async () => new Blob(['cand']) })
+    api.downloadReviewedExcel.mockResolvedValue({ blob: async () => new Blob(['saved']) })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const input = wrapper.get('input[type="file"][multiple]')
+      Object.defineProperty(input.element, 'files', { configurable: true, value: [new File(['x'], 'cand.xlsx')] })
+      await input.trigger('change'); await flushPromises()
+      await wrapper.findAll('button').find(b => b.text() === '开始处理')!.trigger('click'); await flushPromises()
+      const state = wrapper.vm.$.setupState as Record<string, unknown>
+      state.name = 'cand-tpl'
+      state.savedId = 'tpl-saved'
+      await (state.downloadCandidate as (index: number) => Promise<void>)(0)
+      await flushPromises()
+      expect(api.downloadReviewedCandidate).toHaveBeenCalledWith('r-cand', 'v1', 'preserve')
+      await (state.download as (id: string) => Promise<void>)('tpl-saved')
+      await flushPromises()
+      expect(api.downloadReviewedExcel).toHaveBeenCalledWith('tpl-saved')
+      expect(click).toHaveBeenCalled()
+    } finally {
+      click.mockRestore()
+      wrapper.unmount()
+    }
   })
 
 })

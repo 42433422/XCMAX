@@ -4,19 +4,83 @@ import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 
-const api = vi.hoisted(() => ({ archiveClassifyExcel: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn() }))
+const api = vi.hoisted(() => ({
+  archiveClassifyExcel: vi.fn(),
+  archiveAssets: vi.fn(),
+  classifyArchiveVersion: vi.fn(),
+  downloadArchiveVersion: vi.fn(),
+  confirmClassification: vi.fn(),
+  reviewExcel: vi.fn(),
+}))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/auth', () => ({ authApi: { validateSession: vi.fn() } }))
+vi.mock('@/api/xcmaxMarketProxy', () => ({
+  default: { llmResolveChatDefault: vi.fn().mockResolvedValue({ ok: true, provider: 'platform', model: 'default-chat' }) },
+}))
+
 function classified(name: string) {
-  return { name, status: 'classified', classification_id: name, version: 'v1', sheets: [{ sheet: 'Sheet1', labels: ['unknown'], checked_cells: 1, evidence: [],
-    regions: [{ range: 'A1:D4', labels: ['unknown'], checked_cells: 1, parent_heading: '', dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }] }
+  return {
+    name,
+    status: 'classified',
+    classification_id: name,
+    version: 'v1',
+    sheets: [{
+      sheet: 'Sheet1',
+      labels: ['unknown'],
+      checked_cells: 1,
+      evidence: [],
+      regions: [{
+        range: 'A1:D4',
+        labels: ['unknown'],
+        checked_cells: 1,
+        parent_heading: '',
+        dependency_status: '待确认',
+        needs_confirmation: true,
+        header_cells: [],
+        merged_ranges: [],
+        possible_shared_context: [],
+        evidence: [],
+      }],
+    }],
+  }
 }
+
+function reviewPayload(id: string) {
+  const candidates = [0, 1, 2].map(index => ({
+    id: `candidate-${index}`,
+    label: `候选${index + 1}`,
+    explanation: '保留未确认内容',
+    clear: [],
+  }))
+  return {
+    review_id: id,
+    sha256: 'sha',
+    cells: [],
+    sheets: ['Sheet1'],
+    model: 'not_called',
+    proposal: {
+      version: `${id}-v1`,
+      parent_version: null,
+      candidates,
+      evidence: [],
+      model: { status: 'not_called' },
+      result_previews: candidates.map(candidate => ({
+        candidate_id: candidate.id,
+        sha256: 'sha',
+        layout: [],
+        layout_truncated: false,
+      })),
+    },
+  }
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (error: Error) => void
   const promise = new Promise<T>((finish, fail) => { resolve = finish; reject = fail })
   return { promise, resolve, reject }
 }
+
 let wrapper: VueWrapper | undefined
 let actor = 'A'
 function account(id: string) {
@@ -34,6 +98,12 @@ async function choose(names: string[]) {
 beforeEach(() => {
   vi.clearAllMocks(); invalidateEnterpriseSessionCache(); account('A')
   api.archiveClassifyExcel.mockReset().mockImplementation(async (form: FormData) => classified((form.get('file') as File).name))
+  api.confirmClassification.mockReset().mockImplementation(async (_id: string, _form: FormData) => ({
+    ...classified('confirmed.xlsx'),
+    version: 'confirmed-version',
+    confirmed: true,
+  }))
+  api.reviewExcel.mockReset().mockImplementation(async (form: FormData) => reviewPayload(String(form.get('region_range') || 'A1:D4')))
 })
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.restoreAllMocks() })
 
@@ -54,7 +124,9 @@ describe('reviewed workbook account and component ownership', () => {
     else first.reject(new Error('old A error'))
     await flushPromises()
     expect(trace).toEqual([{ actor: 'A', name: 'A-first.xlsx' }])
+    // User path never mounts classification DOM; retired batch must also leave no template picker cards.
     expect(wrapper.findAll('.classification-region')).toHaveLength(0)
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
     expect(wrapper.text()).not.toContain('A-first.xlsx')
     expect(wrapper.text()).not.toContain('old A error')
     expect(wrapper.emitted('stage')?.length).toBe(stages)
@@ -70,6 +142,7 @@ describe('reviewed workbook account and component ownership', () => {
     first.resolve(classified('A-first.xlsx')); await flushPromises()
     expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(1)
     expect(wrapper.findAll('.classification-region')).toHaveLength(0)
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
   })
 
   it('does not continue or emit when the component is unmounted during the first file', async () => {
@@ -104,7 +177,11 @@ describe('reviewed workbook account and component ownership', () => {
     expect(wrapper.emitted('stage')?.length).toBe(stages)
     currentB.resolve(classified('B-first.xlsx')); await flushPromises()
     expect(trace).toEqual(['A:A-first.xlsx', 'B:B-first.xlsx', 'B:B-second.xlsx'])
-    expect(wrapper.findAll('.classification-region')).toHaveLength(2)
+    // User path hides classification form; success shows A4 template cards for the current B batch only.
+    expect(wrapper.findAll('.classification-region')).toHaveLength(0)
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(3)
+    expect(wrapper.text()).toContain('B-first.xlsx')
+    expect(wrapper.text()).toContain('B-second.xlsx')
     expect(wrapper.text()).not.toContain('A-first.xlsx')
   })
 
@@ -116,17 +193,23 @@ describe('reviewed workbook account and component ownership', () => {
     wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     await choose(['A-first.xlsx', 'A-second.xlsx'])
     expect(trace).toEqual(['A:A-first.xlsx', 'A:A-second.xlsx'])
-    expect(wrapper.findAll('.classification-region')).toHaveLength(2)
+    expect(api.confirmClassification).toHaveBeenCalled()
+    expect(api.reviewExcel).toHaveBeenCalled()
+    expect(wrapper.findAll('.classification-region')).toHaveLength(0)
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(3)
+    expect(wrapper.text()).toContain('A-first.xlsx')
+    expect(wrapper.text()).toContain('A-second.xlsx')
     expect(wrapper.get('input[type="file"][multiple]').attributes('disabled')).toBeUndefined()
   })
 
   it.each(['分类此版本', '重新分类（保留历史）'])('does not restore an A archive via %s when bytes arrive after switching to B', async (action) => {
+    // Admin archive controls live only outside chatlike intake.
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const bytes = deferred<Blob>()
     api.archiveAssets.mockResolvedValue({ assets: [{ id: 'asset-A', name: 'A-private.xlsx', state: 'active', versions: [{ id: 'version-A', version: 1, status: 'ready', sha256: 'sha', classification_id: 'c-A' }] }] })
     api.classifyArchiveVersion.mockResolvedValue(classified('A-private.xlsx'))
     api.downloadArchiveVersion.mockResolvedValue({ blob: () => bytes.promise })
-    wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: false } })
     await wrapper.findAll('button').find(button => button.text() === '查看原件档案')!.trigger('click'); await flushPromises()
     await wrapper.findAll('button').find(button => button.text() === action)!.trigger('click'); await flushPromises()
     const form = api.classifyArchiveVersion.mock.calls.at(-1)![1] as FormData

@@ -8,9 +8,9 @@ import type { EtlRunTab } from '@/utils/etlRunView'
 export type TabId = EtlRunTab
 
 export const ETL_CENTER_TABS = [
-  { id: 'archive', label: '原件归档' },
-  { id: 'classification', label: '切片分类' },
-  { id: 'template', label: '生成并保存模板' },
+  { id: 'archive', label: '导入' },
+  { id: 'classification', label: '分类' },
+  { id: 'template', label: '选模板' },
 ] as const
 
 export const ETL_RUN_TABS: Array<{ id: TabId; step: string; label: string }> = [
