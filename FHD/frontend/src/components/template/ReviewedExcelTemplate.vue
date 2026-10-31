@@ -375,6 +375,11 @@ async function classify() {
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类失败' }
   finally { if (current()) busy.value = false }
   if (!current() || !props.archiveOnSelect) return
+  const failed = classifications.value.filter((item) => item.status !== 'classified')
+  if (failed.length) {
+    error.value = failed.map((item) => item.message || `${item.name}未完成`).join('；')
+    return
+  }
   if (classifications.value.some((item) => item.status === 'classified' && !item.confirmed)) {
     await confirmClassifications()
   }
