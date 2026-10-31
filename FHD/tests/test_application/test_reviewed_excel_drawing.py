@@ -586,6 +586,7 @@ def test_archive_accepts_unsupported_geometry_without_allowing_model_or_derivati
             "extent": None,
         }
         from openpyxl import Workbook
+
         from app.application.reviewed_excel_drawing import set_drawing_columns
 
         set_drawing_columns(Workbook().active, [bare])
