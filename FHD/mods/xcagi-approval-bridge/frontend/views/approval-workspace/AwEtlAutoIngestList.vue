@@ -6,9 +6,9 @@
     </div>
     <p class="aw-etl-auto-ingest__hint">选模板保存后自动写入知识库与对应业务域；此处可撤回整批。</p>
     <p v-if="loading" role="status">正在读取入库批次…</p>
-    <p v-else-if="error" role="alert">{{ error }} <button type="button" @click="reload">重试</button></p>
-    <p v-else-if="!items.length">暂无自动入库批次。</p>
-    <ul v-else class="aw-etl-auto-ingest__list">
+    <p v-if="error" role="alert">{{ error }} <button type="button" @click="reload">重试</button></p>
+    <p v-else-if="!loading && !items.length">暂无自动入库批次。</p>
+    <ul v-if="!loading && items.length" class="aw-etl-auto-ingest__list">
       <li v-for="item in items" :key="String(item.batch_id)">
         <div>
           <strong>{{ item.file_name || item.batch_id }}</strong>
