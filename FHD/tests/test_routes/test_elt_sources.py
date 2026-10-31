@@ -53,9 +53,17 @@ def source_client(tmp_path, monkeypatch):
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(service_history, "get_app_data_dir", lambda: str(tmp_path))
     from app.application.elt import sources
+    from app.application.etl import archive_store
+    from app.utils.path_io import path_utils
 
     if hasattr(sources, "get_app_data_dir"):
         monkeypatch.setattr(sources, "get_app_data_dir", lambda: str(tmp_path))
+    archive_root = tmp_path / "business-archive"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(path_utils, "get_desktop_state_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(path_utils, "get_business_archive_dir", lambda **_: str(archive_root))
+    monkeypatch.setattr(archive_store, "get_business_archive_dir", lambda **_: str(archive_root))
+    monkeypatch.setattr(archive_store, "default_archive_root", lambda: archive_root)
 
     app = FastAPI()
 
@@ -267,7 +275,7 @@ def test_sources_require_configured_archive_quota(source_client):
     assert response.status_code == 409, response.text
     with tenant_scope(3), store.factory() as db:
         assert db.query(EtlArchiveAsset).count() == db.query(EtlArchiveVersion).count() == 0
-    assert not (store.root / "etl" / "archive" / "3").exists()
+    assert not (store.root / "business-archive" / "3").exists()
 
 
 def test_request_key_replay_reuses_archive_identity_and_quota(source_client):
@@ -301,7 +309,7 @@ def test_existing_archive_original_is_readable_without_reupload(source_client):
             owner=7,
             name="existing.csv",
             body=ORIGINAL,
-            root=store.root / "etl" / "archive",
+            root=store.root / "business-archive",
             request_key=str(uuid4()),
         )
         asset_id, version_id = archived.asset_id, archived.id

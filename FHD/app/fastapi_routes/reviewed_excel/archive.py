@@ -16,6 +16,7 @@ from app.application.etl.archive_policy import ArchivePolicyError
 from app.application.etl.archive_store import (
     append_original_version,
     create_original,
+    default_archive_root,
     read_original,
     recover_complete_pending,
 )
@@ -45,7 +46,6 @@ from app.fastapi_routes.reviewed_excel_template import (
 )
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS
-from app.utils.path_io.path_utils import get_app_data_dir
 
 router = APIRouter()
 
@@ -157,7 +157,7 @@ def archive_version_download(version_id: str, user=Depends(_read)):
                 db,
                 owner=owner,
                 version_id=version_id,
-                root=Path(get_app_data_dir()) / "etl" / "archive",
+                root=default_archive_root(),
             )
             legacy = body.startswith(OLE_MAGIC)
             return Response(
@@ -204,7 +204,7 @@ async def archive_new_version(
                 owner=owner,
                 asset_id=asset_id,
                 body=body,
-                root=Path(get_app_data_dir()) / "etl" / "archive",
+                root=default_archive_root(),
                 request_key=request_key,
             )
             return {
@@ -283,7 +283,7 @@ def recover_archive_version(
                 db,
                 owner=owner,
                 version_id=version_id,
-                root=Path(get_app_data_dir()) / "etl" / "archive",
+                root=default_archive_root(),
             )
             return {"version_id": version_id, "status": "ready"}
     except ArchivePolicyError as exc:
@@ -317,7 +317,7 @@ async def archive_classify(
                     owner=owner,
                     name=file.filename or "review.xlsx",
                     body=body,
-                    root=Path(get_app_data_dir()) / "etl" / "archive",
+                    root=default_archive_root(),
                     request_key=request_key,
                 )
                 if existing_version.classification_id:
@@ -343,7 +343,7 @@ async def archive_classify(
                 owner=owner,
                 name=file.filename or "review.xlsx",
                 body=body,
-                root=Path(get_app_data_dir()) / "etl" / "archive",
+                root=default_archive_root(),
                 request_key=request_key,
             )
             return _create_archive_classification(
@@ -560,7 +560,7 @@ def classify_archive_version(
                 db,
                 owner=owner,
                 version_id=version_id,
-                root=Path(get_app_data_dir()) / "etl" / "archive",
+                root=default_archive_root(),
             )
             archived = (
                 db.query(EtlArchiveVersion)

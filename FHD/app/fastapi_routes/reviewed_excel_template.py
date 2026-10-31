@@ -25,6 +25,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.application.etl.archive_policy import ArchivePolicyError
 from app.application.etl.archive_store import (
+    default_archive_root,
     read_original,
 )
 from app.application.etl.errors import EtlError, ReviewedExcelError, public_excel_error
@@ -163,7 +164,7 @@ def _source(db, run, tenant, owner):
                 db,
                 owner=owner,
                 version_id=archive_version_id,
-                root=Path(get_app_data_dir()) / "etl" / "archive",
+                root=default_archive_root(),
             )
         except ArchivePolicyError as exc:
             raise HTTPException(status_code=409, detail=public_excel_error(exc)) from None
@@ -221,7 +222,7 @@ def _rebuild_archived_document(db, run, tenant, owner):
             db,
             owner=owner,
             version_id=scope["archive_version_id"],
-            root=Path(get_app_data_dir()) / "etl" / "archive",
+            root=default_archive_root(),
         )
         classification = _classification_run(db, scope["classification_id"], tenant, owner)
         if load_json(classification.summary_json, {}).get("conversion_receipt"):

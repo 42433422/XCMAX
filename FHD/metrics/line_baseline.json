@@ -1,5 +1,5 @@
 {
-  "lines": 2404705,
+  "lines": 2405001,
   "updated": "2026-10-31",
-  "note": "feat/#2858 路由黄金快照加入 auto-ingest 5 条"
+  "note": "feat/#2859 encrypted business-archive under stable user data (rebase onto #2858)"
 }

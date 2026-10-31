@@ -2,13 +2,23 @@
 
 Caller must authenticate the actor and establish tenant scope. Incomplete writes
 remain pending for operator reconciliation; they are never silently retried.
+
+On-disk bodies are Fernet-encrypted under ``business-archive/`` (see
+:func:`default_archive_root`). Metadata ``sha256`` / ``size_bytes`` always
+describe the **plaintext** original. Idempotency remains ``request_key``.
 """
 
+from __future__ import annotations
+
+import base64
+import contextlib
 import hashlib
 import os
+import secrets
 from pathlib import Path
 from typing import cast
 
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import func, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
@@ -18,6 +28,15 @@ from app.application.etl.errors import EtlConflict
 from app.application.etl.service_support import MAX_FILE_BYTES, clean_filename, new_id
 from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.infrastructure.tenant_scope import tenant_id_for_write
+from app.utils.path_io.path_utils import get_business_archive_dir
+
+_KEY_FILE_NAME = ".archive.key"
+_ENVELOPE_MAGIC = b"XCAGIARC1\0"
+
+
+def default_archive_root() -> Path:
+    """Stable user-data root for archived business originals."""
+    return Path(get_business_archive_dir())
 
 
 def create_original(
@@ -94,18 +113,26 @@ def create_original(
     )
     db.add(version)
     db.commit()
-    _write_pending(db, version, body, directory, path)
+    _write_pending(db, version, body, directory, path, root=root)
     return version
 
 
 def _write_pending(
-    db: Session, version: EtlArchiveVersion, body: bytes, directory: Path, path: Path
+    db: Session,
+    version: EtlArchiveVersion,
+    body: bytes,
+    directory: Path,
+    path: Path,
+    *,
+    root: Path | None = None,
 ) -> None:
     # A crash or a failed write leaves an explicit pending record and reservation.
+    archive_root = root if root is not None else path.parent.parent.parent
+    payload = _encrypt_body(body, archive_root=archive_root)
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     with path.open("xb") as handle:
         path.chmod(0o600)
-        handle.write(body)
+        handle.write(payload)
         handle.flush()
         os.fsync(handle.fileno())
     version.status = "ready"
@@ -193,7 +220,7 @@ def append_original_version(
     )
     db.add(version)
     db.commit()
-    _write_pending(db, version, body, directory, path)
+    _write_pending(db, version, body, directory, path, root=root)
     return version
 
 
@@ -225,9 +252,12 @@ def _read_verified(version: EtlArchiveVersion, *, tenant: int, owner: int, root:
     path = raw.resolve()
     if raw.is_symlink() or path.parent != directory or not path.is_file():
         raise ArchivePolicyError("归档原件不可用")
-    if path.stat().st_size != version.size_bytes or version.size_bytes > MAX_FILE_BYTES:
+    disk = path.read_bytes()
+    if len(disk) > MAX_FILE_BYTES + 4096:
         raise ArchivePolicyError("归档原件大小已改变")
-    body = path.read_bytes()
+    body = _decrypt_or_migrate(disk, path=path, archive_root=root, version=version)
+    if len(body) != version.size_bytes or version.size_bytes > MAX_FILE_BYTES:
+        raise ArchivePolicyError("归档原件大小已改变")
     if hashlib.sha256(body).hexdigest() != version.sha256:
         raise ArchivePolicyError("归档原件校验失败")
     return body
@@ -265,3 +295,73 @@ def recover_complete_pending(db: Session, *, owner: int, version_id: str, root: 
         db.rollback()
         raise ArchivePolicyError("归档状态已改变，请刷新")
     db.commit()
+
+
+def _archive_cipher(archive_root: Path) -> Fernet:
+    """Install/user-data scoped Fernet key (never logged).
+
+    Prefer ``SECRET_KEY`` / ``XCAGI_SECRET_KEY`` when set (server). Otherwise a
+    random key file ``{archive_root}/.archive.key`` with mode 0600, matching the
+    group-chat desktop key-file pattern.
+    """
+    secret = (
+        os.environ.get("SECRET_KEY", "").strip() or os.environ.get("XCAGI_SECRET_KEY", "").strip()
+    )
+    if not secret:
+        secret = _load_or_create_key_file(archive_root)
+    digest = hashlib.sha256(secret.encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def _load_or_create_key_file(archive_root: Path) -> str:
+    key_path = archive_root.expanduser().resolve() / _KEY_FILE_NAME
+    try:
+        if key_path.is_file():
+            existing = key_path.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+        key_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        generated = secrets.token_urlsafe(32)
+        # Write then tighten perms (Windows may ignore chmod; still best-effort).
+        key_path.write_text(generated + "\n", encoding="utf-8")
+        with contextlib.suppress(OSError):
+            os.chmod(key_path, 0o600)
+        return generated
+    except OSError as exc:
+        raise ArchivePolicyError("归档密钥不可用") from exc
+
+
+def _encrypt_body(plaintext: bytes, *, archive_root: Path) -> bytes:
+    token = _archive_cipher(archive_root).encrypt(plaintext)
+    return _ENVELOPE_MAGIC + token
+
+
+def _decrypt_or_migrate(
+    disk: bytes, *, path: Path, archive_root: Path, version: EtlArchiveVersion
+) -> bytes:
+    if disk.startswith(_ENVELOPE_MAGIC):
+        token = disk[len(_ENVELOPE_MAGIC) :]
+        try:
+            return _archive_cipher(archive_root).decrypt(token)
+        except InvalidToken as exc:
+            raise ArchivePolicyError("归档原件解密失败") from exc
+    # Legacy plaintext under old etl/archive (or pre-encrypt writes): verify then
+    # transparently re-encrypt on read when the digest matches.
+    if hashlib.sha256(disk).hexdigest() != version.sha256 or len(disk) != version.size_bytes:
+        raise ArchivePolicyError("归档原件校验失败")
+    try:
+        payload = _encrypt_body(disk, archive_root=archive_root)
+        tmp = path.with_suffix(path.suffix + ".migrating")
+        with tmp.open("xb") as handle:
+            tmp.chmod(0o600)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except OSError:
+        # Migration is best-effort; plaintext still verifies and is returned.
+        with contextlib.suppress(OSError):
+            tmp = path.with_suffix(path.suffix + ".migrating")
+            if tmp.exists():
+                tmp.unlink()
+    return disk

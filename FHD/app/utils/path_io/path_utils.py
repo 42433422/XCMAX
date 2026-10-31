@@ -145,6 +145,24 @@ def get_desktop_state_dir() -> str:
     return state_dir
 
 
+def get_business_archive_dir(*, create: bool = True) -> str:
+    """用户业务原件归档根目录（微信式稳定用户数据区）。
+
+    落在 :func:`get_desktop_state_dir` 下的 ``business-archive/``，例如：
+
+    - Windows: ``%APPDATA%\\XCAGI\\business-archive``
+    - macOS: ``~/Library/Application Support/XCAGI/business-archive``
+    - 显式 ``XCAGI_DATA_DIR`` / ``XCAGI_DESKTOP_DATA_DIR`` 时：``{该目录}/business-archive``
+
+    故意不用安装目录 / ``sys._MEIPASS``（只读临时解压区），也不再用历史的
+    ``{app_data}/etl/archive``。密钥文件 ``.archive.key`` 与密文同根存放。
+    """
+    root = os.path.join(get_desktop_state_dir(), "business-archive")
+    if create:
+        os.makedirs(root, exist_ok=True, mode=0o700)
+    return root
+
+
 def get_data_dir() -> str:
     """
     获取数据目录（用于存放数据库等数据文件）

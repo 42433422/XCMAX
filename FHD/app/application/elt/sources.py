@@ -9,7 +9,7 @@ from typing import Any, BinaryIO
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.application.etl import archive_store, service_uploads
+from app.application.etl import archive_store
 from app.application.etl.archive_policy import ArchivePolicyError
 from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
 from app.application.etl.service_support import MAX_FILE_BYTES
@@ -87,7 +87,7 @@ class SourceAssetServiceMixin:
 
     @staticmethod
     def _source_root() -> Path:
-        return Path(service_uploads.get_app_data_dir()) / "etl" / "archive"
+        return archive_store.default_archive_root()
 
     @staticmethod
     def _source_asset(db: Session, asset_id: str, owner_user_id: int) -> EtlArchiveAsset:
