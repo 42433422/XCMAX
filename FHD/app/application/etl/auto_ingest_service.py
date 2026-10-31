@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlError
 from app.application.etl.target_detection import detect_etl_target
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
@@ -249,7 +249,7 @@ class AutoIngestService:
                 business_progress=biz_prog,
             )
             return final or batch
-        except Exception as exc:  # noqa: BLE001 — persist failure into ledger for progress API
+        except BOUNDARY_ERRORS as exc:  # persist failure into ledger for progress API
             _patch_batch(
                 tenant_id,
                 batch_id,
@@ -336,7 +336,7 @@ class AutoIngestService:
                         batch_id=batch_id,
                     )
                     db.commit()
-            except Exception:  # noqa: BLE001 — progress already persisted in run()
+            except BOUNDARY_ERRORS:
                 logger.exception("background auto-ingest failed batch_id=%s", batch_id)
 
         threading.Thread(target=_worker, name=f"auto-ingest-{batch_id}", daemon=True).start()

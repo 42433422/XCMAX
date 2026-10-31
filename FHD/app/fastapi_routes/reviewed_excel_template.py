@@ -1803,7 +1803,7 @@ async def reviewed_excel_save(
                 composer_note="",
                 labels=labels,
             )
-        except Exception as exc:  # noqa: BLE001 — intake save must not roll back on ingest faults
+        except BOUNDARY_ERRORS as exc:  # intake save must not roll back on ingest faults
             # Template save already succeeded; surface ingest failure without undoing save.
             logger.exception(
                 "auto-ingest after reviewed-excel save failed review_id=%s err=%s",
