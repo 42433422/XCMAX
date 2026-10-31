@@ -459,6 +459,9 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                         for key, dim in s.column_dimensions.items()
                         if dim.hidden
                     ],
+                    "auto_filter_ref": (
+                        str(s.auto_filter.ref) if s.auto_filter is not None and s.auto_filter.ref else None
+                    ),
                 }
                 for s in wb.worksheets
             ],

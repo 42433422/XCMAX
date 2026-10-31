@@ -614,6 +614,7 @@ RANGE_GROUP_PROMPT = (
     "put the hosting fragment and every referenced fragment in the same document so those dependencies stay inside one export. "
     "If a document would keep SUBTOTAL (or similar filter-aware aggregates) but omit the sheet_filters rectangle that covers them, "
     "also group in the fragment that covers that AutoFilter reference when one was supplied. "
+    "fragment_structure.has_filter_aware_aggregates and covers_sheet_filter are source facts for that decision. "
     "Technical batches are not document boundaries. Adjacency, sheet membership and repeated headers alone do not prove document identity. "
     "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return exactly output_schema."
 )
@@ -752,7 +753,7 @@ _EXPECTED = {
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "group_ranges": (
-        "3bc6126a37357cf2cbce92a3f0a6564f9df496566c740cd085a5cb2a0b9f0300",
+        "2e5113ae50e6445b3086adfd58d6ade3175c4dbc049de43c1af983dd5b8e33a6",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "identify_atoms": (

@@ -127,6 +127,11 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
     if not 1 <= len(regions) <= 100:
         raise ReviewedExcelError("分组区域数量超过本轮安全预算")
     source_cells = review["cells"]
+    sheet_filters_early = [
+        {"sheet": overview["sheet"], "ref": overview["auto_filter_ref"]}
+        for overview in review.get("sheet_overview", [])
+        if overview.get("auto_filter_ref")
+    ]
     chosen = {}
     fragments = []
     fragment_structure = []
@@ -147,6 +152,14 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
             *_structure_sample_cells(inside),
             *(c for c in inside if (c["sheet"], c["cell"]) in evidence),
         ]
+        # Always surface a capped set of filter-aware aggregates so the model can
+        # see them even when structure sampling omitted those rows.
+        subtotal_cells = [
+            c for c in inside if c.get("kind") == "formula" and "SUBTOTAL" in str(c.get("value", "")).upper()
+        ]
+        for cell in subtotal_cells[:12]:
+            if cell not in selected:
+                selected.append(cell)
         for cell in selected:
             if len(cell["value"]) > 4000:
                 raise ReviewedExcelError("分组证据单格超出安全预算")
@@ -162,6 +175,17 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
         )
         first_row = coordinate_from_string(inside[0]["cell"])[1]
         last_row = coordinate_from_string(inside[-1]["cell"])[1]
+        has_filter_aware = any(
+            c.get("kind") == "formula" and "SUBTOTAL" in str(c.get("value", "")).upper() for c in inside
+        )
+        covers_sheet_filter = False
+        for filt in sheet_filters_early:
+            if filt["sheet"] != sheet:
+                continue
+            fc1, fr1, fc2, fr2 = bounded_range(filt["ref"])
+            if not (c1 > fc2 or fc1 > c2 or r1 > fr2 or fr1 > r2):
+                covers_sheet_filter = True
+                break
         fragment_structure.append(
             {
                 "sheet": sheet,
@@ -170,11 +194,28 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
                 "first_nonempty_row": first_row,
                 "last_nonempty_row": last_row,
                 "has_formulas": any(c.get("kind") == "formula" for c in inside),
+                "has_filter_aware_aggregates": has_filter_aware,
+                "covers_sheet_filter": covers_sheet_filter,
                 "reason": region.get("reason", "")[:1000],
             }
         )
     cells = list(chosen.values())
-    cross_fragment_formulas = _cross_fragment_formula_links(cells, fragments)
+    # Cross-fragment formula facts must not depend on structure sampling: otherwise
+    # filter-aware aggregates (e.g. SUBTOTAL) that sit outside the sample never reach
+    # the model. Scan every formula cell that falls inside a fragment.
+    formula_pool = []
+    for region in regions:
+        sheet, area = region["sheet"], region["range"]
+        c1, r1, c2, r2 = bounded_range(area)
+        for cell in source_cells:
+            if cell.get("kind") != "formula" or cell["sheet"] != sheet:
+                continue
+            col, row = coordinate_from_string(cell["cell"])
+            if c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2:
+                formula_pool.append(
+                    {k: cell[k] for k in ("sheet", "cell", "value", "kind")}
+                )
+    cross_fragment_formulas = _cross_fragment_formula_links(formula_pool, fragments)
     if (
         len(cells) > MAX_MODEL_CELLS
         or sum(len(c["value"].encode("utf-8")) + 64 for c in cells) > MAX_MODEL_TEXT_BYTES
@@ -182,12 +223,14 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
         raise ReviewedExcelError("分组证据超过本轮安全预算")
     from app.application.reviewed_excel_reference_ids import source_sheet_prefixes
 
+    sheet_filters = sheet_filters_early
     output = {
         "source_sha256": review["sha256"],
         "fragments": fragments,
         "cells": cells,
         "fragment_structure": fragment_structure,
         "cross_fragment_formulas": cross_fragment_formulas,
+        "sheet_filters": sheet_filters,
         "source_sheet_prefixes": source_sheet_prefixes(review["sheets"]),
     }
     if review.get("drawing_evidence"):
@@ -309,13 +352,16 @@ def _range_group_input(group_input: dict) -> tuple[dict, dict]:
         )
         dimension["rows"] = max(dimension["rows"], r2)
         dimension["columns"] = max(dimension["columns"], c2)
-    return {
+    shown = {
         "source_sha256": group_input["source_sha256"],
         "ranges": shown_ranges,
         "cells": group_input["cells"],
         "fragment_structure": group_input.get("fragment_structure", []),
         "cross_fragment_formulas": group_input.get("cross_fragment_formulas", []),
-    }, source_ranges_schema(list(dimensions.values()))
+    }
+    if group_input.get("sheet_filters"):
+        shown["sheet_filters"] = group_input["sheet_filters"]
+    return shown, source_ranges_schema(list(dimensions.values()))
 
 
 def _normalize_range_groups(group_input: dict, data: dict) -> list[dict]:
