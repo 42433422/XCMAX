@@ -32,6 +32,20 @@ from app.application.reviewed_excel_classification import (
     plan_semantic_batches,
 )
 from app.application.reviewed_excel_classification_store import (
+
+def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
+    """Persist a compact workbook structural index on classification draft_json."""
+    try:
+        from app.application.reviewed_excel_structural_index import (
+            attach_structural_index_to_draft,
+            build_workbook_structural_index,
+        )
+
+        return attach_structural_index_to_draft(draft, build_workbook_structural_index(body))
+    except Exception:
+        return draft
+
+
     _CLASS_READY,
     _classification_cas,
     _classification_run,
@@ -439,19 +453,22 @@ async def reviewed_excel_classify(
                         stage=_CLASS_READY,
                         file_sha256=result["sha256"],
                         draft_json=dump_json(
-                            {
-                                "versions": [
-                                    {
-                                        "version": version,
-                                        "sheets": result["sheets"],
-                                        "fragment_links": result["fragment_links"],
-                                        "model_status": "not_called",
-                                        "confirmed": False,
-                                        "read_only_print_areas": result["read_only_print_areas"],
-                                        "usage_restrictions": result["usage_restrictions"],
-                                    }
-                                ]
-                            }
+                            _draft_with_structural_index(
+                                {
+                                    "versions": [
+                                        {
+                                            "version": version,
+                                            "sheets": result["sheets"],
+                                            "fragment_links": result["fragment_links"],
+                                            "model_status": "not_called",
+                                            "confirmed": False,
+                                            "read_only_print_areas": result["read_only_print_areas"],
+                                            "usage_restrictions": result["usage_restrictions"],
+                                        }
+                                    ]
+                                },
+                                body,
+                            )
                         ),
                         summary_json=dump_json(
                             {

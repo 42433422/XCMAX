@@ -515,7 +515,7 @@ def neutral_transport_batches(review: dict) -> list[list[dict]]:
 
 CONTRACT_VERSION = "independent-excel-v10-document-ranges"
 SOURCE_PROTOCOL = (
-    "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
+    "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. If workbook_structural_index is supplied, it is optional whole-workbook structural context built by the program; use it with the packet cells, never as a substitute for supplied cells. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
     "sheets[].sheet_state may be visible, hidden, or veryHidden: do not emit physical regions or logical_documents on hidden or veryHidden sheets for independent extraction — leave that content uncovered unless the operator explicitly requires those sheets; never invent workbook-title-specific rules. "
     "Leave uncertain fragments ungrouped. Do not use unread content as evidence. "
@@ -598,7 +598,7 @@ IDENTIFY_PROMPT = (
     "Invalid ranges are rejected, never clipped, expanded or repaired. Formula targets and merge metadata are source facts, not additional supplied cells or business boundaries. "
     "Use multiple ranges in one document only when the source supports that relationship. Technical batches are not documents. "
     "Sheet boundaries, adjacency and repeated headers alone do not prove one business document. "
-    "After cuts are proposed, the server verifies each document against cross-sheet or out-of-range formula references, AutoFilter/SUBTOTAL closure, circular self-refs, and signals of over-merged ledgers (many distinct order/date blocks or repeated titled period headers inside one rectangle). Prefer atomic documents: one titled period/block or one order/date shipment — not an entire continuous ledger. "
+    "When workbook_structural_index is present it is a program-built whole-book structural summary (sheet visibility, headers, order-key-like columns, block title rows, candidate row ranges, cross-sheet formula edges). Use it as global geometric/structural context before local packet cells; it is not a finished document inventory and must not be copied as the answer. After cuts are proposed, the server verifies each document against cross-sheet or out-of-range formula references, AutoFilter/SUBTOTAL closure, circular self-refs, and signals of over-merged ledgers (many distinct order/date blocks or repeated titled period headers inside one rectangle). Prefer atomic documents: one titled period/block or one order/date shipment — not an entire continuous ledger. "
     "Do not place hidden or veryHidden sheets (sheets[].sheet_state) into documents unless explicitly required; never invent workbook-title-specific rules. "
     "Export fidelity: when a document contains filter-aware aggregate formulas (for example SUBTOTAL), "
     "every cell those formulas reference on the same sheet must lie inside that document's rectangles; "
@@ -619,7 +619,7 @@ RANGE_GROUP_PROMPT = (
     "If a document would keep SUBTOTAL (or similar filter-aware aggregates) but omit the sheet_filters rectangle that covers them, "
     "also group in the fragment that covers that AutoFilter reference when one was supplied. "
     "fragment_structure.has_filter_aware_aggregates and covers_sheet_filter are source facts for that decision. "
-    "Server verify-after-cut: after you return documents, each cut is checked for outbound formula refs, circular self-refs, AutoFilter/SUBTOTAL closure, and over-merged ledgers (multiple titled blocks or many distinct date+order runs inside one document). Prefer keeping atomic documents separate; do not merge merely to satisfy a distant aggregate when that would glue unrelated orders together. "
+    "When workbook_structural_index is present, treat it as whole-book structural context for grouping decisions only; do not invent ranges outside the supplied validated ranges. Server verify-after-cut: after you return documents, each cut is checked for outbound formula refs, circular self-refs, AutoFilter/SUBTOTAL closure, and over-merged ledgers (multiple titled blocks or many distinct date+order runs inside one document). Prefer keeping atomic documents separate; do not merge merely to satisfy a distant aggregate when that would glue unrelated orders together. "
     "Technical batches are not document boundaries. Adjacency, sheet membership and repeated headers alone do not prove document identity. "
     "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return exactly output_schema."
 )
@@ -770,11 +770,11 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "891b2e2a660d06b1fd5f70bac345165d6d05fa8c8c826d0194646cf7d4b5a5f4",
+        "83004bbbe2e568f359e9f4ca4f6d3831c59a47637171ce2861834e51a2fc0722",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "group_ranges": (
-        "92c5797d18ab9e1a4f862890f98a03b55d1103c2f138586b90735a5be9322774",
+        "80542ce42151e619db9c2e7151df334395b9f417abf8c08bc7ce77fda3fafe93",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "identify_atoms": (
@@ -786,7 +786,7 @@ _EXPECTED = {
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "c538accb443bc1fa957bfc05142df52ee32f4fb3e54f1f8084630837225074bb",
+        "12e49845beea1c4222ee6bafcaf5d0fddf3b5b9e8271f74dc7b4c65761953cb0",
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (

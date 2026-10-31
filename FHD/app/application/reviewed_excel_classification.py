@@ -411,6 +411,16 @@ def _classify_semantic_batch(
                         for c in chosen
                     ],
                     "rule_hints": rule_hints,
+                    **(
+                        {
+                            "workbook_structural_index": review[
+                                "workbook_structural_index_for_model"
+                            ]
+                        }
+                        if isinstance(review.get("workbook_structural_index_for_model"), dict)
+                        and review.get("workbook_structural_index_for_model")
+                        else {}
+                    ),
                 },
                 ensure_ascii=False,
             ),
@@ -857,6 +867,15 @@ def combine_semantic_batches(
         "input_summaries": input_summaries,
         "structure_map": build_structure_map(review, rules),
         "structure_map_source": "program_observation_not_sent_to_model",
+        "workbook_structural_index": review.get("workbook_structural_index"),
+        "workbook_structural_index_for_model": review.get(
+            "workbook_structural_index_for_model"
+        ),
+        "workbook_structural_index_source": (
+            "program_built_sent_to_model"
+            if review.get("workbook_structural_index_for_model")
+            else "absent"
+        ),
         "budget": {
             "calls": len(batches),
             "max_calls": max_calls,

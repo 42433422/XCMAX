@@ -256,6 +256,9 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
         "source_sheet_prefixes": source_sheet_prefixes(review["sheets"]),
         "omitted_hidden_fragments": omitted_hidden_fragments,
     }
+    model_index = review.get("workbook_structural_index_for_model")
+    if isinstance(model_index, dict) and model_index:
+        output["workbook_structural_index"] = model_index
     if review.get("drawing_evidence"):
         from app.application.reviewed_excel_drawing import grouping_drawings
 
@@ -385,6 +388,8 @@ def _range_group_input(group_input: dict) -> tuple[dict, dict]:
     }
     if group_input.get("sheet_filters"):
         shown["sheet_filters"] = group_input["sheet_filters"]
+    if group_input.get("workbook_structural_index"):
+        shown["workbook_structural_index"] = group_input["workbook_structural_index"]
     return shown, source_ranges_schema(list(dimensions.values()))
 
 
