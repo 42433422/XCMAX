@@ -559,9 +559,7 @@ def group_semantic_fragments(
         from app.application.reviewed_excel_audit import verify_request
 
         verify_request(audit_request, expected_request_sha256)
-    response = _template_llm_complete(
-        messages, schema, max_output_tokens, owner_id=owner_id
-    )
+    response = _template_llm_complete(messages, schema, max_output_tokens, owner_id=owner_id)
     if not _validate_template_schema(schema, response.data):
         raise ReviewedExcelError("模型分组编号不在白名单")
     if not drawings:

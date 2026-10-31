@@ -2109,7 +2109,6 @@ def test_owner_file_template_authorization_uses_platform_by_default(monkeypatch,
     )
 
 
-
 def test_model_input_spreads_across_sheets_and_reports_uncovered(monkeypatch):
     import json
 
@@ -2271,7 +2270,9 @@ def test_revocation_during_model_or_before_write_never_commits(review_store, mon
             used_llm=True, data={"candidates": [{"clear": [], "reason": "保留"} for _ in range(3)]}
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", revoke_model)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete", revoke_model
+    )
     form = {
         "review_id": preview["review_id"],
         "parent_version": preview["proposal"]["version"],

@@ -202,7 +202,9 @@ def _template_platform_complete(
             )
         except BOUNDARY_ERRORS:
             logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
-            raise ReviewedExcelError("模型调用失败或结果不完整，可能已产生费用；未自动重试") from None
+            raise ReviewedExcelError(
+                "模型调用失败或结果不完整，可能已产生费用；未自动重试"
+            ) from None
     finally:
         if token is not None:
             reset_etl_llm_owner(token)
