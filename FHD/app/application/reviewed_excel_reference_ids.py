@@ -1,4 +1,4 @@
-"""Prototype: map model evidence IDs to the exact bounded source coordinates."""
+"""Source-range contracts and archived evidence-ID compatibility."""
 
 import hashlib
 import json
@@ -8,6 +8,19 @@ from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
 from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
+from app.application.reviewed_excel_partition import (
+    _normalize_atom_ids,
+    _normalize_boundaries,
+)
+from app.application.reviewed_excel_partition import (
+    decode_source_range as decode_source_range,
+)
+from app.application.reviewed_excel_partition import (
+    internal_document_id as internal_document_id,
+)
+from app.application.reviewed_excel_partition import (
+    source_ranges_schema as source_ranges_schema,
+)
 
 
 def source_sheet_prefixes(sheets: list) -> list[dict]:
@@ -21,7 +34,7 @@ def source_sheet_prefixes(sheets: list) -> list[dict]:
 
 
 def source_cell_ids(cells: list[dict], prefixes: list[dict]) -> list[str]:
-    """Encode only supplied source identities; returned IDs must still pass the exact whitelist."""
+    """Map supplied cells to stable source coordinates."""
     mapping = {item["sheet"]: item["prefix"] for item in prefixes}
     identifiers = []
     for cell in cells:
@@ -168,89 +181,9 @@ def _atom_contract(payload: dict, schema: dict, review: dict) -> tuple[dict, dic
     return references, schema
 
 
-def _normalize_atom_ids(data: dict, references: dict, review: dict) -> dict:
-    from openpyxl.utils.cell import get_column_letter
-
-    expected = {key for key, entry in references.items() if entry["primary"]}
-    source = review.get("full_cells", review["cells"])
-    used: set[str] = set()
-    decoded: list[dict] = []
-    by_primary: dict[str, dict] = {}
-    for region in data["physical_regions"]:
-        identifiers = region["atom_ids"]
-        if any(key not in references for key in identifiers):
-            raise ReviewedExcelError("源原子身份不在已发送事实中")
-        if any(key not in expected and not references[key].get("blank") for key in identifiers):
-            raise ReviewedExcelError("布局原子不是空白源合并区域，不能替代主体")
-        if len(identifiers) != len(set(identifiers)) or used.intersection(identifiers):
-            raise ReviewedExcelError("源原子重复分配，未修改模型答案")
-        primary = region["primary_id"]
-        if primary not in identifiers or primary not in expected:
-            raise ReviewedExcelError("原子矩形必须选择自身主体原子")
-        sheets = {references[key]["ref"]["sheet"] for key in identifiers}
-        if len(sheets) != 1:
-            raise ReviewedExcelError("源原子矩形不能跨工作表")
-        sheet = next(iter(sheets))
-        boxes = [bounded_range(references[key]["atom_range"]) for key in identifiers]
-        c1, r1 = min(b[0] for b in boxes), min(b[1] for b in boxes)
-        c2, r2 = max(b[2] for b in boxes), max(b[3] for b in boxes)
-        selected = {
-            (references[key]["ref"]["sheet"], references[key]["ref"]["cell"])
-            for key in identifiers
-            if key in expected
-        }
-        for cell in source:
-            col, row = coordinate_from_string(cell["cell"])
-            if (
-                cell["sheet"] == sheet
-                and c1 <= column_index_from_string(col) <= c2
-                and r1 <= row <= r2
-            ):
-                if (sheet, cell["cell"]) not in selected:
-                    raise ReviewedExcelError("原子矩形含未选主体、上下文或未发送内容，不能自动补齐")
-        for overview in review["sheet_overview"]:
-            if overview["sheet"] != sheet:
-                continue
-            for merge in overview.get("merged_regions", []):
-                mc1, mr1, mc2, mr2 = bounded_range(merge)
-                if c1 <= mc2 and mc1 <= c2 and r1 <= mr2 and mr1 <= r2:
-                    if not (c1 <= mc1 and mc2 <= c2 and r1 <= mr1 and mr2 <= r2):
-                        raise ReviewedExcelError("原子矩形切断合并单元格，不能自动扩框")
-        dependencies = region["dependency_ids"]
-        if len(dependencies) != len(set(dependencies)):
-            raise ReviewedExcelError("模型依赖原子重复")
-        area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
-        decoded.append(
-            {
-                "sheet": sheet,
-                "range": area,
-                "labels": ["unknown"],
-                "evidence": [deepcopy(references[primary]["ref"])],
-                "dependencies": [deepcopy(references[key]["ref"]) for key in dependencies],
-                "reason": region["reason"],
-            }
-        )
-        by_primary[primary] = {"sheet": sheet, "range": area}
-        used.update(identifiers)
-    if used.intersection(expected) != expected:
-        raise ReviewedExcelError("源主体原子未完整分配，不能自动补齐")
-    documents = []
-    for document in data["logical_documents"]:
-        if any(key not in by_primary for key in document["fragments"]):
-            raise ReviewedExcelError("文档引用未知主体片段编号")
-        documents.append(
-            {
-                "document_id": document["document_id"],
-                "fragments": [deepcopy(by_primary[key]) for key in document["fragments"]],
-            }
-        )
-    return {
-        "physical_regions": decoded,
-        "logical_documents": documents,
-        "layout_references": [
-            deepcopy(references[key]["ref"]) for key in data["layout_references"]
-        ],
-    }
+def _boundary_contract(payload: dict, schema: dict, review: dict) -> tuple[dict, dict]:
+    _, references, _ = reference_contract(payload["cells"], schema, sheets=payload["sheets"])
+    return references, source_ranges_schema(payload["sheets"])
 
 
 def normalize_reference_ids(
@@ -266,6 +199,13 @@ def normalize_reference_ids(
 
     if not _validate_template_schema(id_schema, data):
         raise ReviewedExcelError("模型证据编号不在本批白名单")
+    if "documents" in id_schema["properties"]:
+        if review is None:
+            raise ReviewedExcelError("边界核验缺少原件上下文")
+        normalized = _normalize_boundaries(data, references, review)
+        if not _validate_template_schema(original_schema, normalized):
+            raise ReviewedExcelError("原分类schema校验失败")
+        return normalized
     if "atom_ids" in id_schema["properties"]["physical_regions"]["items"]["properties"]:
         if review is None:
             raise ReviewedExcelError("源原子解码缺少原件核验上下文")
@@ -275,7 +215,7 @@ def normalize_reference_ids(
         return normalized
     normalized = deepcopy(data)
     for region in normalized["physical_regions"]:
-        # Internal compatibility state only; it is not supplied to or predicted by the model.
+        # Internal compatibility label, not model output.
         region["labels"] = ["unknown"]
         primary_id = region.pop("primary_id")
         entry = references[primary_id]
@@ -313,7 +253,7 @@ def prepare_reference_messages(
     neutralize_messages(messages)
     payload = json.loads(messages[1]["content"])
     if not payload.get("drawing_evidence"):
-        references, provider_schema = _atom_contract(payload, schema, review)
+        references, provider_schema = _boundary_contract(payload, schema, review)
     else:
         payload["cells"], references, provider_schema = reference_contract(
             payload["cells"], schema, payload.get("drawing_evidence"), sheets=payload["sheets"]
@@ -323,7 +263,8 @@ def prepare_reference_messages(
             {**drawing, "drawing_id": f"D{index:04d}"}
             for index, drawing in enumerate(payload["drawing_evidence"], 1)
         ]
-    payload["source_sheet_prefixes"] = source_sheet_prefixes(payload["sheets"])
+    if "documents" not in provider_schema["properties"]:
+        payload["source_sheet_prefixes"] = source_sheet_prefixes(payload["sheets"])
     payload["output_schema"] = provider_schema
     payload["integrity_constraints"] = integrity_constraints(payload["cells"], payload["sheets"])
     for coverage in payload["batch_coverage"]:
@@ -333,7 +274,15 @@ def prepare_reference_messages(
         coverage["unread_nonempty"] = coverage["total_nonempty"] - coverage["sent_nonempty"]
     messages[1]["content"] = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     messages[0]["content"] = (
-        DRAWING_IDENTIFY_PROMPT if payload.get("drawing_evidence") else IDENTIFY_PROMPT
+        DRAWING_IDENTIFY_PROMPT
+        if payload.get("drawing_evidence")
+        else (
+            ATOM_IDENTIFY_PROMPT
+            if "physical_regions" in provider_schema["properties"]
+            and "atom_ids"
+            in provider_schema["properties"]["physical_regions"]["items"]["properties"]
+            else IDENTIFY_PROMPT
+        )
     )
     return references, provider_schema
 
@@ -365,6 +314,13 @@ def neutralize_messages(messages: list[dict]) -> None:
 
 
 def add_reference_trace(summary: dict, raw: dict, references: dict) -> None:
+    if "documents" in raw:
+        summary["reference_response"] = raw
+        summary["source_coverage"] = deepcopy(references["_source_coverage"])
+        summary["reference_index"] = {
+            key: entry for key, entry in references.items() if key != "_source_coverage"
+        }
+        return
     used = {
         identifier
         for region in raw["physical_regions"]
@@ -441,7 +397,15 @@ def integrity_constraints(cells: list[dict], sheets: list[dict]) -> dict:
         except TokenizerError:
             unresolved = True
         formulas.append(
-            {"evidence_id": cell["evidence_id"], "references": references, "unresolved": unresolved}
+            {
+                **(
+                    {"evidence_id": cell["evidence_id"]}
+                    if "evidence_id" in cell
+                    else {"sheet": cell["sheet"], "cell": cell["cell"]}
+                ),
+                "references": references,
+                "unresolved": unresolved,
+            }
         )
     rows = []
     for sheet, numbers in sorted(primary_rows.items()):
@@ -544,7 +508,7 @@ def neutral_transport_batches(review: dict) -> list[list[dict]]:
     return result
 
 
-CONTRACT_VERSION = "independent-excel-v7-source-atoms"
+CONTRACT_VERSION = "independent-excel-v10-document-ranges"
 SOURCE_PROTOCOL = (
     "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
@@ -596,7 +560,7 @@ LEGACY_IDENTIFY_PROMPT = SOURCE_PROTOCOL + (
     "Never synthesize evidence IDs from formula targets or other metadata coordinates; "
     "only cells[].evidence_id values are available, with context_only IDs restricted to dependency_ids."
 )
-IDENTIFY_PROMPT = (
+ATOM_IDENTIFY_PROMPT = (
     "Partition supplied primary source atoms into rectangular physical fragments, then optionally group those fragments into logical documents. "
     "Source atoms are geometry facts, never business candidates or document-count hints. "
     "Each cells[].evidence_id names a source cell; its extent is required_extent when present, otherwise that one cell. "
@@ -617,6 +581,22 @@ IDENTIFY_PROMPT = (
     "layout_references is an optional subset of supplied M-prefixed merge IDs, not a coverage ledger; [] is valid. "
     "Transport batches, sheet boundaries, adjacency and repeated headers do not establish a business document. "
     "Return exactly one JSON object matching output_schema with no extra fields."
+)
+IDENTIFY_PROMPT = (
+    "Split source content into documents, each with one or more exact rectangular ranges. "
+    "Return real sheet_name and inclusive integer row_start,row_end,column_start,column_end; do not invent or report IDs. "
+    "Each rectangle means ALL original nonempty cells within its boundaries. The server reads the source to verify every supplied primary cell is covered exactly once. "
+    "Never include context_only or unread nonempty content, overlap ranges even on blanks, cut any source merge, or exceed source sheet dimensions. "
+    "Every intersected merge must be wholly contained. Internal blanks are allowed; blank-only ranges are not. "
+    "Invalid ranges are rejected, never clipped, expanded or repaired. Formula targets and merge metadata are source facts, not additional supplied cells or business boundaries. "
+    "Use multiple ranges in one document only when the source supports that relationship. Technical batches are not documents. "
+    "Sheet boundaries, adjacency and repeated headers alone do not prove one business document. No cleaning, numbering, printing or template decisions. Return exactly output_schema."
+)
+RANGE_GROUP_PROMPT = (
+    "Group the supplied validated ranges into complete documents using source content. Return documents with nested ranges and reasons, no IDs. "
+    "Copy each supplied sheet_name and integer boundary tuple exactly once across all documents; never expand, shrink, duplicate or omit a range. "
+    "Technical batches are not document boundaries. Adjacency, sheet membership and repeated headers alone do not prove document identity. "
+    "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return exactly output_schema."
 )
 DRAWING_IDENTIFY_PROMPT = LEGACY_IDENTIFY_PROMPT + (
     " When drawing_evidence is present, use only supplied drawing_id values in drawing_ids. "
@@ -642,6 +622,30 @@ DRAWING_GROUP_PROMPT = GROUP_PROMPT + (
 def contract_hashes(schema: dict, phase: str) -> dict:
     """Hash the stable schema template; replace only IDs mechanically sourced from this input."""
     template = deepcopy(schema)
+    if "documents" in template["properties"]:
+        props = template["properties"]["documents"]["items"]["properties"]["ranges"]["items"][
+            "properties"
+        ]
+        props["sheet_name"]["enum"] = ["<SOURCE_SHEET_NAMES>"]
+        for axis, limit in (("row", 1048576), ("column", 16384)):
+            maximum = props[f"{axis}_start"]["maximum"]
+            if (
+                maximum != props[f"{axis}_end"]["maximum"]
+                or type(maximum) is not int
+                or type(props[f"{axis}_end"]["maximum"]) is not int
+                or not 1 <= maximum <= limit
+            ):
+                raise ValueError("source dimension bounds disagree")
+            props[f"{axis}_start"]["maximum"] = 1
+            props[f"{axis}_end"]["maximum"] = 1
+        prompt = IDENTIFY_PROMPT if phase == "identify" else RANGE_GROUP_PROMPT
+        canonical = json.dumps(template, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return {
+            "version": CONTRACT_VERSION,
+            "phase": phase,
+            "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+            "schema_template_sha256": hashlib.sha256(canonical.encode()).hexdigest(),
+        }
     if phase == "identify":
         props = template["properties"]["physical_regions"]["items"]["properties"]
         if "atom_ids" in props:
@@ -671,7 +675,7 @@ def contract_hashes(schema: dict, phase: str) -> dict:
             if not (set(atoms) - set(primary)) <= set(layout["items"].get("enum", [])):
                 raise ValueError("layout atoms must reference source merges")
             layout["items"]["enum"] = ["<SOURCE_MERGE_IDS>"]
-            prompt = IDENTIFY_PROMPT
+            prompt = ATOM_IDENTIFY_PROMPT
         else:
             if props["evidence_ids"]["items"]["enum"] != props["primary_id"]["enum"]:
                 raise ValueError("classification evidence must use the primary source whitelist")
@@ -721,6 +725,14 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
+        "f6e382e3d6a2c468f20f5dd0f4588efb6205ee501d8e6546faac0aff86c82715",
+        "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
+    ),
+    "group_ranges": (
+        "d60d076fa1d6efa00106083d4391dbb9689da78b311fb6eb83b110b19b5b9111",
+        "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
+    ),
+    "identify_atoms": (
         "2bd9134e0414c5b6c6660c515e9c2e494cb8b9564eeeaa861b8ee5143541c8ca",
         "ffab0241efd5e7fba5087b4ca32774b3ba3b2ccb95124709f624d095ddd0adc0",
     ),
@@ -745,16 +757,24 @@ def verify_contract(prompt: str, schema: dict, phase: str) -> dict:
     try:
         hashes = contract_hashes(schema, phase)
         actual_prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
-        key = phase + (
-            "_drawing"
-            if "drawing_ids"
-            in (
-                schema["properties"]["physical_regions" if phase == "identify" else "groups"][
-                    "items"
-                ]["properties"]
+        if "documents" in schema["properties"]:
+            key = "identify" if phase == "identify" else "group_ranges"
+        else:
+            key = phase + (
+                "_drawing"
+                if "drawing_ids"
+                in (
+                    schema["properties"]["physical_regions" if phase == "identify" else "groups"][
+                        "items"
+                    ]["properties"]
+                )
+                else ""
             )
-            else ""
-        )
+            if (
+                phase == "identify"
+                and "atom_ids" in schema["properties"]["physical_regions"]["items"]["properties"]
+            ):
+                key = "identify_atoms"
         if (actual_prompt_hash, hashes["schema_template_sha256"]) != _EXPECTED[key]:
             raise ReviewedExcelError("模型输入契约已改变，未调用模型")
     except (KeyError, TypeError, ValueError):

@@ -117,23 +117,10 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
                 ):
                     raise ReviewedExcelError("所选文档依赖外部说明或标题，暂不能保证保真提取")
         print_area_mode = "source"
-        if source.get("drawing_evidence"):
-            from openpyxl.worksheet.print_settings import PrintArea
-
-            from app.application.reviewed_excel_drawing import rectangles_cover
-
-            if source.get("read_only_print_areas"):
-                raise ReviewedExcelError("原打印区域无法安全映射，暂不能自动裁切")
-            overview = next(
-                item for item in source["sheet_overview"] if item["sheet"] == fragments[0]["sheet"]
-            )
-            if overview.get("print_area") and any(
-                not rectangles_cover(
-                    bounded_range(str(area)), [bounded_range(part["range"]) for part in fragments]
-                )
-                for area in PrintArea.from_string(overview["print_area"]).ranges
-            ):
-                print_area_mode = "selected"
+        # Model grouping is not permission to change the source print layout.
+        # Listing/downloading automatic slices must never silently choose selected.
+        if source.get("drawing_evidence") and source.get("read_only_print_areas"):
+            raise ReviewedExcelError("原打印区域无法安全映射，暂不能自动裁切")
         output = derive_document_workbook(body, fragments, print_area_mode=print_area_mode)
         results.append(
             {

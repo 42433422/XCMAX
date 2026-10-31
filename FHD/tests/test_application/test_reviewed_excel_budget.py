@@ -409,7 +409,7 @@ def test_required_extent_is_source_derived_not_a_business_region(reference_ids, 
     assert "required_extent" not in cells[1]
     assert [c["cell"] for c in cells] == ["A1", "D1"]  # Blank subordinate cells are not evidence.
     assert (
-        "never business candidates"
+        "do not prove one business document"
         if reference_ids
         else "not a business boundary or a separate document"
     ) in request["messages"][0]["content"]

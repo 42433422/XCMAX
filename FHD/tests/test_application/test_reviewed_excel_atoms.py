@@ -13,6 +13,13 @@ from app.application.reviewed_excel_classification import _classify_semantic_bat
 from app.application.reviewed_excel_template import inspect_workbook
 
 
+@pytest.fixture(autouse=True)
+def archived_v7_atom_contract(monkeypatch):
+    from app.application import reviewed_excel_reference_ids as contracts
+
+    monkeypatch.setattr(contracts, "_boundary_contract", contracts._atom_contract)
+
+
 def source(cells, merges=(), *, second=False):
     book = Workbook()
     sheet = book.active

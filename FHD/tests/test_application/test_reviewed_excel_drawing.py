@@ -424,7 +424,7 @@ def test_boundary_candidates_keep_merges_and_shapes_together():
     assert 1 in boundaries and 7 in boundaries
 
 
-def test_auto_slice_maps_crossing_print_area_and_reports_it():
+def test_auto_slice_preserves_source_print_area_or_rejects_without_implicit_consent(monkeypatch):
     from io import BytesIO
 
     from openpyxl import load_workbook
@@ -455,11 +455,31 @@ def test_auto_slice_maps_crossing_print_area_and_reports_it():
             {"fragments": [{"sheet": r["sheet"], "range": r["range"]}]} for r in regions
         ],
     }
+    from app.application import reviewed_excel_auto_slice as auto_slice
+
+    original_derive = auto_slice.derive_document_workbook
+    modes = []
+
+    def checked_derive(body, fragments, *, print_area_mode):
+        modes.append(print_area_mode)
+        return original_derive(body, fragments, print_area_mode=print_area_mode)
+
+    monkeypatch.setattr(auto_slice, "derive_document_workbook", checked_derive)
+    with pytest.raises(ReviewedExcelError, match="打印区域跨越所选文档"):
+        derive_classified_documents(source, classification)
+    assert modes == ["source", "source"]
+    assert inspect_workbook(source)["sha256"] == review["sha256"]
+
+    # An explicitly grouped document covering the entire source print area still
+    # exports normally, without selecting a new print range or changing source.
+    classification["suggested_documents"] = [
+        {"fragments": [{"sheet": r["sheet"], "range": r["range"]} for r in regions]}
+    ]
     slices = derive_classified_documents(source, classification)
-    assert len(slices) == 2
-    assert [x["print_area_mode"] for x in slices] == ["source", "selected"]
+    assert len(slices) == 1
+    assert slices[0]["print_area_mode"] == "source"
+    assert modes == ["source", "source", "source"]
     assert load_workbook(BytesIO(slices[0]["workbook"]))["表"].print_area == "'表'!$A$1:$B$2"
-    assert load_workbook(BytesIO(slices[1]["workbook"]))["表"].print_area == "'表'!$A$3:$B$4"
     assert (
         len(inspect_workbook(slices[0]["workbook"], allow_drawings=True)["drawing_evidence"]) == 1
     )

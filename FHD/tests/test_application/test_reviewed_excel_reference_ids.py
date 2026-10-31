@@ -4,6 +4,7 @@ import pytest
 
 from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_reference_ids import normalize_reference_ids, reference_contract
+from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
 
 
 def contract():
@@ -104,18 +105,18 @@ def test_grouping_uses_only_validated_region_and_evidence_ids(monkeypatch):
     }
     monkeypatch.setattr(grouping, "prepare_grouping", lambda *_: source)
     group = {
-        "document_id": "d",
-        "fragment_ids": ["R0001"],
-        "evidence_ids": ["S1:A1"],
+        "ranges": [
+            {"sheet_name": "表", "row_start": 1, "row_end": 2, "column_start": 1, "column_end": 1}
+        ],
         "reason": "主体",
     }
     monkeypatch.setattr(
-        template, "_template_mimo_complete", lambda *a: SimpleNamespace(data={"groups": [group]})
+        template, "_template_mimo_complete", lambda *a: SimpleNamespace(data={"documents": [group]})
     )
     result = grouping.group_semantic_fragments({}, {})
     assert result[0]["fragments"] == [{"sheet": "表", "range": "A1:A2"}]
-    assert result[0]["reference_ids"] == {"fragment_ids": ["R0001"], "evidence_ids": ["S1:A1"]}
-    group["fragment_ids"] = ["R9999"]
+    assert result[0]["model_range_response"] == group
+    group["ranges"][0]["row_end"] = 999
     with pytest.raises(ReviewedExcelError, match="白名单"):
         grouping.group_semantic_fragments({}, {})
 
@@ -176,40 +177,22 @@ def test_independent_prompt_has_only_source_facts_and_no_program_candidates(monk
         captured["messages"] = messages
         captured["schema"] = schema
         payload = json.loads(messages[1]["content"])
-        primary = next(cell for cell in payload["cells"] if not cell.get("context_only"))
-        return SimpleNamespace(
-            model="fixture",
-            data={
-                "physical_regions": [
-                    {
-                        "atom_ids": [
-                            cell["evidence_id"]
-                            for cell in payload["cells"]
-                            if not cell.get("context_only")
-                        ],
-                        "dependency_ids": [],
-                        "primary_id": primary["evidence_id"],
-                        "reason": "基于所发送源内容",
-                    }
-                ],
-                "logical_documents": [],
-                "layout_references": [],
-            },
-        )
+        return SimpleNamespace(model="fixture", data=synthetic_document_answer(payload))
 
     monkeypatch.setattr(template, "_template_mimo_complete", fake)
     result = _classify_semantic_batch(template.inspect_workbook(sample()), reference_ids=True)
     payload = json.loads(captured["messages"][1]["content"])
     assert not {"rule_hints", "structure_map", "relationship_context", "labels"} & payload.keys()
-    properties = payload["output_schema"]["properties"]["physical_regions"]["items"]["properties"]
+    properties = payload["output_schema"]["properties"]["documents"]["items"]["properties"]
     assert "labels" not in properties
     assert "unknown" not in captured["messages"][0]["content"]
-    assert "Assign every primary cell atom exactly once" in captured["messages"][0]["content"]
+    assert (
+        "every supplied primary cell is covered exactly once" in captured["messages"][0]["content"]
+    )
     assert payload["cells"] and payload["integrity_constraints"]["merged_ranges"]
     assert result["regions"][0]["labels"] == ["unknown"]
     assert (
-        result["input_summary"]["reference_response"]["physical_regions"][0]["primary_id"]
-        == "S1:A1"
+        result["input_summary"]["reference_response"]["documents"][0]["ranges"][0]["row_start"] == 1
     )
 
 

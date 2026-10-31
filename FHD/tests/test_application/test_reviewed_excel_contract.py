@@ -8,11 +8,20 @@ from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_classification import _classify_semantic_batch
 from app.application.reviewed_excel_grouping import group_semantic_fragments
 from app.application.reviewed_excel_reference_ids import (
-    IDENTIFY_PROMPT,
+    ATOM_IDENTIFY_PROMPT as IDENTIFY_PROMPT,
+)
+from app.application.reviewed_excel_reference_ids import (
     contract_hashes,
     verify_contract,
 )
 from app.application.reviewed_excel_template import inspect_workbook
+
+
+@pytest.fixture(autouse=True)
+def archived_v7_atom_contract(monkeypatch):
+    from app.application import reviewed_excel_reference_ids as contracts
+
+    monkeypatch.setattr(contracts, "_boundary_contract", contracts._atom_contract)
 
 
 def test_independent_contract_is_identical_for_unseen_structures(monkeypatch):
@@ -79,7 +88,7 @@ def test_grouping_contract_has_stable_template_across_model_fragments():
     assert fingerprints[0] == fingerprints[1]
     assert (
         fingerprints[0]["schema_template_sha256"]
-        == "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379"
+        == "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2"
     )
 
 
@@ -116,8 +125,8 @@ def test_identification_and_grouping_keep_workbook_prefix_when_batch_skips_first
     }
     grouping = group_semantic_fragments(review, classification, prepare_only=True)
     grouping_payload = json.loads(grouping["messages"][1]["content"])
-    assert grouping_payload["source_sheet_prefixes"] == prefixes
-    assert [cell["evidence_id"] for cell in grouping_payload["cells"]] == ["S2:C17"]
+    assert "source_sheet_prefixes" not in grouping_payload
+    assert [cell["sheet"] for cell in grouping_payload["cells"]] == ["O'Brien ! 表"]
 
 
 def source_protocol_review():

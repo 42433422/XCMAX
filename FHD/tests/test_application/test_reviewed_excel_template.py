@@ -15,6 +15,7 @@ from app.application.reviewed_excel_template import clean_workbook, inspect_work
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from tests.fixtures.etl_template.sources.generate import large_quotation, sample
+from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
 
 
 def input_digest(messages):
@@ -5188,45 +5189,16 @@ def test_auto_group_resume_budget_and_download_multibatch(
 
     def fake(messages, schema, tokens):
         payload = json.loads(messages[1]["content"])
-        if "groups" in schema["properties"]:
+        if "ranges" in payload:
             if group_not_sent and "not_sent" not in calls:
                 from app.application.reviewed_excel_audit import ModelRequestNotSent
 
                 calls.append("not_sent")
                 raise ModelRequestNotSent("配置未完成；未调用模型")
             calls.append("group")
-            fragments = [part["region_id"] for part in payload["fragments"]]
-            evidence = [cell["evidence_id"] for cell in payload["cells"]]
-            return LlmAssistResult(
-                used_llm=True,
-                data={
-                    "groups": [
-                        {
-                            "document_id": "d1",
-                            "fragment_ids": fragments,
-                            "evidence_ids": evidence,
-                            "reason": "已读片段有相同文档标识",
-                        }
-                    ]
-                },
-            )
-        calls.append("batch")
-        primary = [c for c in payload["cells"] if not c["context_only"]]
-        return LlmAssistResult(
-            used_llm=True,
-            data={
-                "physical_regions": [
-                    {
-                        "atom_ids": [c["evidence_id"] for c in primary],
-                        "dependency_ids": [],
-                        "primary_id": primary[0]["evidence_id"],
-                        "reason": "合成",
-                    }
-                ],
-                "logical_documents": [],
-                "layout_references": [],
-            },
-        )
+        else:
+            calls.append("batch")
+        return LlmAssistResult(used_llm=True, data=synthetic_document_answer(payload))
 
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
     client = review_store.client
@@ -5460,23 +5432,7 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
     item = archived.json()
 
     def fake(messages, schema, tokens):
-        primary = schema["properties"]["physical_regions"]["items"]["properties"]["primary_id"][
-            "enum"
-        ][0]
-        data = {
-            "physical_regions": [
-                {
-                    "atom_ids": schema["properties"]["physical_regions"]["items"]["properties"][
-                        "primary_id"
-                    ]["enum"],
-                    "dependency_ids": [],
-                    "primary_id": primary,
-                    "reason": "synthetic",
-                }
-            ],
-            "logical_documents": [{"document_id": "fixture", "fragments": [primary]}],
-            "layout_references": [],
-        }
+        data = synthetic_document_answer(json.loads(messages[1]["content"]))
         response_capture()(
             json.dumps({"choices": [], "usage": {}}, ensure_ascii=False).encode(), 200, "synthetic"
         )

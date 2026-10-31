@@ -168,6 +168,90 @@ def validate_grouping(group_input: dict, data: dict) -> list[dict]:
     return result
 
 
+def _range_group_input(group_input: dict) -> tuple[dict, dict]:
+    from app.application.reviewed_excel_reference_ids import source_ranges_schema
+
+    shown_ranges: list[dict] = []
+    dimensions: dict[str, dict] = {}
+    for part in group_input["fragments"]:
+        c1, r1, c2, r2 = bounded_range(part["range"])
+        shown_ranges.append(
+            {
+                "sheet_name": part["sheet"],
+                "row_start": r1,
+                "row_end": r2,
+                "column_start": c1,
+                "column_end": c2,
+            }
+        )
+        dimension = dimensions.setdefault(
+            part["sheet"], {"sheet": part["sheet"], "rows": 0, "columns": 0}
+        )
+        dimension["rows"] = max(dimension["rows"], r2)
+        dimension["columns"] = max(dimension["columns"], c2)
+    return {
+        "source_sha256": group_input["source_sha256"],
+        "ranges": shown_ranges,
+        "cells": group_input["cells"],
+    }, source_ranges_schema(list(dimensions.values()))
+
+
+def _normalize_range_groups(group_input: dict, data: dict) -> list[dict]:
+    from copy import deepcopy
+
+    from app.application.reviewed_excel_reference_ids import (
+        decode_source_range,
+        internal_document_id,
+    )
+
+    dimensions: dict[str, dict] = {}
+    known = {(part["sheet"], part["range"]) for part in group_input["fragments"]}
+    for sheet, area in known:
+        _, _, c2, r2 = bounded_range(area)
+        dimension = dimensions.setdefault(sheet, {"rows": 0, "columns": 0})
+        dimension["rows"] = max(dimension["rows"], r2)
+        dimension["columns"] = max(dimension["columns"], c2)
+    assigned, groups = set(), []
+    for document in data["documents"]:
+        parts, evidence = [], []
+        for area in document["ranges"]:
+            part = decode_source_range(area, dimensions)
+            key = (part["sheet"], part["range"])
+            if key not in known or key in assigned:
+                raise ReviewedExcelError("分组范围非已有精确片段或重复，未修改答案")
+            assigned.add(key)
+            parts.append(part)
+            c1, r1, c2, r2 = bounded_range(part["range"])
+            for cell in group_input["cells"]:
+                col, row = coordinate_from_string(cell["cell"])
+                if (
+                    cell["sheet"] == part["sheet"]
+                    and c1 <= column_index_from_string(col) <= c2
+                    and r1 <= row <= r2
+                ):
+                    evidence.append({"sheet": cell["sheet"], "cell": cell["cell"]})
+                    break
+        groups.append(
+            {
+                "document_id": internal_document_id(document),
+                "fragments": parts,
+                "evidence": evidence,
+                "reason": document["reason"],
+            }
+        )
+    if assigned != known:
+        raise ReviewedExcelError("最终分组未完整覆盖所有片段，不能自动补齐")
+    result = validate_grouping(group_input, {"groups": groups})
+    for group, raw in zip(result, data["documents"], strict=True):
+        group["model_range_response"] = deepcopy(raw)
+        group["source_coverage"] = {
+            "basis": "exact_validated_source_ranges",
+            "document_id_origin": "internal_source_range_hash",
+            "fragments": deepcopy(group["fragments"]),
+        }
+    return result
+
+
 def group_semantic_fragments(
     review: dict, classification: dict, *, prepare_only=False, expected_request_sha256=None
 ) -> list[dict] | dict:
@@ -234,10 +318,16 @@ def group_semantic_fragments(
         "additionalProperties": False,
         "properties": {"groups": {"type": "array", "maxItems": 100, "items": group}},
     }
-    from app.application.reviewed_excel_reference_ids import DRAWING_GROUP_PROMPT, GROUP_PROMPT
+    from app.application.reviewed_excel_reference_ids import (
+        DRAWING_GROUP_PROMPT,
+        RANGE_GROUP_PROMPT,
+    )
+
+    if not drawings:
+        shown, schema = _range_group_input(group_input)
 
     messages = [
-        {"role": "system", "content": DRAWING_GROUP_PROMPT if drawings else GROUP_PROMPT},
+        {"role": "system", "content": DRAWING_GROUP_PROMPT if drawings else RANGE_GROUP_PROMPT},
         {
             "role": "user",
             "content": json.dumps(
@@ -262,6 +352,8 @@ def group_semantic_fragments(
     response = _template_mimo_complete(messages, schema, max_output_tokens)
     if not _validate_template_schema(schema, response.data):
         raise ReviewedExcelError("模型分组编号不在白名单")
+    if not drawings:
+        return _normalize_range_groups(group_input, response.data)
     normalized = {
         "groups": [
             {
