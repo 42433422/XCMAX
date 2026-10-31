@@ -87,7 +87,7 @@ class SourceAssetServiceMixin:
 
     @staticmethod
     def _source_root() -> Path:
-        return Path(service_uploads.get_app_data_dir()) / "etl" / "archive"
+        return archive_store.default_archive_root()
 
     @staticmethod
     def _source_asset(db: Session, asset_id: str, owner_user_id: int) -> EtlArchiveAsset:

@@ -62,8 +62,17 @@ def store(tmp_path, monkeypatch):
         db.commit()
     for module in (service_uploads, service_history):
         monkeypatch.setattr(module, "get_app_data_dir", lambda: str(tmp_path))
+    from app.application.etl import archive_store
+    from app.utils.path_io import path_utils
+
+    archive_root = tmp_path / "business-archive"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(path_utils, "get_desktop_state_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(path_utils, "get_business_archive_dir", lambda **_: str(archive_root))
+    monkeypatch.setattr(archive_store, "get_business_archive_dir", lambda **_: str(archive_root))
+    monkeypatch.setattr(archive_store, "default_archive_root", lambda: archive_root)
     yield SimpleNamespace(
-        engine=engine, factory=factory, root=tmp_path / "etl" / "archive", service=EtlService()
+        engine=engine, factory=factory, root=archive_root, service=EtlService()
     )
     engine.dispose()
 
@@ -267,7 +276,7 @@ def test_failed_publication_keeps_recoverable_pending_archive_and_reserved_quota
 ):
     source = publish(store) if append else None
 
-    def fail_write(*_args):
+    def fail_write(*_args, **_kwargs):
         raise OSError("unacknowledged archive write")
 
     with monkeypatch.context() as patch:

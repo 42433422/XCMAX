@@ -389,6 +389,17 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(routes, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(archive_routes, "get_app_data_dir", lambda: str(tmp_path))
+    from app.application.etl import archive_store
+    from app.utils.path_io import path_utils
+
+    archive_root = tmp_path / "business-archive"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(path_utils, "get_desktop_state_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(path_utils, "get_business_archive_dir", lambda **_: str(archive_root))
+    monkeypatch.setattr(archive_store, "get_business_archive_dir", lambda **_: str(archive_root))
+    monkeypatch.setattr(archive_store, "default_archive_root", lambda: archive_root)
+    monkeypatch.setattr(archive_routes, "default_archive_root", lambda: archive_root)
+    monkeypatch.setattr(routes, "default_archive_root", lambda: archive_root)
     actor = {"id": 7, "tenant": 1, "manage": True, "read": True, "admin": True}
 
     def authorize(permission):
@@ -1165,7 +1176,7 @@ def test_archive_recover_complete_pending_and_reversible_trash(review_store):
             owner=7,
             name="sample.xlsx",
             body=sample(),
-            root=review_store.root / "etl" / "archive",
+            root=review_store.root / "business-archive",
             request_key="recover-test",
         )
         asset_id, version_id = item.asset_id, item.id
@@ -1265,7 +1276,7 @@ def test_archive_classify_and_withdraw_do_not_both_succeed(review_store):
             owner=7,
             name="sample.xlsx",
             body=sample(),
-            root=review_store.root / "etl" / "archive",
+            root=review_store.root / "business-archive",
             request_key="race-test",
         )
         asset_id, version_id = item.asset_id, item.id
@@ -5065,8 +5076,28 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
         assert response.status_code == 400
     copies = list((review_store.root / "etl" / "uploads").rglob("*.xlsx"))
     assert len(copies) == int(commit_unknown)
-    originals = list((review_store.root / "etl" / "archive" / "1" / "7").iterdir())
-    assert len(originals) == 1 and originals[0].read_bytes() == body
+    originals = list((review_store.root / "business-archive" / "1" / "7").iterdir())
+    assert len(originals) == 1
+    from app.application.etl.archive_store import _ENVELOPE_MAGIC, _decrypt_or_migrate
+    from app.db.models.etl_archive import EtlArchiveVersion
+
+    disk = originals[0].read_bytes()
+    assert disk.startswith(_ENVELOPE_MAGIC) and body not in disk
+    with review_store.engine.connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT size_bytes, sha256 FROM etl_archive_versions WHERE storage_path = :p"
+            ),
+            {"p": str(originals[0])},
+        ).one()
+    version = EtlArchiveVersion(size_bytes=row.size_bytes, sha256=row.sha256)
+    plain = _decrypt_or_migrate(
+        disk,
+        path=originals[0],
+        archive_root=review_store.root / "business-archive",
+        version=version,
+    )
+    assert plain == body
     with review_store.engine.connect() as connection:
         assert connection.execute(text("SELECT count(*) FROM etl_uploads")).scalar_one() == int(
             commit_unknown
