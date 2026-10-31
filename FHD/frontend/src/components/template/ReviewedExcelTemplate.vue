@@ -823,20 +823,38 @@ async function preview(slice?: AutoSlice) {
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '预览失败' }
   finally { if (current()) busy.value = false }
 }
+function canCommitSelectedTemplate() {
+  if (busy.value || !file.value || !review.value || !name.value.trim() || !proposal.value) return false
+  if (selectedVersion.value !== proposals.value.length - 1) return false
+  if (proposal.value.result_previews?.length !== 3) return false
+  if (review.value.selected_region?.selection_basis !== 'model_group' && (!classificationConfirmed.value || !previewSelectionReady.value)) return false
+  return true
+}
+async function pickCandidate(index: number) {
+  if (busy.value) return
+  candidateIndex.value = index
+  if (props.archiveOnSelect) await save()
+}
 async function save() {
-  if (busy.value || !publishToTenant.value) return
-  if (publicationRestricted.value) { publishToTenant.value = false; error.value = '仅数据/模板测试；打印版式未验证，不可发布企业模板库。'; return }
+  const privateIntake = props.archiveOnSelect
+  if (busy.value) return
+  if (!privateIntake && !publishToTenant.value) return
+  if (!privateIntake && publicationRestricted.value) {
+    publishToTenant.value = false
+    error.value = '仅数据/模板测试；打印版式未验证，不可发布企业模板库。'
+    return
+  }
   const current = captureFileOperation()
   if (!current()) return
-  if (!file.value || !review.value || !name.value.trim()) return
-  if (review.value.selected_region?.selection_basis !== 'model_group' && (!classificationConfirmed.value || !previewSelectionReady.value)) return
+  if (!canCommitSelectedTemplate()) return
   busy.value = true
   error.value = ''
   try {
     const form = new FormData()
     form.append('name', name.value.trim())
-    form.append('publish_to_tenant', String(publishToTenant.value))
-    form.append('review_id', review.value.review_id)
+    form.append('publish_to_tenant', privateIntake ? 'false' : String(publishToTenant.value))
+    form.append('private_intake', privateIntake ? 'true' : 'false')
+    form.append('review_id', review.value!.review_id)
     form.append('proposal_version', proposal.value.version)
     form.append('candidate_id', proposal.value.candidates[candidateIndex.value].id)
     form.append('selections', JSON.stringify(selected.value))
@@ -1119,9 +1137,9 @@ async function downloadCandidate(index: number) {
           role="option"
           :aria-selected="candidateIndex === index"
           tabindex="0"
-          @click="!busy && (candidateIndex = index)"
-          @keydown.enter.prevent="!busy && (candidateIndex = index)"
-          @keydown.space.prevent="!busy && (candidateIndex = index)"
+          @click="pickCandidate(index)"
+          @keydown.enter.prevent="pickCandidate(index)"
+          @keydown.space.prevent="pickCandidate(index)"
         >
           <span class="reviewed-template__a4-label">模板 {{ index + 1 }}：{{ candidate.label }}</span>
           <span class="reviewed-template__a4-page">
@@ -1139,7 +1157,7 @@ async function downloadCandidate(index: number) {
           </span>
         </div>
       </div>
-      <p class="reviewed-template__a4-hint">点选卡片选用；黄胶囊=未选，绿胶囊=已选。</p>
+      <p class="reviewed-template__a4-hint">{{ archiveOnSelect ? '点选绿胶囊即选用并开始自动入库（知识库+业务）；黄=未选。' : '点选卡片选用；黄胶囊=未选，绿胶囊=已选。' }}</p>
       <p>版本 {{ selectedVersion + 1 }} · {{ proposal.model.status === 'returned' ? '模型已返回建议，尚待用户确认' : proposal.model.status === 'unavailable' ? '模型不可用，显示确定性规则建议' : '确定性规则建议，未调用模型' }}<span v-if="proposal.model.status === 'returned'"> · 输入 {{ proposal.model.cells_sent }}/{{ proposal.model.cells_total }} 格{{ proposal.model.truncated ? '（已截断）' : '' }}</span></p>
       <details v-if="proposal.model.input_summary"><summary>查看模型输入摘要及来源坐标（不含正文）</summary><pre>{{ JSON.stringify(proposal.model.input_summary, null, 2) }}</pre></details>
       <details v-if="proposal.model.input_messages"><summary>历史记录中的模型输入正文（旧记录未自动清理）</summary><pre>{{ JSON.stringify(proposal.model.input_messages, null, 2) }}</pre></details>
@@ -1149,8 +1167,14 @@ async function downloadCandidate(index: number) {
       <button type="button" :disabled="busy || selectedVersion !== proposals.length - 1 || !consent || sampleAuthorized === templateOwnFileAuthorized || !feedback.trim()" @click="refine">生成新一轮三个模板</button>
       <p>服务端保留 {{ proposals.length }} 个提案版本；历史版本仅供查看，保存和修改需使用最新版本。</p>
       <p v-for="warning in currentRestrictions" :key="warning" role="alert">{{ warning }}</p>
-      <label><input v-model="publishToTenant" type="checkbox" :disabled="busy || publicationRestricted"> 确认发布清理后的文件到企业共享模板库；请检查是否仍有不应共享的信息。原件和审阅记录仍为私有。</label>
-      <button type="button" :disabled="publicationRestricted || !name.trim() || !publishToTenant || busy || selectedVersion !== proposals.length - 1 || proposal.result_previews?.length !== 3" @click="save">保存所选模板</button>
+      <template v-if="archiveOnSelect">
+        <p class="reviewed-template__intake-note">用户对接路径：选用模板后自动写入知识库与业务域；不发布到企业共享模板库。审批工作台仍可撤回。</p>
+        <button type="button" :disabled="!canCommitSelectedTemplate()" @click="save">使用此模板并入库</button>
+      </template>
+      <template v-else>
+        <label><input v-model="publishToTenant" type="checkbox" :disabled="busy || publicationRestricted"> 确认发布清理后的文件到企业共享模板库；请检查是否仍有不应共享的信息。原件和审阅记录仍为私有。</label>
+        <button type="button" :disabled="publicationRestricted || !name.trim() || !publishToTenant || busy || selectedVersion !== proposals.length - 1 || proposal.result_previews?.length !== 3" @click="save">保存所选模板</button>
+      </template>
     </div>
     <p v-if="savedId">已保存到模板库。{{ savedModelStatus }} 可再次预览当前原件并保存新模板，已有模板不会被覆盖。<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
     <div v-if="ingestBatchId" class="etl-ingest-progress" aria-label="自动入库真实进度">

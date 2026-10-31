@@ -1,5 +1,5 @@
 {
-  "lines": 2405316,
+  "lines": 2405482,
   "updated": "2026-10-31",
-  "note": "对齐默认 10 GiB：拆分未配置配额 bootstrap 用例，去掉 archive-classify 预失败断言"
+  "note": "merge main(#2875 默认10GiB) into pick→私有入库；合入两边 CHANGELOG + 基线重算"
 }

@@ -1781,6 +1781,13 @@ def test_save_replay_scope_expiry_and_history(review_store):
         ).status_code
         == 400
     )
+    assert (
+        client.post(
+            "/api/templates/reviewed-excel/save",
+            data={**data, "publish_to_tenant": "true", "private_intake": "true"},
+        ).status_code
+        == 400
+    )
     assert before["versions"][0]["version"] == data["proposal_version"]
     wrong = {**data, "proposal_version": "0" * 64}
     assert client.post("/api/templates/reviewed-excel/save", data=wrong).status_code == 409
@@ -1859,6 +1866,61 @@ def test_save_replay_scope_expiry_and_history(review_store):
     assert client.get(f"/api/templates/reviewed-excel/{template_id}/download").status_code == 404
     with store.engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
+
+
+def test_private_intake_save_skips_enterprise_publish_gate(review_store, monkeypatch):
+    """User intake may save+auto-ingest without publish_to_tenant checkbox."""
+    started = {}
+
+    class _FakeIngest:
+        def start_background(self, **kwargs):
+            started.update(kwargs)
+            return {
+                "success": True,
+                "batch_id": "batch-private",
+                "status": "running",
+                "kb_progress": {"pct": 0, "stage": "queued"},
+                "business_progress": {"pct": 0, "stage": "queued"},
+            }
+
+    monkeypatch.setattr(
+        "app.application.elt.auto_ingest_service.get_auto_ingest_service",
+        lambda: _FakeIngest(),
+    )
+    client = review_store.client
+    upload = {
+        "file": (
+            "sample.xlsx",
+            sample(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+    preview = client.post(
+        "/api/templates/reviewed-excel/preview", files=upload, data={"expected_actor": "1:7"}
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    candidate = body["proposal"]["candidates"][0]
+    saved = client.post(
+        "/api/templates/reviewed-excel/save",
+        data={
+            "review_id": body["review_id"],
+            "name": "私有入库模板",
+            "proposal_version": body["proposal"]["version"],
+            "candidate_id": candidate["id"],
+            "publish_to_tenant": "false",
+            "private_intake": "true",
+            "selections": "[]",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    payload = saved.json()
+    assert payload["success"] is True
+    assert payload["template_id"]
+    # Fixture may detach EltRun before post-save ingest; gate under test is accept private_intake.
+    assert "auto_ingest" in payload
+    if started:
+        assert started.get("review_id") == body["review_id"]
 
 
 def test_quotation_proposals_identify_table_and_identity_without_touching_rules():
