@@ -37,7 +37,10 @@ describe('reviewed Excel template', () => {
   it('offers legacy XLS through the archive conversion boundary in chatlike intake', () => {
     const archived = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     expect(archived.find('input[type=file]').attributes('accept')).toBe('.xlsx,.xls')
-    expect(archived.text()).toContain('打印版式未验证，不可发布企业模板库')
+    expect(archived.find('.etl-admin-panel').exists()).toBe(false)
+    expect(archived.find('.etl-composer__input').exists()).toBe(true)
+    expect(archived.text()).toContain('上传文件，挑选模板')
+    expect(archived.text()).not.toContain('管理员与档案')
     archived.unmount()
   })
   it.each([false, true])('binds limited XLS consent to the exact file hash (accepted=%s)', async accepted => {
@@ -154,6 +157,17 @@ describe('reviewed Excel template', () => {
     await wrapper.findAll('button').find((b) => b.text() === '重试未完成文件')!.trigger('click'); await flushPromises()
     const second = api.archiveClassifyExcel.mock.calls[1][0] as FormData
     expect(first.get('request_key')).toEqual(second.get('request_key'))
+  })
+  it('keeps administrator panel only outside chatlike intake', () => {
+    expect(mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } }).find('.etl-admin-panel').exists()).toBe(false)
+    expect(mount(ReviewedExcelTemplate).find('.etl-admin-panel').exists()).toBe(true)
+  })
+  it('records composer requirement text on user intake', async () => {
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    await wrapper.get('.etl-composer__input').setValue('保留客户栏，清理空白行')
+    await wrapper.get('.etl-composer__send').trigger('click')
+    expect(wrapper.text()).toContain('整理要求：保留客户栏，清理空白行')
+    wrapper.unmount()
   })
   it('shows administrator quota and a dependency-blocked archive withdrawal', async () => {
     api.archiveQuota.mockResolvedValue({ configured: true, limit_bytes: 1000, reserved_bytes: 300 })

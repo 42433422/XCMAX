@@ -32,6 +32,8 @@ const archiveQuotaInfo = ref('')
 const archiveQuotaMiB = ref<number | null>(null)
 const composerDragOver = ref(false)
 const templatePickerOpen = ref(false)
+const composerDraft = ref('')
+const requirementNotes = ref<string[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 type ArchiveAsset = { id: string; name: string; state: string; versions: { id: string; version: number; status: string; sha256: string; classification_id: string | null }[] }
 const archiveAssets = ref<ArchiveAsset[]>([])
@@ -239,7 +241,28 @@ function openFilePicker() {
   fileInputRef.value?.click()
 }
 function startProcessing() {
+  const note = composerDraft.value.trim()
+  if (note) {
+    requirementNotes.value = [...requirementNotes.value, note]
+    feedback.value = note
+    composerDraft.value = ''
+  }
   void classify()
+}
+function submitComposerRequirement() {
+  if (!alive || busy.value) return
+  const note = composerDraft.value.trim()
+  if (!note) return
+  requirementNotes.value = [...requirementNotes.value, note]
+  feedback.value = note
+  composerDraft.value = ''
+  if (props.archiveOnSelect && review.value) {
+    consent.value = true
+    if (!sampleAuthorized.value && !templateOwnFileAuthorized.value) sampleAuthorized.value = true
+    void refine()
+    return
+  }
+  if (props.archiveOnSelect && files.value.length && !review.value) void classify()
 }
 function onComposerDragEnter(event: DragEvent) {
   if (!alive || busy.value) return
@@ -340,14 +363,26 @@ async function classify() {
     if (!current()) return
     retryBudget.value = {}
     classifications.value = results
-    archiveProgress.value = props.archiveOnSelect && results.every((item) => item.status === 'classified')
-      ? '原件已归档并完成规则预筛，请继续核对单据分类、片段边界和续表关系。'
-      : '本批处理结束；失败或结果未知的文件不可继续，请核对后重试。'
+    const allOk = results.every((item) => item.status === 'classified')
+    archiveProgress.value = props.archiveOnSelect && allOk
+      ? '处理完成，正在生成候选模板…'
+      : allOk
+        ? '原件已归档并完成规则预筛，请继续核对单据分类、片段边界和续表关系。'
+        : '本批处理结束；失败或结果未知的文件不可继续，请核对后重试。'
     const index = results.findIndex((item) => item.status === 'classified')
     if (index >= 0 && (!props.archiveOnSelect || !previousSelection || results[files.value.indexOf(previousSelection)]?.status !== 'classified')) selectFile(index)
     if (index >= 0) emit('stage', classificationConfirmed.value ? review.value ? 'template' : 'cleaning' : 'fragments')
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类失败' }
   finally { if (current()) busy.value = false }
+  if (!current() || !props.archiveOnSelect) return
+  if (classifications.value.some((item) => item.status === 'classified' && !item.confirmed)) {
+    await confirmClassifications()
+  }
+  if (!current()) return
+  if (requirementNotes.value.length) feedback.value = requirementNotes.value[requirementNotes.value.length - 1]
+  if (classificationConfirmed.value && previewSelectionReady.value && !review.value) {
+    await preview()
+  }
 }
 async function loadArchiveQuota() {
   const current = captureOperation()
@@ -882,17 +917,20 @@ async function downloadCandidate(index: number) {
   <section class="reviewed-template reviewed-template--chatlike" aria-label="数据对接导入">
     <div class="etl-intake-feed" aria-live="polite">
       <div v-if="!files.length && !classifications.length" class="etl-intake-empty">
-        <p class="etl-intake-empty__title">导入 Excel，开始整理</p>
-        <p>把文件拖到底部对话框，点「开始处理」；处理完成后弹出「选模板」。</p>
+        <p class="etl-intake-empty__title">上传文件，挑选模板</p>
+        <p>把文件拖到底部对话框，也可输入整理要求；点「开始处理」后弹出选模板。</p>
         <p class="etl-quiet">已保存的模板请到「模板库」查看管理。</p>
       </div>
       <div v-if="files.length" class="etl-bubble etl-bubble--user">
         已选择 {{ files.length }} 个文件：{{ files.map((item) => item.name).join('、') }}
       </div>
+      <div v-for="(note, noteIndex) in requirementNotes" :key="`req-${noteIndex}`" class="etl-bubble etl-bubble--user">
+        整理要求：{{ note }}
+      </div>
       <div v-if="archiveProgress" class="etl-bubble etl-bubble--system" role="status">{{ archiveProgress }}</div>
       <div v-if="error && !review" class="etl-bubble etl-bubble--error" role="alert">{{ error }}</div>
 
-    <details class="etl-admin-panel"><summary>管理员与档案（配额、撤回）</summary>
+    <details v-if="!archiveOnSelect" class="etl-admin-panel"><summary>管理员与档案（配额、撤回）</summary>
       <p class="etl-quiet">原件长期保留；未配置归档配额或配额不足时不能归档。打印版式未验证，不可发布企业模板库。</p>
       <button type="button" :disabled="busy" @click="loadArchiveQuota">查看配额</button>
       <p>{{ archiveQuotaInfo }}</p>
@@ -914,7 +952,7 @@ async function downloadCandidate(index: number) {
       </div>
     </details>
 
-      <div v-show="classifications.length">
+      <div v-show="classifications.length && !archiveOnSelect">
 
     <div class="reviewed-template__step" data-etl-stage="classification">
     <h3 v-if="!archiveOnSelect">第二步：文件分类</h3>
@@ -1152,6 +1190,23 @@ async function downloadCandidate(index: number) {
         <span v-for="(item, index) in files" :key="index" class="etl-composer__chip">{{ item.name }}</span>
         <span v-if="!files.length" class="etl-composer__placeholder">拖入或选择 Excel（.xlsx / .xls）</span>
       </div>
+      <label class="etl-composer__prompt">
+        <span class="sr-only">整理要求</span>
+        <textarea
+          v-model="composerDraft"
+          class="etl-composer__input"
+          rows="2"
+          :disabled="busy"
+          placeholder="输入整理要求，例如：保留客户栏，清理明细空白行"
+          @keydown.enter.exact.prevent="submitComposerRequirement"
+        ></textarea>
+      </label>
+      <button
+        type="button"
+        class="etl-composer__send"
+        :disabled="busy || !composerDraft.trim()"
+        @click="submitComposerRequirement"
+      >发送</button>
       <button
         type="button"
         class="etl-composer__start"
@@ -1280,6 +1335,7 @@ async function downloadCandidate(index: number) {
   grid-template-columns: auto 1fr auto;
   grid-template-areas:
     "attach chips start"
+    "prompt prompt send"
     "hint hint hint";
   gap: 0.5rem 0.65rem;
   align-items: center;
@@ -1328,9 +1384,37 @@ async function downloadCandidate(index: number) {
   overflow-wrap: anywhere;
 }
 .etl-composer__placeholder { color: #7a8794; font-size: 13px; }
+.etl-composer__prompt { grid-area: prompt; min-width: 0; }
+.etl-composer__input {
+  width: 100%;
+  min-height: 2.6rem;
+  resize: vertical;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  padding: 0.45rem 0.65rem;
+  font: inherit;
+  line-height: 1.4;
+  background: #fff;
+}
+.etl-composer__send {
+  grid-area: send;
+  justify-self: end;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .etl-composer__start,
 .etl-composer__retry,
-.etl-composer__attach {
+.etl-composer__attach,
+.etl-composer__send {
   border-radius: 10px;
   padding: 0.55rem 0.9rem;
   border: 1px solid #d5deea;
@@ -1541,6 +1625,7 @@ async function downloadCandidate(index: number) {
     grid-template-areas:
       "attach start"
       "chips chips"
+      "prompt send"
       "hint hint";
   }
 }
