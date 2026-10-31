@@ -388,7 +388,6 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(template_scope, "ensure_templates_tenant_column", lambda: None)
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(routes, "get_app_data_dir", lambda: str(tmp_path))
-    monkeypatch.setattr(archive_routes, "get_app_data_dir", lambda: str(tmp_path))
     from app.application.etl import archive_store
     from app.utils.path_io import path_utils
 
