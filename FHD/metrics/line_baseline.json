@@ -1,5 +1,5 @@
 {
-  "lines": 2405482,
-  "updated": "2026-10-31",
-  "note": "merge main(#2875 默认10GiB) into pick→私有入库；合入两边 CHANGELOG + 基线重算"
+  "lines": 2405527,
+  "updated": "2026-11-01",
+  "note": "P1-1 composer_note 接线与 P2-2 ReviewedExcelTemplate etl→elt 类名；配套 EltCenterView 测试与 CHANGELOG（约 +45 行，对齐 #2873 抬升口径）"
 }

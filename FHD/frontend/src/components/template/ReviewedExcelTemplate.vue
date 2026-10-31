@@ -858,6 +858,11 @@ async function save() {
     form.append('proposal_version', proposal.value.version)
     form.append('candidate_id', proposal.value.candidates[candidateIndex.value].id)
     form.append('selections', JSON.stringify(selected.value))
+    const noteParts = [...requirementNotes.value]
+    const draftNote = composerDraft.value.trim()
+    if (draftNote) noteParts.push(draftNote)
+    const composerNote = noteParts.join('\n').trim().slice(0, 4000)
+    if (composerNote) form.append('composer_note', composerNote)
     const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string }
     if (!current()) return
     savedId.value = result.template_id
@@ -939,23 +944,23 @@ async function downloadCandidate(index: number) {
 <template>
 
   <section class="reviewed-template reviewed-template--chatlike" aria-label="数据对接导入">
-    <div class="etl-intake-feed" aria-live="polite">
-      <div v-if="!files.length && !classifications.length" class="etl-intake-empty">
-        <p class="etl-intake-empty__title">上传文件，挑选模板</p>
+    <div class="elt-intake-feed" aria-live="polite">
+      <div v-if="!files.length && !classifications.length" class="elt-intake-empty">
+        <p class="elt-intake-empty__title">上传文件，挑选模板</p>
         <p>把文件拖到底部对话框，也可输入整理要求；点「开始处理」后弹出选模板。</p>
-        <p class="etl-quiet">已保存的模板请到「模板库」查看管理。</p>
+        <p class="elt-quiet">已保存的模板请到「模板库」查看管理。</p>
       </div>
-      <div v-if="files.length" class="etl-bubble etl-bubble--user">
+      <div v-if="files.length" class="elt-bubble elt-bubble--user">
         已选择 {{ files.length }} 个文件：{{ files.map((item) => item.name).join('、') }}
       </div>
-      <div v-for="(note, noteIndex) in requirementNotes" :key="`req-${noteIndex}`" class="etl-bubble etl-bubble--user">
+      <div v-for="(note, noteIndex) in requirementNotes" :key="`req-${noteIndex}`" class="elt-bubble elt-bubble--user">
         整理要求：{{ note }}
       </div>
-      <div v-if="archiveProgress" class="etl-bubble etl-bubble--system" role="status">{{ archiveProgress }}</div>
-      <div v-if="error && !review" class="etl-bubble etl-bubble--error" role="alert">{{ error }}</div>
+      <div v-if="archiveProgress" class="elt-bubble elt-bubble--system" role="status">{{ archiveProgress }}</div>
+      <div v-if="error && !review" class="elt-bubble elt-bubble--error" role="alert">{{ error }}</div>
 
-    <details v-if="!archiveOnSelect" class="etl-admin-panel"><summary>管理员与档案（配额、撤回）</summary>
-      <p class="etl-quiet">原件长期保留；未显式配置时默认 10 GiB，配额不足时不能归档。打印版式未验证，不可发布企业模板库。</p>
+    <details v-if="!archiveOnSelect" class="elt-admin-panel"><summary>管理员与档案（配额、撤回）</summary>
+      <p class="elt-quiet">原件长期保留；未显式配置时默认 10 GiB，配额不足时不能归档。打印版式未验证，不可发布企业模板库。</p>
       <button type="button" :disabled="busy" @click="loadArchiveQuota">查看配额</button>
       <p>{{ archiveQuotaInfo }}</p>
       <label>配额（MiB）：<input v-model.number="archiveQuotaMiB" type="number" min="1" max="1048576" step="1"></label>
@@ -978,9 +983,9 @@ async function downloadCandidate(index: number) {
 
       <div v-if="!archiveOnSelect">
 
-    <div class="reviewed-template__step" data-etl-stage="classification">
+    <div class="reviewed-template__step" data-elt-stage="classification">
     <h3 v-if="!archiveOnSelect">第二步：文件分类</h3>
-    <h3 v-else class="etl-stage-title">处理结果 · 核对分类</h3>
+    <h3 v-else class="elt-stage-title">处理结果 · 核对分类</h3>
     <p v-if="classificationNotice" role="status">{{ classificationNotice }}</p>
     <button type="button" :disabled="busy" @click="loadRecentClassifications">查看已保存分类</button>
     <details v-if="recentClassifications.length"><summary>已保存分类（归档来源可直接恢复；旧记录需选择相同原文件）</summary>
@@ -1087,12 +1092,12 @@ async function downloadCandidate(index: number) {
     </div>
 
       </div>
-      <div class="etl-template-picker" role="dialog" aria-label="选模板" v-show="templatePickerOpen || !!review || !!savedId">
+      <div class="elt-template-picker" role="dialog" aria-label="选模板" v-show="templatePickerOpen || !!review || !!savedId">
 
-    <div class="reviewed-template__step" data-etl-stage="template" v-show="!archiveOnSelect || templatePickerOpen || !!review || !!savedId">
-    <div v-if="archiveOnSelect" class="etl-template-picker__bar">
+    <div class="reviewed-template__step" data-elt-stage="template" v-show="!archiveOnSelect || templatePickerOpen || !!review || !!savedId">
+    <div v-if="archiveOnSelect" class="elt-template-picker__bar">
       <h3>选模板</h3>
-      <button type="button" class="etl-template-picker__close" :disabled="busy" @click="templatePickerOpen = false">关闭</button>
+      <button type="button" class="elt-template-picker__close" :disabled="busy" @click="templatePickerOpen = false">关闭</button>
     </div>
     <h3 v-else>第三步：清理 Excel 并保存到模板库</h3>
     <p v-for="group in classifications[files.indexOf(file as File)]?.logical_documents || []" :key="group.logical_document_id">已确认的文档片段：{{ group.fragments.map((part) => `${part.sheet}!${part.range}`).join('、') }}。</p>
@@ -1177,18 +1182,18 @@ async function downloadCandidate(index: number) {
       </template>
     </div>
     <p v-if="savedId">已保存到模板库。{{ savedModelStatus }} 可再次预览当前原件并保存新模板，已有模板不会被覆盖。<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
-    <div v-if="ingestBatchId" class="etl-ingest-progress" aria-label="自动入库真实进度">
-      <div class="etl-ingest-progress__row">
+    <div v-if="ingestBatchId" class="elt-ingest-progress" aria-label="自动入库真实进度">
+      <div class="elt-ingest-progress__row">
         <span>知识库</span>
-        <div class="etl-ingest-progress__track" role="progressbar" :aria-valuenow="Number(kbProgress?.pct || 0)" aria-valuemin="0" aria-valuemax="100">
-          <div class="etl-ingest-progress__fill etl-ingest-progress__fill--kb" :style="{ width: `${Number(kbProgress?.pct || 0)}%` }" />
+        <div class="elt-ingest-progress__track" role="progressbar" :aria-valuenow="Number(kbProgress?.pct || 0)" aria-valuemin="0" aria-valuemax="100">
+          <div class="elt-ingest-progress__fill elt-ingest-progress__fill--kb" :style="{ width: `${Number(kbProgress?.pct || 0)}%` }" />
         </div>
         <small>{{ Number(kbProgress?.pct || 0) }}% · {{ kbProgress?.message || kbProgress?.stage || '…' }}</small>
       </div>
-      <div class="etl-ingest-progress__row">
+      <div class="elt-ingest-progress__row">
         <span>业务域</span>
-        <div class="etl-ingest-progress__track" role="progressbar" :aria-valuenow="Number(businessProgress?.pct || 0)" aria-valuemin="0" aria-valuemax="100">
-          <div class="etl-ingest-progress__fill etl-ingest-progress__fill--biz" :style="{ width: `${Number(businessProgress?.pct || 0)}%` }" />
+        <div class="elt-ingest-progress__track" role="progressbar" :aria-valuenow="Number(businessProgress?.pct || 0)" aria-valuemin="0" aria-valuemax="100">
+          <div class="elt-ingest-progress__fill elt-ingest-progress__fill--biz" :style="{ width: `${Number(businessProgress?.pct || 0)}%` }" />
         </div>
         <small>{{ Number(businessProgress?.pct || 0) }}% · {{ businessProgress?.message || businessProgress?.stage || '…' }}</small>
       </div>
@@ -1198,33 +1203,33 @@ async function downloadCandidate(index: number) {
       </div>
     </div>
     <div
-      class="etl-composer"
-      :class="{ 'etl-composer--dragover': composerDragOver }"
+      class="elt-composer"
+      :class="{ 'elt-composer--dragover': composerDragOver }"
       @dragenter.prevent="onComposerDragEnter"
       @dragover.prevent="onComposerDragOver"
       @dragleave.prevent="onComposerDragLeave"
       @drop.prevent="onComposerDrop"
     >
-      <div v-if="composerDragOver" class="etl-composer__drop" role="status">松开以加入文件</div>
+      <div v-if="composerDragOver" class="elt-composer__drop" role="status">松开以加入文件</div>
       <input
         ref="fileInputRef"
-        class="etl-composer__file-input"
+        class="elt-composer__file-input"
         type="file"
         accept=".xlsx,.xls"
         multiple
         :disabled="busy"
         @change="choose"
       >
-      <button type="button" class="etl-composer__attach" :disabled="busy" @click="openFilePicker">添加文件</button>
-      <div class="etl-composer__chips" aria-label="待处理文件">
-        <span v-for="(item, index) in files" :key="index" class="etl-composer__chip">{{ item.name }}</span>
-        <span v-if="!files.length" class="etl-composer__placeholder">拖入或选择 Excel（.xlsx / .xls）</span>
+      <button type="button" class="elt-composer__attach" :disabled="busy" @click="openFilePicker">添加文件</button>
+      <div class="elt-composer__chips" aria-label="待处理文件">
+        <span v-for="(item, index) in files" :key="index" class="elt-composer__chip">{{ item.name }}</span>
+        <span v-if="!files.length" class="elt-composer__placeholder">拖入或选择 Excel（.xlsx / .xls）</span>
       </div>
-      <label class="etl-composer__prompt">
+      <label class="elt-composer__prompt">
         <span class="sr-only">整理要求</span>
         <textarea
           v-model="composerDraft"
-          class="etl-composer__input"
+          class="elt-composer__input"
           rows="2"
           :disabled="busy"
           placeholder="输入整理要求，例如：保留客户栏，清理明细空白行"
@@ -1233,24 +1238,24 @@ async function downloadCandidate(index: number) {
       </label>
       <button
         type="button"
-        class="etl-composer__send"
+        class="elt-composer__send"
         :disabled="busy || !composerDraft.trim()"
         @click="submitComposerRequirement"
       >发送</button>
       <button
         type="button"
-        class="etl-composer__start"
+        class="elt-composer__start"
         :disabled="!files.length || files.length > 200 || busy"
         @click="startProcessing"
       >开始处理</button>
       <button
         v-if="classifications.some((item) => item.status !== 'classified')"
         type="button"
-        class="etl-composer__retry"
+        class="elt-composer__retry"
         :disabled="!files.length || files.length > 200 || busy"
         @click="classify"
       >重试未完成文件</button>
-      <p class="etl-composer__hint">每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
+      <p class="elt-composer__hint">每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
     </div>
   </section>
 
@@ -1279,7 +1284,7 @@ async function downloadCandidate(index: number) {
   background: transparent;
   gap: 0;
 }
-.etl-intake-feed {
+.elt-intake-feed {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -1288,21 +1293,21 @@ async function downloadCandidate(index: number) {
   gap: 0.75rem;
   padding: 0.5rem 0.25rem 1rem;
 }
-.etl-intake-empty {
+.elt-intake-empty {
   margin: auto;
   max-width: 28rem;
   text-align: center;
   color: #5f6f7e;
   padding: 2rem 1rem;
 }
-.etl-intake-empty__title {
+.elt-intake-empty__title {
   margin: 0 0 0.5rem;
   font-size: 1.15rem;
   color: #16355f;
   font-weight: 600;
 }
-.etl-quiet { color: #7a8794; font-size: 13px; }
-.etl-bubble {
+.elt-quiet { color: #7a8794; font-size: 13px; }
+.elt-bubble {
   align-self: flex-start;
   max-width: min(40rem, 100%);
   padding: 0.7rem 0.9rem;
@@ -1310,11 +1315,11 @@ async function downloadCandidate(index: number) {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.etl-bubble--user { align-self: flex-end; background: #235d8c; color: #fff; }
-.etl-bubble--system { background: #eef3f8; color: #16355f; }
-.etl-bubble--error { background: #fdecec; color: #8b1e1e; }
-.etl-stage-title { margin: 0 0 0.35rem; font-size: 1rem; color: #16355f; }
-.etl-admin-panel {
+.elt-bubble--user { align-self: flex-end; background: #235d8c; color: #fff; }
+.elt-bubble--system { background: #eef3f8; color: #16355f; }
+.elt-bubble--error { background: #fdecec; color: #8b1e1e; }
+.elt-stage-title { margin: 0 0 0.35rem; font-size: 1rem; color: #16355f; }
+.elt-admin-panel {
   margin: 0.25rem 0;
   padding: 0.5rem 0.75rem;
   border: 1px dashed #d5deea;
@@ -1323,7 +1328,7 @@ async function downloadCandidate(index: number) {
   color: #5f6f7e;
   font-size: 13px;
 }
-.etl-template-picker {
+.elt-template-picker {
   position: fixed;
   inset: 0;
   z-index: 40;
@@ -1336,7 +1341,7 @@ async function downloadCandidate(index: number) {
   border-radius: 0;
   box-shadow: none;
 }
-.etl-template-picker > .reviewed-template__step {
+.elt-template-picker > .reviewed-template__step {
   width: min(56rem, 96vw);
   max-height: min(92vh, 46rem);
   overflow: auto;
@@ -1344,21 +1349,21 @@ async function downloadCandidate(index: number) {
   background: #fff;
   box-shadow: 0 20px 50px rgb(0 0 0 / 20%);
 }
-.etl-template-picker__bar {
+.elt-template-picker__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.35rem 0.5rem 0;
 }
-.etl-template-picker__bar h3 { margin: 0; }
-.etl-template-picker__close {
+.elt-template-picker__bar h3 { margin: 0; }
+.elt-template-picker__close {
   border: 1px solid #d5deea;
   background: #fff;
   border-radius: 8px;
   padding: 0.35rem 0.7rem;
 }
-.etl-composer {
+.elt-composer {
   position: sticky;
   bottom: 0;
   display: grid;
@@ -1376,8 +1381,8 @@ async function downloadCandidate(index: number) {
   box-shadow: 0 -8px 24px rgb(22 53 95 / 8%);
   margin-top: auto;
 }
-.etl-composer--dragover { border-color: #235d8c; background: #f3f8fc; }
-.etl-composer__drop {
+.elt-composer--dragover { border-color: #235d8c; background: #f3f8fc; }
+.elt-composer__drop {
   position: absolute;
   inset: 0;
   display: grid;
@@ -1388,15 +1393,15 @@ async function downloadCandidate(index: number) {
   font-weight: 600;
   z-index: 2;
 }
-.etl-composer__file-input {
+.elt-composer__file-input {
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
   pointer-events: none;
 }
-.etl-composer__attach { grid-area: attach; }
-.etl-composer__chips {
+.elt-composer__attach { grid-area: attach; }
+.elt-composer__chips {
   grid-area: chips;
   display: flex;
   flex-wrap: wrap;
@@ -1405,7 +1410,7 @@ async function downloadCandidate(index: number) {
   max-height: 4.5rem;
   overflow: auto;
 }
-.etl-composer__chip {
+.elt-composer__chip {
   padding: 0.25rem 0.55rem;
   border-radius: 999px;
   background: #eef3f8;
@@ -1413,9 +1418,9 @@ async function downloadCandidate(index: number) {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
-.etl-composer__placeholder { color: #7a8794; font-size: 13px; }
-.etl-composer__prompt { grid-area: prompt; min-width: 0; }
-.etl-composer__input {
+.elt-composer__placeholder { color: #7a8794; font-size: 13px; }
+.elt-composer__prompt { grid-area: prompt; min-width: 0; }
+.elt-composer__input {
   width: 100%;
   min-height: 2.6rem;
   resize: vertical;
@@ -1426,7 +1431,7 @@ async function downloadCandidate(index: number) {
   line-height: 1.4;
   background: #fff;
 }
-.etl-composer__send {
+.elt-composer__send {
   grid-area: send;
   justify-self: end;
 }
@@ -1441,26 +1446,26 @@ async function downloadCandidate(index: number) {
   white-space: nowrap;
   border: 0;
 }
-.etl-composer__start,
-.etl-composer__retry,
-.etl-composer__attach,
-.etl-composer__send {
+.elt-composer__start,
+.elt-composer__retry,
+.elt-composer__attach,
+.elt-composer__send {
   border-radius: 10px;
   padding: 0.55rem 0.9rem;
   border: 1px solid #d5deea;
   background: #fff;
   color: #31506d;
 }
-.etl-composer__start {
+.elt-composer__start {
   grid-area: start;
   background: #235d8c;
   border-color: #235d8c;
   color: #fff;
   font-weight: 600;
 }
-.etl-composer__start:disabled { opacity: 0.55; }
-.etl-composer__retry { grid-column: 1 / -1; justify-self: start; }
-.etl-composer__hint {
+.elt-composer__start:disabled { opacity: 0.55; }
+.elt-composer__retry { grid-column: 1 / -1; justify-self: start; }
+.elt-composer__hint {
   grid-area: hint;
   margin: 0;
   color: #7a8794;
@@ -1650,7 +1655,7 @@ async function downloadCandidate(index: number) {
 @media (max-width: 720px) {
   .reviewed-template,
   .reviewed-template__step { padding: 0.75rem; }
-  .etl-composer {
+  .elt-composer {
     grid-template-columns: 1fr auto;
     grid-template-areas:
       "attach start"
@@ -1670,7 +1675,7 @@ async function downloadCandidate(index: number) {
   background: linear-gradient(180deg, #e8f8ef 0%, #f3f8fc 55%);
   box-shadow: 0 0 0 3px rgb(31 157 85 / 28%);
 }
-.etl-ingest-progress {
+.elt-ingest-progress {
   display: grid;
   gap: 0.55rem;
   margin: 0.5rem 0 0;
@@ -1679,24 +1684,24 @@ async function downloadCandidate(index: number) {
   border-radius: 10px;
   background: #fafbfc;
 }
-.etl-ingest-progress__row {
+.elt-ingest-progress__row {
   display: grid;
   grid-template-columns: 4.5rem 1fr auto;
   gap: 0.55rem;
   align-items: center;
   font-size: 12px;
 }
-.etl-ingest-progress__track {
+.elt-ingest-progress__track {
   height: 10px;
   border-radius: 999px;
   background: #e5e7eb;
   overflow: hidden;
 }
-.etl-ingest-progress__fill {
+.elt-ingest-progress__fill {
   height: 100%;
   border-radius: 999px;
   transition: width 0.25s ease;
 }
-.etl-ingest-progress__fill--kb { background: #2563eb; }
-.etl-ingest-progress__fill--biz { background: #059669; }
+.elt-ingest-progress__fill--kb { background: #2563eb; }
+.elt-ingest-progress__fill--biz { background: #059669; }
 </style>
