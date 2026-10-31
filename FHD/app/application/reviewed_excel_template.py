@@ -726,6 +726,9 @@ def derive_document_workbook(
 
         if object_receipt is not None:
             object_receipt.update(range_plan["receipt"])
+            warnings_list = formula_plan.get("formula_error_operand_warnings") or []
+            if warnings_list:
+                object_receipt["formula_error_operand_warnings"] = warnings_list
         # ZIP member timestamps otherwise vary between saves, preventing a
         # verified re-derivation of exactly the same temporary document later.
         normalized = BytesIO()

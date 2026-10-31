@@ -177,3 +177,36 @@ def test_subtotal_export_guard_rejects_changed_source_semantics(change):
         sheet.title = "不同表"
     with pytest.raises(ReviewedExcelError, match="SUBTOTAL"):
         verify_preserved_subtotals(book, plan)
+
+
+def test_preexisting_error_operands_are_allowed_with_warning_receipt():
+    """Dead #REF! in source SUM formulas must not hard-reject derivation."""
+    body = workbook(
+        {
+            "A1": "=SUM(#REF!)",
+            "A2": 1,
+            "B1": "=SUM(A2,#REF!)",
+            "C1": 9,
+        }
+    )
+    result = plan_formula_support(body, [{"sheet": "表", "range": "A1:B1"}])
+    warnings = result["formula_error_operand_warnings"]
+    assert {item["cell"] for item in warnings} == {"A1", "B1"}
+    assert all(item["message"].startswith("公式含错误引用") for item in warnings)
+    assert result["formula_references"]["A1"] == []
+    assert result["formula_references"]["B1"] == ["A2"]
+    assert result["selected_reference_cells"] == []
+    assert result["support_cells"] == ["A2"]
+
+
+def test_derive_surfaces_error_operand_warnings_on_receipt():
+    from app.application.reviewed_excel_template import derive_document_workbook
+
+    original = workbook({"A1": "=SUM(#REF!)", "A2": 3, "B1": 1})
+    receipt: dict = {}
+    result = derive_document_workbook(
+        original, [{"sheet": "表", "range": "A1:B1"}], object_receipt=receipt
+    )
+    assert result
+    assert receipt["formula_error_operand_warnings"][0]["cell"] == "A1"
+    assert receipt["formula_error_operand_warnings"][0]["formula"] == "=SUM(#REF!)"

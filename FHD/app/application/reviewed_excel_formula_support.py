@@ -79,6 +79,7 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
         proxies: set[str] = set()
         edges: dict[str, set[str]] = {}
         subtotals: set[str] = set()
+        error_operand_warnings: list[dict] = []
         while pending:
             address = pending.pop()
             if address in visited:
@@ -107,7 +108,19 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
             edges[address] = set()
             for token in tokens:
                 if token.type == "OPERAND" and token.subtype == "ERROR":
-                    raise ReviewedExcelError("公式含错误引用")
+                    # Pre-existing dead refs (#REF!, etc.) are source-quality
+                    # issues, not slice-boundary breaks. Allow with a receipt
+                    # warning so derivation can proceed; do not chase them.
+                    error_operand_warnings.append(
+                        {
+                            "sheet": sheet_name,
+                            "cell": address,
+                            "formula": value,
+                            "token": token.value,
+                            "message": "公式含错误引用（原件预存，警告放行）",
+                        }
+                    )
+                    continue
                 if (
                     token.type == "FUNC"
                     and token.subtype == "OPEN"
@@ -203,6 +216,7 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
             "support_cells": sorted(outside),
             "selected_reference_cells": sorted(inside),
             "proxy_cells": sorted(proxies),
+            "formula_error_operand_warnings": error_operand_warnings,
         }
     finally:
         book.close()
