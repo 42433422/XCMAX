@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-10-31 11:00 UTC",
+  "generated_at": "2026-10-31 11:01 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -353,15 +353,15 @@
   "capability_totals": {
     "total": 157,
     "by_status": {
-      "verified": 105,
+      "verified": 106,
       "partial": 15,
       "implemented": 3,
-      "planned": 34
+      "planned": 33
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 105,
+    "verified_total": 106,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 98,
@@ -407,7 +407,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 74
+    "completion": 75
   },
   "capability_warnings": [
     "[base-account-security] 实现路径不存在: FHD/app/application/account_security.py",
@@ -439,8 +439,6 @@
     "[erp-reconcile] 实现路径不存在: FHD/app/services/fhd_payment_reconciliation.py",
     "[erp-contract] 实现路径不存在: FHD/app/services/contract_lifecycle.py",
     "[erp-ocr] 实现路径不存在: FHD/app/services/ocr_service.py",
-    "[erp-etl] 实现路径不存在: FHD/app/fastapi_routes/etl.py",
-    "[erp-etl] 实现路径不存在: FHD/app/fastapi_routes/etl_targets.py",
     "[ch-notify] 实现路径不存在: FHD/app/services/mobile_push.py",
     "[ch-task-center] 实现路径不存在: FHD/app/application/approval_notifications.py",
     "[ch-mobile-pair] 实现路径不存在: FHD/app/services/mobile_relay_pairing.py",
@@ -486,11 +484,11 @@
         ],
         "total": 102,
         "by_status": {
-          "verified": 71,
+          "verified": 72,
           "partial": 5,
-          "planned": 26
+          "planned": 25
         },
-        "verified": 71
+        "verified": 72
       },
       "releases": {
         "macos": {
