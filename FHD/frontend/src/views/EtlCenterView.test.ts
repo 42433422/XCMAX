@@ -34,6 +34,8 @@ async function setup(runId = '') {
     const input = wrapper.get('input[type="file"][multiple]')
     Object.defineProperty(input.element, 'files', { configurable: true, value: [new File(['工艺、原料、检验说明'], '生产单.xlsx')] })
     await input.trigger('change'); await flushPromises()
+    const start = wrapper.findAll('button').find(item => item.text() === '开始处理')
+    if (start) { await start.trigger('click'); await flushPromises() }
   }
   return { wrapper, router, button, choose }
 }
@@ -173,6 +175,7 @@ describe('data docking archive-first workflow', () => {
     const input = wrapper.get('input[type="file"][multiple]')
     Object.defineProperty(input.element, 'files', { value: ['process.xlsx', 'inspection.xlsx'].map(name => new File(['生产资料'], name)) })
     await input.trigger('change'); await flushPromises()
+    await wrapper.findAll('button').find(item => item.text() === '开始处理')!.trigger('click'); await flushPromises()
     const failedRequest = archive.archiveClassifyExcel.mock.calls[1][0] as FormData
     await button('重试未完成文件').trigger('click'); await flushPromises()
     expect(archive.archiveClassifyExcel.mock.calls.map(([form]) => (form.get('file') as File).name)).toEqual(['process.xlsx', 'inspection.xlsx', 'inspection.xlsx'])

@@ -1,94 +1,109 @@
 .etl-center {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 24px 24px max(40px, env(safe-area-inset-bottom));
+  padding: 16px 20px max(24px, env(safe-area-inset-bottom));
   color: #172033;
   background: #f5f7fb;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
-  scrollbar-gutter: stable;
 }
-.etl-hero {
+.etl-center--chatlike {
+  gap: 0.75rem;
+}
+.etl-chat-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 24px;
-  padding: 28px 30px;
-  color: #fff;
-  border-radius: 18px;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 14px;
   background: linear-gradient(135deg, #16355f, #235d8c 58%, #168294);
-  box-shadow: 0 16px 40px rgb(22 53 95 / 16%);
-  overflow: hidden;
-  min-width: 0;
+  color: #fff;
+  box-shadow: 0 10px 28px rgb(22 53 95 / 14%);
+  flex: 0 0 auto;
 }
-.etl-hero > div:first-child {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+.etl-chat-header h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
 }
-.etl-eyebrow {
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  opacity: 0.78;
-}
-.etl-hero h1 {
-  margin: 6px 0 8px;
-  font-size: 30px;
-}
-.etl-hero p {
+.etl-chat-header p {
   margin: 0;
-  max-width: 680px;
-  opacity: 0.84;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  opacity: 0.86;
+  font-size: 13px;
 }
-.etl-hero__limits {
+.etl-chat-header__link {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 13px;
+}
+.etl-workspaces {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  align-content: flex-start;
-  gap: 8px;
-  max-width: 340px;
-  flex: 0 1 340px;
-  min-width: 0;
-}
-.etl-hero__limits span {
-  padding: 7px 10px;
-  border: 1px solid rgb(255 255 255 / 25%);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 10%);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.etl-workspaces,
-.etl-workflow-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin: 1.25rem 0;
+  gap: 0.65rem;
+  margin: 0;
   padding: 0;
+  align-items: center;
+  flex: 0 0 auto;
 }
-.etl-workspaces { align-items: center; }
 .etl-workspaces button {
-  padding: 0.65rem 0.9rem;
+  padding: 0.55rem 0.85rem;
   border: 1px solid #d5deea;
   border-radius: 8px;
   background: #fff;
   color: #31506d;
 }
-.etl-workspaces button.active { color: #fff; background: #235d8c; border-color: #235d8c; }
-.etl-workspaces a { margin-left: auto; color: #235d8c; }
-.etl-workflow-steps { list-style: none; }
-.etl-workflow-steps li { display: flex; align-items: center; gap: 0.4rem; color: #5f6f7e; }
-.etl-workflow-steps li span { display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: #e4ebf3; }
-.etl-workflow-steps li.active { color: #16355f; font-weight: 600; }
-.etl-workflow-steps li.active span { background: #235d8c; color: #fff; }
-.etl-history-note { color: #5f6f7e; line-height: 1.6; }
+.etl-workspaces button.active {
+  color: #fff;
+  background: #235d8c;
+  border-color: #235d8c;
+}
+.etl-intake-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.etl-workflow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+  flex: 0 0 auto;
+}
+.etl-workflow-steps--quiet {
+  opacity: 0.72;
+}
+.etl-workflow-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #5f6f7e;
+  font-size: 12px;
+}
+.etl-workflow-steps li span {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: #e4ebf3;
+  font-size: 11px;
+}
+.etl-workflow-steps li.active {
+  color: #16355f;
+  font-weight: 600;
+}
+.etl-workflow-steps li.active span {
+  background: #235d8c;
+  color: #fff;
+}
 @media (max-width: 900px) {
-  .etl-center { padding: 12px; }
-  .etl-hero { flex-direction: column; gap: 16px; padding: 20px; }
-  .etl-hero__limits { flex: 0 1 auto; justify-content: flex-start; }
-  .etl-workspaces a { margin-left: 0; }
+  .etl-center { padding: 10px; }
+  .etl-chat-header { flex-direction: column; gap: 10px; padding: 14px; }
 }

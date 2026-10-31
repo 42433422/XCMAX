@@ -51,6 +51,7 @@ describe('reviewed Excel template', () => {
       Object.defineProperty(file, 'arrayBuffer', { value: async () => new Uint8Array([1, 2, 3]).buffer })
       const input = wrapper.find('input[type=file]'); Object.defineProperty(input.element, 'files', { value: [file] })
       await input.trigger('change'); await flushPromises()
+      await wrapper.findAll('button').find(b => b.text() === '开始处理')!.trigger('click'); await flushPromises()
       expect(confirmation).toHaveBeenCalledTimes(1)
       expect(confirmation.mock.calls[0][0]).toContain('仅数据/模板测试；打印版式未验证，不可发布企业模板库')
       expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(accepted ? 1 : 0)
@@ -71,8 +72,12 @@ describe('reviewed Excel template', () => {
       const file = new File(['source'], 'stale.xls')
       Object.defineProperty(file, 'arrayBuffer', { value: async () => new ArrayBuffer(1) })
       const input = wrapper.find('input[type=file]'); Object.defineProperty(input.element, 'files', { value: [file] })
-      await input.trigger('change'); await flushPromises(); wrapper.unmount()
-      finish(new Uint8Array(32).buffer); await flushPromises()
+      await input.trigger('change'); await flushPromises()
+      const start = wrapper.findAll('button').find(b => b.text() === '开始处理')!
+      const pending = start.trigger('click')
+      await flushPromises()
+      wrapper.unmount()
+      finish(new Uint8Array(32).buffer); await flushPromises(); await pending.catch(() => undefined)
       expect(confirmation).not.toHaveBeenCalled(); expect(api.archiveClassifyExcel).not.toHaveBeenCalled()
     } finally { confirmation.mockRestore(); vi.unstubAllGlobals() }
   })

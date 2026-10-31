@@ -3,15 +3,15 @@
     <div class="page-content">
       <div class="page-header">
         <h2>模板预览</h2>
-        <p class="muted" style="margin:0;font-size:13px;">展示导出用 Excel 与 Word 模板：可按业务分组管理，也可选「自定义」自由新建任意模板；Word 若有「适用业务」或可从文件名推断则归入对应分组，否则在各分组中均显示。</p>
+        <p class="muted" style="margin:0;font-size:13px;">浏览并管理已保存的 Excel / Word 导出模板：可按业务分组，也可「自定义」新建。从原件导入清洗请使用数据对接中心。</p>
       </div>
 
-      <section class="template-archive-panel" aria-label="原件归档分类与模板清理">
-        <header class="template-archive-panel__header">
-          <h3>原件归档 → 分类 → 模板</h3>
-          <p class="muted">三步向导与下方已保存模板列表分开排布；归档单文件 20&nbsp;MB / 整批 50&nbsp;MB，与数据对接导入上限不同。</p>
-        </header>
-        <ReviewedExcelTemplate @saved="refreshTemplates" />
+      <section class="template-library-intake-note" aria-label="模板库说明">
+        <p class="muted" style="margin:0 0 12px;font-size:13px;line-height:1.5;">
+          模板库只负责查看、管理已保存模板。从 Excel 原件导入并生成模板，请到
+          <a href="/business-docking">数据对接中心</a>
+          （导入 → 开始处理 → 选模板）。
+        </p>
       </section>
 
       <div class="template-preview-toolbar" style="display:flex;gap:8px;align-items:center;margin:12px 0 16px;flex-wrap:wrap;">
@@ -76,7 +76,6 @@
 <script setup lang="ts">
 // 原超大 SFC 已拆分至 ./template-preview/（子组件 + composables + 独立 CSS）；
 // 入口保持对外路径/默认导出不变，仅做组装。
-import ReviewedExcelTemplate from '@/components/template/ReviewedExcelTemplate.vue'
 import TpTemplateCard from './template-preview/TpTemplateCard.vue'
 import TpCreateModal from './template-preview/TpCreateModal.vue'
 import TpPreviewModal from './template-preview/TpPreviewModal.vue'
@@ -99,26 +98,11 @@ const {
 
 <style scoped src="./template-preview/template-preview.css"></style>
 <style scoped>
-.template-archive-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin: 0 0 1.25rem;
-  min-width: 0;
-}
-.template-archive-panel__header h3 {
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
-  color: #16355f;
-}
-.template-archive-panel__header p {
-  margin: 0 0 0.25rem;
-  font-size: 13px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
 .template-preview-toolbar {
   position: relative;
   z-index: 1;
+}
+.template-library-intake-note a {
+  color: #235d8c;
 }
 </style>
