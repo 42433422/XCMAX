@@ -561,9 +561,14 @@ def test_archive_accepts_unsupported_geometry_without_allowing_model_or_derivati
 
     fixture = review_store.__wrapped__(tmp_path, monkeypatch)
     store = next(fixture)
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setattr(
         "app.application.reviewed_excel_template._template_mimo_complete",
         lambda *_: pytest.fail("unexpected model call"),
+    )
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *_a, **_k: pytest.fail("unexpected model call"),
     )
     body = rewrite_drawing(
         synthetic_workbook_with_shape(),
@@ -728,6 +733,7 @@ def test_independent_drawing_ids_and_contract_reject_forged_duplicate_or_outside
             },
         )
 
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", model)
     accepted = _classify_semantic_batch(review, reference_ids=True)
     assert accepted["regions"][0]["drawing_evidence"][0]["object_id"] == "1"
@@ -840,6 +846,7 @@ def test_grouping_drawing_id_contract_and_duplicate_rejection(monkeypatch):
             },
         )
 
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", model)
     groups = group_semantic_fragments(review, classification)
     assert groups[0]["drawing_evidence"][0]["object_id"] == "1"

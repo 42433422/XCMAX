@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import warnings
 from collections import Counter
 from datetime import date, datetime
 from io import BytesIO
@@ -318,7 +319,9 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
     if not body:
         raise ValueError("empty workbook body")
     digest = hashlib.sha256(body).hexdigest()
-    wb = load_workbook(BytesIO(body), data_only=False, keep_links=True)
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        wb = load_workbook(BytesIO(body), data_only=False, keep_links=True)
     try:
         sheets_out: list[dict] = []
         edge_counter: Counter[tuple[str, str]] = Counter()

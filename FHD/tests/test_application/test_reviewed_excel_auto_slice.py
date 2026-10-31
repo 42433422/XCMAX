@@ -89,7 +89,7 @@ def test_rejects_external_dependency_duplicate_group_and_source_mismatch():
         derive_classified_documents(body, result)
 
 
-def test_rejects_cross_sheet_model_group_and_cut_merged_cell():
+def test_rejects_cross_sheet_model_group_and_flattens_cut_merged_cell():
     body = workbook()
     result = classification(body)
     result["suggested_documents"] = [
@@ -98,11 +98,14 @@ def test_rejects_cross_sheet_model_group_and_cut_merged_cell():
     ]
     with pytest.raises(ReviewedExcelError, match="跨工作表"):
         derive_classified_documents(body, result)
+    # V3 export flattens merges that a selection cuts instead of hard-rejecting.
     result = classification(body)
     result["regions"][0]["range"] = "A1:A2"
     result["suggested_documents"][0]["fragments"][0]["range"] = "A1:A2"
-    with pytest.raises(ReviewedExcelError, match="合并单元格"):
-        derive_classified_documents(body, result)
+    slices = derive_classified_documents(body, result)
+    first = load_workbook(BytesIO(slices[0]["workbook"]))["One"]
+    assert first["A1"].value == "第一份"
+    assert "A1:B1" not in {str(r) for r in first.merged_cells.ranges}
 
 
 def test_chinese_names_are_bounded_unique_and_neutral_if_no_title():

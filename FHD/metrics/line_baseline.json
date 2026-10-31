@@ -1,5 +1,5 @@
 {
-  "lines": 2402918,
+  "lines": 2402936,
   "updated": "2026-10-31",
-  "note": "PR#2805: ELT 数据对接中心 platform-default LLM route (+frontend label); legitimate feature growth on V3 slicing branch"
+  "note": "PR#2805: catch print-area warnings in structural index + align platform-LLM/budget/merge-cut tests"
 }
