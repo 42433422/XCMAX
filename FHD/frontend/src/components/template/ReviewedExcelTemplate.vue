@@ -29,6 +29,9 @@ const archiveKeys = ref<string[]>([])
 const archiveProgress = ref('')
 const archiveQuotaInfo = ref('')
 const archiveQuotaMiB = ref<number | null>(null)
+const composerDragOver = ref(false)
+const templatePickerOpen = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 type ArchiveAsset = { id: string; name: string; state: string; versions: { id: string; version: number; status: string; sha256: string; classification_id: string | null }[] }
 const archiveAssets = ref<ArchiveAsset[]>([])
 const versionUploads = ref<Record<string, { file: File; requestKey: string }>>({})
@@ -190,11 +193,32 @@ watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
   emit('stage', 'archive')
 }, { flush: 'sync' })
 onBeforeUnmount(() => { alive = false; operationEpoch += 1; selectionEpoch += 1 })
-function choose(event: Event) {
+function openFilePicker() {
   if (!alive || busy.value) return
-  const input = event.target as HTMLInputElement
-  files.value = Array.from(input.files || [])
-  input.value = ''
+  fileInputRef.value?.click()
+}
+function startProcessing() {
+  void classify()
+}
+function onComposerDragEnter(event: DragEvent) {
+  if (!alive || busy.value) return
+  event.preventDefault()
+  composerDragOver.value = true
+}
+function onComposerDragOver(event: DragEvent) {
+  if (!alive || busy.value) return
+  event.preventDefault()
+  composerDragOver.value = true
+}
+function onComposerDragLeave(event: DragEvent) {
+  const target = event.currentTarget as HTMLElement | null
+  const related = event.relatedTarget as Node | null
+  if (target && related && target.contains(related)) return
+  composerDragOver.value = false
+}
+function applyChosenFiles(list: File[]) {
+  if (!alive || busy.value) return
+  files.value = list
   archiveKeys.value = files.value.map(() => crypto.randomUUID())
   archiveProgress.value = ''
   selectionEpoch += 1; selectedFilesCurrent = captureAuthSession()
@@ -202,8 +226,26 @@ function choose(event: Event) {
   error.value = files.value.length > 200 ? '一次最多上传 200 个文件，请分批上传' : ''
   analysisProgress.value = ''; analysisErrors.value = {}
   classificationNotice.value = ''
+  templatePickerOpen.value = false
   emit('stage', 'archive')
-  if (props.archiveOnSelect) void classify()
+}
+function onComposerDrop(event: DragEvent) {
+  event.preventDefault()
+  composerDragOver.value = false
+  if (!alive || busy.value) return
+  const list = Array.from(event.dataTransfer?.files || []).filter((item) => /\.(xlsx|xls)$/i.test(item.name))
+  if (!list.length) {
+    error.value = '请拖入 Excel 文件（.xlsx / .xls）'
+    return
+  }
+  applyChosenFiles(list)
+}
+function choose(event: Event) {
+  if (!alive || busy.value) return
+  const input = event.target as HTMLInputElement
+  const list = Array.from(input.files || [])
+  input.value = ''
+  applyChosenFiles(list)
 }
 function confirmLegacyScope(form: FormData, name: string, hash: string, current: () => boolean) {
   if (!current()) return false
@@ -604,7 +646,11 @@ async function confirmClassifications() {
       if (!result.confirmed) classificationNotice.value = result.message || '拆分已保存。请核对新的文档片段和续表关系，再次确认后才能清理模板。'
       alignConfirmedSelection(item)
     }
-    if (classificationConfirmed.value && previewSelectionReady.value) { classificationNotice.value = ''; emit('stage', 'cleaning') }
+    if (classificationConfirmed.value && previewSelectionReady.value) {
+      classificationNotice.value = ''
+      emit('stage', 'cleaning')
+      if (props.archiveOnSelect) templatePickerOpen.value = true
+    }
     else emit('stage', 'fragments')
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类确认失败，请刷新后重试' }
   finally { if (current()) busy.value = false }
@@ -691,6 +737,7 @@ async function preview(slice?: AutoSlice) {
     candidateIndex.value = 0
     review.value = result
     emit('stage', 'template')
+    if (props.archiveOnSelect) templatePickerOpen.value = true
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '预览失败' }
   finally { if (current()) busy.value = false }
 }
@@ -782,39 +829,47 @@ async function downloadCandidate(index: number) {
 </script>
 
 <template>
-  <section class="reviewed-template" aria-label="Excel 模板清理">
-    <div class="reviewed-template__step">
-    <h3>第一步：原件归档</h3>
-    <p>原件长期保留，不会自动删除；撤回后可恢复，存在分类依赖时不能撤回。永久清除尚未开放。未配置归档配额或配额不足时不能归档。</p>
-    <details><summary>管理员：归档配额</summary>
+
+  <section class="reviewed-template reviewed-template--chatlike" aria-label="数据对接导入">
+    <div class="etl-intake-feed" aria-live="polite">
+      <div v-if="!files.length && !classifications.length" class="etl-intake-empty">
+        <p class="etl-intake-empty__title">导入 Excel，开始整理</p>
+        <p>把文件拖到底部对话框，点「开始处理」；处理完成后弹出「选模板」。</p>
+        <p class="etl-quiet">已保存的模板请到「模板库」查看管理。</p>
+      </div>
+      <div v-if="files.length" class="etl-bubble etl-bubble--user">
+        已选择 {{ files.length }} 个文件：{{ files.map((item) => item.name).join('、') }}
+      </div>
+      <div v-if="archiveProgress" class="etl-bubble etl-bubble--system" role="status">{{ archiveProgress }}</div>
+      <div v-if="error && !review" class="etl-bubble etl-bubble--error" role="alert">{{ error }}</div>
+
+    <details class="etl-admin-panel"><summary>管理员与档案（配额、撤回）</summary>
+      <p class="etl-quiet">原件长期保留；未配置归档配额或配额不足时不能归档。打印版式未验证，不可发布企业模板库。</p>
       <button type="button" :disabled="busy" @click="loadArchiveQuota">查看配额</button>
       <p>{{ archiveQuotaInfo }}</p>
       <label>配额（MiB）：<input v-model.number="archiveQuotaMiB" type="number" min="1" max="1048576" step="1"></label>
       <button type="button" :disabled="busy" @click="saveArchiveQuota">设置配额</button>
+      <button type="button" :disabled="busy" @click="loadArchiveAssets">查看原件档案</button>
+      <div v-for="asset in archiveAssets" :key="asset.id">
+        <p>{{ asset.name }} · {{ asset.state === 'active' ? '已归档' : '已撤回' }} · {{ asset.id }}</p>
+        <p v-for="entry in asset.versions" :key="entry.id">版本 {{ entry.version }} · {{ entry.status }} · {{ entry.sha256 }}
+          <button v-if="entry.status === 'pending'" type="button" :disabled="busy" @click="recoverArchive(entry.id)">核对完整性并恢复</button>
+          <button v-if="entry.status === 'ready' && asset.state === 'active'" type="button" :disabled="busy" @click="downloadArchiveVersion(entry.id, asset.name)">下载原件版本</button>
+          <button v-if="entry.status === 'ready' && asset.state === 'active'" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name)">分类此版本</button>
+          <button v-if="entry.status === 'ready' && asset.state === 'active' && entry.classification_id" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name, entry.classification_id)">重新分类（保留历史）</button>
+        </p>
+        <label v-if="asset.state === 'active'">为此档案新增版本：<input type="file" accept=".xlsx,.xls" :disabled="busy" @change="chooseArchiveVersion(asset.id, $event)"></label>
+        <button v-if="asset.state === 'active'" type="button" :disabled="busy || !versionUploads[asset.id]" @click="appendArchiveVersion(asset)">保存新版本</button>
+        <button v-if="asset.state === 'active'" type="button" :disabled="busy" @click="changeArchiveState(asset, 'trashed')">撤回</button>
+        <button v-else type="button" :disabled="busy" @click="changeArchiveState(asset, 'active')">恢复</button>
+      </div>
     </details>
-    <button type="button" :disabled="busy" @click="loadArchiveAssets">查看原件档案</button>
-    <div v-for="asset in archiveAssets" :key="asset.id">
-      <p>{{ asset.name }} · {{ asset.state === 'active' ? '已归档' : '已撤回' }} · {{ asset.id }}</p>
-      <p v-for="entry in asset.versions" :key="entry.id">版本 {{ entry.version }} · {{ entry.status }} · {{ entry.sha256 }}
-        <button v-if="entry.status === 'pending'" type="button" :disabled="busy" @click="recoverArchive(entry.id)">核对完整性并恢复</button>
-        <button v-if="entry.status === 'ready' && asset.state === 'active'" type="button" :disabled="busy" @click="downloadArchiveVersion(entry.id, asset.name)">下载原件版本</button>
-        <button v-if="entry.status === 'ready' && asset.state === 'active'" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name)">分类此版本</button>
-        <button v-if="entry.status === 'ready' && asset.state === 'active' && entry.classification_id" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name, entry.classification_id)">重新分类（保留历史）</button>
-      </p>
-      <label v-if="asset.state === 'active'">为此档案新增版本：<input type="file" accept=".xlsx,.xls" :disabled="busy" @change="chooseArchiveVersion(asset.id, $event)"></label>
-      <button v-if="asset.state === 'active'" type="button" :disabled="busy || !versionUploads[asset.id]" @click="appendArchiveVersion(asset)">保存新版本</button>
-      <button v-if="asset.state === 'active'" type="button" :disabled="busy" @click="changeArchiveState(asset, 'trashed')">撤回</button>
-      <button v-else type="button" :disabled="busy" @click="changeArchiveState(asset, 'active')">恢复</button>
-    </div>
-    <p>分类先做规则预筛；可选择模型分析。分类仅供确认，不关联业务库或写入业务数据。依据及未读范围需核对，不表示理解全部语义。</p>
-    <p v-if="props.archiveOnSelect">旧 XLS 需逐文件确认仅数据/模板测试：保留原件及派生哈希；打印版式未验证，不可发布企业模板库。公式、宏、外链及不支持类型会被拒绝。</p>
-    <input type="file" :accept="props.archiveOnSelect ? '.xlsx,.xls' : '.xlsx'" multiple :disabled="busy" @change="choose">
-    <p class="reviewed-template__limits">模板归档流水线：每批最多 200 个文件，单个不超过 20 MB，整批不超过 50 MB<span v-if="!archiveOnSelect">（与旧业务导入单文件 100 MB 上限不同）</span>；超出请分批。</p>
-    <button v-if="!archiveOnSelect || classifications.some((item) => item.status !== 'classified')" type="button" :disabled="!files.length || files.length > 200 || busy" @click="classify">{{ archiveOnSelect ? '重试未完成文件' : '归档并分类所选文件' }}</button>
-    <p v-if="archiveProgress" role="status">{{ archiveProgress }}</p>
-    </div>
-    <div class="reviewed-template__step">
-    <h3>第二步：文件分类</h3>
+
+      <div v-show="classifications.length">
+
+    <div class="reviewed-template__step" data-etl-stage="classification">
+    <h3 v-if="!archiveOnSelect">第二步：文件分类</h3>
+    <h3 v-else class="etl-stage-title">处理结果 · 核对分类</h3>
     <p v-if="classificationNotice" role="status">{{ classificationNotice }}</p>
     <button type="button" :disabled="busy" @click="loadRecentClassifications">查看已保存分类</button>
     <details v-if="recentClassifications.length"><summary>已保存分类（归档来源可直接恢复；旧记录需选择相同原文件）</summary>
@@ -832,7 +887,9 @@ async function downloadCandidate(index: number) {
       <button type="button" :disabled="busy || classificationSampleAuthorized === classificationOwnFileAuthorized" @click="analyzeClassifications()">模型分析已分类文件</button>
       <button v-if="busy && analysisProgress" type="button" @click="cancelAnalysis = true">停止后续分析</button>
       <p v-if="analysisProgress">{{ analysisProgress }}</p>
-      <p>下方坐标是物理片段；是否属于同一业务文档需另行核对。同类别不会自动合并，范围可能包含空白边缘，不表示已精确裁剪。</p>
+      <details><summary>分类说明（可选）</summary>
+        <p>下方坐标是物理片段；是否属于同一业务文档需另行核对。同类别不会自动合并，范围可能包含空白边缘，不表示已精确裁剪。</p>
+      </details>
       <p v-for="group in classificationGroups" :key="group.key">{{ group.name }}：{{ group.files.join('；') }}</p>
       <label>批量设为 <select v-model="batchLabel"><option v-for="(label, key) in labelNames" :key="key" :value="key">{{ label }}</option></select></label>
       <button type="button" :disabled="!selectedRows.length || busy" @click="applyBatchLabel">应用到选中区域</button>
@@ -913,14 +970,25 @@ async function downloadCandidate(index: number) {
         </div>
       </div>
       <button type="button" :disabled="!file || busy" @click="confirmClassifications">确认分类并继续</button>
+      <button v-if="archiveOnSelect" type="button" :disabled="!classificationConfirmed || !previewSelectionReady || busy" @click="templatePickerOpen = true">选模板</button>
       <small>预览前需确认分类；未知会保留为未知，用户可确认继续。</small>
     </div>
     </div>
-    <div class="reviewed-template__step">
-    <h3>第三步：清理 Excel 并保存到模板库</h3>
+
+      </div>
+      <div class="etl-template-picker" role="dialog" aria-label="选模板" v-show="templatePickerOpen || !!review || !!savedId">
+
+    <div class="reviewed-template__step" data-etl-stage="template" v-show="!archiveOnSelect || templatePickerOpen || !!review || !!savedId">
+    <div v-if="archiveOnSelect" class="etl-template-picker__bar">
+      <h3>选模板</h3>
+      <button type="button" class="etl-template-picker__close" :disabled="busy" @click="templatePickerOpen = false">关闭</button>
+    </div>
+    <h3 v-else>第三步：清理 Excel 并保存到模板库</h3>
     <p v-for="group in classifications[files.indexOf(file as File)]?.logical_documents || []" :key="group.logical_document_id">已确认的文档片段：{{ group.fragments.map((part) => `${part.sheet}!${part.range}`).join('、') }}。</p>
-    <p>从所选文档片段生成副本并提供清理建议；无法保真的跨区依赖会阻断生成。公式和不确定内容默认保留。默认不调用模型；使用模型前须明确授权文件内容发送范围。</p>
-    <p>归档原件长期保留；模板生成过程中的临时副本按既有规则在 7 天后清理，已保存模板按模板库规则保留。旧记录及旧副本不会自动迁移。记录中的预览或模型输出仍可能包含表格内容。</p>
+    <details v-if="!archiveOnSelect"><summary>清理与保留说明</summary>
+      <p>从所选文档片段生成副本并提供清理建议；无法保真的跨区依赖会阻断生成。公式和不确定内容默认保留。默认不调用模型；使用模型前须明确授权文件内容发送范围。</p>
+      <p>归档原件长期保留；模板生成过程中的临时副本按既有规则在 7 天后清理，已保存模板按模板库规则保留。旧记录及旧副本不会自动迁移。记录中的预览或模型输出仍可能包含表格内容。</p>
+    </details>
     <p v-if="file">当前文件：{{ file.name }}</p>
     <p v-if="selectedRegion">所选区域：{{ selectedRegion }}。若该区域属于已确认的多片段文档，将一起提取。</p>
     <label v-if="selectedRegion"><input v-model="selectedPrintArea" type="checkbox" :disabled="busy"> 同意在派生文件中将打印范围设为所选片段，可能超出原打印范围并包含原未打印的签字栏；原件不变，页眉页脚保留。</label>
@@ -932,22 +1000,49 @@ async function downloadCandidate(index: number) {
     <p v-if="error" role="alert">{{ error }}</p>
     <div v-if="review">
       <p v-if="review.selected_region?.print_area_mode === 'selected'">已按您的选择设置派生打印范围：原范围 {{ review.selected_region.source_print_areas?.map((area) => area.value).join('；') || '未设置' }} → 派生范围 {{ review.selected_region.derived_print_area || '未设置' }}；原件不变。</p>
-      <p>基于实际生成的候选工作簿属性的布局近似预览，不是 Excel 像素截图；公式显示表达式，未计算结果。保存时原公式缓存值会清除，需在支持计算的表格软件中打开重算。仅展示每表前 40 行、20 列和前 20 张表；超出范围请下载核对。</p>
+      <details><summary>预览说明</summary>
+        <p>基于实际生成的候选工作簿属性的布局近似预览，不是 Excel 像素截图；公式显示表达式，未计算结果。保存时原公式缓存值会清除，需在支持计算的表格软件中打开重算。仅展示每表前 40 行、20 列和前 20 张表；超出范围请下载核对。</p>
+      </details>
       <label v-if="review.layout?.length">工作表 <select v-model.number="sheetIndex"><option v-for="(sheet, i) in review.layout" :key="sheet.sheet" :value="i">{{ sheet.sheet }}{{ sheet.truncated ? '（预览截断）' : '' }}</option></select></label>
-      <div class="reviewed-template__previews">
-        <div v-for="index in 4" :key="index" class="reviewed-template__preview">
-          <strong v-if="index === 1">原件中的所选文档（派生副本）</strong>
-          <label v-else><input v-model="candidateIndex" type="radio" :value="index - 2"> 模板 {{ index - 1 }}：{{ proposal.candidates[index - 2].label }}</label>
-          <small v-if="index > 1 && equivalentTo(index - 2)">与模板 {{ equivalentTo(index - 2) }} 清理结果相同</small>
-          <template v-if="layoutFor(index - 1)"><table><colgroup><col v-for="(width, col) in layoutFor(index - 1)!.widths" :key="col" :style="{ width: `${width * 7}px` }"></colgroup><tbody>
-            <tr v-for="(row, rowIndex) in layoutFor(index - 1)!.rows" :key="rowIndex" :style="{ height: `${row.height * 1.333}px` }">
+      <details class="reviewed-template__source-ref"><summary>查看原件派生副本</summary>
+        <div class="reviewed-template__preview reviewed-template__preview--source">
+          <template v-if="layoutFor(0)"><table><colgroup><col v-for="(width, col) in layoutFor(0)!.widths" :key="col" :style="{ width: `${width * 7}px` }"></colgroup><tbody>
+            <tr v-for="(row, rowIndex) in layoutFor(0)!.rows" :key="rowIndex" :style="{ height: `${row.height * 1.333}px` }">
               <td v-for="cell in row.cells" :key="cell.cell" :rowspan="cell.rowspan" :colspan="cell.colspan" :style="cellStyle(cell)">{{ cell.value }}</td>
             </tr></tbody></table></template>
           <small v-else>此版本无成品布局预览，请重新生成后核对。</small>
-          <button v-if="index > 1 && proposal.result_previews?.[index - 2]" type="button" :disabled="busy" @click="downloadCandidate(index - 2)">下载候选核对</button>
-          <details v-if="index > 1"><summary>查看差异与理由</summary><p>{{ proposal.candidates[index - 2].explanation }}</p><p>清除 {{ proposal.candidates[index - 2].clear.length }} 格；不确定内容保留。{{ proposal.candidates[index - 2].clear.length ? '' : '与原件相同，待确认。' }}</p></details>
+        </div>
+      </details>
+      <div class="reviewed-template__previews reviewed-template__previews--a4" role="listbox" aria-label="候选模板">
+        <div
+          v-for="(candidate, index) in proposal.candidates"
+          :key="candidate.id"
+          class="reviewed-template__preview reviewed-template__preview--a4"
+          :class="{ 'reviewed-template__preview--selected': candidateIndex === index }"
+          role="option"
+          :aria-selected="candidateIndex === index"
+          tabindex="0"
+          @click="!busy && (candidateIndex = index)"
+          @keydown.enter.prevent="!busy && (candidateIndex = index)"
+          @keydown.space.prevent="!busy && (candidateIndex = index)"
+        >
+          <span class="reviewed-template__a4-label">模板 {{ index + 1 }}：{{ candidate.label }}</span>
+          <span class="reviewed-template__a4-page">
+            <template v-if="layoutFor(index + 1)"><table><colgroup><col v-for="(width, col) in layoutFor(index + 1)!.widths" :key="col" :style="{ width: `${width * 7}px` }"></colgroup><tbody>
+              <tr v-for="(row, rowIndex) in layoutFor(index + 1)!.rows" :key="rowIndex" :style="{ height: `${row.height * 1.333}px` }">
+                <td v-for="cell in row.cells" :key="cell.cell" :rowspan="cell.rowspan" :colspan="cell.colspan" :style="cellStyle(cell)">{{ cell.value }}</td>
+              </tr></tbody></table></template>
+            <small v-else>此版本无成品布局预览，请重新生成后核对。</small>
+          </span>
+          <small v-if="equivalentTo(index)" class="reviewed-template__a4-meta">与模板 {{ equivalentTo(index) }} 清理结果相同</small>
+          <small v-else class="reviewed-template__a4-meta">{{ candidate.explanation }}</small>
+          <span class="reviewed-template__a4-actions" @click.stop>
+            <button v-if="proposal.result_previews?.[index]" type="button" :disabled="busy" @click="downloadCandidate(index)">下载候选核对</button>
+            <details><summary>查看差异与理由</summary><p>{{ candidate.explanation }}</p><p>清除 {{ candidate.clear.length }} 格；不确定内容保留。{{ candidate.clear.length ? '' : '与原件相同，待确认。' }}</p></details>
+          </span>
         </div>
       </div>
+      <p class="reviewed-template__a4-hint">点选卡片选用；蓝框为当前所选。</p>
       <p>版本 {{ selectedVersion + 1 }} · {{ proposal.model.status === 'returned' ? '模型已返回建议，尚待用户确认' : proposal.model.status === 'unavailable' ? '模型不可用，显示确定性规则建议' : '确定性规则建议，未调用模型' }}<span v-if="proposal.model.status === 'returned'"> · 输入 {{ proposal.model.cells_sent }}/{{ proposal.model.cells_total }} 格{{ proposal.model.truncated ? '（已截断）' : '' }}</span></p>
       <details v-if="proposal.model.input_summary"><summary>查看模型输入摘要及来源坐标（不含正文）</summary><pre>{{ JSON.stringify(proposal.model.input_summary, null, 2) }}</pre></details>
       <details v-if="proposal.model.input_messages"><summary>历史记录中的模型输入正文（旧记录未自动清理）</summary><pre>{{ JSON.stringify(proposal.model.input_messages, null, 2) }}</pre></details>
@@ -962,8 +1057,51 @@ async function downloadCandidate(index: number) {
     </div>
     <p v-if="savedId">已保存到模板库。{{ savedModelStatus }} 可再次预览当前原件并保存新模板，已有模板不会被覆盖。<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
     </div>
+
+      </div>
+    </div>
+    <div
+      class="etl-composer"
+      :class="{ 'etl-composer--dragover': composerDragOver }"
+      @dragenter.prevent="onComposerDragEnter"
+      @dragover.prevent="onComposerDragOver"
+      @dragleave.prevent="onComposerDragLeave"
+      @drop.prevent="onComposerDrop"
+    >
+      <div v-if="composerDragOver" class="etl-composer__drop" role="status">松开以加入文件</div>
+      <input
+        ref="fileInputRef"
+        class="etl-composer__file-input"
+        type="file"
+        accept=".xlsx,.xls"
+        multiple
+        :disabled="busy"
+        @change="choose"
+      >
+      <button type="button" class="etl-composer__attach" :disabled="busy" @click="openFilePicker">添加文件</button>
+      <div class="etl-composer__chips" aria-label="待处理文件">
+        <span v-for="(item, index) in files" :key="index" class="etl-composer__chip">{{ item.name }}</span>
+        <span v-if="!files.length" class="etl-composer__placeholder">拖入或选择 Excel（.xlsx / .xls）</span>
+      </div>
+      <button
+        type="button"
+        class="etl-composer__start"
+        :disabled="!files.length || files.length > 200 || busy"
+        @click="startProcessing"
+      >开始处理</button>
+      <button
+        v-if="classifications.some((item) => item.status !== 'classified')"
+        type="button"
+        class="etl-composer__retry"
+        :disabled="!files.length || files.length > 200 || busy"
+        @click="classify"
+      >重试未完成文件</button>
+      <p class="etl-composer__hint">每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
+    </div>
   </section>
+
 </template>
+
 
 <style scoped>
 .reviewed-template {
@@ -976,6 +1114,174 @@ async function downloadCandidate(index: number) {
   margin: 1rem 0;
   background: #fff;
   min-width: 0;
+}
+.reviewed-template--chatlike {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  gap: 0;
+}
+.etl-intake-feed {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem 0.25rem 1rem;
+}
+.etl-intake-empty {
+  margin: auto;
+  max-width: 28rem;
+  text-align: center;
+  color: #5f6f7e;
+  padding: 2rem 1rem;
+}
+.etl-intake-empty__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  color: #16355f;
+  font-weight: 600;
+}
+.etl-quiet { color: #7a8794; font-size: 13px; }
+.etl-bubble {
+  align-self: flex-start;
+  max-width: min(40rem, 100%);
+  padding: 0.7rem 0.9rem;
+  border-radius: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.etl-bubble--user { align-self: flex-end; background: #235d8c; color: #fff; }
+.etl-bubble--system { background: #eef3f8; color: #16355f; }
+.etl-bubble--error { background: #fdecec; color: #8b1e1e; }
+.etl-stage-title { margin: 0 0 0.35rem; font-size: 1rem; color: #16355f; }
+.etl-admin-panel {
+  margin: 0.25rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed #d5deea;
+  border-radius: 8px;
+  background: #fff;
+  color: #5f6f7e;
+  font-size: 13px;
+}
+.etl-template-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgb(15 23 42 / 45%);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.etl-template-picker > .reviewed-template__step {
+  width: min(56rem, 96vw);
+  max-height: min(92vh, 46rem);
+  overflow: auto;
+  margin: 0;
+  background: #fff;
+  box-shadow: 0 20px 50px rgb(0 0 0 / 20%);
+}
+.etl-template-picker__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0.5rem 0;
+}
+.etl-template-picker__bar h3 { margin: 0; }
+.etl-template-picker__close {
+  border: 1px solid #d5deea;
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.35rem 0.7rem;
+}
+.etl-composer {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "attach chips start"
+    "hint hint hint";
+  gap: 0.5rem 0.65rem;
+  align-items: center;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #d5deea;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 -8px 24px rgb(22 53 95 / 8%);
+  margin-top: auto;
+}
+.etl-composer--dragover { border-color: #235d8c; background: #f3f8fc; }
+.etl-composer__drop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgb(35 93 140 / 88%);
+  color: #fff;
+  font-weight: 600;
+  z-index: 2;
+}
+.etl-composer__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.etl-composer__attach { grid-area: attach; }
+.etl-composer__chips {
+  grid-area: chips;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+  max-height: 4.5rem;
+  overflow: auto;
+}
+.etl-composer__chip {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: #eef3f8;
+  color: #16355f;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.etl-composer__placeholder { color: #7a8794; font-size: 13px; }
+.etl-composer__start,
+.etl-composer__retry,
+.etl-composer__attach {
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #d5deea;
+  background: #fff;
+  color: #31506d;
+}
+.etl-composer__start {
+  grid-area: start;
+  background: #235d8c;
+  border-color: #235d8c;
+  color: #fff;
+  font-weight: 600;
+}
+.etl-composer__start:disabled { opacity: 0.55; }
+.etl-composer__retry { grid-column: 1 / -1; justify-self: start; }
+.etl-composer__hint {
+  grid-area: hint;
+  margin: 0;
+  color: #7a8794;
+  font-size: 12px;
 }
 .reviewed-template__step {
   display: flex;
@@ -1073,15 +1379,100 @@ async function downloadCandidate(index: number) {
 .reviewed-template__preview small { display: block; }
 .reviewed-template__preview table { border-collapse: collapse; table-layout: fixed; }
 .reviewed-template__preview td { border: 1px solid #ddd; white-space: pre-wrap; min-width: 24px; font-size: 11px; }
+.reviewed-template__previews--a4 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  overflow: visible;
+}
+.reviewed-template__preview--a4 {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
+  margin: 0;
+  max-height: none;
+  padding: 0.65rem;
+  text-align: left;
+  cursor: pointer;
+  border: 2px solid #d9e0e8;
+  border-radius: 10px;
+  background: #f3f5f8;
+  color: inherit;
+  font: inherit;
+  overflow: hidden;
+}
+.reviewed-template__preview--a4:hover { border-color: #9bb6d0; }
+.reviewed-template__preview--selected {
+  border-color: #235d8c;
+  box-shadow: 0 0 0 3px rgb(35 93 140 / 22%);
+  background: #f3f8fc;
+}
+.reviewed-template__a4-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #16355f;
+  overflow-wrap: anywhere;
+}
+.reviewed-template__a4-page {
+  aspect-ratio: 210 / 297;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #111;
+  box-shadow: 0 1px 0 #111, 2px 3px 0 rgb(0 0 0 / 6%);
+  padding: 6% 5% 7%;
+  overflow: auto;
+  display: block;
+}
+.reviewed-template__a4-page table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.reviewed-template__a4-page td {
+  border: 1px solid #111;
+  white-space: pre-wrap;
+  min-width: 18px;
+  font-size: 9px;
+  color: #111;
+}
+.reviewed-template__a4-meta {
+  font-size: 11px;
+  color: #5f6f7e;
+  line-height: 1.35;
+}
+.reviewed-template__a4-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+.reviewed-template__a4-hint {
+  margin: 0.25rem 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+.reviewed-template__source-ref {
+  margin: 0.25rem 0 0.5rem;
+}
+.reviewed-template__preview--source {
+  max-height: 12rem;
+}
+@media (max-width: 720px) {
+  .reviewed-template__previews--a4 { grid-template-columns: 1fr; }
+}
 .reviewed-template__cells { max-height: 25rem; overflow: auto; display: grid; gap: 0.4rem; margin: 0.8rem 0; }
 .reviewed-template__cells label { display: block; overflow-wrap: anywhere; }
 @media (max-width: 720px) {
   .reviewed-template,
-  .reviewed-template__step {
-    padding: 0.75rem;
-  }
-  .reviewed-template__previews {
-    grid-template-columns: 1fr;
+  .reviewed-template__step { padding: 0.75rem; }
+  .etl-composer {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "attach start"
+      "chips chips"
+      "hint hint";
   }
 }
 </style>

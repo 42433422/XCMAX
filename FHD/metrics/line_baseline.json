@@ -1,5 +1,5 @@
 {
-  "lines": 2402936,
+  "lines": 2403587,
   "updated": "2026-10-31",
-  "note": "PR#2805: catch print-area warnings in structural index + align platform-LLM/budget/merge-cut tests"
+  "note": "PR#2855：对话式导入/A4卡片补测与门禁修复后的实测行数抬升"
 }
