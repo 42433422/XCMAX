@@ -1,8 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import EtlCenterView from './EtlCenterView.vue'
-
 const { archive, legacy } = vi.hoisted(() => ({
   archive: {
     archiveClassifyExcel: vi.fn(),
@@ -35,6 +33,7 @@ function review(id: string) {
     candidates, evidence: [], model: { status: 'not_called' }, result_previews: candidates.map(candidate => ({ candidate_id: candidate.id, sha256: 'sha', layout: [], layout_truncated: false })) } }
 }
 async function setup(runId = '') {
+  const EtlCenterView = (await import('./EtlCenterView.vue')).default
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/business-docking', component: EtlCenterView }, { path: '/template-preview', component: { template: '<div>模板库</div>' } }] })
   await router.push({ path: '/business-docking', query: runId ? { run_id: runId } : {} })
   await router.isReady()
