@@ -425,9 +425,9 @@ def test_valid_mulblank_and_mulrk_records_remain_supported():
 
 def test_convert_xls_to_xlsx_for_slice_enters_inspect_path():
     """Slice helper converts without archive consent and feeds inspect/fit_transport."""
-    from app.application.reviewed_excel_template import inspect_workbook
     from app.application.reviewed_excel_budget import fit_transport_batches
     from app.application.reviewed_excel_classification import plan_semantic_batches
+    from app.application.reviewed_excel_template import inspect_workbook
 
     body = fixture()
     converted, receipt = legacy.convert_xls_to_xlsx_for_slice(body)
