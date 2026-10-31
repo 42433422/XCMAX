@@ -283,7 +283,7 @@ def original(principal, operation_id):
 
 def reconcile_source(db, binding, *, executing=None):
     """Bidirectional proof before every new operation/effect, no watermark shortcut."""
-    from app.application.etl.catalog_price_history import manual_provenance
+    from app.application.elt.catalog_price_history import manual_provenance
     from app.db.models.owned_source import ProductPriceHistory
     from app.mod_sdk.catalog_product_store import RECEIPT, image, receipt_payload
 

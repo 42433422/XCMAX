@@ -4,7 +4,7 @@ from io import BytesIO
 import pytest
 from openpyxl import Workbook
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_classification import _classify_semantic_batch
 from app.application.reviewed_excel_grouping import group_semantic_fragments
 from app.application.reviewed_excel_reference_ids import (
@@ -199,7 +199,7 @@ def test_final_source_protocol_defines_layout_documents_and_context(reference_id
 
 
 def test_layout_source_enums_do_not_replace_sheet_range_pair_guard(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import _validate_template_schema
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")

@@ -12,16 +12,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl import service_preview
-from app.application.etl.adviser import EtlRowAdviser
-from app.application.etl.errors import EtlError
-from app.application.etl.parser_types import ParsedDataset, ParsedRow
-from app.application.etl.service import EtlService
-from app.application.etl.service_support import dump_json, load_json
+from app.application.elt import service_preview
+from app.application.elt.adviser import EltRowAdviser
+from app.application.elt.errors import EltError
+from app.application.elt.parser_types import ParsedDataset, ParsedRow
+from app.application.elt.service import EltService
+from app.application.elt.service_support import dump_json, load_json
 from app.db.db_base import Base
-from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.db.models.purchase_unit import PurchaseUnit
-from app.fastapi_routes import etl as api
+from app.fastapi_routes import elt as api
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -30,7 +30,7 @@ def replay_store(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'replay.db'}")
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
-    service = EtlService(adviser=EtlRowAdviser())
+    service = EltService(adviser=EltRowAdviser())
     monkeypatch.setattr(service_preview, "new_session", factory)
     monkeypatch.setattr(
         service,
@@ -39,7 +39,7 @@ def replay_store(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("FHD_ETL_LLM", "off")
     with tenant_scope(1), factory() as db:
-        upload = EtlUpload(
+        upload = EltUpload(
             id="original-upload",
             tenant_id=1,
             owner_user_id=7,
@@ -50,7 +50,7 @@ def replay_store(tmp_path, monkeypatch):
             storage_path=str(tmp_path / "removed-original.csv"),
             expires_at=datetime.now(UTC) - timedelta(days=1),
         )
-        source = EtlRun(
+        source = EltRun(
             id="source",
             tenant_id=1,
             owner_user_id=7,
@@ -88,7 +88,7 @@ def replay_store(tmp_path, monkeypatch):
                 source_features={"kind": "table"},
             ),
         )
-        source_row = db.query(EtlRunRow).filter(EtlRunRow.run_id == source.id).one()
+        source_row = db.query(EltRunRow).filter(EltRunRow.run_id == source.id).one()
         source_row.normalized_json = dump_json({"customer_name": "旧转换结果"})
         source_row.execution_status = "success"
         source_row.after_json = dump_json({"id": 123})
@@ -105,16 +105,16 @@ def test_replay_retransforms_without_original_and_requires_fresh_confirmation(re
     assert result["details"]["source_run_id"] == "source"
     assert result["receipt"] == {} and result["summary"]["executed"] == 0
     assert result["draft"]["ocr_confirmed"] is False
-    run = store.db.get(EtlRun, result["id"])
+    run = store.db.get(EltRun, result["id"])
     assert run.confirmed_at is None and run.executed_at is None
-    row = store.db.query(EtlRunRow).filter(EtlRunRow.run_id == run.id).one()
+    row = store.db.query(EltRunRow).filter(EltRunRow.run_id == run.id).one()
     assert load_json(row.normalized_json, {}) == {"customer_name": "重放客户"}
     assert row.execution_status is None and load_json(row.after_json, {}) != {"id": 123}
     assert store.db.query(PurchaseUnit).count() == 0
-    original = store.db.query(EtlRunRow).filter(EtlRunRow.run_id == "source").one()
+    original = store.db.query(EltRunRow).filter(EltRunRow.run_id == "source").one()
     assert original.execution_status == "success"
     assert load_json(original.normalized_json, {}) == {"customer_name": "旧转换结果"}
-    with pytest.raises(EtlError, match="显式确认"):
+    with pytest.raises(EltError, match="显式确认"):
         store.service.execute(
             store.db, run_id=run.id, owner_user_id=7, confirmed=False, valid_rows_only=False
         )
@@ -123,7 +123,7 @@ def test_replay_retransforms_without_original_and_requires_fresh_confirmation(re
 @pytest.mark.parametrize("damage", ["row", "missing_row", "expired", "legacy"])
 def test_replay_rejects_unavailable_or_changed_evidence(replay_store, damage):
     store = replay_store
-    row = store.db.query(EtlRunRow).filter(EtlRunRow.run_id == "source").one()
+    row = store.db.query(EltRunRow).filter(EltRunRow.run_id == "source").one()
     if damage == "row":
         row.source_json = dump_json({"客户": "被篡改客户"})
     elif damage == "missing_row":
@@ -133,17 +133,17 @@ def test_replay_rejects_unavailable_or_changed_evidence(replay_store, damage):
     else:
         store.source.summary_json = "{}"
     store.db.commit()
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         store.service.replay(store.db, run_id="source", owner_user_id=7)
-    assert error.value.code in {"ETL_SOURCE_SNAPSHOT_INVALID", "ETL_SOURCE_SNAPSHOT_REQUIRED"}
-    assert store.db.query(EtlRun).count() == 1
+    assert error.value.code in {"ELT_SOURCE_SNAPSHOT_INVALID", "ELT_SOURCE_SNAPSHOT_REQUIRED"}
+    assert store.db.query(EltRun).count() == 1
 
 
 @pytest.mark.parametrize("owner,tenant", [(8, 1), (7, 2)])
 def test_replay_cannot_read_another_owners_or_tenants_source(replay_store, owner, tenant):
-    with tenant_scope(tenant), pytest.raises(EtlError) as error:
+    with tenant_scope(tenant), pytest.raises(EltError) as error:
         replay_store.service.replay(replay_store.db, run_id="source", owner_user_id=owner)
-    assert error.value.code == "ETL_NOT_FOUND"
+    assert error.value.code == "ELT_NOT_FOUND"
 
 
 def test_read_only_companion_cannot_be_promoted_by_replay(replay_store):
@@ -152,10 +152,10 @@ def test_read_only_companion_cannot_be_promoted_by_replay(replay_store):
     draft["linked_preview"] = {"read_only": True, "parent_run_id": "parent"}
     store.source.draft_json = dump_json(draft)
     store.db.commit()
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         store.service.replay(store.db, run_id="source", owner_user_id=7)
-    assert error.value.code == "ETL_REPLAY_PREVIEW_ONLY"
-    assert store.db.query(EtlRun).count() == 1
+    assert error.value.code == "ELT_REPLAY_PREVIEW_ONLY"
+    assert store.db.query(EltRun).count() == 1
 
 
 @pytest.mark.parametrize("target", ["knowledge", "attendance"])
@@ -164,14 +164,14 @@ def test_original_dependent_targets_cannot_replay_a_missing_original(replay_stor
     dataset = store.service._load_source_snapshot(store.db, store.source)
     store.source.summary_json = "{}"
     store.source.target_type = target
-    store.db.query(EtlRunRow).filter(EtlRunRow.run_id == "source").delete(
+    store.db.query(EltRunRow).filter(EltRunRow.run_id == "source").delete(
         synchronize_session="fetch"
     )
     store.service._persist_source_snapshot(store.db, store.source, dataset)
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         store.service.replay(store.db, run_id="source", owner_user_id=7)
-    assert error.value.code == "ETL_UPLOAD_EXPIRED"
-    assert store.db.query(EtlRun).count() == 1
+    assert error.value.code == "ELT_UPLOAD_EXPIRED"
+    assert store.db.query(EltRun).count() == 1
 
 
 def test_repeated_replay_preserves_original_lineage(replay_store):
@@ -191,8 +191,8 @@ def test_replay_submission_failure_keeps_retryable_source_snapshot(replay_store,
     )
     with pytest.raises(RuntimeError, match="queue closed"):
         store.service.replay(store.db, run_id="source", owner_user_id=7)
-    run = store.db.query(EtlRun).filter(EtlRun.id != "source").one()
-    assert run.status == "failed" and run.error_code == "ETL_INTERNAL_ERROR"
+    run = store.db.query(EltRun).filter(EltRun.id != "source").one()
+    assert run.status == "failed" and run.error_code == "ELT_INTERNAL_ERROR"
     assert store.service._load_source_snapshot(store.db, run).rows[0].values == {"客户": "重放客户"}
     assert store.source.status == "completed"
 
@@ -201,12 +201,12 @@ def test_replay_route_uses_execute_permission_and_returns_accepted(monkeypatch):
     app = FastAPI()
     app.include_router(api.router)
     replay = Mock(return_value={"id": "new-run", "status": "queued"})
-    monkeypatch.setattr(api, "get_etl_service", lambda: SimpleNamespace(replay=replay))
+    monkeypatch.setattr(api, "get_elt_service", lambda: SimpleNamespace(replay=replay))
     app.dependency_overrides[api._feature_gate] = lambda: None
     app.dependency_overrides[api._execute] = lambda: SimpleNamespace(id=7)
     app.dependency_overrides[api.get_db_dependency] = lambda: "owned-db"
     client = TestClient(app)
-    response = client.post("/api/etl/runs/source/replay")
+    response = client.post("/api/elt/runs/source/replay")
     assert response.status_code == 202 and response.json()["data"]["id"] == "new-run"
     replay.assert_called_once_with("owned-db", run_id="source", owner_user_id=7)
 
@@ -215,12 +215,12 @@ def test_replay_route_uses_execute_permission_and_returns_accepted(monkeypatch):
 
     app.dependency_overrides[api._execute] = denied
     replay.reset_mock()
-    assert client.post("/api/etl/runs/source/replay").status_code == 403
+    assert client.post("/api/elt/runs/source/replay").status_code == 403
     replay.assert_not_called()
 
 
 def test_replay_chain_cannot_extend_original_snapshot_retention(replay_store, monkeypatch):
-    from app.application.etl import service_source
+    from app.application.elt import service_source
 
     store = replay_store
     original_time = datetime.now(UTC) - timedelta(days=89)
@@ -235,12 +235,12 @@ def test_replay_chain_cannot_extend_original_snapshot_retention(replay_store, mo
     assert first["details"]["source_snapshot"]["expires_at"] == expiry
     assert second["details"]["source_snapshot"]["expires_at"] == expiry
     monkeypatch.setattr(service_source, "utcnow", lambda: datetime.now(UTC) + timedelta(days=2))
-    before = store.db.query(EtlRun).count()
+    before = store.db.query(EltRun).count()
     for run_id in ("source", first["id"], second["id"]):
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             store.service.replay(store.db, run_id=run_id, owner_user_id=7)
-        assert error.value.code == "ETL_SOURCE_SNAPSHOT_INVALID"
-    assert store.db.query(EtlRun).count() == before
+        assert error.value.code == "ELT_SOURCE_SNAPSHOT_INVALID"
+    assert store.db.query(EltRun).count() == before
     assert store.db.query(PurchaseUnit).count() == 0
 
 
@@ -253,10 +253,10 @@ def test_replay_rejects_missing_or_invalid_retention_proof(replay_store, expiry)
     summary["source_snapshot"]["expires_at"] = expiry
     store.source.summary_json = dump_json(summary)
     store.db.commit()
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         store.service.replay(store.db, run_id="source", owner_user_id=7)
-    assert error.value.code == "ETL_SOURCE_SNAPSHOT_INVALID"
-    assert store.db.query(EtlRun).count() == 1
+    assert error.value.code == "ELT_SOURCE_SNAPSHOT_INVALID"
+    assert store.db.query(EltRun).count() == 1
 
 
 @pytest.mark.parametrize("blocked", ["active_owner", "outcome_unknown"])
@@ -267,8 +267,8 @@ def test_replay_does_not_reissue_active_or_uncertain_writes(replay_store, blocke
     else:
         store.source.status = "outcome_unknown"
     store.db.commit()
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         store.service.replay(store.db, run_id="source", owner_user_id=7)
-    assert error.value.code == "ETL_RUN_BUSY"
-    assert store.db.query(EtlRun).count() == 1
+    assert error.value.code == "ELT_RUN_BUSY"
+    assert store.db.query(EltRun).count() == 1
     assert store.db.query(PurchaseUnit).count() == 0

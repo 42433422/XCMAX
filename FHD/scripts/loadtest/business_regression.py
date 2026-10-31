@@ -163,7 +163,7 @@ def vector_case(rows: int, directory: Path) -> dict:
 def csv_case(rows: int, directory: Path) -> dict:
     import psutil
 
-    from app.application.etl.parsers import MAX_ROWS, _parse_csv
+    from app.application.elt.parsers import MAX_ROWS, _parse_csv
 
     fixture = directory / "synthetic.csv"
     with fixture.open("w", encoding="utf-8-sig", newline="") as handle:

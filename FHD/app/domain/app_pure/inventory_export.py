@@ -12,7 +12,7 @@ from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Font
 
-from app.application.etl.transforms import neutralize_spreadsheet_formula
+from app.application.elt.transforms import neutralize_spreadsheet_formula
 
 INVENTORY_COLUMNS = (
     ("product_name", "产品名称", 28),

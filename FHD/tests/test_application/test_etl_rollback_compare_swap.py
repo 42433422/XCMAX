@@ -13,8 +13,8 @@ import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl.errors import EtlError
-from app.application.etl.targets import get_adapter
+from app.application.elt.errors import EltError
+from app.application.elt.targets import get_adapter
 from app.db.db_base import Base
 from app.db.models import InventoryLedger, Product, PurchaseUnit, ShipmentRecord, Warehouse
 from app.infrastructure.tenant_scope import tenant_scope
@@ -25,9 +25,9 @@ def store(tmp_path, request):
     admin = None
     schema = ""
     if getattr(request, "param", "sqlite") == "postgres":
-        url = os.environ.get("ETL_TEST_POSTGRES_URL", "")
+        url = os.environ.get("ELT_TEST_POSTGRES_URL", "")
         if not url:
-            pytest.skip("ETL_TEST_POSTGRES_URL must point to an isolated acceptance PostgreSQL")
+            pytest.skip("ELT_TEST_POSTGRES_URL must point to an isolated acceptance PostgreSQL")
         schema = f"pm_etl_{uuid.uuid4().hex}"
         admin = create_engine(url)
         with admin.begin() as connection:
@@ -171,10 +171,10 @@ def test_update_uses_atomic_compare_and_swap(store, target, field, conflicting):
         commit_before_rollback_dml(store, model.__tablename__, "UPDATE", edit) as sql,
     ):
         if conflicting:
-            with pytest.raises(EtlError) as error:
+            with pytest.raises(EltError) as error:
                 get_adapter(target).rollback_row(db, **receipt, context={})
                 db.commit()
-            assert error.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+            assert error.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
             assert error.value.status_code == 409
             db.rollback()
         else:
@@ -235,10 +235,10 @@ def test_delete_protects_even_columns_outside_the_import_mapping(store, target):
         factory() as db,
         commit_before_rollback_dml(store, model.__tablename__, "DELETE", edit) as sql,
     ):
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             get_adapter(target).rollback_row(db, **receipt, context={})
             db.commit()
-        assert error.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+        assert error.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
         assert error.value.status_code == 409
         db.rollback()
         assert len(sql) == 1
@@ -254,7 +254,7 @@ def test_customer_delete_rechecks_new_product_in_the_delete_statement(store):
         db.add(Product(tenant_id=1, unit="新增客户", name="并发关联产品", model_number="LINK"))
 
     with factory() as db, commit_before_rollback_dml(store, model.__tablename__, "DELETE", edit):
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             get_adapter("customers").rollback_row(db, **receipt, context={})
             db.commit()
         assert error.value.status_code == 409
@@ -272,7 +272,7 @@ def test_update_cannot_cross_tenant_after_target_is_reassigned(store):
         db.get(Product, ids[1]).tenant_id = 2
 
     with factory() as db, commit_before_rollback_dml(store, "products", "UPDATE", edit):
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             get_adapter("products").rollback_row(db, **receipt, context={})
         assert error.value.status_code == 409
         db.rollback()
@@ -291,7 +291,7 @@ def test_delete_rejects_concurrent_foreign_key_reference(store):
         db.add(InventoryLedger(tenant_id=1, warehouse_id=warehouse.id, product_id=pk, quantity=1))
 
     with factory() as db, commit_before_rollback_dml(store, "products", "DELETE", edit):
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             get_adapter("products").rollback_row(db, **receipt, context={})
         assert error.value.status_code == 409
         db.rollback()
@@ -318,7 +318,7 @@ def test_delete_rechecks_concurrent_legacy_shipment_reference(store, target):
         )
 
     with factory() as db, commit_before_rollback_dml(store, model.__tablename__, "DELETE", edit):
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             get_adapter(target).rollback_row(db, **receipt, context={})
         assert error.value.status_code == 409
         db.rollback()
@@ -332,9 +332,9 @@ def test_postgres_creation_rollback_retains_row_until_reference_locking_is_compl
     _engine, factory, _ids = store
     model, pk, receipt = create_receipt(store, target)
     with factory() as db:
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             get_adapter(target).rollback_row(db, **receipt, context={})
-        assert error.value.code == "ETL_ROLLBACK_RELATION_GUARD_REQUIRED"
+        assert error.value.code == "ELT_ROLLBACK_RELATION_GUARD_REQUIRED"
         assert error.value.status_code == 409
         db.rollback()
     with factory() as db:
@@ -347,7 +347,7 @@ def test_creation_rollback_refuses_sqlite_without_foreign_keys(store):
     with engine.connect() as connection:
         connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
         with sessionmaker(bind=connection)() as db:
-            with pytest.raises(EtlError) as error:
+            with pytest.raises(EltError) as error:
                 get_adapter("products").rollback_row(db, **receipt, context={})
-            assert error.value.code == "ETL_ROLLBACK_RELATION_GUARD_REQUIRED"
+            assert error.value.code == "ELT_ROLLBACK_RELATION_GUARD_REQUIRED"
             assert error.value.status_code == 409

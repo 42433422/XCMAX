@@ -9,14 +9,14 @@ from uuid import UUID
 
 import pytest
 
-from app.application.etl.catalog_price_history import (
+from app.application.elt.catalog_price_history import (
     effective_history,
     effective_price,
     history_events,
     manual_provenance,
     validate_correction,
 )
-from app.application.etl.errors import EtlConflict, EtlError
+from app.application.elt.errors import EltConflict, EltError
 
 JAN = (date(2026, 1, 1), date(2026, 2, 1))
 FEB = (date(2026, 2, 1), date(2026, 3, 1))
@@ -99,7 +99,7 @@ def test_unmarked_correction_stays_unmarked_without_clock_date():
 
 def test_unmarked_independent_conflict_is_not_last_writer_wins():
     rows = [observation(1, period=(None, None)), observation(2, "11.00", (None, None))]
-    with pytest.raises(EtlConflict, match="冲突"):
+    with pytest.raises(EltConflict, match="冲突"):
         current(rows)
 
 
@@ -110,9 +110,9 @@ def test_unselected_independent_same_period_observation_remains_conflicting():
         independent,
         correction,
     ]
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         current([first, independent, correction])
-    assert error.value.code == "ETL_PRICE_PERIOD_CONFLICT"
+    assert error.value.code == "ELT_PRICE_PERIOD_CONFLICT"
 
 
 def test_explicitly_reviewed_entire_same_period_group_can_be_corrected():
@@ -125,9 +125,9 @@ def test_independent_overlapping_period_conflict_is_not_suppressed():
     first = observation(1)
     overlap = observation(2, "10.00", (date(2026, 1, 15), date(2026, 2, 15)))
     correction = observation(3, "11.00", supersedes=[first])
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         current([first, overlap, correction])
-    assert error.value.code == "ETL_PRICE_PERIOD_CONFLICT"
+    assert error.value.code == "ELT_PRICE_PERIOD_CONFLICT"
 
 
 @pytest.mark.parametrize("mode", ["missing", "false", "truthy", "old_receipt"])
@@ -141,7 +141,7 @@ def test_receipt_validation_is_mandatory_including_superseded_manual_rows(mode):
         "truthy": lambda row, envelope: "true",
         "old_receipt": lambda row, envelope: row.id != 2,
     }[mode]
-    with pytest.raises(EtlConflict):
+    with pytest.raises(EltConflict):
         effective_history([first, second, third], verify_manual=verifier)
 
 
@@ -160,7 +160,7 @@ def test_correction_must_reference_unique_backward_active_leaves(kind):
         third.period_start, third.period_end = FEB
     else:
         third = observation(3, "11.00", supersedes=[second, second])
-    with pytest.raises(EtlConflict):
+    with pytest.raises(EltConflict):
         effective_history([first, second, third], verify_manual=trust)
 
 
@@ -184,7 +184,7 @@ def test_changed_dimensions_actor_or_unversioned_envelope_fail_closed(change):
     envelope = json.loads(correction.provenance_json)
     envelope.update(change)
     correction.provenance_json = json.dumps(envelope)
-    with pytest.raises(EtlConflict):
+    with pytest.raises(EltConflict):
         effective_history([first, correction], verify_manual=trust)
 
 
@@ -203,21 +203,21 @@ def test_history_scope_identity_and_order_are_not_implicitly_repaired(change):
     first, second = observation(1), observation(2, "20.00", FEB)
     for key, value in change.items():
         setattr(second, key, value)
-    with pytest.raises(EtlConflict):
+    with pytest.raises(EltConflict):
         effective_history([first, second], verify_manual=trust)
 
 
 def test_duplicate_source_identity_is_rejected():
     first, second = observation(1), observation(2)
     second.source_key = first.source_key
-    with pytest.raises(EtlConflict):
+    with pytest.raises(EltConflict):
         effective_history([first, second], verify_manual=trust)
 
 
 def test_manual_envelope_cannot_hide_in_legacy_provenance_list():
     row = observation(1, supersedes=[])
     row.provenance_json = json.dumps([json.loads(row.provenance_json)])
-    with pytest.raises(EtlConflict):
+    with pytest.raises(EltConflict):
         manual_provenance(row)
 
 
@@ -232,7 +232,7 @@ def test_manual_envelope_cannot_hide_in_legacy_provenance_list():
     ],
 )
 def test_proposal_selection_cannot_invent_originals_or_period(keys, period):
-    with pytest.raises(EtlConflict):
+    with pytest.raises(EltConflict):
         validate_correction([observation(1)], keys, *period)
 
 
@@ -240,5 +240,5 @@ def test_pure_empty_and_legacy_inputs():
     assert effective_history([], verify_manual=None) == []
     first = observation(1)
     assert effective_history([first], verify_manual=None) == [first]
-    with pytest.raises(EtlConflict):
+    with pytest.raises(EltConflict):
         effective_price([])

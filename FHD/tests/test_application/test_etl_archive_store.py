@@ -4,14 +4,14 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.application.etl.archive_policy import ArchivePolicyError
-from app.application.etl.archive_store import (
+from app.application.elt.archive_policy import ArchivePolicyError
+from app.application.elt.archive_store import (
     create_original,
     read_original,
     recover_complete_pending,
 )
 from app.db.db_base import Base
-from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
+from app.db.models.elt_archive import EltArchiveAsset, EltArchiveQuota, EltArchiveVersion
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -20,11 +20,11 @@ def store(tmp_path):
     engine = create_engine("sqlite://")
     Base.metadata.create_all(
         engine,
-        tables=[EtlArchiveQuota.__table__, EtlArchiveAsset.__table__, EtlArchiveVersion.__table__],
+        tables=[EltArchiveQuota.__table__, EltArchiveAsset.__table__, EltArchiveVersion.__table__],
     )
     with Session(engine, expire_on_commit=False) as db:
         with tenant_scope(1):
-            db.add(EtlArchiveQuota(tenant_id=1, limit_bytes=10, reserved_bytes=0))
+            db.add(EltArchiveQuota(tenant_id=1, limit_bytes=10, reserved_bytes=0))
             db.commit()
         yield db, tmp_path
     engine.dispose()
@@ -37,7 +37,7 @@ def test_manual_archive_readback_quota_and_owner_isolation(store):
             db, owner=3, name="报价.xlsx", body=b"original", root=root, request_key="one"
         )
         assert item.status == "ready"
-        assert db.get(EtlArchiveAsset, item.asset_id).retention_mode == "manual"
+        assert db.get(EltArchiveAsset, item.asset_id).retention_mode == "manual"
         assert read_original(db, owner=3, version_id=item.id, root=root) == b"original"
         assert (
             create_original(
@@ -77,9 +77,9 @@ def test_failed_write_stays_pending_and_reserved(store, monkeypatch):
     with tenant_scope(1):
         with pytest.raises(OSError, match="synthetic"):
             create_original(db, owner=3, name="x.xlsx", body=b"abcd", root=root, request_key="one")
-        version = db.query(EtlArchiveVersion).one()
+        version = db.query(EltArchiveVersion).one()
         assert version.status == "pending"
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == 4
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == 4
         with pytest.raises(ArchivePolicyError, match="待核对"):
             create_original(db, owner=3, name="x.xlsx", body=b"abcd", root=root, request_key="one")
         with pytest.raises(ArchivePolicyError, match="尚不可用"):
@@ -96,7 +96,7 @@ def test_archive_rejects_symlinked_tenant_directory(store, tmp_path):
     with tenant_scope(1):
         with pytest.raises(ArchivePolicyError, match="路径"):
             create_original(db, owner=3, name="x.xlsx", body=b"x", root=root, request_key="one")
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == 0
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == 0
     assert not list(outside.iterdir())
 
 
@@ -109,10 +109,10 @@ def test_concurrent_admissions_cannot_exceed_quota(tmp_path):
     )
     Base.metadata.create_all(
         engine,
-        tables=[EtlArchiveQuota.__table__, EtlArchiveAsset.__table__, EtlArchiveVersion.__table__],
+        tables=[EltArchiveQuota.__table__, EltArchiveAsset.__table__, EltArchiveVersion.__table__],
     )
     with Session(engine) as db, tenant_scope(1):
-        db.add(EtlArchiveQuota(tenant_id=1, limit_bytes=7, reserved_bytes=0))
+        db.add(EltArchiveQuota(tenant_id=1, limit_bytes=7, reserved_bytes=0))
         db.commit()
     barrier = Barrier(2)
 
@@ -135,7 +135,7 @@ def test_concurrent_admissions_cannot_exceed_quota(tmp_path):
     with ThreadPoolExecutor(max_workers=2) as pool:
         assert sorted(pool.map(submit, ["one", "two"])) == ["full", "ready"]
     with Session(engine) as db, tenant_scope(1):
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == 4
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == 4
     engine.dispose()
 
 
@@ -152,7 +152,7 @@ def test_archive_migration_matches_models_and_preserves_data_on_downgrade(monkey
     spec.loader.exec_module(migration)
     engine = create_engine("sqlite://")
     model_engine = create_engine("sqlite://")
-    tables = [EtlArchiveQuota.__table__, EtlArchiveAsset.__table__, EtlArchiveVersion.__table__]
+    tables = [EltArchiveQuota.__table__, EltArchiveAsset.__table__, EltArchiveVersion.__table__]
     try:
         Base.metadata.create_all(model_engine, tables=tables)
         with engine.begin() as connection:
@@ -202,7 +202,7 @@ def test_archive_listing_batches_versions_and_preserves_owner_scope(store, monke
     for number in range(205):
         asset_id = f"asset-{number}"
         db.add(
-            EtlArchiveAsset(
+            EltArchiveAsset(
                 id=asset_id,
                 tenant_id=1,
                 owner_user_id=3,
@@ -213,7 +213,7 @@ def test_archive_listing_batches_versions_and_preserves_owner_scope(store, monke
         for version in range(1, 6):
             key = f"{asset_id}-{version}"
             db.add(
-                EtlArchiveVersion(
+                EltArchiveVersion(
                     id=key,
                     asset_id=asset_id,
                     version=version,

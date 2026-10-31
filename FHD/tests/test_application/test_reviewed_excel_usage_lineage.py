@@ -8,9 +8,9 @@ from openpyxl import load_workbook
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl.service_support import dump_json, load_json
+from app.application.elt.service_support import dump_json, load_json
 from app.application.reviewed_excel_template import inspect_workbook
-from app.db.models.etl import EtlRun, EtlUpload
+from app.db.models.elt import EltRun, EltUpload
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.etl_template.legacy_biff import fixture
@@ -53,7 +53,7 @@ def test_standalone_classification_persists_and_reports_restrictions(review_stor
     item = response.json()["files"][0]
     assert item["usage_restrictions"]
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        run = db.get(EtlRun, item["classification_id"])
+        run = db.get(EltRun, item["classification_id"])
         summary = load_json(run.summary_json, {})
         assert summary["usage_restrictions"] == item["usage_restrictions"]
         state = load_json(run.draft_json, {})
@@ -143,8 +143,8 @@ def test_metadata_free_derived_workbook_still_blocked_by_database_lineage(
     preview = response.json()
     assert preview["usage_restrictions"]
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        run = db.get(EtlRun, preview["review_id"])
-        upload = db.get(EtlUpload, run.upload_id)
+        run = db.get(EltRun, preview["review_id"])
+        upload = db.get(EltUpload, run.upload_id)
         from pathlib import Path
 
         assert not inspect_workbook(Path(upload.storage_path).read_bytes())["usage_restrictions"]

@@ -7,7 +7,7 @@ from zipfile import ZipFile
 
 from defusedxml import ElementTree as ET
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 
 S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"

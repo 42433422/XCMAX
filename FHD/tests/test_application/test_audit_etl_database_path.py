@@ -15,18 +15,18 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl.errors import EtlConflict
-from app.application.etl.operation_owner import (
+from app.application.elt.errors import EltConflict
+from app.application.elt.operation_owner import (
     bind_owner,
     claim_operation,
     recover_stale_owner,
 )
-from app.application.etl.parsers import parse_file
-from app.application.etl.service_source import SourceServiceMixin
-from app.application.etl.service_support import dump_json, load_json
-from app.application.etl.targets import get_adapter
-from app.application.etl.transforms import apply_mapping
-from app.db.models.etl import EtlRun, EtlRunRow, EtlTemplate, EtlTemplateVersion, EtlUpload
+from app.application.elt.parsers import parse_file
+from app.application.elt.service_source import SourceServiceMixin
+from app.application.elt.service_support import dump_json, load_json
+from app.application.elt.targets import get_adapter
+from app.application.elt.transforms import apply_mapping
+from app.db.models.elt import EltRun, EltRunRow, EltTemplate, EltTemplateVersion, EltUpload
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -41,7 +41,7 @@ def database(tmp_path, monkeypatch):
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-    for model in (EtlUpload, EtlTemplate, EtlTemplateVersion, EtlRun, EtlRunRow):
+    for model in (EltUpload, EltTemplate, EltTemplateVersion, EltRun, EltRunRow):
         model.__table__.create(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     try:
@@ -63,7 +63,7 @@ def seed_snapshot(factory, tmp_path):
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     with tenant_scope(101), factory() as db:
         db.add(
-            EtlUpload(
+            EltUpload(
                 id=upload_id,
                 tenant_id=101,
                 owner_user_id=201,
@@ -75,7 +75,7 @@ def seed_snapshot(factory, tmp_path):
             )
         )
         db.commit()
-        run = EtlRun(
+        run = EltRun(
             id=run_id,
             tenant_id=101,
             owner_user_id=201,
@@ -109,17 +109,17 @@ def test_csv_snapshot_mapping_database_and_real_export(database, tmp_path):
         {"source": "note", "target": "note"},
     ]
     with tenant_scope(101), database() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         restored = SourceServiceMixin()._load_source_snapshot(db, run)
         assert restored is not None
-        rows = db.query(EtlRunRow).filter_by(run_id=run_id).order_by(EtlRunRow.id).all()
+        rows = db.query(EltRunRow).filter_by(run_id=run_id).order_by(EltRunRow.id).all()
         for row, source in zip(rows, restored.rows, strict=True):
             row.normalized_json = dump_json(apply_mapping(source.values, mappings))
         db.commit()
     with tenant_scope(101), database() as db:
         stored = [
             load_json(row.normalized_json, {})
-            for row in db.query(EtlRunRow).filter_by(run_id=run_id).order_by(EtlRunRow.id)
+            for row in db.query(EltRunRow).filter_by(run_id=run_id).order_by(EltRunRow.id)
         ]
         assert [row["zero"] for row in stored] == [0, 0]
         assert all(row["flag"] is False and row["split_zero"] == "0" for row in stored)
@@ -135,8 +135,8 @@ def test_csv_snapshot_mapping_database_and_real_export(database, tmp_path):
 def test_snapshot_rejects_other_tenant(database, tmp_path):
     run_id = seed_snapshot(database, tmp_path)
     with tenant_scope(101), database() as db:
-        run = db.get(EtlRun, run_id)
-    with tenant_scope(102), database() as db, pytest.raises(EtlConflict):
+        run = db.get(EltRun, run_id)
+    with tenant_scope(102), database() as db, pytest.raises(EltConflict):
         SourceServiceMixin()._load_source_snapshot(db, run)
 
 
@@ -144,8 +144,8 @@ def test_snapshot_rejects_other_tenant(database, tmp_path):
 def test_snapshot_integrity_and_ownership_survive_reopen(database, tmp_path, tamper):
     run_id = seed_snapshot(database, tmp_path)
     with tenant_scope(101), database() as db:
-        run = db.get(EtlRun, run_id)
-        row = db.query(EtlRunRow).filter_by(run_id=run_id).first()
+        run = db.get(EltRun, run_id)
+        row = db.query(EltRunRow).filter_by(run_id=run_id).first()
         if tamper == "owner":
             row.owner_user_id = 999
         elif tamper == "payload":
@@ -155,8 +155,8 @@ def test_snapshot_integrity_and_ownership_survive_reopen(database, tmp_path, tam
             summary["source_snapshot"]["expires_at"] = "2000-01-01T00:00:00+00:00"
             run.summary_json = dump_json(summary)
         db.commit()
-    with tenant_scope(101), database() as db, pytest.raises(EtlConflict):
-        SourceServiceMixin()._load_source_snapshot(db, db.get(EtlRun, run_id))
+    with tenant_scope(101), database() as db, pytest.raises(EltConflict):
+        SourceServiceMixin()._load_source_snapshot(db, db.get(EltRun, run_id))
 
 
 def test_two_real_database_sessions_only_one_claims_execution(database, tmp_path):
@@ -165,27 +165,27 @@ def test_two_real_database_sessions_only_one_claims_execution(database, tmp_path
 
     def claim():
         with tenant_scope(101), database() as db:
-            run = db.get(EtlRun, run_id)
+            run = db.get(EltRun, run_id)
             barrier.wait(timeout=10)
             try:
                 owner = claim_operation(db, run, "execute", allowed_statuses={"preview_ready"})
                 db.commit()
                 return "claimed", owner.token
-            except EtlConflict as exc:
+            except EltConflict as exc:
                 db.rollback()
                 return "rejected", exc.code
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda _: claim(), range(2)))
     assert sorted(state for state, _ in results) == ["claimed", "rejected"]
-    assert next(detail for state, detail in results if state == "rejected") == "ETL_RUN_BUSY"
+    assert next(detail for state, detail in results if state == "rejected") == "ELT_RUN_BUSY"
 
 
 @pytest.mark.parametrize("kind", ["execute", "batch_execute"])
 def test_expired_owners_cannot_repeat_or_overwrite_work(database, tmp_path, kind):
     run_id = seed_snapshot(database, tmp_path)
     with tenant_scope(101), database() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         owner = claim_operation(db, run, kind, allowed_statuses={"preview_ready"})
         db.commit()
         db.refresh(run)
@@ -195,7 +195,7 @@ def test_expired_owners_cannot_repeat_or_overwrite_work(database, tmp_path, kind
         if kind == "batch_execute":
             assert run.status == "outcome_unknown"
             assert run.operation_token == owner.token
-            with pytest.raises(EtlConflict):
+            with pytest.raises(EltConflict):
                 claim_operation(db, run, "execute", allowed_statuses={"outcome_unknown"})
             db.rollback()
         else:
@@ -204,11 +204,11 @@ def test_expired_owners_cannot_repeat_or_overwrite_work(database, tmp_path, kind
             db.commit()
             assert replacement.token != owner.token
     with tenant_scope(101), database() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         bind_owner(db, owner)
         run.executed_rows = 999
-        with pytest.raises(EtlConflict):
+        with pytest.raises(EltConflict):
             db.commit()
         db.rollback()
     with tenant_scope(101), database() as db:
-        assert db.get(EtlRun, run_id).executed_rows == 0
+        assert db.get(EltRun, run_id).executed_rows == 0

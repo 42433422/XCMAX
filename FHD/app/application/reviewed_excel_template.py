@@ -16,7 +16,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.print_settings import PrintArea
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
@@ -150,9 +150,9 @@ def _template_platform_complete(
     import asyncio
     import logging
 
-    from app.application.etl import llm_assist
-    from app.application.etl.llm_assist_runtime import etl_llm_mode, etl_llm_timeout_seconds
-    from app.application.etl.llm_session_provider import (
+    from app.application.elt import llm_assist
+    from app.application.elt.llm_assist_runtime import etl_llm_mode, etl_llm_timeout_seconds
+    from app.application.elt.llm_session_provider import (
         bind_etl_llm_owner,
         current_owner_market_provider,
         reset_etl_llm_owner,
@@ -230,7 +230,7 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
     import logging
     import os
 
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
     from app.application.reviewed_excel_audit import ModelRequestNotSent
     from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
     from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
@@ -1104,7 +1104,7 @@ def refine_proposal(
     """Use the configured platform (or mapped) template LLM for a bounded revision."""
     import json
 
-    from app.application.etl.llm_session_provider import bind_etl_llm_owner, reset_etl_llm_owner
+    from app.application.elt.llm_session_provider import bind_etl_llm_owner, reset_etl_llm_owner
 
     base = make_proposals(review)
     if len(parent_version) != 64 or not feedback.strip() or len(feedback) > 1000:

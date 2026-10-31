@@ -70,14 +70,14 @@ def test_wait_rechecks_authority_and_retains_unproved_head(catalog, stop):
         assert db.query(AgentBusinessActionRecord).count() == 0
     assert authority_images(c)[1] == before_source
     verification = c.client.get(
-        f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
+        f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
         headers=c.actor.headers,
     )
     assert verification.status_code == 409
     # No missing-ledger shortcut may fabricate a no-effect receipt or clear the
     # original pending head; explicit durable reconciliation is still required.
     another = c.client.post(
-        f"/api/etl/owned-mixed-v1/products/{c.pid}/edits",
+        f"/api/elt/owned-mixed-v1/products/{c.pid}/edits",
         headers=c.actor.headers,
         json=request(c),
     )

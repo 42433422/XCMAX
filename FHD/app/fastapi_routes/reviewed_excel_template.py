@@ -23,14 +23,14 @@ from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
-from app.application.etl.archive_policy import ArchivePolicyError
-from app.application.etl.archive_store import (
+from app.application.elt.archive_policy import ArchivePolicyError
+from app.application.elt.archive_store import (
     default_archive_root,
     read_original,
 )
-from app.application.etl.errors import EtlError, ReviewedExcelError, public_excel_error
-from app.application.etl.service_support import dump_json, load_json, new_id, utcnow
-from app.application.etl.service_uploads import UploadServiceMixin
+from app.application.elt.errors import EltError, ReviewedExcelError, public_excel_error
+from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
+from app.application.elt.service_uploads import UploadServiceMixin
 from app.application.reviewed_excel_audit import ModelRequestNotSent, record_not_sent
 from app.application.reviewed_excel_classification import (
     _classify_semantic_batch,
@@ -58,7 +58,7 @@ from app.application.reviewed_excel_template import (
     make_proposals,
     refine_proposal,
 )
-from app.db.models.etl import EtlRun, EtlUpload
+from app.db.models.elt import EltRun, EltUpload
 from app.db.session import get_db
 from app.infrastructure.auth.dependencies import require_permission
 from app.infrastructure.tenant_scope import tenant_scope
@@ -76,7 +76,7 @@ def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
 
         return attach_structural_index_to_draft(draft, build_workbook_structural_index(body))
     except (
-        EtlError,
+        EltError,
         OSError,
         KeyError,
         TypeError,
@@ -140,12 +140,12 @@ def _build_candidate_previews(body, review, proposal):
 
 def _run(db, review_id, tenant, owner):
     run = (
-        db.query(EtlRun)
+        db.query(EltRun)
         .filter(
-            EtlRun.id == review_id,
-            EtlRun.tenant_id == tenant,
-            EtlRun.owner_user_id == owner,
-            EtlRun.target_type == "template_review",
+            EltRun.id == review_id,
+            EltRun.tenant_id == tenant,
+            EltRun.owner_user_id == owner,
+            EltRun.target_type == "template_review",
         )
         .first()
     )
@@ -176,11 +176,11 @@ def _source(db, run, tenant, owner):
         if conversion.get("derived_sha256") != run.file_sha256:
             raise HTTPException(status_code=409, detail="转换副本与归档收据不一致")
     upload = (
-        db.query(EtlUpload)
+        db.query(EltUpload)
         .filter(
-            EtlUpload.id == run.upload_id,
-            EtlUpload.tenant_id == tenant,
-            EtlUpload.owner_user_id == owner,
+            EltUpload.id == run.upload_id,
+            EltUpload.tenant_id == tenant,
+            EltUpload.owner_user_id == owner,
         )
         .first()
     )
@@ -285,13 +285,13 @@ def _lock_review_classification(db, run, tenant, owner):
     if not versions or versions[-1].get("version") != scope["version"]:
         raise HTTPException(status_code=409, detail="文档分类已变化，请重新生成候选")
     locked = db.execute(
-        update(EtlRun)
+        update(EltRun)
         .where(
-            EtlRun.id == classification.id,
-            EtlRun.tenant_id == tenant,
-            EtlRun.owner_user_id == owner,
-            EtlRun.status == _CLASS_READY,
-            EtlRun.draft_json == classification.draft_json,
+            EltRun.id == classification.id,
+            EltRun.tenant_id == tenant,
+            EltRun.owner_user_id == owner,
+            EltRun.status == _CLASS_READY,
+            EltRun.draft_json == classification.draft_json,
         )
         .values(status=_CLASS_SAVING)
     )
@@ -305,12 +305,12 @@ def _unlock_review_classification(db, classification_id, tenant, owner):
     if classification_id is None:
         return
     released = db.execute(
-        update(EtlRun)
+        update(EltRun)
         .where(
-            EtlRun.id == classification_id,
-            EtlRun.tenant_id == tenant,
-            EtlRun.owner_user_id == owner,
-            EtlRun.status == _CLASS_SAVING,
+            EltRun.id == classification_id,
+            EltRun.tenant_id == tenant,
+            EltRun.owner_user_id == owner,
+            EltRun.status == _CLASS_SAVING,
         )
         .values(status=_CLASS_READY)
     )
@@ -323,13 +323,13 @@ def _release_failed_review(
 ):
     """Release only this review's lock when the library was not called."""
     released = db.execute(
-        update(EtlRun)
+        update(EltRun)
         .where(
-            EtlRun.id == review_id,
-            EtlRun.tenant_id == tenant,
-            EtlRun.owner_user_id == owner,
-            EtlRun.status == _SAVING,
-            EtlRun.draft_json == saving_draft,
+            EltRun.id == review_id,
+            EltRun.tenant_id == tenant,
+            EltRun.owner_user_id == owner,
+            EltRun.status == _SAVING,
+            EltRun.draft_json == saving_draft,
         )
         .values(status=_READY, stage=_READY, draft_json=old_draft)
     )
@@ -350,13 +350,13 @@ def _proposals(run):
 
 def _cas(db, run, old_draft, **values):
     result = db.execute(
-        update(EtlRun)
+        update(EltRun)
         .where(
-            EtlRun.id == run.id,
-            EtlRun.tenant_id == run.tenant_id,
-            EtlRun.owner_user_id == run.owner_user_id,
-            EtlRun.status == _READY,
-            EtlRun.draft_json == old_draft,
+            EltRun.id == run.id,
+            EltRun.tenant_id == run.tenant_id,
+            EltRun.owner_user_id == run.owner_user_id,
+            EltRun.status == _READY,
+            EltRun.draft_json == old_draft,
         )
         .values(**values)
     )
@@ -445,7 +445,7 @@ async def reviewed_excel_classify(
                     content_type=file.content_type,
                     stream=BytesIO(body),
                 )
-                record = db.get(EtlUpload, upload["upload_id"])
+                record = db.get(EltUpload, upload["upload_id"])
                 created_paths.append(Path(record.storage_path))
                 os.chmod(record.storage_path, 0o600)
                 version = _classification_version(
@@ -460,7 +460,7 @@ async def reviewed_excel_classify(
                     {"classification_id": new_id(), "version": version, "confirmed": False}
                 )
                 db.add(
-                    EtlRun(
+                    EltRun(
                         id=result["classification_id"],
                         tenant_id=tenant,
                         owner_user_id=owner,
@@ -535,19 +535,19 @@ def reviewed_excel_recent_classifications(user=Depends(_read)):
     tenant, owner = _identity(user)
     with tenant_scope(tenant), get_db() as db:
         runs = (
-            db.query(EtlRun)
+            db.query(EltRun)
             .filter(
-                EtlRun.tenant_id == tenant,
-                EtlRun.owner_user_id == owner,
-                EtlRun.target_type == "template_classification",
+                EltRun.tenant_id == tenant,
+                EltRun.owner_user_id == owner,
+                EltRun.target_type == "template_classification",
             )
-            .order_by(EtlRun.created_at.desc())
+            .order_by(EltRun.created_at.desc())
             .limit(200)
             .all()
         )
         result = []
         for run in runs:
-            upload = db.get(EtlUpload, run.upload_id)
+            upload = db.get(EltUpload, run.upload_id)
             state = load_json(run.draft_json, {})
             versions = state.get("versions", [])
             result.append(
@@ -681,7 +681,7 @@ def reviewed_excel_auto_slices(classification_id: str, version: str, user=Depend
                 for index, item in enumerate(slices)
             ],
         }
-    except (ValueError, TypeError, EtlError) as exc:
+    except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
@@ -704,7 +704,7 @@ def reviewed_excel_auto_slice_download(
                 "Content-Disposition": f"attachment; filename*=UTF-8''{quote(slices[index]['filename'])}"
             },
         )
-    except (ValueError, TypeError, EtlError) as exc:
+    except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
@@ -814,7 +814,7 @@ def reviewed_excel_classification_confirm(
             "confirmed_document_count": latest["confirmed_document_count"],
             "document_count_status": latest["document_count_status"],
         }
-    except (ValueError, TypeError, EtlError) as exc:
+    except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
@@ -1023,7 +1023,7 @@ async def reviewed_excel_classification_analyze(
                     record_not_sent(state, request_sha, exc.public_message)
                     _classification_cas(db, run, claimed_draft, state)
                     raise
-                except (ValueError, TypeError, EtlError):
+                except (ValueError, TypeError, EltError):
                     if audit_holder[0] != audit_draft_before_response:
                         checkpoint["results"] = checkpoint["results"][:index]
                         checkpoint["phase"] = "failed"
@@ -1106,7 +1106,7 @@ async def reviewed_excel_classification_analyze(
                     record_not_sent(state, request_sha, exc.public_message)
                     _classification_cas(db, run, claimed_draft, state)
                     raise
-                except (ValueError, TypeError, EtlError):
+                except (ValueError, TypeError, EltError):
                     if audit_holder[0] != claimed_draft:
                         checkpoint["phase"] = "failed"
                         checkpoint["calls_in_round"] = previous_calls + 1
@@ -1237,7 +1237,7 @@ async def reviewed_excel_classification_analyze(
             _recheck(request, (tenant, owner))
             _classification_cas(db, run, old, state)
         return {"classification_id": classification_id, **latest}
-    except (ValueError, TypeError, EtlError) as exc:
+    except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
@@ -1458,9 +1458,9 @@ async def reviewed_excel_preview(
                 content_type=file.content_type,
                 stream=BytesIO(body),
             )
-            upload_record = db.get(EtlUpload, upload["upload_id"])
+            upload_record = db.get(EltUpload, upload["upload_id"])
             os.chmod(upload_record.storage_path, 0o600)
-            run = EtlRun(
+            run = EltRun(
                 id=new_id(),
                 tenant_id=tenant,
                 owner_user_id=owner,
@@ -1489,7 +1489,7 @@ async def reviewed_excel_preview(
             "versions": versions,
             "selected_region": selected_region,
         }
-    except (ValueError, TypeError, EtlError) as exc:
+    except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
@@ -1609,7 +1609,7 @@ async def reviewed_excel_refine(
             state["versions"] = versions
             _cas(db, run, old_draft, draft_json=dump_json(state))
         return {"success": True, "proposal": proposal}
-    except (ValueError, TypeError, EtlError) as exc:
+    except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
@@ -1755,12 +1755,12 @@ async def reviewed_excel_save(
                     )
                 template_id = result["template"]["id"]
                 persisted = db.execute(
-                    update(EtlRun)
+                    update(EltRun)
                     .where(
-                        EtlRun.id == run.id,
-                        EtlRun.tenant_id == tenant,
-                        EtlRun.owner_user_id == owner,
-                        EtlRun.status == _SAVING,
+                        EltRun.id == run.id,
+                        EltRun.tenant_id == tenant,
+                        EltRun.owner_user_id == owner,
+                        EltRun.status == _SAVING,
                     )
                     .values(
                         status=_SAVED,
@@ -1783,7 +1783,7 @@ async def reviewed_excel_save(
                 raise
         auto_ingest = None
         try:
-            from app.application.etl.auto_ingest_service import get_auto_ingest_service
+            from app.application.elt.auto_ingest_service import get_auto_ingest_service
 
             labels: list[str] = []
             summary = load_json(run.summary_json, {})
@@ -1818,7 +1818,7 @@ async def reviewed_excel_save(
             "replayed": False,
             "auto_ingest": auto_ingest,
         }
-    except (ValueError, TypeError, EtlError) as exc:
+    except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
@@ -1841,11 +1841,11 @@ def reviewed_excel_download(template_id: int, user=Depends(_read)):
         review_id = (metadata.get("preview_data") or {}).get("review_id")
         with tenant_scope(tenant), get_db() as db:
             run = (
-                db.query(EtlRun)
+                db.query(EltRun)
                 .filter(
-                    EtlRun.id == review_id,
-                    EtlRun.tenant_id == tenant,
-                    EtlRun.target_type == "template_review",
+                    EltRun.id == review_id,
+                    EltRun.tenant_id == tenant,
+                    EltRun.target_type == "template_review",
                 )
                 .first()
             )

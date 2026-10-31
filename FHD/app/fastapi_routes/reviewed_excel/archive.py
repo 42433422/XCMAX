@@ -12,17 +12,17 @@ from fastapi.responses import Response
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
-from app.application.etl.archive_policy import ArchivePolicyError
-from app.application.etl.archive_store import (
+from app.application.elt.archive_policy import ArchivePolicyError
+from app.application.elt.archive_store import (
     append_original_version,
     create_original,
     default_archive_root,
     read_original,
     recover_complete_pending,
 )
-from app.application.etl.errors import EtlError, public_excel_error
-from app.application.etl.service_support import dump_json, load_json, new_id
-from app.application.etl.service_uploads import UploadServiceMixin
+from app.application.elt.errors import EltError, public_excel_error
+from app.application.elt.service_support import dump_json, load_json, new_id
+from app.application.elt.service_uploads import UploadServiceMixin
 from app.application.reviewed_excel_classification import observe_fragment_relationships
 from app.application.reviewed_excel_classification_store import (
     _classification_run,
@@ -30,8 +30,8 @@ from app.application.reviewed_excel_classification_store import (
 )
 from app.application.reviewed_excel_legacy import OLE_MAGIC, prepare_archive_workbook
 from app.application.reviewed_excel_template import classify_review_workbook
-from app.db.models.etl import EtlRun, EtlUpload
-from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
+from app.db.models.elt import EltRun, EltUpload
+from app.db.models.elt_archive import EltArchiveAsset, EltArchiveQuota, EltArchiveVersion
 from app.db.session import get_db
 from app.fastapi_routes.reviewed_excel_template import (
     _CLASS_READY,
@@ -54,7 +54,7 @@ router = APIRouter()
 def archive_quota(user=Depends(_archive_admin)):
     tenant, _owner = _identity(user)
     with tenant_scope(tenant), get_db() as db:
-        quota = db.get(EtlArchiveQuota, tenant)
+        quota = db.get(EltArchiveQuota, tenant)
         return {
             "configured": quota is not None,
             "limit_bytes": quota.limit_bytes if quota else None,
@@ -72,16 +72,16 @@ def set_archive_quota(
     _expected_actor(expected_actor, user)
     tenant, _owner = _identity(user)
     with tenant_scope(tenant), get_db() as db:
-        quota = db.get(EtlArchiveQuota, tenant)
+        quota = db.get(EltArchiveQuota, tenant)
         if quota is None:
-            quota = EtlArchiveQuota(tenant_id=tenant, limit_bytes=limit_bytes, reserved_bytes=0)
+            quota = EltArchiveQuota(tenant_id=tenant, limit_bytes=limit_bytes, reserved_bytes=0)
             db.add(quota)
         else:
             result = db.execute(
-                update(EtlArchiveQuota)
+                update(EltArchiveQuota)
                 .where(
-                    EtlArchiveQuota.tenant_id == tenant,
-                    EtlArchiveQuota.reserved_bytes <= limit_bytes,
+                    EltArchiveQuota.tenant_id == tenant,
+                    EltArchiveQuota.reserved_bytes <= limit_bytes,
                 )
                 .values(limit_bytes=limit_bytes)
             )
@@ -97,9 +97,9 @@ def archive_assets(user=Depends(_read)):
     tenant, owner = _identity(user)
     with tenant_scope(tenant), get_db() as db:
         assets = (
-            db.query(EtlArchiveAsset)
+            db.query(EltArchiveAsset)
             .filter_by(tenant_id=tenant, owner_user_id=owner)
-            .order_by(EtlArchiveAsset.created_at.desc())
+            .order_by(EltArchiveAsset.created_at.desc())
             .limit(200)
             .all()
         )
@@ -107,20 +107,20 @@ def archive_assets(user=Depends(_read)):
         if assets:
             versions = (
                 db.query(
-                    EtlArchiveVersion.asset_id,
-                    EtlArchiveVersion.id,
-                    EtlArchiveVersion.version,
-                    EtlArchiveVersion.status,
-                    EtlArchiveVersion.sha256,
-                    EtlArchiveVersion.size_bytes,
-                    EtlArchiveVersion.classification_id,
+                    EltArchiveVersion.asset_id,
+                    EltArchiveVersion.id,
+                    EltArchiveVersion.version,
+                    EltArchiveVersion.status,
+                    EltArchiveVersion.sha256,
+                    EltArchiveVersion.size_bytes,
+                    EltArchiveVersion.classification_id,
                 )
                 .filter(
-                    EtlArchiveVersion.tenant_id == tenant,
-                    EtlArchiveVersion.owner_user_id == owner,
-                    EtlArchiveVersion.asset_id.in_([asset.id for asset in assets]),
+                    EltArchiveVersion.tenant_id == tenant,
+                    EltArchiveVersion.owner_user_id == owner,
+                    EltArchiveVersion.asset_id.in_([asset.id for asset in assets]),
                 )
-                .order_by(EtlArchiveVersion.version.desc())
+                .order_by(EltArchiveVersion.version.desc())
             )
             for version in versions:
                 versions_by_asset[version.asset_id].append(version)
@@ -214,7 +214,7 @@ async def archive_new_version(
                 "sha256": item.sha256,
                 "status": item.status,
             }
-    except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
+    except (ArchivePolicyError, ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
@@ -233,37 +233,37 @@ def archive_asset_state(
     with tenant_scope(tenant), get_db() as db:
         # The row update serializes classification creation and trash/restore.
         changed = db.execute(
-            update(EtlArchiveAsset)
+            update(EltArchiveAsset)
             .where(
-                EtlArchiveAsset.id == asset_id,
-                EtlArchiveAsset.tenant_id == tenant,
-                EtlArchiveAsset.owner_user_id == owner,
+                EltArchiveAsset.id == asset_id,
+                EltArchiveAsset.tenant_id == tenant,
+                EltArchiveAsset.owner_user_id == owner,
             )
-            .values(state=EtlArchiveAsset.state)
+            .values(state=EltArchiveAsset.state)
         )
         if changed.rowcount != 1:
             db.rollback()
             raise HTTPException(status_code=404, detail="归档不存在")
         if (
             state == "trashed"
-            and db.query(EtlArchiveVersion)
+            and db.query(EltArchiveVersion)
             .filter(
-                EtlArchiveVersion.tenant_id == tenant,
-                EtlArchiveVersion.owner_user_id == owner,
-                EtlArchiveVersion.asset_id == asset_id,
-                (EtlArchiveVersion.classification_id.is_not(None))
-                | (EtlArchiveVersion.status != "ready"),
+                EltArchiveVersion.tenant_id == tenant,
+                EltArchiveVersion.owner_user_id == owner,
+                EltArchiveVersion.asset_id == asset_id,
+                (EltArchiveVersion.classification_id.is_not(None))
+                | (EltArchiveVersion.status != "ready"),
             )
             .first()
         ):
             db.rollback()
             raise HTTPException(status_code=409, detail="归档存在分类依赖或待核对版本，不能撤回")
         db.execute(
-            update(EtlArchiveAsset)
+            update(EltArchiveAsset)
             .where(
-                EtlArchiveAsset.id == asset_id,
-                EtlArchiveAsset.tenant_id == tenant,
-                EtlArchiveAsset.owner_user_id == owner,
+                EltArchiveAsset.id == asset_id,
+                EltArchiveAsset.tenant_id == tenant,
+                EltArchiveAsset.owner_user_id == owner,
             )
             .values(state=state)
         )
@@ -307,7 +307,7 @@ async def archive_classify(
     try:
         with tenant_scope(tenant), get_db() as db:
             existing_asset = (
-                db.query(EtlArchiveAsset)
+                db.query(EltArchiveAsset)
                 .filter_by(tenant_id=tenant, owner_user_id=owner, request_key=request_key)
                 .first()
             )
@@ -358,7 +358,7 @@ async def archive_classify(
                 tenant,
                 owner,
             )
-    except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
+    except (ArchivePolicyError, ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
@@ -429,28 +429,28 @@ def _create_archive_classification(
     _recheck(request, (tenant, owner))
     classification_id = new_id()
     locked = db.execute(
-        update(EtlArchiveAsset)
+        update(EltArchiveAsset)
         .where(
-            EtlArchiveAsset.id == archived.asset_id,
-            EtlArchiveAsset.tenant_id == tenant,
-            EtlArchiveAsset.owner_user_id == owner,
-            EtlArchiveAsset.state == "active",
+            EltArchiveAsset.id == archived.asset_id,
+            EltArchiveAsset.tenant_id == tenant,
+            EltArchiveAsset.owner_user_id == owner,
+            EltArchiveAsset.state == "active",
         )
-        .values(state=EtlArchiveAsset.state)
+        .values(state=EltArchiveAsset.state)
     )
     if locked.rowcount != 1:
         db.rollback()
         raise HTTPException(status_code=409, detail="归档已撤回或不可用")
     claimed = db.execute(
-        update(EtlArchiveVersion)
+        update(EltArchiveVersion)
         .where(
-            EtlArchiveVersion.id == archived.id,
-            EtlArchiveVersion.tenant_id == tenant,
-            EtlArchiveVersion.owner_user_id == owner,
-            EtlArchiveVersion.status == "ready",
-            (EtlArchiveVersion.classification_id == expected_classification_id)
+            EltArchiveVersion.id == archived.id,
+            EltArchiveVersion.tenant_id == tenant,
+            EltArchiveVersion.owner_user_id == owner,
+            EltArchiveVersion.status == "ready",
+            (EltArchiveVersion.classification_id == expected_classification_id)
             if reclassify
-            else EtlArchiveVersion.classification_id.is_(None),
+            else EltArchiveVersion.classification_id.is_(None),
         )
         .values(classification_id=classification_id)
     )
@@ -462,12 +462,12 @@ def _create_archive_classification(
     try:
         if review.get("conversion_receipt"):
             charged = db.execute(
-                update(EtlArchiveQuota)
+                update(EltArchiveQuota)
                 .where(
-                    EtlArchiveQuota.tenant_id == tenant,
-                    EtlArchiveQuota.reserved_bytes + len(body) <= EtlArchiveQuota.limit_bytes,
+                    EltArchiveQuota.tenant_id == tenant,
+                    EltArchiveQuota.reserved_bytes + len(body) <= EltArchiveQuota.limit_bytes,
                 )
-                .values(reserved_bytes=EtlArchiveQuota.reserved_bytes + len(body))
+                .values(reserved_bytes=EltArchiveQuota.reserved_bytes + len(body))
             )
             if charged.rowcount != 1:
                 db.rollback()
@@ -475,7 +475,7 @@ def _create_archive_classification(
         upload = UploadServiceMixin().save_upload(
             db, owner_user_id=owner, file_name=name, content_type=content_type, stream=BytesIO(body)
         )
-        upload_record = db.get(EtlUpload, upload["upload_id"])
+        upload_record = db.get(EltUpload, upload["upload_id"])
         if review.get("conversion_receipt"):
             upload_record.expires_at = None
         created_paths.append(Path(upload_record.storage_path))
@@ -504,7 +504,7 @@ def _create_archive_classification(
             "usage_restrictions": review.get("usage_restrictions", []),
         }
         db.add(
-            EtlRun(
+            EltRun(
                 id=classification_id,
                 tenant_id=tenant,
                 owner_user_id=owner,
@@ -563,12 +563,12 @@ def classify_archive_version(
                 root=default_archive_root(),
             )
             archived = (
-                db.query(EtlArchiveVersion)
+                db.query(EltArchiveVersion)
                 .filter_by(id=version_id, tenant_id=tenant, owner_user_id=owner)
                 .one()
             )
             asset = (
-                db.query(EtlArchiveAsset)
+                db.query(EltArchiveAsset)
                 .filter_by(id=archived.asset_id, tenant_id=tenant, owner_user_id=owner)
                 .one()
             )
@@ -594,5 +594,5 @@ def classify_archive_version(
                 reclassify=reclassify,
                 expected_classification_id=expected_classification_id,
             )
-    except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
+    except (ArchivePolicyError, ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None

@@ -3,7 +3,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_drawing import extract_drawing_evidence
 
 
@@ -110,7 +110,7 @@ def test_planner_accounts_for_multiple_drawings_at_same_cell_and_fails_on_uncove
 def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference(monkeypatch):
     import json
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_classification import (
         _classify_semantic_batch,
         plan_semantic_batches,
@@ -231,7 +231,7 @@ def synthetic_workbook_with_shape(*, extra_rows=False):
 
 
 def test_synthetic_shape_real_api_upload_analyze_download(tmp_path, monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import inspect_workbook
     from tests.test_application.test_reviewed_excel_template import review_store
 
@@ -693,7 +693,7 @@ def test_drawing_derivation_keeps_formula_support_sheet():
 def test_independent_drawing_ids_and_contract_reject_forged_duplicate_or_outside(monkeypatch):
     import json
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_classification import _classify_semantic_batch
     from app.application.reviewed_excel_drawing import plan_drawing_batches
     from app.application.reviewed_excel_reference_ids import DRAWING_IDENTIFY_PROMPT
@@ -804,7 +804,7 @@ def test_drawing_content_type_is_not_silently_repaired():
 
 
 def test_grouping_drawing_id_contract_and_duplicate_rejection(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_grouping import group_semantic_fragments
     from app.application.reviewed_excel_template import inspect_workbook
 

@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.application.etl.service_support import apply_validation_rules
+from app.application.elt.service_support import apply_validation_rules
 
 
 @pytest.mark.parametrize("value", [0, False, Decimal("0"), 0.0, "0", "False", "中文"])

@@ -1,0 +1,317 @@
+import { primeCsrfCookie } from '@/api/core'
+import { apiFetch } from '@/utils/apiBase'
+
+export type EltAction = 'new' | 'update' | 'skip' | 'error'
+
+export type EltFieldMapping = {
+  source: string
+  target: string
+  transforms: Record<string, unknown>[]
+  confidence: number
+  required: boolean
+}
+
+export type EltValidationIssue = {
+  code: string
+  message: string
+  severity: 'info' | 'warning' | 'error'
+  field: string
+}
+
+export type EltTargetField = {
+  key: string
+  label: string
+  type: string
+  required: boolean
+  aliases: string[]
+  updatable: boolean
+}
+
+export type EltTargetCapability = {
+  type: string
+  label: string
+  fields: EltTargetField[]
+  required_fields: string[]
+  default_match_keys: string[]
+  supported_actions: EltAction[]
+  reversible: boolean
+  allow_dynamic_fields?: boolean
+}
+
+export type EltCapabilities = {
+  enabled: boolean
+  limits: { max_file_bytes: number; max_rows: number }
+  inputs: {
+    structured: string[]
+    ocr: string[]
+    knowledge_only: string[]
+    folder_upload?: boolean
+  }
+  transforms: string[]
+  targets: EltTargetCapability[]
+  compatibility_presets?: Array<{ id: string; label: string; source: string; target: string }>
+  execution_policy: Record<string, unknown>
+}
+
+export type EltRun = {
+  id: string
+  upload_id: string
+  file_name: string
+  batch_id?: string | null
+  relative_path?: string
+  file_sha256: string
+  template_id?: string | null
+  template_version_id?: string | null
+  target_type: string
+  status: string
+  preview_revision?: string | null
+  stage: string
+  progress: number
+  total_rows: number
+  processed_rows: number
+  summary: { new: number; update: number; skip: number; error: number; executed: number }
+  details: Record<string, unknown>
+  source_features: Record<string, unknown>
+  draft: {
+    field_mappings?: EltFieldMapping[]
+    validation_rules?: Record<string, unknown>[]
+    match_keys?: string[]
+    allowed_update_fields?: string[]
+    action_rules?: Record<string, unknown>
+    target_config_id?: string
+    ocr_confirmed?: boolean
+  }
+  receipt: Record<string, unknown>
+  reversible: boolean
+  rollback_status?: string | null
+  error?: { code: string; message: string } | null
+  created_at?: string | null
+  updated_at?: string | null
+  executed_at?: string | null
+}
+
+export type EltUploadOptions = {
+  batchId?: string
+  relativePath?: string
+}
+
+export type EltRunRow = {
+  id: number
+  source_sheet: string
+  source_row: number
+  source: Record<string, unknown>
+  normalized: Record<string, unknown>
+  provenance: Record<string, unknown>
+  validation_issues: EltValidationIssue[]
+  llm_suggestion: {
+    action?: EltAction
+    reason?: string
+    used_llm?: boolean
+    advisory_only?: boolean
+  }
+  suggested_action: EltAction
+  final_action: EltAction
+  action_overridden: boolean
+  match_ref?: string | null
+  before: Record<string, unknown>
+  after: Record<string, unknown>
+  execution_status?: string | null
+  execution_error?: { code: string; message: string } | null
+}
+
+export type EltTemplate = {
+  id: string
+  name: string
+  description?: string | null
+  target_type: string
+  current_version: number
+  version: {
+    id: string
+    number: number
+    source_features: Record<string, unknown>
+    field_mappings: EltFieldMapping[]
+    validation_rules: Record<string, unknown>[]
+    match_keys: string[]
+    allowed_update_fields: string[]
+    action_rules: Record<string, unknown>
+    created_at?: string | null
+  }
+}
+
+export type EltTargetConfig = {
+  id: string
+  name: string
+  target_type: 'webhook'
+  endpoint_url: string
+  headers: Record<string, string>
+  has_secret: boolean
+  is_active: boolean
+}
+
+type ApiEnvelope<T> = { success: boolean; data: T }
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const method = String(init.method || 'GET').toUpperCase()
+  if (!['GET', 'HEAD'].includes(method)) await primeCsrfCookie()
+  const res = await apiFetch(path, init)
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok || body?.success === false) {
+    const detail = body?.detail || body || {}
+    const rollbackPermissionDenied = res.status === 403 && path.endsWith('/rollback') &&
+      (detail.code === 'FORBIDDEN' || String(body?.message || '').includes('FORBIDDEN'))
+    if (rollbackPermissionDenied) {
+      const error = new Error('当前账号没有撤销权限，请联系管理员授权后重试。') as Error & { code?: string; status?: number }
+      error.code = 'FORBIDDEN'
+      error.status = res.status
+      throw error
+    }
+    const message = String(detail.message || body?.message || `请求失败 HTTP ${res.status}`)
+    const error = new Error(message) as Error & { code?: string; status?: number }
+    error.code = String(detail.code || body?.error_code || 'ELT_REQUEST_FAILED')
+    error.status = res.status
+    throw error
+  }
+  return (body as ApiEnvelope<T>).data
+}
+
+export const eltApi = {
+  capabilities: () => request<EltCapabilities>('/api/elt/capabilities'),
+  upload: async (file: File, options: EltUploadOptions = {}) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (options.batchId) form.append('batch_id', options.batchId)
+    if (options.relativePath) form.append('relative_path', options.relativePath)
+    return request<{
+      upload_id: string
+      file_name: string
+      batch_id?: string | null
+      relative_path?: string
+      suffix: string
+      size_bytes: number
+      sha256: string
+    }>('/api/elt/uploads', { method: 'POST', body: form })
+  },
+  preview: (body: {
+    upload_id: string
+    target_type: string
+    template_id?: string
+    compatibility_preset_id?: string
+    target_config_id?: string
+  }) =>
+    request<EltRun>('/api/elt/runs/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  runs: (limit = 50, batchId = '') =>
+    request<EltRun[]>(`/api/elt/runs?limit=${limit}${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`),
+  run: (id: string) => request<EltRun>(`/api/elt/runs/${encodeURIComponent(id)}`),
+  rows: (id: string, page = 1, pageSize = 50, action = '', source?: { sheet?: string; row?: number }) =>
+    request<{ page: number; page_size: number; total: number; items: EltRunRow[]; preview_revision: string | null }>(
+      `/api/elt/runs/${encodeURIComponent(id)}/rows?page=${page}&page_size=${pageSize}${action ? `&action=${encodeURIComponent(action)}` : ''}` +
+      `${source?.sheet ? `&source_sheet=${encodeURIComponent(source.sheet)}` : ''}${source?.row ? `&source_row=${source.row}` : ''}`,
+    ),
+  patchDraft: (id: string, body: Record<string, unknown>) =>
+    request<EltRun>(`/api/elt/runs/${encodeURIComponent(id)}/draft`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  execute: (id: string, previewRevision: string, validRowsOnly = false) =>
+    request<EltRun>(`/api/elt/runs/${encodeURIComponent(id)}/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmed: true, preview_revision: previewRevision, valid_rows_only: validRowsOnly }),
+    }),
+  saveShipmentTemplate: (id: string, name = '', sourceRegionId = '') =>
+    request<{
+      template_id: string
+      name: string
+      file_path: string
+      source_region_id?: string
+      message: string
+    }>(`/api/elt/runs/${encodeURIComponent(id)}/shipment-template`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        ...(sourceRegionId ? { source_region_id: sourceRegionId } : {}),
+      }),
+    }),
+  retry: (id: string) => request<EltRun>(`/api/elt/runs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
+  replay: (id: string) => request<EltRun>(`/api/elt/runs/${encodeURIComponent(id)}/replay`, { method: 'POST' }),
+  rollback: (id: string) => request<EltRun>(`/api/elt/runs/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
+  autoIngest: (body: {
+    source_path: string
+    file_name?: string
+    template_id?: string
+    review_id?: string
+    classification_id?: string
+    composer_note?: string
+    labels?: string[]
+  }) =>
+    request<Record<string, unknown>>('/api/elt/auto-ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  autoIngestBatches: (limit = 50, mine = true) =>
+    request<Array<Record<string, unknown>>>(
+      `/api/elt/auto-ingest/batches?limit=${limit}&mine=${mine ? 'true' : 'false'}`,
+    ),
+  withdrawAutoIngestBatch: (batchId: string) =>
+    request<Record<string, unknown>>(
+      `/api/elt/auto-ingest/batches/${encodeURIComponent(batchId)}/withdraw`,
+      { method: 'POST' },
+    ),
+  autoIngestProgress: (batchId: string) =>
+    request<{
+      batch_id: string
+      status?: string
+      kb_progress?: { stage?: string; pct?: number; message?: string; error?: string }
+      business_progress?: { stage?: string; pct?: number; message?: string; error?: string }
+      updated_at?: string
+    }>(`/api/elt/auto-ingest/batches/${encodeURIComponent(batchId)}/progress`),
+  templates: () => request<EltTemplate[]>('/api/elt/templates'),
+  createTemplate: (body: {
+    name: string
+    target_type: string
+    draft: Record<string, unknown>
+    source_features?: Record<string, unknown>
+    description?: string
+  }) =>
+    request<EltTemplate>('/api/elt/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  targetConfigs: () => request<EltTargetConfig[]>('/api/elt/targets'),
+  createTargetConfig: (body: { name: string; endpoint_url: string; headers?: Record<string, string>; secret?: string }) =>
+    request<EltTargetConfig>('/api/elt/targets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  updateTargetConfig: (
+    id: string,
+    body: {
+      name: string
+      endpoint_url: string
+      headers?: Record<string, string>
+      secret?: string
+    },
+  ) =>
+    request<EltTargetConfig>(`/api/elt/targets/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  testTarget: (id: string) =>
+    request<Record<string, unknown>>(`/api/elt/targets/${encodeURIComponent(id)}/test`, {
+      method: 'POST',
+    }),
+  exportUrl: (id: string) => `/api/elt/runs/${encodeURIComponent(id)}/download`,
+  errorExportUrl: (id: string) => `/api/elt/runs/${encodeURIComponent(id)}/errors/export`,
+}
+
+export default eltApi

@@ -24,7 +24,7 @@ from openpyxl.utils.cell import (
     get_column_letter,
 )
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 
 # General title / period-block cues (language-agnostic keywords + Chinese ledger labels).

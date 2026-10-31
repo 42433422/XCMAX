@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.application.shipment_etl.protocols import InputPath, OutputPath, ShipmentApplication
 from app.application.shipment_excel_etl_security import ShipmentEtlPathError
-from app.fastapi_routes.shipment_etl.responses import EtlResponses
+from app.fastapi_routes.shipment_etl.responses import EltResponses
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -22,7 +22,7 @@ class TemplateOutputs:
         output_path: OutputPath,
         directory: Callable[[], str],
         now: Callable[[], datetime],
-        responses: EtlResponses,
+        responses: EltResponses,
     ) -> None:
         self._service = service
         self._input_path = input_path

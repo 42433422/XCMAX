@@ -13,7 +13,7 @@ from app.application.shipment_etl.protocols import (
     TemplateCapture,
     TemplateIngest,
 )
-from app.fastapi_routes.shipment_etl.responses import EtlResponses
+from app.fastapi_routes.shipment_etl.responses import EltResponses
 from app.fastapi_routes.shipment_etl.uploads import UploadStager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -24,7 +24,7 @@ class ShipmentImports:
         service: Callable[[], ShipmentApplication],
         capture: TemplateIngest,
         uploads: UploadStager,
-        responses: EtlResponses,
+        responses: EltResponses,
     ) -> None:
         self._service = service
         self._capture = capture

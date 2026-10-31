@@ -3,7 +3,7 @@ from io import BytesIO
 import pytest
 from openpyxl import Workbook, load_workbook
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_auto_slice import derive_classified_documents
 from app.application.reviewed_excel_template import inspect_workbook
 

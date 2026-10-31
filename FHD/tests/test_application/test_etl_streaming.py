@@ -10,11 +10,11 @@ import pytest
 from openpyxl import Workbook
 from sqlalchemy import event
 
-from app.application.etl import parser_types, service_source
-from app.application.etl.errors import EtlError
-from app.application.etl.parser_types import ParsedDataset, ParsedRow, ParsedRows
-from app.application.etl.parsers import parse_file
-from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.application.elt import parser_types, service_source
+from app.application.elt.errors import EltError
+from app.application.elt.parser_types import ParsedDataset, ParsedRow, ParsedRows
+from app.application.elt.parsers import parse_file
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from tests.test_application.test_etl_preview_task_boundaries import create_preview
 from tests.test_application.test_etl_preview_task_boundaries import preview_store as preview_store
 
@@ -110,7 +110,7 @@ def test_snapshot_load_streams_columns_and_verifies_last_row(preview_store, monk
     )
     with store.factory() as db:
         db.add(
-            EtlUpload(
+            EltUpload(
                 id="source",
                 tenant_id=1,
                 owner_user_id=7,
@@ -122,7 +122,7 @@ def test_snapshot_load_streams_columns_and_verifies_last_row(preview_store, monk
             )
         )
         db.flush()
-        run = EtlRun(
+        run = EltRun(
             id="streamed",
             tenant_id=1,
             owner_user_id=7,
@@ -142,10 +142,10 @@ def test_snapshot_load_streams_columns_and_verifies_last_row(preview_store, monk
         try:
             assert len(snapshot.rows) == 2500
             assert snapshot.rows[-1].values == {"客户名称": "客户2499"}
-            assert EtlRunRow not in loaded_entities
+            assert EltRunRow not in loaded_entities
         finally:
             snapshot.close()
-        db.query(EtlRunRow).filter_by(run_id=run.id, source_row=2501).update({"source_json": "{}"})
+        db.query(EltRunRow).filter_by(run_id=run.id, source_row=2501).update({"source_json": "{}"})
         db.commit()
         created = []
 
@@ -155,14 +155,14 @@ def test_snapshot_load_streams_columns_and_verifies_last_row(preview_store, monk
             return rows
 
         monkeypatch.setattr(service_source, "ParsedRows", rows_factory)
-        with pytest.raises(EtlError, match="原始数据快照"):
+        with pytest.raises(EltError, match="原始数据快照"):
             store.service._load_source_snapshot(db, run)
         assert created and all(rows.closed for rows in created)
 
 
 @pytest.mark.parametrize("fail", [False, True])
 def test_worker_closes_temporary_rows_on_terminal_outcome(preview_store, monkeypatch, fail):
-    from app.application.etl import parsers
+    from app.application.elt import parsers
 
     store, created = preview_store, []
     monkeypatch.setenv("FHD_ETL_LLM", "off")
@@ -177,11 +177,11 @@ def test_worker_closes_temporary_rows_on_terminal_outcome(preview_store, monkeyp
     if fail:
 
         def fail_persist(*_args, **_kwargs):
-            raise EtlError("ETL_TEST_FAILURE", "测试失败")
+            raise EltError("ELT_TEST_FAILURE", "测试失败")
 
         monkeypatch.setattr(store.service, "_persist_source_snapshot", fail_persist)
     run_id = create_preview(store)
     store.executor.futures[-1].result(timeout=10)
     assert created and all(rows.closed for rows in created)
     with store.factory() as db:
-        assert db.get(EtlRun, run_id).status == ("failed" if fail else "preview_ready")
+        assert db.get(EltRun, run_id).status == ("failed" if fail else "preview_ready")

@@ -6,9 +6,9 @@ from threading import Barrier
 import pytest
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl.service_support import dump_json, load_json
-from app.db.models.etl import EtlRun, EtlUpload
-from app.db.models.etl_archive import EtlArchiveVersion
+from app.application.elt.service_support import dump_json, load_json
+from app.db.models.elt import EltRun, EltUpload
+from app.db.models.elt_archive import EltArchiveVersion
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.etl_template.sources.generate import sample
 from tests.test_application.test_reviewed_excel_template import review_store as _review_store
@@ -57,7 +57,7 @@ def test_explicit_reclassification_preserves_history_and_default_idempotency(rev
     url = f"/api/templates/reviewed-excel/archive-versions/{old['archive_version_id']}/classify"
     old_id = old["classification_id"]
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        run = db.get(EtlRun, old_id)
+        run = db.get(EltRun, old_id)
         state = load_json(run.draft_json, {})
         state["analysis_checkpoint"] = {
             "phase": "failed",
@@ -99,10 +99,10 @@ def test_explicit_reclassification_preserves_history_and_default_idempotency(rev
         == new["classification_id"]
     )
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        assert db.get(EtlRun, old_id).draft_json == old_draft
-        assert db.query(EtlRun).count() == 2
+        assert db.get(EltRun, old_id).draft_json == old_draft
+        assert db.query(EltRun).count() == 2
         assert (
-            db.get(EtlArchiveVersion, old["archive_version_id"]).classification_id
+            db.get(EltArchiveVersion, old["archive_version_id"]).classification_id
             == new["classification_id"]
         )
     history = review_store.client.get(f"/api/templates/reviewed-excel/classifications/{old_id}")
@@ -132,7 +132,7 @@ def test_reclassification_rejects_other_actor(review_store, actor):
     )
     assert response.status_code in {400, 403, 404}
     with sessionmaker(bind=review_store.engine)() as db:
-        assert db.query(EtlRun).count() == 1
+        assert db.query(EltRun).count() == 1
 
 
 def test_concurrent_reclassification_claims_only_one_new_run(review_store):
@@ -147,8 +147,8 @@ def test_concurrent_reclassification_claims_only_one_new_run(review_store):
         statuses = list(pool.map(lambda _: submit(), range(2)))
     assert sorted(statuses) == [200, 409]
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        assert db.query(EtlRun).count() == 2
-        assert db.query(EtlUpload).count() == 2
+        assert db.query(EltRun).count() == 2
+        assert db.query(EltUpload).count() == 2
 
 
 @pytest.mark.parametrize("after_upload", [False, True])
@@ -170,9 +170,9 @@ def test_failed_reclassification_keeps_original_association(
     assert reclassify(review_store, old).status_code == 400
     assert set((review_store.root / "etl" / "uploads").rglob("*")) == uploads_before
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        assert db.query(EtlRun).count() == 1
-        assert db.query(EtlUpload).count() == 1
+        assert db.query(EltRun).count() == 1
+        assert db.query(EltUpload).count() == 1
         assert (
-            db.get(EtlArchiveVersion, old["archive_version_id"]).classification_id
+            db.get(EltArchiveVersion, old["archive_version_id"]).classification_id
             == old["classification_id"]
         )

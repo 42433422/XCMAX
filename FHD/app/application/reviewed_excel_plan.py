@@ -4,7 +4,7 @@ import hashlib
 import json
 from typing import NoReturn
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_budget import BUDGET_VERSION, MAX_CLASSIFICATION_BATCHES
 from app.application.reviewed_excel_evidence import MAX_MODEL_CELLS
 

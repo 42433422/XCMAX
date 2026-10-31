@@ -4,7 +4,7 @@ import re
 
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 from app.application.reviewed_excel_legacy import ensure_slice_workbook
 from app.application.reviewed_excel_template import derive_document_workbook, inspect_workbook

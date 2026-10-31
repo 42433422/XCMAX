@@ -2,7 +2,7 @@
 
 from collections import deque
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 
 
 def bounded_range(value: str) -> tuple[int, int, int, int]:

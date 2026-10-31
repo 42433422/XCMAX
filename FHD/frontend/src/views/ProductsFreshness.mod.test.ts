@@ -5,25 +5,25 @@ import { computed, defineComponent } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ModProductsView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/ProductsView.vue'
 import HostProductsView from './ProductsView.vue'
-import { createEtlCenterState } from './etlCenter/etlCenterState'
-import { createEtlCenterRuns } from './etlCenter/useEtlCenterRuns'
+import { createEltCenterState } from './eltCenter/eltCenterState'
+import { createEltCenterRuns } from './eltCenter/useEltCenterRuns'
 import { useProductsStore } from '@/stores/products'
 import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
-import type { EtlRun, EtlRunRow } from '@/api/etl'
+import type { EltRun, EltRunRow } from '@/api/elt'
 
 const api = vi.hoisted(() => ({ getProducts: vi.fn(), getCustomers: vi.fn(), updateProduct: vi.fn(), execute: vi.fn(), run: vi.fn(), runs: vi.fn(), rollback: vi.fn(), rows: vi.fn() }))
 vi.mock('@/api/products', () => ({ default: api }))
-vi.mock('@/api/etl', () => ({ etlApi: api }))
+vi.mock('@/api/elt', () => ({ eltApi: api }))
 vi.mock('@/api/customers', () => ({ default: api }))
 vi.mock('@/api/templatePreview', () => ({ default: { listTemplates: vi.fn().mockResolvedValue({ success: true, templates: [] }) } }))
 vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn() }))
 vi.mock('@/composables/useCoreNavLabel', () => ({ useCoreNavLabel: () => '产品' }))
 let price = 99
-let run: EtlRun
+let run: EltRun
 let wrapper: VueWrapper | undefined
 const Table = defineComponent({ props: ['data'], template: '<div><div v-for="row in data" :key="row.id" class="product-row"><span class="product-price">{{ row.price }}</span><slot name="actions" :row="row" /></div></div>' })
 const Shell = defineComponent({ template: '<RouterView v-slot="{ Component }"><KeepAlive><component :is="Component" /></KeepAlive></RouterView>' })
-function fixture(status = 'preview_ready'): EtlRun {
+function fixture(status = 'preview_ready'): EltRun {
   return { id: 'run-price-update', upload_id: 'upload-1', file_name: 'prices.xlsx', file_sha256: 'abc', target_type: 'products', status, preview_revision: 'a'.repeat(64),
     stage: status, progress: 100, total_rows: 1, processed_rows: 1, summary: { new: 0, update: 1, skip: 0, error: 0, executed: status === 'preview_ready' ? 0 : 1 },
     details: {}, source_features: {}, draft: {}, receipt: {}, reversible: true }
@@ -36,8 +36,8 @@ async function setup(view = ModProductsView) {
   await router.push('/products'); await router.isReady()
   wrapper = mount(Shell, { global: { plugins: [pinia, router], stubs: { DataTable: Table, ConfirmDialog: true } } })
   await flushPromises()
-  const state = createEtlCenterState(); state.currentRun.value = run
-  const etl = createEtlCenterRuns({ state, router, route: { query: {} }, canExecute: computed(() => true), canRollback: computed(() => true), shipmentTemplateCandidates: computed(() => []), bulkNewRows: computed(() => []) })
+  const state = createEltCenterState(); state.currentRun.value = run
+  const etl = createEltCenterRuns({ state, router, route: { query: {} }, canExecute: computed(() => true), canRollback: computed(() => true), shipmentTemplateCandidates: computed(() => []), bulkNewRows: computed(() => []) })
   await etl.loadRows()
   return { router, etl, state, store: useProductsStore() }
 }
@@ -52,7 +52,7 @@ beforeEach(() => {
     normalized: { product_name: 'PM90', price: 109 }, provenance: {}, validation_issues: [], llm_suggestion: {},
     suggested_action: 'update', final_action: 'update', action_overridden: false, match_ref: 'product:1',
     before: { price: 99 }, after: { price: 109 },
-  } satisfies EtlRunRow] })
+  } satisfies EltRunRow] })
   api.run.mockImplementation(async () => run); api.runs.mockImplementation(async () => [run])
   api.execute.mockImplementation(async () => { price = 109; run = fixture('completed'); return run })
   api.rollback.mockImplementation(async () => { price = 99; run = { ...run, rollback_status: 'completed', receipt: { rollback: { status: 'completed', rows: 1 } } }; return run })

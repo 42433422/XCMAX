@@ -14,13 +14,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl import service_history, service_uploads
-from app.application.etl.archive_store import create_original
+from app.application.elt import service_history, service_uploads
+from app.application.elt.archive_store import create_original
 from app.db.db_base import Base
-from app.db.models.etl import EtlRun, EtlUpload
-from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
+from app.db.models.elt import EltRun, EltUpload
+from app.db.models.elt_archive import EltArchiveAsset, EltArchiveQuota, EltArchiveVersion
 from app.db.session import get_db_dependency
-from app.fastapi_routes import etl
+from app.fastapi_routes import elt as etl
 from app.infrastructure.auth import dependencies
 from app.infrastructure.tenant_scope import tenant_scope
 
@@ -37,7 +37,7 @@ def source_client(tmp_path, monkeypatch):
     factory = sessionmaker(bind=engine)
     for tenant in (1, 2):
         with tenant_scope(tenant), factory() as db:
-            db.add(EtlArchiveQuota(tenant_id=tenant, limit_bytes=1024 * 1024, reserved_bytes=0))
+            db.add(EltArchiveQuota(tenant_id=tenant, limit_bytes=1024 * 1024, reserved_bytes=0))
             db.commit()
     actor = SimpleNamespace(
         user=SimpleNamespace(id=7, tenant_id=1, is_active=True),
@@ -53,7 +53,7 @@ def source_client(tmp_path, monkeypatch):
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(service_history, "get_app_data_dir", lambda: str(tmp_path))
     from app.application.elt import sources
-    from app.application.etl import archive_store
+    from app.application.elt import archive_store
     from app.utils.path_io import path_utils
 
     if hasattr(sources, "get_app_data_dir"):
@@ -131,21 +131,21 @@ def test_sources_preserve_versions_originals_and_never_create_business_runs(sour
         assert original.headers["cache-control"] == "private, no-store"
         assert "storage_path" not in revision.text
     with tenant_scope(1), store.factory() as db:
-        assert db.query(EtlRun).count() == db.query(EtlUpload).count() == 0
-        assert db.query(EtlArchiveVersion).count() == 2
+        assert db.query(EltRun).count() == db.query(EltUpload).count() == 0
+        assert db.query(EltArchiveVersion).count() == 2
 
 
 def test_download_streams_verified_snapshot_when_original_changes(source_client, monkeypatch):
     store = source_client
     source = create_source(store)
-    service = etl.get_etl_service()
+    service = etl.get_elt_service()
     get_verified_content = service.get_source_content
     snapshots = []
 
     def change_original_after_verification(db, **kwargs):
         snapshot, file_name = get_verified_content(db, **kwargs)
         snapshots.append(snapshot)
-        version = db.get(EtlArchiveVersion, source["revision"]["id"])
+        version = db.get(EltArchiveVersion, source["revision"]["id"])
         Path(version.storage_path).write_bytes(CORRECTION)
         return snapshot, file_name
 
@@ -156,7 +156,7 @@ def test_download_streams_verified_snapshot_when_original_changes(source_client,
     assert hashlib.sha256(response.content).hexdigest() == source["revision"]["sha256"]
     assert len(snapshots) == 1 and snapshots[0].closed
     with tenant_scope(1), store.factory() as db:
-        version = db.get(EtlArchiveVersion, source["revision"]["id"])
+        version = db.get(EltArchiveVersion, source["revision"]["id"])
         assert Path(version.storage_path).read_bytes() == CORRECTION
 
 
@@ -235,7 +235,7 @@ def test_sources_reuse_enterprise_feature_gate(source_client, monkeypatch, disab
     )
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == (
-        "ETL_CENTER_DISABLED" if disabled == "flag" else "ETL_ENTERPRISE_REQUIRED"
+        "ELT_CENTER_DISABLED" if disabled == "flag" else "ELT_ENTERPRISE_REQUIRED"
     )
 
 
@@ -260,8 +260,8 @@ def test_append_requires_positive_current_version_and_preserves_original_on_conf
     )
     assert store.client.get(f"{revision_path(first)}/content").content == ORIGINAL
     with tenant_scope(1), store.factory() as db:
-        assert db.query(EtlArchiveVersion).count() == 1
-        assert db.query(EtlUpload).count() == 0
+        assert db.query(EltArchiveVersion).count() == 1
+        assert db.query(EltUpload).count() == 0
 
 
 def test_sources_require_configured_archive_quota(source_client):
@@ -274,7 +274,7 @@ def test_sources_require_configured_archive_quota(source_client):
     )
     assert response.status_code == 409, response.text
     with tenant_scope(3), store.factory() as db:
-        assert db.query(EtlArchiveAsset).count() == db.query(EtlArchiveVersion).count() == 0
+        assert db.query(EltArchiveAsset).count() == db.query(EltArchiveVersion).count() == 0
     assert not (store.root / "business-archive" / "3").exists()
 
 
@@ -295,10 +295,10 @@ def test_request_key_replay_reuses_archive_identity_and_quota(source_client):
         revisions.append(response.json()["data"])
     assert revisions[0] == revisions[1]
     with tenant_scope(1), store.factory() as db:
-        assert db.query(EtlArchiveAsset).count() == 1
-        assert db.query(EtlArchiveVersion).count() == 2
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == len(ORIGINAL) + len(CORRECTION)
-        assert db.query(EtlUpload).count() == db.query(EtlRun).count() == 0
+        assert db.query(EltArchiveAsset).count() == 1
+        assert db.query(EltArchiveVersion).count() == 2
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == len(ORIGINAL) + len(CORRECTION)
+        assert db.query(EltUpload).count() == db.query(EltRun).count() == 0
 
 
 def test_existing_archive_original_is_readable_without_reupload(source_client):
@@ -320,9 +320,9 @@ def test_existing_archive_original_is_readable_without_reupload(source_client):
     assert source["revision"]["id"] == version_id
     assert store.client.get(f"{revision_path(source)}/content").content == ORIGINAL
     with tenant_scope(1), store.factory() as db:
-        assert db.query(EtlArchiveVersion).count() == 1
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == len(ORIGINAL)
-        assert db.query(EtlUpload).count() == db.query(EtlRun).count() == 0
+        assert db.query(EltArchiveVersion).count() == 1
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == len(ORIGINAL)
+        assert db.query(EltUpload).count() == db.query(EltRun).count() == 0
 
 
 @pytest.mark.parametrize("request_key", [None, "", "x" * 81])
@@ -340,7 +340,7 @@ def test_legacy_upload_keeps_seven_day_retention_and_response_contract(source_cl
     before = datetime.now(UTC)
     batch_id = "7af2693b-cf7c-4a15-af76-e725ee15470a"
     response = store.client.post(
-        "/api/etl/uploads",
+        "/api/elt/uploads",
         files={"file": ("legacy.csv", ORIGINAL, "text/csv")},
         data={"batch_id": batch_id, "relative_path": "folder/legacy.csv"},
     )
@@ -350,8 +350,8 @@ def test_legacy_upload_keeps_seven_day_retention_and_response_contract(source_cl
     assert data["relative_path"] == "folder/legacy.csv"
     assert data["sha256"] == hashlib.sha256(ORIGINAL).hexdigest()
     with tenant_scope(1), store.factory() as db:
-        upload = db.get(EtlUpload, data["upload_id"])
+        upload = db.get(EltUpload, data["upload_id"])
         assert upload is not None and upload.expires_at is not None
         expires = upload.expires_at.replace(tzinfo=UTC)
         assert before + timedelta(days=7) <= expires <= datetime.now(UTC) + timedelta(days=7)
-        assert db.query(EtlArchiveVersion).count() == db.query(EtlRun).count() == 0
+        assert db.query(EltArchiveVersion).count() == db.query(EltRun).count() == 0

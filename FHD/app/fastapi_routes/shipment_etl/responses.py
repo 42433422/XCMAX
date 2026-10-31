@@ -58,7 +58,7 @@ def safe_failed_result(
 
 
 @dataclass(frozen=True)
-class EtlResponses:
+class EltResponses:
     sanitize: Callable[[Payload, str], Payload]
     logger: logging.Logger
 

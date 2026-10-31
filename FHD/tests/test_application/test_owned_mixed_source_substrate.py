@@ -47,7 +47,7 @@ def host(trusted_actor, monkeypatch, tmp_path):
 
 
 def enrolled(host):
-    from app.application.etl.batch_owned_source import OwnedSqlSessions
+    from app.application.elt.batch_owned_source import OwnedSqlSessions
     from app.mod_sdk.owned_price_catalog import provision_owned_price_catalog
 
     source = provision_owned_price_catalog(host.actor.principal, confirmed=True, mixed=True)
@@ -81,7 +81,7 @@ def test_private_models_leave_host_base_and_default_bootstrap_unchanged(tmp_path
 
 
 def test_fresh_enrollment_real_models_fk_knowledge_and_rollback(host):
-    from app.db.models.owned_source import EtlPriceDimension, ProductPriceHistory
+    from app.db.models.owned_source import EltPriceDimension, ProductPriceHistory
     from app.db.models.product import Product
     from app.infrastructure.tenant_scope import tenant_scope
     from app.mod_sdk.owned_price_catalog import validate_price_catalog
@@ -104,7 +104,7 @@ def test_fresh_enrollment_real_models_fk_knowledge_and_rollback(host):
             )
         )
         db.add(
-            EtlPriceDimension(
+            EltPriceDimension(
                 product_id=1,
                 tenant_id=7,
                 currency="CNY",
@@ -116,7 +116,7 @@ def test_fresh_enrollment_real_models_fk_knowledge_and_rollback(host):
         db.commit()
     with factory() as db, tenant_scope(7):
         assert db.scalars(select(ProductPriceHistory)).one().product_id == 1
-        assert db.scalars(select(EtlPriceDimension)).one().currency == "CNY"
+        assert db.scalars(select(EltPriceDimension)).one().currency == "CNY"
         db.add(Product(id=2, tenant_id=7, name="rollback"))
         db.flush()
         # Leaving pinned Session rolls back before releasing the target lock.
@@ -295,7 +295,7 @@ def test_source_generation_and_head_tampering_fail_closed(host, tamper):
 
 
 def test_pinned_session_refuses_custom_creator_and_foreign_target(host):
-    from app.application.etl.owned_sql_session import _fresh_target_session
+    from app.application.elt.owned_sql_session import _fresh_target_session
     from app.desktop_runtime.database_generation_registry import GenerationObservationError
 
     factory = enrolled(host)

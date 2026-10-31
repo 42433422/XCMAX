@@ -7,12 +7,12 @@ from collections.abc import Callable
 from fastapi.responses import JSONResponse
 
 from app.application.shipment_etl.protocols import ExtractionHistory
-from app.fastapi_routes.shipment_etl.responses import EtlResponses
+from app.fastapi_routes.shipment_etl.responses import EltResponses
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class HistoryViews:
-    def __init__(self, history: Callable[[], ExtractionHistory], responses: EtlResponses) -> None:
+    def __init__(self, history: Callable[[], ExtractionHistory], responses: EltResponses) -> None:
         self._history = history
         self._responses = responses
 

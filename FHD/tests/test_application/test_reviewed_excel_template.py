@@ -362,9 +362,9 @@ def test_mimo_fenced_three_plans_and_strict_nested_contract(monkeypatch):
 def review_store(tmp_path, monkeypatch):
     from fastapi import HTTPException
 
-    from app.application.etl import service_uploads
+    from app.application.elt import service_uploads
     from app.db import session as db_session
-    from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap
+    from app.db.elt_bootstrap import ensure_sqlite_elt_bootstrap
     from app.domain.shared_services.document_templates import crud
     from app.fastapi_routes.reviewed_excel import archive as archive_routes
     from app.fastapi_routes.template_api import router as product_template_router
@@ -382,7 +382,7 @@ def review_store(tmp_path, monkeypatch):
         conn.execute(
             text("CREATE TABLE template_usage_log (template_id INTEGER, action TEXT, result TEXT)")
         )
-    ensure_sqlite_etl_bootstrap(engine=engine, swallow_errors=False)
+    ensure_sqlite_elt_bootstrap(engine=engine, swallow_errors=False)
     monkeypatch.setattr(db_session, "SessionLocal", sessionmaker(bind=engine))
     monkeypatch.setattr(crud, "_ensure_template_tables_ready", lambda: None)
     monkeypatch.setattr(template_scope, "ensure_templates_tenant_column", lambda: None)
@@ -1040,7 +1040,7 @@ def test_existing_large_classification_can_confirm_without_expanding_regions(rev
 def test_archive_classification_receipt_survives_expired_temporary_upload(review_store):
     from datetime import UTC, datetime, timedelta
 
-    from app.db.models.etl import EtlRun
+    from app.db.models.elt import EltRun
     from app.infrastructure.tenant_scope import tenant_scope
 
     client = review_store.client
@@ -1079,7 +1079,7 @@ def test_archive_classification_receipt_survives_expired_temporary_upload(review
             },
         )
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        assert routes._source(db, db.get(EtlRun, receipt["classification_id"]), 1, 7) == body
+        assert routes._source(db, db.get(EltRun, receipt["classification_id"]), 1, 7) == body
     source_url = (
         f"/api/templates/reviewed-excel/classifications/{receipt['classification_id']}/source"
     )
@@ -1163,12 +1163,12 @@ def test_archive_quota_requires_admin_and_never_drops_below_reserved(review_stor
 
 
 def test_archive_recover_complete_pending_and_reversible_trash(review_store):
-    from app.application.etl.archive_store import create_original
-    from app.db.models.etl_archive import EtlArchiveQuota, EtlArchiveVersion
+    from app.application.elt.archive_store import create_original
+    from app.db.models.elt_archive import EltArchiveQuota, EltArchiveVersion
     from app.infrastructure.tenant_scope import tenant_scope
 
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        db.add(EtlArchiveQuota(tenant_id=1, limit_bytes=1000000, reserved_bytes=0))
+        db.add(EltArchiveQuota(tenant_id=1, limit_bytes=1000000, reserved_bytes=0))
         db.commit()
         item = create_original(
             db,
@@ -1179,7 +1179,7 @@ def test_archive_recover_complete_pending_and_reversible_trash(review_store):
             request_key="recover-test",
         )
         asset_id, version_id = item.asset_id, item.id
-        db.get(EtlArchiveVersion, version_id).status = "pending"
+        db.get(EltArchiveVersion, version_id).status = "pending"
         db.commit()
     client = review_store.client
     state_url = f"/api/templates/reviewed-excel/archive-assets/{asset_id}/state"
@@ -1263,12 +1263,12 @@ def test_archive_classify_and_withdraw_do_not_both_succeed(review_store):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
 
-    from app.application.etl.archive_store import create_original
-    from app.db.models.etl_archive import EtlArchiveQuota
+    from app.application.elt.archive_store import create_original
+    from app.db.models.elt_archive import EltArchiveQuota
     from app.infrastructure.tenant_scope import tenant_scope
 
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        db.add(EtlArchiveQuota(tenant_id=1, limit_bytes=1000000, reserved_bytes=0))
+        db.add(EltArchiveQuota(tenant_id=1, limit_bytes=1000000, reserved_bytes=0))
         db.commit()
         item = create_original(
             db,
@@ -1360,7 +1360,7 @@ def test_semantic_classification_persists_versions_and_links_source(review_store
     import json
     from datetime import UTC, datetime, timedelta
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
 
@@ -1476,13 +1476,13 @@ def test_semantic_classification_persists_versions_and_links_source(review_store
         ]
         is True
     )
-    from app.application.etl.errors import EtlConflict
-    from app.application.etl.service import EtlService
+    from app.application.elt.errors import EltConflict
+    from app.application.elt.service import EltService
     from app.infrastructure.tenant_scope import tenant_scope
 
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        with pytest.raises(EtlConflict):
-            EtlService().execute(
+        with pytest.raises(EltConflict):
+            EltService().execute(
                 db, run_id=cid, owner_user_id=7, confirmed=True, valid_rows_only=False
             )
     preview_data = {
@@ -1499,7 +1499,7 @@ def test_semantic_classification_persists_versions_and_links_source(review_store
     )
     assert preview.status_code == 400 and "依赖外部" in preview.json()["detail"]
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        history_ids = [item["id"] for item in EtlService().list_runs(db, owner_user_id=7)]
+        history_ids = [item["id"] for item in EltService().list_runs(db, owner_user_id=7)]
         assert cid not in history_ids
     assert (
         client.post(
@@ -1530,7 +1530,7 @@ def test_semantic_classification_persists_versions_and_links_source(review_store
 
 
 def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     wb = Workbook()
@@ -1648,7 +1648,7 @@ def test_semantic_classification_uses_bounded_fenced_model_output(monkeypatch):
 def test_semantic_stale_response_cannot_overwrite_confirmed_correction(review_store, monkeypatch):
     import json
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
 
@@ -1887,7 +1887,7 @@ def test_quotation_proposals_identify_table_and_identity_without_touching_rules(
 
 def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monkeypatch):
     from app.application import reviewed_excel_template as service
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     body = sample()
     review = service.inspect_workbook(body)
@@ -1918,7 +1918,7 @@ def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monk
 
 
 def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, review_store):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.fastapi_routes.reviewed_excel import archive as archive_routes
     from app.fastapi_routes.template_api import router as product_template_router
 
@@ -1996,7 +1996,7 @@ def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, rev
 
 
 def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypatch, review_store):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.fastapi_routes.reviewed_excel import archive as archive_routes
     from app.fastapi_routes.template_api import router as product_template_router
 
@@ -2049,7 +2049,7 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
 
 
 def test_owner_file_template_authorization_uses_platform_by_default(monkeypatch, review_store):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     calls = []
 
@@ -2123,7 +2123,7 @@ def test_model_input_spreads_across_sheets_and_reports_uncovered(monkeypatch):
     import json
 
     from app.application import reviewed_excel_template as service
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     wb = Workbook()
     ws = wb.active
@@ -2259,7 +2259,7 @@ def test_invalid_or_excessive_upload_is_rejected(review_store):
 def test_revocation_during_model_or_before_write_never_commits(review_store, monkeypatch):
     from fastapi import HTTPException
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     store = review_store
     client = store.client
@@ -2540,7 +2540,7 @@ def test_classification_empty_batch_is_rejected(review_store):
 def test_semantic_large_workbook_discloses_unread_regions_and_merge_omissions(monkeypatch):
     import json
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -2629,7 +2629,7 @@ def test_evidence_fairness_hidden_and_empty_sheets():
 
 
 def test_semantic_sequential_batches_budget_and_conflict(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -2676,7 +2676,7 @@ def test_semantic_sequential_batches_budget_and_conflict(monkeypatch):
 
 
 def test_unprocessed_rule_regions_remain_separately_reviewable(review_store, monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     wb = Workbook()
@@ -2742,7 +2742,7 @@ def test_unresolved_fragments_never_cut_merged_cells():
 
 
 def test_multibatch_failure_does_not_commit_partial_history(review_store, monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
@@ -2800,7 +2800,7 @@ def test_multibatch_failure_does_not_commit_partial_history(review_store, monkey
 def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     from datetime import UTC, datetime, timedelta
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_evidence import plan_semantic_batches
     from app.fastapi_routes import reviewed_excel_template as routes
 
@@ -2897,7 +2897,7 @@ def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatc
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
@@ -2949,7 +2949,7 @@ def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatc
 def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkeypatch):
     import json
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -3052,7 +3052,7 @@ def test_semantic_finish_length_rejected_without_retry(monkeypatch):
 
 
 def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -3090,7 +3090,7 @@ def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
 
 
 def test_repeated_generic_header_does_not_establish_purchase(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -3166,7 +3166,7 @@ def test_repeated_generic_header_does_not_establish_purchase(monkeypatch):
 
 
 def test_no_lexical_classification_gate_for_non_repeated_regions(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -3220,7 +3220,7 @@ def test_relationship_payload_shows_observed_header_positions_without_guessing(
 ):
     import json
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -3395,7 +3395,7 @@ def test_overlong_cell_refuses_whole_plan_without_dropping_evidence(monkeypatch)
 
 
 def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
@@ -3473,7 +3473,7 @@ def test_oversized_single_row_refused_before_provider_and_checkpoint(review_stor
 def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
     import json
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -3741,7 +3741,7 @@ def test_cross_batch_document_ids_are_namespaced_and_links_need_evidence():
 
 
 def test_user_document_groups_are_versioned_split_and_stale_safe(review_store, monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     wb = Workbook()
@@ -3989,7 +3989,7 @@ def test_signature_outside_old_rectangular_print_area_is_only_added_with_consent
 def test_product_saves_document_outside_original_print_with_explicit_choice(
     review_store, monkeypatch
 ):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     original = _workbook_with_print_area("报价!$1:$19", second_document=True)
@@ -4114,7 +4114,7 @@ def test_nine_batch_plan_is_fair_across_sheets_and_preserves_each_sheet_order():
 def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
     review_store, monkeypatch, per_round
 ):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", str(per_round))
@@ -4228,7 +4228,7 @@ def test_nine_batch_concurrent_resume_does_not_resend(review_store, monkeypatch)
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
@@ -4437,7 +4437,7 @@ def test_known_print_warning_does_not_hide_unrelated_warning(monkeypatch):
 
 
 def test_semantic_contract_distinguishes_fragments_documents_and_layout(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_classification import _classify_semantic_batch
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -4690,7 +4690,7 @@ def test_document_derivation_blocks_uncertain_print_merge_and_dynamic_formula():
 
 
 def test_model_document_to_template_library_roundtrip(review_store, monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     wb = Workbook()
@@ -4822,7 +4822,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
     monkeypatch.setattr(routes, "_recheck", recheck)
     from fastapi import HTTPException
 
-    from app.application.etl.service_support import load_json
+    from app.application.elt.service_support import load_json
     from app.application.reviewed_excel_classification_store import (
         _classification_cas,
         _classification_run,
@@ -4904,7 +4904,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
 
 
 def test_model_multifragment_document_is_a_real_candidate(review_store, monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     wb = Workbook()
@@ -5034,7 +5034,7 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
 ):
     from sqlalchemy.orm import Session
 
-    from app.db.models.etl import EtlRun
+    from app.db.models.elt import EltRun
     from app.fastapi_routes.reviewed_excel import archive as archive_routes
 
     body = sample()
@@ -5051,7 +5051,7 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
 
         def commit_then_lose_receipt(db):
             classification = any(
-                isinstance(item, EtlRun) and item.target_type == "template_classification"
+                isinstance(item, EltRun) and item.target_type == "template_classification"
                 for item in db.new
             )
             original_commit(db)
@@ -5147,7 +5147,7 @@ def test_reviewed_excel_never_returns_underlying_exception_payload(
 
 
 def test_auto_slice_api_without_confirmation_and_owner_isolation(review_store, monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     source = sample()
@@ -5205,8 +5205,8 @@ def test_auto_slice_api_without_confirmation_and_owner_isolation(review_store, m
 
 
 def test_model_cannot_create_region_or_evidence_from_context_only(monkeypatch):
-    from app.application.etl.errors import ReviewedExcelError
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.errors import ReviewedExcelError
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_classification import _classify_semantic_batch
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -5252,7 +5252,7 @@ def test_model_cannot_create_region_or_evidence_from_context_only(monkeypatch):
 def test_auto_group_resume_budget_and_download_multibatch(
     review_store, monkeypatch, group_not_sent
 ):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
@@ -5323,7 +5323,7 @@ def test_auto_group_resume_budget_and_download_multibatch(
 def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_store, monkeypatch):
     import base64
 
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_audit import response_capture
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -5424,8 +5424,8 @@ def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
 def test_completed_invalid_response_is_counted_and_requires_explicit_retry(
     review_store, monkeypatch
 ):
-    from app.application.etl.errors import ReviewedExcelError
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.errors import ReviewedExcelError
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_audit import response_capture
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -5484,7 +5484,7 @@ def test_completed_invalid_response_is_counted_and_requires_explicit_retry(
 def test_archived_model_slice_can_be_selected_for_template_without_coordinate_confirmation(
     review_store, monkeypatch
 ):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_audit import response_capture
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -5566,7 +5566,7 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
 
 def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
     """An apparently valid model group must not silently omit source cells."""
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     client = review_store.client
@@ -5620,7 +5620,7 @@ def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
 
 @pytest.mark.parametrize("fault", ["off", "missing_key", "invalid_base", "invalid_model"])
 def test_unsent_model_configuration_does_not_lock_classification(review_store, monkeypatch, fault):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_audit import response_capture
     from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 

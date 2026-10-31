@@ -24,7 +24,7 @@ from openpyxl import load_workbook
 from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
 from openpyxl.utils.cell import get_column_letter
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 
 SCHEMA_VERSION = "workbook-structural-index-v1"
@@ -678,7 +678,7 @@ def compress_structural_index_for_model(
 def attach_structural_index_to_draft(
     draft: dict[str, Any], index: dict[str, Any]
 ) -> dict[str, Any]:
-    """Product path: persist compact index on an EtlRun draft_json object (mutates+returns)."""
+    """Product path: persist compact index on an EltRun draft_json object (mutates+returns)."""
     if not isinstance(draft, dict):
         draft = {}
     draft["workbook_structural_index"] = compress_structural_index_for_model(index)

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from openpyxl import Workbook
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_classification import (
     _classify_semantic_batch,
     combine_semantic_batches,

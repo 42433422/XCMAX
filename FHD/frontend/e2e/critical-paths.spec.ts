@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { installE2eShellMocks, captureEvidence, csrfHeaders, isFullStack, loginBrowserSession } from './helpers'
-import { exportEtlRowsCsv, importBusinessCsv } from './etl-business'
+import { exportEtlRowsCsv, importBusinessCsv } from './elt-business'
 
 test.describe('P0 critical paths', () => {
   test.beforeEach(async ({ page }) => {

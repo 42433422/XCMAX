@@ -23,8 +23,9 @@ _DESKTOP_REQUIRED_ROUTES = {
     "workspace_prefs",
     "business_bridge",
     "mod_store",
-    "etl",
-    "elt",
+    "elt_api",
+    "elt_sources",
+    "elt_targets",
 }
 
 
@@ -233,29 +234,29 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
-        "etl",
-        lambda: __import__("app.fastapi_routes.etl", fromlist=["router"]).router,
+        "elt_api",
+        lambda: __import__("app.fastapi_routes.elt", fromlist=["router"]).router,
         priority=13,
         required_in_ci=True,
     )
     _mount(
         registry,
-        "etl_auto_ingest",
-        lambda: __import__("app.fastapi_routes.etl_auto_ingest", fromlist=["router"]).router,
+        "elt_auto_ingest",
+        lambda: __import__("app.fastapi_routes.elt_auto_ingest", fromlist=["router"]).router,
         priority=13,
         required_in_ci=True,
     )
     _mount(
         registry,
-        "etl_targets",
-        lambda: __import__("app.fastapi_routes.etl_targets", fromlist=["router"]).router,
+        "elt_targets",
+        lambda: __import__("app.fastapi_routes.elt_targets", fromlist=["router"]).router,
         priority=13,
         required_in_ci=True,
     )
     _mount(
         registry,
-        "elt",
-        lambda: __import__("app.fastapi_routes.etl", fromlist=["sources_router"]).sources_router,
+        "elt_sources",
+        lambda: __import__("app.fastapi_routes.elt", fromlist=["sources_router"]).sources_router,
         priority=13,
         required_in_ci=True,
     )

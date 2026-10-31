@@ -3,7 +3,7 @@
 import json
 from collections import deque
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 
 BUDGET_VERSION = "full-request-plan-v11-2000-cells"
 MAX_REQUEST_BYTES = 384_000  # aligned with MAX_MODEL_TEXT_BYTES for ~2000-cell packs

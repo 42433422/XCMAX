@@ -121,15 +121,15 @@ def test_unconfigured_app_does_not_borrow_global_readiness(admission):
     app = FastAPI()
     app.add_middleware(g.CatalogAdmissionMiddleware, admission=None)
 
-    @app.get("/api/etl/owned-mixed-v1/products")
+    @app.get("/api/elt/owned-mixed-v1/products")
     def ordinary():
         return {"ordinary": True}
 
     with TestClient(app) as client:
-        assert client.get("/api/etl/owned-mixed-v1/products").json() == {"ordinary": True}
+        assert client.get("/api/elt/owned-mixed-v1/products").json() == {"ordinary": True}
         owner = g.admit(admission.config)
         owner.ready = True
-        response = client.get("/api/etl/owned-mixed-v1/products")
+        response = client.get("/api/elt/owned-mixed-v1/products")
         assert response.status_code == 503 and response.json()["retryable"] is False
 
 

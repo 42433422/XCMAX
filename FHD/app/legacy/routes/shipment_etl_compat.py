@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.application.etl.errors import EtlError
-from app.application.etl.service import get_etl_service
+from app.application.elt.errors import EltError
+from app.application.elt.service import get_elt_service
 from app.db.session import get_db_dependency
 from app.infrastructure.auth.dependencies import require_identified_user
 from app.infrastructure.auth.shipment_etl_access_gate import require_legacy_shipment_etl_access
@@ -32,7 +32,7 @@ def _user_id(user: Any) -> int:
     if value is None and isinstance(user, dict):
         value = user.get("id") or user.get("user_id")
     if value is None:
-        raise EtlError("ETL_USER_REQUIRED", "请先登录", status_code=401)
+        raise EltError("ELT_USER_REQUIRED", "请先登录", status_code=401)
     return int(value)
 
 
@@ -43,7 +43,7 @@ def _create_runs(
     upload_id: str,
     target_types: list[str],
 ) -> list[dict[str, Any]]:
-    service = get_etl_service()
+    service = get_elt_service()
     return [
         service.create_preview(
             db,
@@ -57,7 +57,7 @@ def _create_runs(
 
 def _store_general_upload(db: Session, file: UploadFile, *, owner_user_id: int) -> dict[str, Any]:
     file.file.seek(0)
-    upload = get_etl_service().save_upload(
+    upload = get_elt_service().save_upload(
         db,
         owner_user_id=owner_user_id,
         file_name=file.filename or "shipment.xlsx",
@@ -94,7 +94,7 @@ async def shipment_etl_preview(
             return JSONResponse(
                 {
                     "success": False,
-                    "error_code": "ETL_UPLOAD_REQUIRED",
+                    "error_code": "ELT_UPLOAD_REQUIRED",
                     "message": "为防止读取任意本地路径，请重新上传源文件后预演",
                     "file_path_ignored": bool(str(file_path or "").strip()),
                 },
@@ -119,7 +119,7 @@ async def shipment_etl_preview(
             },
             status_code=200,
         )
-    except EtlError as exc:
+    except EltError as exc:
         return JSONResponse(
             {"success": False, "error_code": exc.code, "message": exc.message},
             status_code=exc.status_code,
@@ -173,7 +173,7 @@ async def shipment_etl_execute(
         run_id = str(etl_run_id or "").strip()
         if run_id:
             try:
-                run = get_etl_service().execute(
+                run = get_elt_service().execute(
                     db,
                     run_id=run_id,
                     owner_user_id=owner_user_id,
@@ -181,7 +181,7 @@ async def shipment_etl_execute(
                     valid_rows_only=_form_truthy(valid_rows_only, False),
                     preview_revision=str(preview_revision or ""),
                 )
-            except EtlError as exc:
+            except EltError as exc:
                 return JSONResponse(
                     {
                         "success": False,
@@ -203,7 +203,7 @@ async def shipment_etl_execute(
             return JSONResponse(
                 {
                     "success": False,
-                    "error_code": "ETL_UPLOAD_REQUIRED",
+                    "error_code": "ELT_UPLOAD_REQUIRED",
                     "message": "为防止读取任意本地路径，请重新上传源文件后预演",
                     "file_path_ignored": bool(str(file_path or "").strip()),
                 },
@@ -224,7 +224,7 @@ async def shipment_etl_execute(
         return JSONResponse(
             {
                 "success": False,
-                "error_code": "ETL_PREVIEW_CONFIRMATION_REQUIRED",
+                "error_code": "ELT_PREVIEW_CONFIRMATION_REQUIRED",
                 "message": "旧接口已升级为通用 ETL：请先检查预演，再逐个确认执行",
                 "general_etl": {
                     "preview_required": True,
@@ -236,7 +236,7 @@ async def shipment_etl_execute(
             },
             status_code=409,
         )
-    except EtlError as exc:
+    except EltError as exc:
         return JSONResponse(
             {"success": False, "error_code": exc.code, "message": exc.message},
             status_code=exc.status_code,

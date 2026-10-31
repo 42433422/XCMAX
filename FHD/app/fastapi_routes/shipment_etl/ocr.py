@@ -8,7 +8,7 @@ from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 
 from app.application.shipment_etl.protocols import DocumentPreview
-from app.fastapi_routes.shipment_etl.responses import EtlResponses
+from app.fastapi_routes.shipment_etl.responses import EltResponses
 from app.fastapi_routes.shipment_etl.uploads import OCR_SUFFIXES, SPREADSHEET_SUFFIXES, UploadStager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -19,7 +19,7 @@ class OcrPreview:
         parse: DocumentPreview,
         preview: DocumentPreview,
         uploads: UploadStager,
-        responses: EtlResponses,
+        responses: EltResponses,
     ) -> None:
         self._parse = parse
         self._preview = preview

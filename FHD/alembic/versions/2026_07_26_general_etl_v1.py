@@ -35,9 +35,9 @@ def _timestamps() -> list[sa.Column]:
 
 _ETL_PERMISSIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("etl.read", "查看数据对接", ("viewer", "operator", "admin")),
-    ("etl.template.manage", "管理 ETL 模板", ("operator", "admin")),
-    ("etl.execute", "执行 ETL", ("operator", "admin")),
-    ("etl.rollback", "撤销 ETL", ("admin",)),
+    ("etl.template.manage", "管理 ELT 模板", ("operator", "admin")),
+    ("etl.execute", "执行 ELT", ("operator", "admin")),
+    ("etl.rollback", "撤销 ELT", ("admin",)),
     ("etl.target.manage", "管理 ETL 目标", ("admin",)),
 )
 

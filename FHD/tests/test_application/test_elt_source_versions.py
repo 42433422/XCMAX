@@ -14,15 +14,15 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl import archive_store, service_history, service_uploads
-from app.application.etl.archive_policy import ArchivePolicyError
-from app.application.etl.errors import EtlError
-from app.application.etl.service import EtlService
-from app.application.etl.service_support import MAX_FILE_BYTES
+from app.application.elt import archive_store, service_history, service_uploads
+from app.application.elt.archive_policy import ArchivePolicyError
+from app.application.elt.errors import EltError
+from app.application.elt.service import EltService
+from app.application.elt.service_support import MAX_FILE_BYTES
 from app.db.db_base import Base
 from app.db.models import Product, PurchaseUnit
-from app.db.models.etl import EtlRun, EtlUpload
-from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
+from app.db.models.elt import EltRun, EltUpload
+from app.db.models.elt_archive import EltArchiveAsset, EltArchiveQuota, EltArchiveVersion
 from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
 
 RAW = "部门,姓名,未知符号\n甲,同名员工,√ 2\n".encode()
@@ -32,7 +32,7 @@ RAW = "部门,姓名,未知符号\n甲,同名员工,√ 2\n".encode()
 def test_source_and_legacy_service_imports_work_in_a_fresh_process(source_first):
     imports = [
         "from app.application.elt.sources import SourceAssetServiceMixin",
-        "from app.application.etl import EtlService, get_etl_service",
+        "from app.application.elt import EltService, get_elt_service",
     ]
     if not source_first:
         imports.reverse()
@@ -40,7 +40,7 @@ def test_source_and_legacy_service_imports_work_in_a_fresh_process(source_first)
         [
             sys.executable,
             "-c",
-            "\n".join([*imports, "assert isinstance(get_etl_service(), EtlService)"]),
+            "\n".join([*imports, "assert isinstance(get_elt_service(), EltService)"]),
         ],
         capture_output=True,
         text=True,
@@ -57,12 +57,12 @@ def store(tmp_path, monkeypatch):
     with factory() as db:
         for tenant in (1, 2):
             db.add(
-                EtlArchiveQuota(tenant_id=tenant, limit_bytes=MAX_FILE_BYTES * 2, reserved_bytes=0)
+                EltArchiveQuota(tenant_id=tenant, limit_bytes=MAX_FILE_BYTES * 2, reserved_bytes=0)
             )
         db.commit()
     for module in (service_uploads, service_history):
         monkeypatch.setattr(module, "get_app_data_dir", lambda: str(tmp_path))
-    from app.application.etl import archive_store
+    from app.application.elt import archive_store
     from app.utils.path_io import path_utils
 
     archive_root = tmp_path / "business-archive"
@@ -71,7 +71,7 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(path_utils, "get_business_archive_dir", lambda **_: str(archive_root))
     monkeypatch.setattr(archive_store, "get_business_archive_dir", lambda **_: str(archive_root))
     monkeypatch.setattr(archive_store, "default_archive_root", lambda: archive_root)
-    yield SimpleNamespace(engine=engine, factory=factory, root=archive_root, service=EtlService())
+    yield SimpleNamespace(engine=engine, factory=factory, root=archive_root, service=EltService())
     engine.dispose()
 
 
@@ -104,17 +104,17 @@ def test_neutral_archive_lifecycle_survives_restart_without_importing_business_d
     assert source["revision"]["id"] != second["revision"]["id"]
     store.engine.dispose()
     with store.factory() as db:
-        restarted = EtlService()
+        restarted = EltService()
         assert restarted.get_source(db, asset_id=source["id"], owner_user_id=7) == second
         versions = restarted.list_source_revisions(db, asset_id=source["id"], owner_user_id=7)
         assert [item["version"] for item in versions] == [1, 2]
         assert all(
             item["status"] == "ready" and item["file_name"] == "资料.csv" for item in versions
         )
-        assert db.get(EtlArchiveAsset, source["id"]).retention_mode == "manual"
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == len(RAW) * 2
+        assert db.get(EltArchiveAsset, source["id"]).retention_mode == "manual"
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == len(RAW) * 2
         assert all(
-            db.query(model).count() == 0 for model in (EtlUpload, EtlRun, PurchaseUnit, Product)
+            db.query(model).count() == 0 for model in (EltUpload, EltRun, PurchaseUnit, Product)
         )
 
 
@@ -126,19 +126,19 @@ def test_request_identity_is_idempotent_but_identical_content_is_not_an_asset_id
     second = publish(store, source=source, key="append")
     assert publish(store, source=source, key="append", expected=1)["revision"] == second["revision"]
     for arguments in ({"key": "create"}, {"source": source, "key": "append"}):
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             publish(store, body=b"different", **arguments)
-        assert error.value.code == "ETL_SOURCE_ARCHIVE_CONFLICT"
+        assert error.value.code == "ELT_SOURCE_ARCHIVE_CONFLICT"
     with store.factory() as db:
-        assert db.query(EtlArchiveAsset).count() == 2 and db.query(EtlArchiveVersion).count() == 3
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == len(RAW) * 3
+        assert db.query(EltArchiveAsset).count() == 2 and db.query(EltArchiveVersion).count() == 3
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == len(RAW) * 3
 
 
 @pytest.mark.parametrize("tenant,owner", [(1, 8), (2, 7)])
 @pytest.mark.parametrize("operation", ["get", "list", "revision", "content", "append"])
 def test_source_operations_never_cross_tenant_or_owner(store, tenant, owner, operation):
     source = publish(store)
-    with tenant_scope(tenant), store.factory() as db, pytest.raises(EtlError) as error:
+    with tenant_scope(tenant), store.factory() as db, pytest.raises(EltError) as error:
         arguments = {"asset_id": source["id"], "owner_user_id": owner}
         if operation in {"revision", "content"}:
             arguments["revision_id"] = source["revision"]["id"]
@@ -157,7 +157,7 @@ def test_source_operations_never_cross_tenant_or_owner(store, tenant, owner, ope
 
 def test_revision_cannot_be_read_through_a_different_asset(store):
     first, second = publish(store), publish(store)
-    with store.factory() as db, pytest.raises(EtlError) as error:
+    with store.factory() as db, pytest.raises(EltError) as error:
         store.service.get_source_revision(
             db, asset_id=first["id"], revision_id=second["revision"]["id"], owner_user_id=7
         )
@@ -168,15 +168,15 @@ def test_revision_cannot_be_read_through_a_different_asset(store):
 def test_archive_admission_requires_configured_available_quota(store, tenant, limit):
     with tenant_scope(tenant), store.factory() as db:
         if limit is not None:
-            db.get(EtlArchiveQuota, tenant).limit_bytes = limit
+            db.get(EltArchiveQuota, tenant).limit_bytes = limit
             db.commit()
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             publish(store)
-        assert error.value.code == "ETL_SOURCE_ARCHIVE_CONFLICT"
-        assert db.query(EtlArchiveAsset).count() == 0
-        assert db.query(EtlArchiveVersion).count() == 0
+        assert error.value.code == "ELT_SOURCE_ARCHIVE_CONFLICT"
+        assert db.query(EltArchiveAsset).count() == 0
+        assert db.query(EltArchiveVersion).count() == 0
         if limit is not None:
-            assert db.get(EtlArchiveQuota, tenant).reserved_bytes == 0
+            assert db.get(EltArchiveQuota, tenant).reserved_bytes == 0
     assert not list(store.root.rglob("*"))
 
 
@@ -190,7 +190,7 @@ def test_legacy_upload_ttl_cleanup_never_deletes_shared_archive_originals(store)
             content_type="text/csv",
             stream=BytesIO(RAW),
         )
-        upload = db.get(EtlUpload, legacy["upload_id"])
+        upload = db.get(EltUpload, legacy["upload_id"])
         expires = upload.expires_at.replace(tzinfo=UTC)
         assert timedelta(days=6, hours=23) < expires - datetime.now(UTC) <= timedelta(days=7)
         upload.expires_at = datetime.now(UTC) - timedelta(days=1)
@@ -198,7 +198,7 @@ def test_legacy_upload_ttl_cleanup_never_deletes_shared_archive_originals(store)
         assert store.service.cleanup_retention(db, owner_user_id=7)["removed_upload_files"] == 1
         with content(store, db, source) as snapshot:
             assert snapshot.read() == RAW
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == len(RAW)
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == len(RAW)
 
 
 def test_concurrent_expected_version_allows_only_one_new_archive_version(store):
@@ -212,7 +212,7 @@ def test_concurrent_expected_version_allows_only_one_new_archive_version(store):
         with tenant_scope(1):
             try:
                 return publish(store, source=source, body=body)
-            except EtlError as error:
+            except EltError as error:
                 return error
 
     event.listen(store.engine, "before_cursor_execute", synchronize)
@@ -222,13 +222,13 @@ def test_concurrent_expected_version_allows_only_one_new_archive_version(store):
     finally:
         event.remove(store.engine, "before_cursor_execute", synchronize)
     successes = [result for result in results if isinstance(result, dict)]
-    failures = [result for result in results if isinstance(result, EtlError)]
+    failures = [result for result in results if isinstance(result, EltError)]
     assert len(successes) == len(failures) == 1
-    assert failures[0].code == "ETL_SOURCE_VERSION_CONFLICT"
+    assert failures[0].code == "ELT_SOURCE_VERSION_CONFLICT"
     with store.factory() as db:
-        assert db.query(EtlArchiveVersion).count() == 2
+        assert db.query(EltArchiveVersion).count() == 2
         assert (
-            db.get(EtlArchiveQuota, 1).reserved_bytes
+            db.get(EltArchiveQuota, 1).reserved_bytes
             == len(RAW) + successes[0]["revision"]["size_bytes"]
         )
 
@@ -237,7 +237,7 @@ def test_concurrent_expected_version_allows_only_one_new_archive_version(store):
 def test_download_snapshot_is_stable_after_original_changes(store, change):
     source = publish(store)
     with store.factory() as db, content(store, db, source) as snapshot:
-        original = Path(db.get(EtlArchiveVersion, source["revision"]["id"]).storage_path)
+        original = Path(db.get(EltArchiveVersion, source["revision"]["id"]).storage_path)
         if change == "in_place":
             original.write_bytes(b"changed")
         else:
@@ -251,11 +251,11 @@ def test_download_snapshot_is_stable_after_original_changes(store, change):
 def test_archive_integrity_and_withdrawal_are_enforced_by_source_download(store, damage):
     source = publish(store)
     with store.factory() as db:
-        original = Path(db.get(EtlArchiveVersion, source["revision"]["id"]).storage_path)
+        original = Path(db.get(EltArchiveVersion, source["revision"]["id"]).storage_path)
         if damage == "hash":
             original.write_bytes(b"x" * len(RAW))
         elif damage == "withdrawn":
-            db.get(EtlArchiveAsset, source["id"]).state = "trashed"
+            db.get(EltArchiveAsset, source["id"]).state = "trashed"
             db.commit()
         else:
             original.unlink()
@@ -263,7 +263,7 @@ def test_archive_integrity_and_withdrawal_are_enforced_by_source_download(store,
                 outside = store.root.parent / "unrelated"
                 outside.write_bytes(RAW)
                 original.symlink_to(outside)
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             content(store, db, source)
         assert error.value.status_code == (404 if damage == "withdrawn" else 409)
 
@@ -282,11 +282,11 @@ def test_failed_publication_keeps_recoverable_pending_archive_and_reserved_quota
         with pytest.raises(OSError):
             publish(store, source=source, key="pending")
     with store.factory() as db:
-        version = db.query(EtlArchiveVersion).filter_by(request_key="pending").one()
+        version = db.query(EltArchiveVersion).filter_by(request_key="pending").one()
         pending = store.service.get_source(db, asset_id=version.asset_id, owner_user_id=7)
         assert pending["revision"]["status"] == "pending"
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == len(RAW) * (2 if append else 1)
-        with pytest.raises(EtlError):
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == len(RAW) * (2 if append else 1)
+        with pytest.raises(EltError):
             content(store, db, pending)
         with pytest.raises(ArchivePolicyError):
             archive_store.recover_complete_pending(
@@ -306,7 +306,7 @@ def test_sources_read_the_same_asset_created_by_the_existing_archive_entrypoint(
         )
         source = store.service.get_source(db, asset_id=version.asset_id, owner_user_id=7)
         assert source["revision"]["id"] == version.id
-        assert db.query(EtlArchiveAsset).count() == db.query(EtlArchiveVersion).count() == 1
+        assert db.query(EltArchiveAsset).count() == db.query(EltArchiveVersion).count() == 1
         with content(store, db, source) as snapshot:
             assert snapshot.read() == RAW
 
@@ -332,10 +332,10 @@ def test_short_reads_are_complete_and_oversize_admission_does_not_reserve_quota(
             source = publish(store, stream=ShortRead(body))
             with content(store, db, source) as snapshot:
                 assert snapshot.read() == body
-            assert db.get(EtlArchiveQuota, 1).reserved_bytes == 8
+            assert db.get(EltArchiveQuota, 1).reserved_bytes == 8
         else:
-            with pytest.raises(EtlError) as error:
+            with pytest.raises(EltError) as error:
                 publish(store, stream=ShortRead(body))
-            assert error.value.code == "ETL_FILE_TOO_LARGE" and error.value.status_code == 413
-            assert db.get(EtlArchiveQuota, 1).reserved_bytes == 0
-            assert db.query(EtlArchiveAsset).count() == db.query(EtlArchiveVersion).count() == 0
+            assert error.value.code == "ELT_FILE_TOO_LARGE" and error.value.status_code == 413
+            assert db.get(EltArchiveQuota, 1).reserved_bytes == 0
+            assert db.query(EltArchiveAsset).count() == db.query(EltArchiveVersion).count() == 0

@@ -26,7 +26,7 @@ from app.db.models.accounting import JournalEntry
 from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord, AgentTaskRecord
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRecord, ApprovalRequest
 from app.db.models.customer import Customer
-from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.db.models.inventory import InventoryLedger, Warehouse
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
@@ -790,7 +790,7 @@ def test_data_import_verifiers_require_preview_rows_and_persisted_mixed_results(
     tenant_id = run.workspace.tutorial_tenant_id
     now = datetime.utcnow()
     with tenant_scope(tenant_id):
-        upload = EtlUpload(
+        upload = EltUpload(
             id="tutorial-upload-1",
             owner_user_id=users[0].id,
             file_name="xcagi-tutorial-business-import.xlsx",
@@ -801,7 +801,7 @@ def test_data_import_verifiers_require_preview_rows_and_persisted_mixed_results(
         )
         db.add(upload)
         db.flush()
-        etl_run = EtlRun(
+        etl_run = EltRun(
             id="tutorial-etl-run-1",
             owner_user_id=users[0].id,
             upload_id=upload.id,
@@ -815,7 +815,7 @@ def test_data_import_verifiers_require_preview_rows_and_persisted_mixed_results(
         )
         db.add(etl_run)
         db.flush()
-        success_row = EtlRunRow(
+        success_row = EltRunRow(
             run_id=etl_run.id,
             owner_user_id=users[0].id,
             source_sheet="教学客户产品",
@@ -828,7 +828,7 @@ def test_data_import_verifiers_require_preview_rows_and_persisted_mixed_results(
             final_action="create",
             after_json=json.dumps({"customer": "教学客户C", "product": "教学产品C"}),
         )
-        error_row = EtlRunRow(
+        error_row = EltRunRow(
             run_id=etl_run.id,
             owner_user_id=users[0].id,
             source_sheet="教学客户产品",

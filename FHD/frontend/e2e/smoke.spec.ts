@@ -72,7 +72,7 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
     const jobs: Promise<any>[] = []
     for (let i = 0; i < 10; i += 1) {
       jobs.push(
-        page.request.get('/api/etl/capabilities', { timeout: 20_000 }),
+        page.request.get('/api/elt/capabilities', { timeout: 20_000 }),
       )
       jobs.push(page.request.get('/api/system/industries', { timeout: 20_000 }))
     }

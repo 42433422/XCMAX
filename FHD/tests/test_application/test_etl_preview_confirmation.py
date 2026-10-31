@@ -11,14 +11,14 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from app.application.etl import service_execution
-from app.application.etl.errors import EtlError
-from app.application.etl.preview_confirmation import REVIEW_KEY
-from app.application.etl.service_support import dump_json, load_json
-from app.application.etl.targets import get_adapter
+from app.application.elt import service_execution
+from app.application.elt.errors import EltError
+from app.application.elt.preview_confirmation import REVIEW_KEY
+from app.application.elt.service_support import dump_json, load_json
+from app.application.elt.targets import get_adapter
 from app.db.models import PurchaseUnit
-from app.db.models.etl import EtlRun, EtlRunRow, EtlTargetConfig, EtlUpload
-from app.fastapi_routes import etl as etl_routes
+from app.db.models.elt import EltRun, EltRunRow, EltTargetConfig, EltUpload
+from app.fastapi_routes import elt as etl_routes
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.test_application.test_etl_preview_task_boundaries import (
     create_preview,
@@ -51,7 +51,7 @@ def assert_unwritten(store, run_id, *, status="preview_ready"):
     assert current["lease"] == (None, None, None)
     with store.factory() as db:
         assert db.query(PurchaseUnit).count() == 0
-        assert all(row.execution_status != "success" for row in db.query(EtlRunRow).all())
+        assert all(row.execution_status != "success" for row in db.query(EltRunRow).all())
     return current
 
 
@@ -63,11 +63,11 @@ def test_missing_or_wrong_approval_does_not_write_or_claim_run(
     run_id = ready_preview(store, monkeypatch)
     reviewed = snapshot(store, run_id)["preview_revision"]
     assert len(reviewed) == 64
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         execute(store, run_id, revision)
     assert error.value.status_code == 409
     assert error.value.code == (
-        "ETL_PREVIEW_CONFIRMATION_REQUIRED" if revision in (None, "") else "ETL_PREVIEW_CHANGED"
+        "ELT_PREVIEW_CONFIRMATION_REQUIRED" if revision in (None, "") else "ELT_PREVIEW_CHANGED"
     )
     assert assert_unwritten(store, run_id)["preview_revision"] == reviewed
     execute(store, run_id, reviewed)
@@ -81,8 +81,8 @@ def test_reviewed_version_rejects_content_changes(preview_store, monkeypatch, ch
     run_id = ready_preview(store, monkeypatch)
     reviewed = snapshot(store, run_id)["preview_revision"]
     with store.factory() as db:
-        run = db.get(EtlRun, run_id)
-        row = db.query(EtlRunRow).filter_by(run_id=run_id).first()
+        run = db.get(EltRun, run_id)
+        row = db.query(EltRunRow).filter_by(run_id=run_id).first()
         if change in {"mapping", "row"}:
             patch = (
                 {"validation_rules": []}
@@ -93,15 +93,15 @@ def test_reviewed_version_rejects_content_changes(preview_store, monkeypatch, ch
         elif change == "target":
             run.target_type = "export_csv"
         elif change == "source":
-            Path(db.get(EtlUpload, run.upload_id).storage_path).write_bytes(b"changed source")
+            Path(db.get(EltUpload, run.upload_id).storage_path).write_bytes(b"changed source")
         else:
             row.normalized_json = dump_json({"customer_name": "unreviewed customer"})
         db.commit()
     if change == "mapping":
         store.executor.futures[-1].result(timeout=10)
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         execute(store, run_id, reviewed)
-    assert error.value.code == "ETL_PREVIEW_CHANGED"
+    assert error.value.code == "ELT_PREVIEW_CHANGED"
     current = assert_unwritten(store, run_id)
     if change in {"mapping", "row"}:
         assert current["preview_revision"] != reviewed
@@ -116,13 +116,13 @@ def test_legacy_run_requires_revalidation_and_invalid_patch_releases_claim(
     store = preview_store
     run_id = ready_preview(store, monkeypatch)
     with store.factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         details = load_json(run.summary_json, {})
         details.pop(REVIEW_KEY)
         run.summary_json = dump_json(details)
         db.commit()
     assert snapshot(store, run_id)["preview_revision"] is None
-    with store.factory() as db, pytest.raises(EtlError):
+    with store.factory() as db, pytest.raises(EltError):
         store.service.update_draft(
             db, run_id=run_id, owner_user_id=7, patch={"field_mappings": None}
         )
@@ -143,9 +143,9 @@ def test_claim_refreshes_stale_session_before_accepting_revision(preview_store, 
     run_id = ready_preview(store, monkeypatch)
     reviewed = snapshot(store, run_id)["preview_revision"]
     with store.factory() as stale:
-        old_run = stale.get(EtlRun, run_id)
+        old_run = stale.get(EltRun, run_id)
         with store.factory() as other:
-            row = other.query(EtlRunRow).filter_by(run_id=run_id).first()
+            row = other.query(EltRunRow).filter_by(run_id=run_id).first()
             store.service.update_draft(
                 other,
                 run_id=run_id,
@@ -153,9 +153,9 @@ def test_claim_refreshes_stale_session_before_accepting_revision(preview_store, 
                 patch={"row_overrides": {str(row.id): "skip"}},
             )
         assert load_json(old_run.summary_json, {})[REVIEW_KEY]["revision"] == reviewed
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             execute(store, run_id, reviewed, db=stale)
-    assert error.value.code == "ETL_PREVIEW_CHANGED"
+    assert error.value.code == "ELT_PREVIEW_CHANGED"
     assert_unwritten(store, run_id)
 
 
@@ -192,9 +192,9 @@ def test_rows_do_not_report_new_revision_for_old_displayed_rows(
         return data
 
     monkeypatch.setattr(store.service, "row_dict", concurrent_edit)
-    with store.factory() as db, pytest.raises(EtlError) as error:
+    with store.factory() as db, pytest.raises(EltError) as error:
         store.service.get_rows(db, run_id=run_id, owner_user_id=7, page=1, page_size=10, **location)
-    assert error.value.code == "ETL_PREVIEW_CHANGED"
+    assert error.value.code == "ELT_PREVIEW_CHANGED"
 
 
 def test_source_location_keeps_owner_scope_pagination_and_approval_revision(
@@ -222,9 +222,9 @@ def test_source_location_keeps_owner_scope_pagination_and_approval_revision(
         assert (
             store.service.get_rows(db, **{**query, "source_sheet": "not-this-sheet"})["total"] == 0
         )
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             store.service.get_rows(db, **{**query, "owner_user_id": 8})
-        with tenant_scope(2), pytest.raises(EtlError):
+        with tenant_scope(2), pytest.raises(EltError):
             store.service.get_rows(db, **query)
     assert_unwritten(store, run_id)
 
@@ -245,14 +245,14 @@ async def test_source_location_route_validates_and_forwards_exact_coordinates(
             yield db
 
     app.dependency_overrides[etl_routes.get_db_dependency] = scoped_db
-    monkeypatch.setattr(etl_routes, "get_etl_service", lambda: store.service)
+    monkeypatch.setattr(etl_routes, "get_elt_service", lambda: store.service)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
-        unfiltered = (await client.get(f"/api/etl/runs/{run_id}/rows")).json()["data"]
+        unfiltered = (await client.get(f"/api/elt/runs/{run_id}/rows")).json()["data"]
         row = unfiltered["items"][-1]
         response = await client.get(
-            f"/api/etl/runs/{run_id}/rows",
+            f"/api/elt/runs/{run_id}/rows",
             params={
                 "source_sheet": row["source_sheet"],
                 "source_row": row["source_row"],
@@ -264,7 +264,7 @@ async def test_source_location_route_validates_and_forwards_exact_coordinates(
         assert response.json()["data"]["preview_revision"] == unfiltered["preview_revision"]
         for invalid_row in (0, -1, "not-a-row", "1.5"):
             assert (
-                await client.get(f"/api/etl/runs/{run_id}/rows", params={"source_row": invalid_row})
+                await client.get(f"/api/elt/runs/{run_id}/rows", params={"source_row": invalid_row})
             ).status_code == 422
 
 
@@ -294,12 +294,12 @@ def test_webhook_change_cannot_redirect_reviewed_batch(preview_store, monkeypatc
     if after_queue:
         execute(store, run_id, reviewed)
     with store.factory() as db:
-        db.get(EtlTargetConfig, config["id"]).endpoint_url = "https://unreviewed.invalid"
+        db.get(EltTargetConfig, config["id"]).endpoint_url = "https://unreviewed.invalid"
         db.commit()
     if after_queue:
         store.service._execute_worker(run_id, 7, False, **queued.call_args.kwargs)
         assert (
-            assert_unwritten(store, run_id, status="failed")["error_code"] == "ETL_PREVIEW_CHANGED"
+            assert_unwritten(store, run_id, status="failed")["error_code"] == "ELT_PREVIEW_CHANGED"
         )
         with store.factory() as db:
             store.service.retry(db, run_id=run_id, owner_user_id=7)
@@ -307,9 +307,9 @@ def test_webhook_change_cannot_redirect_reviewed_batch(preview_store, monkeypatc
         refreshed = assert_unwritten(store, run_id)
         assert refreshed["preview_revision"] != reviewed
     else:
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             execute(store, run_id, reviewed)
-        assert error.value.code == "ETL_PREVIEW_CHANGED"
+        assert error.value.code == "ELT_PREVIEW_CHANGED"
         assert_unwritten(store, run_id)
     dispatch.assert_not_called()
 
@@ -338,7 +338,7 @@ def test_worker_dispatches_the_exact_verified_target_snapshot(preview_store, mon
     def change_after_verification(db, run, **kwargs):
         target = verify(db, run, **kwargs)
         with store.factory() as other:
-            other.get(EtlTargetConfig, config["id"]).endpoint_url = "https://changed.invalid"
+            other.get(EltTargetConfig, config["id"]).endpoint_url = "https://changed.invalid"
             other.commit()
         return target
 
@@ -365,16 +365,16 @@ def test_error_row_scope_requires_explicit_choice_and_cannot_change_in_queue(
     store.executor.futures[-1].result(timeout=10)
     reviewed = snapshot(store, run_id)
     assert reviewed["summary"]["error"] == 1
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         execute(store, run_id, reviewed["preview_revision"])
-    assert error.value.code == "ETL_INVALID_ROWS_BLOCKED"
+    assert error.value.code == "ELT_INVALID_ROWS_BLOCKED"
     assert_unwritten(store, run_id)
     queued = Mock()
     monkeypatch.setattr(store.service, "_submit_execution", queued)
     execute(store, run_id, reviewed["preview_revision"], valid_rows_only=True)
     # A worker cannot substitute a different scope for the one explicitly approved.
     store.service._execute_worker(run_id, 7, False, **queued.call_args.kwargs)
-    assert assert_unwritten(store, run_id, status="failed")["error_code"] == "ETL_PREVIEW_CHANGED"
+    assert assert_unwritten(store, run_id, status="failed")["error_code"] == "ELT_PREVIEW_CHANGED"
     with store.factory() as db:
         store.service.retry(db, run_id=run_id, owner_user_id=7)
     store.executor.futures[-1].result(timeout=10)
@@ -390,16 +390,16 @@ def test_error_row_scope_requires_explicit_choice_and_cannot_change_in_queue(
 async def test_execute_routes_forward_only_supplied_approval(
     preview_store, monkeypatch, route, with_revision
 ):
-    from app.fastapi_routes import etl
+    from app.fastapi_routes import elt as etl
     from app.legacy.routes import shipment_etl_compat
-    from app.schemas.etl_schema import EtlExecuteRequest
+    from app.schemas.elt_schema import EltExecuteRequest
 
     store = preview_store
     run_id = ready_preview(store, monkeypatch)
     reviewed = snapshot(store, run_id)["preview_revision"]
     revision = reviewed if with_revision else None
-    monkeypatch.setattr(etl, "get_etl_service", lambda: store.service)
-    monkeypatch.setattr(shipment_etl_compat, "get_etl_service", lambda: store.service)
+    monkeypatch.setattr(etl, "get_elt_service", lambda: store.service)
+    monkeypatch.setattr(shipment_etl_compat, "get_elt_service", lambda: store.service)
     with store.factory() as db:
         if route == "legacy":
             response = await shipment_etl_compat.shipment_etl_execute(
@@ -413,21 +413,21 @@ async def test_execute_routes_forward_only_supplied_approval(
             assert response.status_code == (202 if with_revision else 409)
             if not with_revision:
                 assert (
-                    json.loads(response.body)["error_code"] == "ETL_PREVIEW_CONFIRMATION_REQUIRED"
+                    json.loads(response.body)["error_code"] == "ELT_PREVIEW_CONFIRMATION_REQUIRED"
                 )
         elif with_revision:
             assert etl.execute_run(
                 run_id,
-                EtlExecuteRequest(confirmed=True, preview_revision=revision),
+                EltExecuteRequest(confirmed=True, preview_revision=revision),
                 db,
                 SimpleNamespace(id=7),
             )["success"]
         else:
-            with pytest.raises(EtlError) as error:
+            with pytest.raises(EltError) as error:
                 etl.execute_run(
-                    run_id, EtlExecuteRequest(confirmed=True), db, SimpleNamespace(id=7)
+                    run_id, EltExecuteRequest(confirmed=True), db, SimpleNamespace(id=7)
                 )
-            assert error.value.code == "ETL_PREVIEW_CONFIRMATION_REQUIRED"
+            assert error.value.code == "ELT_PREVIEW_CONFIRMATION_REQUIRED"
     if with_revision:
         store.executor.futures[-1].result(timeout=10)
         assert snapshot(store, run_id)["summary"]["executed"] == 2

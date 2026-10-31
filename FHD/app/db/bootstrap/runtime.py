@@ -15,7 +15,7 @@ class RuntimeBootstrap:
     sqlite_start: tuple[BootstrapStep, ...]
     postgres_start: AuthBootstrap
     common: tuple[BootstrapStep, ...]
-    sqlite_etl: BootstrapStep
+    sqlite_elt: BootstrapStep
     erp: BootstrapStep
     effective_url: Callable[[], str]
     is_sqlite: Callable[[str], bool]
@@ -33,5 +33,5 @@ class RuntimeBootstrap:
         for step in self.common:
             step(engine, database_url=url, swallow_errors=swallow_errors)
         if sqlite:
-            self.sqlite_etl(engine, database_url=url, swallow_errors=swallow_errors)
+            self.sqlite_elt(engine, database_url=url, swallow_errors=swallow_errors)
         self.erp(engine, database_url=url, swallow_errors=swallow_errors)

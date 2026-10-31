@@ -3,7 +3,7 @@ from io import BytesIO
 import pytest
 from openpyxl import Workbook
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_formula_support import plan_formula_support
 
 

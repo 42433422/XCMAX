@@ -9,11 +9,11 @@ from typing import Any, BinaryIO
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.application.etl import archive_store
-from app.application.etl.archive_policy import ArchivePolicyError
-from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
-from app.application.etl.service_support import MAX_FILE_BYTES
-from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveVersion
+from app.application.elt import archive_store
+from app.application.elt.archive_policy import ArchivePolicyError
+from app.application.elt.errors import EltConflict, EltError, EltNotFound
+from app.application.elt.service_support import MAX_FILE_BYTES
+from app.db.models.elt_archive import EltArchiveAsset, EltArchiveVersion
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_id_for_write
 
 
@@ -40,7 +40,7 @@ class SourceAssetServiceMixin:
                 request_key=request_key,
             )
         except ArchivePolicyError as exc:
-            raise EtlConflict("ETL_SOURCE_ARCHIVE_CONFLICT", exc.public_message) from exc
+            raise EltConflict("ELT_SOURCE_ARCHIVE_CONFLICT", exc.public_message) from exc
         asset = self._source_asset(db, revision.asset_id, owner_user_id)
         return self._source_dict(db, asset, revision)
 
@@ -58,7 +58,7 @@ class SourceAssetServiceMixin:
     ) -> dict[str, Any]:
         asset = self._source_asset(db, asset_id, owner_user_id)
         if type(expected_version) is not int or expected_version < 1:
-            raise EtlError("ETL_SOURCE_VERSION_INVALID", "来源版本必须为正整数")
+            raise EltError("ELT_SOURCE_VERSION_INVALID", "来源版本必须为正整数")
         body = self._source_body(stream)
         try:
             revision = archive_store.append_original_version(
@@ -71,7 +71,7 @@ class SourceAssetServiceMixin:
                 expected_version=expected_version,
             )
         except ArchivePolicyError as exc:
-            raise EtlConflict("ETL_SOURCE_ARCHIVE_CONFLICT", exc.public_message) from exc
+            raise EltConflict("ELT_SOURCE_ARCHIVE_CONFLICT", exc.public_message) from exc
         return self._source_dict(db, asset, revision)
 
     @staticmethod
@@ -81,7 +81,7 @@ class SourceAssetServiceMixin:
         while chunk := stream.read(min(1024 * 1024, MAX_FILE_BYTES + 1 - size)):
             size += len(chunk)
             if size > MAX_FILE_BYTES:
-                raise EtlError("ETL_FILE_TOO_LARGE", "来源原件超过单文件大小限制", status_code=413)
+                raise EltError("ELT_FILE_TOO_LARGE", "来源原件超过单文件大小限制", status_code=413)
             chunks.append(chunk)
         return b"".join(chunks)
 
@@ -90,25 +90,25 @@ class SourceAssetServiceMixin:
         return archive_store.default_archive_root()
 
     @staticmethod
-    def _source_asset(db: Session, asset_id: str, owner_user_id: int) -> EtlArchiveAsset:
+    def _source_asset(db: Session, asset_id: str, owner_user_id: int) -> EltArchiveAsset:
         tenant = current_tenant_id()
         if tenant is None:
-            raise EtlNotFound("来源资产")
+            raise EltNotFound("来源资产")
         asset = (
-            db.query(EtlArchiveAsset)
+            db.query(EltArchiveAsset)
             .filter_by(id=asset_id, tenant_id=tenant, owner_user_id=owner_user_id, state="active")
             .first()
         )
         if asset is None:
-            raise EtlNotFound("来源资产")
+            raise EltNotFound("来源资产")
         return asset
 
     def _source_revision(
         self, db: Session, asset_id: str, revision_id: str, owner_user_id: int
-    ) -> tuple[EtlArchiveAsset, EtlArchiveVersion]:
+    ) -> tuple[EltArchiveAsset, EltArchiveVersion]:
         asset = self._source_asset(db, asset_id, owner_user_id)
         revision = (
-            db.query(EtlArchiveVersion)
+            db.query(EltArchiveVersion)
             .filter_by(
                 id=revision_id,
                 asset_id=asset.id,
@@ -118,14 +118,14 @@ class SourceAssetServiceMixin:
             .first()
         )
         if revision is None:
-            raise EtlNotFound("来源版本")
+            raise EltNotFound("来源版本")
         return asset, revision
 
     def _source_dict(
-        self, db: Session, asset: EtlArchiveAsset, revision: EtlArchiveVersion
+        self, db: Session, asset: EltArchiveAsset, revision: EltArchiveVersion
     ) -> dict[str, Any]:
         current = (
-            db.query(func.max(EtlArchiveVersion.version))
+            db.query(func.max(EltArchiveVersion.version))
             .filter_by(
                 asset_id=asset.id, tenant_id=asset.tenant_id, owner_user_id=asset.owner_user_id
             )
@@ -141,13 +141,13 @@ class SourceAssetServiceMixin:
     def get_source(self, db: Session, *, asset_id: str, owner_user_id: int) -> dict[str, Any]:
         asset = self._source_asset(db, asset_id, owner_user_id)
         revision = (
-            db.query(EtlArchiveVersion)
+            db.query(EltArchiveVersion)
             .filter_by(asset_id=asset.id, tenant_id=asset.tenant_id, owner_user_id=owner_user_id)
-            .order_by(EtlArchiveVersion.version.desc())
+            .order_by(EltArchiveVersion.version.desc())
             .first()
         )
         if revision is None:
-            raise EtlNotFound("来源版本")
+            raise EltNotFound("来源版本")
         return self._source_dict(db, asset, revision)
 
     def list_source_revisions(
@@ -155,9 +155,9 @@ class SourceAssetServiceMixin:
     ) -> list[dict[str, Any]]:
         asset = self._source_asset(db, asset_id, owner_user_id)
         rows = (
-            db.query(EtlArchiveVersion)
+            db.query(EltArchiveVersion)
             .filter_by(asset_id=asset.id, tenant_id=asset.tenant_id, owner_user_id=owner_user_id)
-            .order_by(EtlArchiveVersion.version)
+            .order_by(EltArchiveVersion.version)
             .all()
         )
         return [self._source_revision_dict(asset, revision) for revision in rows]
@@ -170,7 +170,7 @@ class SourceAssetServiceMixin:
 
     @staticmethod
     def _source_revision_dict(
-        asset: EtlArchiveAsset, revision: EtlArchiveVersion
+        asset: EltArchiveAsset, revision: EltArchiveVersion
     ) -> dict[str, Any]:
         return {
             "id": revision.id,
@@ -192,5 +192,5 @@ class SourceAssetServiceMixin:
                 db, owner=owner_user_id, version_id=revision.id, root=self._source_root()
             )
         except ArchivePolicyError as exc:
-            raise EtlConflict("ETL_SOURCE_ARCHIVE_CONFLICT", exc.public_message) from exc
+            raise EltConflict("ELT_SOURCE_ARCHIVE_CONFLICT", exc.public_message) from exc
         return BytesIO(body), asset.name

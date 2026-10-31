@@ -192,7 +192,7 @@ class CatalogAdmissionMiddleware:
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
         if scope["type"] == "http" and (
-            path.startswith("/api/etl/owned-mixed-v1/products") or self.admission is not None
+            path.startswith("/api/elt/owned-mixed-v1/products") or self.admission is not None
         ):
             try:
                 if self.admission is None:

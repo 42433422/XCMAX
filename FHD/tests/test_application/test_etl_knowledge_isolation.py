@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.application import dataset_rag_app_service as rag
-from app.application.etl.errors import EtlError
-from app.application.etl.targets.knowledge import KnowledgeAdapter
+from app.application.elt.errors import EltError
+from app.application.elt.targets.knowledge import KnowledgeAdapter
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -59,9 +59,9 @@ def test_replaying_one_import_preserves_version_and_receipt(service):
 def test_stale_new_preview_cannot_claim_another_runs_document(service):
     with tenant_scope(1):
         first = execute("shared synthetic content", "run-a")
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             execute("shared synthetic content", "run-b")
-    assert error.value.code == "ETL_PREVIEW_STALE"
+    assert error.value.code == "ELT_PREVIEW_STALE"
     assert documents(service, 1)[0]["metadata"]["etl_run_id"] == "run-a"
     assert documents(service, 1)[0]["document_id"] == first["match_ref"]
 
@@ -77,7 +77,7 @@ def test_rollback_rejects_later_replacement_at_same_document_id(service):
             tenant_id="1",
         )
         assert replacement["success"] is True
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             KnowledgeAdapter().rollback_row(
                 None,
                 match_ref=imported["match_ref"],
@@ -85,7 +85,7 @@ def test_rollback_rejects_later_replacement_at_same_document_id(service):
                 after=imported["after"],
                 context={"owner_user_id": 1, "run_id": "run-a"},
             )
-    assert error.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert error.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
     assert documents(service, 1)[0]["version"] == replacement["document"]["version"]
 
 
@@ -110,11 +110,11 @@ def test_inventory_failure_blocks_preview_instead_of_claiming_empty(response, mo
     service = MagicMock()
     service.status.return_value = response
     monkeypatch.setattr(rag, "get_dataset_rag_app_service", lambda: service)
-    with tenant_scope(1), pytest.raises(EtlError) as error:
+    with tenant_scope(1), pytest.raises(EltError) as error:
         KnowledgeAdapter().preview(
             None, {"content": "synthetic"}, allowed_update_fields=set(), context={}
         )
-    assert error.value.code == "ETL_KNOWLEDGE_STATUS_FAILED"
+    assert error.value.code == "ELT_KNOWLEDGE_STATUS_FAILED"
     service.ingest_document.assert_not_called()
 
 
@@ -141,7 +141,7 @@ def test_confirmed_source_version_cannot_change_before_execution(service):
             source="synthetic",
             tenant_id="1",
         )
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             execute(
                 "second synthetic version",
                 "run-b",
@@ -149,7 +149,7 @@ def test_confirmed_source_version_cannot_change_before_execution(service):
                 match_ref=first["match_ref"],
                 preview_before=old_preview,
             )
-    assert error.value.code == "ETL_PREVIEW_STALE"
+    assert error.value.code == "ELT_PREVIEW_STALE"
     assert len(documents(service, 1)) == 1
 
 

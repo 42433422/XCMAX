@@ -10,7 +10,7 @@ from openpyxl.formatting.rule import Rule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from openpyxl.styles.differential import DifferentialStyle
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_range_objects import (
     _WPS_FOLLOW,
     S,
@@ -379,15 +379,15 @@ def test_dtd_xml_is_rejected_as_business_error():
 def test_archive_auto_slice_http_download_returns_verified_metadata_and_receipt(review_store):
     from sqlalchemy.orm import sessionmaker
 
-    from app.application.etl.service_support import dump_json, load_json
-    from app.db.models.etl import EtlRun
+    from app.application.elt.service_support import dump_json, load_json
+    from app.db.models.elt import EltRun
     from app.infrastructure.tenant_scope import tenant_scope
     from tests.test_application.test_reviewed_excel_legacy import archive
 
     body = sample()
     item, _ = archive(review_store, body)
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        run = db.get(EtlRun, item["classification_id"])
+        run = db.get(EltRun, item["classification_id"])
         state = load_json(run.draft_json, {})
         latest = state["versions"][-1]
         latest["model_status"] = "returned"
