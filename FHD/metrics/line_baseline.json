@@ -1,9 +1,5 @@
 {
   "lines": 2405243,
   "updated": "2026-10-31",
-<<<<<<< HEAD
-  "note": "fix/#2856 rebase onto #2859：用户上传→选模板测试与覆盖率补测；同步净删除基线"
-=======
-  "note": "feat/#2859 encrypted business-archive; ELT product rename rebase ongoing — recomputed after conflict resolve"
->>>>>>> f4f90a8fa (fix(ci): expect /api/elt download URL; bump net-deletion baseline +4)
+  "note": "rebase onto #2856; recomputed after finish"
 }

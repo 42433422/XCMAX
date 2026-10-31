@@ -388,7 +388,7 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(template_scope, "ensure_templates_tenant_column", lambda: None)
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(routes, "get_app_data_dir", lambda: str(tmp_path))
-    from app.application.etl import archive_store
+    from app.application.elt import archive_store
     from app.utils.path_io import path_utils
 
     archive_root = tmp_path / "business-archive"
@@ -5077,8 +5077,8 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
     assert len(copies) == int(commit_unknown)
     originals = list((review_store.root / "business-archive" / "1" / "7").iterdir())
     assert len(originals) == 1
-    from app.application.etl.archive_store import _ENVELOPE_MAGIC, _decrypt_or_migrate
-    from app.db.models.etl_archive import EtlArchiveVersion
+    from app.application.elt.archive_store import _ENVELOPE_MAGIC, _decrypt_or_migrate
+    from app.db.models.elt_archive import EltArchiveVersion
 
     disk = originals[0].read_bytes()
     assert disk.startswith(_ENVELOPE_MAGIC) and body not in disk
@@ -5087,7 +5087,7 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
             text("SELECT size_bytes, sha256 FROM etl_archive_versions WHERE storage_path = :p"),
             {"p": str(originals[0])},
         ).one()
-    version = EtlArchiveVersion(size_bytes=row.size_bytes, sha256=row.sha256)
+    version = EltArchiveVersion(size_bytes=row.size_bytes, sha256=row.sha256)
     plain = _decrypt_or_migrate(
         disk,
         path=originals[0],
