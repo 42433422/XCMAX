@@ -864,10 +864,11 @@ def combine_semantic_batches(
     }
 
 
-def classify_semantic_workbook(review: dict, *, skip_hidden_sheets: bool = True) -> dict:
+def classify_semantic_workbook(review: dict, *, skip_hidden_sheets: bool = False) -> dict:
     """Run the bounded standalone path, used by isolated replay and tests.
 
-    Default skip_hidden_sheets=True: auto-slice only sees visible worksheets.
+    Default keeps all sheets; pass skip_hidden_sheets=True only as an explicit
+    general option. Prompt guidance steers the model using sheet_state.
     """
     review = prepare_auto_slice_review(review, skip_hidden_sheets=skip_hidden_sheets)
     batches, max_calls = plan_semantic_batches(

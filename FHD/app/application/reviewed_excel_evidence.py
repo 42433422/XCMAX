@@ -20,13 +20,12 @@ def bounded_range(value: str) -> tuple[int, int, int, int]:
 
 
 
-def prepare_auto_slice_review(review: dict, *, skip_hidden_sheets: bool = True) -> dict:
-    """Default auto classify→group→slice view: drop hidden/veryHidden worksheets.
+def prepare_auto_slice_review(review: dict, *, skip_hidden_sheets: bool = False) -> dict:
+    """Optional general filter: drop hidden/veryHidden worksheets from a review.
 
-    Hidden sheets are skipped entirely — not packed, not suggested as documents,
-    and not fail-closed for extraction. Explicit derive_document_workbook still
-    rejects extracting a hidden sheet alone. Pass skip_hidden_sheets=False to
-    keep the full inspect review (legacy/debug only).
+    Default is off — the model receives sheet_state and decides via prompt guidance.
+    Pass skip_hidden_sheets=True only as an explicit operator/general option.
+    Explicit derive_document_workbook still rejects extracting a hidden sheet alone.
     """
     if not skip_hidden_sheets:
         return review
@@ -704,16 +703,15 @@ def plan_semantic_batches(
 ) -> tuple[list[list[dict]], int]:
     """Analyze bounded batches sequentially; fail closed on conflicting model regions.
 
-    When skip_hidden_sheets is True (default for neutral/auto-slice), hidden and
-    veryHidden worksheets are omitted from packing. Callers should pass the same
-    filtered review from prepare_auto_slice_review into classify/group/slice.
+    When skip_hidden_sheets is True, omit hidden/veryHidden worksheets from packing
+    (explicit general option). Default False so the model sees sheet_state.
     """
     import os
 
     from app.application.reviewed_excel_classification import classify_review_workbook
 
     if skip_hidden_sheets is None:
-        skip_hidden_sheets = bool(neutral)
+        skip_hidden_sheets = False
     if skip_hidden_sheets:
         review = prepare_auto_slice_review(review, skip_hidden_sheets=True)
     try:

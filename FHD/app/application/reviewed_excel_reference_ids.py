@@ -514,6 +514,7 @@ CONTRACT_VERSION = "independent-excel-v10-document-ranges"
 SOURCE_PROTOCOL = (
     "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
+    "sheets[].sheet_state may be visible, hidden, or veryHidden: prefer leaving fragments on hidden or veryHidden sheets ungrouped and out of logical_documents for independent extraction unless the operator explicitly requires those sheets; never invent workbook-title-specific rules. "
     "Leave uncertain fragments ungrouped. Do not use unread content as evidence. "
     "Keep merged cells intact; every evidence coordinate MUST be inside its region and on the same sheet. "
     "External context belongs in dependencies. A repeated table header is an observation, not proof "
@@ -581,6 +582,7 @@ ATOM_IDENTIFY_PROMPT = (
     "logical_documents.fragments contains the primary_id values of returned physical regions, each region at most once; "
     "document_id must be nonblank, unique and at most 80 characters. Leave uncertain fragments ungrouped. "
     "layout_references is an optional subset of supplied M-prefixed merge IDs, not a coverage ledger; [] is valid. "
+    "sheets[].sheet_state may be visible, hidden, or veryHidden: prefer not creating physical regions or logical_documents on hidden or veryHidden sheets; leave that content ungrouped unless explicitly required; never invent workbook-title-specific rules. "
     "Transport batches, sheet boundaries, adjacency and repeated headers do not establish a business document. "
     "Return exactly one JSON object matching output_schema with no extra fields."
 )
@@ -592,19 +594,32 @@ IDENTIFY_PROMPT = (
     "Every intersected merge must be wholly contained. Internal blanks are allowed; blank-only ranges are not. "
     "Invalid ranges are rejected, never clipped, expanded or repaired. Formula targets and merge metadata are source facts, not additional supplied cells or business boundaries. "
     "Use multiple ranges in one document only when the source supports that relationship. Technical batches are not documents. "
-    "Sheet boundaries, adjacency and repeated headers alone do not prove one business document. No cleaning, numbering, printing or template decisions. Return exactly output_schema."
+    "Sheet boundaries, adjacency and repeated headers alone do not prove one business document. "
+    "Prefer omitting hidden or veryHidden sheets (sheets[].sheet_state) from documents unless explicitly required; never invent workbook-title-specific rules. "
+    "Export fidelity: when a document contains filter-aware aggregate formulas (for example SUBTOTAL), "
+    "every cell those formulas reference on the same sheet must lie inside that document's rectangles; "
+    "if the sheet carries an active AutoFilter, include that AutoFilter's full reference rectangle in the same document "
+    "(add another rectangle if needed). Prefer self-contained period/documents over leaving such dependencies outside. "
+    "Decide from supplied cell values and sheet facts only; never invent coordinates that are not justified by that evidence. "
+    "No cleaning, numbering, printing or template decisions. Return exactly output_schema."
 )
 RANGE_GROUP_PROMPT = (
     "Group the supplied validated ranges into complete documents using source content. Return documents with nested ranges and reasons, no IDs. "
     "Copy each supplied sheet_name and integer boundary tuple exactly once across all documents; never expand, shrink, duplicate or omit a range. "
     "cells, fragment_structure and cross_fragment_formulas provide middle-row samples and cross-fragment formula facts; use them to judge continuity. "
     "Do not auto-merge merely because ranges are adjacent or share a sheet; only group when supplied content supports one business document. "
+    "Prefer omitting ranges on hidden or veryHidden sheets unless explicitly required. "
+    "sheet_filters (when present) lists each sheet's active AutoFilter reference rectangle as a source fact. "
+    "Export fidelity: if cross_fragment_formulas show a filter-aware aggregate (for example SUBTOTAL) whose referenced cells sit in another fragment, "
+    "put the hosting fragment and every referenced fragment in the same document so those dependencies stay inside one export. "
+    "If a document would keep SUBTOTAL (or similar filter-aware aggregates) but omit the sheet_filters rectangle that covers them, "
+    "also group in the fragment that covers that AutoFilter reference when one was supplied. "
     "Technical batches are not document boundaries. Adjacency, sheet membership and repeated headers alone do not prove document identity. "
     "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return exactly output_schema."
 )
 DRAWING_IDENTIFY_PROMPT = LEGACY_IDENTIFY_PROMPT + (
     " When drawing_evidence is present, use only supplied drawing_id values in drawing_ids. "
-    "Drawing text and anchors are source evidence; last_col and last_row are conservative outer bounds, not document suggestions. "
+    "Drawing text and anchors are source evidence; last_col and last_row are conservative outer bounds resolved from worksheet dimension records when available — geometry facts, not document suggestions. "
     "Every drawing must be wholly inside one region; do not cut objects horizontally or vertically. "
     "Choose two-dimensional rectangles independently; transport batches do not prescribe document boundaries."
 )
@@ -612,9 +627,13 @@ GROUP_PROMPT = (
     "Group only fragments that belong to the same business document. "
     "A standalone fragment can be one group. Do not group merely because fragments are adjacent, "
     "have similar headers, or share a category. Leave uncertain fragments ungrouped. "
+    "Prefer not forcing groups whose only purpose is to extract hidden or veryHidden sheets. "
     "For every grouped fragment cite at least one sent cell within it and explain the relationship "
     "using sent values. Use only supplied region_id and evidence_id values. "
     "Fragment boundaries are fixed; do not invent ranges or cells. "
+    "If supplied evidence shows a filter-aware aggregate formula (for example SUBTOTAL) whose referenced "
+    "cells live in another fragment, group those fragments together so the dependency stays in one document. "
+    "When sheet_filters are supplied, keep AutoFilter-covered fragments with any grouped SUBTOTAL that needs that filter. "
     "Return exactly one JSON object matching output_schema."
 )
 DRAWING_GROUP_PROMPT = GROUP_PROMPT + (
@@ -729,27 +748,27 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "f6e382e3d6a2c468f20f5dd0f4588efb6205ee501d8e6546faac0aff86c82715",
+        "fe750f97254a7bdce2c8158d6dbb4e861c163b96694d2d46a7fbbdea3f265a28",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "group_ranges": (
-        "148d386102dbae964456964e0a582872b7035dd8ee671d79869a275d58109482",
+        "3bc6126a37357cf2cbce92a3f0a6564f9df496566c740cd085a5cb2a0b9f0300",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "identify_atoms": (
-        "2bd9134e0414c5b6c6660c515e9c2e494cb8b9564eeeaa861b8ee5143541c8ca",
+        "fbe19d61e212772c1763d41a4efeb310e61bbfdbf08f110e58397671f8003972",
         "ffab0241efd5e7fba5087b4ca32774b3ba3b2ccb95124709f624d095ddd0adc0",
     ),
     "group": (
-        "440a63ab70be709c7825a4e6374ef3c1f3e52687a3e8b4f3f5927235459ee22e",
+        "30bc484b520ebfb64779fa59828491d73cfc6d074c632e0025764c83861378fb",
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "1c30723c74bd33de1608a802b67c735093f80f4192ab6d7c262de725c9c317a6",
+        "7a778c6b35f388c06960bbeb0713c06e4fce748de13ac907f9ca7cba98e12480",
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (
-        "49665c8535ed2aa9ba6a4dfc047fe360ccf97ddcead5063b20f05314f097c4b8",
+        "1d064115ea3043d4b868dcd33c51bb6c5150e11367b465352fe375972d84c172",
         "47042d8477ddf0eb59819d512ead64c7213fc4210351687df0bedea6403129df",
     ),
 }
