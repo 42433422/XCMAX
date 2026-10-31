@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections import defaultdict
 from typing import Any
 
