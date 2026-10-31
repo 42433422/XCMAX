@@ -19,6 +19,14 @@ _SUBTOTAL = re.compile(
 )
 _CELL_RANGE = re.compile(r"\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?\Z")
 
+def _beyond_sheet_dimensions(col: int, row: int, sheet) -> bool:
+    """True when a referenced cell lies outside the worksheet's used dimensions."""
+    max_col = max(1, int(sheet.max_column or 1))
+    max_row = max(1, int(sheet.max_row or 1))
+    return col < 1 or row < 1 or col > max_col or row > max_row
+
+
+
 
 def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int = 20_000) -> dict:
     """Find required same-sheet cells and dependencies; do not rewrite or export a workbook.
@@ -141,8 +149,12 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                 direct.append(target)
                 selected_refs: set[str] = set()
                 includes_support = False
+                beyond = False
                 for row in range(r1, r2 + 1):
                     for col in range(c1, c2 + 1):
+                        if _beyond_sheet_dimensions(col, row, sheet):
+                            beyond = True
+                            continue
                         ref = f"{get_column_letter(col)}{row}"
                         if selected(col, row):
                             inside.add(ref)
@@ -156,6 +168,16 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                             edges[address].add(ref)
                             if ref not in visited:
                                 pending.append(ref)
+                if beyond:
+                    error_operand_warnings.append(
+                        {
+                            "sheet": sheet_name,
+                            "cell": address,
+                            "formula": value,
+                            "token": target,
+                            "message": "公式引用超出工作表已用行列，越界部分已忽略（警告放行）",
+                        }
+                    )
                 source_col, source_row = coordinate_from_string(address)
                 if includes_support or not selected(
                     column_index_from_string(source_col), source_row
@@ -199,6 +221,7 @@ def plan_formula_support(body: bytes, fragments: list[dict], *, max_cells: int =
                     f"{get_column_letter(col)}{row}"
                     for row in range(r1, r2 + 1)
                     for col in range(c1, c2 + 1)
+                    if not _beyond_sheet_dimensions(col, row, sheet)
                 )
         return {
             "preserved_subtotal_cells": {
