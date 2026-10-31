@@ -52,8 +52,7 @@ def source_client(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(service_history, "get_app_data_dir", lambda: str(tmp_path))
-    from app.application.elt import sources
-    from app.application.elt import archive_store
+    from app.application.elt import archive_store, sources
     from app.utils.path_io import path_utils
 
     if hasattr(sources, "get_app_data_dir"):
