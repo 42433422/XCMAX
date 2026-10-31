@@ -105,12 +105,12 @@ def test_complete_union_preserves_duplicate_rules_priorities_dxf_and_wps_filter(
     "selection", [fragments("A1:C3"), fragments("A1:A4"), fragments("A1:C1", "A3:C4")]
 )
 def test_partial_multirange_comparison_or_hole_is_not_clipped(selection):
-    with pytest.raises(ReviewedExcelError, match="跨越"):
+    with pytest.raises(ReviewedExcelError, match="跨越|真实数据|空白上下文"):
         derive_document_workbook(sample(), selection)
 
 
 def test_filter_crosses_boundary_even_when_conditional_rule_is_inside():
-    with pytest.raises(ReviewedExcelError, match="未选尾列"):
+    with pytest.raises(ReviewedExcelError, match="未选尾列|空白上下文|真实数据"):
         derive_document_workbook(sample(area="A1:A4", filter_area="A1:D4"), fragments("A1:C4"))
 
 
@@ -269,7 +269,7 @@ def test_filter_only_verified_empty_tail_preserves_node_without_expanding_busine
     ],
 )
 def test_empty_filter_tail_exception_rejects_any_meaningful_dependency(mutation):
-    with pytest.raises(ReviewedExcelError, match="尾列|绘图"):
+    with pytest.raises(ReviewedExcelError, match="尾列|空白上下文|绘图"):
         derive_document_workbook(empty_tail_sample(mutation), fragments("A1:C4"))
 
 
@@ -452,3 +452,35 @@ def test_http_template_preview_refuses_raw_filter_metadata_without_blocking_plai
         files={"file": ("ordinary.xlsx", out.getvalue())},
     )
     assert ordinary.status_code == 200, ordinary.text
+
+
+def test_conditional_format_blank_context_is_preserved_without_expanding_selection():
+    """CF may keep a verified blank right-hand context; business selection stays unchanged."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Synthetic"
+    for row in range(1, 5):
+        for col in range(1, 4):
+            sheet.cell(row, col, row)
+        sheet.cell(row, 4).value = None
+    style = DifferentialStyle(font=Font(color="FFFF0000"))
+    sheet.conditional_formatting.add("A1:D4", Rule(type="duplicateValues", dxf=style, priority=3))
+    out = BytesIO()
+    book.save(out)
+    body = out.getvalue()
+    chosen = fragments("A1:C4")
+    receipt = {}
+    output = derive_document_workbook(body, chosen, object_receipt=receipt)
+    verify_range_objects(output, plan_range_objects(body, "Synthetic", chosen))
+    retained = [r for r in receipt["retained"] if r["type"] == "duplicateValues"]
+    assert retained and retained[0]["ranges"] == ["A1:D4"]
+    assert "blank_conditional_context" in retained[0]["reason"]
+    assert chosen == fragments("A1:C4")
+    saved = load_workbook(BytesIO(output)).active
+    assert all(saved.cell(row, 4).value is None for row in range(1, 5))
+
+
+def test_conditional_format_with_unselected_real_data_is_rejected():
+    body = sample(area="A1:D4", filter_area=None, outside=False, duplicate=False)
+    with pytest.raises(ReviewedExcelError, match="真实数据|空白上下文|跨越"):
+        derive_document_workbook(body, fragments("A1:C4"))

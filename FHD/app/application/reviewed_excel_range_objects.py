@@ -97,25 +97,25 @@ def _blank_snapshot(body, sheet_name, tail):
     from app.application.reviewed_excel_template import inspect_workbook
 
     if (tail[2] - tail[0] + 1) * (tail[3] - tail[1] + 1) > 20_000:
-        _fail("过滤器空尾列证明超出安全预算")
+        _fail("空白上下文证明超出安全预算")
     review = inspect_workbook(body)
     for drawing in review.get("drawing_evidence", []):
         if drawing["sheet"] == sheet_name and _intersects(drawing_bounds(drawing), tail):
-            _fail("过滤器未选尾列包含绘图")
+            _fail("空白上下文包含绘图")
     wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
     try:
         ws = wb[sheet_name]
         if wb.defined_names or ws.defined_names or ws.data_validations.count or ws.tables:
-            _fail("过滤器空尾列存在尚未验证的区域依赖")
+            _fail("空白上下文存在尚未验证的区域依赖")
         if any(_intersects(_bounds(str(merge)), tail) for merge in ws.merged_cells.ranges):
-            _fail("过滤器未选尾列包含合并单元格")
+            _fail("空白上下文包含合并单元格")
         for row in range(tail[1], tail[3] + 1):
             for col in range(tail[0], tail[2] + 1):
                 cell = ws._cells.get((row, col))
                 if cell is not None and (
                     cell.value is not None or cell.has_style or cell.comment or cell.hyperlink
                 ):
-                    _fail("过滤器未选尾列含值、公式、样式或关联对象")
+                    _fail("空白上下文含值、公式、样式或关联对象")
         rows = []
         for index, dim in ws.row_dimensions.items():
             if tail[1] <= index <= tail[3]:
@@ -125,7 +125,7 @@ def _blank_snapshot(body, sheet_name, tail):
                 font_state = None
                 if dim.has_style:
                     if any(list(dim._style)[1:]):
-                        _fail("过滤器未选尾列继承非字体行样式")
+                        _fail("空白上下文继承非字体行样式")
                     font_state = (tuple(dim._style), _fingerprint(dim.font.to_tree()))
                 rows.append(
                     (index, dim.height, dim.hidden, dim.outlineLevel, dim.collapsed, font_state)
@@ -134,7 +134,7 @@ def _blank_snapshot(body, sheet_name, tail):
         for dim in ws.column_dimensions.values():
             if dim.min <= tail[2] and tail[0] <= dim.max:
                 if dim.has_style:
-                    _fail("过滤器未选尾列继承列样式")
+                    _fail("空白上下文继承列样式")
                 cols.append(
                     (dim.min, dim.max, dim.width, dim.hidden, dim.outlineLevel, dim.collapsed)
                 )
@@ -166,6 +166,42 @@ def _filter_blank_tail(body, sheet_name, area, rectangles, conditional_formats):
     ):
         _fail("过滤器未选尾列含条件格式依赖")
     return _blank_snapshot(body, sheet_name, tail)
+
+
+def _uncovered_blank_proofs(body, sheet_name, bounds, rectangles):
+    """Prove every cell of bounds outside the selection is blank context; else fail closed."""
+    if rectangles_cover(bounds, rectangles):
+        return []
+    proofs = []
+    # Fully outside the selection: the whole rectangle must be blank context.
+    if not any(_intersects(bounds, rectangle) for rectangle in rectangles):
+        return [_blank_snapshot(body, sheet_name, bounds)]
+    # Partial overlap: prefer a verified empty right-hand strip (filter-compatible).
+    c1, r1, c2, r2 = bounds
+    covered_prefix = c1
+    while covered_prefix <= c2 and rectangles_cover(
+        (covered_prefix, r1, covered_prefix, r2), rectangles
+    ):
+        covered_prefix += 1
+    if covered_prefix > c1 and covered_prefix <= c2:
+        right = (covered_prefix, r1, c2, r2)
+        if not any(_intersects(right, rectangle) for rectangle in rectangles):
+            proofs.append(_blank_snapshot(body, sheet_name, right))
+            remainder = (c1, r1, covered_prefix - 1, r2)
+            if rectangles_cover(remainder, rectangles):
+                return proofs
+    # Bottom empty strip when rows below the covered band are blank.
+    covered_rows = r1
+    while covered_rows <= r2 and rectangles_cover((c1, covered_rows, c2, covered_rows), rectangles):
+        covered_rows += 1
+    if covered_rows > r1 and covered_rows <= r2:
+        bottom = (c1, covered_rows, c2, r2)
+        if not any(_intersects(bottom, rectangle) for rectangle in rectangles):
+            proofs.append(_blank_snapshot(body, sheet_name, bottom))
+            remainder = (c1, r1, c2, covered_rows - 1)
+            if rectangles_cover(remainder, rectangles):
+                return proofs
+    _fail("条件格式涉及未选中的真实数据或无法证明的空白上下文")
 
 
 def plan_range_objects(body, sheet_name, fragments):
@@ -201,7 +237,24 @@ def plan_range_objects(body, sheet_name, fragments):
             ranges = cf.get("sqref", "").split()
             if not ranges:
                 _fail("条件格式缺少范围")
-            kind = disposition(ranges)
+            bounds_list = [_bounds(area) for area in ranges]
+            blank_proofs = []
+            if all(rectangles_cover(b, rectangles) for b in bounds_list):
+                kind = "retained"
+            elif not any(
+                a <= x2 and x1 <= c and b <= y2 and y1 <= d
+                for a, b, c, d in bounds_list
+                for x1, y1, x2, y2 in rectangles
+            ):
+                kind = "excluded"
+            else:
+                # Partial involvement: blank context outside selection may stay; real data fails.
+                for area_bounds in bounds_list:
+                    blank_proofs.extend(
+                        _uncovered_blank_proofs(body, sheet_name, area_bounds, rectangles)
+                    )
+                kind = "retained"
+                tail_proofs.extend(blank_proofs)
             for rule in cf:
                 if (
                     rule.tag != f"{{{S}}}cfRule"
@@ -231,13 +284,17 @@ def plan_range_objects(body, sheet_name, fragments):
                     ):
                         _fail("差异样式仅支持已核验字体与填充")
                     used_styles[index] = deepcopy(dxf)
-                receipt[kind].append(
-                    {
-                        "type": "duplicateValues",
-                        "ranges": ranges,
-                        "priority": int(rule.get("priority")),
-                    }
-                )
+                entry = {
+                    "type": "duplicateValues",
+                    "ranges": ranges,
+                    "priority": int(rule.get("priority")),
+                }
+                if blank_proofs:
+                    entry["reason"] = (
+                        "source_verified_blank_conditional_context_preserved_without_expanding_business_fragments"
+                    )
+                    entry["blank_context_rects"] = [list(p["tail"]) for p in blank_proofs]
+                receipt[kind].append(entry)
             if kind == "retained":
                 nodes["conditionalFormatting"].append(deepcopy(cf))
         if len(originals["autoFilter"]) > 1:
@@ -303,7 +360,7 @@ def plan_range_objects(body, sheet_name, fragments):
 def verify_range_objects(body, plan):
     for proof in plan.get("tail_proofs", []):
         if _blank_snapshot(body, plan["sheet"], proof["tail"]) != proof:
-            _fail("过滤器空尾列或源尺寸读回不一致")
+            _fail("空白上下文或源尺寸读回不一致")
     with _package(body) as archive:
         _, sheet = _sheet(archive, plan["sheet"])
         for name, expected in plan["nodes"].items():

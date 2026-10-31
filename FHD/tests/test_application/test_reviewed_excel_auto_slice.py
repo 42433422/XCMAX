@@ -213,3 +213,69 @@ def test_unresolved_open_fragment_cannot_be_exported_as_a_finished_document():
     result["regions"][0]["model_original_range"] = "A1:B5"
     with pytest.raises(ReviewedExcelError, match="未读边界"):
         derive_classified_documents(body, result)
+
+
+def test_prepare_grouping_includes_middle_structure_and_cross_fragment_formulas():
+    """Final grouping input must expose middle rows and cross-fragment formulas, not only ends."""
+    from app.application.reviewed_excel_grouping import prepare_grouping
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "综合"
+    sheet["A103"] = "表头甲"
+    sheet["B103"] = "表头乙"
+    for row in range(104, 125):
+        sheet[f"A{row}"] = f"上段-{row}"
+        sheet[f"B{row}"] = row
+    sheet["A125"] = "续表标题"
+    sheet["B125"] = "数量"
+    for row in range(126, 140):
+        sheet[f"A{row}"] = f"下段-{row}"
+        sheet[f"B{row}"] = row
+    sheet["C139"] = "=SUM(B104:B124)"
+    stream = BytesIO()
+    book.save(stream)
+    body = stream.getvalue()
+    review = inspect_workbook(body)
+    classification = {
+        "source_sha256": review["sha256"],
+        "coverage": [
+            {
+                "sheet": "综合",
+                "unread": [],
+                "unassigned": [],
+                "merged_omitted": 0,
+            }
+        ],
+        "regions": [
+            {
+                "sheet": "综合",
+                "range": "A103:K124",
+                "evidence": [{"sheet": "综合", "cell": "A103"}],
+                "reason": "上段",
+            },
+            {
+                "sheet": "综合",
+                "range": "A125:G203",
+                "evidence": [{"sheet": "综合", "cell": "A125"}],
+                "reason": "下段",
+            },
+        ],
+    }
+    proposal = prepare_grouping(review, classification)
+    cells = {(c["sheet"], c["cell"]) for c in proposal["cells"]}
+    # Middle rows from the upper fragment must be present, not only A103 and the last row.
+    assert ("综合", "A103") in cells
+    assert any(cell.startswith("A11") or cell.startswith("A12") for _, cell in cells)
+    assert ("综合", "A125") in cells
+    assert ("综合", "C139") in cells
+    structure = {(item["sheet"], item["range"]): item for item in proposal["fragment_structure"]}
+    assert structure[("综合", "A103:K124")]["nonempty_cells"] >= 2
+    assert structure[("综合", "A125:G203")]["has_formulas"] is True
+    links = proposal["cross_fragment_formulas"]
+    assert any(
+        link["from_fragment"] == "A125:G203" and link["to_fragment"] == "A103:K124"
+        for link in links
+    )
+    # Evidence is descriptive only: prepare_grouping must not invent merged groups.
+    assert len(proposal["fragments"]) == 2

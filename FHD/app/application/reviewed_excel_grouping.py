@@ -8,6 +8,87 @@ from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 
 
+def _structure_sample_cells(inside: list[dict]) -> list[dict]:
+    """Sample first/middle/last structure rows and formulas; not only first/last cells."""
+    by_row: dict[int, list[dict]] = {}
+    for cell in inside:
+        _, row = coordinate_from_string(cell["cell"])
+        by_row.setdefault(row, []).append(cell)
+    rows = sorted(by_row)
+    chosen_rows = set(rows[:3] + rows[-3:])
+    if len(rows) > 6:
+        for fraction in (0.25, 0.5, 0.75):
+            chosen_rows.add(rows[int((len(rows) - 1) * fraction)])
+    selected: list[dict] = []
+    for row in sorted(chosen_rows):
+        selected.extend(by_row[row][:4])
+    for cell in inside:
+        if cell.get("kind") == "formula":
+            selected.append(cell)
+    return selected
+
+
+def _cross_fragment_formula_links(cells: list[dict], fragments: list[dict]) -> list[dict]:
+    """Describe formula references that touch another fragment; never merge answers."""
+    from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
+    from openpyxl.utils.cell import range_boundaries
+
+    bounds = []
+    for part in fragments:
+        c1, r1, c2, r2 = bounded_range(part["range"])
+        bounds.append((part["sheet"], part["range"], c1, r1, c2, r2))
+    links: list[dict] = []
+    seen: set[tuple] = set()
+    for cell in cells:
+        if cell.get("kind") != "formula":
+            continue
+        owner = None
+        col, row = coordinate_from_string(cell["cell"])
+        col_i = column_index_from_string(col)
+        for sheet, area, c1, r1, c2, r2 in bounds:
+            if cell["sheet"] == sheet and c1 <= col_i <= c2 and r1 <= row <= r2:
+                owner = (sheet, area)
+                break
+        if owner is None:
+            continue
+        try:
+            tokens = Tokenizer(cell["value"]).items
+        except TokenizerError:
+            continue
+        for token in tokens:
+            if token.type != "OPERAND" or token.subtype != "RANGE":
+                continue
+            target = token.value
+            sheet = cell["sheet"]
+            if "!" in target:
+                continue
+            try:
+                tc1, tr1, tc2, tr2 = range_boundaries(target.replace("$", ""))
+            except (TypeError, ValueError):
+                continue
+            if None in (tc1, tr1, tc2, tr2):
+                continue
+            for fsheet, farea, c1, r1, c2, r2 in bounds:
+                if fsheet != sheet or (fsheet, farea) == owner:
+                    continue
+                if tc1 <= c2 and c1 <= tc2 and tr1 <= r2 and r1 <= tr2:
+                    key = (cell["sheet"], cell["cell"], owner[1], farea, target)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    links.append(
+                        {
+                            "from_sheet": cell["sheet"],
+                            "from_cell": cell["cell"],
+                            "from_fragment": owner[1],
+                            "to_fragment": farea,
+                            "to_range": target,
+                            "formula": cell["value"][:500],
+                        }
+                    )
+    return links[:200]
+
+
 def prepare_grouping(review: dict, classification: dict) -> dict:
     """Build a bounded evidence index; never infer relationships from coordinates alone."""
     if review["sha256"] != classification.get("source_sha256"):
@@ -28,6 +109,7 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
     source_cells = review["cells"]
     chosen = {}
     fragments = []
+    fragment_structure = []
     for region in regions:
         sheet, area = region["sheet"], region["range"]
         c1, r1, c2, r2 = bounded_range(area)
@@ -42,8 +124,7 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
             raise ReviewedExcelError("分组片段没有已读内容")
         evidence = {(ref["sheet"], ref["cell"]) for ref in region.get("evidence", [])}
         selected = [
-            inside[0],
-            inside[-1],
+            *_structure_sample_cells(inside),
             *(c for c in inside if (c["sheet"], c["cell"]) in evidence),
         ]
         for cell in selected:
@@ -59,7 +140,21 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
                 "reason": region.get("reason", "")[:1000],
             }
         )
+        first_row = coordinate_from_string(inside[0]["cell"])[1]
+        last_row = coordinate_from_string(inside[-1]["cell"])[1]
+        fragment_structure.append(
+            {
+                "sheet": sheet,
+                "range": area,
+                "nonempty_cells": len(inside),
+                "first_nonempty_row": first_row,
+                "last_nonempty_row": last_row,
+                "has_formulas": any(c.get("kind") == "formula" for c in inside),
+                "reason": region.get("reason", "")[:1000],
+            }
+        )
     cells = list(chosen.values())
+    cross_fragment_formulas = _cross_fragment_formula_links(cells, fragments)
     if len(cells) > 500 or sum(len(c["value"].encode("utf-8")) + 64 for c in cells) > 96_000:
         raise ReviewedExcelError("分组证据超过本轮安全预算")
     from app.application.reviewed_excel_reference_ids import source_sheet_prefixes
@@ -68,6 +163,8 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
         "source_sha256": review["sha256"],
         "fragments": fragments,
         "cells": cells,
+        "fragment_structure": fragment_structure,
+        "cross_fragment_formulas": cross_fragment_formulas,
         "source_sheet_prefixes": source_sheet_prefixes(review["sheets"]),
     }
     if review.get("drawing_evidence"):
@@ -193,6 +290,8 @@ def _range_group_input(group_input: dict) -> tuple[dict, dict]:
         "source_sha256": group_input["source_sha256"],
         "ranges": shown_ranges,
         "cells": group_input["cells"],
+        "fragment_structure": group_input.get("fragment_structure", []),
+        "cross_fragment_formulas": group_input.get("cross_fragment_formulas", []),
     }, source_ranges_schema(list(dimensions.values()))
 
 

@@ -595,6 +595,8 @@ IDENTIFY_PROMPT = (
 RANGE_GROUP_PROMPT = (
     "Group the supplied validated ranges into complete documents using source content. Return documents with nested ranges and reasons, no IDs. "
     "Copy each supplied sheet_name and integer boundary tuple exactly once across all documents; never expand, shrink, duplicate or omit a range. "
+    "cells, fragment_structure and cross_fragment_formulas provide middle-row samples and cross-fragment formula facts; use them to judge continuity. "
+    "Do not auto-merge merely because ranges are adjacent or share a sheet; only group when supplied content supports one business document. "
     "Technical batches are not document boundaries. Adjacency, sheet membership and repeated headers alone do not prove document identity. "
     "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return exactly output_schema."
 )
@@ -729,7 +731,7 @@ _EXPECTED = {
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "group_ranges": (
-        "d60d076fa1d6efa00106083d4391dbb9689da78b311fb6eb83b110b19b5b9111",
+        "148d386102dbae964456964e0a582872b7035dd8ee671d79869a275d58109482",
         "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
     ),
     "identify_atoms": (
