@@ -1640,6 +1640,7 @@ async def reviewed_excel_save(
         selected = json.loads(selections)
         if not isinstance(selected, list):
             raise ReviewedExcelError("清理范围无效")
+        summary_for_ingest: dict = {}
         with tenant_scope(tenant), get_db() as db:
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
@@ -1784,6 +1785,9 @@ async def reviewed_excel_save(
                         status_code=409, detail="模板已写入但审阅回执未确认，请人工核对"
                     )
                 _unlock_review_classification(db, classification_lock, tenant, owner)
+                # Snapshot before session closes: EltRun detaches when get_db() exits,
+                # and post-save auto-ingest must not touch ORM attributes afterward.
+                summary_for_ingest = load_json(run.summary_json, {})
                 db.commit()
             except BOUNDARY_ERRORS:
                 # The legacy library commits in a separate transaction; do not retry or remove
@@ -1794,7 +1798,7 @@ async def reviewed_excel_save(
             from app.application.elt.auto_ingest_service import get_auto_ingest_service
 
             labels: list[str] = []
-            summary = load_json(run.summary_json, {})
+            summary = summary_for_ingest
             selected_region = summary.get("selected_region") or {}
             for key in ("document_type", "semantic_label", "label", "sheet"):
                 val = selected_region.get(key) or summary.get(key)

@@ -1918,12 +1918,13 @@ def test_private_intake_save_skips_enterprise_publish_gate(review_store, monkeyp
     payload = saved.json()
     assert payload["success"] is True
     assert payload["template_id"]
-    # Fixture may detach EltRun before post-save ingest; gate under test is accept private_intake.
     assert "auto_ingest" in payload
-    if started:
-        assert started.get("review_id") == body["review_id"]
-        assert started.get("composer_note") == "整理要求：保留客户与单号"
-        assert "整理要求：保留客户与单号" in (started.get("labels") or [])
+    assert payload["auto_ingest"].get("success") is True
+    assert payload["auto_ingest"].get("batch_id") == "batch-private"
+    # Must start background ingest using plain snapshots (no detached EltRun access).
+    assert started.get("review_id") == body["review_id"]
+    assert started.get("composer_note") == "整理要求：保留客户与单号"
+    assert "整理要求：保留客户与单号" in (started.get("labels") or [])
 
 
 def test_quotation_proposals_identify_table_and_identity_without_touching_rules():
