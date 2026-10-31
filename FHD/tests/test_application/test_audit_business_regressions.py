@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.application.etl.transforms import apply_mapping, apply_transform
+from app.application.elt.transforms import apply_mapping, apply_transform
 from app.domain.approval.safe_dsl import (
     SafeEvaluationError,
     evaluate_condition,

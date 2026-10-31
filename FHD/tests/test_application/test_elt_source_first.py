@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from app.application.etl import service_draft, service_preview, service_preview_worker
-from app.application.etl.errors import EtlError
-from app.application.etl.parser_types import ParsedDataset, ParsedRow
-from app.application.etl.service_support import dump_json, load_json
+from app.application.elt import service_draft, service_preview, service_preview_worker
+from app.application.elt.errors import EltError
+from app.application.elt.parser_types import ParsedDataset, ParsedRow
+from app.application.elt.service_support import dump_json, load_json
 from app.db.models import PurchaseUnit
-from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.test_application.test_etl_preview_task_boundaries import (
     create_preview,
@@ -28,7 +28,7 @@ def wait_for_job(store):
 
 
 def raw_rows(db, run_id):
-    return db.query(EtlRunRow).filter(EtlRunRow.run_id == run_id).order_by(EtlRunRow.id).all()
+    return db.query(EltRunRow).filter(EltRunRow.run_id == run_id).order_by(EltRunRow.id).all()
 
 
 def test_complete_raw_rows_are_visible_before_mapping_and_transformation(
@@ -42,7 +42,7 @@ def test_complete_raw_rows_are_visible_before_mapping_and_transformation(
 
     def inspect_committed_source(stage):
         with store.factory() as reader:
-            run = reader.query(EtlRun).one()
+            run = reader.query(EltRun).one()
             rows = raw_rows(reader, run.id)
             manifest = load_json(run.summary_json, {})["source_snapshot"]
             assert manifest["rows"] == len(rows) == 2
@@ -85,11 +85,11 @@ def test_mapping_failure_retries_from_raw_without_the_uploaded_file(preview_stor
     wait_for_job(store)
     assert snapshot(store, run_id)["status"] == "failed"
     with store.factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         manifest = load_json(run.summary_json, {})["source_snapshot"]
         before = [(row.id, row.source_json, row.provenance_json) for row in raw_rows(db, run_id)]
         assert manifest["rows"] == len(before) == 2
-        Path(db.get(EtlUpload, run.upload_id).storage_path).unlink()
+        Path(db.get(EltUpload, run.upload_id).storage_path).unlink()
 
     def forbidden_parse(*_args, **_kwargs):
         raise AssertionError("recovery must read the committed raw snapshot")
@@ -109,7 +109,7 @@ def test_mapping_failure_retries_from_raw_without_the_uploaded_file(preview_stor
         assert before == [
             (row.id, row.source_json, row.provenance_json) for row in raw_rows(db, run_id)
         ]
-        assert load_json(db.get(EtlRun, run_id).summary_json, {})["source_snapshot"] == manifest
+        assert load_json(db.get(EltRun, run_id).summary_json, {})["source_snapshot"] == manifest
         assert db.query(PurchaseUnit).count() == 0
 
 
@@ -119,7 +119,7 @@ def test_new_transform_preserves_raw_snapshot_and_requires_confirmation(preview_
     run_id = create_preview(store)
     wait_for_job(store)
     with store.factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         source_before = [
             (row.id, row.source_json, row.provenance_json) for row in raw_rows(db, run_id)
         ]
@@ -145,13 +145,13 @@ def test_new_transform_preserves_raw_snapshot_and_requires_confirmation(preview_
         assert source_before == [
             (row.id, row.source_json, row.provenance_json) for row in raw_rows(db, run_id)
         ]
-        assert load_json(db.get(EtlRun, run_id).summary_json, {})["source_snapshot"] == manifest
+        assert load_json(db.get(EltRun, run_id).summary_json, {})["source_snapshot"] == manifest
         assert db.query(PurchaseUnit).count() == 0
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             store.service.execute(
                 db, run_id=run_id, owner_user_id=7, confirmed=False, valid_rows_only=False
             )
-        assert error.value.code == "ETL_CONFIRMATION_REQUIRED"
+        assert error.value.code == "ELT_CONFIRMATION_REQUIRED"
 
 
 def test_structured_execution_uses_loaded_rows_after_upload_expiry(preview_store, monkeypatch):
@@ -160,8 +160,8 @@ def test_structured_execution_uses_loaded_rows_after_upload_expiry(preview_store
     run_id = create_preview(store)
     wait_for_job(store)
     with store.factory() as db:
-        run = db.get(EtlRun, run_id)
-        upload = db.get(EtlUpload, run.upload_id)
+        run = db.get(EltRun, run_id)
+        upload = db.get(EltUpload, run.upload_id)
         Path(upload.storage_path).unlink()
         upload.storage_path = ""
         upload.expires_at = datetime.now(UTC) - timedelta(days=1)
@@ -193,7 +193,7 @@ def test_corrupt_source_snapshot_is_rejected(preview_store, monkeypatch, damage)
     run_id = create_preview(store)
     wait_for_job(store)
     with store.factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         rows = raw_rows(db, run_id)
         if damage == "source":
             rows[0].source_json = dump_json({"客户名称": "tampered"})
@@ -204,9 +204,9 @@ def test_corrupt_source_snapshot_is_rejected(preview_store, monkeypatch, damage)
             summary["source_snapshot"]["profile"]["target_type"] = "products"
             run.summary_json = dump_json(summary)
         db.commit()
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             store.service._load_source_snapshot(db, run)
-        assert error.value.code == "ETL_SOURCE_SNAPSHOT_INVALID"
+        assert error.value.code == "ELT_SOURCE_SNAPSHOT_INVALID"
         assert db.query(PurchaseUnit).count() == 0
 
 
@@ -227,7 +227,7 @@ def test_failed_raw_load_never_commits_partial_rows_or_completion_marker(
     wait_for_job(store)
     assert snapshot(store, run_id)["status"] == "failed"
     with store.factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         assert "source_snapshot" not in load_json(run.summary_json, {})
         assert raw_rows(db, run_id) == []
         assert db.query(PurchaseUnit).count() == 0
@@ -245,7 +245,7 @@ def test_empty_source_has_a_completed_reusable_snapshot(preview_store, monkeypat
     wait_for_job(store)
     assert snapshot(store, run_id)["status"] == "preview_ready"
     with store.factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         manifest = load_json(run.summary_json, {})["source_snapshot"]
         assert manifest["rows"] == 0
         source = store.service._load_source_snapshot(db, run)
@@ -262,7 +262,7 @@ def test_loaded_source_remains_private_to_tenant_and_owner(
     run_id = create_preview(store)
     wait_for_job(store)
     with tenant_scope(tenant), store.factory() as db:
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             store.service.get_run(db, run_id=run_id, owner_user_id=owner)
         assert error.value.status_code == 404
 
@@ -276,9 +276,9 @@ def test_preview_ready_and_owner_release_are_published_in_one_transaction(
     observed = []
 
     def inspect_before_release(db, owner):
-        assert db.get(EtlRun, owner.run_id).status == "preview_ready"
+        assert db.get(EltRun, owner.run_id).status == "preview_ready"
         with store.factory() as reader:
-            persisted = reader.get(EtlRun, owner.run_id)
+            persisted = reader.get(EltRun, owner.run_id)
             assert persisted.status == "previewing"
             assert persisted.stage == "transforming"
             assert persisted.operation_token == owner.token

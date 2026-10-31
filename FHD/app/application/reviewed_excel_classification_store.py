@@ -5,21 +5,21 @@ import hashlib
 from fastapi import HTTPException
 from sqlalchemy import update
 
-from app.application.etl.errors import ReviewedExcelError
-from app.application.etl.service_support import dump_json
-from app.db.models.etl import EtlRun
+from app.application.elt.errors import ReviewedExcelError
+from app.application.elt.service_support import dump_json
+from app.db.models.elt import EltRun
 
 _CLASS_READY = "classification_ready"
 
 
 def _classification_run(db, classification_id, tenant, owner):
     run = (
-        db.query(EtlRun)
+        db.query(EltRun)
         .filter(
-            EtlRun.id == classification_id,
-            EtlRun.tenant_id == tenant,
-            EtlRun.owner_user_id == owner,
-            EtlRun.target_type == "template_classification",
+            EltRun.id == classification_id,
+            EltRun.tenant_id == tenant,
+            EltRun.owner_user_id == owner,
+            EltRun.target_type == "template_classification",
         )
         .first()
     )
@@ -136,13 +136,13 @@ def _confirmed_document_count(review, latest, groups, independent_confirmed):
 
 def _classification_cas(db, run, old_draft, state):
     result = db.execute(
-        update(EtlRun)
+        update(EltRun)
         .where(
-            EtlRun.id == run.id,
-            EtlRun.tenant_id == run.tenant_id,
-            EtlRun.owner_user_id == run.owner_user_id,
-            EtlRun.status == _CLASS_READY,
-            EtlRun.draft_json == old_draft,
+            EltRun.id == run.id,
+            EltRun.tenant_id == run.tenant_id,
+            EltRun.owner_user_id == run.owner_user_id,
+            EltRun.status == _CLASS_READY,
+            EltRun.draft_json == old_draft,
         )
         .values(draft_json=dump_json(state))
     )

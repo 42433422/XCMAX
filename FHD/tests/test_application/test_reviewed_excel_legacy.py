@@ -11,10 +11,10 @@ from openpyxl import load_workbook
 from sqlalchemy.orm import sessionmaker
 
 from app.application import reviewed_excel_legacy as legacy
-from app.application.etl.errors import ReviewedExcelError
-from app.application.etl.service_support import dump_json, load_json
-from app.db.models.etl import EtlRun, EtlUpload
-from app.db.models.etl_archive import EtlArchiveQuota, EtlArchiveVersion
+from app.application.elt.errors import ReviewedExcelError
+from app.application.elt.service_support import dump_json, load_json
+from app.db.models.elt import EltRun, EltUpload
+from app.db.models.elt_archive import EltArchiveQuota, EltArchiveVersion
 from app.fastapi_routes.reviewed_excel_template import _source
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.etl_template.legacy_biff import fixture, record
@@ -155,16 +155,16 @@ def test_archive_separate_hashes_quota_and_persisted_restrictions(review_store):
         original.content == fixture() and "original.xls" in original.headers["content-disposition"]
     )
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        run = db.get(EtlRun, item["classification_id"])
+        run = db.get(EltRun, item["classification_id"])
         assert _source(db, run, 1, 7) == derived
-        assert db.get(EtlArchiveQuota, 1).reserved_bytes == len(fixture()) + len(derived)
-        assert db.get(EtlUpload, run.upload_id).expires_at is None
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == len(fixture()) + len(derived)
+        assert db.get(EltUpload, run.upload_id).expires_at is None
         assert load_json(run.summary_json, {})["usage_restrictions"]
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException):
             _source(db, run, 1, 99)
-        Path(db.get(EtlUpload, run.upload_id).storage_path).write_bytes(b"tampered")
+        Path(db.get(EltUpload, run.upload_id).storage_path).write_bytes(b"tampered")
         with pytest.raises(HTTPException):
             _source(db, run, 1, 7)
 
@@ -202,7 +202,7 @@ def test_no_consent_never_creates_archive(review_store):
     )
     assert response.status_code == 400
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        assert db.query(EtlArchiveVersion).count() == db.query(EtlRun).count() == 0
+        assert db.query(EltArchiveVersion).count() == db.query(EltRun).count() == 0
 
 
 def test_http_preview_download_allowed_but_formal_save_blocked_by_server_lineage(review_store):
@@ -244,7 +244,7 @@ def test_http_preview_download_allowed_but_formal_save_blocked_by_server_lineage
     assert download.status_code == 200
     # Remove mutable latest state to prove the immutable server summary is enough.
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
-        run = db.get(EtlRun, item["classification_id"])
+        run = db.get(EltRun, item["classification_id"])
         state = load_json(run.draft_json, {})
         state["versions"][-1].pop("usage_restrictions", None)
         state["versions"][-1].pop("conversion_receipt", None)

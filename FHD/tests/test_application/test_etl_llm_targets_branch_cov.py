@@ -23,8 +23,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
-from app.application.etl.targets.targets_base import (
+from app.application.elt.errors import EltConflict, EltError, EltNotFound
+from app.application.elt.targets.targets_base import (
     PreviewDecision,
     TargetAdapter,
     TargetField,
@@ -37,7 +37,7 @@ from app.db.db_base import Base
 
 @pytest.fixture(autouse=True)
 def _reset_llm_circuit():
-    from app.application.etl.llm_assist import clear_etl_llm_circuit
+    from app.application.elt.llm_assist import clear_etl_llm_circuit
 
     clear_etl_llm_circuit()
     yield
@@ -73,13 +73,13 @@ def session():
 
 
 def test_etl_errors():
-    e = EtlError("CODE", "msg")
+    e = EltError("CODE", "msg")
     assert e.code == "CODE" and e.message == "msg" and e.status_code == 400
     assert isinstance(e, RuntimeError)
-    nf = EtlNotFound("资源")
-    assert nf.code == "ETL_NOT_FOUND" and nf.status_code == 404
+    nf = EltNotFound("资源")
+    assert nf.code == "ELT_NOT_FOUND" and nf.status_code == 404
     assert "不存在或无权访问" in nf.message
-    cf = EtlConflict("C", "m")
+    cf = EltConflict("C", "m")
     assert cf.status_code == 409 and cf.code == "C"
 
 
@@ -115,18 +115,18 @@ def test_target_adapter_validate_and_defaults():
     a = TargetAdapter()
     a.fields = (TargetField("k", "字段", required=True),)
     issues = a.validate({"k": ""})
-    assert issues and issues[0]["code"] == "ETL_REQUIRED_FIELD_MISSING"
+    assert issues and issues[0]["code"] == "ELT_REQUIRED_FIELD_MISSING"
     assert a.validate({"k": "v"}) == []
     dec = a.preview(MagicMock(), {"k": "v"}, allowed_update_fields=set(), context={})
     assert dec.action == "new"
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.execute_row(
             MagicMock(), {}, action="new", match_ref="", allowed_update_fields=set(), context={}
         )
-    assert ex.value.code == "ETL_TARGET_NOT_IMPLEMENTED"
-    with pytest.raises(EtlError) as ex2:
+    assert ex.value.code == "ELT_TARGET_NOT_IMPLEMENTED"
+    with pytest.raises(EltError) as ex2:
         a.rollback_row(MagicMock(), match_ref="", before={}, after={}, context={})
-    assert ex2.value.code == "ETL_TARGET_NOT_REVERSIBLE"
+    assert ex2.value.code == "ELT_TARGET_NOT_REVERSIBLE"
     assert isinstance(PreviewDecision("new"), PreviewDecision)
 
 
@@ -134,7 +134,7 @@ def test_target_adapter_validate_and_defaults():
 
 
 def test_llm_assist_mode_and_limits(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     monkeypatch.setenv("FHD_ETL_LLM", "0")
     assert llm_assist.etl_llm_mode() == "off"
@@ -167,7 +167,7 @@ def test_llm_assist_mode_and_limits(monkeypatch):
 
 
 def test_llm_assist_public_metadata():
-    from app.application.etl.llm_assist import LlmAssistResult
+    from app.application.elt.llm_assist import LlmAssistResult
 
     r = LlmAssistResult()
     meta = r.public_metadata()
@@ -184,51 +184,51 @@ def test_llm_assist_public_metadata():
 
 
 def test_llm_assist_degradation_code_exception_types():
-    from app.application.etl.llm_assist import (
+    from app.application.elt.llm_assist import (
         _circuit_cooldown_seconds,
         _circuit_key,
         _degradation_code,
         _owner_call_lock,
     )
 
-    assert _degradation_code(RuntimeError("quota exhausted")) == "ETL_LLM_QUOTA_EXHAUSTED"
-    assert _degradation_code(RuntimeError("429 Too Many")) == "ETL_LLM_QUOTA_EXHAUSTED"
-    assert _degradation_code(RuntimeError("额度不足")) == "ETL_LLM_QUOTA_EXHAUSTED"
-    assert _degradation_code(RuntimeError("boom")) == "ETL_LLM_UNAVAILABLE"
+    assert _degradation_code(RuntimeError("quota exhausted")) == "ELT_LLM_QUOTA_EXHAUSTED"
+    assert _degradation_code(RuntimeError("429 Too Many")) == "ELT_LLM_QUOTA_EXHAUSTED"
+    assert _degradation_code(RuntimeError("额度不足")) == "ELT_LLM_QUOTA_EXHAUSTED"
+    assert _degradation_code(RuntimeError("boom")) == "ELT_LLM_UNAVAILABLE"
 
-    assert _circuit_cooldown_seconds("ETL_LLM_QUOTA_EXHAUSTED") == 300.0
-    assert _circuit_cooldown_seconds("ETL_LLM_UNAVAILABLE") == 30.0
+    assert _circuit_cooldown_seconds("ELT_LLM_QUOTA_EXHAUSTED") == 300.0
+    assert _circuit_cooldown_seconds("ELT_LLM_UNAVAILABLE") == 30.0
     assert _owner_call_lock("k1") is _owner_call_lock("k1")
 
 
 def test_llm_assist_circuit_key(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
-    with patch("app.application.etl.llm_session_provider.current_etl_llm_owner", return_value=7):
+    with patch("app.application.elt.llm_session_provider.current_etl_llm_owner", return_value=7):
         assert llm_assist._circuit_key() == "owner:7"
-    with patch("app.application.etl.llm_session_provider.current_etl_llm_owner", return_value=None):
+    with patch("app.application.elt.llm_session_provider.current_etl_llm_owner", return_value=None):
         assert llm_assist._circuit_key() == "process"
     with patch(
-        "app.application.etl.llm_session_provider.current_etl_llm_owner",
+        "app.application.elt.llm_session_provider.current_etl_llm_owner",
         side_effect=RuntimeError("no ctx"),
     ):
         assert llm_assist._circuit_key() == "process"
 
 
 def test_llm_assist_circuit_crud(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     assert llm_assist._circuit_degradation("ck") == ""
     monkeypatch.setenv("FHD_ETL_LLM_FAILURE_COOLDOWN_SECONDS", "bad")
     monkeypatch.setenv("FHD_ETL_LLM_QUOTA_COOLDOWN_SECONDS", "bad")
-    llm_assist._open_circuit("ck", "ETL_LLM_UNAVAILABLE")
-    assert llm_assist._circuit_degradation("ck") == "ETL_LLM_UNAVAILABLE"
+    llm_assist._open_circuit("ck", "ELT_LLM_UNAVAILABLE")
+    assert llm_assist._circuit_degradation("ck") == "ELT_LLM_UNAVAILABLE"
     llm_assist.clear_etl_llm_circuit()
     assert llm_assist._circuit_degradation("ck") == ""
 
 
 def test_llm_assist_bounded_completion_success(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
     from app.infrastructure.llm.structured_output import StructuredResult
 
     captured = {}
@@ -255,7 +255,7 @@ def test_llm_assist_bounded_completion_success(monkeypatch):
 
 
 def test_llm_assist_bounded_completion_error(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     def boom(*a, **k):
         raise RuntimeError("llm down")
@@ -268,7 +268,7 @@ def test_llm_assist_bounded_completion_error(monkeypatch):
 
 
 def test_llm_assist_bounded_completion_timeout(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     def slow(*a, **k):
         import time
@@ -284,14 +284,14 @@ def test_llm_assist_bounded_completion_timeout(monkeypatch):
 
 
 def test_llm_assist_active_software_llm(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     class FakeProvider:
         pass
 
     # market provider path
     with patch(
-        "app.application.etl.llm_session_provider.current_owner_market_provider",
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
         return_value=FakeProvider(),
     ):
         configured, service, provider = llm_assist._active_software_llm()
@@ -300,7 +300,7 @@ def test_llm_assist_active_software_llm(monkeypatch):
     # registry active provider path
     with (
         patch(
-            "app.application.etl.llm_session_provider.current_owner_market_provider",
+            "app.application.elt.llm_session_provider.current_owner_market_provider",
             return_value=None,
         ),
         patch(
@@ -313,7 +313,7 @@ def test_llm_assist_active_software_llm(monkeypatch):
     # conversation service path
     with (
         patch(
-            "app.application.etl.llm_session_provider.current_owner_market_provider",
+            "app.application.elt.llm_session_provider.current_owner_market_provider",
             return_value=None,
         ),
         patch(
@@ -331,7 +331,7 @@ def test_llm_assist_active_software_llm(monkeypatch):
     # none configured
     with (
         patch(
-            "app.application.etl.llm_session_provider.current_owner_market_provider",
+            "app.application.elt.llm_session_provider.current_owner_market_provider",
             return_value=None,
         ),
         patch("app.infrastructure.llm.providers.registry.get_active_provider", return_value=None),
@@ -344,29 +344,29 @@ def test_llm_assist_active_software_llm(monkeypatch):
 
     # recoverable error
     with patch(
-        "app.application.etl.llm_session_provider.current_owner_market_provider",
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
         side_effect=RuntimeError("boom"),
     ):
         assert llm_assist._active_software_llm() == (False, None, None)
 
 
 def test_llm_assist_enabled(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     monkeypatch.setenv("FHD_ETL_LLM", "off")
     assert llm_assist.etl_llm_enabled() is False
     monkeypatch.setenv("FHD_ETL_LLM", "auto")
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(True, None, None)
     ):
         assert llm_assist.etl_llm_enabled() is True
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(False, None, None)
     ):
         assert llm_assist.etl_llm_enabled() is False
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(False, None, None)
     ):
         assert llm_assist.etl_llm_enabled() is True
 
@@ -381,7 +381,7 @@ def _patch_complete(monkeypatch, data):
 
 
 def test_llm_assist_complete_off_and_not_configured(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     monkeypatch.setenv("FHD_ETL_LLM", "off")
     r = llm_assist._complete([], schema={}, max_tokens=1)
@@ -389,26 +389,26 @@ def test_llm_assist_complete_off_and_not_configured(monkeypatch):
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(False, None, None)
     ):
         r2 = llm_assist._complete([], schema={}, max_tokens=1)
-        assert r2.degraded is True and r2.degradation_code == "ETL_LLM_UNAVAILABLE"
+        assert r2.degraded is True and r2.degradation_code == "ELT_LLM_UNAVAILABLE"
 
     monkeypatch.setenv("FHD_ETL_LLM", "auto")
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(False, None, None)
     ):
         r3 = llm_assist._complete([], schema={}, max_tokens=1)
         assert r3.degraded is False and r3.degradation_code == ""
 
 
 def test_llm_assist_complete_success_and_circuit(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     _patch_complete(monkeypatch, {"regions": []})
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(True, None, None)
     ):
         r = llm_assist._complete([], schema={}, max_tokens=1)
         assert r.used_llm is True and r.model == "m" and r.billing == {"b": 1}
@@ -419,26 +419,26 @@ def test_llm_assist_complete_success_and_circuit(monkeypatch):
 
     monkeypatch.setattr("app.infrastructure.llm.structured_output.complete_structured_sync", boom)
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(True, None, None)
     ):
         r2 = llm_assist._complete([], schema={}, max_tokens=1)
-        assert r2.degraded is True and r2.degradation_code == "ETL_LLM_QUOTA_EXHAUSTED"
+        assert r2.degraded is True and r2.degradation_code == "ELT_LLM_QUOTA_EXHAUSTED"
         r3 = llm_assist._complete([], schema={}, max_tokens=1)
-        assert r3.degraded is True and r3.degradation_code == "ETL_LLM_QUOTA_EXHAUSTED"
+        assert r3.degraded is True and r3.degradation_code == "ELT_LLM_QUOTA_EXHAUSTED"
 
 
 def test_llm_assist_circuit_blocked_before_call(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
-    llm_assist._open_circuit("process", "ETL_LLM_UNAVAILABLE")
+    llm_assist._open_circuit("process", "ELT_LLM_UNAVAILABLE")
     # _circuit_key returns "process" when no owner
     r = llm_assist._complete([], schema={}, max_tokens=1)
     assert r.degraded is True
 
 
 def test_llm_assist_advise_workbook_regions(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     assert llm_assist.advise_workbook_regions([]).used_llm is False
     monkeypatch.setenv("FHD_ETL_LLM", "on")
@@ -472,7 +472,7 @@ def test_llm_assist_advise_workbook_regions(monkeypatch):
         {"region_id": "r2", "sheet": "S2"},
     ]
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(True, None, None)
     ):
         out = llm_assist.advise_workbook_regions(probes)
     assert out.used_llm is True
@@ -482,7 +482,7 @@ def test_llm_assist_advise_workbook_regions(monkeypatch):
 
 
 def test_llm_assist_advise_field_mappings(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     assert (
         llm_assist.advise_field_mappings(headers=[], samples={}, target_fields=[]).used_llm is False
@@ -529,7 +529,7 @@ def test_llm_assist_advise_field_mappings(monkeypatch):
         },
     )
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(True, None, None)
     ):
         out = llm_assist.advise_field_mappings(
             headers=["a"], samples={"a": ["v1", "v2"]}, target_fields=[{"key": "f1"}]
@@ -539,7 +539,7 @@ def test_llm_assist_advise_field_mappings(monkeypatch):
 
 
 def test_llm_assist_advise_row_decisions(monkeypatch):
-    from app.application.etl import llm_assist
+    from app.application.elt import llm_assist
 
     assert llm_assist.advise_row_decisions([]).used_llm is False
     monkeypatch.setenv("FHD_ETL_LLM", "on")
@@ -566,7 +566,7 @@ def test_llm_assist_advise_row_decisions(monkeypatch):
         for _ in range(2)
     ]
     with patch(
-        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+        "app.application.elt.llm_assist._active_software_llm", return_value=(True, None, None)
     ):
         out = llm_assist.advise_row_decisions(payloads)
     assert out.data["items"] == [{"index": 0, "action": "new", "reason": "ok"}]
@@ -576,14 +576,14 @@ def test_llm_assist_advise_row_decisions(monkeypatch):
 
 
 def test_session_provider_is_configured():
-    from app.application.etl.llm_session_provider import SessionMarketProvider
+    from app.application.elt.llm_session_provider import SessionMarketProvider
 
     assert SessionMarketProvider(1, "tok", timeout_seconds=3.0).is_configured is True
     assert SessionMarketProvider(1, "", timeout_seconds=3.0).is_configured is False
 
 
 def test_session_provider_owner_bind(monkeypatch):
-    from app.application.etl import llm_session_provider as mod
+    from app.application.elt import llm_session_provider as mod
 
     assert mod.current_etl_llm_owner() is None
     token = mod.bind_etl_llm_owner(42)
@@ -593,7 +593,7 @@ def test_session_provider_owner_bind(monkeypatch):
 
 
 def test_current_owner_market_provider(monkeypatch):
-    from app.application.etl import llm_session_provider as mod
+    from app.application.elt import llm_session_provider as mod
 
     assert mod.current_owner_market_provider(timeout_seconds=1.0) is None
     token = mod.bind_etl_llm_owner(3)
@@ -612,7 +612,7 @@ def test_current_owner_market_provider(monkeypatch):
 
 
 def test_session_provider_chat_completion_success(monkeypatch):
-    from app.application.etl.llm_session_provider import SessionMarketProvider
+    from app.application.elt.llm_session_provider import SessionMarketProvider
 
     class FakeResp:
         def raise_for_status(self):
@@ -657,7 +657,7 @@ def test_session_provider_chat_completion_success(monkeypatch):
 
 
 def test_session_provider_chat_completion_route_failure(monkeypatch):
-    from app.application.etl.llm_session_provider import SessionMarketProvider
+    from app.application.elt.llm_session_provider import SessionMarketProvider
 
     class FakeResp:
         def raise_for_status(self):
@@ -689,9 +689,9 @@ def test_session_provider_chat_completion_route_failure(monkeypatch):
 
 
 def test_etl_row_adviser_fallback():
-    from app.application.etl.adviser import EtlRowAdviser
+    from app.application.elt.adviser import EltRowAdviser
 
-    fb = EtlRowAdviser.fallback(
+    fb = EltRowAdviser.fallback(
         deterministic_action="new",
         deterministic_reason="",
         normalized={},
@@ -704,9 +704,9 @@ def test_etl_row_adviser_fallback():
 
 
 def test_etl_row_adviser_no_provider():
-    from app.application.etl.adviser import EtlRowAdviser
+    from app.application.elt.adviser import EltRowAdviser
 
-    adv = EtlRowAdviser()
+    adv = EltRowAdviser()
     out = adv.suggest(
         deterministic_action="skip", deterministic_reason="r", normalized={}, before={}, after={}
     )
@@ -714,10 +714,10 @@ def test_etl_row_adviser_no_provider():
 
 
 def test_etl_row_adviser_provider_branches():
-    from app.application.etl.adviser import EtlRowAdviser
+    from app.application.elt.adviser import EltRowAdviser
 
     # provider raises
-    adv = EtlRowAdviser(provider=lambda row: (_ for _ in ()).throw(RuntimeError("boom")))
+    adv = EltRowAdviser(provider=lambda row: (_ for _ in ()).throw(RuntimeError("boom")))
     out = adv.suggest(
         deterministic_action="new",
         deterministic_reason="r",
@@ -725,24 +725,24 @@ def test_etl_row_adviser_provider_branches():
         before={},
         after={},
     )
-    assert out["degraded"] is True and out["degradation_code"] == "ETL_LLM_UNAVAILABLE"
+    assert out["degraded"] is True and out["degradation_code"] == "ELT_LLM_UNAVAILABLE"
 
     # provider returns non-dict
-    adv2 = EtlRowAdviser(provider=lambda row: "nope")
+    adv2 = EltRowAdviser(provider=lambda row: "nope")
     out2 = adv2.suggest(
         deterministic_action="new", deterministic_reason="r", normalized={}, before={}, after={}
     )
-    assert out2["degradation_code"] == "ETL_LLM_INVALID_RESPONSE"
+    assert out2["degradation_code"] == "ELT_LLM_INVALID_RESPONSE"
 
     # invalid action
-    adv3 = EtlRowAdviser(provider=lambda row: {"action": "delete", "reason": "x"})
+    adv3 = EltRowAdviser(provider=lambda row: {"action": "delete", "reason": "x"})
     out3 = adv3.suggest(
         deterministic_action="new", deterministic_reason="r", normalized={}, before={}, after={}
     )
-    assert out3["degradation_code"] == "ETL_LLM_INVALID_ACTION"
+    assert out3["degradation_code"] == "ELT_LLM_INVALID_ACTION"
 
     # valid
-    adv4 = EtlRowAdviser(provider=lambda row: {"action": "update", "reason": "good"})
+    adv4 = EltRowAdviser(provider=lambda row: {"action": "update", "reason": "good"})
     out4 = adv4.suggest(
         deterministic_action="new", deterministic_reason="r", normalized={}, before={}, after={}
     )
@@ -750,7 +750,7 @@ def test_etl_row_adviser_provider_branches():
 
 
 def test_etl_row_adviser_suggest_many():
-    from app.application.etl.adviser import EtlRowAdviser
+    from app.application.elt.adviser import EltRowAdviser
 
     rows = [
         {
@@ -762,14 +762,14 @@ def test_etl_row_adviser_suggest_many():
         }
     ]
     # empty
-    assert EtlRowAdviser().suggest_many([]) == []
+    assert EltRowAdviser().suggest_many([]) == []
     # no batch provider -> per-row suggest
-    adv = EtlRowAdviser(provider=lambda row: {"action": "skip", "reason": "s"})
+    adv = EltRowAdviser(provider=lambda row: {"action": "skip", "reason": "s"})
     outs = adv.suggest_many(rows)
     assert outs[0]["used_llm"] is True and outs[0]["action"] == "skip"
 
     # batch provider success
-    adv2 = EtlRowAdviser(
+    adv2 = EltRowAdviser(
         batch_provider=lambda payloads: {
             "items": [{"index": 0, "action": "update", "reason": "ok"}],
             "metadata": {"used_llm": True, "model": "m"},
@@ -779,17 +779,17 @@ def test_etl_row_adviser_suggest_many():
     assert outs2[0]["used_llm"] is True and outs2[0]["model"] == "m"
 
     # batch provider raises
-    adv3 = EtlRowAdviser(batch_provider=lambda p: (_ for _ in ()).throw(RuntimeError("boom")))
+    adv3 = EltRowAdviser(batch_provider=lambda p: (_ for _ in ()).throw(RuntimeError("boom")))
     outs3 = adv3.suggest_many(rows)
     assert outs3[0]["degraded"] is True
 
     # non-dict result
-    adv4 = EtlRowAdviser(batch_provider=lambda p: "x")
+    adv4 = EltRowAdviser(batch_provider=lambda p: "x")
     outs4 = adv4.suggest_many(rows)
     assert outs4[0]["used_llm"] is False
 
     # degraded metadata
-    adv5 = EtlRowAdviser(
+    adv5 = EltRowAdviser(
         batch_provider=lambda p: {
             "items": [],
             "metadata": {"degraded": True, "degradation_code": "X"},
@@ -799,12 +799,12 @@ def test_etl_row_adviser_suggest_many():
     assert outs5[0]["degraded"] is True and outs5[0]["degradation_code"] == "X"
 
     # metadata not used_llm
-    adv6 = EtlRowAdviser(batch_provider=lambda p: {"items": [], "metadata": {"used_llm": False}})
+    adv6 = EltRowAdviser(batch_provider=lambda p: {"items": [], "metadata": {"used_llm": False}})
     outs6 = adv6.suggest_many(rows)
     assert outs6[0]["used_llm"] is False
 
     # bad item index / bad index type / non-dict item
-    adv7 = EtlRowAdviser(
+    adv7 = EltRowAdviser(
         batch_provider=lambda p: {
             "items": [
                 "x",
@@ -821,48 +821,48 @@ def test_etl_row_adviser_suggest_many():
 
 
 def test_etl_row_adviser_default_batch_provider(monkeypatch):
-    from app.application.etl import adviser
+    from app.application.elt import adviser
 
     result = {"data": {"items": [{"index": 0, "action": "skip", "reason": "r"}]}}
     result_obj = MagicMock()
     result_obj.data = result["data"]
     result_obj.public_metadata.return_value = {"used_llm": True}
-    with patch("app.application.etl.llm_assist.advise_row_decisions", return_value=result_obj):
+    with patch("app.application.elt.llm_assist.advise_row_decisions", return_value=result_obj):
         out = adviser._default_batch_provider([{}])
         assert out["metadata"]["used_llm"] is True
-    assert isinstance(adviser.get_etl_row_adviser(), adviser.EtlRowAdviser)
+    assert isinstance(adviser.get_elt_row_adviser(), adviser.EltRowAdviser)
 
 
 # --------------------------------------------------------------------------- compatibility_presets.py
 
 
 def test_validate_compatibility_preset(monkeypatch):
-    from app.application.etl import compatibility_presets as cp
+    from app.application.elt import compatibility_presets as cp
 
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         cp.validate_compatibility_preset("p", target_type="bogus", upload_suffix=".xlsx")
-    assert ex.value.code == "ETL_COMPATIBILITY_PRESET_TARGET_MISMATCH"
+    assert ex.value.code == "ELT_COMPATIBILITY_PRESET_TARGET_MISMATCH"
 
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         cp.validate_compatibility_preset("p", target_type="customers", upload_suffix=".csv")
-    assert ex.value.code == "ETL_COMPATIBILITY_PRESET_FILE_UNSUPPORTED"
+    assert ex.value.code == "ELT_COMPATIBILITY_PRESET_FILE_UNSUPPORTED"
 
     with patch("app.application.shipment_etl_profile.list_profiles", side_effect=RuntimeError("x")):
-        with pytest.raises(EtlError) as ex:
+        with pytest.raises(EltError) as ex:
             cp.validate_compatibility_preset("p", target_type="customers", upload_suffix=".xlsx")
         assert (
-            ex.value.code == "ETL_COMPATIBILITY_PRESET_UNAVAILABLE" and ex.value.status_code == 503
+            ex.value.code == "ELT_COMPATIBILITY_PRESET_UNAVAILABLE" and ex.value.status_code == 503
         )
 
     with patch(
         "app.application.shipment_etl_profile.list_profiles",
         return_value=[{"id": "a"}, {"id": "b"}, "junk"],
     ):
-        with pytest.raises(EtlError) as ex:
+        with pytest.raises(EltError) as ex:
             cp.validate_compatibility_preset(
                 "missing", target_type="customers", upload_suffix=".xlsx"
             )
-        assert ex.value.code == "ETL_COMPATIBILITY_PRESET_NOT_FOUND" and ex.value.status_code == 404
+        assert ex.value.code == "ELT_COMPATIBILITY_PRESET_NOT_FOUND" and ex.value.status_code == 404
 
         # valid path
         cp.validate_compatibility_preset("a", target_type="products", upload_suffix=".xlsm")
@@ -872,7 +872,7 @@ def test_validate_compatibility_preset(monkeypatch):
 
 
 def test_helpers_issue_optional_decimal():
-    from app.application.etl.targets import helpers
+    from app.application.elt.targets import helpers
 
     assert helpers.issue("C", "f", "m") == {
         "code": "C",
@@ -886,24 +886,24 @@ def test_helpers_issue_optional_decimal():
     assert helpers.decimal_or_zero("1,000") == Decimal("1000")
     assert helpers.decimal_or_zero(None) == Decimal("0")
     assert helpers.decimal_or_zero("3.5") == Decimal("3.5")
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         helpers.decimal_or_zero("abc")
-    assert ex.value.code == "ETL_NUMBER_INVALID"
+    assert ex.value.code == "ELT_NUMBER_INVALID"
 
 
 def test_helpers_parse_date():
-    from app.application.etl.targets import helpers
+    from app.application.elt.targets import helpers
 
     assert helpers.parse_date(datetime(2024, 1, 2, 3, 4)) == date(2024, 1, 2)
     assert helpers.parse_date(date(2024, 1, 2)) == date(2024, 1, 2)
     assert helpers.parse_date("2024-01-02") == date(2024, 1, 2)
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         helpers.parse_date("not-a-date")
-    assert ex.value.code == "ETL_DATE_INVALID"
+    assert ex.value.code == "ELT_DATE_INVALID"
 
 
 def test_helpers_model_values_and_compare():
-    from app.application.etl.targets import helpers
+    from app.application.elt.targets import helpers
 
     obj = MagicMock()
     obj.price = Decimal("1.50")
@@ -927,7 +927,7 @@ def test_helpers_model_values_and_compare():
 
 
 def test_helpers_rollback_assertions():
-    from app.application.etl.targets import helpers
+    from app.application.elt.targets import helpers
 
     fields = (TargetField("price", "价格"), TargetField("name", "名称"))
     obj = MagicMock()
@@ -936,23 +936,23 @@ def test_helpers_rollback_assertions():
 
     # _changed_image_fields path: before/after differ -> assert matches
     helpers.assert_rollback_image_matches(obj, {"price": "1.5"}, {"price": "1.5"}, fields, "产品")
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         helpers.assert_rollback_image_matches(obj, {"price": "1.5"}, {"price": "9"}, fields, "产品")
-    assert ex.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert ex.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
 
     helpers.assert_created_row_unchanged(obj, {"name": "x"}, fields, "产品")
-    with pytest.raises(EtlError) as ex2:
+    with pytest.raises(EltError) as ex2:
         helpers.assert_created_row_unchanged(obj, {"name": "CHANGED"}, fields, "产品")
-    assert ex2.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert ex2.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
 
     helpers.assert_snapshot_unchanged(obj, {"id": 1, "created_at": "x", "price": "1.5"}, "发货记录")
-    with pytest.raises(EtlError) as ex3:
+    with pytest.raises(EltError) as ex3:
         helpers.assert_snapshot_unchanged(obj, {"price": "9"}, "发货记录")
-    assert ex3.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert ex3.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
 
 
 def test_helpers_uploaded_document_path(tmp_path):
-    from app.application.etl.targets import helpers
+    from app.application.elt.targets import helpers
 
     assert helpers.is_uploaded_document_path("x", {}) is False
     p = tmp_path / "f.xlsx"
@@ -965,45 +965,45 @@ def test_helpers_uploaded_document_path(tmp_path):
 
 
 def test_helpers_webhook_url(monkeypatch):
-    from app.application.etl.targets import helpers
+    from app.application.elt.targets import helpers
 
     monkeypatch.delenv("FHD_ETL_ALLOW_HTTP_WEBHOOK", raising=False)
     monkeypatch.delenv("FHD_ETL_ALLOW_PRIVATE_WEBHOOK", raising=False)
 
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         helpers.assert_safe_webhook_url("ftp://x")
-    assert ex.value.code == "ETL_WEBHOOK_URL_INVALID"
+    assert ex.value.code == "ELT_WEBHOOK_URL_INVALID"
 
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         helpers.assert_safe_webhook_url("http://example.com")
-    assert ex.value.code == "ETL_WEBHOOK_HTTPS_REQUIRED"
+    assert ex.value.code == "ELT_WEBHOOK_HTTPS_REQUIRED"
 
     monkeypatch.setenv("FHD_ETL_ALLOW_HTTP_WEBHOOK", "1")
     with patch(
-        "app.application.etl.targets.helpers.socket.getaddrinfo", side_effect=OSError("dns")
+        "app.application.elt.targets.helpers.socket.getaddrinfo", side_effect=OSError("dns")
     ):
-        with pytest.raises(EtlError) as ex:
+        with pytest.raises(EltError) as ex:
             helpers.assert_safe_webhook_url("http://nope.invalid")
-        assert ex.value.code == "ETL_WEBHOOK_DNS_FAILED"
+        assert ex.value.code == "ELT_WEBHOOK_DNS_FAILED"
 
     with patch(
-        "app.application.etl.targets.helpers.socket.getaddrinfo",
+        "app.application.elt.targets.helpers.socket.getaddrinfo",
         return_value=[("ai", 0, 0, "", ("127.0.0.1", 80))],
     ):
-        with pytest.raises(EtlError) as ex:
+        with pytest.raises(EltError) as ex:
             helpers.assert_safe_webhook_url("http://localhost")
-        assert ex.value.code == "ETL_WEBHOOK_PRIVATE_ADDRESS_FORBIDDEN"
+        assert ex.value.code == "ELT_WEBHOOK_PRIVATE_ADDRESS_FORBIDDEN"
 
     monkeypatch.setenv("FHD_ETL_ALLOW_PRIVATE_WEBHOOK", "1")
     with patch(
-        "app.application.etl.targets.helpers.socket.getaddrinfo",
+        "app.application.elt.targets.helpers.socket.getaddrinfo",
         return_value=[("ai", 0, 0, "", ("8.8.8.8", 443))],
     ):
         helpers.assert_safe_webhook_url("https://example.com")
 
 
 def test_helpers_truthy_env(monkeypatch):
-    from app.application.etl.targets import helpers
+    from app.application.elt.targets import helpers
 
     monkeypatch.setenv("X1", "true")
     monkeypatch.setenv("X0", "0")
@@ -1017,7 +1017,7 @@ def test_helpers_truthy_env(monkeypatch):
 
 
 def test_get_adapter_registry():
-    from app.application.etl.targets import get_adapter, target_capabilities
+    from app.application.elt.targets import get_adapter, target_capabilities
 
     assert get_adapter("customers").type == "customers"
     assert get_adapter("products").type == "products"
@@ -1030,9 +1030,9 @@ def test_get_adapter_registry():
     assert get_adapter("webhook").type == "webhook"
     assert get_adapter("knowledge").type == "knowledge"
 
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         get_adapter("bogus")
-    assert ex.value.code == "ETL_TARGET_UNSUPPORTED"
+    assert ex.value.code == "ELT_TARGET_UNSUPPORTED"
 
     caps = target_capabilities()
     assert isinstance(caps, list) and all(isinstance(c, dict) for c in caps)
@@ -1053,7 +1053,7 @@ def _make_customer(db, name="客户A", **kw):
 
 
 def test_customers_preview_branches(session):
-    from app.application.etl.targets.customers import CustomerAdapter
+    from app.application.elt.targets.customers import CustomerAdapter
 
     a = CustomerAdapter()
     # validation fail
@@ -1091,7 +1091,7 @@ def test_customers_preview_branches(session):
 
 
 def test_customers_execute_row(session):
-    from app.application.etl.targets.customers import CustomerAdapter
+    from app.application.elt.targets.customers import CustomerAdapter
 
     a = CustomerAdapter()
     # new
@@ -1106,7 +1106,7 @@ def test_customers_execute_row(session):
     assert "match_ref" in r
 
     # new with existing -> ETL_MATCH_CHANGED
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.execute_row(
             session,
             {"customer_name": "新客户"},
@@ -1115,7 +1115,7 @@ def test_customers_execute_row(session):
             allowed_update_fields=set(),
             context={},
         )
-    assert ex.value.code == "ETL_MATCH_CHANGED"
+    assert ex.value.code == "ELT_MATCH_CHANGED"
 
     # update existing
     obj = _make_customer(session, "老客户")
@@ -1130,7 +1130,7 @@ def test_customers_execute_row(session):
     assert r2["after"]["contact_person"] == "李"
 
     # disappear
-    with pytest.raises(EtlError) as ex2:
+    with pytest.raises(EltError) as ex2:
         a.execute_row(
             session,
             {"customer_name": "无"},
@@ -1139,15 +1139,15 @@ def test_customers_execute_row(session):
             allowed_update_fields=set(),
             context={},
         )
-    assert ex2.value.code == "ETL_MATCH_DISAPPEARED"
+    assert ex2.value.code == "ELT_MATCH_DISAPPEARED"
 
 
 def test_customers_rollback_row(session):
-    from app.application.etl.targets.customers import CustomerAdapter
+    from app.application.elt.targets.customers import CustomerAdapter
 
     a = CustomerAdapter()
     # before present, missing obj -> ETL_ROLLBACK_TARGET_MISSING
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.rollback_row(
             session,
             match_ref="999999",
@@ -1155,11 +1155,11 @@ def test_customers_rollback_row(session):
             after={"customer_name": "y"},
             context={},
         )
-    assert ex.value.code == "ETL_ROLLBACK_TARGET_MISSING"
+    assert ex.value.code == "ELT_ROLLBACK_TARGET_MISSING"
 
     # before present, mismatch -> concurrent change
     obj = _make_customer(session, "客户X", contact_person="A")
-    with pytest.raises(EtlError) as ex2:
+    with pytest.raises(EltError) as ex2:
         a.rollback_row(
             session,
             match_ref=str(obj.id),
@@ -1167,7 +1167,7 @@ def test_customers_rollback_row(session):
             after={"contact_person": "C"},
             context={},
         )
-    assert ex2.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert ex2.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
 
     # An unchanged snapshot owns no fields; preserve the current manual value.
     r = a.rollback_row(
@@ -1190,11 +1190,11 @@ def test_customers_rollback_row(session):
 
     # before empty, mismatch -> concurrent
     obj3 = _make_customer(session, "客户Z")
-    with pytest.raises(EtlError) as ex3:
+    with pytest.raises(EltError) as ex3:
         a.rollback_row(
             session, match_ref=str(obj3.id), before={}, after={"customer_name": "改过"}, context={}
         )
-    assert ex3.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert ex3.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
 
 
 # --------------------------------------------------------------------------- targets/orders.py
@@ -1221,7 +1221,7 @@ def _make_supplier(db, name="供应商A"):
 
 
 def test_purchase_order_preview(session):
-    from app.application.etl.targets.orders import PurchaseOrderAdapter
+    from app.application.elt.targets.orders import PurchaseOrderAdapter
 
     a = PurchaseOrderAdapter()
     supplier = _make_supplier(session, "供应商A")
@@ -1277,7 +1277,7 @@ def test_purchase_order_preview(session):
 
 
 def test_purchase_order_execute_and_rollback(session):
-    from app.application.etl.targets.orders import PurchaseOrderAdapter
+    from app.application.elt.targets.orders import PurchaseOrderAdapter
     from app.db.models.purchase import PurchaseOrderItem
 
     a = PurchaseOrderAdapter()
@@ -1306,7 +1306,7 @@ def test_purchase_order_execute_and_rollback(session):
     assert r2["after"]["order_created"] is False
 
     # missing supplier
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.execute_row(
             session,
             {**good, "external_order_no": "PO-2", "supplier_name": "无人"},
@@ -1315,10 +1315,10 @@ def test_purchase_order_execute_and_rollback(session):
             allowed_update_fields=set(),
             context={},
         )
-    assert ex.value.code == "ETL_SUPPLIER_NOT_FOUND"
+    assert ex.value.code == "ELT_SUPPLIER_NOT_FOUND"
 
     # missing product
-    with pytest.raises(EtlError) as ex2:
+    with pytest.raises(EltError) as ex2:
         a.execute_row(
             session,
             {**good, "external_order_no": "PO-3", "product_name": "无", "product_model": ""},
@@ -1327,7 +1327,7 @@ def test_purchase_order_execute_and_rollback(session):
             allowed_update_fields=set(),
             context={},
         )
-    assert ex2.value.code == "ETL_PRODUCT_NOT_FOUND"
+    assert ex2.value.code == "ELT_PRODUCT_NOT_FOUND"
 
     # rollback deletes item + order
     item_id = int(r["match_ref"])
@@ -1352,7 +1352,7 @@ def _make_shipment_record(db, order_no, run_id):
 
 
 def test_shipment_preview_branches(session):
-    from app.application.etl.targets.orders import ShipmentAdapter
+    from app.application.elt.targets.orders import ShipmentAdapter
 
     a = ShipmentAdapter()
     base = {
@@ -1473,7 +1473,7 @@ def test_shipment_preview_branches(session):
 
 
 def test_shipment_fingerprint_and_belongs():
-    from app.application.etl.targets.orders import ShipmentAdapter
+    from app.application.elt.targets.orders import ShipmentAdapter
 
     a = ShipmentAdapter()
     assert a._fingerprint({"source_fingerprint": "  SUP  "}, {}) == "SUP"
@@ -1491,7 +1491,7 @@ def test_shipment_fingerprint_and_belongs():
 
 
 def test_shipment_execute_and_rollback(session):
-    from app.application.etl.targets.orders import ShipmentAdapter
+    from app.application.elt.targets.orders import ShipmentAdapter
     from app.db.models.shipment import ShipmentRecord
 
     a = ShipmentAdapter()
@@ -1513,11 +1513,11 @@ def test_shipment_execute_and_rollback(session):
     assert r["match_ref"] and r["after"]["id"]
 
     # second execute -> preview not new -> ETL_MATCH_CHANGED
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.execute_row(
             session, data, action="new", match_ref="", allowed_update_fields=set(), context=context
         )
-    assert ex.value.code == "ETL_MATCH_CHANGED"
+    assert ex.value.code == "ELT_MATCH_CHANGED"
 
     # rollback
     obj = session.get(ShipmentRecord, int(r["match_ref"]))
@@ -1554,7 +1554,7 @@ def _make_cp_product(db, name="漆", model=None, unit="客户A"):
 
 
 def test_customer_products_preview(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     base = {"customer_name": "客户A", "name": "漆", "model_number": "M1"}
@@ -1628,7 +1628,7 @@ def test_customer_products_preview(session):
 
 
 def test_customer_products_execute(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     # new -> creates customer + product
@@ -1646,7 +1646,7 @@ def test_customer_products_execute(session):
     # new with existing product -> ETL_MATCH_CHANGED
     prod = _make_cp_product(session, "已有漆", "EM1", unit="客户A")
     match_ref = json.dumps({"customer_id": None, "product_id": prod.id})
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.execute_row(
             session,
             {"customer_name": "客户A", "name": "已有漆", "model_number": "EM1"},
@@ -1655,12 +1655,12 @@ def test_customer_products_execute(session):
             allowed_update_fields=set(),
             context={},
         )
-    assert ex.value.code == "ETL_MATCH_CHANGED"
+    assert ex.value.code == "ELT_MATCH_CHANGED"
 
     # product disappeared -> ETL_MATCH_DISAPPEARED
     cust = _make_cp_customer(session, "客户D")
     match_ref2 = json.dumps({"customer_id": cust.id, "product_id": 999999})
-    with pytest.raises(EtlError) as ex2:
+    with pytest.raises(EltError) as ex2:
         a.execute_row(
             session,
             {"customer_name": "客户D", "name": "未匹配", "model_number": "XX"},
@@ -1669,7 +1669,7 @@ def test_customer_products_execute(session):
             allowed_update_fields=set(),
             context={},
         )
-    assert ex2.value.code == "ETL_MATCH_DISAPPEARED"
+    assert ex2.value.code == "ELT_MATCH_DISAPPEARED"
 
     # update success
     prod2 = _make_cp_product(session, "更新漆", "UM1", unit="客户D")
@@ -1686,19 +1686,19 @@ def test_customer_products_execute(session):
 
 
 def test_customer_products_parse_match_ref():
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     assert CustomerProductsAdapter._parse_match_ref(
         json.dumps({"customer_id": 1, "product_id": 2})
     ) == (1, 2)
     assert CustomerProductsAdapter._parse_match_ref("") == (None, None)
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         CustomerProductsAdapter._parse_match_ref("not-json")
-    assert ex.value.code == "ETL_MATCH_REF_INVALID"
+    assert ex.value.code == "ELT_MATCH_REF_INVALID"
 
 
 def test_customer_products_rollback(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     # product_created -> delete product
@@ -1724,13 +1724,13 @@ def test_customer_products_rollback(session):
         context={},
     )
     r2["after"]["_etl"]["customer_created"] = True
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.rollback_row(session, match_ref=r2["match_ref"], before={}, after=r2["after"], context={})
-    assert ex.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert ex.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
 
 
 def test_customer_products_preview_customer_conflict(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     ctx = {}
@@ -1750,7 +1750,7 @@ def test_customer_products_preview_customer_conflict(session):
 
 
 def test_customer_products_preview_model_ambiguity(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     _make_cp_customer(session, "客模")
@@ -1765,7 +1765,7 @@ def test_customer_products_preview_model_ambiguity(session):
 
 
 def test_customer_products_execute_customer_update(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     cust = _make_cp_customer(session, "客CU2")
@@ -1787,7 +1787,7 @@ def test_customer_products_execute_customer_update(session):
 
 
 def test_customer_products_execute_product_update_loop(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     cust = _make_cp_customer(session, "客U")
@@ -1813,12 +1813,12 @@ def test_customer_products_execute_product_update_loop(session):
 
 
 def test_customer_products_execute_ambiguity(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     _make_cp_customer(session, "客A")
     _make_cp_product(session, "漆", None, unit="客A")
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.execute_row(
             session,
             {"customer_name": "客A", "name": "漆", "model_number": "M1"},
@@ -1827,14 +1827,14 @@ def test_customer_products_execute_ambiguity(session):
             allowed_update_fields=set(),
             context={},
         )
-    assert ex.value.code == "ETL_PRODUCT_MODEL_AMBIGUITY"
+    assert ex.value.code == "ELT_PRODUCT_MODEL_AMBIGUITY"
 
 
 def test_customer_products_rollback_product_missing(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.rollback_row(
             session,
             match_ref=json.dumps({"customer_id": None, "product_id": 999}),
@@ -1842,11 +1842,11 @@ def test_customer_products_rollback_product_missing(session):
             after={"product": {}, "_etl": {"product_created": True}},
             context={},
         )
-    assert ex.value.code == "ETL_ROLLBACK_TARGET_MISSING"
+    assert ex.value.code == "ELT_ROLLBACK_TARGET_MISSING"
 
 
 def test_customer_products_rollback_product_updated(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     cust = _make_cp_customer(session, "客R")
@@ -1869,7 +1869,7 @@ def test_customer_products_rollback_product_updated(session):
 
 
 def test_customer_products_rollback_customer_updated(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     cust = _make_cp_customer(session, "客CU")
@@ -1891,10 +1891,10 @@ def test_customer_products_rollback_customer_updated(session):
 
 
 def test_customer_products_rollback_customer_created_missing(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.rollback_row(
             session,
             match_ref=json.dumps({"customer_id": 999, "product_id": None}),
@@ -1902,17 +1902,17 @@ def test_customer_products_rollback_customer_created_missing(session):
             after={"customer": {}, "_etl": {"customer_created": True}},
             context={},
         )
-    assert ex.value.code == "ETL_ROLLBACK_TARGET_MISSING"
+    assert ex.value.code == "ELT_ROLLBACK_TARGET_MISSING"
 
 
 def test_customer_products_rollback_customer_created_modified(session):
-    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
 
     a = CustomerProductsAdapter()
     cust = _make_cp_customer(session, "客CC")
     cust.contact_person = "改过"
     session.flush()
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.rollback_row(
             session,
             match_ref=json.dumps({"customer_id": cust.id, "product_id": None}),
@@ -1920,16 +1920,16 @@ def test_customer_products_rollback_customer_created_modified(session):
             after={"customer": {"contact_person": "原始"}, "_etl": {"customer_created": True}},
             context={},
         )
-    assert ex.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert ex.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
 
 
 # --------------------------------------------------------------------------- targets/batch.py
 
 
 def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
-    from app.application.etl.targets.batch import AttendanceAdapter
+    from app.application.elt.targets.batch import AttendanceAdapter
 
-    monkeypatch.setattr("app.application.etl.targets.batch.get_app_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("app.application.elt.targets.batch.get_app_data_dir", lambda: tmp_path)
     a = AttendanceAdapter()
     context = {"upload_path": str(tmp_path / "a.csv"), "file_sha256": "f"}
     d = a.preview(MagicMock(), [], allowed_update_fields=set(), context=context)
@@ -1950,7 +1950,7 @@ def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
 
 
 def test_attendance_existing_batch_db(session, tmp_path):
-    from app.application.etl.targets.batch import AttendanceAdapter
+    from app.application.elt.targets.batch import AttendanceAdapter
 
     a = AttendanceAdapter()
     db_path = tmp_path / "data" / "mod_dbs" / "taiyangniao-pro.db"
@@ -1993,15 +1993,15 @@ def test_attendance_existing_batch_db(session, tmp_path):
 
 
 def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
-    from app.application.etl.targets.batch import AttendanceAdapter
+    from app.application.elt.targets.batch import AttendanceAdapter
 
-    monkeypatch.setattr("app.application.etl.targets.batch.get_app_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("app.application.elt.targets.batch.get_app_data_dir", lambda: tmp_path)
     a = AttendanceAdapter()
 
     # unsupported suffix
-    with pytest.raises(EtlError) as ex:
+    with pytest.raises(EltError) as ex:
         a.execute_batch([], {"upload_path": str(tmp_path / "a.csv")})
-    assert ex.value.code == "ETL_ATTENDANCE_FILE_INVALID"
+    assert ex.value.code == "ELT_ATTENDANCE_FILE_INVALID"
 
     # existing batch -> ETL_MATCH_CHANGED
     ctx = {
@@ -2009,9 +2009,9 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
         "file_sha256": "f",
         "_preview_cache": {"attendance_batch:f:a.xlsx": {"batch_id": 1}},
     }
-    with pytest.raises(EtlError) as ex2:
+    with pytest.raises(EltError) as ex2:
         a.execute_batch([], ctx)
-    assert ex2.value.code == "ETL_MATCH_CHANGED"
+    assert ex2.value.code == "ELT_MATCH_CHANGED"
 
     # success
     ctx2 = {
@@ -2030,9 +2030,9 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
 
     # rollback data missing
     with patch.object(AttendanceAdapter, "_db_path", return_value=tmp_path / "missing.db"):
-        with pytest.raises(EtlError) as ex3:
+        with pytest.raises(EltError) as ex3:
             a.rollback_batch({}, {"source_file": ""})
-        assert ex3.value.code == "ETL_ATTENDANCE_ROLLBACK_DATA_MISSING"
+        assert ex3.value.code == "ELT_ATTENDANCE_ROLLBACK_DATA_MISSING"
 
     # rollback success
     db_path = tmp_path / "roll.db"
@@ -2051,9 +2051,9 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
 
 
 def test_export_csv_adapter(tmp_path, monkeypatch):
-    from app.application.etl.targets.batch import ExportCsvAdapter
+    from app.application.elt.targets.batch import ExportCsvAdapter
 
-    monkeypatch.setattr("app.application.etl.targets.batch.get_app_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("app.application.elt.targets.batch.get_app_data_dir", lambda: tmp_path)
     calls = []
     rows = [{"a": "=cmd", "b": "x"}, {"a": "y", "b": "z"}]
     r = ExportCsvAdapter().execute_batch(
@@ -2066,9 +2066,9 @@ def test_export_csv_adapter(tmp_path, monkeypatch):
 
 
 def test_export_csv_empty_rows(tmp_path, monkeypatch):
-    from app.application.etl.targets.batch import ExportCsvAdapter
+    from app.application.elt.targets.batch import ExportCsvAdapter
 
-    monkeypatch.setattr("app.application.etl.targets.batch.get_app_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("app.application.elt.targets.batch.get_app_data_dir", lambda: tmp_path)
     r = ExportCsvAdapter().execute_batch(
         [], {"run_id": "r2", "row_count": 0, "output_headers": ["h1"]}
     )
@@ -2076,9 +2076,9 @@ def test_export_csv_empty_rows(tmp_path, monkeypatch):
 
 
 def test_export_xlsx_adapter(tmp_path, monkeypatch):
-    from app.application.etl.targets.batch import ExportXlsxAdapter
+    from app.application.elt.targets.batch import ExportXlsxAdapter
 
-    monkeypatch.setattr("app.application.etl.targets.batch.get_app_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("app.application.elt.targets.batch.get_app_data_dir", lambda: tmp_path)
     rows = [{"a": "=evil", "b": "1"} for _ in range(501)]
     calls = []
     r = ExportXlsxAdapter().execute_batch(
@@ -2090,7 +2090,7 @@ def test_export_xlsx_adapter(tmp_path, monkeypatch):
 
 
 def test_webhook_adapter_success(monkeypatch):
-    from app.application.etl.targets.batch import WebhookAdapter
+    from app.application.elt.targets.batch import WebhookAdapter
 
     statuses = iter([200, 200])
     calls = []
@@ -2114,8 +2114,8 @@ def test_webhook_adapter_success(monkeypatch):
             return FakeResp(next(statuses))
 
     monkeypatch.setattr("httpx.Client", FakeClient)
-    monkeypatch.setattr("app.application.etl.targets.batch.read_webhook_secret", lambda ref: "sec")
-    with patch("app.application.etl.targets._assert_safe_webhook_url", lambda url: None):
+    monkeypatch.setattr("app.application.elt.targets.batch.read_webhook_secret", lambda ref: "sec")
+    with patch("app.application.elt.targets._assert_safe_webhook_url", lambda url: None):
         r = WebhookAdapter().execute_batch(
             [{"a": 1} for _ in range(501)],
             {
@@ -2130,7 +2130,7 @@ def test_webhook_adapter_success(monkeypatch):
 
 
 def test_webhook_adapter_failure(monkeypatch):
-    from app.application.etl.targets.batch import WebhookAdapter
+    from app.application.elt.targets.batch import WebhookAdapter
 
     class FakeResp:
         status_code = 500
@@ -2149,9 +2149,9 @@ def test_webhook_adapter_failure(monkeypatch):
             return FakeResp()
 
     monkeypatch.setattr("httpx.Client", FakeClient)
-    monkeypatch.setattr("app.application.etl.targets.batch.read_webhook_secret", lambda ref: "")
-    with patch("app.application.etl.targets._assert_safe_webhook_url", lambda url: None):
-        with pytest.raises(EtlError) as ex:
+    monkeypatch.setattr("app.application.elt.targets.batch.read_webhook_secret", lambda ref: "")
+    with patch("app.application.elt.targets._assert_safe_webhook_url", lambda url: None):
+        with pytest.raises(EltError) as ex:
             WebhookAdapter().execute_batch(
                 [{"a": 1}],
                 {
@@ -2160,13 +2160,13 @@ def test_webhook_adapter_failure(monkeypatch):
                     "row_count": 1,
                 },
             )
-    assert ex.value.code == "ETL_WEBHOOK_DELIVERY_FAILED"
+    assert ex.value.code == "ELT_WEBHOOK_DELIVERY_FAILED"
 
 
 def test_webhook_adapter_http_error_retry(monkeypatch):
     import httpx
 
-    from app.application.etl.targets.batch import WebhookAdapter
+    from app.application.elt.targets.batch import WebhookAdapter
 
     class FakeClient:
         def __init__(self, *a, **k):
@@ -2182,9 +2182,9 @@ def test_webhook_adapter_http_error_retry(monkeypatch):
             raise httpx.ConnectError("conn refused")
 
     monkeypatch.setattr("httpx.Client", FakeClient)
-    monkeypatch.setattr("app.application.etl.targets.batch.read_webhook_secret", lambda ref: "")
-    with patch("app.application.etl.targets._assert_safe_webhook_url", lambda url: None):
-        with pytest.raises(EtlError) as ex:
+    monkeypatch.setattr("app.application.elt.targets.batch.read_webhook_secret", lambda ref: "")
+    with patch("app.application.elt.targets._assert_safe_webhook_url", lambda url: None):
+        with pytest.raises(EltError) as ex:
             WebhookAdapter().execute_batch(
                 [{"a": 1}],
                 {
@@ -2193,11 +2193,11 @@ def test_webhook_adapter_http_error_retry(monkeypatch):
                     "row_count": 1,
                 },
             )
-    assert ex.value.code == "ETL_WEBHOOK_DELIVERY_FAILED"
+    assert ex.value.code == "ELT_WEBHOOK_DELIVERY_FAILED"
 
 
 def test_webhook_adapter_connectivity_test(monkeypatch):
-    from app.application.etl.targets.batch import WebhookAdapter
+    from app.application.elt.targets.batch import WebhookAdapter
 
     class FakeResp:
         status_code = 200
@@ -2216,8 +2216,8 @@ def test_webhook_adapter_connectivity_test(monkeypatch):
             return FakeResp()
 
     monkeypatch.setattr("httpx.Client", FakeClient)
-    monkeypatch.setattr("app.application.etl.targets.batch.read_webhook_secret", lambda ref: "")
-    with patch("app.application.etl.targets._assert_safe_webhook_url", lambda url: None):
+    monkeypatch.setattr("app.application.elt.targets.batch.read_webhook_secret", lambda ref: "")
+    with patch("app.application.elt.targets._assert_safe_webhook_url", lambda url: None):
         r = WebhookAdapter().execute_batch(
             [],
             {

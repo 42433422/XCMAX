@@ -38,7 +38,7 @@ from tests.test_application.test_catalog_product_edits import host as host
 from tests.test_application.test_catalog_product_edits import trusted_actor as trusted_actor
 
 KIND = "catalog_preclaim_finalization_v1"
-BASE = "/api/etl/owned-mixed-v1/products"
+BASE = "/api/elt/owned-mixed-v1/products"
 
 
 def resolve(c, body, *, actor=None, confirmation=None):

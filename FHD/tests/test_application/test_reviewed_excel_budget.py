@@ -7,7 +7,7 @@ from io import BytesIO
 import pytest
 from openpyxl import Workbook
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_audit import request_digest
 from app.application.reviewed_excel_budget import (
     BUDGET_VERSION,
@@ -420,7 +420,7 @@ def test_required_extent_is_source_derived_not_a_business_region(reference_ids, 
     assert review == original
 
     if reference_ids:
-        from app.application.etl.llm_assist_runtime import LlmAssistResult
+        from app.application.elt.llm_assist_runtime import LlmAssistResult
 
         raw = {
             "physical_regions": [

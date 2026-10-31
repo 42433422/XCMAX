@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.application.etl.archive_policy import ArchivePolicy, ArchivePolicyError
+from app.application.elt.archive_policy import ArchivePolicy, ArchivePolicyError
 
 
 @pytest.mark.parametrize(

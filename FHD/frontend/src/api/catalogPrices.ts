@@ -44,7 +44,7 @@ export interface CatalogVerification {
   success: boolean
   data: { verified: boolean; outcome: 'saved' | 'rejected_no_effect'; reason_code?: string; receipt_kind?: 'catalog_preclaim_finalization_v1'; current_matches: boolean; historical_effect_verified: boolean; fresh_save: false; business_action_id: string; product: CatalogProduct; operation_id: string; run_id: string; request_digest: string }
 }
-const base = '/api/etl/owned-mixed-v1/products'
+const base = '/api/elt/owned-mixed-v1/products'
 const scope = (mod: string) => {
   if (!mod.trim()) throw new Error('必须明确选择 Mod')
   return { headers: { 'X-XCAGI-Active-Mod-Id': mod } }

@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl import (
+from app.application.elt import (
     llm_assist,
     llm_session_provider,
     service_draft,
@@ -22,14 +22,14 @@ from app.application.etl import (
     service_preview,
     service_uploads,
 )
-from app.application.etl.errors import EtlError
-from app.application.etl.service import EtlService
-from app.application.etl.service_support import load_json
-from app.application.etl.targets import get_adapter
+from app.application.elt.errors import EltError
+from app.application.elt.service import EltService
+from app.application.elt.service_support import load_json
+from app.application.elt.targets import get_adapter
 from app.db import session as db_session
 from app.db.db_base import Base
 from app.db.models import Product, PurchaseUnit
-from app.db.models.etl import EtlRun, EtlRunRow
+from app.db.models.elt import EltRun, EltRunRow
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.infrastructure.llm.providers import registry
@@ -101,7 +101,7 @@ def preview_store(tmp_path, monkeypatch):
         store = SimpleNamespace(
             factory=factory,
             executor=executor,
-            service=EtlService(),
+            service=EltService(),
             fallback=fallback,
             calls=[],
         )
@@ -172,9 +172,9 @@ def create_preview(store, *, owner=7, target="customers", csv=CSV):
 
 def snapshot(store, run_id, owner=7):
     with store.factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         result = store.service.get_run(db, run_id=run_id, owner_user_id=owner)
-        rows = db.query(EtlRunRow).filter(EtlRunRow.run_id == run_id).order_by(EtlRunRow.id).all()
+        rows = db.query(EltRunRow).filter(EltRunRow.run_id == run_id).order_by(EltRunRow.id).all()
         result["persisted_rows"] = [
             {
                 "normalized": load_json(row.normalized_json, {}),
@@ -218,7 +218,7 @@ def test_real_csv_preview_preserves_owner_and_deterministic_rows(
     assert all(row["advisory"]["degraded"] is degraded for row in result["persisted_rows"])
     assert len(store.calls) == (1 if degraded else 2), "ETL must not automatically retry failures"
     if degraded:
-        assert mapping["degradation_code"] == "ETL_LLM_UNAVAILABLE"
+        assert mapping["degradation_code"] == "ELT_LLM_UNAVAILABLE"
     else:
         assert mapping["model"] == "isolated-owner-model"
         assert all(row["advisory"]["action"] == "skip" for row in result["persisted_rows"])
@@ -239,7 +239,7 @@ def test_no_account_or_app_configuration_still_finishes_preview(preview_store, m
     store.executor.futures[-1].result(timeout=10)
     result = snapshot(store, run_id)
     assert result["status"] == "preview_ready" and result["total_rows"] == 2
-    assert result["source_features"]["llm_mapping"]["degradation_code"] == "ETL_LLM_UNAVAILABLE"
+    assert result["source_features"]["llm_mapping"]["degradation_code"] == "ELT_LLM_UNAVAILABLE"
     assert result["details"]["llm_degraded"] is True
     assert result["lease"] == (None, None, None)
     assert store.fallback.calls == 0
@@ -256,7 +256,7 @@ def test_unexpected_parser_error_is_persisted_and_releases_preview_lease(
     preview_store.executor.futures[-1].result(timeout=10)
     result = snapshot(preview_store, run_id)
     assert result["status"] == result["stage"] == "failed"
-    assert result["error_code"] == "ETL_INTERNAL_ERROR"
+    assert result["error_code"] == "ELT_INTERNAL_ERROR"
     assert "private detail" not in result["error_message"]
     assert result["lease"] == (None, None, None)
     assert result["persisted_rows"] == []
@@ -329,7 +329,7 @@ def test_unexpected_revalidation_error_fails_and_releases_lease(preview_store, m
     store.executor.futures[-1].result(timeout=10)
     result = snapshot(store, run_id)
     assert result["status"] == result["stage"] == "failed"
-    assert result["error_code"] == "ETL_INTERNAL_ERROR"
+    assert result["error_code"] == "ELT_INTERNAL_ERROR"
     assert result["lease"] == (None, None, None)
     assert run_id not in service_draft.SUBMITTED
 
@@ -363,7 +363,7 @@ def test_unexpected_database_execution_error_rolls_back_chunk_without_replay(
         )
     store.executor.futures[-1].result(timeout=10)
     result = snapshot(store, run_id)
-    assert result["status"] == "failed" and result["error_code"] == "ETL_INTERNAL_ERROR"
+    assert result["status"] == "failed" and result["error_code"] == "ELT_INTERNAL_ERROR"
     assert result["lease"] == (None, None, None)
     assert calls == ["隔离客户甲", "隔离客户乙"], "unexpected errors must not replay writes"
     assert all(row["execution_status"] != "success" for row in result["persisted_rows"])
@@ -396,12 +396,12 @@ def test_unexpected_external_batch_error_retains_unknown_outcome_and_rejects_ret
     store.executor.futures[-1].result(timeout=10)
     result = snapshot(store, run_id)
     assert result["status"] == result["stage"] == "outcome_unknown"
-    assert result["error_code"] == "ETL_OUTCOME_UNKNOWN"
+    assert result["error_code"] == "ELT_OUTCOME_UNKNOWN"
     assert result["lease"][0] == "batch_execute" and all(result["lease"])
     assert len(calls) == 1 and len(calls[0]) == 2
-    with store.factory() as db, pytest.raises(EtlError) as error:
+    with store.factory() as db, pytest.raises(EltError) as error:
         store.service.retry(db, run_id=run_id, owner_user_id=7)
-    assert error.value.code == "ETL_RETRY_NOT_ALLOWED"
+    assert error.value.code == "ELT_RETRY_NOT_ALLOWED"
     assert len(calls) == 1 and run_id not in service_execution.SUBMITTED
 
 
@@ -425,20 +425,20 @@ def test_process_control_exceptions_are_not_translated_to_application_failure(
 async def test_upload_committed_before_success_response(preview_store, monkeypatch):
     from fastapi import FastAPI
 
-    from app.db.models.etl import EtlUpload
-    from app.fastapi_routes import etl
+    from app.db.models.elt import EltUpload
+    from app.fastapi_routes import elt as etl
 
     app = FastAPI()
     app.include_router(etl.router)
     app.dependency_overrides[etl._feature_gate] = lambda: None
     app.dependency_overrides[etl._execute] = lambda: SimpleNamespace(id=7)
-    monkeypatch.setattr(etl, "get_etl_service", lambda: preview_store.service)
+    monkeypatch.setattr(etl, "get_elt_service", lambda: preview_store.service)
 
     async def observed_app(scope, receive, send):
         async def observe(message):
             if message["type"] == "http.response.start" and message["status"] == 201:
                 with preview_store.factory() as db:
-                    upload = db.query(EtlUpload).filter_by(owner_user_id=7).one_or_none()
+                    upload = db.query(EltUpload).filter_by(owner_user_id=7).one_or_none()
                     assert upload is not None, "201 must not precede upload transaction commit"
                     assert preview_store.service._owned_upload(db, upload.id, 7).sha256
             await send(message)
@@ -449,6 +449,6 @@ async def test_upload_committed_before_success_response(preview_store, monkeypat
         transport=httpx.ASGITransport(app=observed_app), base_url="http://test"
     ) as client:
         result = await client.post(
-            "/api/etl/uploads", files={"file": ("products.csv", CSV, "text/csv")}
+            "/api/elt/uploads", files={"file": ("products.csv", CSV, "text/csv")}
         )
         assert result.status_code == 201, result.text

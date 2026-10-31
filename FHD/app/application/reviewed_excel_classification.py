@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_basic_classification import (
     classify_review_workbook as classify_review_workbook,
 )

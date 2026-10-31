@@ -10,8 +10,8 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl import archive_store
-from app.application.etl.archive_store import (
+from app.application.elt import archive_store
+from app.application.elt.archive_store import (
     _ENVELOPE_MAGIC,
     _KEY_FILE_NAME,
     create_original,
@@ -19,7 +19,7 @@ from app.application.etl.archive_store import (
     read_original,
 )
 from app.db.db_base import Base
-from app.db.models.etl_archive import EtlArchiveQuota
+from app.db.models.elt_archive import EltArchiveQuota
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.path_io import path_utils
 
@@ -41,7 +41,7 @@ def archive_db(tmp_path, monkeypatch):
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     with tenant_scope(1), factory() as db:
-        db.add(EtlArchiveQuota(tenant_id=1, limit_bytes=10_000_000, reserved_bytes=0))
+        db.add(EltArchiveQuota(tenant_id=1, limit_bytes=10_000_000, reserved_bytes=0))
         db.commit()
     yield factory, archive_root
     engine.dispose()

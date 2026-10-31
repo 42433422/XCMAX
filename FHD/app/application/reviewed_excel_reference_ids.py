@@ -6,7 +6,7 @@ from copy import deepcopy
 
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 
 # Provider cite cap for drawing_ids; dense sheets may approach this in one region.
 MAX_DRAWING_IDS_PER_REGION = 300
@@ -687,7 +687,7 @@ _EXPECTED = {
 
 
 def verify_contract(prompt: str, schema: dict, phase: str) -> dict:
-    from app.application.etl.errors import ReviewedExcelError
+    from app.application.elt.errors import ReviewedExcelError
 
     try:
         hashes = contract_hashes(schema, phase)

@@ -4,7 +4,7 @@ import { captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCach
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import templatePreviewApi from '@/api/templatePreview'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
-import { etlApi } from '@/api/etl'
+import { eltApi } from '@/api/elt'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
@@ -141,7 +141,7 @@ async function pollIngestProgress() {
   const id = ingestBatchId.value
   if (!id) return
   try {
-    const data = await etlApi.autoIngestProgress(id)
+    const data = await eltApi.autoIngestProgress(id)
     kbProgress.value = data.kb_progress || null
     businessProgress.value = data.business_progress || null
     const kbDone = Number(data.kb_progress?.pct || 0) >= 100

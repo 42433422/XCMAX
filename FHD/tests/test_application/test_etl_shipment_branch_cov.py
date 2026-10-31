@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application.etl import (
+from app.application.elt import (
     mapping_assist,
     parser_shipment_history,
     product_identity,
@@ -26,9 +26,9 @@ from app.application.etl import (
     target_detection,
     transforms,
 )
-from app.application.etl.errors import EtlError
-from app.application.etl.parser_types import ParsedDataset, ParsedRow
-from app.application.etl.targets import TargetAdapter, TargetField
+from app.application.elt.errors import EltError
+from app.application.elt.parser_types import ParsedDataset, ParsedRow
+from app.application.elt.targets import TargetAdapter, TargetField
 
 
 # ---------------------------------------------------------------------------
@@ -65,9 +65,9 @@ class TestTransforms:
             transforms.apply_transform("2026-08-01", {"op": "cast", "type": "date"}, {})
             == "2026-08-01"
         )
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform("maybe", {"op": "cast", "type": "boolean"}, {})
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform("x", {"op": "cast", "type": "point"}, {})
 
     def test_apply_transform_date(self):
@@ -82,7 +82,7 @@ class TestTransforms:
         # %d/%m/%Y is tried before %m/%d/%Y in the default format list
         assert transforms.apply_transform("01/02/2026", {"op": "date"}, {"f": "x"}) == "2026-02-01"
         assert transforms.apply_transform("2026-08-04T10:00:00", {"op": "date"}, {}) == "2026-08-04"
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform("not-adate", {"op": "date"}, {})
 
     def test_apply_transform_number_and_default(self):
@@ -90,7 +90,7 @@ class TestTransforms:
         assert transforms.apply_transform("(1,200)", {"op": "number"}, {}) == "-1200"
         assert transforms.apply_transform("￥50", {"op": "number"}, {}) == "50"
         assert transforms.apply_transform("30元", {"op": "number"}, {}) == "30"
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform("abc", {"op": "number"}, {})
         assert transforms.apply_transform("", {"op": "default", "value": "D"}, {}) == "D"
         assert transforms.apply_transform("keep", {"op": "default", "value": "D"}, {}) == "keep"
@@ -104,7 +104,7 @@ class TestTransforms:
             == "F"
         )
         assert transforms.apply_transform("z", {"op": "map", "values": {"a": "甲"}}, {}) == "z"
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform("a", {"op": "map", "values": []}, {})
         assert (
             transforms.apply_transform("x,y,z", {"op": "split", "delimiter": ",", "index": 1}, {})
@@ -123,7 +123,7 @@ class TestTransforms:
             )
             == "甲-乙"
         )
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform("x", {"op": "concat", "fields": "bad"}, {})
 
     def test_apply_transform_formula(self):
@@ -172,25 +172,25 @@ class TestTransforms:
             )
             == "fallback"
         )
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform(
                 None,
                 {"op": "formula", "operator": "div", "operands": [{"field": "a"}, {"literal": 0}]},
                 row,
             )
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform(
                 None, {"op": "formula", "operator": "pow", "operands": [{"field": "a"}]}, row
             )
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform(
                 None, {"op": "formula", "operator": "add", "operands": []}, row
             )
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform(
                 None, {"op": "formula", "operator": "add", "operands": [{"both": 1}]}, row
             )
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_transform(None, {"op": "evil"}, row)
 
     def test_apply_mapping(self):
@@ -206,10 +206,10 @@ class TestTransforms:
         # empty target skipped
         assert transforms.apply_mapping({"a": 1}, [{"target": "", "source": "a"}]) == {}
         # transforms must be list
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_mapping({"a": 1}, [{"target": "t", "source": "a", "transforms": "x"}])
         # rule must be dict
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             transforms.apply_mapping(
                 {"a": 1}, [{"target": "t", "source": "a", "transforms": ["x"]}]
             )
@@ -229,7 +229,7 @@ class TestProductIdentity:
 
     def test_validation_issue(self):
         issue = product_identity.validation_issue()
-        assert issue["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY"
+        assert issue["code"] == "ELT_PRODUCT_MODEL_AMBIGUITY"
         assert issue["severity"] == "error"
 
     def test_provenance_validation_issues(self):
@@ -674,14 +674,14 @@ class TestShipmentCompatParser:
         assert len(out.rows) == 2
         assert any(row.values.get("unit") == "客户甲" for row in out.rows)
         codes = {w["code"] for w in out.warnings}
-        assert "ETL_COMPATIBILITY_UNIT_INHERITED" in codes
+        assert "ELT_COMPATIBILITY_UNIT_INHERITED" in codes
 
     def test_max_rows_exceeded(self, tmp_path, monkeypatch):
         note = {**_NOTE, "items": [{"product_name": "漆", "model_number": "M1"}]}
         self._patched_preview(monkeypatch, {"success": True, "notes": [note]})
         path = tmp_path / "a.xlsx"
         path.write_text("x")
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             shipment_compat_parser.parse_delivery_note_with_compat_profile(
                 path, target_type="products", max_rows=0
             )
@@ -714,7 +714,7 @@ class TestShipmentCompatParser:
         # date-like contact person is dropped entirely from the row values
         assert "contact_person" not in out.rows[0].values
         codes = {w["code"] for w in out.warnings}
-        assert "ETL_COMPATIBILITY_LOW_CONFIDENCE_SHEETS_SKIPPED" in codes
+        assert "ELT_COMPATIBILITY_LOW_CONFIDENCE_SHEETS_SKIPPED" in codes
 
 
 # ---------------------------------------------------------------------------
@@ -781,22 +781,22 @@ class TestShipmentTemplateExtractor:
     def test_extract_no_selected_region(self, tmp_path):
         src = self._make_source(tmp_path)
         dest = tmp_path / "o.xlsx"
-        with pytest.raises(EtlError) as exc:
+        with pytest.raises(EltError) as exc:
             shipment_template_extractor.extract_shipment_template(
                 src,
                 source_features={"regions": [{"id": "r1", "status": "rejected", "header_row": 3}]},
                 destination=dest,
             )
-        assert exc.value.code == "ETL_SHIPMENT_TEMPLATE_REGION_MISSING"
+        assert exc.value.code == "ELT_SHIPMENT_TEMPLATE_REGION_MISSING"
 
     def test_extract_requested_region_not_found(self, tmp_path):
         src = self._make_source(tmp_path)
         dest = tmp_path / "o.xlsx"
-        with pytest.raises(EtlError) as exc:
+        with pytest.raises(EltError) as exc:
             shipment_template_extractor.extract_shipment_template(
                 src, source_features=self._features(), destination=dest, source_region_id="missing"
             )
-        assert exc.value.code == "ETL_SHIPMENT_TEMPLATE_REGION_NOT_FOUND"
+        assert exc.value.code == "ELT_SHIPMENT_TEMPLATE_REGION_NOT_FOUND"
         assert exc.value.status_code == 409
 
     def test_extract_sheet_missing(self, tmp_path):
@@ -813,20 +813,20 @@ class TestShipmentTemplateExtractor:
                 }
             ]
         }
-        with pytest.raises(EtlError) as exc:
+        with pytest.raises(EltError) as exc:
             shipment_template_extractor.extract_shipment_template(
                 src, source_features=features, destination=dest
             )
-        assert exc.value.code == "ETL_SHIPMENT_TEMPLATE_SHEET_MISSING"
+        assert exc.value.code == "ELT_SHIPMENT_TEMPLATE_SHEET_MISSING"
 
     def test_extract_total_missing(self, tmp_path):
         src = self._make_source(tmp_path, with_total=False)
         dest = tmp_path / "o.xlsx"
-        with pytest.raises(EtlError) as exc:
+        with pytest.raises(EltError) as exc:
             shipment_template_extractor.extract_shipment_template(
                 src, source_features=self._features(), destination=dest
             )
-        assert exc.value.code == "ETL_SHIPMENT_TEMPLATE_TOTAL_MISSING"
+        assert exc.value.code == "ELT_SHIPMENT_TEMPLATE_TOTAL_MISSING"
 
     def test_template_bounds_no_requested_sorts(self, tmp_path):
         src = self._make_source(tmp_path)
@@ -876,7 +876,7 @@ class TestMappingAssist:
         assert meta["used_llm"] is False
 
     def test_applies_llm_suggestions(self, monkeypatch):
-        from app.application.etl.llm_assist import LlmAssistResult
+        from app.application.elt.llm_assist import LlmAssistResult
 
         def _fake(**kwargs):
             return LlmAssistResult(
@@ -936,12 +936,12 @@ class TestShipmentPreviewFallback:
 
     def test_valid_owner_and_tenant(self, monkeypatch):
         monkeypatch.setattr(
-            "app.application.etl.shipment_preview_fallback.current_tenant_id", lambda: "123"
+            "app.application.elt.shipment_preview_fallback.current_tenant_id", lambda: "123"
         )
         assert shipment_preview_fallback._valid_owner_and_tenant(7) == (123, 7)
         assert shipment_preview_fallback._valid_owner_and_tenant(0) is None
         monkeypatch.setattr(
-            "app.application.etl.shipment_preview_fallback.current_tenant_id", lambda: None
+            "app.application.elt.shipment_preview_fallback.current_tenant_id", lambda: None
         )
         assert shipment_preview_fallback._valid_owner_and_tenant(7) is None
         assert shipment_preview_fallback._valid_owner_and_tenant("abc") is None
@@ -1409,7 +1409,7 @@ class TestShipmentPreviewFallback:
             )
 
         monkeypatch.setattr(
-            "app.application.etl.service_shipment_templates.shipment_template_candidates",
+            "app.application.elt.service_shipment_templates.shipment_template_candidates",
             lambda *a: [{"status": "detected", "customer_name": "甲", "source_region_id": "r1"}],
         )
         db_fb = MagicMock()

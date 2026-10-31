@@ -1,0 +1,87 @@
+/**
+ * 数据对接中心字段映射动作（拆分自 views/EltCenterView.vue，行为保持一致）：
+ * 保存映射、常用转换、样例查询与目标字段查找。
+ */
+import type { ComputedRef } from 'vue'
+import type { EltTargetCapability } from '@/api/elt'
+import { eltApi } from '@/api/elt'
+import type { EltCenterState } from './eltCenterState'
+
+export interface EltCenterDraftActionsDeps {
+  state: EltCenterState
+  currentCapability: ComputedRef<EltTargetCapability | undefined>
+  syncDraft: () => void
+  loadRows: () => Promise<void>
+  schedulePoll: () => void
+  refreshRuns: () => Promise<void>
+}
+
+export function createEltCenterDraftActions({
+  state,
+  currentCapability,
+  syncDraft,
+  loadRows,
+  schedulePoll,
+  refreshRuns,
+}: EltCenterDraftActionsDeps) {
+  const { busy, pageError, currentRun, activeTab, runRows, editableMappings, mappingUiTransform, mappingUiTransformJson, allowedUpdateFields, ocrConfirmed } =
+    state
+
+  async function saveMappings() {
+    const run = currentRun.value
+    if (busy.value || !run) return
+    let isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
+    pageError.value = ''
+    try {
+      const mappings = editableMappings.value.map((mapping, index) => {
+        const parsed = JSON.parse(mappingUiTransformJson[String(index)] || '[]')
+        if (!Array.isArray(parsed)) throw new Error(`${mapping.target} 的转换规则必须是 JSON 数组`)
+        return { ...mapping, transforms: parsed }
+      })
+      const updated = await eltApi.patchDraft(run.id, {
+        field_mappings: mappings,
+        allowed_update_fields: allowedUpdateFields.value,
+        ocr_confirmed: ocrConfirmed.value,
+      })
+      if (!isCurrent()) return
+      currentRun.value = updated
+      syncDraft()
+      activeTab.value = currentRun.value.status === 'previewing' ? 'upload' : 'preview'
+      isCurrent = state.captureReadContext()
+      if (currentRun.value.status === 'preview_ready') await loadRows()
+      if (!isCurrent()) return
+      schedulePoll()
+      await refreshRuns()
+    } catch (error) {
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '映射保存失败'
+    } finally {
+      finishBusy()
+    }
+  }
+
+  function targetField(key: string) {
+    return currentCapability.value?.fields.find((field) => field.key === key)
+  }
+
+  function applyCommonTransform(target: string) {
+    const op = mappingUiTransform[target]
+    if (op === 'custom') return
+    mappingUiTransformJson[target] = JSON.stringify(op ? [{ op }] : [])
+  }
+
+  function mappingSample(source: string): string {
+    if (!source) return '—'
+    const value = runRows.value.find((row) => row.source[source] != null)?.source[source]
+    return value == null ? '—' : String(value).slice(0, 80)
+  }
+
+  return {
+    saveMappings,
+    targetField,
+    applyCommonTransform,
+    mappingSample,
+  }
+}
+
+export type EltCenterDraftActions = ReturnType<typeof createEltCenterDraftActions>

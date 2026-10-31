@@ -55,7 +55,7 @@ class ProductPriceHistory(
     provenance_json: Mapped[str] = mapped_column(Text, nullable=False)
 
 
-class EtlPriceDimension(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, OwnedSourceBase):
+class EltPriceDimension(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, OwnedSourceBase):
     __tablename__ = "etl_price_dimensions"
     __table_args__ = (
         UniqueConstraint("tenant_id", "product_id", name="uq_etl_price_dimensions_product"),

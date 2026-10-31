@@ -15,7 +15,7 @@ from zipfile import BadZipFile, ZipFile
 from defusedxml import ElementTree as SAFE
 from defusedxml.common import DefusedXmlException
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_drawing import (
     R,
     S,

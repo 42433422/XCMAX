@@ -4,7 +4,7 @@ import hashlib
 import json
 from copy import deepcopy
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 
 MAX_ARCHIVE_BYTES = 20_000_000
 

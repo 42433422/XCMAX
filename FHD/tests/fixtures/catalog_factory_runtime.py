@@ -41,7 +41,7 @@ def _audit(event, args):
 sys.addaudithook(_audit)
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-BASE = "/api/etl/owned-mixed-v1/products"
+BASE = "/api/elt/owned-mixed-v1/products"
 GRANTS = {
     "product.view",
     "product.edit",
@@ -77,10 +77,10 @@ def _seed(root):
     from starlette.requests import Request
 
     import app.db.models  # noqa: F401 - register canonical fixture schemas
-    from app.application.etl.batch_owned_source import OwnedSqlSessions
+    from app.application.elt.batch_owned_source import OwnedSqlSessions
     from app.db.db_base import Base
     from app.db.models.agent_business_action import AgentBusinessActionRecord
-    from app.db.models.owned_source import EtlPriceDimension, ProductPriceHistory
+    from app.db.models.owned_source import EltPriceDimension, ProductPriceHistory
     from app.db.models.permission import Permission, Role
     from app.db.models.product import Product
     from app.db.models.product_edit_claim import ProductEditClaimRecord
@@ -162,7 +162,7 @@ def _seed(root):
         db.flush()
         pid = product.id
         db.add(
-            EtlPriceDimension(
+            EltPriceDimension(
                 tenant_id=7,
                 product_id=pid,
                 currency="CNY",
@@ -254,7 +254,7 @@ def _existing_reader(info):
     """A real authorized physical READ connection, used only as a concurrent reader."""
     from starlette.requests import Request
 
-    from app.application.etl.batch_owned_source import OwnedSqlSessions
+    from app.application.elt.batch_owned_source import OwnedSqlSessions
     from app.desktop_runtime.database_generation_registry import _epoch_paths
     from app.infrastructure.auth.agent_principal import require_agent_principal
     from app.mod_sdk.owned_price_catalog import CatalogPurpose

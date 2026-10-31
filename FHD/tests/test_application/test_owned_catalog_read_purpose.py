@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl.batch_owned_source import OwnedSqlSessions
+from app.application.elt.batch_owned_source import OwnedSqlSessions
 from app.db.models.product import Product
 from app.desktop_runtime.database_generation_registry import GenerationObservationError
 from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
@@ -173,7 +173,7 @@ def test_read_denies_orm_flush(catalog, operation):
 
 
 def test_read_is_physically_readonly_even_without_authorizer_or_query_only(catalog):
-    from app.application.etl.errors import EtlError
+    from app.application.elt.errors import EltError
 
     _, reader, _ = catalog
     with reader() as db:
@@ -183,12 +183,12 @@ def test_read_is_physically_readonly_even_without_authorizer_or_query_only(catal
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
             physical.execute("UPDATE products SET name='bad'")
         assert physical.execute("SELECT name FROM products").fetchone() == ("original",)
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             reader.validate(db)
 
 
 def test_explicit_read_session_cannot_delegate_to_writer(catalog):
-    from app.application.etl.owned_sql_session import _fresh_target_session
+    from app.application.elt.owned_sql_session import _fresh_target_session
 
     writer, reader, _ = catalog
     with (

@@ -26,7 +26,7 @@ from app.db.bootstrap.orm_tables import GroupName, OrmBootstrap, table_group
 from app.db.bootstrap.postgres_auth import PostgresAuthBootstrap
 from app.db.bootstrap.runtime import RuntimeBootstrap
 from app.db.db_base import Base
-from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap as ensure_sqlite_etl_bootstrap
+from app.db.elt_bootstrap import ensure_sqlite_elt_bootstrap as ensure_sqlite_elt_bootstrap
 from app.legacy.db.bootstrap import legacy_tables
 from app.legacy.db.bootstrap.legacy_tables import TemplateTables
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -355,7 +355,7 @@ def ensure_runtime_auth_bootstrap(
             ensure_ai_conversation_bootstrap,
             ensure_mobile_push_bootstrap,
         ),
-        sqlite_etl=ensure_sqlite_etl_bootstrap,
+        sqlite_elt=ensure_sqlite_elt_bootstrap,
         erp=ensure_erp_bootstrap,
         effective_url=resolve_effective_database_url,
         is_sqlite=is_sqlite_url,

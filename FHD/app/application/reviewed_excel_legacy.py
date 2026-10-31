@@ -21,7 +21,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.properties import PageSetupProperties
 from xlrd.compdoc import CompDoc, CompDocError
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_legacy_styles import assign_style, legacy_style
 from app.application.reviewed_excel_template import MAX_BYTES, MAX_CELLS, inspect_workbook
 

@@ -86,7 +86,7 @@ def test_runtime_bootstrap_uses_late_bound_steps_in_dependency_order(monkeypatch
     names = (
         *_SQLITE_ONLY,
         *_COMMON,
-        "ensure_sqlite_etl_bootstrap",
+        "ensure_sqlite_elt_bootstrap",
         "ensure_erp_bootstrap",
         "ensure_postgresql_auth_bootstrap",
     )
@@ -101,7 +101,7 @@ def test_runtime_bootstrap_uses_late_bound_steps_in_dependency_order(monkeypatch
 
     first = list(_SQLITE_ONLY) if url.startswith("sqlite") else ["ensure_postgresql_auth_bootstrap"]
     last = (
-        ["ensure_sqlite_etl_bootstrap", "ensure_erp_bootstrap"]
+        ["ensure_sqlite_elt_bootstrap", "ensure_erp_bootstrap"]
         if url.startswith("sqlite")
         else ["ensure_erp_bootstrap"]
     )

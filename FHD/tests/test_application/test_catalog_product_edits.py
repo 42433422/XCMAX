@@ -30,9 +30,9 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.application.etl.batch_owned_source import OwnedSqlSessions
+from app.application.elt.batch_owned_source import OwnedSqlSessions
 from app.db.models.agent_business_action import AgentBusinessActionRecord
-from app.db.models.owned_source import EtlPriceDimension, ProductPriceHistory
+from app.db.models.owned_source import EltPriceDimension, ProductPriceHistory
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.workflow import WorkflowPlan
@@ -92,7 +92,7 @@ def catalog(host, monkeypatch):
         db.flush()
         pid = product.id
         db.add(
-            EtlPriceDimension(
+            EltPriceDimension(
                 tenant_id=actor.tenant_id,
                 product_id=pid,
                 currency="CNY",
@@ -147,7 +147,7 @@ def prepare(c, body=None, *, actor=None):
     actor = actor or c.actor
     body = body or request(c, actor=actor)
     response = c.client.post(
-        f"/api/etl/owned-mixed-v1/products/{c.pid}/edits", headers=actor.headers, json=body
+        f"/api/elt/owned-mixed-v1/products/{c.pid}/edits", headers=actor.headers, json=body
     )
     if response.status_code != 202:
         create_edit(
@@ -192,7 +192,7 @@ def test_real_http_approval_effect_receipt_and_no_replay(catalog):
     assert result.get("success") is True, result
     assert len(rows(c)) == 2
     verified = c.client.get(
-        f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
+        f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
         headers=c.actor.headers,
     )
     assert verified.status_code == 200, verified.text
@@ -200,7 +200,7 @@ def test_real_http_approval_effect_receipt_and_no_replay(catalog):
     assert again.get("success") is True, again
     assert len(rows(c)) == 2
     response = c.client.get(
-        f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}", headers=c.actor.headers
+        f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}", headers=c.actor.headers
     )
     assert "_tool_approval_grants" not in response.text
     assert c.runs.get(run.run_id).metadata["_tool_approval_grants"]
@@ -243,10 +243,10 @@ def test_reader_can_observe_saved_original_without_host_or_source_writes(catalog
     revoke_write_grants(c)
     before = authority_images(c)
     assert (
-        c.client.get("/api/etl/owned-mixed-v1/products", headers=c.actor.headers).status_code == 200
+        c.client.get("/api/elt/owned-mixed-v1/products", headers=c.actor.headers).status_code == 200
     )
     response = c.client.get(
-        f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
+        f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
         headers=c.actor.headers,
     )
     assert response.status_code == 200, response.text
@@ -254,7 +254,7 @@ def test_reader_can_observe_saved_original_without_host_or_source_writes(catalog
     result = AgentToolExecutor().execute(run.steps[0], runtime_context=action_context(run))
     assert result["success"] is True
     denied = c.client.post(
-        f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
+        f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
         headers=c.actor.headers,
         json={"confirmed": True},
     )
@@ -305,7 +305,7 @@ def test_committed_unknown_is_read_only_until_explicit_owner_reconciliation(cata
     run, body = committed_but_unknown(c)
     before = authority_images(c)
     response = c.client.get(
-        f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
+        f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
         headers=c.actor.headers,
     )
     assert response.status_code == 200, response.text
@@ -314,7 +314,7 @@ def test_committed_unknown_is_read_only_until_explicit_owner_reconciliation(cata
     assert authority_images(c) == before  # No automatic UNKNOWN->completed CAS or re-effect.
     for confirmation in ({}, {"confirmed": False}, {"confirmed": 1}):
         denied = c.client.post(
-            f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
+            f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
             headers=c.actor.headers,
             json=confirmation,
         )
@@ -327,7 +327,7 @@ def test_committed_unknown_is_read_only_until_explicit_owner_reconciliation(cata
     }
     assert (
         c.client.post(
-            f"/api/etl/owned-mixed-v1/products/{c.pid}/edits",
+            f"/api/elt/owned-mixed-v1/products/{c.pid}/edits",
             headers=c.actor.headers,
             json=alternate,
         ).status_code
@@ -335,7 +335,7 @@ def test_committed_unknown_is_read_only_until_explicit_owner_reconciliation(cata
     )
     assert authority_images(c) == before
     reconciled = c.client.post(
-        f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
+        f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
         headers=c.actor.headers,
         json={"confirmed": True},
     )
@@ -344,7 +344,7 @@ def test_committed_unknown_is_read_only_until_explicit_owner_reconciliation(cata
     with c.actor.factory() as db:
         assert db.query(AgentBusinessActionRecord).one().state == "completed"
     assert (
-        c.client.get("/api/etl/owned-mixed-v1/products", headers=c.actor.headers).status_code == 200
+        c.client.get("/api/elt/owned-mixed-v1/products", headers=c.actor.headers).status_code == 200
     )
 
 
@@ -360,7 +360,7 @@ def test_replaced_ledger_owner_cannot_adopt_original_signed_effect(catalog, reje
         (c.client.post, "reconciliation", {"json": {"confirmed": True}}),
     ):
         response = method(
-            f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/{suffix}",
+            f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/{suffix}",
             headers=c.actor.headers,
             **kwargs,
         )
@@ -374,14 +374,14 @@ def test_replaced_ledger_owner_cannot_adopt_original_signed_effect(catalog, reje
     alternate = {**body, "operation_id": str(uuid4())}
     assert (
         c.client.post(
-            f"/api/etl/owned-mixed-v1/products/{c.pid}/edits",
+            f"/api/elt/owned-mixed-v1/products/{c.pid}/edits",
             headers=c.actor.headers,
             json=alternate,
         ).status_code
         == 409
     )
     assert (
-        c.client.get("/api/etl/owned-mixed-v1/products", headers=c.actor.headers).status_code == 409
+        c.client.get("/api/elt/owned-mixed-v1/products", headers=c.actor.headers).status_code == 409
     )
     assert authority_images(c) == before
 
@@ -410,7 +410,7 @@ def test_source_transaction_rollback_keeps_claim_unknown_and_never_replays(catal
     )
     assert (
         c.client.post(
-            f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
+            f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
             headers=c.actor.headers,
             json={"confirmed": True},
         ).status_code
@@ -447,7 +447,7 @@ def test_missing_or_rolled_back_authority_is_unknown_without_new_effect(catalog,
             )
     before = authority_images(c)
     response = c.client.get(
-        f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
+        f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
         headers=c.actor.headers,
     )
     assert response.status_code == 409, response.text
@@ -470,14 +470,14 @@ def test_foreign_actor_cannot_read_or_reconcile_original(catalog, foreign):
     before = authority_images(c)
     assert (
         c.client.get(
-            f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
+            f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/verification",
             headers=actor.headers,
         ).status_code
         == 409
     )
     assert (
         c.client.post(
-            f"/api/etl/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
+            f"/api/elt/owned-mixed-v1/products/edits/{body['operation_id']}/reconciliation",
             headers=actor.headers,
             json={"confirmed": True},
         ).status_code
@@ -535,7 +535,7 @@ def test_verified_historical_save_and_rejection_are_not_unknown(catalog):
     assert prior["historical_effect_verified"] is True and prior["fresh_save"] is False
     assert prior["current_matches"] is False
     response = c.client.get(
-        f"/api/etl/owned-mixed-v1/products/edits/{first_body['operation_id']}/verification",
+        f"/api/elt/owned-mixed-v1/products/edits/{first_body['operation_id']}/verification",
         headers=c.actor.headers,
     )
     data = response.json()["data"]
@@ -674,7 +674,7 @@ def test_spawn_requires_parent_only_verified_worker_claim(catalog, monkeypatch, 
 
 def test_registered_catalog_routes_require_auth_and_reject_client_authority(catalog):
     c = catalog
-    base = "/api/etl/owned-mixed-v1/products"
+    base = "/api/elt/owned-mixed-v1/products"
     paths = {
         base,
         base + "/{product_id}",

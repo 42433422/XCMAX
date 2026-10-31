@@ -9,17 +9,17 @@ import pytest
 from openpyxl import Workbook
 
 from app.application.attendance_import_app_service import _ensure_schema
-from app.application.etl.errors import EtlError
-from app.application.etl.preview_confirmation import record_confirmation
-from app.application.etl.targets.batch import AttendanceAdapter
-from app.db.models.etl import EtlRun, EtlRunRow
+from app.application.elt.errors import EltError
+from app.application.elt.preview_confirmation import record_confirmation
+from app.application.elt.targets.batch import AttendanceAdapter
+from app.db.models.elt import EltRun, EltRunRow
 from tests.test_application.test_etl_preview_task_boundaries import (
     preview_store as preview_store,
 )
 from tests.test_application.test_etl_preview_task_boundaries import snapshot
 
-PARTIAL = "ETL_ATTENDANCE_PARTIAL_SELECTION_UNSUPPORTED"
-EMPTY = "ETL_ATTENDANCE_EMPTY_SELECTION"
+PARTIAL = "ELT_ATTENDANCE_PARTIAL_SELECTION_UNSUPPORTED"
+EMPTY = "ELT_ATTENDANCE_EMPTY_SELECTION"
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ def test_excluded_attendance_rows_never_reach_workbook_writer(
     store = attendance_store
     before = attendance_contents(store)
     with store.factory() as db:
-        rows = db.query(EtlRunRow).filter_by(run_id=store.run_id).order_by(EtlRunRow.id).all()
+        rows = db.query(EltRunRow).filter_by(run_id=store.run_id).order_by(EltRunRow.id).all()
         patch = (
             {
                 "field_mappings": [{"source": "姓名", "target": "document_path"}],
@@ -109,7 +109,7 @@ def test_excluded_attendance_rows_never_reach_workbook_writer(
     assert reviewed["summary"]["error"] == (1 if selection == "error" else 0)
     only_valid = selection == "error"
     if boundary == "approval":
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             approve(store, reviewed["preview_revision"], valid_rows_only=only_valid)
         assert error.value.code == code and error.value.status_code == 409
         current = snapshot(store, store.run_id)
@@ -118,7 +118,7 @@ def test_excluded_attendance_rows_never_reach_workbook_writer(
     else:
         # A legacy/internal dispatcher cannot bypass the worker's own scope check.
         with store.factory() as db:
-            run = db.get(EtlRun, store.run_id)
+            run = db.get(EltRun, store.run_id)
             record_confirmation(run, reviewed["preview_revision"], valid_rows_only=only_valid)
             run.status = "executing"
             db.commit()
@@ -163,7 +163,7 @@ def test_attendance_adapter_also_rejects_incomplete_scope(
         "row_count": declared,
         "total_rows": total,
     }
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         AttendanceAdapter().execute_batch(({} for _ in range(actual)), context)
     assert error.value.code == code
     assert attendance_contents(store) == before

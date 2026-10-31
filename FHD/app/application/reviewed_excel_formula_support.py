@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string, get_column_letter
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 
 _SAFE_FUNCTIONS = {"SUM", "AVERAGE", "MIN", "MAX", "ROUND", "IF", "IFERROR", "COUNT", "COUNTA"}

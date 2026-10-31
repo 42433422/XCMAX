@@ -4,7 +4,7 @@ vi.mock('./core', () => ({ api: http }))
 import { catalogPricesApi, type CatalogEditRequest } from './catalogPrices'
 import agentRunsApi from './agentRuns'
 const headers = { headers: { 'X-XCAGI-Active-Mod-Id': 'selected-mod' } }
-const base = '/api/etl/owned-mixed-v1/products'
+const base = '/api/elt/owned-mixed-v1/products'
 beforeEach(() => vi.clearAllMocks())
 describe('protected catalog transport', () => {
   it('binds every read to the explicit selected Mod without ERP routing', async () => {

@@ -12,15 +12,15 @@ from typing import Any
 
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 from app.application.agent_orchestrator.catalog_product_worker import TOOL
-from app.application.etl.batch_owned_source import OwnedSqlSessions
-from app.application.etl.batch_price_sources import price_value
-from app.application.etl.catalog_price_history import (
+from app.application.elt.batch_owned_source import OwnedSqlSessions
+from app.application.elt.batch_price_sources import price_value
+from app.application.elt.catalog_price_history import (
     effective_history,
     effective_price,
     history_events,
     validate_correction,
 )
-from app.db.models.owned_source import EtlPriceDimension, ProductPriceHistory
+from app.db.models.owned_source import EltPriceDimension, ProductPriceHistory
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.workflow import WorkflowPlan
@@ -92,7 +92,7 @@ def verify_manual_row(db, row, provenance):
     try:
         payload = receipt_payload(db, provenance["receipt_key"])
         dimension = (
-            db.query(EtlPriceDimension)
+            db.query(EltPriceDimension)
             .filter_by(tenant_id=row.tenant_id, product_id=row.product_id)
             .one_or_none()
         )
@@ -125,7 +125,7 @@ def state(db, product_id, tenant):
     if len(history) > 5000:
         raise ValueError("catalog history exceeds review limit")
     dimension = (
-        db.query(EtlPriceDimension)
+        db.query(EltPriceDimension)
         .filter_by(tenant_id=int(tenant), product_id=product_id)
         .one_or_none()
     )

@@ -13,8 +13,8 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 from sqlalchemy.sql.ddl import sort_tables
 
 from app.db.models.customer import Customer
-from app.db.models.etl import EtlTemplate, EtlTemplateVersion, EtlUpload
-from app.db.models.owned_source import EtlPriceDimension, ProductPriceHistory
+from app.db.models.elt import EltTemplate, EltTemplateVersion, EltUpload
+from app.db.models.owned_source import EltPriceDimension, ProductPriceHistory
 from app.db.models.product import Product, UomCategory, UomUnit
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.sales import SalesOrder, SalesOrderItem
@@ -29,11 +29,11 @@ from app.mod_sdk.owner_workspace import owner_workspace
 CATALOG_MODELS = (
     Product,
     ProductPriceHistory,
-    EtlPriceDimension,
+    EltPriceDimension,
     PurchaseUnit,
     UomCategory,
     UomUnit,
-    EtlUpload,
+    EltUpload,
     WorkflowPlan,
     ShipmentRecord,
     SalesOrder,
@@ -86,7 +86,7 @@ def _context(principal, *, provisioning=False, mixed=False, purpose=CatalogPurpo
 def _schema(*, mixed=False):
     ddl = dialect()
     result = {}
-    models = CATALOG_MODELS + ((EtlTemplate, EtlTemplateVersion) if mixed else ())
+    models = CATALOG_MODELS + ((EltTemplate, EltTemplateVersion) if mixed else ())
     for table in sort_tables([model.__table__ for model in models]):
         result[("table", table.name)] = str(CreateTable(table).compile(dialect=ddl))
         for index in sorted(table.indexes, key=lambda item: item.name):

@@ -102,11 +102,11 @@ def _build_etl_http():
     from app.fastapi_routes.shipment_etl.history import HistoryViews
     from app.fastapi_routes.shipment_etl.imports import ShipmentImports
     from app.fastapi_routes.shipment_etl.ocr import OcrPreview
-    from app.fastapi_routes.shipment_etl.responses import EtlResponses
+    from app.fastapi_routes.shipment_etl.responses import EltResponses
     from app.fastapi_routes.shipment_etl.templates import TemplateOutputs
     from app.fastapi_routes.shipment_etl.uploads import UploadStager
 
-    responses = EtlResponses(sanitize=_safe_failed_etl_result, logger=logger)
+    responses = EltResponses(sanitize=_safe_failed_etl_result, logger=logger)
     uploads = UploadStager(_temporary_upload_path, logger)
     imports = ShipmentImports(
         get_shipment_excel_etl_app_service,

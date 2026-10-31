@@ -13,7 +13,7 @@ from app.db.models.accounting import JournalEntry
 from app.db.models.agent import AgentTaskExecutionRecord, AgentTaskRecord
 from app.db.models.approval import ApprovalRequest
 from app.db.models.customer import Customer
-from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.db.models.inventory import InventoryLedger
 from app.db.models.product import Product
 from app.db.models.receivable_allocation import ReceivableAllocation
@@ -220,15 +220,15 @@ class TutorialBusinessVerifierMixin:
         ok, refs, counts = self._closed_loop_result(db, run)
         return ok, "verification_passed" if ok else "sales_result_not_ready", refs, counts
 
-    def _etl_rows(self, db: Session, run: TutorialRun) -> list[EtlRun]:
+    def _etl_rows(self, db: Session, run: TutorialRun) -> list[EltRun]:
         with tenant_scope(run.workspace.tutorial_tenant_id):
             return cast(
-                list[EtlRun],
-                db.query(EtlRun)
-                .join(EtlUpload, EtlUpload.id == EtlRun.upload_id)
-                .filter(EtlRun.owner_user_id == run.user_id)
-                .filter(EtlUpload.file_name.like("xcagi-tutorial-business-import%"))
-                .order_by(EtlRun.created_at.desc())
+                list[EltRun],
+                db.query(EltRun)
+                .join(EltUpload, EltUpload.id == EltRun.upload_id)
+                .filter(EltRun.owner_user_id == run.user_id)
+                .filter(EltUpload.file_name.like("xcagi-tutorial-business-import%"))
+                .order_by(EltRun.created_at.desc())
                 .all(),
             )
 
@@ -238,7 +238,7 @@ class TutorialBusinessVerifierMixin:
         row_count = 0
         if previews:
             with tenant_scope(run.workspace.tutorial_tenant_id):
-                row_count = db.query(EtlRunRow).filter(EtlRunRow.run_id == previews[0].id).count()
+                row_count = db.query(EltRunRow).filter(EltRunRow.run_id == previews[0].id).count()
         ok = bool(previews) and row_count > 0
         return (
             ok,
@@ -255,7 +255,7 @@ class TutorialBusinessVerifierMixin:
         error_rows = 0
         if completed:
             with tenant_scope(run.workspace.tutorial_tenant_id):
-                rows = db.query(EtlRunRow).filter(EtlRunRow.run_id == completed[0].id).all()
+                rows = db.query(EltRunRow).filter(EltRunRow.run_id == completed[0].id).all()
             successful = sum(row.execution_status == "success" for row in rows)
             referenced = sum(bool(row.match_ref or _load_json(row.after_json, {})) for row in rows)
             error_rows = sum(row.execution_status == "failed" for row in rows)

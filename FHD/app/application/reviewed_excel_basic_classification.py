@@ -13,7 +13,7 @@ def classify_review_workbook(review: dict) -> list[dict]:
 
     from openpyxl.utils.cell import coordinate_from_string
 
-    from app.application.etl.target_detection import _ATTENDANCE_RE, _DELIVERY_RE, _PURCHASE_RE
+    from app.application.elt.target_detection import _ATTENDANCE_RE, _DELIVERY_RE, _PURCHASE_RE
 
     patterns = {
         "quotation": re.compile(r"报价|報價|quotation|sales quote", re.I),

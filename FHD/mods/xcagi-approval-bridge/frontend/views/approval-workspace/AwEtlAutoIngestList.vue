@@ -31,7 +31,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { etlApi } from '@/api/etl'
+import { eltApi } from '@/api/elt'
 
 type Batch = {
   batch_id?: string
@@ -51,7 +51,7 @@ async function reload() {
   loading.value = true
   error.value = ''
   try {
-    items.value = (await etlApi.autoIngestBatches(50, true)) as Batch[]
+    items.value = (await eltApi.autoIngestBatches(50, true)) as Batch[]
   } catch (err) {
     error.value = err instanceof Error ? err.message : '读取入库批次失败'
   } finally {
@@ -64,7 +64,7 @@ async function withdraw(batchId: string) {
   busyId.value = batchId
   error.value = ''
   try {
-    await etlApi.withdrawAutoIngestBatch(batchId)
+    await eltApi.withdrawAutoIngestBatch(batchId)
     await reload()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '撤回失败'

@@ -11,15 +11,15 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.application.etl.errors import EtlError
-from app.application.etl.service import EtlService
-from app.application.etl.service_support import dump_json
-from app.application.etl.targets import get_adapter
-from app.application.etl.targets.customer_product_support import customer_values
-from app.application.etl.targets.helpers import model_values
-from app.application.etl.targets.products import ProductAdapter
+from app.application.elt.errors import EltError
+from app.application.elt.service import EltService
+from app.application.elt.service_support import dump_json
+from app.application.elt.targets import get_adapter
+from app.application.elt.targets.customer_product_support import customer_values
+from app.application.elt.targets.helpers import model_values
+from app.application.elt.targets.products import ProductAdapter
 from app.db.db_base import Base
-from app.db.models.etl import EtlRun, EtlRunRow, EtlTemplateVersion, EtlUpload
+from app.db.models.elt import EltRun, EltRunRow, EltTemplateVersion, EltUpload
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
 
@@ -119,10 +119,10 @@ def test_rollback_rejects_touched_field_conflict_without_partial_restore(db, tar
     current_customer = customer_values(customer)
     current_product = model_values(product, ProductAdapter.fields)
 
-    with pytest.raises(EtlError) as error, db.begin_nested():
+    with pytest.raises(EltError) as error, db.begin_nested():
         get_adapter(target).rollback_row(db, **receipt)
 
-    assert error.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert error.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
     db.expire_all()
     assert customer_values(customer) == current_customer
     assert model_values(product, ProductAdapter.fields) == current_product
@@ -151,7 +151,7 @@ def test_unchanged_import_snapshot_has_nothing_to_restore(db, target):
 
 
 def persist_run(db, target, receipts):
-    upload = EtlUpload(
+    upload = EltUpload(
         id="rollback-upload",
         tenant_id=1,
         owner_user_id=1,
@@ -161,7 +161,7 @@ def persist_run(db, target, receipts):
         sha256="a" * 64,
         storage_path="unused-synthetic-source.csv",
     )
-    run = EtlRun(
+    run = EltRun(
         id="rollback-run",
         tenant_id=1,
         owner_user_id=1,
@@ -178,7 +178,7 @@ def persist_run(db, target, receipts):
     db.flush()
     rows = []
     for source_row, receipt in enumerate(receipts, 1):
-        row = EtlRunRow(
+        row = EltRunRow(
             tenant_id=1,
             owner_user_id=1,
             run_id=run.id,
@@ -203,7 +203,7 @@ def test_service_reverses_row_order_and_never_replays_completed_rollback(db):
     customer.contact_person = "人工新联系人"
     product.description = "人工新备注"
     db.commit()
-    service = EtlService(adviser=MagicMock())
+    service = EltService(adviser=MagicMock())
 
     service.rollback(db, run_id=run.id, owner_user_id=1)
 
@@ -215,9 +215,9 @@ def test_service_reverses_row_order_and_never_replays_completed_rollback(db):
     assert product.description == "人工新备注"
     customer.contact_phone = "400"
     db.commit()
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         service.rollback(db, run_id=run.id, owner_user_id=1)
-    assert error.value.code == "ETL_ALREADY_ROLLED_BACK"
+    assert error.value.code == "ELT_ALREADY_ROLLED_BACK"
     assert customer.contact_phone == "400"
 
 
@@ -228,11 +228,11 @@ def test_failed_rollback_retry_skips_previously_restored_rows(db):
     run, rows = persist_run(db, "customer_products", [first, second])
     customer.contact_phone = "300"
     db.commit()
-    service = EtlService(adviser=MagicMock())
+    service = EltService(adviser=MagicMock())
 
-    with pytest.raises(EtlError) as error:
+    with pytest.raises(EltError) as error:
         service.rollback(db, run_id=run.id, owner_user_id=1)
-    assert error.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert error.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
     assert error.value.status_code == 409
     assert run.rollback_status == "failed"
     assert [row.execution_status for row in rows] == ["success", "rolled_back"]
@@ -271,7 +271,7 @@ def test_aggregate_rollback_removes_created_products_before_created_customer(db)
     assert db.query(Product).count() == 2
     assert db.query(PurchaseUnit).count() == 1
 
-    EtlService(adviser=MagicMock()).rollback(db, run_id=run.id, owner_user_id=1)
+    EltService(adviser=MagicMock()).rollback(db, run_id=run.id, owner_user_id=1)
 
     assert db.query(Product).count() == 0
     assert db.query(PurchaseUnit).count() == 0
@@ -281,10 +281,10 @@ def test_aggregate_rollback_removes_created_products_before_created_customer(db)
 @pytest.mark.parametrize(
     ("model", "field", "hook"),
     [
-        (EtlTemplateVersion, "created_at", "default"),
-        (EtlRunRow, "created_at", "default"),
-        (EtlRunRow, "updated_at", "default"),
-        (EtlRunRow, "updated_at", "onupdate"),
+        (EltTemplateVersion, "created_at", "default"),
+        (EltRunRow, "created_at", "default"),
+        (EltRunRow, "updated_at", "default"),
+        (EltRunRow, "updated_at", "onupdate"),
     ],
 )
 def test_etl_timestamp_hooks_keep_utc_naive_without_deprecated_calls(model, field, hook):

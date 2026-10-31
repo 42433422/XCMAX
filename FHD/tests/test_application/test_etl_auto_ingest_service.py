@@ -9,8 +9,8 @@ import pytest
 from openpyxl import Workbook
 
 from app.application import dataset_rag_app_service as rag
-from app.application.etl import auto_ingest_service as ais
-from app.application.etl.auto_ingest_service import AutoIngestService
+from app.application.elt import auto_ingest_service as ais
+from app.application.elt.auto_ingest_service import AutoIngestService
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -60,7 +60,7 @@ def test_auto_ingest_writes_knowledge_and_records_business(
         "status": "completed",
         "summary": {"new": 1, "update": 0, "skip": 0, "error": 0, "executed": 1},
     }
-    monkeypatch.setattr("app.application.etl.service.get_etl_service", lambda: fake_etl)
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake_etl)
 
     service = AutoIngestService()
     with tenant_scope(42):
@@ -105,7 +105,7 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
     }
     fake_etl.execute.return_value = {"id": "run-2", "status": "completed", "summary": {}}
     fake_etl.rollback.return_value = {"id": "run-2", "rollback_status": "completed"}
-    monkeypatch.setattr("app.application.etl.service.get_etl_service", lambda: fake_etl)
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake_etl)
 
     service = AutoIngestService()
     with tenant_scope(9):
@@ -144,7 +144,7 @@ def test_auto_ingest_progress_tracks_real_stages(rag_service, ledger_root, tmp_p
         "status": "completed",
         "summary": {"new": 1, "update": 0, "skip": 0, "error": 0, "executed": 1},
     }
-    monkeypatch.setattr("app.application.etl.service.get_etl_service", lambda: fake_etl)
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake_etl)
 
     service = AutoIngestService()
     with tenant_scope(7):

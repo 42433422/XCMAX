@@ -1,5 +1,5 @@
 {
-  "lines": 2405243,
+  "lines": 2405246,
   "updated": "2026-10-31",
-  "note": "fix/#2856 rebase onto #2859：用户上传→选模板测试与覆盖率补测；同步净删除基线"
+  "note": "ELT product rename (/api/elt; etl_* tables; etl.* perms) rebased onto #2856 inline docking template"
 }

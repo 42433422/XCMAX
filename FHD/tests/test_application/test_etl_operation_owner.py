@@ -16,24 +16,24 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import inspect, update
 
-from app.application.etl.errors import EtlError
-from app.application.etl.operation_owner import (
+from app.application.elt.errors import EltError
+from app.application.elt.operation_owner import (
     bind_owner,
     claim_operation,
     fail_operation,
     finish_operation,
     unbind_owner,
 )
-from app.application.etl.preview_confirmation import (
+from app.application.elt.preview_confirmation import (
     preview_revision,
     publish_preview,
     record_confirmation,
 )
-from app.application.etl.service import EtlService, mark_interrupted_runs_on_startup
-from app.application.etl.targets import get_adapter
-from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap
+from app.application.elt.service import EltService, mark_interrupted_runs_on_startup
+from app.application.elt.targets import get_adapter
+from app.db.elt_bootstrap import ensure_sqlite_elt_bootstrap
 from app.db.models import Product
-from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.test_application.test_etl_rollback_compare_swap import import_update
 from tests.test_application.test_etl_rollback_compare_swap import store as store
@@ -53,17 +53,17 @@ def test_active_owner_blocks_other_connections_even_when_status_is_failed(store)
     _engine, factory, _ids = store
     run_id = make_run(store)
     with factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         owner = claim_operation(db, run, "rollback", allowed_statuses={"completed"})
         run.status = "failed"
         db.commit()
     with factory() as db:
-        with pytest.raises(EtlError) as error:
-            claim_operation(db, db.get(EtlRun, run_id), "execute", allowed_statuses={"failed"})
-        assert error.value.code == "ETL_RUN_BUSY"
+        with pytest.raises(EltError) as error:
+            claim_operation(db, db.get(EltRun, run_id), "execute", allowed_statuses={"failed"})
+        assert error.value.code == "ELT_RUN_BUSY"
         db.rollback()
     with factory() as db:
-        assert db.get(EtlRun, run_id).operation_token == owner.token
+        assert db.get(EltRun, run_id).operation_token == owner.token
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
@@ -73,29 +73,29 @@ def test_expired_worker_cannot_write_after_takeover_or_replace_new_owner_status(
     run_id = make_run(store)
     with factory() as first:
         owner = claim_operation(
-            first, first.get(EtlRun, run_id), "rollback", allowed_statuses={"completed"}
+            first, first.get(EltRun, run_id), "rollback", allowed_statuses={"completed"}
         )
         first.commit()
         bind_owner(first, owner)
         product = first.get(Product, ids[1])
         with factory() as other:
             other.execute(
-                update(EtlRun)
-                .where(EtlRun.id == run_id)
+                update(EltRun)
+                .where(EltRun.id == run_id)
                 .values(operation_lease_until=datetime.now(UTC) - timedelta(seconds=1))
             )
             other.commit()
             replacement = claim_operation(
-                other, other.get(EtlRun, run_id), "rollback", allowed_statuses={"completed"}
+                other, other.get(EltRun, run_id), "rollback", allowed_statuses={"completed"}
             )
             other.commit()
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             if write_kind == "orm":
                 product.price = 999
                 first.flush()
             else:
                 first.execute(update(Product).where(Product.id == product.id).values(price=999))
-        assert error.value.code == "ETL_OPERATION_LEASE_LOST"
+        assert error.value.code == "ELT_OPERATION_LEASE_LOST"
         assert error.value.status_code == 409
         assert not fail_operation(
             first, owner, code="old_failure", message="must not replace owner"
@@ -103,8 +103,8 @@ def test_expired_worker_cannot_write_after_takeover_or_replace_new_owner_status(
         unbind_owner(first)
     with factory() as db:
         assert db.get(Product, ids[1]).price == 20
-        assert db.get(EtlRun, run_id).operation_token == replacement.token
-        assert db.get(EtlRun, run_id).error_code is None
+        assert db.get(EltRun, run_id).operation_token == replacement.token
+        assert db.get(EltRun, run_id).error_code is None
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
@@ -112,7 +112,7 @@ def test_owner_finishes_business_write_and_releases_in_one_transaction(store):
     _engine, factory, ids = store
     run_id = make_run(store)
     with factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         owner = claim_operation(db, run, "rollback", allowed_statuses={"completed"})
         bind_owner(db, owner)
         db.get(Product, ids[1]).price = 10
@@ -121,8 +121,8 @@ def test_owner_finishes_business_write_and_releases_in_one_transaction(store):
         db.commit()
     with factory() as db:
         assert db.get(Product, ids[1]).price == 10
-        assert db.get(EtlRun, run_id).operation_token is None
-        assert db.get(EtlRun, run_id).rollback_status == "completed"
+        assert db.get(EltRun, run_id).operation_token is None
+        assert db.get(EltRun, run_id).rollback_status == "completed"
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
@@ -131,25 +131,25 @@ def test_expired_external_batch_is_not_automatically_reclaimed(store):
     run_id = make_run(store)
     with factory() as db:
         owner = claim_operation(
-            db, db.get(EtlRun, run_id), "batch_execute", allowed_statuses={"completed"}
+            db, db.get(EltRun, run_id), "batch_execute", allowed_statuses={"completed"}
         )
         db.commit()
         db.execute(
-            update(EtlRun)
-            .where(EtlRun.id == run_id)
+            update(EltRun)
+            .where(EltRun.id == run_id)
             .values(operation_lease_until=datetime.now(UTC) - timedelta(seconds=1))
         )
         db.commit()
     with factory() as db:
-        with pytest.raises(EtlError) as error:
-            claim_operation(db, db.get(EtlRun, run_id), "execute", allowed_statuses={"completed"})
-        assert error.value.code == "ETL_RUN_BUSY"
+        with pytest.raises(EltError) as error:
+            claim_operation(db, db.get(EltRun, run_id), "execute", allowed_statuses={"completed"})
+        assert error.value.code == "ELT_RUN_BUSY"
         db.rollback()
         assert fail_operation(db, owner, code="unknown", message="unknown", outcome_unknown=True)
     with factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         assert run.status == "outcome_unknown"
-        assert run.error_code == "ETL_OUTCOME_UNKNOWN"
+        assert run.error_code == "ELT_OUTCOME_UNKNOWN"
         assert run.operation_token == owner.token
 
 
@@ -158,13 +158,13 @@ def test_startup_does_not_interrupt_another_process_with_a_live_owner(store):
     engine, factory, _ids = store
     run_id = make_run(store)
     with factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         claim_operation(db, run, "execute", allowed_statuses={"completed"})
         run.status = "executing"
         db.commit()
     assert mark_interrupted_runs_on_startup(engine) == 0
     with factory() as db:
-        assert db.get(EtlRun, run_id).status == "executing"
+        assert db.get(EltRun, run_id).status == "executing"
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
@@ -183,27 +183,27 @@ def test_second_rollback_never_runs_adapter_or_overwrites_the_first_result(store
         return adapter.rollback_row(db, **kwargs)
 
     monkeypatch.setattr(
-        "app.application.etl.service_execution.get_adapter",
+        "app.application.elt.service_execution.get_adapter",
         lambda _target: SimpleNamespace(rollback_row=rollback_row),
     )
 
     def primary():
         with tenant_scope(1), factory() as db:
-            EtlService(adviser=MagicMock()).rollback(db, run_id=run_id, owner_user_id=1)
+            EltService(adviser=MagicMock()).rollback(db, run_id=run_id, owner_user_id=1)
 
     with ThreadPoolExecutor(max_workers=1, thread_name_prefix="primary-rollback") as executor:
         primary_result = executor.submit(primary)
         try:
             assert entered.wait(5)
-            with factory() as db, pytest.raises(EtlError) as error:
-                EtlService(adviser=MagicMock()).rollback(db, run_id=run_id, owner_user_id=1)
-            assert error.value.code == "ETL_RUN_BUSY"
+            with factory() as db, pytest.raises(EltError) as error:
+                EltService(adviser=MagicMock()).rollback(db, run_id=run_id, owner_user_id=1)
+            assert error.value.code == "ELT_RUN_BUSY"
         finally:
             release.set()
             primary_result.result(timeout=6)
     assert len(calls) == 1 and calls[0].startswith("primary-rollback")
     with factory() as db:
-        assert db.get(EtlRun, run_id).rollback_status == "completed"
+        assert db.get(EltRun, run_id).rollback_status == "completed"
         assert db.get(Product, ids[1]).price == 10
 
 
@@ -225,8 +225,8 @@ def test_real_migration_is_idempotent_and_preserves_existing_rows(store):
         migration.upgrade()
         migration.upgrade()
     with factory() as db:
-        assert db.get(EtlRun, run_id).status == "completed"
-        assert db.get(EtlRun, run_id).operation_token is None
+        assert db.get(EltRun, run_id).status == "completed"
+        assert db.get(EltRun, run_id).operation_token is None
 
 
 def test_packaged_sqlite_bootstrap_upgrades_old_columns_without_recreating_rows(store):
@@ -234,13 +234,13 @@ def test_packaged_sqlite_bootstrap_upgrades_old_columns_without_recreating_rows(
     run_id = make_run(store)
     with engine.begin() as connection, Operations.context(MigrationContext.configure(connection)):
         _migration().downgrade()
-    ensure_sqlite_etl_bootstrap(engine, swallow_errors=False)
-    ensure_sqlite_etl_bootstrap(engine, swallow_errors=False)
+    ensure_sqlite_elt_bootstrap(engine, swallow_errors=False)
+    ensure_sqlite_elt_bootstrap(engine, swallow_errors=False)
     assert {"operation_kind", "operation_token", "operation_lease_until"} <= {
         column["name"] for column in inspect(engine).get_columns("etl_runs")
     }
     with factory() as db:
-        assert db.get(EtlRun, run_id).status == "completed"
+        assert db.get(EltRun, run_id).status == "completed"
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
@@ -251,13 +251,13 @@ def test_active_rollback_owner_blocks_forward_entry_points(store, action, status
     _engine, factory, _ids = store
     run_id = make_run(store)
     with factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         owner = claim_operation(db, run, "rollback", allowed_statuses={"completed"})
         run.status = status
         db.commit()
-    service = EtlService(adviser=MagicMock())
+    service = EltService(adviser=MagicMock())
     service._owned_upload = service._owned_upload_record
-    with factory() as db, pytest.raises(EtlError) as error:
+    with factory() as db, pytest.raises(EltError) as error:
         if action == "execute":
             service.execute(
                 db, run_id=run_id, owner_user_id=1, confirmed=True, valid_rows_only=False
@@ -266,10 +266,10 @@ def test_active_rollback_owner_blocks_forward_entry_points(store, action, status
             service.retry(db, run_id=run_id, owner_user_id=1)
         else:
             service.update_draft(db, run_id=run_id, owner_user_id=1, patch={"field_mappings": []})
-    assert error.value.code == "ETL_RUN_BUSY"
+    assert error.value.code == "ELT_RUN_BUSY"
     with factory() as db:
-        assert db.get(EtlRun, run_id).operation_token == owner.token
-        assert db.get(EtlRun, run_id).status == status
+        assert db.get(EltRun, run_id).operation_token == owner.token
+        assert db.get(EltRun, run_id).status == status
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
@@ -277,10 +277,10 @@ def test_duplicate_batch_dispatch_token_activates_only_one_worker(store, monkeyp
     _engine, factory, _ids = store
     run_id = make_run(store)
     with factory() as db:
-        run = db.get(EtlRun, run_id)
+        run = db.get(EltRun, run_id)
         source = tmp_path / "reviewed.csv"
         source.write_bytes(b"reviewed")
-        upload = db.get(EtlUpload, run.upload_id)
+        upload = db.get(EltUpload, run.upload_id)
         upload.storage_path = str(source)
         upload.size_bytes = len(b"reviewed")
         upload.sha256 = run.file_sha256 = hashlib.sha256(b"reviewed").hexdigest()
@@ -302,11 +302,11 @@ def test_duplicate_batch_dispatch_token_activates_only_one_worker(store, monkeyp
         return {"executed": 0, "receipt": {"test": True}}
 
     monkeypatch.setattr(
-        "app.application.etl.service_execution.get_adapter",
+        "app.application.elt.service_execution.get_adapter",
         lambda _target: SimpleNamespace(execute_batch=execute_batch),
     )
-    monkeypatch.setattr("app.application.etl.service_execution.new_session", factory)
-    service = EtlService(adviser=MagicMock())
+    monkeypatch.setattr("app.application.elt.service_execution.new_session", factory)
+    service = EltService(adviser=MagicMock())
     service._owned_upload = service._owned_upload_record
 
     def primary():
@@ -324,8 +324,8 @@ def test_duplicate_batch_dispatch_token_activates_only_one_worker(store, monkeyp
         thread.join(6)
     assert not thread.is_alive()
     with factory() as db:
-        assert db.get(EtlRun, run_id).status == "completed"
-        assert db.get(EtlRun, run_id).operation_token is None
+        assert db.get(EltRun, run_id).status == "completed"
+        assert db.get(EltRun, run_id).operation_token is None
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
@@ -372,17 +372,17 @@ def test_crashed_rollback_resumes_only_remaining_rows_in_reverse_order(store, la
         unbind_owner(db)
     with factory() as db:
         db.execute(
-            update(EtlRun)
-            .where(EtlRun.id == run_id)
+            update(EltRun)
+            .where(EltRun.id == run_id)
             .values(operation_lease_until=datetime.now(UTC) - timedelta(seconds=1))
         )
         db.get(Product, ids[1]).description = "崩溃后人工备注"
         db.commit()
     with factory() as db:
-        result = EtlService(adviser=MagicMock()).rollback(db, run_id=run_id, owner_user_id=1)
+        result = EltService(adviser=MagicMock()).rollback(db, run_id=run_id, owner_user_id=1)
         assert result["rollback_status"] == "completed"
     with factory() as db:
         assert db.get(Product, ids[1]).price == 10
         assert db.get(Product, ids[1]).description == "崩溃后人工备注"
-        assert {row.execution_status for row in db.query(EtlRunRow).all()} == {"rolled_back"}
-        assert db.get(EtlRun, run_id).operation_token is None
+        assert {row.execution_status for row in db.query(EltRunRow).all()} == {"rolled_back"}
+        assert db.get(EltRun, run_id).operation_token is None

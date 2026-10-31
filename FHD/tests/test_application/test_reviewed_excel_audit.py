@@ -1,6 +1,6 @@
 import pytest
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_audit import claim_request, verify_request
 
 

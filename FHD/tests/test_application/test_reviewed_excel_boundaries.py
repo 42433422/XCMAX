@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_classification import _classify_semantic_batch
 from tests.test_application.test_reviewed_excel_atoms import source
 

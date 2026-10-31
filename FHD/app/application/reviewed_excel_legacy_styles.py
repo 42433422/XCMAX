@@ -2,7 +2,7 @@
 
 from openpyxl.styles import Alignment, Border, Color, Font, PatternFill, Protection, Side
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 
 _PATTERNS = [
     None,

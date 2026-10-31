@@ -98,7 +98,7 @@ def _catalog_unavailable():
     )
 
 
-@router.get("/api/etl/owned-mixed-v1/products")
+@router.get("/api/elt/owned-mixed-v1/products")
 def list_catalog_products(
     keyword: str = Query(default="", max_length=100),
     principal: AgentPrincipal = Depends(require_agent_principal),
@@ -109,7 +109,7 @@ def list_catalog_products(
         return _catalog_unavailable()
 
 
-@router.get("/api/etl/owned-mixed-v1/products/edits/{operation_id}")
+@router.get("/api/elt/owned-mixed-v1/products/edits/{operation_id}")
 def lookup_catalog_edit(
     operation_id: str, principal: AgentPrincipal = Depends(require_agent_principal)
 ):
@@ -134,7 +134,7 @@ def lookup_catalog_edit(
         return _catalog_unavailable()
 
 
-@router.get("/api/etl/owned-mixed-v1/products/edits/{operation_id}/verification")
+@router.get("/api/elt/owned-mixed-v1/products/edits/{operation_id}/verification")
 def verify_catalog_edit(
     operation_id: str, principal: AgentPrincipal = Depends(require_agent_principal)
 ):
@@ -144,7 +144,7 @@ def verify_catalog_edit(
         return _catalog_unavailable()
 
 
-@router.post("/api/etl/owned-mixed-v1/products/edits/{operation_id}/reconciliation")
+@router.post("/api/elt/owned-mixed-v1/products/edits/{operation_id}/reconciliation")
 def reconcile_catalog_edit(
     operation_id: str,
     body: dict = Body(...),
@@ -160,7 +160,7 @@ def reconcile_catalog_edit(
         return _catalog_unavailable()
 
 
-@router.get("/api/etl/owned-mixed-v1/products/{product_id}")
+@router.get("/api/elt/owned-mixed-v1/products/{product_id}")
 def get_catalog_product(
     product_id: int, principal: AgentPrincipal = Depends(require_agent_principal)
 ):
@@ -170,7 +170,7 @@ def get_catalog_product(
         return _catalog_unavailable()
 
 
-@router.post("/api/etl/owned-mixed-v1/products/{product_id}/edits")
+@router.post("/api/elt/owned-mixed-v1/products/{product_id}/edits")
 def post_catalog_edit(
     product_id: int,
     body: dict = Body(...),

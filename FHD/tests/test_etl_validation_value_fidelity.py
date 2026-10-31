@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.application.etl.service_support import apply_validation_rules
+from app.application.elt.service_support import apply_validation_rules
 
 
 @pytest.mark.parametrize("value", [0, False, Decimal("0"), 0.0, "0", "False", "中文"])
@@ -40,7 +40,7 @@ def test_missing_and_empty_values_keep_empty_length(data):
 
 @pytest.mark.parametrize("value", [0, False, Decimal("0"), 0.0, "0", "False", "中文", None, ""])
 def test_mapping_split_concat_and_validation_share_value_fidelity(value):
-    from app.application.etl.transforms import apply_mapping
+    from app.application.elt.transforms import apply_mapping
 
     output = apply_mapping(
         {"raw": value},

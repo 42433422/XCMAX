@@ -211,8 +211,6 @@
   "mechanical_modules": {
     "FHD/app/application/employee_runtime/scheduler_discovery.py": 17,
     "FHD/app/application/employee_runtime/scheduler_execution.py": 17,
-    "FHD/app/application/etl/parser_region_parse.py": 60,
-    "FHD/app/application/etl/service_preview_worker.py": 12,
     "FHD/app/domain/shared_services/inventory_counting.py": 20,
     "FHD/app/domain/shared_services/inventory_lookup.py": 24,
     "FHD/app/domain/shared_services/inventory_movements.py": 43,
@@ -313,6 +311,8 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler_startup_phase03.py": 83,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler_startup_phase04.py": 57,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/xcmax_admin_surface_routes.py": 19,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/xcmax_admin_sync_routes.py": 40
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/xcmax_admin_sync_routes.py": 40,
+    "FHD/app/application/elt/parser_region_parse.py": 60,
+    "FHD/app/application/elt/service_preview_worker.py": 12
   }
 }

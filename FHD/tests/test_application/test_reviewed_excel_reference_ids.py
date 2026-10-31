@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytest
 
-from app.application.etl.errors import ReviewedExcelError
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_reference_ids import normalize_reference_ids, reference_contract
 from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
 
