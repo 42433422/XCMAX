@@ -111,7 +111,7 @@ export async function importBusinessCsv(
 export async function exportEtlRowsCsv(page: Page, csv: string): Promise<{ sha256: string; text: string }> {
   const { run } = await importBusinessCsv(page, 'export_csv', csv, 'new')
   const downloadUrl = String(run.receipt?.download_url || '')
-  expect(downloadUrl).toMatch(/^\/api\/etl\/runs\/.+\/download$/)
+  expect(downloadUrl).toMatch(/^\/api\/elt\/runs\/.+\/download$/)
   expect(String(run.receipt?.file_name || '')).toMatch(/\.csv$/)
   const response = await page.request.get(`${apiBase}${downloadUrl}`, { timeout: 30_000 })
   expect(response.status(), await response.text()).toBe(200)
