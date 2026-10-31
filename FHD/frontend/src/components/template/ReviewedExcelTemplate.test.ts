@@ -147,13 +147,13 @@ describe('reviewed Excel template', () => {
     if (count > 200) expect(wrapper.text()).toContain('一次最多上传 200 个文件')
   })
   it('blocks classification when archive admission fails and preserves request identity for retry', async () => {
-    api.archiveClassifyExcel.mockReset().mockRejectedValue(new Error('归档配额尚未配置'))
+    api.archiveClassifyExcel.mockReset().mockRejectedValue(new Error('归档配额不足'))
     const wrapper = mount(ReviewedExcelTemplate)
     const input = wrapper.find('input[type=file]')
     Object.defineProperty(input.element, 'files', { value: [new File(['a'], 'sample.xlsx')] })
     await input.trigger('change')
     await wrapper.findAll('button').find((b) => b.text() === '开始处理')!.trigger('click'); await flushPromises()
-    expect(wrapper.text()).toContain('归档配额尚未配置')
+    expect(wrapper.text()).toContain('归档配额不足')
     expect(wrapper.findAll('.classification-region')).toHaveLength(0)
     const first = api.archiveClassifyExcel.mock.calls[0][0] as FormData
     await wrapper.findAll('button').find((b) => b.text() === '重试未完成文件')!.trigger('click'); await flushPromises()
@@ -169,6 +169,14 @@ describe('reviewed Excel template', () => {
     await wrapper.get('.etl-composer__input').setValue('保留客户栏，清理空白行')
     await wrapper.get('.etl-composer__send').trigger('click')
     expect(wrapper.text()).toContain('整理要求：保留客户栏，清理空白行')
+    wrapper.unmount()
+  })
+  it('shows default 10 GiB quota when tenant has not configured one', async () => {
+    api.archiveQuota.mockResolvedValue({ configured: false, using_default: true, limit_bytes: 10737418240, reserved_bytes: 0 })
+    const wrapper = mount(ReviewedExcelTemplate)
+    await wrapper.findAll('button').find((b) => b.text() === '查看配额')!.trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('默认 10 GiB')
+    expect(wrapper.text()).toContain('已预留 0 / 10737418240 字节')
     wrapper.unmount()
   })
   it('shows administrator quota and a dependency-blocked archive withdrawal', async () => {

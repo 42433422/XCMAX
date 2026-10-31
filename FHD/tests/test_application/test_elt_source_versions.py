@@ -164,19 +164,28 @@ def test_revision_cannot_be_read_through_a_different_asset(store):
     assert error.value.status_code == 404
 
 
-@pytest.mark.parametrize("tenant,limit", [(3, None), (1, 1)])
-def test_archive_admission_requires_configured_available_quota(store, tenant, limit):
-    with tenant_scope(tenant), store.factory() as db:
-        if limit is not None:
-            db.get(EltArchiveQuota, tenant).limit_bytes = limit
-            db.commit()
+def test_archive_admission_bootstraps_default_quota_when_unset(store):
+    from app.application.elt.archive_store import DEFAULT_ARCHIVE_QUOTA_BYTES
+
+    with tenant_scope(3), store.factory() as db:
+        source = publish(store)
+        assert source["current_version"] == 1
+        quota = db.get(EltArchiveQuota, 3)
+        assert quota is not None
+        assert quota.limit_bytes == DEFAULT_ARCHIVE_QUOTA_BYTES
+        assert quota.reserved_bytes == len(RAW)
+
+
+def test_archive_admission_rejects_when_configured_quota_too_small(store):
+    with tenant_scope(1), store.factory() as db:
+        db.get(EltArchiveQuota, 1).limit_bytes = 1
+        db.commit()
         with pytest.raises(EltError) as error:
             publish(store)
         assert error.value.code == "ELT_SOURCE_ARCHIVE_CONFLICT"
         assert db.query(EltArchiveAsset).count() == 0
         assert db.query(EltArchiveVersion).count() == 0
-        if limit is not None:
-            assert db.get(EltArchiveQuota, tenant).reserved_bytes == 0
+        assert db.get(EltArchiveQuota, 1).reserved_bytes == 0
     assert not list(store.root.rglob("*"))
 
 

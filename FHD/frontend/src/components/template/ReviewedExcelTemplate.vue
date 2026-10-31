@@ -393,9 +393,10 @@ async function loadArchiveQuota() {
   const current = captureOperation()
   if (!current()) return
   try {
-    const quota = await templatePreviewApi.archiveQuota() as { configured: boolean; limit_bytes: number | null; reserved_bytes: number }
+    const quota = await templatePreviewApi.archiveQuota() as { configured: boolean; using_default?: boolean; limit_bytes: number; reserved_bytes: number }
     if (!current()) return
-    archiveQuotaInfo.value = quota.configured ? `已预留 ${quota.reserved_bytes} / ${quota.limit_bytes} 字节` : '尚未设置配额，不能归档'
+    const prefix = quota.using_default || !quota.configured ? '默认 10 GiB：' : ''
+    archiveQuotaInfo.value = `${prefix}已预留 ${quota.reserved_bytes} / ${quota.limit_bytes} 字节`
   } catch (err) { if (!current()) return; archiveQuotaInfo.value = err instanceof Error ? err.message : '无法读取配额' }
 }
 async function saveArchiveQuota() {
@@ -954,7 +955,7 @@ async function downloadCandidate(index: number) {
       <div v-if="error && !review" class="etl-bubble etl-bubble--error" role="alert">{{ error }}</div>
 
     <details v-if="!archiveOnSelect" class="etl-admin-panel"><summary>管理员与档案（配额、撤回）</summary>
-      <p class="etl-quiet">原件长期保留；未配置归档配额或配额不足时不能归档。打印版式未验证，不可发布企业模板库。</p>
+      <p class="etl-quiet">原件长期保留；未显式配置时默认 10 GiB，配额不足时不能归档。打印版式未验证，不可发布企业模板库。</p>
       <button type="button" :disabled="busy" @click="loadArchiveQuota">查看配额</button>
       <p>{{ archiveQuotaInfo }}</p>
       <label>配额（MiB）：<input v-model.number="archiveQuotaMiB" type="number" min="1" max="1048576" step="1"></label>

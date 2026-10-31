@@ -1,5 +1,5 @@
 {
-  "lines": 2405412,
+  "lines": 2405482,
   "updated": "2026-10-31",
-  "note": "选模板直达私有入库（P0-2）+ 修复 structural_index 测试误把 SHA 子串当硬编码；line_baseline 随 PR 抬升"
+  "note": "merge main(#2875 默认10GiB) into pick→私有入库；合入两边 CHANGELOG + 基线重算"
 }

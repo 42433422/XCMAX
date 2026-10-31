@@ -21,6 +21,7 @@ from typing import cast
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import func, update
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.application.elt.archive_policy import ArchivePolicy, ArchivePolicyError
@@ -32,11 +33,36 @@ from app.utils.path_io.path_utils import get_business_archive_dir
 
 _KEY_FILE_NAME = ".archive.key"
 _ENVELOPE_MAGIC = b"XCAGIARC1\0"
+# Owner: unset quota uses 10 GiB default; admins may raise via archive-quota API (no extra hard ceiling on the default).
+DEFAULT_ARCHIVE_QUOTA_BYTES = 10 * 1024 * 1024 * 1024
 
 
 def default_archive_root() -> Path:
     """Stable user-data root for archived business originals."""
     return Path(get_business_archive_dir())
+
+
+def _ensure_tenant_quota(db: Session, tenant: int) -> EltArchiveQuota:
+    """Return the tenant quota row, inserting the 10 GiB default when unset."""
+    quota = db.get(EltArchiveQuota, tenant)
+    if quota is not None:
+        return quota
+    try:
+        with db.begin_nested():
+            db.add(
+                EltArchiveQuota(
+                    tenant_id=tenant,
+                    limit_bytes=DEFAULT_ARCHIVE_QUOTA_BYTES,
+                    reserved_bytes=0,
+                )
+            )
+            db.flush()
+    except IntegrityError:
+        pass
+    quota = db.get(EltArchiveQuota, tenant)
+    if quota is None:
+        raise ArchivePolicyError("归档配额不足")
+    return quota
 
 
 def create_original(
@@ -65,9 +91,7 @@ def create_original(
             raise ArchivePolicyError("归档结果待核对，不能重复提交")
         read_original(db, owner=owner, version_id=version.id, root=root)
         return version
-    quota = db.get(EltArchiveQuota, tenant)
-    if quota is None:
-        raise ArchivePolicyError("归档配额尚未配置")
+    quota = _ensure_tenant_quota(db, tenant)
     policy = ArchivePolicy(None, quota.limit_bytes, "manual")
     if len(body) > policy.quota_bytes:
         raise ArchivePolicyError("归档配额不足")
@@ -188,6 +212,7 @@ def append_original_version(
     if expected_version is not None and current_version != expected_version:
         db.rollback()
         raise EltConflict("ELT_SOURCE_VERSION_CONFLICT", "来源已有新版本，请刷新后再追加")
+    _ensure_tenant_quota(db, tenant)
     reserved = db.execute(
         update(EltArchiveQuota)
         .where(
@@ -198,7 +223,7 @@ def append_original_version(
     )
     if cast(CursorResult, reserved).rowcount != 1:
         db.rollback()
-        raise ArchivePolicyError("归档配额不足或尚未配置")
+        raise ArchivePolicyError("归档配额不足")
     root = root.resolve()
     directory = root / str(tenant) / str(owner)
     if directory.resolve() != directory:
