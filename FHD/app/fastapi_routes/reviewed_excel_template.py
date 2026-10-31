@@ -967,15 +967,13 @@ async def reviewed_excel_classification_analyze(
                     prepare_only=True,
                     reference_ids=auto_group,
                 )
-                import os
 
                 from app.application.reviewed_excel_audit import claim_request
-                from app.build_identity import build_identity
-
                 from app.application.reviewed_excel_template import (
                     configured_template_llm_provider,
                     template_llm_model_label,
                 )
+                from app.build_identity import build_identity
 
                 request_sha = claim_request(
                     state,
@@ -1063,15 +1061,13 @@ async def reviewed_excel_classification_analyze(
                 )
                 if not isinstance(grouping_request, dict):
                     raise ReviewedExcelError("分组请求格式无效")
-                import os
 
                 from app.application.reviewed_excel_audit import claim_request
-                from app.build_identity import build_identity
-
                 from app.application.reviewed_excel_template import (
                     configured_template_llm_provider,
                     template_llm_model_label,
                 )
+                from app.build_identity import build_identity
 
                 request_sha = claim_request(
                     state,
@@ -1398,10 +1394,10 @@ async def reviewed_excel_preview(
                 raise ReviewedExcelError("请明确选择获授权样本或授权本人文件发送模型")
             from app.application.reviewed_excel_template import configured_template_llm_provider
 
-            if (
-                own_file_authorized
-                and configured_template_llm_provider() not in {"mimo", "platform"}
-            ):
+            if own_file_authorized and configured_template_llm_provider() not in {
+                "mimo",
+                "platform",
+            }:
                 raise ReviewedExcelError(
                     "本人文件仅授权已配置的平台模型；当前供应商不受支持，未调用模型"
                 )
