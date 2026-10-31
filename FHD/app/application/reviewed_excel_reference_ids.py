@@ -24,6 +24,17 @@ from app.application.reviewed_excel_partition import (
 from app.application.reviewed_excel_partition import (
     source_ranges_schema as source_ranges_schema,
 )
+from app.application.reviewed_excel_reference_prompts import (
+    ATOM_IDENTIFY_PROMPT as ATOM_IDENTIFY_PROMPT,
+    CONTRACT_VERSION as CONTRACT_VERSION,
+    DRAWING_GROUP_PROMPT as DRAWING_GROUP_PROMPT,
+    DRAWING_IDENTIFY_PROMPT as DRAWING_IDENTIFY_PROMPT,
+    GROUP_PROMPT as GROUP_PROMPT,
+    IDENTIFY_PROMPT as IDENTIFY_PROMPT,
+    LEGACY_IDENTIFY_PROMPT as LEGACY_IDENTIFY_PROMPT,
+    RANGE_GROUP_PROMPT as RANGE_GROUP_PROMPT,
+    SOURCE_PROTOCOL as SOURCE_PROTOCOL,
+)
 
 
 def source_sheet_prefixes(sheets: list) -> list[dict]:
@@ -511,148 +522,6 @@ def neutral_transport_batches(review: dict) -> list[list[dict]]:
     if not result:
         raise ReviewedExcelError("单行超出模型安全预算，未调用模型；请人工检查并分开文件")
     return result
-
-
-CONTRACT_VERSION = "independent-excel-v10-document-ranges"
-SOURCE_PROTOCOL = (
-    "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
-    "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
-    "sheets[].sheet_state may be visible, hidden, or veryHidden: do not emit physical regions or logical_documents on hidden or veryHidden sheets for independent extraction — leave that content uncovered unless the operator explicitly requires those sheets; never invent workbook-title-specific rules. "
-    "Leave uncertain fragments ungrouped. Do not use unread content as evidence. "
-    "Keep merged cells intact; every evidence coordinate MUST be inside its region and on the same sheet. "
-    "External context belongs in dependencies. A repeated table header is an observation, not proof "
-    "of continuation or a business category. Treat structural observations, not proof, as context only. "
-    "Return exactly one JSON object matching output_schema, without extra fields."
-    " physical_regions are non-overlapping geometric fragments, not document counts. "
-    "Every supplied non-context nonempty cell must lie in exactly one physical region. "
-    "A physical region must contain its own supplied non-context nonempty evidence; "
-    "blank cells may be included, but blank layout, formatting or merge metadata alone cannot form a region. "
-    "Any region intersecting a merged range must contain that entire merged range. "
-    "A cell's required_extent is its exact source merged rectangle, including blank subordinate cells: "
-    "the physical region containing that primary cell must contain the whole required_extent on that sheet. "
-    "This extent is indivisible source geometry, not a business boundary or a separate document. "
-    "Use two-dimensional rectangles where needed, not just whole-row cuts; "
-    "never cut a merge or borrow unread nonempty cells to complete a rectangle. "
-    "context_only cells may be dependencies, never primary or classification evidence. "
-    "Formula target coordinates and merge metadata describe source structure, not additional supplied cells. "
-    "A formula target is available evidence only if it is explicitly present in cells. "
-    "logical_documents.fragments must copy exact sheet/range pairs from this response's physical_regions; "
-    "do not invent larger document bounding boxes. Assign each fragment to at most one document, "
-    "without duplicate fragments. document_id must be nonblank, unique and at most 80 characters. "
-    "Ungrouped fragments are allowed and logical_documents may be []. "
-    "layout_references contains only exact sheet/range pairs from sheets[].merged on the same sheet, "
-    "not physical-region or document bounding boxes. It is an optional subset of source layout references, "
-    "not a merge-coverage ledger: use [] when none is needed, not an enumeration of every merge."
-)
-LEGACY_IDENTIFY_PROMPT = SOURCE_PROTOCOL + (
-    " Use only supplied evidence_id values for evidence_ids, dependency_ids and primary_id. "
-    "Evidence IDs encode source_sheet_prefixes and source coordinates, not sequence numbers. "
-    "The primary_id must identify a non-context cell inside its region. "
-    "For each region cite only a small set of representative evidence IDs, at most 100; "
-    "do not list every cell. Include only necessary dependency IDs, also at most 100. "
-    "Integrity constraints show primary row spans, direct formula references and known merged ranges. "
-    "Do not sever merged ranges or treat formula references as proof of one business document. "
-    "Every sent non-context primary cell must be inside exactly one non-overlapping physical region, "
-    "including isolated headers, footnotes, and formulas; do not include unread cells to fill gaps. "
-    "Unresolved references and omitted merges require caution; unread cells are not evidence."
-    " Create physical_regions only for ranges containing at least one supplied non-context nonempty source cell. "
-    "Never create a standalone physical_region for blank layout, formatting-only areas, merge metadata alone, "
-    "or unread areas; never borrow a primary_id from outside a region to satisfy the schema. "
-    "Blank cells may remain inside a larger region that also contains its own supplied primary evidence. "
-    "Full primary-cell coverage does not require enumerating all cells as evidence: "
-    "choose 1 to 8 representative evidence_ids per region. "
-    "Check each selected ID against its supplied sheet and coordinate; "
-    "related references outside the region belong only in dependency_ids. "
-    "Never synthesize evidence IDs from formula targets or other metadata coordinates; "
-    "only cells[].evidence_id values are available, with context_only IDs restricted to dependency_ids."
-)
-ATOM_IDENTIFY_PROMPT = (
-    "Partition supplied primary source atoms into rectangular physical fragments, then optionally group those fragments into logical documents. "
-    "Source atoms are geometry facts, never business candidates or document-count hints. "
-    "Each cells[].evidence_id names a source cell; its extent is required_extent when present, otherwise that one cell. "
-    "M-prefixed layout IDs encode the matching S-prefixed source sheet and exact merged range; use only IDs in the relevant schema whitelist. "
-    "The atom_ids whitelist contains primary cells and explicitly available blank-merge layout atoms, not context cells. "
-    "Return only atom IDs, never sheet/range coordinates. For each physical region select atom_ids and choose primary_id from its selected non-context cell atoms. "
-    "Its rectangle is defined once as the smallest bounding rectangle of the selected atoms' complete source extents. "
-    "Ordinary source blank cells inside that rectangle are allowed; no padding outside those bounds is added. "
-    "Every nonempty source cell inside the rectangle must be a selected primary atom of that same region. "
-    "Never bridge an unselected cell, context_only cell or unread content. Any intersected merged range must be entirely contained. "
-    "Invalid selections are rejected, never expanded, repaired or automatically regrouped. "
-    "Use multiple physical regions for nonrectangular content, not an enclosing box that absorbs other content. "
-    "Assign every primary cell atom exactly once; do not duplicate atoms across or within regions, and do not overlap rectangles. "
-    "Each region must have its own primary_id; blank layout alone cannot form a region. "
-    "dependency_ids may name supplied cell evidence, including context_only, but formula targets and metadata do not create additional evidence IDs. "
-    "logical_documents.fragments contains the primary_id values of returned physical regions, each region at most once; "
-    "document_id must be nonblank, unique and at most 80 characters. Leave uncertain fragments ungrouped. "
-    "layout_references is an optional subset of supplied M-prefixed merge IDs, not a coverage ledger; [] is valid. "
-    "sheets[].sheet_state may be visible, hidden, or veryHidden: do not create physical regions or logical_documents on hidden or veryHidden sheets; leave that content ungrouped unless explicitly required; never invent workbook-title-specific rules. "
-    "Transport batches, sheet boundaries, adjacency and repeated headers do not establish a business document. "
-    "Return exactly one JSON object matching output_schema with no extra fields."
-)
-IDENTIFY_PROMPT = (
-    "Split source content into documents, each with one or more exact rectangular ranges. "
-    "Return real sheet_name and inclusive integer row_start,row_end,column_start,column_end; do not invent or report IDs. "
-    "Each rectangle means ALL original nonempty cells within its boundaries. The server reads the source to verify every supplied primary cell is covered exactly once. "
-    "Never include context_only or unread nonempty content, overlap ranges even on blanks, cut any source merge, or exceed source sheet dimensions. "
-    "Every intersected merge must be wholly contained. Internal blanks are allowed; blank-only ranges are not. "
-    "Invalid ranges are rejected, never clipped, expanded or repaired. Formula targets and merge metadata are source facts, not additional supplied cells or business boundaries. "
-    "Use multiple ranges in one document only when the source supports that relationship. Technical batches are not documents. "
-    "Sheet boundaries, adjacency and repeated headers alone do not prove one business document. "
-    "After cuts are proposed, the server verifies each document against cross-sheet or out-of-range formula references, AutoFilter/SUBTOTAL closure, circular self-refs, and signals of over-merged ledgers (many distinct order/date blocks or repeated titled period headers inside one rectangle). Prefer atomic documents: one titled period/block or one order/date shipment — not an entire continuous ledger. "
-    "Do not place hidden or veryHidden sheets (sheets[].sheet_state) into documents unless explicitly required; never invent workbook-title-specific rules. "
-    "Export fidelity: when a document contains filter-aware aggregate formulas (for example SUBTOTAL), "
-    "every cell those formulas reference on the same sheet must lie inside that document's rectangles; "
-    "if the sheet carries an active AutoFilter, include that AutoFilter's full reference rectangle in the same document "
-    "(add another rectangle if needed). Prefer self-contained period/documents over leaving such dependencies outside. "
-    "Decide from supplied cell values and sheet facts only; never invent coordinates that are not justified by that evidence. "
-    "No cleaning, numbering, printing or template decisions. Return exactly output_schema."
-)
-RANGE_GROUP_PROMPT = (
-    "Group the supplied validated ranges into complete documents using source content. Return documents with nested ranges and reasons, no IDs. "
-    "Copy each supplied sheet_name and integer boundary tuple exactly once across all documents; never expand, shrink, duplicate or omit a range. "
-    "cells, fragment_structure and cross_fragment_formulas provide middle-row samples and cross-fragment formula facts; use them to judge continuity. "
-    "Do not auto-merge merely because ranges are adjacent or share a sheet; only group when supplied content supports one business document. "
-    "Omit ranges on hidden or veryHidden sheets unless explicitly required; sheet_state on each supplied range is authoritative. "
-    "sheet_filters (when present) lists each sheet's active AutoFilter reference rectangle as a source fact. "
-    "Export fidelity: if cross_fragment_formulas show a filter-aware aggregate (for example SUBTOTAL) whose referenced cells sit in another fragment, "
-    "put the hosting fragment and every referenced fragment in the same document so those dependencies stay inside one export. "
-    "If a document would keep SUBTOTAL (or similar filter-aware aggregates) but omit the sheet_filters rectangle that covers them, "
-    "also group in the fragment that covers that AutoFilter reference when one was supplied. "
-    "fragment_structure.has_filter_aware_aggregates and covers_sheet_filter are source facts for that decision. "
-    "Server verify-after-cut: after you return documents, each cut is checked for outbound formula refs, circular self-refs, AutoFilter/SUBTOTAL closure, and over-merged ledgers (multiple titled blocks or many distinct date+order runs inside one document). Prefer keeping atomic documents separate; do not merge merely to satisfy a distant aggregate when that would glue unrelated orders together. "
-    "Technical batches are not document boundaries. Adjacency, sheet membership and repeated headers alone do not prove document identity. "
-    "This step groups existing ranges only; do not change source data or make cleaning, numbering, printing or template decisions. Return exactly output_schema."
-)
-DRAWING_IDENTIFY_PROMPT = LEGACY_IDENTIFY_PROMPT + (
-    " When drawing_evidence is present, use only supplied drawing_id values in drawing_ids. "
-    "Drawing text and anchors are source evidence; last_col and last_row are conservative outer bounds resolved from worksheet dimension records when available — geometry facts, not document suggestions. "
-    "Every drawing must be wholly inside one region; do not cut objects horizontally or vertically. "
-    "Widen each physical_region rectangle so every cited drawing's full last_col/last_row outer bounds lie inside that same rectangle; never cite a drawing whose outer bounds stick outside. "
-    "drawing_ids maxItems is in output_schema (at least 100, up to the supplied drawing count capped generally); cite every drawing that belongs in a region when the list fits, otherwise split into multiple regions so each cite list respects maxItems. "
-    "Prefer covering every supplied drawing geometrically inside some region even when citing only a representative subset of drawing_ids. "
-    "Merged ranges that intersect a region must be wholly contained — extend the rectangle using sheets[].merged / integrity constraints, never clip a merge to fit a period cut. "
-    "Choose two-dimensional rectangles independently; transport batches do not prescribe document boundaries."
-)
-GROUP_PROMPT = (
-    "Group only fragments that belong to the same business document. "
-    "A standalone fragment can be one group. Do not group merely because fragments are adjacent, "
-    "have similar headers, or share a category. Leave uncertain fragments ungrouped. "
-    "Do not group fragments solely to extract hidden or veryHidden sheets; sheet_state on fragments is authoritative. "
-    "For every grouped fragment cite at least one sent cell within it and explain the relationship "
-    "using sent values. Use only supplied region_id and evidence_id values. "
-    "Fragment boundaries are fixed; do not invent ranges or cells. "
-    "If supplied evidence shows a filter-aware aggregate formula (for example SUBTOTAL) whose referenced "
-    "cells live in another fragment, group those fragments together so the dependency stays in one document. "
-    "When sheet_filters are supplied, keep AutoFilter-covered fragments with any grouped SUBTOTAL that needs that filter. "
-    "The server will verify each returned group for outbound formula references and over-merged multi-order or multi-title cuts; prefer one business document per group. "
-    "Return exactly one JSON object matching output_schema."
-)
-DRAWING_GROUP_PROMPT = GROUP_PROMPT + (
-    " When drawing_evidence is present, cite only supplied drawing_id values in drawing_ids; "
-    "each cited object must be wholly contained in one of the group's fixed fragments; "
-    "cite at most output_schema drawing_ids.maxItems per group."
-)
-
 
 def contract_hashes(schema: dict, phase: str) -> dict:
     """Hash the stable schema template; replace only IDs mechanically sourced from this input."""
