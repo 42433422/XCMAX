@@ -31,7 +31,7 @@ SCHEMA_VERSION = "workbook-structural-index-v1"
 STRUCTURAL_INDEX_MODEL_BUDGET_BYTES = 40_000
 
 _TITLE_HINT = re.compile(
-    r"(购货明细|回款明细|出货明细|送货单|退货单|出货单|报价|对账|明细表|"
+    r"(购货明细|回款明细|出货明细|送货单|出货单|报价|对账|明细表|"
     r"invoice|statement|receipt|delivery)",
     re.IGNORECASE,
 )
@@ -790,6 +790,9 @@ def prefer_structural_classification_if_undersegmented(
     # Severe under-segmentation (cash-like) or title-sheet orphans (qicai-like).
     severe = struct_n >= model_n + 10 or (model_n > 0 and struct_n >= int(model_n * 1.8))
     orphan_gap = orphan_singles >= 2 and struct_n >= model_n + 2
-    if severe or orphan_gap or model_n == 0:
+    # Mild gap on already-large multi-sheet ledgers (迎扬 45→49): promote without
+    # catching small delivery+ledger books like 26鑫顺 (7 vs 10).
+    mild_large = model_n >= 40 and 2 <= (struct_n - model_n) <= 8
+    if severe or orphan_gap or mild_large or model_n == 0:
         return classification_from_structural_index(review, index=index)
     return classification
