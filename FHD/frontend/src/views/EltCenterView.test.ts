@@ -63,8 +63,8 @@ afterEach(() => vi.restoreAllMocks())
 describe('data docking user-only intake', () => {
   it('keeps upload → A4 pick only and hides admin/classification UI', async () => {
     const { wrapper, choose } = await setup()
-    expect(wrapper.find('.etl-admin-panel').exists()).toBe(false)
-    expect(wrapper.find('.etl-composer__input').exists()).toBe(true)
+    expect(wrapper.find('.elt-admin-panel').exists()).toBe(false)
+    expect(wrapper.find('.elt-composer__input').exists()).toBe(true)
     expect(wrapper.text()).toContain('上传文件，挑选模板')
     await choose()
     expect(archive.archiveClassifyExcel).toHaveBeenCalledTimes(1)
@@ -96,8 +96,8 @@ describe('data docking user-only intake', () => {
 
   it('accepts typed requirements in the bottom composer', async () => {
     const { wrapper, button } = await setup()
-    await wrapper.get('.etl-composer__input').setValue('保留工艺表头')
-    await wrapper.get('.etl-composer__send').trigger('click')
+    await wrapper.get('.elt-composer__input').setValue('保留工艺表头')
+    await wrapper.get('.elt-composer__send').trigger('click')
     expect(wrapper.text()).toContain('整理要求：保留工艺表头')
     const input = wrapper.get('input[type="file"][multiple]')
     Object.defineProperty(input.element, 'files', { configurable: true, value: [new File(['工艺'], '生产单.xlsx')] })
@@ -142,9 +142,9 @@ describe('data docking user-only intake', () => {
   it('shows chatlike empty composer guidance', async () => {
     const { wrapper } = await setup()
     expect(wrapper.text()).toContain('上传文件，挑选模板')
-    expect(wrapper.find('.etl-composer__input').exists()).toBe(true)
-    expect(wrapper.find('.etl-admin-panel').exists()).toBe(false)
-    expect(wrapper.find('.etl-composer__start').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.elt-composer__input').exists()).toBe(true)
+    expect(wrapper.find('.elt-admin-panel').exists()).toBe(false)
+    expect(wrapper.find('.elt-composer__start').attributes('disabled')).toBeDefined()
     wrapper.unmount()
   })
 

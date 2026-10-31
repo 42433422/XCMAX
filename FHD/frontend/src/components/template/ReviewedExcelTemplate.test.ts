@@ -39,8 +39,8 @@ describe('reviewed Excel template', () => {
   it('offers legacy XLS through the archive conversion boundary in chatlike intake', () => {
     const archived = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     expect(archived.find('input[type=file]').attributes('accept')).toBe('.xlsx,.xls')
-    expect(archived.find('.etl-admin-panel').exists()).toBe(false)
-    expect(archived.find('.etl-composer__input').exists()).toBe(true)
+    expect(archived.find('.elt-admin-panel').exists()).toBe(false)
+    expect(archived.find('.elt-composer__input').exists()).toBe(true)
     expect(archived.text()).toContain('上传文件，挑选模板')
     expect(archived.text()).not.toContain('管理员与档案')
     archived.unmount()
@@ -161,16 +161,45 @@ describe('reviewed Excel template', () => {
     expect(first.get('request_key')).toEqual(second.get('request_key'))
   })
   it('keeps administrator panel only outside chatlike intake', () => {
-    expect(mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } }).find('.etl-admin-panel').exists()).toBe(false)
-    expect(mount(ReviewedExcelTemplate).find('.etl-admin-panel').exists()).toBe(true)
+    expect(mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } }).find('.elt-admin-panel').exists()).toBe(false)
+    expect(mount(ReviewedExcelTemplate).find('.elt-admin-panel').exists()).toBe(true)
   })
   it('records composer requirement text on user intake', async () => {
     const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
-    await wrapper.get('.etl-composer__input').setValue('保留客户栏，清理空白行')
-    await wrapper.get('.etl-composer__send').trigger('click')
+    await wrapper.get('.elt-composer__input').setValue('保留客户栏，清理空白行')
+    await wrapper.get('.elt-composer__send').trigger('click')
     expect(wrapper.text()).toContain('整理要求：保留客户栏，清理空白行')
     wrapper.unmount()
   })
+
+      it('passes composer requirement notes into saveReviewedExcel FormData', async () => {
+    api.saveReviewedExcel.mockResolvedValue({ template_id: 'db:note', auto_ingest: { batch_id: 'batch-note', status: 'running' } })
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const file = new File(['x'], 'note.xlsx')
+      const input = wrapper.find('input[type=file]')
+      Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+      await input.trigger('change'); await flushPromises()
+      const state = wrapper.vm.$.setupState as Record<string, unknown>
+      state.requirementNotes = ['第一条整理要求']
+      state.composerDraft = '未发送草稿'
+      state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [] }]
+      state.file = file
+      state.name = 'note-tpl'
+      state.review = { review_id: 'r-note', sheets: [], cells: [], proposal: proposal('v1'), selected_region: { selection_basis: 'model_group' } }
+      state.proposals = [proposal('v1')]
+      state.templatePickerOpen = true
+      await flushPromises()
+      await wrapper.findAll('button').find(b => b.text() === '使用此模板并入库')!.trigger('click')
+      await flushPromises()
+      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+      const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
+      expect(form.get('composer_note')).toBe('第一条整理要求\n未发送草稿')
+      expect(form.get('private_intake')).toBe('true')
+    } finally { wrapper.unmount() }
+  })
+
+
   it('shows default 10 GiB quota when tenant has not configured one', async () => {
     api.archiveQuota.mockResolvedValue({ configured: false, using_default: true, limit_bytes: 10737418240, reserved_bytes: 0 })
     const wrapper = mount(ReviewedExcelTemplate)
@@ -693,27 +722,27 @@ describe('reviewed Excel template', () => {
     api.archiveClassifyExcel.mockResolvedValue({ name: 'drag.xlsx', status: 'classified', classification_id: 'd1', version: 'v1', sheets: [{ sheet: 'S', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['unknown'], checked_cells: 1, parent_heading: '', dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }] })
     const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     try {
-      const composer = wrapper.get('.etl-composer')
+      const composer = wrapper.get('.elt-composer')
       const file = new File(['x'], 'drag.xlsx')
       await composer.trigger('dragenter', { dataTransfer: { files: [file] } })
-      expect(wrapper.find('.etl-composer--dragover').exists()).toBe(true)
+      expect(wrapper.find('.elt-composer--dragover').exists()).toBe(true)
       await composer.trigger('dragleave', { relatedTarget: null })
       await composer.trigger('drop', { dataTransfer: { files: [file] } })
       await flushPromises()
       expect(api.archiveClassifyExcel).not.toHaveBeenCalled()
       expect(wrapper.text()).toContain('drag.xlsx')
-      await wrapper.get('.etl-composer__start').trigger('click'); await flushPromises()
+      await wrapper.get('.elt-composer__start').trigger('click'); await flushPromises()
       expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(1)
-      expect(wrapper.find('.etl-intake-empty').exists()).toBe(false)
+      expect(wrapper.find('.elt-intake-empty').exists()).toBe(false)
     } finally { wrapper.unmount() }
   })
 
   it('opens the hidden file picker from the attach control', async () => {
     const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     try {
-      const input = wrapper.get('input.etl-composer__file-input').element as HTMLInputElement
+      const input = wrapper.get('input.elt-composer__file-input').element as HTMLInputElement
       const click = vi.spyOn(input, 'click').mockImplementation(() => undefined)
-      await wrapper.get('.etl-composer__attach').trigger('click')
+      await wrapper.get('.elt-composer__attach').trigger('click')
       expect(click).toHaveBeenCalledTimes(1)
     } finally { wrapper.unmount() }
   })
@@ -721,11 +750,11 @@ describe('reviewed Excel template', () => {
   it('marks composer drag-over on dragover and clears on leave', async () => {
     const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     try {
-      const composer = wrapper.get('.etl-composer')
+      const composer = wrapper.get('.elt-composer')
       await composer.trigger('dragover', { dataTransfer: { files: [] } })
-      expect(wrapper.find('.etl-composer--dragover').exists()).toBe(true)
+      expect(wrapper.find('.elt-composer--dragover').exists()).toBe(true)
       await composer.trigger('dragleave', { relatedTarget: null })
-      expect(wrapper.find('.etl-composer--dragover').exists()).toBe(false)
+      expect(wrapper.find('.elt-composer--dragover').exists()).toBe(false)
     } finally { wrapper.unmount() }
   })
 
@@ -776,6 +805,7 @@ describe('reviewed Excel template', () => {
       state.name = 'pick-tpl'
       state.review = { review_id: 'r-pick', sheets: [], cells: [], proposal: proposal('v1'), selected_region: { selection_basis: 'model_group' } }
       state.proposals = [proposal('v1')]
+      state.requirementNotes = ['保留客户栏，清理空白行']
       state.templatePickerOpen = true
       await flushPromises()
       expect(wrapper.text()).toContain('点选绿胶囊即选用并开始自动入库')
@@ -789,6 +819,7 @@ describe('reviewed Excel template', () => {
       expect(form.get('private_intake')).toBe('true')
       expect(form.get('publish_to_tenant')).toBe('false')
       expect(form.get('candidate_id')).toBe('table')
+      expect(form.get('composer_note')).toBe('保留客户栏，清理空白行')
       expect(wrapper.emitted('saved')).toHaveLength(1)
       expect(etl.autoIngestProgress).toHaveBeenCalledWith('batch-pick')
     } finally { wrapper.unmount() }
