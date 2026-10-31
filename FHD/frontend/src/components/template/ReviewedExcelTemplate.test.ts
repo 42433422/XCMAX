@@ -748,6 +748,70 @@ describe('reviewed Excel template', () => {
     }
   })
 
+
+
+  it('on archiveOnSelect, picking an A4 capsule saves with private_intake and starts ingest poll', async () => {
+    api.saveReviewedExcel.mockResolvedValue({
+      template_id: 'db:42',
+      auto_ingest: { batch_id: 'batch-pick', status: 'running', kb_progress: { pct: 5, stage: 'queued', message: '排队' }, business_progress: { pct: 0, stage: 'queued', message: '排队' } },
+    })
+    etl.autoIngestProgress.mockResolvedValue({ status: 'running', kb_progress: { pct: 5 }, business_progress: { pct: 0 } })
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const file = new File(['x'], 'pick.xlsx')
+      const input = wrapper.find('input[type=file]')
+      Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+      await input.trigger('change'); await flushPromises()
+      const state = wrapper.vm.$.setupState as Record<string, unknown>
+      state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [] }]
+      state.file = file
+      state.name = 'pick-tpl'
+      state.review = { review_id: 'r-pick', sheets: [], cells: [], proposal: proposal('v1'), selected_region: { selection_basis: 'model_group' } }
+      state.proposals = [proposal('v1')]
+      state.templatePickerOpen = true
+      await flushPromises()
+      expect(wrapper.text()).toContain('点选绿胶囊即选用并开始自动入库')
+      expect(wrapper.findAll('button').some(b => b.text() === '保存所选模板')).toBe(false)
+      expect(wrapper.findAll('button').some(b => b.text() === '使用此模板并入库')).toBe(true)
+      expect(wrapper.findAll('input[type=checkbox]').some(el => el.element.closest('label')?.textContent?.includes('确认发布'))).toBe(false)
+      await wrapper.findAll('.reviewed-template__preview--a4')[1].trigger('click')
+      await flushPromises()
+      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+      const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
+      expect(form.get('private_intake')).toBe('true')
+      expect(form.get('publish_to_tenant')).toBe('false')
+      expect(form.get('candidate_id')).toBe('table')
+      expect(wrapper.emitted('saved')).toHaveLength(1)
+      expect(etl.autoIngestProgress).toHaveBeenCalledWith('batch-pick')
+    } finally { wrapper.unmount() }
+  })
+
+  it('on archiveOnSelect, print/layout restrictions still allow private intake save', async () => {
+    api.saveReviewedExcel.mockResolvedValue({ template_id: 'db:99', auto_ingest: { batch_id: 'batch-lim', status: 'running' } })
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const file = new File(['x'], 'limited.xlsx')
+      const input = wrapper.find('input[type=file]')
+      Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+      await input.trigger('change'); await flushPromises()
+      const state = wrapper.vm.$.setupState as Record<string, unknown>
+      state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [], usage_restrictions: ['打印版式未验证'] }]
+      state.file = file
+      state.name = 'limited-tpl'
+      state.review = { review_id: 'r-lim', sheets: [], cells: [], proposal: proposal('v1'), selected_region: { selection_basis: 'model_group' }, usage_restrictions: ['打印版式未验证'] }
+      state.proposals = [proposal('v1')]
+      state.templatePickerOpen = true
+      await flushPromises()
+      expect(state.publicationRestricted).toBe(true)
+      await wrapper.findAll('button').find(b => b.text() === '使用此模板并入库')!.trigger('click')
+      await flushPromises()
+      expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
+      const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
+      expect(form.get('private_intake')).toBe('true')
+      expect(form.get('publish_to_tenant')).toBe('false')
+    } finally { wrapper.unmount() }
+  })
+
   it('downloads a candidate workbook from the A4 picker', async () => {
     api.archiveClassifyExcel.mockResolvedValue({ name: 'cand.xlsx', status: 'classified', classification_id: 'c-cand', version: 'v1', confirmed: true, sheets: [{ sheet: 'S', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['unknown'], checked_cells: 1, parent_heading: '', dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }] })
     api.confirmClassification.mockResolvedValue({ version: 'confirmed-version', confirmed: true, sheets: [{ sheet: 'S', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['unknown'], checked_cells: 1, parent_heading: '', dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }] })

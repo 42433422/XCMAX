@@ -1622,10 +1622,16 @@ async def reviewed_excel_save(
     selections: str = Form(..., max_length=500_000),
     name: str = Form(..., max_length=160),
     publish_to_tenant: bool = Form(False),
+    private_intake: bool = Form(False),
     user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
-    if not publish_to_tenant:
+    # Enterprise shared-library path still requires explicit publish consent.
+    # User intake (archiveOnSelect) uses private_intake: save + auto-ingest without
+    # enterprise-library publish checkbox; approval withdraw remains available.
+    if publish_to_tenant and private_intake:
+        raise HTTPException(status_code=400, detail="不能同时选择企业发布与私有入库")
+    if not publish_to_tenant and not private_intake:
         raise HTTPException(status_code=400, detail="请确认将清理后的模板发布到企业模板库")
     if not name.strip() or len(name.strip()) > 160:
         raise HTTPException(status_code=400, detail="模板名称不能为空或超过 160 字")
@@ -1636,7 +1642,8 @@ async def reviewed_excel_save(
         with tenant_scope(tenant), get_db() as db:
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
-            if _usage_restrictions(db, run, tenant, owner):
+            # Print/layout restrictions block enterprise publish only; private intake may proceed.
+            if publish_to_tenant and _usage_restrictions(db, run, tenant, owner):
                 raise HTTPException(
                     status_code=409,
                     detail="此来源仅供数据/模板测试，打印版式未验证；可预览和下载测试候选，不得发布到企业模板库",
