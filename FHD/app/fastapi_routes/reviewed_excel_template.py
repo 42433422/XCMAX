@@ -10,9 +10,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
+from xml.etree.ElementTree import ParseError
+from zipfile import BadZipFile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
@@ -67,7 +70,16 @@ def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
         )
 
         return attach_structural_index_to_draft(draft, build_workbook_structural_index(body))
-    except Exception:
+    except (
+        EtlError,
+        OSError,
+        KeyError,
+        TypeError,
+        ValueError,
+        BadZipFile,
+        InvalidFileException,
+        ParseError,
+    ):
         return draft
 
 
