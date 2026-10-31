@@ -61,10 +61,17 @@ def test_manual_archive_readback_quota_and_owner_isolation(store):
             read_original(db, owner=3, version_id=item.id, root=root)
 
 
-def test_missing_quota_never_creates_archive(store):
+def test_missing_quota_bootstraps_default_10gib(store):
+    from app.application.elt.archive_store import DEFAULT_ARCHIVE_QUOTA_BYTES
+
     db, root = store
-    with tenant_scope(2), pytest.raises(ArchivePolicyError, match="尚未配置"):
-        create_original(db, owner=3, name="x.xlsx", body=b"x", root=root, request_key="one")
+    with tenant_scope(2):
+        item = create_original(db, owner=3, name="x.xlsx", body=b"x", root=root, request_key="one")
+        assert item.status == "ready"
+        quota = db.get(EltArchiveQuota, 2)
+        assert quota is not None
+        assert quota.limit_bytes == DEFAULT_ARCHIVE_QUOTA_BYTES == 10 * 1024 * 1024 * 1024
+        assert quota.reserved_bytes == 1
 
 
 def test_failed_write_stays_pending_and_reserved(store, monkeypatch):

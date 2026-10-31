@@ -1144,7 +1144,11 @@ def test_archive_quota_requires_admin_and_never_drops_below_reserved(review_stor
     assert client.get(url).status_code == 403
     assert client.post(url, data={"expected_actor": "1:7", "limit_bytes": 1000}).status_code == 403
     review_store.actor["admin"] = True
-    assert client.get(url).json()["configured"] is False
+    unset = client.get(url).json()
+    assert unset["configured"] is False
+    assert unset["using_default"] is True
+    assert unset["limit_bytes"] == 10 * 1024 * 1024 * 1024
+    assert unset["reserved_bytes"] == 0
     assert (
         client.post(url, data={"expected_actor": "1:7", "limit_bytes": 1000000}).status_code == 200
     )
