@@ -1,5 +1,5 @@
 {
-  "lines": 2405527,
+  "lines": 2405650,
   "updated": "2026-11-01",
-  "note": "P1-1 composer_note 接线与 P2-2 ReviewedExcelTemplate etl→elt 类名；配套 EltCenterView 测试与 CHANGELOG（约 +45 行，对齐 #2873 抬升口径）"
+  "note": "P1-2 AwEtlAutoIngestList list+withdraw vitest; keep withdraw error without hiding loaded batches"
 }
