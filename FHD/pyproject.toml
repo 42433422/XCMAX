@@ -238,6 +238,12 @@ exclude = [
 module = "modstore_server.*"
 ignore_missing_imports = true
 
+# mypy 2.4.x hits INTERNAL ERROR ("Too many iterations when checking a loop") on the
+# overlapped pack window search; ignore until upstream mypy can check this module.
+[[tool.mypy.overrides]]
+module = "app.application.reviewed_excel_multipack_stitch"
+ignore_errors = true
+
 # Optional heavyweight/platform adapters are imported behind runtime feature
 # probes.  Their availability is validated by the owning capability, while the
 # core type gate remains independent of platform-only or ML-only distributions.

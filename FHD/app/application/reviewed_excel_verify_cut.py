@@ -209,17 +209,17 @@ def _column_values(cells: list[dict], sheet: str, col: int, r1: int, r2: int) ->
 def _run_boundaries(keys: list[tuple[int, Any]]) -> list[tuple[int, int, Any]]:
     """keys is sorted (row, key); return inclusive (start,end,key) runs skipping None keys."""
     runs: list[tuple[int, int, Any]] = []
-    cur = None
-    start = None
+    cur: Any = None
+    start: int | None = None
     for row, key in keys:
         if key is None:
-            if cur is not None:
+            if cur is not None and start is not None:
                 runs.append((start, row - 1, cur))
                 cur = None
                 start = None
             continue
         if key != cur:
-            if cur is not None:
+            if cur is not None and start is not None:
                 runs.append((start, row - 1, cur))
             cur = key
             start = row
@@ -291,7 +291,7 @@ def _detect_order_ledger_runs(
             )
             if order_also_dates > o_hits * 0.5:
                 continue
-            keyed = []
+            keyed: list[tuple[int, Any]] = []
             for row in rows:
                 dv, ov = dvals.get(row), ovals.get(row)
                 if (dv is None and ov is None) or not (
@@ -305,12 +305,11 @@ def _detect_order_ledger_runs(
                 continue
             # Prefer real Excel-serial / year-bearing date columns over SKU
             # false positives that inflate run_count via soft gaps.
-            serial_hits = sum(
-                1
-                for r in rows
-                if (_as_number(dvals.get(r)) is not None)
-                and _EXCEL_DATE_LO <= float(_as_number(dvals.get(r))) <= _EXCEL_DATE_HI
-            )
+            serial_hits = 0
+            for r in rows:
+                number = _as_number(dvals.get(r))
+                if number is not None and _EXCEL_DATE_LO <= float(number) <= _EXCEL_DATE_HI:
+                    serial_hits += 1
             year_hits = sum(
                 1
                 for r in rows
@@ -381,15 +380,15 @@ def _formula_outbound_and_circular(cells: list[dict], fragments: list[dict]) -> 
             except (TypeError, ValueError):
                 pass
         for match in cell_ref.finditer(formula):
-            a, r, a2, r2 = match.groups()
+            col_a, row_a, col_b, row_b = match.groups()
             try:
-                if a2 and r2:
-                    bc1, br1, bc2, br2 = bounded_range(f"{a}{r}:{a2}{r2}")
+                if col_b and row_b:
+                    bc1, br1, bc2, br2 = bounded_range(f"{col_a}{row_a}:{col_b}{row_b}")
                     points = [(bc1, br1), (bc2, br2)]
                     # sample corners + mid for outbound
                     points.append(((bc1 + bc2) // 2, (br1 + br2) // 2))
                 else:
-                    points = [(column_index_from_string(a), int(r))]
+                    points = [(column_index_from_string(col_a), int(row_a))]
             except (TypeError, ValueError):
                 continue
             for col, row in points:
@@ -501,7 +500,7 @@ def inspect_cut(review: dict, group: dict) -> dict:
     elif sticky_ledger:
         status = "sticky_ledger"
         reason = (
-            f"切片疑似粘连多单台账（检出约 {ledger['run_count']} 个日期+单号连续块），"
+            f"切片疑似粘连多单台账（检出约 {(ledger or {}).get('run_count', 0)} 个日期+单号连续块），"
             "需按单拆分或重新识别"
         )
     elif formula["outbound_count"]:
@@ -686,7 +685,7 @@ def verify_after_cut(
                     split = _split_by_ledger_runs(group, inspection)
             if split:
                 # Re-inspect children; keep those that are not empty.
-                children = []
+                children: list[dict[str, Any]] = []
                 child_notes = []
                 for child in split:
                     if len(out_groups) + len(children) >= max_groups:
@@ -745,4 +744,5 @@ def verify_after_cut(
 def verify_groups_or_raise(review: dict, groups: list[dict], *, resplit: bool = True) -> list[dict]:
     """Product-path helper: run verify_after_cut and return groups (resplit when possible)."""
     result = verify_after_cut(review, groups, resplit=resplit)
-    return result["groups"]
+    groups_out = result["groups"]
+    return groups_out if isinstance(groups_out, list) else []

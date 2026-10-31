@@ -1,5 +1,5 @@
 {
-  "lines": 2402718,
+  "lines": 2402724,
   "updated": "2026-10-31",
-  "note": "PR#2805：ruff format 对齐 ELT 相关 20 文件（CI backend-quality format --check）；基线随格式化换行净增（owner voice 授权合入）"
+  "note": "PR#2805：mypy 修 ELT 结构索引/verify_cut/template；multipack 对 mypy 2.4 INTERNAL ERROR 加 ignore_errors（owner voice 授权合入）"
 }

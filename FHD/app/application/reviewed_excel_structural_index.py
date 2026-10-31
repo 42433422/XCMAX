@@ -470,24 +470,24 @@ def build_workbook_structural_index(body: bytes) -> dict[str, Any]:
                 # one atom — not a phantom extra document.
                 skip_indices: set[int] = set()
                 document_headings_seen = 0
-                for index, title in enumerate(block_titles):
-                    if index in skip_indices:
+                for title_idx, title in enumerate(block_titles):
+                    if title_idx in skip_indices:
                         continue
                     end = (
-                        (rows[index + 1] - 1)
-                        if index + 1 < len(rows)
+                        (rows[title_idx + 1] - 1)
+                        if title_idx + 1 < len(rows)
                         else (ws.max_row or title["row"])
                     )
                     kind = title["kind_hint"]
                     if (
                         _is_document_heading_text(title["text"])
                         and document_headings_seen >= 1
-                        and index + 1 < len(block_titles)
-                        and _is_form_meta_text(block_titles[index + 1]["text"])
+                        and title_idx + 1 < len(block_titles)
+                        and _is_form_meta_text(block_titles[title_idx + 1]["text"])
                     ):
-                        skip_indices.add(index + 1)
-                        if index + 2 < len(rows):
-                            end = rows[index + 2] - 1
+                        skip_indices.add(title_idx + 1)
+                        if title_idx + 2 < len(rows):
+                            end = rows[title_idx + 2] - 1
                         else:
                             end = ws.max_row or title["row"]
                         kind = title["kind_hint"] or _kind_hint(title["text"])

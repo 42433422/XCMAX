@@ -540,7 +540,7 @@ def _flatten_cut_merge(ws: Worksheet, merge) -> None:
     mc1, mr1, mc2, mr2 = merge.min_col, merge.min_row, merge.max_col, merge.max_row
     corner = ws.cell(mr1, mc1)
     value = corner.value
-    style = copy(corner._style) if corner.has_style else None
+    style = copy(corner._style) if corner.has_style else None  # type: ignore[union-attr]
     number_format = corner.number_format
     ws.unmerge_cells(str(merge))
     for row in range(mr1, mr2 + 1):
@@ -549,7 +549,7 @@ def _flatten_cut_merge(ws: Worksheet, merge) -> None:
             if cell.value is None:
                 cell.value = value
             if style is not None:
-                cell._style = copy(style)
+                cell._style = copy(style)  # type: ignore[union-attr]
             if number_format:
                 cell.number_format = number_format
 
