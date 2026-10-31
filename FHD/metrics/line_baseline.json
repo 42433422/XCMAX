@@ -1,5 +1,5 @@
 {
-  "lines": 2405243,
+  "lines": 2405246,
   "updated": "2026-10-31",
-  "note": "rebase onto #2856; recomputed after finish"
+  "note": "ELT product rename (/api/elt; etl_* tables; etl.* perms) rebased onto #2856 inline docking template"
 }
