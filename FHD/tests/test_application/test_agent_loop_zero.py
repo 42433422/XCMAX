@@ -10,40 +10,9 @@ import pytest
 
 from app.application.employee_runtime.agent_loop import (
     _format_tool_calls,
-    _parse_args,
     default_employee_tools,
     run_employee_agent_loop,
 )
-
-
-class TestParseArgs:
-    """Tests for _parse_args helper."""
-
-    def test_parse_valid_json(self) -> None:
-        result = _parse_args('{"key": "value"}')
-        assert result == {"key": "value"}
-
-    def test_parse_empty_string(self) -> None:
-        result = _parse_args("")
-        assert result == {}
-
-    def test_parse_none_like(self) -> None:
-        result = _parse_args(None)
-        assert result == {}
-
-    def test_parse_invalid_json(self) -> None:
-        result = _parse_args("not json at all")
-        assert result == {}
-
-    def test_parse_non_dict_json(self) -> None:
-        result = _parse_args("[1, 2, 3]")
-        assert result == {}
-
-    def test_parse_dict_with_nested_data(self) -> None:
-        raw = '{"task": "create_order", "items": [1, 2]}'
-        result = _parse_args(raw)
-        assert result["task"] == "create_order"
-        assert result["items"] == [1, 2]
 
 
 class TestFormatToolCalls:

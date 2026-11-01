@@ -90,10 +90,22 @@ def test_performance_cache_clear(
 
 
 @patch("app.utils.performance.performance_initializer.get_performance_optimizer")
-def test_performance_cache_invalidate(mock_get: MagicMock, system_client: TestClient) -> None:
-    mock_get.return_value = _optimizer_mock()
-    r = system_client.post("/api/performance/cache/invalidate", json={"key": "k"})
-    assert r.status_code in (200, 400)
+@pytest.mark.parametrize("body, status", [({"keys": ["k"]}, 200), ({"key": "k"}, 400)])
+def test_performance_cache_invalidate(
+    mock_get: MagicMock, system_client: TestClient, body: dict, status: int
+) -> None:
+    optimizer = mock_get.return_value = _optimizer_mock()
+    optimizer.redis_cache.delete.return_value = 1
+    r = system_client.post("/api/performance/cache/invalidate", json=body)
+    assert r.status_code == status, r.text
+    assert r.json()["success"] is (status == 200)
+    if status == 200:
+        assert r.json()["data"]["deleted_count"] == 1
+        assert r.json()["data"]["requested_keys"] == 1
+        optimizer.redis_cache.delete.assert_called_once_with("k")
+    else:
+        assert r.json()["error_code"] == "schema_validation_failed"
+        optimizer.redis_cache.delete.assert_not_called()
 
 
 @patch("app.utils.performance.performance_initializer.get_performance_optimizer")
@@ -140,25 +152,30 @@ def test_templates_progress(mock_prog: MagicMock, system_client: TestClient) -> 
 
 
 def test_templates_delete_validation(system_client: TestClient) -> None:
-    r = system_client.delete("/api/templates/delete")
-    assert r.status_code in (200, 400, 405, 422)
+    with patch("app.legacy.routes.document_templates_compat.run_archive_template_delete") as delete:
+        r = system_client.delete("/api/templates/delete")
+    assert r.status_code == 400, r.text
+    assert r.json()["success"] is False
+    assert r.json()["error_code"] == "schema_validation_failed"
+    delete.assert_not_called()
 
 
 @patch("app.infrastructure.skills.get_skill_registry")
 def test_skills_list(mock_reg: MagicMock, system_client: TestClient) -> None:
-    mock_reg.return_value.list_skills.return_value = []
+    mock_reg.return_value.list_all.return_value = []
     r = system_client.get("/api/skills/list")
-    assert r.status_code in (200, 500)
+    assert r.status_code == 200
+    assert r.json() == {"success": True, "skills": []}
+    mock_reg.return_value.list_all.assert_called_once_with()
 
 
-def test_skills_execute_empty(system_client: TestClient) -> None:
-    r = system_client.post("/api/skills/execute", json={})
-    assert r.status_code in (200, 400, 422, 500)
-
-
-def test_tools_execute_empty(system_client: TestClient) -> None:
-    r = system_client.post("/api/tools/execute", json={})
-    assert r.status_code in (200, 400, 422, 500)
+@pytest.mark.parametrize("path", ["/api/skills/execute", "/api/tools/execute"])
+def test_tools_execute_empty(system_client: TestClient, path: str) -> None:
+    with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
+        r = system_client.post(path, json={})
+    assert r.status_code == 400, r.text
+    assert r.json() == {"success": False, "message": "未知工具: None"}
+    orchestrator.assert_not_called()
 
 
 def test_admin_llm_reload(system_client: TestClient) -> None:

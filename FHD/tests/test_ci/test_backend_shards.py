@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from scripts.ci.backend_shards import partition, profile, seal, verify
-from tests.test_ci.backend_shard_fixtures import IDENTITY, make_artifacts
+from tests.test_ci.backend_shard_fixtures import IDENTITY, artifact_source, make_artifacts
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -56,8 +56,12 @@ def artifacts(tmp_path_factory, request):
 
 def test_exact_complete_artifacts_pass(artifacts):
     total = len(list(artifacts.iterdir()))
-    assert verify(artifacts, total, "full", IDENTITY)["collected"] == max(4, total)
-    assert verify(artifacts, total, "behavior", IDENTITY)["outcomes"] == {"passed": max(4, total)}
+    assert verify(artifacts, total, "full", IDENTITY, source_root=artifact_source(artifacts))[
+        "collected"
+    ] == max(4, total)
+    assert verify(artifacts, total, "behavior", IDENTITY, source_root=artifact_source(artifacts))[
+        "outcomes"
+    ] == {"passed": max(4, total)}
 
 
 @pytest.mark.parametrize(
@@ -85,6 +89,12 @@ def test_exact_complete_artifacts_pass(artifacts):
         "total",
         "toolchain",
         "manifest_symlink",
+        "missing_file",
+        "foreign_file",
+        "missing_collector",
+        "duplicate_collector",
+        "hidden_leaf",
+        "inventory_hash",
     ],
 )
 def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
@@ -131,6 +141,19 @@ def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
         (root / "shard-1/report-toolchain.json").write_text('{"coverage":"1.0","python":"3.11"}')
     elif fault == "manifest_symlink":
         pass
+    elif fault == "missing_file":
+        data["assigned_files"].pop()
+    elif fault == "foreign_file":
+        data["assigned_files"].append("test_foreign.py")
+    elif fault == "missing_collector":
+        del data["collection_reports"][node.split("::")[0]]
+    elif fault == "duplicate_collector":
+        receipts = data["collection_reports"][node.split("::")[0]]
+        receipts.append(receipts[0])
+    elif fault == "hidden_leaf":
+        data["collection_reports"][node.split("::")[0]][0]["children"] = []
+    elif fault == "inventory_hash":
+        data["source_inventory_sha256"] = "foreign"
     else:
         (root / "shard-1" / (".coverage.full" if fault == "coverage" else "full.xml")).write_text(
             "changed"
@@ -141,7 +164,33 @@ def test_bad_evidence_fails_closed(artifacts, tmp_path, fault):
         path.rename(target)
         path.symlink_to(target)
     with pytest.raises(ValueError):
-        verify(root, len(list(artifacts.iterdir())), "full", IDENTITY)
+        verify(
+            root,
+            len(list(artifacts.iterdir())),
+            "full",
+            IDENTITY,
+            source_root=artifact_source(artifacts),
+        )
+
+
+@pytest.mark.parametrize(
+    "change", ["new_file", "deleted_file", "test_body", "conftest", "configuration"]
+)
+def test_evidence_is_bound_to_the_current_source_inventory(tmp_path, change):
+    artifacts = make_artifacts(tmp_path / "shards", 2)
+    source = artifact_source(artifacts)
+    if change == "new_file":
+        (source / "test_new.py").write_text("def test_new(): pass\n")
+    elif change == "deleted_file":
+        (source / "test_00.py").unlink()
+    elif change == "test_body":
+        (source / "test_00.py").write_text("def test_a(): assert False\n")
+    elif change == "conftest":
+        (source / "conftest.py").write_text("collect_ignore = ['test_00.py']\n")
+    else:
+        (source / "pytest.ini").write_text("[pytest]\npython_functions = hidden_*\n")
+    with pytest.raises(ValueError, match="current source inventory"):
+        verify(artifacts, 2, "full", IDENTITY, source_root=source)
 
 
 @pytest.mark.parametrize("total", [4, 8])
@@ -296,7 +345,10 @@ def test_real_coverage_union_matches_serial(tmp_path, total, monkeypatch):
         shutil.copy(directory / "full.xml", directory / "behavior.xml")
         shutil.copy(directory / ".coverage.full", directory / ".coverage.behavior")
         seal(directory)
-    assert verify(tmp_path / "evidence", total, "full", IDENTITY)["collected"] == 8
+    assert (
+        verify(tmp_path / "evidence", total, "full", IDENTITY, source_root=tmp_path)["collected"]
+        == 8
+    )
     run(
         [
             sys.executable,
@@ -427,7 +479,8 @@ def test_behavior_marker_is_applied_before_sharding(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     evidence = json.loads((tmp_path / "evidence.json").read_text())
     assert evidence["mode"] == "behavior"
-    assert evidence["full"] == ["test_a.py::test_real", "test_b.py::test_real"]
+    assert evidence["collected"] == ["test_a.py::test_real", "test_a.py::test_stub"]
+    assert evidence["excluded_ramp"] == ["test_a.py::test_stub"]
     assert evidence["selected"] == ["test_a.py::test_real"]
 
 

@@ -15,30 +15,20 @@ from app.application.employee_runtime.agent_loop import (
 )
 
 
-class TestParseArgs:
-    def test_valid_json(self):
-        result = _parse_args('{"key": "value"}')
-        assert result == {"key": "value"}
-
-    def test_empty_string(self):
-        result = _parse_args("")
-        assert result == {}
-
-    def test_none(self):
-        result = _parse_args(None)
-        assert result == {}
-
-    def test_invalid_json(self):
-        result = _parse_args("not json")
-        assert result == {}
-
-    def test_non_dict_json(self):
-        result = _parse_args("[1, 2, 3]")
-        assert result == {}
-
-    def test_nested_json(self):
-        result = _parse_args('{"a": {"b": 1}}')
-        assert result == {"a": {"b": 1}}
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ('{"key": "value"}', {"key": "value"}),
+        ("", {}),
+        (None, {}),
+        ("not json", {}),
+        ("[1, 2, 3]", {}),
+        ('{"a": {"b": 1}}', {"a": {"b": 1}}),
+        ('{"task": "create_order", "items": [1, 2]}', {"task": "create_order", "items": [1, 2]}),
+    ],
+)
+def test_parse_args(raw, expected):
+    assert _parse_args(raw) == expected
 
 
 class TestFormatToolCalls:

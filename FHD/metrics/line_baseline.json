@@ -1,5 +1,5 @@
 {
-  "lines": 2405772,
+  "lines": 2406574,
   "updated": "2026-11-01",
-  "note": "PR #2888 CI follow-up adds 3 test lines to verify upstream URLs/secrets are never echoed in SSE errors. Actual tree after main #2886 sync: 2405772 lines; PR delta versus e70b175f0 is +2532 (2123 report fixes, 406 CodeQL/format/regressions, 3 error-redaction regression). No scanner suppression or unrelated deletion."
+  "note": "PR #2888 CI optimization adds 802 maintained lines for early file sharding, independently verified source and collector receipts, configuration/cross-mode rejection and regression coverage; removes duplicate frontend jobs and weak duplicate tests, restores 41 hidden tests by zero-content renames. Existing UX/CodeQL scope remains +2532 versus main e70b175f0; cumulative +3334. No unrelated deletion or coverage threshold reduction."
 }

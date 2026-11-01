@@ -128,11 +128,17 @@ class TestMarketAdminProxyAdditional:
             patch(
                 "app.fastapi_routes.market_account._proxy_json",
                 new=AsyncMock(return_value={"success": True, "data": {"id": 1}}),
-            ),
+            ) as proxy,
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
-        assert isinstance(result, dict)
-        assert result["success"] is True
+        assert result == {"success": True, "data": {"id": 1}}
+        proxy.assert_awaited_once_with(
+            "GET",
+            "/api/test",
+            json_body=None,
+            authorization="Bearer tok",
+            return_error_payload=True,
+        )
 
     @pytest.mark.asyncio
     async def test_require_admin_session_true_gate(self):

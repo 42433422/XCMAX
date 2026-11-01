@@ -3,15 +3,137 @@
 from __future__ import annotations
 
 import argparse
+import configparser
+import fnmatch
 import hashlib
 import importlib.metadata
 import json
 import math
 import os
 import re
+import shlex
 import sys
+import tomllib
 from collections import Counter, defaultdict
 from pathlib import Path
+
+DEFAULT_NORECURSEDIRS = [
+    "*.egg",
+    ".*",
+    "_darcs",
+    "build",
+    "CVS",
+    "dist",
+    "node_modules",
+    "venv",
+    "{arch}",
+]
+
+
+def object_digest(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def suite_configuration(root: Path) -> dict:
+    """Read pytest's supported directory discovery options without importing tests."""
+    if any((root / name).exists() for name in ("pytest.toml", ".pytest.toml")):
+        raise ValueError("Native pytest TOML configuration is unsupported by backend shards")
+    options: dict | None = {}
+    config_identity = None
+    for name in ("pytest.ini", ".pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"):
+        path = root / name
+        if not path.is_file():
+            continue
+        if name == "pyproject.toml":
+            table = tomllib.loads(path.read_text()).get("tool", {}).get("pytest", {})
+            if set(table) - {"ini_options"}:
+                raise ValueError(
+                    "Native pytest TOML configuration is unsupported by backend shards"
+                )
+            options = table.get("ini_options")
+        else:
+            parser = configparser.RawConfigParser()
+            parser.read(path)
+            section = "tool:pytest" if name == "setup.cfg" else "pytest"
+            options = dict(parser[section]) if parser.has_section(section) else None
+        if options is not None or name in ("pytest.ini", ".pytest.ini"):
+            config_identity = {"path": name, "sha256": digest(path)}
+            break
+    options = options or {}
+
+    def values(key, default):
+        value = options.get(key, default)
+        return shlex.split(value) if isinstance(value, str) else list(value)
+
+    roots = values("testpaths", []) or ["."]
+    for directory in roots:
+        path = Path(directory)
+        if path.is_absolute() or ".." in path.parts or not (root / path).is_dir():
+            raise ValueError("Backend sharding requires existing relative test directories")
+    configuration = {
+        "config": config_identity,
+        "roots": roots,
+        "python_files": values("python_files", ["test_*.py", "*_test.py"]),
+        "norecursedirs": values("norecursedirs", DEFAULT_NORECURSEDIRS),
+    }
+    if any(
+        "/" in pattern or "\\" in pattern
+        for key in ("python_files", "norecursedirs")
+        for pattern in configuration[key]
+    ):
+        raise ValueError("Backend shard discovery requires basename-only pytest patterns")
+    return configuration
+
+
+def source_inventory(root: Path) -> tuple[dict, dict[str, str]]:
+    """Discover the current suite, including empty modules, without old node lists."""
+    configuration = suite_configuration(root)
+    files = {}
+    conftests = {}
+    for directory in configuration["roots"]:
+        for ancestor in (root / directory, *(root / directory).parents):
+            if not ancestor.is_relative_to(root):
+                break
+            conftest = ancestor / "conftest.py"
+            if conftest.is_file():
+                conftests[conftest.relative_to(root).as_posix()] = digest(conftest)
+        for parent, directories, names in os.walk(root / directory, followlinks=False):
+            base = Path(parent)
+            directories[:] = [
+                name
+                for name in directories
+                if not any(
+                    fnmatch.fnmatch(name, pattern) for pattern in configuration["norecursedirs"]
+                )
+                and not (base / name / "bin/activate").is_file()
+                and not (base / name / "Scripts/activate").is_file()
+            ]
+            if base.is_symlink() or any((base / name).is_symlink() for name in directories):
+                raise ValueError("Symlinked test directories are unsupported")
+            for name in names:
+                if name == "conftest.py":
+                    conftests[(base / name).relative_to(root).as_posix()] = digest(base / name)
+                if (
+                    name == "conftest.py"
+                    or not name.endswith(".py")
+                    or not any(
+                        fnmatch.fnmatch(name, pattern) for pattern in configuration["python_files"]
+                    )
+                ):
+                    continue
+                path = base / name
+                relative = path.relative_to(root).as_posix()
+                if path.with_suffix("").is_dir():
+                    raise ValueError(
+                        "Test module collides with a same-name package directory: " + relative
+                    )
+                if path.is_symlink() or relative in files:
+                    raise ValueError("Indirect or overlapping test source files")
+                files[relative] = digest(path)
+    if not files:
+        raise ValueError("Empty backend test source inventory")
+    configuration["conftests"] = dict(sorted(conftests.items()))
+    return configuration, dict(sorted(files.items()))
 
 
 def configured_total() -> int:
@@ -123,23 +245,71 @@ def seal(directory: Path) -> None:
         path.write_text(json.dumps(data, sort_keys=True), encoding="utf-8")
 
 
+def collection_leaves(data: dict, assigned: list[str]) -> list[str]:
+    """Prove that every assigned module and nested collector was visited once."""
+    reports = data["collection_reports"]
+    visited, leaves, skipped = set(), [], []
+
+    def visit(node):
+        if node in visited or node not in reports or len(reports[node]) != 1:
+            raise ValueError("Missing or duplicate collector receipt")
+        visited.add(node)
+        report = reports[node][0]
+        if report["outcome"] == "skipped" and not report["children"]:
+            skipped.append(node)
+        elif report["outcome"] == "passed":
+            for child in report["children"]:
+                child_id = child["nodeid"]
+                if not child_id.startswith(node + "::") or type(child["collector"]) is not bool:
+                    raise ValueError("Foreign collection child")
+                if child["collector"]:
+                    visit(child_id)
+                else:
+                    leaves.append(child_id)
+        else:
+            raise ValueError("Failed or invalid collection receipt")
+
+    for name in assigned:
+        visit(name)
+    if visited != set(reports) or sorted(skipped) != data["collection_skips"]:
+        raise ValueError("Foreign or unreported collection receipt")
+    if len(leaves) != len(set(leaves)) or sorted(leaves) != data["collected"]:
+        raise ValueError("Missing, duplicate or extra collected test")
+    return sorted(leaves)
+
+
 def verify(
-    root: Path, total: int, mode: str, expected: dict[str, str], artifact_prefix: str = "shard-"
+    root: Path,
+    total: int,
+    mode: str,
+    expected: dict[str, str],
+    artifact_prefix: str = "shard-",
+    *,
+    source_root: Path | None = None,
 ) -> dict:
     if not 1 <= total <= 24 or mode not in ("full", "behavior"):
         raise ValueError("Invalid shard total or evidence mode")
     if re.fullmatch(r"[A-Za-z0-9_-]+", artifact_prefix) is None:
         raise ValueError("Invalid artifact directory prefix")
     timings, expected_profile = profile()
+    configuration, files = source_inventory((source_root or Path.cwd()).resolve())
+    inventory_hash = object_digest({"configuration": configuration, "files": files})
+    groups = partition(list(files), total, timings)
     directories = sorted(root.iterdir())
     if len(directories) != total or {p.name for p in directories} != {
         f"{artifact_prefix}{i}" for i in range(1, total + 1)
     }:
         raise ValueError("Missing or extra shard artifact")
-    full = None
-    skipped = None
     toolchain = None
-    indices, selected, outcomes, node_outcomes = set(), [], Counter(), {}
+    outcomes: Counter[str] = Counter()
+    indices, selected, assigned_files, skipped, node_outcomes = (
+        set(),
+        [],
+        [],
+        [],
+        {},
+    )
+    discovered, ramp_nodes = [], []
     for directory in directories:
         manifest = directory / f"{mode}.json"
         if directory.is_symlink() or manifest.is_symlink() or not manifest.is_file():
@@ -149,6 +319,13 @@ def verify(
             raise ValueError("Foreign SHA/run/attempt in shard evidence")
         if data.get("partition_profile") != expected_profile:
             raise ValueError("Foreign partition profile")
+        if (
+            data.get("schema") != 2
+            or data.get("configuration") != configuration
+            or data.get("files") != files
+            or data.get("source_inventory_sha256") != inventory_hash
+        ):
+            raise ValueError("Different or incomplete current source inventory")
         index = data["index"]
         if (
             type(index) is not int
@@ -161,16 +338,16 @@ def verify(
         indices.add(index)
         if data["mode"] != mode or data["exitstatus"] != 0 or data["collection_errors"]:
             raise ValueError("Shard did not successfully finish")
-        nodes = data["full"]
-        groups = partition(nodes, total, timings)
-        if full is not None and nodes != full:
-            raise ValueError("Different full collections across shards")
-        if skipped is not None and skipped != data["collection_skips"]:
-            raise ValueError("Different collection skips across shards")
-        skipped = data["collection_skips"]
-        full = nodes
+        assigned = data["assigned_files"]
+        if not assigned or assigned != sorted(groups[index - 1]):
+            raise ValueError("Missing, extra or empty file shard")
+        nodes = collection_leaves(data, assigned)
+        ramp = data["excluded_ramp"]
+        if ramp != sorted(set(ramp)) or not set(ramp) <= set(nodes):
+            raise ValueError("Invalid behavior exclusions")
         chosen = data["selected"]
-        if chosen != sorted(groups[index - 1]) or set(data["reports"]) != set(chosen):
+        expected_nodes = [node for node in nodes if mode == "full" or node not in set(ramp)]
+        if not chosen or chosen != expected_nodes or set(data["reports"]) != set(chosen):
             raise ValueError("Missing/extra test execution")
         if any(r["outcome"] == "failed" or r["nodeid"] not in chosen for r in data["subtests"]):
             raise ValueError("Failed or foreign subtest")
@@ -200,19 +377,42 @@ def verify(
             raise ValueError("Different report toolchains across shards")
         toolchain = current_toolchain
         selected.extend(chosen)
-    if len(selected) != len(set(selected)) or set(selected) != set(full or []):
-        raise ValueError("Shard union differs from full suite")
+        discovered.extend(nodes)
+        ramp_nodes.extend(ramp)
+        assigned_files.extend(assigned)
+        skipped.extend(data["collection_skips"])
+    if (
+        len(selected) != len(set(selected))
+        or len(assigned_files) != len(set(assigned_files))
+        or set(assigned_files) != set(files)
+    ):
+        raise ValueError("Shard union differs from current source suite")
     return {
         "mode": mode,
         "collected": len(selected),
         "outcomes": dict(outcomes),
-        "collection_skips": skipped,
+        "collection_skips": sorted(skipped),
         "report_toolchain": toolchain,
-        "collection_sha256": hashlib.sha256(json.dumps(full, sort_keys=True).encode()).hexdigest(),
-        "outcomes_sha256": hashlib.sha256(
-            json.dumps(node_outcomes, sort_keys=True).encode()
-        ).hexdigest(),
+        "files": len(files),
+        "source_inventory_sha256": inventory_hash,
+        "discovered_sha256": object_digest(sorted(discovered)),
+        "ramp_sha256": object_digest(sorted(ramp_nodes)),
+        "collection_sha256": object_digest(sorted(selected)),
+        "outcomes_sha256": object_digest(node_outcomes),
     }
+
+
+def verify_scopes(summaries: list[dict]) -> None:
+    if len(summaries) != 2 or any(
+        summaries[0][key] != summaries[1][key]
+        for key in (
+            "source_inventory_sha256",
+            "discovered_sha256",
+            "ramp_sha256",
+            "collection_skips",
+        )
+    ):
+        raise ValueError("Full and behavior must collect the same source suite and markers")
 
 
 def main() -> None:
@@ -232,16 +432,17 @@ def main() -> None:
         result = plan(args.total)
         outputs = {"total": str(args.total), "matrix": json.dumps(result["matrix"])}
     else:
-        result = [
+        summaries = [
             verify(args.directory, configured_total(), mode, identity(), args.artifact_prefix)
             for mode in ("full", "behavior")
         ]
-        outputs = {"coverage_version": result[0]["report_toolchain"]["coverage"]}
+        verify_scopes(summaries)
+        outputs = {"coverage_version": summaries[0]["report_toolchain"]["coverage"]}
     if output := os.environ.get("GITHUB_OUTPUT"):
         with Path(output).open("a", encoding="utf-8") as stream:
             for name, value in outputs.items():
                 stream.write(f"{name}={value}\n")
-    print(json.dumps(result, indent=2))
+    print(json.dumps(result if args.command == "plan" else summaries, indent=2))
 
 
 if __name__ == "__main__":

@@ -988,26 +988,39 @@ def test_recognize_sync_returns_result() -> None:
 
 
 def test_recognize_sync_handles_timeout() -> None:
-    svc = _make_service(use_rasa=False, use_bert=False)
-    with patch.object(HybridIntentService, "recognize", new=AsyncMock(side_effect=_slow_recognize)):
-        # Force timeout by patching future.result to raise TimeoutError
-        import concurrent.futures
-
-        original = concurrent.futures.ThreadPoolExecutor
-        result = svc.recognize_sync("hello")
-    # Should fall back to rule_recognize_intents
-    assert (
-        "sources_used" not in result
-        or result.get("primary_intent") is None
-        or isinstance(result, dict)
-    )
-
-
-async def _slow_recognize(_msg: str) -> dict:  # noqa: RUF029
     import asyncio
+    import concurrent.futures
 
-    await asyncio.sleep(10)
-    return {}
+    from app.domain.shared_services import hybrid_intent_service as module
+
+    svc = _make_service(use_rasa=False, use_bert=False)
+    expected = module.rule_recognize_intents("hello")
+    loop = MagicMock()
+    loop.is_running.return_value = True
+    future = MagicMock(spec=concurrent.futures.Future)
+    future.result.side_effect = concurrent.futures.TimeoutError
+    executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    executor.__enter__.return_value = executor
+
+    def submit(runner, coroutine):
+        coroutine.close()
+        assert runner is asyncio.run
+        return future
+
+    executor.submit.side_effect = submit
+    with (
+        patch("asyncio.get_event_loop", return_value=loop),
+        patch("concurrent.futures.ThreadPoolExecutor", return_value=executor),
+        patch.object(
+            module, "rule_recognize_intents", wraps=module.rule_recognize_intents
+        ) as fallback,
+    ):
+        result = svc.recognize_sync("hello")
+    executor.submit.assert_called_once()
+    future.result.assert_called_once_with(timeout=30)
+    executor.__exit__.assert_called_once()
+    fallback.assert_called_once_with("hello")
+    assert result == expected
 
 
 def test_recognize_sync_handles_recoverable_error() -> None:
