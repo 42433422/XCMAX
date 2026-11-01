@@ -1,5 +1,5 @@
 {
-  "lines": 2406562,
+  "lines": 2406821,
   "updated": "2026-11-01",
-  "note": "PR #2888: net-delete 27 lines by removing import-time RAG package mocks and isolating the real dataset service fixture; preserve all assertions and verify old singleton/import-order failures. Cumulative maintained delta +3307 versus main d20ae2492 (original UX/CodeQL +2532, CI integrity/performance +775); complete shard evidence and safety gates retained."
+  "note": "PR #2891: after excluding .github/security/gitleaks-disposition/ evidence from the line ratchet (parity with FHD/docs/evidence/), remaining +259 is intentional security gate unblock code (auto_ingest path jail, normalize disposition apply, unit tests, changelog, lock bumps already skipped)."
 }
