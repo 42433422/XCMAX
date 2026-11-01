@@ -45,7 +45,7 @@ EVENT_PATTERNS = {
 }
 
 def record_summary(records):
-    events, metadata, message_types = {}, {}, {}
+    events, metadata, message_types, listeners = {}, {}, {}, []
     for record in records:
         message = record.get('MESSAGE')
         kind = 'str' if isinstance(message, str) else 'bytes_array' if isinstance(message, list) else 'other'
@@ -64,6 +64,13 @@ def record_summary(records):
                 event = events.setdefault(name, {'count': 0, 'first_us': timestamp, 'last_us': timestamp})
                 event['count'] += 1
                 event['last_us'] = timestamp
+        endpoint = re.search(r'Uvicorn running on (https?)://(\[[0-9a-fA-F:]+\]|[A-Za-z0-9_.-]+):([0-9]{1,5})(?:[/\s]|$)', message)
+        if endpoint and 1 <= int(endpoint[3]) <= 65535:
+            host = endpoint[2].lower()
+            category = 'loopback' if host in ('127.0.0.1', 'localhost', '[::1]') else 'wildcard' if host in ('0.0.0.0', '[::]') else 'other'
+            value = {'host_category': category, 'port': int(endpoint[3]), 'time_us': timestamp}
+            if value not in listeners:
+                listeners.append(value)
         for field in ('MESSAGE_ID', 'EXIT_CODE', 'EXIT_STATUS', '_COMM'):
             value = record.get(field)
             allowed = isinstance(value, str) and (
@@ -78,7 +85,7 @@ def record_summary(records):
         if match:
             key = 'process_exit:' + match[1] + ':' + match[2]
             metadata[key] = metadata.get(key, 0) + 1
-    return {'event_categories': events, 'structured_counts': metadata, 'message_types': message_types}
+    return {'event_categories': events, 'structured_counts': metadata, 'message_types': message_types, 'listening_endpoints': listeners[:20]}
 
 def read(args):
     result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=15, check=False)

@@ -1,5 +1,5 @@
 {
-  "lines": 2407373,
+  "lines": 2407380,
   "updated": "2026-11-01",
-  "note": "Authorized fixed-window event metadata diagnosis: only enumerated categories status codes and known source guards; isolated diagnostic branch"
+  "note": "Authorized same-window known Uvicorn listen message: only host category and numeric port, no URL/env; diagnostic branch only"
 }
