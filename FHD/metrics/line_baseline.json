@@ -1,5 +1,5 @@
 {
-  "lines": 2406795,
+  "lines": 2406531,
   "updated": "2026-11-01",
-  "note": "PR #2891: maintained baseline is +233 versus main: original +259 security unblock, +7 managed-template jail and real-resolver regression fix, minus 33 redundant mobile test-loader lines. All 549 mobile cases pass with explicit per-fixture imports in isolated files."
+  "note": "PR #2896 after merging #2891: test-quality cleanup net deletion plus delivery plan None-safe expected_delivery_at; recompute maintained line baseline post-merge."
 }

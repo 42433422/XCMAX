@@ -23,14 +23,12 @@ from __future__ import annotations
 
 import os
 
-from app.utils.operational_errors import BOUNDARY_ERRORS
-
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
+import importlib
 import json
 import shutil
 import sqlite3
-import sys
 import tempfile
 from contextlib import contextmanager
 from datetime import datetime
@@ -165,20 +163,9 @@ def _simple_plan(nodes=None, plan_id="p1"):
     )
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _resolve_circular_import():
-    """Resolve circular import between mobile_api and mobile_api_extensions."""
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        try:
-            from app.fastapi_routes import mobile_api  # noqa: F401
-        except BOUNDARY_ERRORS:
-            pass
-    yield
-
-
 @pytest.fixture
 def ext_mod():
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 # ===========================================================================

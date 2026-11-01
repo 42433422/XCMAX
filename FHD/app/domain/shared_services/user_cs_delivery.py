@@ -36,8 +36,9 @@ def update_delivery_plan(
 ) -> dict[str, Any]:
     doc = ensure_delivery_on_doc(doc)
     delivery = dict(doc["delivery"])
-    if expected_delivery_at.strip():
-        delivery["expected_delivery_at"] = expected_delivery_at.strip()
+    expected = str(expected_delivery_at or "").strip()
+    if expected:
+        delivery["expected_delivery_at"] = expected
     if milestones is not None:
         delivery["milestones"] = milestones
     if start_delivery:

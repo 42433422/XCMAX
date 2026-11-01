@@ -230,17 +230,15 @@ class TestDownloadModel:
 
     def test_invalid_request_body(self, client: TestClient) -> None:
         r = client.post("/api/desktop/models/download", json={})
-        # 422 from pydantic validation, or 400 if handler runs
-        assert r.status_code in (400, 422)
+        assert r.status_code == 422
+        assert {tuple(error["loc"]) for error in r.json()["detail"]} == {
+            ("body", field) for field in ("name", "version", "url", "sha256")
+        }
 
-    def test_successful_download_returns_zip(self, client: TestClient) -> None:
+    def test_successful_download_returns_downloaded_asset(self, client: TestClient) -> None:
         with (
             patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
             patch("app.fastapi_routes.desktop_runtime.download_model") as dl,
-            patch(
-                "app.fastapi_routes.desktop_runtime.build_support_bundle_zip",
-                return_value=b"PK\x03\x04zip",
-            ),
         ):
             dl.return_value = "/tmp/model.bin"
             r = client.post(
@@ -253,8 +251,17 @@ class TestDownloadModel:
                     "size": 1024,
                 },
             )
-        # Either 200 with zip or some other success-ish code
-        assert r.status_code in (200, 201, 202, 400, 500)
+        assert r.status_code == 200, r.text
+        assert r.json() == {"success": True, "path": "/tmp/model.bin"}
+        dl.assert_called_once()
+        asset = dl.call_args.args[0]
+        assert (asset.name, asset.version, asset.url, asset.sha256, asset.size) == (
+            "test-model",
+            "1.0.0",
+            "https://example.com/m.bin",
+            "abc123",
+            1024,
+        )
 
 
 class TestCrashReport:

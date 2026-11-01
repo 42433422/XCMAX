@@ -54,6 +54,7 @@ export async function importBusinessCsv(
   csv: string,
   expectedAction: 'new' | 'update',
   allowedUpdateFields: string[] = [],
+  assertPreviewUnchanged?: () => Promise<void>,
 ): Promise<{ run: EltRun; row: EltRow }> {
   const uploadHeaders = await csrfHeaders(page.request, {}, apiBase)
   delete uploadHeaders['Content-Type']
@@ -88,23 +89,46 @@ export async function importBusinessCsv(
   }
   expect(ready.summary[expectedAction], JSON.stringify(ready)).toBe(1)
   expect(ready.summary.error, JSON.stringify(ready)).toBe(0)
+  expect(ready.summary.executed, 'preview must not execute target rows').toBe(0)
 
   const previewRows = await jsonRequest(page, `/api/elt/runs/${preview.id}/rows`) as { items: EltRow[]; preview_revision: string | null }
   expect(previewRows.items).toHaveLength(1)
   expect(previewRows.items[0].final_action).toBe(expectedAction)
   expect(ready.preview_revision).toMatch(/^[a-f0-9]{64}$/)
   expect(previewRows.preview_revision).toBe(ready.preview_revision)
-  await jsonRequest(page, `/api/elt/runs/${preview.id}/execute`, 'POST', {
-    confirmed: true,
-    preview_revision: ready.preview_revision,
-    valid_rows_only: false,
-  })
+  expect(previewRows.items[0].execution_status).toBeNull()
+  await assertPreviewUnchanged?.()
+  const executePath = `/api/elt/runs/${preview.id}/execute`
+  const confirmation = { confirmed: true, preview_revision: ready.preview_revision, valid_rows_only: false }
+  for (const [data, status, code] of [
+    [{ ...confirmation, confirmed: false }, 400, 'ELT_CONFIRMATION_REQUIRED'],
+    [{ ...confirmation, preview_revision: '0'.repeat(64) }, 409, 'ELT_PREVIEW_CHANGED'],
+  ] as const) {
+    const rejected = await page.request.post(`${apiBase}${executePath}`, {
+      headers: await csrfHeaders(page.request, {}, apiBase), data,
+    })
+    expect(rejected.status(), await rejected.text()).toBe(status)
+    expect(await rejected.json()).toMatchObject({ success: false, error_code: `http_${status}`, message: expect.stringContaining(code), path: executePath })
+  }
+  const unexecuted = await jsonRequest(page, `/api/elt/runs/${preview.id}`) as EltRun
+  expect(unexecuted).toMatchObject({ status: 'preview_ready', preview_revision: ready.preview_revision, summary: { executed: 0 } })
+  await assertPreviewUnchanged?.()
+  await jsonRequest(page, executePath, 'POST', confirmation)
   const completed = await waitForRun(page, preview.id, 'completed')
   expect(completed.summary.executed, JSON.stringify(completed)).toBe(1)
-  const rows = await jsonRequest(page, `/api/elt/runs/${preview.id}/rows`) as { items: EltRow[] }
+  const rowsPath = `/api/elt/runs/${preview.id}/rows`
+  const rows = await jsonRequest(page, rowsPath) as { items: EltRow[] }
   expect(rows.items).toHaveLength(1)
   expect(rows.items[0].execution_status).toBe('success')
   if (target !== 'export_csv') expect(rows.items[0].match_ref).toBeTruthy()
+  // Retrying an already committed confirmation must never create another write.
+  const duplicate = await page.request.post(`${apiBase}${executePath}`, {
+    headers: await csrfHeaders(page.request, {}, apiBase), data: confirmation,
+  })
+  expect(duplicate.status(), await duplicate.text()).toBe(409)
+  expect(await duplicate.json()).toMatchObject({ success: false, error_code: 'http_409', message: expect.stringContaining('ELT_PREVIEW_REQUIRED'), path: executePath })
+  expect(await jsonRequest(page, rowsPath)).toEqual(rows)
+  expect(await jsonRequest(page, `/api/elt/runs/${preview.id}`)).toMatchObject({ status: 'completed', summary: { executed: 1 } })
   return { run: completed, row: rows.items[0] }
 }
 

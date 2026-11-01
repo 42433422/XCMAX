@@ -1,6 +1,15 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { installE2eShellMocks, captureEvidence, csrfHeaders, isFullStack, loginBrowserSession } from './helpers'
 import { exportEtlRowsCsv, importBusinessCsv } from './elt-business'
+
+async function customerRecords(page: Page, name: string) {
+  const response = await page.request.get(`/api/mod/xcagi-erp-domain-bridge/customers/list?keyword=${encodeURIComponent(name)}`)
+  expect(response.status(), await response.text()).toBe(200)
+  const body = await response.json()
+  expect(body).toMatchObject({ success: true, data: expect.any(Array), total: expect.any(Number) })
+  expect(body.total).toBe(body.data.length)
+  return body.data
+}
 
 test.describe('P0 critical paths', () => {
   test.beforeEach(async ({ page }) => {
@@ -18,49 +27,58 @@ test.describe('P0 critical paths', () => {
     await captureEvidence(page, '01-login.png')
   })
 
-  test('02 order — orders list API reachable', async ({ page, request }) => {
+  test('02 order — anonymous and tenant sessions cannot read the legacy shared store', async ({ page, request }) => {
     if (isFullStack()) {
-      const resp = await request.get('/api/orders', { timeout: 20_000 })
-      expect(resp.status(), await resp.text()).toBeLessThan(500)
+      const anonymous = await request.get('/api/orders', { timeout: 20_000 })
+      expect(anonymous.status(), await anonymous.text()).toBe(401)
+      expect(await anonymous.json()).toMatchObject({ success: false, error_code: 'http_401', message: expect.stringContaining('请先登录'), path: '/api/orders' })
+      const tenant = await page.request.get('/api/orders', { timeout: 20_000 })
+      expect(tenant.status(), await tenant.text()).toBe(403)
+      expect(await tenant.json()).toMatchObject({ success: false, error_code: 'http_403', message: '该旧业务接口尚未提供安全的租户数据隔离', path: '/api/orders' })
+      await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 })
+      await expect(page).toHaveURL((url) => url.pathname === '/mod/xcagi-erp-domain-bridge/orders')
+    } else {
+      await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     }
-
-    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
-    const orderNav = page.getByRole('button', { name: /订单|发货单|创建订单/ }).first()
-    if (await orderNav.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await orderNav.click()
-    }
     await captureEvidence(page, '02-order.png')
   })
 
-  test('03 shipment — shipment list API reachable', async ({ page, request }) => {
+  test('03 shipment — tenant record list has the business response contract', async ({ page }) => {
     if (isFullStack()) {
-      const resp = await request.get('/api/shipment/list', { timeout: 20_000 })
-      expect(resp.status(), await resp.text()).toBeLessThan(500)
+      const response = await page.request.get('/api/shipment/shipment-records/records', { timeout: 20_000 })
+      expect(response.status(), await response.text()).toBe(200)
+      expect(await response.json()).toMatchObject({
+        success: true, data: expect.any(Array),
+        source: 'mod:xcagi-erp-domain-bridge', execution_path: 'mod_domain_handler',
+      })
     }
-
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
     await captureEvidence(page, '03-shipment.png')
   })
 
-  test('04 OCR — ocr test endpoint reachable', async ({ page, request }) => {
+  test('04 OCR — diagnostics return the declared service schema', async ({ page }) => {
     if (isFullStack()) {
-      const resp = await request.get('/api/ocr/test', { timeout: 20_000 })
-      expect(resp.status(), await resp.text()).toBeLessThan(500)
+      const response = await page.request.get('/api/ocr/test', { timeout: 20_000 })
+      expect(response.status(), await response.text()).toBe(200)
+      const body = await response.json()
+      expect(body).toMatchObject({ success: true, message: 'OCR服务运行正常' })
+      expect(['paddleocr', 'easyocr', 'macos_vision', 'tesseract', 'none', 'unknown']).toContain(body.active_backend)
     }
-
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
     await captureEvidence(page, '04-ocr.png')
   })
 
-  test('05 mod — mods list API reachable', async ({ page, request }) => {
+  test('05 mod — authenticated catalog returns installed business mods', async ({ page }) => {
     if (isFullStack()) {
-      const resp = await request.get('/api/mods/', { timeout: 20_000 })
-      expect(resp.status(), await resp.text()).toBeLessThan(500)
+      const response = await page.request.get('/api/mods/', { timeout: 20_000 })
+      expect(response.status(), await response.text()).toBe(200)
+      const body = await response.json()
+      expect(body).toMatchObject({ success: true, data: expect.any(Array) })
+      expect(body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'xcagi-erp-domain-bridge' })]))
     }
-
     await page.goto('/ai-ecosystem', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
     await captureEvidence(page, '05-mod.png')
@@ -78,16 +96,26 @@ test.describe('P0 critical paths', () => {
       await page.goto('/business-docking', { waitUntil: 'domcontentloaded', timeout: 30_000 })
       await expect(page.locator('#view-business-docking')).toBeVisible({ timeout: 25_000 })
       const name = `E2E客户-${Date.now()}`
+      expect(await customerRecords(page, name)).toEqual([])
       const created = await importBusinessCsv(page, 'customers',
-        `客户名称,联系人,电话,地址\n${name},验收员,13000000001,原地址\n`, 'new')
+        `客户名称,联系人,电话,地址\n${name},验收员,13000000001,原地址\n`, 'new', [],
+        async () => { expect(await customerRecords(page, name), 'preview and rejected confirmation must not create a customer').toEqual([]) })
       expect(created.row.after.customer_name).toBe(name)
+      const beforeUpdate = await customerRecords(page, name)
+      expect(beforeUpdate).toHaveLength(1)
+      expect(beforeUpdate[0]).toMatchObject({ customer_name: name, contact_phone: '13000000001' })
       const updated = await importBusinessCsv(page, 'customers',
         `客户名称,联系人,电话,地址\n${name},验收员,13000000002,新地址\n`, 'update',
-        ['contact_phone', 'contact_address'])
+        ['contact_phone', 'contact_address'],
+        async () => { expect(await customerRecords(page, name), 'preview must preserve the committed customer').toEqual(beforeUpdate) })
       expect(updated.row.match_ref).toBe(created.row.match_ref)
       expect(updated.row.before.contact_phone).toBe('13000000001')
       expect(updated.row.after.contact_phone).toBe('13000000002')
       expect(updated.row.after.contact_address).toBe('新地址')
+      const readback = await customerRecords(page, name)
+      expect(readback).toHaveLength(1)
+      expect(readback[0]).toMatchObject({ customer_name: name, contact_phone: '13000000002', contact_address: '新地址' })
+      expect(String(readback[0].id)).toBe(created.row.match_ref)
       // The exported source is the completed, owner-scoped ETL row readback.
       const exported = await exportEtlRowsCsv(page,
         `客户名称,电话\n${updated.row.after.customer_name},${updated.row.after.contact_phone}\n`)

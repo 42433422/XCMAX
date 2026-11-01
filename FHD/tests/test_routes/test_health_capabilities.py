@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -21,14 +22,32 @@ def _build_app() -> FastAPI:
     return app
 
 
-def test_health_details_shape():
+@pytest.mark.parametrize(
+    ("changed_probe", "probe_status", "overall"),
+    [
+        ("redis", "healthy", "healthy"),
+        ("redis", "disabled", "healthy"),
+        ("database", "unhealthy", "degraded"),
+        ("ai_service", "degraded", "degraded"),
+    ],
+)
+def test_health_details_shape(monkeypatch, changed_probe, probe_status, overall):
+    from app.fastapi_routes import health_k8s
+
+    checks = {
+        name: {"status": "healthy"}
+        for name in ("database", "redis", "ai_service", "pgvector", "rasa")
+    }
+    checks[changed_probe] = {"status": probe_status}
+    for name, result in checks.items():
+        probe = "_check_rasa_nlu" if name == "rasa" else f"_check_{name}"
+        monkeypatch.setattr(health_k8s, probe, lambda result=result: result)
     client = TestClient(_build_app(), raise_server_exceptions=False)
     resp = client.get("/health/details")
-    assert resp.status_code in (200, 503)
+    assert resp.status_code == 200
     body = resp.json()
-    assert "checks" in body
-    for key in ("database", "redis", "ai_service", "pgvector", "rasa"):
-        assert key in body["checks"], f"health/details 缺少 {key} 分项"
+    assert body["status"] == overall
+    assert body["checks"] == checks
 
 
 def test_capabilities_endpoint_contract():

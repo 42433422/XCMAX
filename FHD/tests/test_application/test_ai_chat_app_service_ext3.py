@@ -76,35 +76,6 @@ class TestSkipProExcelDeterministicImportExtended:
                 assert _skip_pro_excel_deterministic_import({}) is False
 
 
-# ========================= _is_pro_source - extended ======================
-
-
-class TestIsProSourceExtended:
-    def test_pro_mode(self):
-        assert AIChatApplicationService._is_pro_source("pro_mode") is True
-
-    def test_promode(self):
-        assert AIChatApplicationService._is_pro_source("promode") is True
-
-    def test_professional(self):
-        assert AIChatApplicationService._is_pro_source("professional") is True
-
-    def test_xcagi_pro(self):
-        assert AIChatApplicationService._is_pro_source("xcagi_pro") is True
-
-    def test_pro_with_dash(self):
-        assert AIChatApplicationService._is_pro_source("pro-mode") is True
-
-    def test_none(self):
-        assert AIChatApplicationService._is_pro_source(None) is False
-
-    def test_empty(self):
-        assert AIChatApplicationService._is_pro_source("") is False
-
-    def test_normal(self):
-        assert AIChatApplicationService._is_pro_source("normal") is False
-
-
 # ========================= _merge_tool_runtime_context - extended ==========
 
 
@@ -556,10 +527,6 @@ class TestResolveExcelPathForImportExtended:
         fp = str(tmp_path / "in.xlsx")
         result = AIChatApplicationService._resolve_excel_path_for_import({"file_path": fp}, {})
         assert result == fp
-
-    def test_empty_both(self):
-        result = AIChatApplicationService._resolve_excel_path_for_import({}, {})
-        assert result == ""
 
     def test_non_dict_preview_data(self):
         result = AIChatApplicationService._resolve_excel_path_for_import(

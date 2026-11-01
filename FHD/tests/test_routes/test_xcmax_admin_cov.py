@@ -14,6 +14,7 @@ import json
 import os
 import tempfile
 from contextlib import ExitStack
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -816,12 +817,15 @@ class TestAdminSetUserProfile:
 
     def test_entitled_industries_list_passed(self, client: TestClient):
         """Lines 684-689: entitled_raw is list → merge_entitled_industries called."""
-        mock_user = MagicMock()
-        mock_user.tier = "enterprise"
-        mock_user.entitled_industries = ["通用"]
-        mock_user.industry_id = ""
-        mock_user.account_tier = None
-        mock_user.budget_range = ""
+        mock_user = SimpleNamespace(
+            username="frank",
+            market_user_id=1,
+            tier="enterprise",
+            entitled_industries=["通用"],
+            industry_id="",
+            account_tier=None,
+            budget_range="",
+        )
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
@@ -855,8 +859,22 @@ class TestAdminSetUserProfile:
                 "/api/xcmax/admin/users/1/profile",
                 json={"username": "frank", "entitled_industries": ["通用", "行业A"]},
             )
-        # Either 200 (success) or 500 depending on DB mock completeness
-        assert resp.status_code in (200, 500)
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {
+            "success": True,
+            "data": {
+                "market_user_id": 1,
+                "username": "frank",
+                "tier": "enterprise",
+                "entitled_industries": ["通用", "行业A"],
+                "industry_id": "",
+                "account_tier": None,
+                "budget_range": "",
+            },
+        }
+        assert mock_user.entitled_industries == ["通用", "行业A"]
+        mock_db.commit.assert_called_once()
+        mock_db.add.assert_not_called()
 
     def test_db_error_returns_500(self, client: TestClient):
         """Lines 771-773: RECOVERABLE_ERRORS from DB → 500."""

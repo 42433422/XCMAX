@@ -194,6 +194,8 @@ PR Fast CI
 
 原 `Vitest (173 文件 · jsdom)` 与 `frontend-smoke` 检查名称保留为轻量兼容任务，显式要求 `frontend-test` 聚合成功；上游失败、取消或跳过均拒绝。`frontend-smoke` 还运行原仓库卫生检查。独立重复 Vitest、smoke 子集和 mock E2E 已移除；真实全栈 E2E、严格构建、安全扫描及覆盖率门禁保留。当前 `coverage_ramp` 为零时，后端复用已验证的 full 结果作为 behavior 结果，不重复执行测试。
 
+测试去重须核对实现、输入、夹具和独有断言，保留有效场景；不以文件名或执行条数判断质量。现有 `test_bloat_report.py --check` 同时拒绝后端测试的字面 `assert True` 和同一状态码集合同时接受成功与服务器错误。业务回归应核对精确状态、响应及副作用；ELT 全栈闭环验证预演不写入、未确认拒绝、执行后读回及重复提交拒绝，模型闭环使用真实会话与适配器、仅替代外部 HTTP 传输，不调用付费模型。
+
 ### 比较时间的方法
 
 计时范围是同一提交全部 required checks 完成，并包含排队与环境准备。若没有真实事件接收时间，使用最早 workflow `created_at` 作代理起点并标注；不得把一次手动主工作流结果当成全部 11 项的耗时。PR head、被测试的 merge source、base、各 workflow run/attempt 分别保留。

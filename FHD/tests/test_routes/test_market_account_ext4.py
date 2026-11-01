@@ -765,23 +765,40 @@ class TestMarketAccountRoutes:
             new=AsyncMock(return_value={"status": "synthetic-healthy"}),
         ) as remote:
             resp = client.get("/api/market/status")
-        assert resp.status_code in (200, 401, 403, 502)
         assert resp.status_code == 200
         assert resp.json()["data"]["raw"] == {"status": "synthetic-healthy"}
         remote.assert_awaited_once_with("GET", "/api/health", return_error_payload=True)
 
-    def test_market_login_route_empty_body(self, client):
-        resp = client.post("/api/market/login", json={})
-        assert resp.status_code in (200, 400, 422, 502)
+    @pytest.mark.parametrize(
+        ("path", "status", "message"),
+        [
+            ("/api/market/login", 400, "username 与 password 必填"),
+            ("/api/market/account-overview", 401, "尚未绑定市场账号；请重新登录软件以自动同步"),
+        ],
+    )
+    def test_market_missing_credentials_reject_without_upstream(
+        self, client, path, status, message
+    ):
+        with (
+            patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock()) as remote,
+            patch(
+                "app.fastapi_routes.market_account.login_market_with_password", new=AsyncMock()
+            ) as login,
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request_resolved",
+                new=AsyncMock(return_value=""),
+            ),
+        ):
+            resp = client.post(path, json={})
+        assert resp.status_code == status
+        assert resp.json() == {"success": False, "message": message}
+        remote.assert_not_awaited()
+        login.assert_not_awaited()
 
     def test_market_session_handoff(self, client):
         resp = client.get("/api/market/session-handoff")
         assert resp.status_code == 401
         assert "market_access_token" not in resp.text
-
-    def test_market_account_overview(self, client):
-        resp = client.post("/api/market/account-overview", json={})
-        assert resp.status_code in (200, 401, 403, 422, 502)
 
 
 # ---------------------------------------------------------------------------

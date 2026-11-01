@@ -47,15 +47,6 @@ def test_ai_chat_service_instantiation(mock_conv: MagicMock) -> None:
     assert svc is not None
 
 
-@patch("app.services.get_ai_conversation_service")
-def test_ai_chat_build_error_response(mock_conv: MagicMock) -> None:
-    mock_conv.return_value = MagicMock()
-    svc = AIChatApplicationService()
-    if hasattr(svc, "_build_error_response"):
-        out = svc._build_error_response("E001", "失败")
-        assert out.get("success") is False or "message" in out
-
-
 # ---------------------------------------------------------------------------
 # More system routes
 # ---------------------------------------------------------------------------
@@ -101,11 +92,13 @@ def test_database_backup_delete(
     assert r.status_code == 200
 
 
-@patch("app.template_analysis_progress.get_template_analysis_progress")
+@patch("app.fastapi_routes.domains.system.system_routes.get_template_analysis_progress")
 def test_template_analysis_progress(mock_prog: MagicMock, system_client: TestClient) -> None:
     mock_prog.return_value = {"status": "idle"}
-    r = system_client.get("/api/template/analysis/progress")
-    assert r.status_code in (200, 404, 500)
+    r = system_client.get("/api/templates/progress/task-1")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"status": "idle"}
+    mock_prog.assert_called_once_with("task-1")
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +134,8 @@ def test_auth_subscription_status(mock_get: MagicMock, auth_client: TestClient) 
 def test_auth_oidc_start_disabled(auth_client: TestClient) -> None:
     with patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=False):
         r = auth_client.get("/api/auth/oidc/start")
-    assert r.status_code in (200, 302, 400, 404, 503)
+    assert r.status_code == 404
+    assert r.json() == {"success": False, "message": "OIDC 未启用"}
 
 
 @patch("app.application.auth_app_service.get_auth_app_service")
@@ -162,7 +156,13 @@ def test_auth_forgot_password_send_code(
         "/api/auth/forgot-password/send-code",
         json={"email": "u@example.com"},
     )
-    assert r.status_code in (200, 400, 502)
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "success": True,
+        "message": "若该邮箱已注册，将收到验证码",
+        "data": {"local_user_count": 0},
+    }
+    svc.send_password_reset_code.assert_called_once_with("u@example.com")
 
 
 # ---------------------------------------------------------------------------

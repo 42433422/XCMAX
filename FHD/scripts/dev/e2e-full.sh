@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 全量 Playwright e2e：编排 FastAPI :5000 + Vite :5001，跑 P0 套件（14 用例）。
+# Playwright 门禁：编排隔离 FastAPI + Vite，验证首次登录及 P0 业务闭环。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

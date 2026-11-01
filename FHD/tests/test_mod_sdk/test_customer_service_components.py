@@ -38,7 +38,7 @@ def bridge(monkeypatch, tmp_path):
     spec.loader.exec_module(module)
     app = FastAPI()
     module.register_fastapi_routes(app, "synthetic-customer-service")
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with TestClient(app) as client:
         yield SimpleNamespace(client=client, module=module, app=app)
 
 
