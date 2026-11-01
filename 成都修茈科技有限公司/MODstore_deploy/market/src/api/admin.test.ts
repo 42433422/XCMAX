@@ -280,11 +280,6 @@ describe('admin API', () => {
     expect(m).toHaveBeenCalledWith('/api/admin/ai-accounts/1', expect.objectContaining({ method: 'DELETE' }))
   })
 
-  it('butlerQqStatus', async () => {
-    await admin.butlerQqStatus()
-    expect(m).toHaveBeenCalledWith('/api/agent/butler/qq/status')
-  })
-
   it('adminYuangonOnboardStatus', async () => {
     await admin.adminYuangonOnboardStatus()
     expect(m).toHaveBeenCalledWith('/api/admin/yuangon-onboard/status')

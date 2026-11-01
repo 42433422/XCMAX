@@ -2,7 +2,7 @@
 
 把"AI 员工拥有外部账号"这件事抽象成一张可共享的池表：每个 AI 员工
 （``employee_id``，例如 ``xc-digital-butler``）名下可以挂任意多个外部
-账号（QQ 官方机器人、企业微信、邮箱等），密钥 **不入库**——只在
+账号（企业微信、邮箱等外部渠道；QQ 官方机器人已下线），密钥 **不入库**——只在
 ``_local_secrets/<platform>/<account_id>.json`` 里存运行时凭证。
 
 放在独立模块、由 ``models.py`` 末尾 ``import``，与 ``models_cs`` 同样的
@@ -32,13 +32,13 @@ class AIEmployeeAccount(Base):
 
     ``platform`` 取值约定（暂列）：
 
-    - ``qq``           QQ 官方机器人 V2（与 ``butler_qq_bridge`` 配套）
+    - ``qq``           （已下线）历史 QQ 官方机器人 V2
     - ``wechat``       企业/服务号（预留）
     - ``email``        邮箱（预留）
     - ``slack``、``feishu``、``discord``  …… 后续按平台补
 
-    ``external_id`` 是该平台上这个账号的"对外名片"，比如 QQ 号、邮箱地址。
-    跟 ``platform`` 联合唯一——同一个 QQ 号不能同时挂在两个 AI 员工名下。
+    ``external_id`` 是该平台上这个账号的"对外名片"，比如邮箱地址、企业微信 id。
+    跟 ``platform`` 联合唯一——同一个 external_id 不能同时挂在两个 AI 员工名下。
 
     ``employee_id`` 是 manifest 里那一串 id（与 ``BUTLER_VIRTUAL_EMPLOYEE_ID``
     或 catalog 里 .xcemp 的 id 对齐），允许同一员工持有多个账号。

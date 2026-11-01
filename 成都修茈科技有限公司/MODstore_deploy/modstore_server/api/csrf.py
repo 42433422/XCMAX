@@ -52,12 +52,8 @@ _CSRF_EXEMPT_PATHS = frozenset(
     }
 )
 
-# 前缀豁免：QQ 官方机器人 V2 的 webhook 由 QQ 官方主动 POST，签名头是
-# Ed25519，没有 CSRF Cookie 概念。涵盖：
-#   - /api/agent/butler/qq/webhook                           （管家默认）
-#   - /api/agent/butler/qq/{webhook_key}/webhook             （task-router / employee-interview 等老员工）
-#   - /api/agent/butler/qq/by-employee/{employee_id}/webhook （新员工通用入口）
-_CSRF_EXEMPT_PREFIXES: tuple[str, ...] = ("/api/agent/butler/qq/",)
+# 前缀豁免：历史 QQ Bot webhook 已下线；保留空元组以免调用方假设该常量存在。
+_CSRF_EXEMPT_PREFIXES: tuple[str, ...] = ()
 
 
 def _csrf_exempt_path(path: str) -> bool:

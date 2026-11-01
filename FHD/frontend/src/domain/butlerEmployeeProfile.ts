@@ -127,12 +127,6 @@ export const BUTLER_PROFILE = {
             kind: 'skill',
             how: 'butlerTaskBus · BroadcastChannel + 内部 EventTarget',
           },
-          {
-            name: 'QQ 入口',
-            brief: '以 QQ 官方机器人身份在群/单聊里收发消息，复用同一套 butler chat 链路。',
-            kind: 'channel',
-            how: 'butler_qq_bridge · /api/agent/butler/qq/webhook + api.sgroup.qq.com',
-          },
         ],
       },
       actions: {
@@ -143,7 +137,6 @@ export const BUTLER_PROFILE = {
           'butler_click',
           'butler_fill',
           'butler_orchestrate',
-          'butler_qq',
           'butler_skill',
         ],
       },
@@ -172,7 +165,6 @@ const HANDLER_FRIENDLY_LABELS: Record<string, string> = {
   butler_fill: '在当前页面 fill（前端）',
   butler_orchestrate: 'POST /api/agent/butler/orchestrate',
   butler_skill: '本地 skillRegistry · agentSkillRegistry',
-  butler_qq: 'QQ 官方机器人 V2（webhook 入站 + api.sgroup.qq.com 出站）',
 }
 
 export function describeHandler(name: string): string {

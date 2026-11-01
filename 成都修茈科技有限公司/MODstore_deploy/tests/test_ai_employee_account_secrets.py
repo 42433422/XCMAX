@@ -10,7 +10,6 @@ from modstore_server.ai_employee_account_secrets import (
     delete_secret,
     read_secret,
     secret_path_for,
-    validate_qq_secret,
     write_secret,
 )
 
@@ -52,8 +51,3 @@ def test_secret_path_rejects_unsafe_platform(platform: str) -> None:
         secret_path_for(platform, 1)
 
 
-def test_validate_qq_secret_requires_all_credentials() -> None:
-    with pytest.raises(ValueError, match="bot_token"):
-        validate_qq_secret({"app_id": "1", "app_secret": "s"})
-
-    validate_qq_secret({"app_id": "1", "app_secret": "s", "bot_token": "t"})

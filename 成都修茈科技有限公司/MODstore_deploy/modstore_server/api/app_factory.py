@@ -71,8 +71,6 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.openai_llm_gateway_api",
     "modstore_server.agent_butler_api",
     "modstore_server.account_api",
-    "modstore_server.butler_qq_bridge",
-    "modstore_server.butler_qq_botpy",
     "modstore_server.notification_api",
     "modstore_server.knowledge_vector_api",
     "modstore_server.knowledge_v2_api",
