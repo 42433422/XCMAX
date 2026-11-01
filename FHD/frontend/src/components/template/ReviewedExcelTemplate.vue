@@ -906,7 +906,9 @@ async function preview(slice?: AutoSlice) {
     selectedVersion.value = proposals.value.length - 1
     candidateIndex.value = 0
     review.value = result
-    if (props.archiveOnSelect) archiveProgress.value = '候选模板已生成，请在页面内核对。'
+    if (props.archiveOnSelect) archiveProgress.value = result.proposal.model.status === 'returned'
+      ? '平台模型候选已生成，请核对。' : result.proposal.model.status === 'unavailable'
+        ? '平台模型处理未完成，当前显示本地规则候选，请查看处理诊断。' : '当前仅生成本地规则候选，平台模型尚未启用。'
     emit('stage', 'template')
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '预览失败'; if (props.archiveOnSelect) archiveProgress.value = '候选生成未完成，请重试生成候选。' }
   finally { if (current()) busy.value = false }
