@@ -179,7 +179,7 @@ def test_auto_ingest_progress_tracks_real_stages(
 
 @pytest.mark.parametrize("terminal", ["completed", "failed", "interrupted", "outcome_unknown"])
 def test_async_business_receipts_follow_actual_run_without_reexecution(
-    rag_service, ledger_root, tmp_path, monkeypatch, terminal
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch, terminal
 ):
     from contextlib import nullcontext
 
@@ -241,7 +241,7 @@ def test_async_business_receipts_follow_actual_run_without_reexecution(
 
 
 def test_business_failure_preserves_completed_knowledge_receipt(
-    rag_service, ledger_root, tmp_path, monkeypatch
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
     from app.application.elt.errors import EltError
 
