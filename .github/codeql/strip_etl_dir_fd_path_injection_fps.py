@@ -34,13 +34,13 @@ SAFE_LINES_BY_SUFFIX = {
 }
 
 
-# Reviewed at a1970711f824c0f76eecec1bdc356e7eec9ab547. Never regenerate
+# Reviewed after root-None guard relocation (2026-11-01). Never regenerate
 # these automatically: a code/guard change needs a new independent review.
 # Hash the COMPLETE module AST, not just sink text: this pins directory walking,
 # ownership/root validation, component barriers, flags, and cleanup dependencies.
 # Blank lines/comments may move; every semantic AST change fails closed.
 _REVIEWED_URI = "FHD/app/application/shipment_excel_etl_security.py"
-_REVIEWED_MODULE = "f6437110bb74cfb74c47fa84dffd0382a3258ec15a662dfdac55077f534b119c"
+_REVIEWED_MODULE = "3552e2ce40e538682abb46903bf7704e66a476543f0bd20cd89ad91f40714bab"
 _REVIEWED_CALLS = {
     "open_etl_input_file": "19094ef1cb8443339fcb23be54c51abecea8fa5a11b3f844c05b620d285aa9d8",
     "open_etl_output_file": "8b0fd8e35e3a7cb7ad1a91e048c74b1ee1260d9adb7f18dd7d242ef800f16b31",

@@ -801,9 +801,9 @@ def open_etl_input_file(
             ):
                 root = Path(root_text)
                 break
-        if root is None:
-            raise ShipmentEtlPathError("path not under allowed dirs")
         path = Path(path_text)
+    if root is None:
+        raise ShipmentEtlPathError("path not under allowed dirs")
     parent_fd = _open_directory_under_root(root, path.parent, create=False)
     descriptor: int | None = None
     try:
