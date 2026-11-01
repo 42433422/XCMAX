@@ -14,24 +14,17 @@ Focuses on REMAINING uncovered branches not addressed by ext/cov/ext2/ext3:
 
 from __future__ import annotations
 
+import importlib
 import json
-import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _load_ext_module():
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401
-    yield
-
-
 @pytest.fixture
 def m():
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 def _user(uid: int = 1, role: str = "admin"):
