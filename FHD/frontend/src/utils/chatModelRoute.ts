@@ -9,6 +9,7 @@ export interface ChatModelRoute {
   route_source: string
   key_source: string
   config_revision: string | null
+  route_state: 'selected' | 'completed' | 'failed'
 }
 
 const receipts = shallowRef(new Map<string, ChatModelRoute | null>())
@@ -22,7 +23,8 @@ export function readChatModelRoute(value: unknown): ChatModelRoute | null {
   const row = value as Record<string, unknown>
   const text = (name: string) => typeof row[name] === 'string' ? row[name].trim() : ''
   if (!text('provider') || !text('model') || !text('route_source') || !text('key_source')) return null
-  return { provider: text('provider'), model: text('model'), route_source: text('route_source'), key_source: text('key_source'), config_revision: text('config_revision') || null }
+  const route_state = ['completed', 'failed'].includes(text('route_state')) ? text('route_state') as 'completed' | 'failed' : 'selected'
+  return { provider: text('provider'), model: text('model'), route_source: text('route_source'), key_source: text('key_source'), config_revision: text('config_revision') || null, route_state }
 }
 export function recordChatModelRoute(sessionId: string, value: unknown, identity = resolveChatIdentity()): void {
   if (value === undefined) return

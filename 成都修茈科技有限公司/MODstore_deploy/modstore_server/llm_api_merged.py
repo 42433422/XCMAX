@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import importlib
 
+from fastapi import HTTPException, Response
+from pydantic import Field
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from llm_api_part01.py ---
@@ -238,7 +241,7 @@ async def llm_status(
 
 @_facade().router.get("/resolve-chat-default")
 async def resolve_chat_default(
-    response: _facade().Response,
+    response: Response,
     db: _facade().Session = _facade().Depends(_facade().get_db),
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
     provider: str = "",
@@ -616,7 +619,7 @@ async def delete_llm_credentials(
 class LlmPreferenceDTO(_facade().BaseModel):
     provider: str = _facade().Field("", max_length=32)
     model: str = _facade().Field("", max_length=256)
-    mode: _facade().Optional[str] = None
+    mode: str | None = None
 
 
 class LlmPriceDTO(_facade().BaseModel):
@@ -1100,9 +1103,9 @@ class ChatMessageDTO(_facade().BaseModel):
 class LlmChatDTO(_facade().BaseModel):
     provider: str
     model: str
-    route_token: _facade().Optional[str] = _facade().Field(None, max_length=20000, repr=False)
-    config_revision: _facade().Optional[str] = _facade().Field(None, max_length=128)
-    key_source: _facade().Optional[str] = None
+    route_token: str | None = Field(None, max_length=20000, repr=False)
+    config_revision: str | None = Field(None, max_length=128)
+    key_source: str | None = None
     messages: _facade().List[ChatMessageDTO]
     max_tokens: _facade().Optional[int] = _facade().Field(None, ge=1, le=32000)
     conversation_id: _facade().Optional[int] = _facade().Field(None, ge=1)
@@ -1154,7 +1157,7 @@ def _requested_chat_snapshot(db, user, body):
         or body.key_source is not None
         and body.key_source != snapshot.key_source
     ):
-        raise _facade().HTTPException(
+        raise HTTPException(
             409,
             {
                 "code": "CHAT_ROUTE_CHANGED",
@@ -1198,6 +1201,7 @@ async def llm_chat(
         "model": out.get("model"),
         "route_source": out.get("route_source"),
         "config_revision": out.get("config_revision"),
+        "route_state": out.get("route_state"),
     }
     if out.get("failover_from"):
         payload["failover_from"] = out["failover_from"]

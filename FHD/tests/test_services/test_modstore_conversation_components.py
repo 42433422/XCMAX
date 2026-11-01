@@ -1177,7 +1177,7 @@ async def test_expired_snapshot_ends_turn_without_reselect_or_secret_echo(reques
                 [item async for item in adapter.stream_chat_completion([])]
         assert "synthetic-" not in str(failure.value)
         assert methods == ["GET", "POST"]
-        assert adapter.last_route_metadata == {}
+        assert adapter.last_route_metadata.get("route_state") == "selected"
     finally:
         await adapter.close()
 
@@ -1212,3 +1212,102 @@ def test_explicit_alias_sends_and_reuses_canonical_snapshot_route(request_market
         client.chat.completions.create(messages=[], model="xiaomi/mimo-v2.5")
     assert client.default_model == "mimo-v2.6-flash"
     assert methods == ["GET", "POST", "POST"]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("outcome", ["completed", "failed", "cancelled"])
+@pytest.mark.asyncio
+async def test_stream_route_selection_requires_a_terminal_gateway_receipt(
+    request_market, asynchronous, outcome
+):
+    identity = {
+        "provider": "xiaomi",
+        "model": "flash",
+        "route_source": "platform_default",
+        "key_source": "platform",
+        "config_revision": "r1",
+    }
+
+    def respond(request):
+        if request.method == "GET":
+            return httpx.Response(
+                200, json={"ok": True, **identity, "route_token": "private-snapshot"}
+            )
+        selected = (
+            "event: meta\ndata: " + json.dumps({**identity, "route_state": "selected"}) + "\n\n"
+        )
+        if outcome == "cancelled":
+            return httpx.Response(200, text=selected)
+        event = "done" if outcome == "completed" else "error"
+        terminal = {**identity, "route_state": outcome, "ok": outcome == "completed", "status": 401}
+        return httpx.Response(
+            200, text=selected + f"event: {event}\ndata: " + json.dumps(terminal) + "\n\n"
+        )
+
+    adapter = request_market(respond).adapter
+    try:
+        if asynchronous:
+            stream = adapter.stream_chat_completion([])
+            selected = json.loads(await anext(stream))
+            assert selected["route_metadata"]["route_state"] == "selected"
+            if outcome == "cancelled":
+                await stream.aclose()
+            elif outcome == "failed":
+                with pytest.raises(ValueError):
+                    [chunk async for chunk in stream]
+            else:
+                [chunk async for chunk in stream]
+        else:
+            stream = adapter.stream_chat_completion_sync([])
+            selected = json.loads(next(stream))
+            assert selected["route_metadata"]["route_state"] == "selected"
+            if outcome == "cancelled":
+                stream.close()
+            elif outcome == "failed":
+                with pytest.raises(ValueError):
+                    list(stream)
+            else:
+                list(stream)
+        expected = "selected" if outcome == "cancelled" else outcome
+        assert adapter.last_route_metadata == {**identity, "route_state": expected}
+        assert "private-snapshot" not in json.dumps(adapter.last_route_metadata)
+    finally:
+        await adapter.close()
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_sync_route_failure_receipt_comes_only_from_gateway_error_identity(
+    request_market, asynchronous
+):
+    identity = {
+        "provider": "xiaomi",
+        "model": "flash",
+        "route_source": "platform_default",
+        "key_source": "platform",
+        "config_revision": "r1",
+    }
+
+    def respond(request):
+        if request.method == "GET":
+            return httpx.Response(
+                200, json={"ok": True, **identity, "route_token": "private-snapshot"}
+            )
+        return httpx.Response(
+            401,
+            json={
+                "detail": {**identity, "route_state": "failed", "api_key_masked": "private-mask"}
+            },
+        )
+
+    adapter = request_market(respond).adapter
+    try:
+        with pytest.raises(ValueError):
+            if asynchronous:
+                await adapter.chat_completion([])
+            else:
+                adapter.chat_completion_sync([])
+        assert adapter.last_route_metadata == {**identity, "route_state": "failed"}
+        assert "private-" not in json.dumps(adapter.last_route_metadata)
+    finally:
+        await adapter.close()

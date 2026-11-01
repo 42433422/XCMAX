@@ -64,12 +64,13 @@ function withMarketAuthorization(options: RequestOptions = {}): RequestOptions {
 }
 
 /** Planner SSE：非 2xx 时解析 JSON 错误文案 */
-export async function parseChatStreamErrorResponse(res: Response): Promise<string> {
+export async function parseChatStreamErrorResponse(res: Response, onRouteMetadata?: (value: unknown) => void): Promise<string> {
   let msg = `流式请求失败（${res.status}）`
   try {
     const ct = res.headers.get('content-type') || ''
     if (ct.includes('application/json')) {
       const j = asRecord(await res.json())
+      onRouteMetadata?.(j.route_metadata || asRecord(j.detail).route_metadata)
       msg = asString(j.message || j.detail) || msg
     }
   } catch {

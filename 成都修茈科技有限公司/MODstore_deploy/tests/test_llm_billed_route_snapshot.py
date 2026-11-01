@@ -1,5 +1,6 @@
 """Billed chat receipts describe the credential snapshot actually dispatched."""
 
+import asyncio
 import json
 from decimal import Decimal
 from types import SimpleNamespace
@@ -94,9 +95,11 @@ async def test_bound_snapshot_survives_rotation_and_returns_actual_receipt(
             for frame in frames
         }
         receipt = events["done"]
+        assert events["meta"]["route_state"] == "selected"
         assert all(events["meta"][key] == value for key, value in route.public_metadata().items())
     else:
         receipt = await llm_billed_chat.run_billed_llm_chat(**args)
+    assert receipt["route_state"] == "completed"
     assert all(receipt[key] == value for key, value in route.public_metadata().items())
     assert dispatched == [(route.provider, route.model, route.api_key, route.base_url)]
     assert "synthetic-before-key" not in json.dumps(receipt)
@@ -217,3 +220,123 @@ def test_same_provider_backup_alias_uses_canonical_pair_without_rereading(monkey
     assert snapshots["minimax", "MiniMax-M2.7"].public_metadata()["model"] == "MiniMax-M2.7"
     assert snapshots["minimax", "MiniMax-M2.7"].api_key == primary.api_key
     resolver.assert_not_called()
+
+
+@pytest.fixture
+def failed_billed_case(monkeypatch):
+    route = _route()
+    wallet = SimpleNamespace(
+        preauthorize=AsyncMock(return_value=WalletHold("synthetic-hold", Decimal(".01"), True)),
+        settle=AsyncMock(),
+        release=AsyncMock(),
+    )
+    for module in (llm_billed_chat, llm_billed_once):
+        monkeypatch.setattr(module, "JavaWalletClient", lambda **kwargs: wallet)
+        monkeypatch.setattr(module, "enforce_risk_limits", Mock())
+        monkeypatch.setattr(module, "estimate_preauthorization", lambda *args: Decimal(".01"))
+        monkeypatch.setattr(module, "save_failure_log", Mock())
+    args = dict(
+        request=SimpleNamespace(state=SimpleNamespace(), headers={}),
+        db=object(),
+        user=SimpleNamespace(id=7),
+        provider=route.provider,
+        model=route.model,
+        messages=[{"role": "user", "content": "synthetic"}],
+        route_snapshot=route,
+    )
+    return route, args, wallet
+
+
+def _frame(frame):
+    lines = frame.split("\n")
+    return lines[0].removeprefix("event: "), json.loads(lines[1].removeprefix("data: "))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["401event", "401exception", "timeout"])
+async def test_stream_failure_after_meta_has_failed_route_receipt(
+    monkeypatch, failed_billed_case, failure
+):
+    route, args, wallet = failed_billed_case
+
+    async def dispatch(*_args, **_kwargs):
+        if failure == "401event":
+            yield {"type": "error", "status": 401, "error": "synthetic unauthorized"}
+        elif failure == "401exception":
+            raise HTTPException(401, "synthetic unauthorized")
+        else:
+            raise TimeoutError("synthetic upstream timeout")
+
+    monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch)
+    response = await llm_billed_chat.stream_billed_llm_chat(**args)
+    events = [_frame(frame) async for frame in response.body_iterator]
+    assert [event for event, _ in events] == ["meta", "error"]
+    assert events[0][1]["route_state"] == "selected"
+    error = events[1][1]
+    assert error["route_state"] == "failed"
+    assert all(error[key] == value for key, value in route.public_metadata().items())
+    assert "synthetic-before-key" not in json.dumps(error)
+    assert "synthetic.invalid" not in json.dumps(error)
+    wallet.settle.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancel_after_meta_keeps_selected_without_completed_receipt(
+    monkeypatch, failed_billed_case
+):
+    _, args, wallet = failed_billed_case
+    upstream_started = asyncio.Event()
+
+    async def dispatch(*_args, **_kwargs):
+        upstream_started.set()
+        await asyncio.Future()
+        yield {"type": "delta", "delta": "unreachable"}
+
+    monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch)
+    response = await llm_billed_chat.stream_billed_llm_chat(**args)
+    iterator = response.body_iterator
+    event, meta = _frame(await anext(iterator))
+    assert event == "meta" and meta["route_state"] == "selected"
+    pending = asyncio.create_task(anext(iterator))
+    await asyncio.wait_for(upstream_started.wait(), 1)
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
+    await iterator.aclose()
+    wallet.settle.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["401", "timeout"])
+async def test_sync_failure_retains_route_identity(monkeypatch, failed_billed_case, failure):
+    route, args, _ = failed_billed_case
+    dispatch = AsyncMock(
+        return_value={"ok": False, "status": 401, "error": "synthetic unauthorized"}
+    )
+    if failure == "timeout":
+        dispatch.side_effect = TimeoutError("synthetic upstream timeout")
+    monkeypatch.setattr(llm_billed_once, "chat_dispatch", dispatch)
+    with pytest.raises(HTTPException) as error:
+        await llm_billed_chat.run_billed_llm_chat(**args)
+    detail = error.value.detail
+    assert detail["route_state"] == "failed"
+    assert detail["message"] and detail["error"]
+    assert all(detail[key] == value for key, value in route.public_metadata().items())
+
+
+def test_failed_receipt_preserves_reconciliation_fields_and_excludes_credentials():
+    route = _route()
+    detail = llm_billed_once.failed_chat_route_detail(
+        route,
+        {
+            "message": "synthetic pending",
+            "request_id": "request",
+            "hold_no": "hold",
+            "api_key": route.api_key,
+            "base_url": route.base_url,
+            "route_token": "private",
+        },
+    )
+    assert detail["request_id"] == "request" and detail["hold_no"] == "hold"
+    assert detail["route_state"] == "failed"
+    assert all(field not in detail for field in ("api_key", "base_url", "route_token"))

@@ -1,5 +1,6 @@
 /** 聊天 UI 层消息（localStorage / 组件展示；role 用 ai 而非 API 的 assistant） */
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
+import type { ChatModelRoute } from '@/utils/chatModelRoute'
 
 export interface ChatExecutionProgressItem {
   phase: string
@@ -35,6 +36,7 @@ export interface UiChatMessage {
   time: string
   /** Request turn shared with server history; independent of local display text. */
   turnId?: string
+  routeMetadata?: ChatModelRoute
   persistence?: {
     id: string
     status: 'local' | 'saving' | 'saved' | 'failed'

@@ -340,8 +340,28 @@ def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]
 
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
     body = _prepare_compat_chat_body(request, body)
-    with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
-        payload = await _execute_compat_chat_impl(request, body)
+    try:
+        with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+            payload = await _execute_compat_chat_impl(request, body)
+    except HTTPException as exc:
+        metadata = request_route_metadata(request)
+        if metadata:
+            message = (
+                exc.detail
+                if isinstance(exc.detail, str)
+                else str(exc.detail.get("message") or "对话执行失败")
+                if isinstance(exc.detail, dict)
+                else "对话执行失败"
+            )
+            _persist_compat_chat_turn(
+                body, {"success": False, "response": message, "route_metadata": metadata}
+            )
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={"message": message, "route_metadata": metadata},
+                headers=exc.headers,
+            ) from None
+        raise
     metadata = request_route_metadata(request)
     if metadata:
         payload["route_metadata"] = metadata
@@ -405,6 +425,8 @@ async def compat_chat_stream_async(
                                 item["result"]["route_metadata"] = metadata
                             _persist_compat_chat_turn(body, item["result"])
                         elif item.get("type") == "error":
+                            if metadata:
+                                item["route_metadata"] = metadata
                             _persist_compat_chat_turn(
                                 body,
                                 {

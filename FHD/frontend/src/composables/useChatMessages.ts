@@ -7,7 +7,8 @@ import { useModsStore } from '@/stores/mods'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useIndustryStore } from '@/stores/industry'
 import { getIndustryWelcomeMarkdown } from '@/constants/industryPresets'
-import { buildChatMessagesKey, buildChatSessionMetaKey } from '@/utils/chatStorageKeys'
+import { buildChatMessagesKey, buildChatSessionMetaKey, resolveChatIdentity } from '@/utils/chatStorageKeys'
+import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
@@ -105,6 +106,8 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
       .map((item) => asRecord(item))
       .filter((item) => Object.keys(item).length > 0)
   const extras: ChatMessageExtras = {}
+  const route = readChatModelRoute(metadata.route_metadata || ui.routeMetadata)
+  if (route && row.role !== 'user' && ui.role !== 'user') extras.routeMetadata = route
   const turnId = asString(ui.turnId || asRecord(metadata.business_harness).turn_id || asRecord(metadata.summary).turn_id).trim()
   if (turnId) extras.turnId = turnId
   if (row.role !== 'user' && asRecord(metadata.summary).success === false) extras.workflowAction = 'failed'
@@ -185,6 +188,10 @@ export function useChatMessages(sessionId: Ref<string>) {
       if (!Array.isArray(parsed) || !parsed.length) return getDefaultWelcome()
       const sanitized = sanitizeMessagesList(parsed)
       for (const message of sanitized) {
+        if (message.streamingShell) {
+          delete message.streamingShell
+          message.content = `${message.content}${hasMeaningfulContent(message.content) ? '<br>' : ''}上次回复未收到完成回执。请核对任务状态，勿重复提交。`
+        }
         if (message.persistence?.status === 'saving') {
           message.persistence.status = 'failed'
           message.persistence.error = '上次保存未确认，请仅重试保存。'
@@ -237,6 +244,11 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
 
   const messages = ref<ChatMessage[]>(readCachedMessages())
+  function restoreModelRoute() {
+    const latest = [...messages.value].reverse().find(message => message.role === 'ai' && message.routeMetadata)
+    recordChatModelRoute(sessionId.value, latest?.routeMetadata || null, resolveChatIdentity(String(activeModId.value || '')))
+  }
+  restoreModelRoute()
   const bootSanitized = sanitizeMessagesList(messages.value)
   if (bootSanitized.length !== messages.value.length) {
     messages.value = bootSanitized.length ? bootSanitized : getDefaultWelcome()
@@ -460,6 +472,7 @@ export function useChatMessages(sessionId: Ref<string>) {
 
   function loadMessages(newMessages: ChatMessage[]) {
     messages.value = sanitizeMessagesList(newMessages)
+    restoreModelRoute()
     persistMessagesCache()
   }
 
@@ -508,6 +521,7 @@ export function useChatMessages(sessionId: Ref<string>) {
       flushMessagesCache()
       cacheError.value = ''
       messages.value = readCachedMessages()
+      restoreModelRoute()
     },
     { flush: 'sync' },
   )
@@ -520,6 +534,7 @@ export function useChatMessages(sessionId: Ref<string>) {
       flushMessagesCache()
       cacheError.value = ''
       messages.value = readCachedMessages()
+      restoreModelRoute()
     },
     { flush: 'sync' },
   )
@@ -543,6 +558,7 @@ export function useChatMessages(sessionId: Ref<string>) {
         attachments: message.attachments,
         businessResult: message.businessResult,
         sameAsPrevious: message.sameAsPrevious,
+        routeMetadata: message.routeMetadata,
       })),
     () => persistMessagesCache(),
     { deep: true, flush: 'post' },

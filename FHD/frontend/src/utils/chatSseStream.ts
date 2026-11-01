@@ -5,7 +5,7 @@ export type PlannerSseEvent =
   | { type: 'token'; text: string; ephemeral?: boolean }
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string; run_id?: string }
   | { type: 'done'; result?: unknown }
-  | { type: 'error'; message?: string; status_code?: number; run_id?: string }
+  | { type: 'error'; message?: string; status_code?: number; run_id?: string; route_metadata?: unknown }
   | { type: 'requires_token'; token_name?: string; token_description?: string; run_id?: string }
 
 export class IncompletePlannerSseError extends Error {

@@ -3,7 +3,7 @@
     <summary>{{ failed ? '模型配置需检查' : '模型信息' }}</summary>
     <p role="status">{{ status }}</p>
     <p v-if="model">当前解析默认：{{ provider }} / {{ model }}。选路：{{ chatRouteSourceLabel(routeSource) }}；凭据来源：{{ chatKeySourceLabel(keySource) }}；配置版本：{{ revision || '未提供' }}。</p>
-    <p v-if="actual" data-testid="actual-model-route">上一模型请求实际采用：{{ actual.provider }} / {{ actual.model }}。选路：{{ chatRouteSourceLabel(actual.route_source) }}；凭据来源：{{ chatKeySourceLabel(actual.key_source) }}；配置版本：{{ actual.config_revision || '未提供' }}。</p>
+    <p v-if="actual" data-testid="actual-model-route">{{ actual.route_state === 'completed' ? '上一模型请求实际返回' : actual.route_state === 'failed' ? '上次模型调用失败' : '已选择模型，未收到完成回执（含中断）' }}：{{ actual.provider }} / {{ actual.model }}。选路：{{ chatRouteSourceLabel(actual.route_source) }}；凭据来源：{{ chatKeySourceLabel(actual.key_source) }}；配置版本：{{ actual.config_revision || '未提供' }}。</p>
     <p v-else>本会话尚无实际模型回执。默认解析不代表请求已执行。</p>
     <p>跟随平台会在下一请求读取最新配置；个人显式选择和 BYOK 独立保留。平台模型由管理员在服务器统一维护。</p>
     <template v-if="invalidPreference">

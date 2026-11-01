@@ -11,7 +11,6 @@ from app.application.tool_execution_deadline import (
     check_invocation_deadline,
     remaining_invocation_seconds,
 )
-from app.infrastructure.modstore_transport import MarketModelError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .authentication import validate_demo_destination
@@ -24,7 +23,7 @@ from .protocols import (
     Route,
     SyncClientFactory,
 )
-from .responses import _response_status_code, finish_completion
+from .responses import _response_status_code, finish_completion, market_response_error
 
 
 def post_sync(
@@ -53,7 +52,7 @@ def post_sync(
         status = _response_status_code(response)
         if status >= 400:
             if request.extra.get("key_source") or request.extra.get("route_token"):
-                raise MarketModelError({"status": status})
+                raise market_response_error(response, status)
             raise ValueError(f"平台错误({status}): {response.text[:500]}")
         result = response.json()
     return finish_completion(result, connection, route, latency_ms, response_ports)
@@ -116,7 +115,7 @@ async def complete_async(
             status = ports.status_code(response, 200)
             if status >= 400:
                 if request.extra.get("key_source") or request.extra.get("route_token"):
-                    raise MarketModelError({"status": status})
+                    raise market_response_error(response, status)
                 error = ValueError(f"平台错误({status}): {response.text[:500]}")
                 if index + 1 < len(candidates) and ports.failoverable(status, response.text[:500]):
                     last_error = error

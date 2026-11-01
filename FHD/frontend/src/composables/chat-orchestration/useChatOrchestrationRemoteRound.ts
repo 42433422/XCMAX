@@ -21,7 +21,7 @@ import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useC
 import { asPlannerPayload, errorMessage } from './chatOrchestrationShared'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
 import type { UiChatMessageExtras } from '@/types/chat-ui'
-import { recordChatModelRoute } from '@/utils/chatModelRoute'
+import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 
 type ChatMessagesApi = ReturnType<typeof useChatMessages>
 
@@ -105,6 +105,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const data = asRecord(row.data)
     const inner = asRecord(data.data)
     return row.cached === true || data.cached === true || inner.cached === true
+  }
+  function responseExtras(payload: ChatPlannerPayload, failed = false): UiChatMessageExtras | undefined {
+    const routeMetadata = readChatModelRoute(payload.route_metadata)
+    const extras = { ...(routeMetadata ? { routeMetadata } : {}), ...(failed ? { workflowAction: 'failed' } : {}), ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}) }
+    return Object.keys(extras).length ? extras : undefined
   }
 
   /** 消费后端 state.update 事件（payload.data.data.state_updates），维护「步骤进度」UI 状态 */
@@ -310,6 +315,13 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const msgIndex = pushStreamingAiShell()
       const streamMessage = messages.value[msgIndex]
       if (streamMessage) streamMessage.turnId = requestScope.turnId
+      const consumeRoute = (value: unknown) => {
+        if (!round.isActive()) return
+        const route = readChatModelRoute(value)
+        if (!route) return
+        recordChatModelRoute(requestScope.sessionId, route, identity)
+        if (streamMessage) streamMessage.routeMetadata = route
+      }
       const syncStreamRun = (payload: unknown, attachTrace = false) => {
         const runId = extractAgentRunId(payload) || streamRunId
         if (!round.isActive() || !runId) return
@@ -363,7 +375,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         )
         if (!isOwnerCurrent()) { controller.abort(); return }
         if (!res.ok) {
-          throw new Error(await parseChatStreamErrorResponse(res))
+          throw new Error(await parseChatStreamErrorResponse(res, consumeRoute))
         }
         await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
           if (!isOwnerCurrent()) { controller.abort(); return }
@@ -372,7 +384,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
           }
           if (ev.type === 'route_metadata') {
-            if (round.isActive()) recordChatModelRoute(requestScope.sessionId, ev.route_metadata, identity)
+            consumeRoute(ev.route_metadata)
           } else if (ev.type === 'tool_progress') {
             streamRunId = ev.run_id || streamRunId
             setLoadingProgress(ev.label || '正在执行任务…', requestScope.sessionId)
@@ -386,6 +398,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             doneResult = ev.result
             awaitingAuthorization = false
           } else if (ev.type === 'error') {
+            consumeRoute(ev.route_metadata)
             streamRunId = ev.run_id || streamRunId
             sseError = String(ev.message || '流式接口错误')
           } else if (ev.type === 'requires_token') {
@@ -413,7 +426,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           return
         }
         const donePayload = asPlannerPayload(doneResult)
-        if (round.isActive()) recordChatModelRoute(requestScope.sessionId, donePayload.route_metadata, identity)
+        consumeRoute(donePayload.route_metadata)
         const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
         if (round.isActive()) {
           if (responseCameFromCache(donePayload)) {
@@ -523,9 +536,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         setLoadingProgress('执行失败，正在整理错误信息...', requestScope.sessionId)
       }
     } catch (err: unknown) {
+      const errorData = asRecord(asRecord(err).data)
+      const route = readChatModelRoute(errorData.route_metadata || asRecord(errorData.detail).route_metadata)
       data = {
         success: false,
         message: errorMessage(err, '请求失败'),
+        ...(route ? { route_metadata: route } : {}),
       }
     } finally {
       round.setStreaming(false)
@@ -545,14 +561,14 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             if (part.requires_token) {
               handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
             }
-            await addRoundMessage(part.response || '', responseCameFromCache(part) ? { sameAsPrevious: true } : undefined)
+            await addRoundMessage(part.response || '', responseExtras(part))
             if (!round.isActive()) return
             syncTaskFromChatResponse(part, primaryText)
             await syncAgentRunFromPayload(part, primaryText, isOwnerCurrent)
             if (!round.isActive()) return
             attachAgentRunTraceToLastAiMessage(extractAgentRunId(part))
           } else {
-            await addRoundMessage('处理失败: ' + (part.message || '未知错误'), { workflowAction: 'failed' })
+            await addRoundMessage('处理失败: ' + (part.message || '未知错误'), responseExtras(part, true))
           }
         }
         attachContextSummaryToLastAiMessage()
@@ -587,7 +603,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           maybeCloseAssistantFloatForShipmentTask(lastTask.task, lastAction?.autoAction)
         }
       } else {
-        await addRoundMessage('处理失败: ' + (data.message || '批量请求失败'), { workflowAction: 'failed' })
+        await addRoundMessage('处理失败: ' + (data.message || '批量请求失败'), responseExtras(data, true))
       }
       return
     }
@@ -596,7 +612,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       if (data?.requires_token) {
         handleChatRequiresToken(data.token_name || '', data.token_description || '', remoteMessages)
       }
-      await addRoundMessage(data.response || '', responseCameFromCache(data) ? { sameAsPrevious: true } : undefined)
+      await addRoundMessage(data.response || '', responseExtras(data))
       if (!round.isActive()) return
       syncTaskFromChatResponse(data, primaryText)
       await syncAgentRunFromPayload(data, primaryText, isOwnerCurrent)
@@ -628,7 +644,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         maybeCloseAssistantFloatForShipmentTask(data.task, data.autoAction)
       }
     } else {
-      await addRoundMessage('处理失败: ' + (data.message || '未知错误'), { workflowAction: 'failed' })
+      await addRoundMessage('处理失败: ' + (data.message || '未知错误'), responseExtras(data, true))
     }
   }
 

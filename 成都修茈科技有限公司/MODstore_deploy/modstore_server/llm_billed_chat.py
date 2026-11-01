@@ -12,6 +12,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from modstore_server.llm_billed_once import failed_chat_route_detail
 from modstore_server.llm_billed_once import run_billed_llm_chat_once as _run_billed_llm_chat_once
 from modstore_server.llm_billing import (
     JavaWalletClient,
@@ -47,10 +48,22 @@ from modstore_server.multimodal_llm import (
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_CHAT_ERRORS = (HTTPException,) + RECOVERABLE_ERRORS
 
 
 def _sse(event: str, data: Dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _route_error(route: ChatRouteSnapshot, error: Any, status: int | None = None) -> str:
+    return _sse(
+        "error",
+        {
+            "ok": False,
+            **failed_chat_route_detail(route, error),
+            "status": status,
+        },
+    )
 
 
 def _candidate_snapshots(
@@ -148,16 +161,21 @@ async def run_billed_llm_chat(
                     mdl,
                     attempted,
                 )
+            out["route_state"] = "completed"
             return out
         except HTTPException as exc:
+            last_exc = HTTPException(
+                exc.status_code,
+                failed_chat_route_detail(snapshots[prov, mdl], exc.detail),
+                headers=exc.headers,
+            )
             if (
                 exc.status_code == 409
                 and getattr(request.state, "llm_pat_user_id", None) is not None
                 and isinstance(exc.detail, dict)
                 and exc.detail.get("request_id")
             ):
-                raise
-            last_exc = exc
+                raise last_exc from exc
             detail = str(exc.detail)
             rest = remaining_candidates_after_failure(
                 queue,
@@ -167,7 +185,7 @@ async def run_billed_llm_chat(
                 key_source_by_provider=key_source_by_provider,
             )
             if not rest:
-                raise
+                raise last_exc from exc
             logger.warning(
                 "llm chat failover after %s/%s status=%s detail=%s next=%s",
                 prov,
@@ -182,7 +200,7 @@ async def run_billed_llm_chat(
             continue
     if last_exc is not None:
         raise last_exc
-    raise HTTPException(502, "LLM 调用失败且无可用备用模型")
+    raise HTTPException(502, failed_chat_route_detail(primary, "LLM 调用失败且无可用备用模型"))
 
 
 async def stream_billed_llm_chat(
@@ -204,10 +222,10 @@ async def stream_billed_llm_chat(
     primary_provider, primary_model = primary.provider, primary.model
     msgs = messages
     if not msgs:
-        raise HTTPException(400, "messages 不能为空")
+        raise HTTPException(400, failed_chat_route_detail(primary, "messages 不能为空"))
     size_err = validate_multimodal_payload_size(msgs)
     if size_err:
-        raise HTTPException(400, size_err)
+        raise HTTPException(400, failed_chat_route_detail(primary, size_err))
 
     if allow_failover and route_snapshot is None:
         candidates = await list_chat_failover_candidates(
@@ -224,7 +242,9 @@ async def stream_billed_llm_chat(
     if primary_provider not in key_source_by_provider and primary_provider in KNOWN_PROVIDERS:
         raise HTTPException(
             400,
-            f"供应商「{primary_provider}」未配置可用 API Key（平台环境变量或 BYOK）。",
+            failed_chat_route_detail(
+                primary, f"供应商「{primary_provider}」未配置可用 API Key（平台环境变量或 BYOK）。"
+            ),
         )
 
     async def gen():
@@ -232,6 +252,7 @@ async def stream_billed_llm_chat(
         attempted: list[str] = []
         idx = 0
         last_error = "LLM 流式调用失败且无可用备用模型"
+        route = primary
         while idx < len(queue):
             prov, mdl = queue[idx]
             attempted.append(f"{prov}/{mdl}")
@@ -253,7 +274,7 @@ async def stream_billed_llm_chat(
                     key_source_by_provider=key_source_by_provider,
                 )
                 if not rest:
-                    yield _sse("error", {"ok": False, "error": last_error})
+                    yield _route_error(route, last_error)
                     return
                 queue = queue[: idx + 1] + rest
                 idx += 1
@@ -274,10 +295,7 @@ async def stream_billed_llm_chat(
                     key_source_by_provider=key_source_by_provider,
                 )
                 if not rest:
-                    yield _sse(
-                        "error",
-                        {"ok": False, "error": last_error, "status": exc.status_code},
-                    )
+                    yield _route_error(route, exc.detail, exc.status_code)
                     return
                 queue = queue[: idx + 1] + rest
                 idx += 1
@@ -308,10 +326,7 @@ async def stream_billed_llm_chat(
                     key_source_by_provider=key_source_by_provider,
                 )
                 if not rest:
-                    yield _sse(
-                        "error",
-                        {"ok": False, "error": last_error, "status": exc.status_code},
-                    )
+                    yield _route_error(route, exc.detail, exc.status_code)
                     return
                 logger.warning(
                     "llm stream preauth failover after %s/%s: %s",
@@ -328,6 +343,7 @@ async def stream_billed_llm_chat(
                 "request_id": request_id,
                 "hold_no": hold.hold_no,
                 **route.public_metadata(),
+                "route_state": "selected",
                 "billed": not is_byok,
             }
             if len(attempted) > 1:
@@ -397,10 +413,7 @@ async def stream_billed_llm_chat(
                                 queue = queue[: idx + 1] + rest
                                 idx += 1
                                 break
-                        yield _sse(
-                            "error",
-                            {"ok": False, "error": last_error, "status": status},
-                        )
+                        yield _route_error(route, last_error, status_code)
                         return
                     if ev.get("type") == "usage":
                         upstream_usage = ev.get("usage") or {}
@@ -445,6 +458,7 @@ async def stream_billed_llm_chat(
                         "charge_amount": float(charge),
                         "hold_no": hold.hold_no,
                         **route.public_metadata(),
+                        "route_state": "completed",
                         "billed": not is_byok,
                     }
                     if len(attempted) > 1:
@@ -454,7 +468,9 @@ async def stream_billed_llm_chat(
                     return
                 # break from async for → try next candidate
                 continue
-            except RECOVERABLE_ERRORS as exc:
+            except _CHAT_ERRORS as exc:
+                status_code = exc.status_code if isinstance(exc, HTTPException) else None
+                last_error = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
                 try:
                     save_failure_log(
                         db,
@@ -469,22 +485,21 @@ async def stream_billed_llm_chat(
                     logger.exception(
                         "failed to release LLM wallet hold after unexpected stream error"
                     )
-                last_error = str(exc)
-                if not emitted_delta and is_chat_failoverable_failure(last_error, None):
+                if not emitted_delta and is_chat_failoverable_failure(last_error, status_code):
                     rest = remaining_candidates_after_failure(
                         queue,
                         idx,
                         error_text=last_error,
-                        status_code=None,
+                        status_code=status_code,
                         key_source_by_provider=key_source_by_provider,
                     )
                     if rest:
                         queue = queue[: idx + 1] + rest
                         idx += 1
                         continue
-                yield _sse("error", {"ok": False, "error": last_error})
+                yield _route_error(route, last_error, status_code)
                 return
-        yield _sse("error", {"ok": False, "error": last_error})
+        yield _route_error(route, last_error)
 
     return StreamingResponse(
         gen(),

@@ -143,6 +143,7 @@ def record_worker_route_metadata(metadata: Any, captured_scope: dict[str, Any] |
         return
     snapshot = captured_scope.get("route_snapshot")
     expected = safe_route_metadata(snapshot)
+    expected.pop("route_state", None)
     route = safe_route_metadata(metadata)
     if (
         not expected
@@ -153,7 +154,14 @@ def record_worker_route_metadata(metadata: Any, captured_scope: dict[str, Any] |
     current = adapter._route_snapshots.get(
         (adapter._connection(), (expected.get("provider"), expected.get("model")))
     )
-    if current == snapshot:
+    current_identity = safe_route_metadata(current)
+    current_identity.pop("route_state", None)
+    if (
+        current_identity == expected
+        and isinstance(current, dict)
+        and isinstance(snapshot, dict)
+        and current.get("route_token") == snapshot.get("route_token")
+    ):
         adapter.last_route_metadata = route
 
 

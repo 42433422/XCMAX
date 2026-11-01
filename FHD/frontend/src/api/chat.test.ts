@@ -101,6 +101,14 @@ describe('parseChatStreamErrorResponse', () => {
     expect(await parseChatStreamErrorResponse(res)).toBe('出错了')
   })
 
+  it('retains safe failed route metadata from an HTTP error envelope for the caller', async () => {
+    const route = { provider: 'xiaomi', model: 'flash', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'failed' }
+    const record = vi.fn()
+    const res = { status: 401, headers: { get: () => 'application/json' }, json: async () => ({ message: '上游授权失败', detail: { route_metadata: route } }) } as unknown as Response
+    expect(await parseChatStreamErrorResponse(res, record)).toBe('上游授权失败')
+    expect(record).toHaveBeenCalledWith(route)
+  })
+
   it('falls back to default on non-json', async () => {
     const res = {
       status: 500,

@@ -20,6 +20,7 @@ from app.domain.shared_services.conversation.modstore_adapter import (
 )
 from app.infrastructure.llm.modstore_response_normalize import normalize_market_chat_response
 from app.infrastructure.modstore_transport import (
+    MarketModelError,
     aiter_market_sse_data_payloads,
     safe_route_metadata,
 )
@@ -191,3 +192,69 @@ def test_route_metadata_rejects_nested_objects_and_private_fields():
     assert safe_route_metadata({"route_metadata": {**ROUTE, "api_key": "private"}}) == ROUTE
     assert safe_route_metadata({"provider": {"api_key": "private"}, "config_revision": True}) == {}
     assert safe_route_metadata(None) == {}
+
+
+@pytest.mark.parametrize("state", ["selected", "completed", "failed", "other", {"key": "private"}])
+def test_route_state_is_whitelisted_without_inventing_success(state):
+    metadata = safe_route_metadata({**ROUTE, "route_state": state})
+    assert metadata == {
+        **ROUTE,
+        **(
+            {"route_state": state}
+            if isinstance(state, str) and state in {"selected", "completed", "failed"}
+            else {}
+        ),
+    }
+    result = normalize_market_chat_response({**ROUTE, "route_state": state}, "old", "old")
+    assert result["route_metadata"] == metadata
+    normalized = normalize_market_chat_response({"content": "legacy"}, "requested", "requested")
+    assert normalized["route_metadata"] == {}
+
+
+@pytest.mark.parametrize("terminal", ["completed", "failed"])
+@pytest.mark.parametrize("mode", ["sync", "async"])
+@pytest.mark.asyncio
+async def test_stream_route_state_moves_from_selected_to_observed_outcome(terminal, mode):
+    selected = {**ROUTE, "route_state": "selected"}
+    ended = {**ROUTE, "route_state": terminal}
+    text = (
+        f"event: meta\ndata: {json.dumps(selected)}\n\n"
+        'event: delta\ndata: {"delta":"part"}\n\n'
+        f"event: {'done' if terminal == 'completed' else 'error'}\ndata: "
+        f"{json.dumps({**ended, 'content': 'part', 'status': 503, 'api_key': 'private'})}\n\n"
+    )
+    received = []
+
+    async def collect():
+        response = httpx.Response(200, text=text)
+        if mode == "sync":
+            for data in _iter_market_sse_data_payloads(response):
+                received.append(_platform_stream_payload_to_openai_chunk(data))
+        else:
+            async for data in aiter_market_sse_data_payloads(
+                response, payload_has_content=lambda data: bool(json.loads(data).get("delta"))
+            ):
+                received.append(_platform_stream_payload_to_openai_chunk(data))
+
+    if terminal == "failed":
+        with pytest.raises(MarketModelError) as error:
+            await collect()
+        assert error.value.route_metadata == ended
+        assert "private" not in str(error.value)
+    else:
+        await collect()
+        assert received[-1]["route_metadata"] == ended
+    assert received[0]["route_metadata"] == selected
+    assert [item["choices"][0]["delta"]["content"] for item in received if item["choices"]] == [
+        "part"
+    ]
+
+
+def test_http_and_openai_errors_only_preserve_safe_failed_route():
+    detail = {**ROUTE, "route_state": "selected", "api_key_masked": "private-mask"}
+    error = MarketModelError({"status": 503, "detail": detail})
+    assert error.route_metadata == {**ROUTE, "route_state": "failed"}
+    with pytest.raises(MarketModelError) as chunk_error:
+        _platform_stream_payload_to_openai_chunk(json.dumps({"type": "error", **detail}))
+    assert chunk_error.value.route_metadata == error.route_metadata
+    assert MarketModelError({"status": 503}).route_metadata == {}

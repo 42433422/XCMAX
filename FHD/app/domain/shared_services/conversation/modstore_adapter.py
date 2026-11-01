@@ -11,7 +11,7 @@ import re as re
 import threading
 import time
 from collections.abc import AsyncIterator, Iterator
-from contextlib import aclosing
+from contextlib import aclosing, contextmanager
 from types import SimpleNamespace as SimpleNamespace
 from typing import Any, Dict, List, Optional, Self
 
@@ -264,7 +264,9 @@ class ModstorePlatformAdapter:
         self, raw_response: Dict[str, Any], provider: str, model: str
     ) -> Dict[str, Any]:
         result = normalize_market_chat_response(raw_response, provider, model)
-        self.last_route_metadata = routing.route_metadata(result.get("route_metadata") or {})
+        metadata = routing.route_metadata(result.get("route_metadata") or {})
+        if metadata:
+            self.last_route_metadata = metadata
         return result
 
     def resolve_default_route(self, connection: Connection | None = None) -> tuple[str, str]:
@@ -297,6 +299,10 @@ class ModstorePlatformAdapter:
     def _chat_input(self, connection, route, messages, temperature, max_tokens, extra):
         snapshot = self._pinned_snapshot(connection, route)
         if snapshot:
+            self.last_route_metadata = {
+                **routing.route_metadata(snapshot),
+                "route_state": "selected",
+            }
             extra = {
                 **extra,
                 **{
@@ -307,6 +313,16 @@ class ModstorePlatformAdapter:
                 "allow_failover": False,
             }
         return ChatInput(messages, temperature, max_tokens, extra)
+
+    @contextmanager
+    def _route_observation(self):
+        try:
+            yield
+        except _transport.MarketModelError as exc:
+            metadata = routing.route_metadata(getattr(exc, "route_metadata", {}))
+            if metadata:
+                self.last_route_metadata = metadata
+            raise
 
     def _observe_stream_payload(self, data: str) -> str:
         try:
@@ -421,12 +437,13 @@ class ModstorePlatformAdapter:
         """执行异步平台补全，沿已配置候选链处理可重试的配额错误并返回 OpenAI 响应。"""
         connection = self._connection()
         route = await self._resolve_provider_model_async(provider, model, connection)
-        return await completions.complete_async(
-            connection,
-            route,
-            self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
-            self._completion_ports(connection),
-        )
+        with self._route_observation():
+            return await completions.complete_async(
+                connection,
+                route,
+                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
+                self._completion_ports(connection),
+            )
 
     async def stream_chat_completion(
         self,
@@ -451,9 +468,10 @@ class ModstorePlatformAdapter:
             self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
             self._stream_ports(connection),
         )
-        async with aclosing(source) as chunks:
-            async for chunk in chunks:
-                yield self._observe_stream_payload(chunk)
+        with self._route_observation():
+            async with aclosing(source) as chunks:
+                async for chunk in chunks:
+                    yield self._observe_stream_payload(chunk)
 
     def chat_completion_sync(
         self,
@@ -467,12 +485,13 @@ class ModstorePlatformAdapter:
         """同步版平台补全，用于现有 Planner 的 OpenAI SDK 兼容调用栈。"""
         connection = self._connection()
         route = self._resolve_provider_model(provider, model, connection=connection)
-        return completions.complete_sync(
-            connection,
-            route,
-            self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
-            self._completion_ports(connection),
-        )
+        with self._route_observation():
+            return completions.complete_sync(
+                connection,
+                route,
+                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
+                self._completion_ports(connection),
+            )
 
     def stream_chat_completion_sync(
         self,
@@ -486,13 +505,14 @@ class ModstorePlatformAdapter:
         """同步版平台流式补全，逐条产出 SSE data payload。"""
         connection = self._connection()
         route = self._resolve_provider_model(provider, model, connection=connection)
-        for data in streaming.stream_sync(
-            connection,
-            route,
-            self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
-            self._stream_ports(connection),
-        ):
-            yield self._observe_stream_payload(data)
+        with self._route_observation():
+            for data in streaming.stream_sync(
+                connection,
+                route,
+                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
+                self._stream_ports(connection),
+            ):
+                yield self._observe_stream_payload(data)
 
     async def get_available_providers(self) -> List[Dict[str, Any]]:
         """获取当前凭据可用的供应商列表。"""

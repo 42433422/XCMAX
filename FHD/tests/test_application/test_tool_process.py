@@ -420,7 +420,7 @@ def _route_receipt_client(owner="a", revision="r1"):
         "key_source": "platform",
         "config_revision": revision,
     }
-    snapshot = {**route, "route_token": f"fake-route-token-{revision}"}
+    snapshot = {**route, "route_token": f"fake-route-token-{revision}", "route_state": "selected"}
     adapter._route_snapshots[(adapter._connection(), ("xiaomi", "flash"))] = snapshot
     return ModstoreOpenAICompatibleClient(adapter), route, snapshot
 
@@ -436,13 +436,18 @@ def test_spawned_tool_route_receipt_returns_to_the_original_request(invalid_resu
             FixtureExecutor(),
             _step(
                 action,
-                receipt={**route, "api_key": "fake-private", "route_token": "private-token"},
+                receipt={
+                    **route,
+                    "route_state": "completed",
+                    "api_key": "fake-private",
+                    "route_token": "private-token",
+                },
                 invalid_result=invalid_result,
             ),
             runtime_context={},
             timeout_seconds=10,
         )
-    assert client.adapter.last_route_metadata == route
+    assert client.adapter.last_route_metadata == {**route, "route_state": "completed"}
     assert result.get("outcome") == "unknown" if invalid_result else result["success"] is True
     assert "route_metadata" not in result  # Route receipt is outside the tool result protocol.
 
@@ -475,6 +480,23 @@ def test_worker_metadata_inspection_never_instantiates_an_unused_client():
     factory.assert_not_called()
 
 
+@pytest.mark.parametrize("state", ["selected", "completed", "failed"])
+def test_worker_metadata_preserves_state_separately_from_snapshot_identity(state):
+    from app.infrastructure.llm import client as routing
+
+    client, route, _ = _route_receipt_client()
+    with routing.llm_client_scope(client, "xiaomi/flash"):
+        captured = routing.capture_worker_llm_scope()
+        key = (client.adapter._connection(), ("xiaomi", "flash"))
+        client.adapter._route_snapshots[key] = {
+            **client.adapter._route_snapshots[key],
+            "route_state": "failed",
+        }
+        receipt = {**route, "route_state": state}
+        routing.record_worker_route_metadata(receipt, captured)
+    assert client.adapter.last_route_metadata == receipt
+
+
 def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkeypatch):
     from unittest.mock import Mock
 
@@ -482,7 +504,7 @@ def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkey
     from app.infrastructure.llm import client as routing
 
     client, route, _ = _route_receipt_client()
-    monkeypatch.setattr(tool_process.os, "setsid", lambda: None)
+    monkeypatch.setattr(tool_process.os, "setsid", lambda: None, raising=False)
     monkeypatch.setattr(routing, "restore_worker_llm_client", lambda _: (client, "xiaomi/flash"))
     payload = json.dumps(
         {

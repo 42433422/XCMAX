@@ -16,11 +16,15 @@ def safe_route_metadata(payload: Any) -> dict[str, str | int]:
         return {}
     nested = payload.get("route_metadata")
     source = nested if isinstance(nested, dict) else payload
-    return {
+    route = {
         field: source[field]
         for field in ("provider", "model", "route_source", "key_source", "config_revision")
         if isinstance(source.get(field), (str, int)) and not isinstance(source[field], bool)
     }
+    state = source.get("route_state", payload.get("route_state"))
+    if isinstance(state, str) and state in {"selected", "completed", "failed"}:
+        route["route_state"] = state
+    return route
 
 
 class MarketModelError(ValueError):
@@ -31,12 +35,17 @@ class MarketModelError(ValueError):
 
     def __init__(self, payload: dict[str, Any]):
         # Gateway/provider error text may contain credentials, URLs or request data.
-        # Only the status is suitable for the durable, user-visible chat history.
+        # Only status and public route identity are suitable for chat history.
         try:
             status = int(payload.get("status") or 502)
         except (TypeError, ValueError):
             status = 502
         self.status_code = status if 400 <= status <= 599 else 502
+        self.route_metadata = safe_route_metadata(payload) or safe_route_metadata(
+            payload.get("detail")
+        )
+        if self.route_metadata:
+            self.route_metadata["route_state"] = "failed"
         super().__init__(
             {
                 400: "模型服务未接受请求，请查看模型状态；平台模型配置请联系管理员核对。",

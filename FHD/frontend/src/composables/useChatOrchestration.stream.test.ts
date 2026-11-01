@@ -281,15 +281,51 @@ describe('useChatOrchestration stream', () => {
   })
 
   it.each(['stream', 'json'])('records only server route receipts for a %s response', async mode => {
-    const route = { provider: 'xiaomi', model: 'flash', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'revision-a' }
+    const route = { provider: 'xiaomi', model: 'flash', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'revision-a', route_state: 'completed' }
     streamMode.enabled = mode === 'stream'
     requestChatByModeWithTimeout.mockResolvedValue({ success: true, response: '完成', route_metadata: route })
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
-      onEvent({ type: 'route_metadata', route_metadata: { ...route, route_token: 'synthetic-private-token', api_key: 'synthetic-never-render' } })
-      onEvent({ type: 'done', result: { success: true, response: '完成' } })
+      onEvent({ type: 'route_metadata', route_metadata: { ...route, route_state: 'selected', route_token: 'synthetic-private-token', api_key: 'synthetic-never-render' } })
+      onEvent({ type: 'done', result: { success: true, response: '完成', route_metadata: route } })
     })
     await useChatOrchestration({ sessionId: ref('route-receipt') }).sendMessage('hello')
     expect(lastChatModelRoute('route-receipt')).toEqual(route)
+  })
+
+  it('keeps selected identity unconfirmed after meta then stop and preserves it in the local interruption message', async () => {
+    const selected = { provider: 'xiaomi', model: 'request-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'selected' }
+    let finish!: () => void
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'route_metadata', route_metadata: selected })
+      await new Promise<void>(resolve => { finish = resolve })
+    })
+    const api = useChatOrchestration({ sessionId: ref('selected-stop') })
+    const pending = api.sendMessage('hello')
+    await vi.waitFor(() => expect(lastChatModelRoute('selected-stop')).toEqual(selected))
+    api.stopReply()
+    expect(addMessage.mock.calls.find(call => String(call[0]).includes('已停止接收'))?.[2]).toEqual({ routeMetadata: selected })
+    finish(); await pending
+    expect(lastChatModelRoute('selected-stop')).toEqual(selected)
+  })
+
+  it.each(['upstream', 'timeout'])('keeps %s failure distinguishable from an actual model return', async kind => {
+    const selected = { provider: 'xiaomi', model: 'request-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'selected' }
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'route_metadata', route_metadata: selected })
+      if (kind === 'upstream') onEvent({ type: 'error', message: '上游401', route_metadata: { ...selected, route_state: 'failed' } })
+      else throw new DOMException('timeout', 'AbortError')
+    })
+    await useChatOrchestration({ sessionId: ref('failed-receipt') }).sendMessage('hello')
+    expect(lastChatModelRoute('failed-receipt')?.route_state).toBe(kind === 'upstream' ? 'failed' : 'selected')
+  })
+
+  it('retains the failed model identity on a synchronous HTTP error without treating it as a model return', async () => {
+    streamMode.enabled = false
+    const route = { provider: 'xiaomi', model: 'failed-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'failed' }
+    requestChatByModeWithTimeout.mockRejectedValue({ status: 401, message: '上游授权失败', data: { detail: { route_metadata: route } } })
+    await useChatOrchestration({ sessionId: ref('sync-failed-receipt') }).sendMessage('hello')
+    expect(lastChatModelRoute('sync-failed-receipt')).toEqual(route)
+    expect(addMessage.mock.calls.find(call => String(call[0]).includes('处理失败'))?.[2]).toMatchObject({ workflowAction: 'failed', routeMetadata: route })
   })
 
   it('sendMessage stream handles requires_token event', async () => {

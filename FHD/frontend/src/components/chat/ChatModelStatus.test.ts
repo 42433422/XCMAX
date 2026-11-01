@@ -61,10 +61,10 @@ it('retires a pending response when the status panel unmounts', async () => {
 
 
 it('invalidates current defaults on platform save without rewriting the actual receipt', async () => {
-  resolveRoute.mockResolvedValue({ ok: true, provider: 'xiaomi', model: 'flash-a', route_source: 'platform_default', key_source: 'managed', config_revision: 'a' })
+  resolveRoute.mockResolvedValue({ ok: true, provider: 'xiaomi', model: 'flash-a', route_source: 'platform_default', key_source: 'managed', config_revision: 'a', route_state: 'completed' })
   const wrapper = mount(ChatModelStatus, { props: { sessionId: 'chat-a' } })
   await flushPromises()
-  recordChatModelRoute('chat-a', { provider: 'xiaomi', model: 'flash-a', route_source: 'platform_default', key_source: 'managed', config_revision: 'a' })
+  recordChatModelRoute('chat-a', { provider: 'xiaomi', model: 'flash-a', route_source: 'platform_default', key_source: 'managed', config_revision: 'a', route_state: 'completed' })
   await flushPromises()
   resolveRoute.mockResolvedValue({ ok: true, provider: 'xiaomi', model: 'flash-b', route_source: 'platform_default', key_source: 'managed', config_revision: 'b' })
   window.dispatchEvent(new Event(PLATFORM_MODEL_CHANGED_EVENT))
@@ -107,4 +107,43 @@ it('keeps only the latest of repeated refreshes', async () => {
   await flushPromises()
   expect(wrapper.text()).toContain('current / new')
   expect(wrapper.text()).not.toContain('stale / old')
+})
+
+
+it.each([
+  ['selected', '未收到完成回执（含中断）'],
+  ['completed', '上一模型请求实际返回'],
+  ['failed', '上次模型调用失败'],
+] as const)('distinguishes a %s route receipt from a successful return', async (route_state, label) => {
+  resolveRoute.mockResolvedValue({ ok: true, provider: 'xiaomi', model: 'current-default' })
+  const wrapper = mount(ChatModelStatus, { props: { sessionId: 'state-check' } })
+  recordChatModelRoute('state-check', { provider: 'xiaomi', model: 'request-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state })
+  await flushPromises()
+  const actual = wrapper.get('[data-testid="actual-model-route"]').text()
+  expect(actual).toContain(label)
+  if (route_state !== 'completed') expect(actual).not.toContain('实际返回')
+  expect((wrapper.element as HTMLDetailsElement).open).toBe(false)
+})
+
+
+it('keeps recovery errors actionable and ignores an old account recovery acknowledgement', async () => {
+  resolveRoute.mockRejectedValue({ status: 400, data: { detail: { code: 'NO_BYOK_CHAT_MODEL' } } })
+  const wrapper = mount(ChatModelStatus)
+  await flushPromises()
+  const restore = () => wrapper.findAll('button').find(button => button.text().includes('改为跟随平台'))!
+  followPlatform.mockRejectedValueOnce(new Error('synthetic-never-render-secret'))
+  await restore().trigger('click'); await flushPromises()
+  expect(wrapper.text()).toContain('模型选择未确认保存')
+  expect(wrapper.text()).not.toContain('synthetic-never-render-secret')
+  let finish!: (value: unknown) => void
+  followPlatform.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+  await restore().trigger('click')
+  expect(followPlatform).toHaveBeenCalledTimes(2)
+  resolveRoute.mockResolvedValue({ ok: true, provider: 'other-account', model: 'other-model' })
+  productReadAccountEpoch.value++
+  await flushPromises()
+  finish({ ok: true }); await flushPromises()
+  expect(wrapper.text()).toContain('other-account / other-model')
+  expect(wrapper.text()).not.toContain('模型选择未确认保存')
+  expect(resolveRoute).toHaveBeenCalledTimes(2)
 })
