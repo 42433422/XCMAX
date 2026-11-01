@@ -34,9 +34,11 @@ from modstore_server.llm_chat_proxy import chat_dispatch_stream
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
-    resolve_api_key,
-    resolve_base_url,
+    ChatRouteSnapshot,
+    chat_route_snapshot,
+    resolve_chat_route_snapshot,
 )
+from modstore_server.llm_model_taxonomy import classify_model
 from modstore_server.models import User
 from modstore_server.multimodal_llm import (
     messages_use_openai_multipart_content,
@@ -51,6 +53,43 @@ def _sse(event: str, data: Dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+def _candidate_snapshots(
+    db: Session,
+    user_id: int,
+    primary: ChatRouteSnapshot,
+    candidates: list[tuple[str, str]],
+) -> tuple[list[tuple[str, str]], dict[tuple[str, str], ChatRouteSnapshot]]:
+    """An unusable backup must never block a healthy, already resolved primary."""
+    pair = (primary.provider, primary.model)
+    snapshots = {pair: primary}
+    allowed = [pair]
+    by_provider: dict[str, ChatRouteSnapshot | None] = {primary.provider: primary}
+    for provider, model in candidates:
+        pair = (provider, model)
+        if pair in snapshots or classify_model(provider, model) not in {"llm", "vlm"}:
+            continue
+        if provider not in by_provider:
+            try:
+                by_provider[provider] = resolve_chat_route_snapshot(
+                    db, user_id, provider, model, route_source="failover"
+                )
+            except HTTPException:
+                by_provider[provider] = None
+            except RECOVERABLE_ERRORS:
+                by_provider[provider] = None
+        route = by_provider[provider]
+        if route is None or not route.api_key or route.key_source != primary.key_source:
+            continue
+        route = chat_route_snapshot(
+            provider, model, route.api_key, route.base_url, route.key_source, "failover"
+        )
+        pair = (route.provider, route.model)
+        if pair not in snapshots:
+            snapshots[pair] = route
+            allowed.append(pair)
+    return allowed, snapshots
+
+
 async def run_billed_llm_chat(
     request: Request,
     db: Session,
@@ -62,11 +101,12 @@ async def run_billed_llm_chat(
     max_tokens: Optional[int] = None,
     conversation_id: Optional[int] = None,
     allow_failover: bool = True,
+    route_snapshot: ChatRouteSnapshot | None = None,
 ) -> dict[str, Any]:
     """执行一轮 LLM 对话并完成钱包预授权/结算；配额/限流时可自动切换备用模型。"""
-    primary_provider = (provider or "").strip().lower()
-    primary_model = (model or "").strip()
-    if allow_failover:
+    primary = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
+    primary_provider, primary_model = primary.provider, primary.model
+    if allow_failover and route_snapshot is None:
         candidates = await list_chat_failover_candidates(
             db, int(user.id), primary_provider, primary_model
         )
@@ -75,11 +115,8 @@ async def run_billed_llm_chat(
     if not candidates:
         candidates = [(primary_provider, primary_model)]
 
-    key_source_by_provider: dict[str, str] = {}
-    for p, _m in candidates:
-        _key, src = resolve_api_key(db, user.id, p)
-        if _key:
-            key_source_by_provider[p] = src
+    candidates, snapshots = _candidate_snapshots(db, user.id, primary, candidates)
+    key_source_by_provider = {p: snapshots[p, m].key_source for p, m in candidates}
 
     last_exc: Optional[HTTPException] = None
     queue = list(candidates)
@@ -98,6 +135,7 @@ async def run_billed_llm_chat(
                 messages=messages,
                 max_tokens=max_tokens,
                 conversation_id=conversation_id,
+                route_snapshot=snapshots[prov, mdl],
             )
             if len(attempted) > 1:
                 out["failover_from"] = f"{primary_provider}/{primary_model}"
@@ -160,9 +198,10 @@ async def stream_billed_llm_chat(
     allow_failover: bool = True,
     tools: Optional[list[dict[str, Any]]] = None,
     tool_choice: Any = None,
+    route_snapshot: ChatRouteSnapshot | None = None,
 ) -> StreamingResponse:
-    primary_provider = (provider or "").strip().lower()
-    primary_model = (model or "").strip()
+    primary = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
+    primary_provider, primary_model = primary.provider, primary.model
     msgs = messages
     if not msgs:
         raise HTTPException(400, "messages 不能为空")
@@ -170,7 +209,7 @@ async def stream_billed_llm_chat(
     if size_err:
         raise HTTPException(400, size_err)
 
-    if bool(allow_failover):
+    if allow_failover and route_snapshot is None:
         candidates = await list_chat_failover_candidates(
             db, int(user.id), primary_provider, primary_model
         )
@@ -179,11 +218,8 @@ async def stream_billed_llm_chat(
     if not candidates:
         candidates = [(primary_provider, primary_model)]
 
-    key_source_by_provider: dict[str, str] = {}
-    for p, _m in candidates:
-        k, src = resolve_api_key(db, user.id, p)
-        if k:
-            key_source_by_provider[p] = src
+    candidates, snapshots = _candidate_snapshots(db, user.id, primary, candidates)
+    key_source_by_provider = {p: snapshots[p, m].key_source for p, m in candidates}
 
     if primary_provider not in key_source_by_provider and primary_provider in KNOWN_PROVIDERS:
         raise HTTPException(
@@ -199,7 +235,8 @@ async def stream_billed_llm_chat(
         while idx < len(queue):
             prov, mdl = queue[idx]
             attempted.append(f"{prov}/{mdl}")
-            api_key, key_source = resolve_api_key(db, user.id, prov)
+            route = snapshots[prov, mdl]
+            api_key, key_source = route.api_key, route.key_source
             if not api_key:
                 idx += 1
                 continue
@@ -223,11 +260,7 @@ async def stream_billed_llm_chat(
                 continue
 
             is_byok = key_source == "user_override"
-            base = (
-                resolve_base_url(db, user.id, prov)
-                if prov in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-                else None
-            )
+            base = route.base_url if prov in OAI_COMPAT_OPENAI_STYLE_PROVIDERS else None
             request_id = new_request_id()
             try:
                 enforce_risk_limits(db, user.id, prov, mdl, msgs, request)
@@ -294,10 +327,8 @@ async def stream_billed_llm_chat(
                 "ok": True,
                 "request_id": request_id,
                 "hold_no": hold.hold_no,
-                "key_source": key_source,
+                **route.public_metadata(),
                 "billed": not is_byok,
-                "provider": prov,
-                "model": mdl,
             }
             if len(attempted) > 1:
                 meta["failover_from"] = f"{primary_provider}/{primary_model}"
@@ -413,10 +444,8 @@ async def stream_billed_llm_chat(
                         "usage": usage.__dict__,
                         "charge_amount": float(charge),
                         "hold_no": hold.hold_no,
-                        "key_source": key_source,
+                        **route.public_metadata(),
                         "billed": not is_byok,
-                        "provider": prov,
-                        "model": mdl,
                     }
                     if len(attempted) > 1:
                         done["failover_from"] = f"{primary_provider}/{primary_model}"

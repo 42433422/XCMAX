@@ -106,6 +106,20 @@ async def test_list_candidates_prefers_primary_then_others(monkeypatch):
     assert ("xiaomi", "mimo-v2") in out
 
 
+def _route(_db, _uid, provider, model, **_kwargs):
+    from modstore_server.llm_key_resolver import ChatRouteSnapshot
+
+    return ChatRouteSnapshot(
+        provider=provider,
+        model=model,
+        api_key="synthetic",
+        base_url=None,
+        key_source="platform",
+        route_source="explicit",
+        config_revision="synthetic",
+    )
+
+
 @pytest.mark.asyncio
 async def test_run_billed_llm_chat_failsover_on_quota(monkeypatch):
     from modstore_server import llm_billed_chat as llm_api
@@ -142,8 +156,8 @@ async def test_run_billed_llm_chat_failsover_on_quota(monkeypatch):
     monkeypatch.setattr(llm_api, "list_chat_failover_candidates", fake_candidates)
     monkeypatch.setattr(
         llm_api,
-        "resolve_api_key",
-        lambda db, uid, p: ("k", "platform"),
+        "resolve_chat_route_snapshot",
+        _route,
     )
 
     user = SimpleNamespace(id=7)
@@ -165,6 +179,8 @@ async def test_run_billed_llm_chat_failsover_on_quota(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_billed_respects_allow_failover_false(monkeypatch):
     from modstore_server import llm_billed_chat as llm_api
+
+    monkeypatch.setattr(llm_api, "resolve_chat_route_snapshot", _route)
 
     async def fake_once(request, db, user, **kwargs):
         raise HTTPException(429, "insufficient_quota")

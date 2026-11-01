@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
+import { lastChatModelRoute } from '@/utils/chatModelRoute'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 const {
   handleChatRequiresToken,
@@ -252,6 +254,7 @@ describe('useChatOrchestration stream', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     vi.clearAllMocks()
+    productReadAccountEpoch.value++
     streamMode.enabled = true
     streamMode.realShipment = false
     modState.activeModId = ''
@@ -275,6 +278,18 @@ describe('useChatOrchestration stream', () => {
     expect(refreshHistorySessions).toHaveBeenCalledOnce()
     expect(saveMessage).not.toHaveBeenCalled()
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it.each(['stream', 'json'])('records only server route receipts for a %s response', async mode => {
+    const route = { provider: 'xiaomi', model: 'flash', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'revision-a' }
+    streamMode.enabled = mode === 'stream'
+    requestChatByModeWithTimeout.mockResolvedValue({ success: true, response: '完成', route_metadata: route })
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'route_metadata', route_metadata: { ...route, route_token: 'synthetic-private-token', api_key: 'synthetic-never-render' } })
+      onEvent({ type: 'done', result: { success: true, response: '完成' } })
+    })
+    await useChatOrchestration({ sessionId: ref('route-receipt') }).sendMessage('hello')
+    expect(lastChatModelRoute('route-receipt')).toEqual(route)
   })
 
   it('sendMessage stream handles requires_token event', async () => {
@@ -595,6 +610,7 @@ describe('useChatOrchestration stream', () => {
       await vi.waitFor(() => expect(callbacks).toHaveLength(2))
     }
     expect(oldSignal.aborted).toBe(true)
+    callbacks[0]({ type: 'route_metadata', route_metadata: { provider: 'old', model: 'stale', route_source: 'preference', key_source: 'user_override', config_revision: 'old' } })
     callbacks[0]({ type: 'token', text: 'late old answer' })
     callbacks[0]({ type: 'requires_token', token_name: 'DB_WRITE' })
     callbacks[0]({ type: 'done', result: { success: true, response: 'late old answer' } })
@@ -604,6 +620,7 @@ describe('useChatOrchestration stream', () => {
     expect(handleChatRequiresToken).not.toHaveBeenCalled()
     expect(queueVoice).not.toHaveBeenCalled()
     expect(api.isLoading.value).toBe(action === 'correct')
+    expect(lastChatModelRoute('same-session')).toBeNull()
     if (current) {
       callbacks[1]({ type: 'done', result: { success: true, response: 'correct answer' } })
       finishes[1]()

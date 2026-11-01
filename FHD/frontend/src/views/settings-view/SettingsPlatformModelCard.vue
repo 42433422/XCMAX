@@ -68,6 +68,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { platformModelApi, type PlatformModelDraft, type PlatformModelList } from '@/api/platformModel'
 import { appConfirm } from '@/utils/appDialog'
+import { notifyPlatformModelChanged } from '@/api/platformModel'
 
 const props = defineProps<{ canManage: boolean }>()
 const state = ref<PlatformModelList | null>(null)
@@ -203,6 +204,7 @@ async function perform(operation: 'test' | 'save') {
           providers: state.value.providers.map(row => row.provider === selectedProvider ? { ...row, ...result.config } : { ...row, is_default: row.provider === result.default_provider }) }
       }
       resetDraft()
+      notifyPlatformModelChanged()
       saveMessage.value = '平台模型配置已保存，后续共享网关请求按上述范围生效。'
     }
   } catch (error) {

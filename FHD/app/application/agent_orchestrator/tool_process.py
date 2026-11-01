@@ -44,13 +44,26 @@ def _worker(
 ):
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
     from app.application.tool_execution_deadline import invocation_deadline
-    from app.infrastructure.llm.client import llm_client_factory_scope, restore_worker_llm_client
+    from app.infrastructure.llm.client import (
+        llm_client_factory_scope,
+        restore_worker_llm_client,
+        scoped_route_metadata,
+    )
 
     if os.name != "nt":
         os.setsid()
     ready.set()
     if not start.wait(max(0, deadline - time.monotonic())):
         return
+    route_metadata: dict[str, str | int] = {}
+    worker_client: tuple[Any, str] | None = None
+
+    def restore_llm_scope():
+        nonlocal worker_client
+        if worker_client is None:
+            worker_client = restore_worker_llm_client(llm_scope)
+        return worker_client
+
     try:
         data = json.loads(payload)
         from app.application.agent_orchestrator.catalog_product_worker import (
@@ -62,15 +75,16 @@ def _worker(
         with (
             restore_catalog_claim(catalog_claim),
             invocation_deadline(deadline) as budget,
-            llm_client_factory_scope(lambda: restore_worker_llm_client(llm_scope))
-            if llm_scope is not None
-            else nullcontext(),
+            llm_client_factory_scope(restore_llm_scope) if llm_scope is not None else nullcontext(),
         ):
-            output = executor_type().execute(
-                agent_step_from_dict(data["step"]), runtime_context=data["context"]
-            )
+            try:
+                output = executor_type().execute(
+                    agent_step_from_dict(data["step"]), runtime_context=data["context"]
+                )
+            finally:
+                route_metadata = scoped_route_metadata(worker_client[0] if worker_client else None)
         encoded = json.dumps(
-            {"output": output, "uncertain": budget.uncertain},
+            {"output": output, "uncertain": budget.uncertain, "llm_route_metadata": route_metadata},
             allow_nan=False,
             default=_json_scalar,
         )
@@ -91,6 +105,7 @@ def _worker(
                         "retryable": False,
                     },
                     "uncertain": [],
+                    "llm_route_metadata": route_metadata,
                 }
             ),
             encoding="utf-8",
@@ -145,7 +160,7 @@ def _ignore_missing_cleanup_entry(_function, _path, error):
 
 
 def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
-    from app.infrastructure.llm.client import capture_worker_llm_scope
+    from app.infrastructure.llm.client import capture_worker_llm_scope, record_worker_route_metadata
 
     try:
         payload = json.dumps({"step": step.to_dict(), "context": context}, allow_nan=False)
@@ -167,6 +182,7 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     ctx = multiprocessing.get_context("spawn")
     ready, start, done = (ctx.Event() for _ in range(3))
     folder = tempfile.mkdtemp(prefix="xcagi-tool-")
+    llm_scope = capture_worker_llm_scope(context)
     process = ctx.Process(
         target=_worker,
         args=(
@@ -177,7 +193,7 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
             start,
             done,
             deadline,
-            capture_worker_llm_scope(context),
+            llm_scope,
             catalog_profile,
             catalog_claim,
         ),
@@ -206,6 +222,8 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
                 clean = False
         if not clean:
             executor._tool_cleanup_failed = True
+    if result:
+        record_worker_route_metadata(result.get("llm_route_metadata"), llm_scope)
     if not clean:
         return {"outcome": "unknown", "error_code": "tool_cleanup_failed", "retryable": False}
     if result:

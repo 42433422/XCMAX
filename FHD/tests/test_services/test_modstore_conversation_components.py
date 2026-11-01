@@ -207,7 +207,10 @@ def test_new_sse_event_resets_metadata_filter_after_blank_separator():
         text='event: meta\ndata: {"provider":"fixture"}\n\ndata: {"delta":"visible"}\n\n',
     )
 
-    assert list(facade._iter_market_sse_data_payloads(response)) == ['{"delta":"visible"}']
+    assert [json.loads(data) for data in facade._iter_market_sse_data_payloads(response)] == [
+        {"route_metadata": {"provider": "fixture"}},
+        {"delta": "visible"},
+    ]
 
 
 @pytest.mark.parametrize("mode", ["sync", "async"])
@@ -591,14 +594,29 @@ def test_main_chat_auto_uses_server_route_before_local_fallback(
 
 
 @pytest.mark.parametrize("stream", [False, True])
-def test_explicit_model_bypasses_unavailable_server_default(request_market, stream):
+def test_explicit_model_resolves_its_own_snapshot_without_default_discovery(request_market, stream):
     requests = []
 
     def respond(request):
         requests.append(request.method)
-        assert request.method == "POST", "Explicit selection must not depend on default discovery"
+        if request.method == "GET":
+            assert dict(request.url.params) == {"provider": "byok", "model": "chosen"}
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "provider": "byok",
+                    "model": "chosen",
+                    "route_source": "explicit",
+                    "key_source": "byok",
+                    "config_revision": "account-1",
+                    "route_token": "synthetic-snapshot",
+                },
+            )
         payload = json.loads(request.content)
         assert (payload["provider"], payload["model"]) == ("byok", "chosen")
+        assert payload["route_token"] == "synthetic-snapshot"
+        assert payload["allow_failover"] is False
         return (
             httpx.Response(200, text='data: {"delta":"selected"}\n\n')
             if stream
@@ -611,7 +629,7 @@ def test_explicit_model_bypasses_unavailable_server_default(request_market, stre
         assert list(result)[-1].choices[0].delta.content == "selected"
     else:
         assert result.choices[0].message.content == "selected"
-    assert requests == ["POST"]
+    assert requests == ["GET", "POST"]
 
 
 @pytest.mark.parametrize(
@@ -805,6 +823,10 @@ def test_desktop_status_and_chat_keep_account_route_through_failure_and_retry(
                     "ok": True,
                     "provider": "openai",
                     "model": f"model-{uid}",
+                    "route_source": "platform_configuration",
+                    "key_source": "platform",
+                    "config_revision": f"revision-{uid}",
+                    "route_token": f"synthetic-route-{uid}",
                     "api_key": "synthetic-secret",
                     "base_url": "https://private.invalid",
                 },
@@ -812,6 +834,8 @@ def test_desktop_status_and_chat_keep_account_route_through_failure_and_retry(
         assert request.method == "POST" and request.url.path == "/api/llm/chat/stream"
         payload = json.loads(request.content)
         assert (payload["provider"], payload["model"]) == ("openai", f"model-{uid}")
+        assert payload["route_token"] == f"synthetic-route-{uid}"
+        assert payload["config_revision"] == f"revision-{uid}"
         assert payload["messages"][-1]["content"] == "只回复：会话验证成功。"
         if uid == 71 and not failed_once:
             failed_once = True
@@ -821,7 +845,19 @@ def test_desktop_status_and_chat_keep_account_route_through_failure_and_retry(
             )
         return httpx.Response(
             200,
-            text=f'event: delta\ndata: {{"delta":"会话{uid}验证成功"}}\n\nevent: done\ndata: {{"ok":true}}\n\n',
+            text=(
+                "event: meta\ndata: "
+                + json.dumps(
+                    {
+                        "provider": "openai",
+                        "model": f"model-{uid}",
+                        "route_source": "platform_configuration",
+                        "key_source": "platform",
+                        "config_revision": f"revision-{uid}",
+                    }
+                )
+                + f'\n\nevent: delta\ndata: {{"delta":"会话{uid}验证成功"}}\n\nevent: done\ndata: {{"ok":true}}\n\n'
+            ),
         )
 
     monkeypatch.setenv("LLM_PROVIDER", "stale-local")
@@ -841,7 +877,14 @@ def test_desktop_status_and_chat_keep_account_route_through_failure_and_retry(
             headers=forged,
         )
         assert status.status_code == 200
-        assert status.json() == {"ok": True, "provider": "openai", "model": f"model-{uid}"}
+        assert status.json() == {
+            "ok": True,
+            "provider": "openai",
+            "model": f"model-{uid}",
+            "route_source": "platform_configuration",
+            "key_source": "platform",
+            "config_revision": f"revision-{uid}",
+        }
         assert status.headers["Cache-Control"] == "no-store"
         response = client.post(
             "/api/ai/chat/stream",
@@ -873,6 +916,13 @@ def test_desktop_status_and_chat_keep_account_route_through_failure_and_retry(
             assert len(done) == 1
             assert done[0]["result"]["success"] is True
             assert done[0]["result"]["response"] == f"会话{uid}验证成功"
+            assert done[0]["result"]["route_metadata"] == {
+                key: value for key, value in status.json().items() if key != "ok"
+            }
+            metadata_events = [event for event in events if event["type"] == "route_metadata"]
+            assert len(metadata_events) == 1
+            assert metadata_events[0]["route_metadata"] == done[0]["result"]["route_metadata"]
+        assert "synthetic-route-" not in status.text + response.text
         assert "synthetic-secret" not in status.text + response.text + caplog.text
         assert "private.invalid" not in status.text + response.text + caplog.text
     assert seen == [
@@ -929,3 +979,236 @@ def test_model_status_failure_never_exposes_upstream_error_body(
     assert "synthetic-secret" not in response.text
     assert "private.invalid" not in response.text
     assert "模型" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("mode", ["sync", "async", "stream", "async-stream"])
+@pytest.mark.asyncio
+async def test_turn_snapshot_rotation_and_actual_route_receipt(request_market, mode):
+    revision = "first"
+    posts = []
+    metadata = lambda rev: {
+        "provider": "xiaomi",
+        "model": f"chat-{rev}",
+        "route_source": "platform_configuration",
+        "key_source": "platform",
+        "config_revision": rev,
+    }
+
+    def respond(request):
+        if request.method == "GET":
+            return httpx.Response(
+                200, json={"ok": True, **metadata(revision), "route_token": f"snapshot-{revision}"}
+            )
+        payload = json.loads(request.content)
+        posts.append(payload)
+        rev = payload["config_revision"]
+        assert payload["route_token"] == f"snapshot-{rev}"
+        assert payload["model"] == f"chat-{rev}"
+        assert payload["allow_failover"] is False
+        if "stream" in mode:
+            return httpx.Response(
+                200,
+                text=(
+                    "event: meta\ndata: " + json.dumps(metadata(rev)) + "\n\n"
+                    'event: delta\ndata: {"delta":"reply"}\n\n'
+                    'event: done\ndata: {"ok":true}\n\n'
+                ),
+            )
+        return httpx.Response(200, json={"content": "reply", **metadata(rev)})
+
+    first = request_market(respond).adapter
+    assert first.resolve_default_route_metadata() == metadata("first")
+    revision = "second"
+
+    async def invoke(adapter):
+        if mode == "sync":
+            adapter.chat_completion_sync([])
+        elif mode == "async":
+            await adapter.chat_completion([])
+        elif mode == "stream":
+            list(adapter.stream_chat_completion_sync([]))
+        else:
+            [item async for item in adapter.stream_chat_completion([])]
+
+    try:
+        await invoke(first)
+        await invoke(first)
+        assert first.last_route_metadata == metadata("first")
+        with pytest.raises(ValueError):
+            first.chat_completion_sync([], model="other/chosen")
+        second = facade.ModstorePlatformAdapter.from_request(Mock())
+        try:
+            await invoke(second)
+            assert second.last_route_metadata == metadata("second")
+        finally:
+            await second.close()
+        assert [post["config_revision"] for post in posts] == ["first", "first", "second"]
+    finally:
+        await first.close()
+
+
+def test_request_client_is_reused_only_within_one_http_request(request_market):
+    from starlette.requests import Request
+
+    request_market(lambda request: pytest.fail("Client creation must not resolve a model"))
+    one = Request({"type": "http", "headers": []})
+    two = Request({"type": "http", "headers": []})
+    first = facade.create_modstore_openai_client_from_request(one)
+    assert facade.create_modstore_openai_client_from_request(one) is first
+    assert facade.create_modstore_openai_client_from_request(two) is not first
+
+
+@pytest.mark.parametrize("code", ["INVALID_CHAT_PREFERENCE", "NO_BYOK_CHAT_MODEL"])
+def test_invalid_chat_preference_status_offers_safe_recovery(
+    desktop_model_status_client, monkeypatch, code
+):
+    monkeypatch.setattr(
+        facade,
+        "_httpx_sync_client",
+        lambda **kwargs: httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    400,
+                    json={
+                        "detail": {
+                            "code": code,
+                            "message": "synthetic-secret",
+                            "recovery": "synthetic-private-url",
+                        }
+                    },
+                )
+            ),
+            **kwargs,
+        ),
+    )
+    desktop_model_status_client.cookies.set("session_id", "synthetic-session-71")
+    response = desktop_model_status_client.get("/api/conversation/model-status")
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == code
+    assert response.json()["detail"]["recovery"] == "choose_chat_model_or_follow_platform"
+    assert "synthetic-" not in response.text
+
+
+@pytest.mark.parametrize("uid", [71, 72])
+def test_preference_recovery_uses_own_session_authorization(
+    desktop_model_status_client, monkeypatch, uid
+):
+    observed = []
+
+    def respond(request):
+        observed.append(request)
+        assert request.method == "PUT" and request.url.path == "/api/llm/preferences"
+        assert request.headers["Authorization"] == f"Bearer synthetic-owned-{uid}"
+        assert json.loads(request.content) == {"mode": "platform"}
+        return httpx.Response(200, json={"ok": True, "api_key": "synthetic-secret"})
+
+    monkeypatch.setattr(
+        facade,
+        "_httpx_sync_client",
+        lambda **kwargs: httpx.Client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    desktop_model_status_client.cookies.set("session_id", f"synthetic-session-{uid}")
+    result = desktop_model_status_client.put(
+        "/api/conversation/model-preference",
+        json={"mode": "platform"},
+        headers={"Authorization": "Bearer forged", "X-User-ID": "999"},
+    )
+    assert result.status_code == 200 and result.json() == {"ok": True}
+    assert len(observed) == 1
+
+
+@pytest.mark.parametrize("session", [None, "synthetic-session-73"])
+def test_preference_recovery_requires_market_bound_session(
+    desktop_model_status_client, monkeypatch, session
+):
+    outgoing = Mock(side_effect=AssertionError("No market update without bound local identity"))
+    monkeypatch.setattr(facade, "_httpx_sync_client", outgoing)
+    if session:
+        desktop_model_status_client.cookies.set("session_id", session)
+    result = desktop_model_status_client.put(
+        "/api/conversation/model-preference", json={"mode": "platform"}
+    )
+    assert result.status_code == 401
+    outgoing.assert_not_called()
+
+
+def test_preference_recovery_rejects_arbitrary_mutations(desktop_model_status_client, monkeypatch):
+    outgoing = Mock(side_effect=AssertionError("Recovery cannot alter models or another account"))
+    monkeypatch.setattr(facade, "_httpx_sync_client", outgoing)
+    desktop_model_status_client.cookies.set("session_id", "synthetic-session-71")
+    result = desktop_model_status_client.put(
+        "/api/conversation/model-preference", json={"mode": "platform", "user_id": 72}
+    )
+    assert result.status_code == 400
+    outgoing.assert_not_called()
+
+
+@pytest.mark.parametrize("mode", ["sync", "async", "stream", "async-stream"])
+@pytest.mark.asyncio
+async def test_expired_snapshot_ends_turn_without_reselect_or_secret_echo(request_market, mode):
+    methods = []
+
+    def respond(request):
+        methods.append(request.method)
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "provider": "xiaomi",
+                    "model": "chat",
+                    "key_source": "platform",
+                    "config_revision": "old",
+                    "route_token": "synthetic-token",
+                },
+            )
+        return httpx.Response(409, json={"detail": "synthetic-secret synthetic-token"})
+
+    adapter = request_market(respond).adapter
+    try:
+        with pytest.raises(ValueError, match="重新发送") as failure:
+            if mode == "sync":
+                adapter.chat_completion_sync([])
+            elif mode == "async":
+                await adapter.chat_completion([])
+            elif mode == "stream":
+                list(adapter.stream_chat_completion_sync([]))
+            else:
+                [item async for item in adapter.stream_chat_completion([])]
+        assert "synthetic-" not in str(failure.value)
+        assert methods == ["GET", "POST"]
+        assert adapter.last_route_metadata == {}
+    finally:
+        await adapter.close()
+
+
+def test_explicit_alias_sends_and_reuses_canonical_snapshot_route(request_market):
+    methods = []
+
+    def respond(request):
+        methods.append(request.method)
+        if request.method == "GET":
+            assert dict(request.url.params) == {"provider": "xiaomi", "model": "mimo-v2.5"}
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "provider": "xiaomi",
+                    "model": "mimo-v2.6-flash",
+                    "key_source": "platform",
+                    "config_revision": "current",
+                    "route_token": "synthetic-alias-token",
+                },
+            )
+        payload = json.loads(request.content)
+        assert (payload["provider"], payload["model"]) == ("xiaomi", "mimo-v2.6-flash")
+        assert payload["route_token"] == "synthetic-alias-token"
+        return httpx.Response(
+            200, json={"content": "reply", "provider": "xiaomi", "model": "mimo-v2.6-flash"}
+        )
+
+    client = request_market(respond)
+    for _ in range(2):
+        client.chat.completions.create(messages=[], model="xiaomi/mimo-v2.5")
+    assert client.default_model == "mimo-v2.6-flash"
+    assert methods == ["GET", "POST", "POST"]

@@ -125,7 +125,7 @@
         @proactive-suggestions-change="onProactiveSuggestionsChange"
         @toggle-tts="setTtsEnabled"
       />
-      <ChatModelStatus ref="modelStatusRef" />
+      <ChatModelStatus ref="modelStatusRef" :session-id="currentSessionId" :mod-id="String(modsStore.activeModId || '')" />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <span class="sheet-link-label">关联工作表：</span>
         <button class="sheet-link-btn" :class="{ active: linkedExcelAllSheets }" @click="bindAllExcelSheetsToChat">

@@ -18,85 +18,138 @@ def _facade():
 
 
 async def resolve_default_llm_route(
-    db: _facade().Session, user_id: int
+    db: _facade().Session, user_id: int, *, provider: str = "", model: str = ""
 ) -> dict[str, _facade().Any]:
-    """与 ``GET /api/llm/resolve-chat-default`` 同源：解析账户默认 vendor + model。"""
+    """Resolve a chat-capable route and bind its credentials before any catalog await."""
     import asyncio
-
-    from modstore_server.models import User as UserModel
-    from modstore_server.models import get_session_factory
+    from modstore_server.llm_catalog import get_models_for_credentials
+    from modstore_server.llm_key_resolver import (
+        chat_route_snapshot,
+        chat_route_token,
+        platform_credentials,
+        resolve_credentials,
+    )
+    from modstore_server.llm_model_taxonomy import classify_model
+    from modstore_server.models import User as UserModel, get_session_factory
+    from modstore_server.platform_model_config import read_state
 
     uid = int(user_id)
 
-    def _load_prefs_and_keys() -> tuple[str, str, dict[str, str], set[str]]:
-        sf = get_session_factory()
-        with sf() as _db:
-            urow = _db.query(UserModel).filter(UserModel.id == uid).first()
-            prefs: _facade().Dict[str, _facade().Any] = {}
-            raw = ((urow.default_llm_json if urow else None) or "").strip()
-            if raw:
-                try:
-                    loaded = _facade().json.loads(raw)
-                    if isinstance(loaded, dict):
-                        prefs = loaded
-                except _facade().json.JSONDecodeError:
-                    prefs = {}
-            pref_p = str(prefs.get("provider") or "").strip()
-            pref_m = str(prefs.get("model") or "").strip()
-            keys: dict[str, str] = {}
-            byok: set[str] = set()
-            for p in _facade().KNOWN_PROVIDERS:
-                k, source = _facade().resolve_api_key(_db, uid, p)
-                if k:
-                    keys[p] = k
-                    if source == "user_override":
-                        byok.add(p)
-        return (pref_p, pref_m, keys, byok)
+    def invalid(message: str, code: str = "INVALID_CHAT_PREFERENCE"):
+        raise _facade().HTTPException(
+            400,
+            {
+                "code": code,
+                "message": message,
+                "recovery": (
+                    "choose_chat_model_or_follow_platform"
+                    if code in {"INVALID_CHAT_PREFERENCE", "NO_BYOK_CHAT_MODEL"}
+                    else None
+                ),
+            },
+        )
 
-    pref_p, pref_m, keys, byok = await asyncio.to_thread(_load_prefs_and_keys)
-
-    async def first_model_id(provider: str) -> str:
-        block = await _facade().get_models_for_provider(db, uid, provider, force_refresh=False)
-        mids = list(block.get("runtime_models") or block.get("models") or [])
-        return str(mids[0]).strip() if mids else ""
-
-    if pref_p in _facade().KNOWN_PROVIDERS and pref_m and (pref_p in keys):
-        return {"ok": True, "provider": pref_p, "model": pref_m, "source": "preference"}
-    if pref_p in _facade().KNOWN_PROVIDERS and pref_p in keys:
-        m0 = await first_model_id(pref_p)
-        if m0:
-            return {
-                "ok": True,
-                "provider": pref_p,
-                "model": m0,
-                "source": "preference_first_model",
+    def load():
+        state = read_state()
+        with get_session_factory()() as session:
+            urow = session.query(UserModel).filter(UserModel.id == uid).first()
+            try:
+                prefs = _facade().json.loads((urow.default_llm_json if urow else None) or "{}")
+            except (ValueError, TypeError):
+                prefs = {}
+            if not isinstance(prefs, dict):
+                prefs = {}
+            credentials = {
+                p: resolve_credentials(session, uid, p, platform_state=state)
+                for p in _facade().KNOWN_PROVIDERS
             }
-    # Preserve user-owned credentials before considering a shared platform default.
-    for p in keys:
-        if p in byok:
-            m0 = await first_model_id(p)
-            if m0:
-                return {"ok": True, "provider": p, "model": m0, "source": "byok"}
-    from modstore_server.platform_model_config import default_config
+        return prefs, credentials, state
 
-    configured = default_config()
-    if configured and configured["provider"] in keys:
+    prefs, credentials, state = await asyncio.to_thread(load)
+    explicit_query = bool(provider or model)
+    mode = "explicit" if explicit_query else str(prefs.get("mode") or "")
+    pref_p = (
+        provider.strip().lower()
+        if explicit_query
+        else str(prefs.get("provider") or "").strip().lower()
+    )
+    pref_m = model.strip() if explicit_query else str(prefs.get("model") or "").strip()
+    explicit = bool(provider or model or (mode != "platform" and (pref_p or pref_m)))
+
+    async def select(p: str, m: str, source: str, *, platform_only: bool = False):
+        key, base, key_source = credentials.get(p, (None, None, "none"))
+        if platform_only:
+            key, base = platform_credentials(p, state=state)
+            key_source = "platform" if key else "none"
+        if not key:
+            return None
+        if m:
+            if classify_model(p, m) not in {"llm", "vlm"}:
+                if platform_only:
+                    invalid(
+                        "平台默认模型不支持聊天，请管理员配置聊天模型",
+                        "INVALID_PLATFORM_CHAT_MODEL",
+                    )
+                invalid("所选模型不支持聊天，请选择聊天模型或明确恢复跟随平台")
+        else:
+            block = await get_models_for_credentials(
+                uid, p, api_key=key, base_url=base, force_refresh=False
+            )
+            # Empty runtime_models is authoritative: never fall back to the full catalog.
+            mids = block.get("runtime_models")
+            if mids is None:
+                mids = [
+                    r["id"]
+                    for r in block.get("models_detailed", [])
+                    if r.get("runtime_selectable") is True
+                ]
+            m = next(
+                (str(mid).strip() for mid in mids if classify_model(p, str(mid)) in {"llm", "vlm"}),
+                "",
+            )
+            if not m:
+                return None
+        snapshot = chat_route_snapshot(p, m, key, base, key_source, source)
         return {
             "ok": True,
-            "provider": configured["provider"],
-            "model": configured["model"],
-            "source": "platform_configuration",
+            **snapshot.public_metadata(),
+            "source": source,
+            "route_token": chat_route_token(snapshot, uid),
         }
+
+    if explicit:
+        if pref_p not in _facade().KNOWN_PROVIDERS:
+            invalid("账户默认供应商无效，请重新选择聊天模型或跟随平台")
+        if mode == "byok" and credentials[pref_p][2] != "user_override":
+            invalid("所选 BYOK 不可用，未切换到收费平台", "NO_BYOK_CHAT_MODEL")
+        selected = await select(pref_p, pref_m, "explicit" if provider else "preference")
+        if selected:
+            return selected
+        invalid("账户所选供应商没有可用聊天模型或密钥，请重新选择；未切换到收费平台")
+    byok = [p for p, (_, _, source) in credentials.items() if source == "user_override"]
+    if mode != "platform" and byok:
+        for p in byok:
+            selected = await select(p, "", "byok")
+            if selected:
+                return selected
+        invalid(
+            "BYOK 未提供可用聊天模型，请选择其他 BYOK 模型或明确恢复跟随平台", "NO_BYOK_CHAT_MODEL"
+        )
+    configured = state["providers"].get(state.get("default_provider"))
+    if configured:
+        selected = await select(
+            configured["provider"],
+            configured["model"],
+            "platform_configuration",
+            platform_only=True,
+        )
+        if selected:
+            return selected
     for p in _facade().KNOWN_PROVIDERS:
-        if p not in keys:
-            continue
-        m0 = await first_model_id(p)
-        if m0:
-            return {"ok": True, "provider": p, "model": m0, "source": "fallback"}
-    raise _facade().HTTPException(
-        400,
-        "未配置任何可用 LLM 密钥（平台环境变量或 BYOK）。请在钱包页为至少一个厂商配置密钥，或将账户默认供应商改为已配置密钥的厂商；若已保存 BYOK，请确认服务端已配置 MODSTORE_LLM_MASTER_KEY。",
-    )
+        selected = await select(p, "", "fallback", platform_only=True)
+        if selected:
+            return selected
+    invalid("没有可用的聊天模型，请联系管理员配置聊天模型或配置 BYOK", "NO_CHAT_MODEL")
 
 
 def _membership_meta(plan_id: str | None) -> _facade().Dict[str, _facade().Any]:
@@ -185,17 +238,17 @@ async def llm_status(
 
 @_facade().router.get("/resolve-chat-default")
 async def resolve_chat_default(
+    response: _facade().Response,
     db: _facade().Session = _facade().Depends(_facade().get_db),
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
+    provider: str = "",
+    model: str = "",
 ):
-    """
-    供工作台「自动」模式与需求规划使用：用与 /chat 相同的 resolve_api_key 选出
-    provider + model，避免仅依赖前端 /status 与目录推断导致与后端不一致。
-
-    顺序：①账户默认且该厂商有密钥且已填 model；②默认厂商有密钥则取其目录首模；
-    ③按 KNOWN_PROVIDERS 顺序第一个「有密钥且能拉到模型 id」的厂商。
-    """
-    return await _facade().resolve_default_llm_route(db, int(user.id))
+    """Resolve account selection (or an explicit route) with a short-lived tool-round snapshot."""
+    response.headers["Cache-Control"] = "no-store"
+    return await _facade().resolve_default_llm_route(
+        db, int(user.id), provider=provider, model=model
+    )
 
 
 # --- from llm_api_part02_part01_part01.py ---
@@ -561,8 +614,9 @@ async def delete_llm_credentials(
 
 
 class LlmPreferenceDTO(_facade().BaseModel):
-    provider: str = _facade().Field(..., min_length=2, max_length=32)
-    model: str = _facade().Field(..., min_length=1, max_length=256)
+    provider: str = _facade().Field("", max_length=32)
+    model: str = _facade().Field("", max_length=256)
+    mode: _facade().Optional[str] = None
 
 
 class LlmPriceDTO(_facade().BaseModel):
@@ -581,13 +635,26 @@ async def put_llm_preferences(
     db: _facade().Session = _facade().Depends(_facade().get_db),
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
-    if body.provider not in _facade().KNOWN_PROVIDERS:
+    if body.mode not in {None, "platform", "explicit", "byok"}:
+        raise _facade().HTTPException(400, "unknown selection mode")
+    if body.mode != "platform" and body.provider not in _facade().KNOWN_PROVIDERS:
         raise _facade().HTTPException(400, "unknown provider")
+    if body.mode != "platform" and not body.model.strip() and body.mode != "byok":
+        raise _facade().HTTPException(400, "model is required")
     u = db.query(_facade().User).filter(_facade().User.id == user.id).first()
     if not u:
         raise _facade().HTTPException(401, "用户不存在")
     u.default_llm_json = _facade().json.dumps(
-        {"provider": body.provider, "model": body.model.strip()}, ensure_ascii=False
+        (
+            {"mode": "platform"}
+            if body.mode == "platform"
+            else {
+                "provider": body.provider,
+                "model": body.model.strip(),
+                "mode": body.mode or "explicit",
+            }
+        ),
+        ensure_ascii=False,
     )
     db.commit()
     return {"ok": True, "preferences": _facade().json.loads(u.default_llm_json)}
@@ -1033,6 +1100,9 @@ class ChatMessageDTO(_facade().BaseModel):
 class LlmChatDTO(_facade().BaseModel):
     provider: str
     model: str
+    route_token: _facade().Optional[str] = _facade().Field(None, max_length=20000, repr=False)
+    config_revision: _facade().Optional[str] = _facade().Field(None, max_length=128)
+    key_source: _facade().Optional[str] = None
     messages: _facade().List[ChatMessageDTO]
     max_tokens: _facade().Optional[int] = _facade().Field(None, ge=1, le=32000)
     conversation_id: _facade().Optional[int] = _facade().Field(None, ge=1)
@@ -1068,6 +1138,32 @@ class LlmPptxDTO(_facade().BaseModel):
     filename: str = _facade().Field("ai-presentation.pptx", max_length=160)
 
 
+def _requested_chat_snapshot(db, user, body):
+    from modstore_server.llm_key_resolver import read_chat_route_token, resolve_chat_route_snapshot
+
+    if not body.route_token and body.config_revision is None:
+        return None
+    snapshot = (
+        read_chat_route_token(body.route_token, user.id, body.provider, body.model.strip())
+        if body.route_token
+        else resolve_chat_route_snapshot(db, user.id, body.provider, body.model.strip())
+    )
+    if (
+        body.config_revision is not None
+        and body.config_revision != snapshot.config_revision
+        or body.key_source is not None
+        and body.key_source != snapshot.key_source
+    ):
+        raise _facade().HTTPException(
+            409,
+            {
+                "code": "CHAT_ROUTE_CHANGED",
+                "message": "模型配置已变化，请重新发送此轮对话",
+            },
+        )
+    return snapshot
+
+
 @_facade().router.post("/chat")
 async def llm_chat(
     request: _facade().Request,
@@ -1076,6 +1172,7 @@ async def llm_chat(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
+    snapshot = _requested_chat_snapshot(db, user, body)
     out = await _facade().run_billed_llm_chat(
         request,
         db,
@@ -1086,6 +1183,7 @@ async def llm_chat(
         max_tokens=body.max_tokens,
         conversation_id=body.conversation_id,
         allow_failover=bool(body.allow_failover),
+        route_snapshot=snapshot,
     )
     payload = {
         "ok": out["ok"],
@@ -1098,6 +1196,8 @@ async def llm_chat(
         "billed": out["billed"],
         "provider": out.get("provider"),
         "model": out.get("model"),
+        "route_source": out.get("route_source"),
+        "config_revision": out.get("config_revision"),
     }
     if out.get("failover_from"):
         payload["failover_from"] = out["failover_from"]
@@ -1113,6 +1213,7 @@ async def llm_chat_stream(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     msgs = [m.model_dump(exclude_none=True) for m in body.messages]
+    snapshot = _requested_chat_snapshot(db, user, body)
     return await _facade().stream_billed_llm_chat(
         request,
         db,
@@ -1125,6 +1226,7 @@ async def llm_chat_stream(
         allow_failover=bool(body.allow_failover),
         tools=body.tools,
         tool_choice=body.tool_choice,
+        route_snapshot=snapshot,
     )
 
 

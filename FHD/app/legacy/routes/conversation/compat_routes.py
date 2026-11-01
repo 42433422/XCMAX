@@ -44,7 +44,7 @@ def conversation_model_status(request: Request, _user=Depends(get_logged_in_user
             headers=headers,
         )
     try:
-        provider, model = client.adapter.resolve_default_route()
+        metadata = client.adapter.resolve_default_route_metadata()
     except RECOVERABLE_ERRORS as exc:
         status = (
             exc.status_code
@@ -55,10 +55,39 @@ def conversation_model_status(request: Request, _user=Depends(get_logged_in_user
             if isinstance(exc, httpx.ConnectError)
             else 502
         )
+        detail: str | dict[str, str] = str(MarketModelError({"status": status}))
+        if getattr(exc, "code", None) in {"INVALID_CHAT_PREFERENCE", "NO_BYOK_CHAT_MODEL"}:
+            detail = {
+                "code": str(getattr(exc, "code", "INVALID_CHAT_PREFERENCE")),
+                "message": "已保存的模型不支持聊天，请选择聊天模型或恢复跟随平台。",
+                "recovery": "choose_chat_model_or_follow_platform",
+            }
+        raise HTTPException(status_code=status, detail=detail, headers=headers) from None
+    return JSONResponse({"ok": True, **metadata}, headers=headers)
+
+
+@router.put("/conversation/model-preference", deprecated=False)
+def conversation_follow_platform(
+    request: Request, body: dict = Body(...), _user=Depends(get_logged_in_user)
+):
+    from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    if body != {"mode": "platform"}:
+        raise HTTPException(status_code=400, detail="仅支持明确恢复跟随平台默认模型。")
+    client = create_modstore_openai_client_from_request(request)
+    if not client.adapter.auth_token:
         raise HTTPException(
-            status_code=status, detail=str(MarketModelError({"status": status})), headers=headers
+            status_code=401, detail="当前会话未绑定模型服务授权，请重新登录市场账号。"
+        )
+    try:
+        client.adapter.follow_platform_default()
+    except RECOVERABLE_ERRORS as exc:
+        status = exc.status_code if isinstance(exc, MarketModelError) else 502
+        raise HTTPException(
+            status_code=status, detail=str(MarketModelError({"status": status}))
         ) from None
-    return JSONResponse({"ok": True, "provider": provider, "model": model}, headers=headers)
+    return {"ok": True}
 
 
 async def _chat_stream_with_slot_release(

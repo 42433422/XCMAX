@@ -21,6 +21,7 @@ import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useC
 import { asPlannerPayload, errorMessage } from './chatOrchestrationShared'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
 import type { UiChatMessageExtras } from '@/types/chat-ui'
+import { recordChatModelRoute } from '@/utils/chatModelRoute'
 
 type ChatMessagesApi = ReturnType<typeof useChatMessages>
 
@@ -292,6 +293,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     }
 
     if (!isOwnerCurrent()) return
+    recordChatModelRoute(requestScope.sessionId, null, identity)
     if (remoteMessages.length === 1 && isChatStreamEnabled()) {
       const primaryForStream = remoteMessages[0] || ''
       round.setStreaming(true)
@@ -369,7 +371,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             window.clearTimeout(killTimer)
             killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
           }
-          if (ev.type === 'tool_progress') {
+          if (ev.type === 'route_metadata') {
+            if (round.isActive()) recordChatModelRoute(requestScope.sessionId, ev.route_metadata, identity)
+          } else if (ev.type === 'tool_progress') {
             streamRunId = ev.run_id || streamRunId
             setLoadingProgress(ev.label || '正在执行任务…', requestScope.sessionId)
             if (streamRunId) syncStreamRun({ run_id: streamRunId })
@@ -409,6 +413,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           return
         }
         const donePayload = asPlannerPayload(doneResult)
+        if (round.isActive()) recordChatModelRoute(requestScope.sessionId, donePayload.route_metadata, identity)
         const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
         if (round.isActive()) {
           if (responseCameFromCache(donePayload)) {
@@ -530,6 +535,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
 
     if (!isOwnerCurrent()) return
     if (!round.isActive()) return persistDetachedPlannerResult(data, requestScope.sessionId, saveMessage)
+    const receipt = data.batch && Array.isArray(data.results) ? data.results[data.results.length - 1] : data
+    recordChatModelRoute(requestScope.sessionId, receipt?.route_metadata, identity)
     if (data.batch && Array.isArray(data.results)) {
       const results = data.results.map((part) => asPlannerPayload(part))
       if (data.success) {

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const apiMock = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  put: vi.fn(),
 }))
 const sse = vi.hoisted(() => ({
   readPlannerSseResponse: vi.fn().mockResolvedValue(undefined),
@@ -31,6 +32,7 @@ function setMarketToken(token: string) {
 beforeEach(() => {
   apiMock.get.mockReset().mockResolvedValue({ success: true })
   apiMock.post.mockReset().mockResolvedValue({ success: true })
+  apiMock.put.mockReset().mockResolvedValue({ ok: true })
   sse.readPlannerSseResponse.mockClear()
   globalThis.fetch = vi.fn()
   localStorage.clear()
@@ -42,6 +44,10 @@ describe('chatApi thin wrappers', () => {
   it('reads model status through the session-owned client endpoint without selecting another account', async () => {
     await chatApi.getModelStatus()
     expect(apiMock.get).toHaveBeenCalledWith('/api/conversation/model-status', {}, { timeoutMs: 20_000, cache: 'no-store' })
+  })
+  it('restores platform routing only through the session-bound preference endpoint', async () => {
+    await chatApi.followPlatformModel()
+    expect(apiMock.put).toHaveBeenCalledWith('/api/conversation/model-preference', { mode: 'platform' })
   })
   it('covers post/get endpoints', async () => {
     await chatApi.sendChat({ message: 'hi' } as never)

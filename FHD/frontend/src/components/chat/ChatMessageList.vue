@@ -130,7 +130,7 @@
         </template>
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
-          <span v-if="msg.persistence" class="message-save-status" role="status">
+          <span v-if="msg.persistence && (msg.persistence.status === 'saving' || msg.persistence.status === 'failed' || msg.persistence.error || msg.persistence.localSaved === false)" class="message-save-status" role="status">
             {{ saveLabels[msg.persistence.status] }}{{ msg.persistence.localSaved === false ? ' · 本机副本保存失败' : '' }}
             <span v-if="msg.persistence.error" class="message-save-error">{{ msg.persistence.error }}</span>
           </span>
@@ -172,6 +172,10 @@
           </div>
         </div>
       </div>
+      <details v-if="messages.some(message => message.persistence)" class="message-storage-details">
+        <summary>保存详情</summary>
+        <p v-for="state in ['local', 'saving', 'saved', 'failed'] as const" :key="state">{{ saveLabels[state] }}：{{ messages.filter(message => message.persistence?.status === state).length }} 条</p>
+      </details>
       <div v-if="windowEnd === messages.length && isLoading && !isStreamingReply" class="message ai">
         <div class="chat-loading-row">
           <i class="fa fa-spinner fa-spin chat-loading-spinner" aria-hidden="true"></i>
@@ -409,6 +413,7 @@ watch(
 </script>
 
 <style scoped>
+.message-storage-details { margin: 4px 0; font-size: 12px; color: var(--app-text-muted, #667085); }
 .proactive-suggestions {
   padding-top: 8px;
 }

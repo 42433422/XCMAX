@@ -4,6 +4,7 @@ import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 import type { RequestOptions } from './core'
 import type { ApiResponse } from '@/types/api'
 import type { ChatRequest, ChatResponse, ChatSession } from '@/types/chat'
+import type { ChatModelRoute } from '@/utils/chatModelRoute'
 import { readPlannerSseResponse, resolveChatStreamPath, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { asRecord, asString } from '@/utils/typeGuards'
 import {
@@ -78,8 +79,12 @@ export async function parseChatStreamErrorResponse(res: Response): Promise<strin
 }
 
 export const chatApi = {
-  getModelStatus(): Promise<{ ok: boolean; provider: string; model: string }> {
+  getModelStatus(): Promise<{ ok: boolean; provider: string; model: string } & Partial<ChatModelRoute>> {
     return api.get('/api/conversation/model-status', {}, { timeoutMs: 20_000, cache: 'no-store' })
+  },
+
+  followPlatformModel(): Promise<{ ok: boolean }> {
+    return api.put('/api/conversation/model-preference', { mode: 'platform' })
   },
 
   sendChat(payload: ChatRequest, options: RequestOptions = {}): Promise<ApiResponse<ChatResponse>> {

@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import json
+
+import httpx
 import pytest
 
 from app.domain.shared_services.conversation.modstore_adapter import (
@@ -15,6 +18,19 @@ from app.domain.shared_services.conversation.modstore_adapter import (
     _strip_bearer_prefix,
     _to_openai_object,
 )
+from app.infrastructure.llm.modstore_response_normalize import normalize_market_chat_response
+from app.infrastructure.modstore_transport import (
+    aiter_market_sse_data_payloads,
+    safe_route_metadata,
+)
+
+ROUTE = {
+    "provider": "xiaomi",
+    "model": "mimo-v2.6-flash",
+    "route_source": "platform_default",
+    "key_source": "platform",
+    "config_revision": "revision-2",
+}
 
 
 class TestModstoreAdapterHelpers:
@@ -53,7 +69,7 @@ class TestModstoreAdapterHelpers:
         with pytest.raises(ValueError, match="模型服务请求失败"):
             _platform_stream_payload_to_openai_chunk('{"type":"error","message":"boom"}')
 
-    def test_iter_market_sse_skips_meta_and_surfaces_done_content(self) -> None:
+    def test_iter_market_sse_preserves_meta_and_surfaces_done_content(self) -> None:
         class _Resp:
             def iter_lines(self):
                 return iter(
@@ -66,8 +82,8 @@ class TestModstoreAdapterHelpers:
                 )
 
         payloads = list(_iter_market_sse_data_payloads(_Resp()))
-        assert len(payloads) == 1
-        assert "最终回复" in payloads[0]
+        assert json.loads(payloads[0]) == {"route_metadata": {"provider": "xiaomi"}}
+        assert "最终回复" in payloads[1]
 
     def test_iter_market_sse_yields_delta(self) -> None:
         class _Resp:
@@ -122,3 +138,56 @@ class TestModstoreAdapterHelpers:
             ("http://127.0.0.1:7890", 2, 2),
         ]
         assert _market_connect_attempts() == 2
+
+
+@pytest.mark.parametrize("choices", [False, True])
+def test_completion_metadata_uses_executed_route_and_omits_credentials(choices):
+    raw = {
+        **ROUTE,
+        "content": "完成",
+        "api_key": "fixture-secret",
+        "api_key_masked": "fixture-mask",
+        "base_url": "https://fixture.invalid",
+    }
+    if choices:
+        raw["choices"] = [{"message": {"content": "完成"}}]
+    result = normalize_market_chat_response(raw, "old-provider", "old-model")
+    assert result["model"] == ROUTE["model"]
+    assert result["route_metadata"] == ROUTE
+    assert {key: result["_modstore_meta"][key] for key in ROUTE} == ROUTE
+    assert "fixture-secret" not in json.dumps(result)
+    assert "fixture-mask" not in json.dumps(result)
+    assert "fixture.invalid" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("done_content", ["", "完成"])
+@pytest.mark.asyncio
+async def test_sync_async_stream_identity_survives_without_duplicate_content(done_content):
+    # Metadata is additive; final full text must not replay an emitted delta.
+    private = {**ROUTE, "api_key": "fixture-secret", "route_token": "fixture-token"}
+    text = (
+        f"event: meta\ndata: {json.dumps(private)}\n\n"
+        'event: delta\ndata: {"delta":"完成"}\n\n'
+        f"event: done\ndata: {json.dumps({**private, 'content': done_content})}\n\n"
+    )
+    response = httpx.Response(200, text=text)
+    sync = list(_iter_market_sse_data_payloads(response))
+    asynchronous = [
+        data
+        async for data in aiter_market_sse_data_payloads(
+            httpx.Response(200, text=text),
+            payload_has_content=lambda data: bool(json.loads(data).get("delta")),
+        )
+    ]
+    assert sync == asynchronous
+    chunks = [_platform_stream_payload_to_openai_chunk(data) for data in sync]
+    assert chunks[0] == {"choices": [], "route_metadata": ROUTE}
+    assert chunks[-1] == {"choices": [], "route_metadata": ROUTE}
+    assert [c["choices"][0]["delta"]["content"] for c in chunks if c["choices"]] == ["完成"]
+    assert all("fixture-secret" not in data and "fixture-token" not in data for data in sync)
+
+
+def test_route_metadata_rejects_nested_objects_and_private_fields():
+    assert safe_route_metadata({"route_metadata": {**ROUTE, "api_key": "private"}}) == ROUTE
+    assert safe_route_metadata({"provider": {"api_key": "private"}, "config_revision": True}) == {}
+    assert safe_route_metadata(None) == {}

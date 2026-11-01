@@ -317,7 +317,7 @@ def test_byok_ownership_and_endpoint_never_mix(database):
     byok.api_key_encrypted = "unreadable"
     byok.base_url_encrypted = encrypt_secret("https://untrusted.example.com/v1")
     database.commit()
-    assert keys.resolve_credentials(database, 1, "openai") == (None, None, "none")
+    assert keys.resolve_credentials(database, 1, "openai") == (None, None, "user_override")
 
 
 @pytest.mark.asyncio
@@ -347,15 +347,165 @@ async def test_catalog_and_defaults_respect_user_and_explicit_employee_route(dat
     database.commit()
 
     async def catalog_for_user(*_args, **_kwargs):
-        return {"models": ["byok-model"]}
+        return {"models": ["byok-model"], "runtime_models": ["byok-model"]}
 
-    monkeypatch.setattr(llm_api, "get_models_for_provider", catalog_for_user)
+    monkeypatch.setattr(llm_catalog, "get_models_for_credentials", catalog_for_user)
     selected = await llm_api.resolve_default_llm_route(database, 1)
     assert selected["source"] == "byok" and selected["provider"] == "deepseek"
     llm_runtime_route.commit_runtime_route(
         "deepseek", "explicit-employee", actor="test", reason="selected"
     )
     assert resolve_platform_bench_llm() == ("deepseek", "explicit-employee")
+
+
+@pytest.mark.asyncio
+async def test_chat_default_rotation_and_tool_round_snapshot(database, monkeypatch):
+    from modstore_server import llm_api
+    from modstore_server.llm_api_merged import _requested_chat_snapshot
+
+    save("xiaomi", model="mimo-v2.6-flash")
+    first = await llm_api.resolve_default_llm_route(database, 1)
+    save(
+        "xiaomi",
+        model="mimo-v2.6-pro",
+        api_key=NEXT_KEY,
+        expected_revision=first["config_revision"],
+    )
+    second = await llm_api.resolve_default_llm_route(database, 1)
+    assert first["model"] == "mimo-v2.6-flash" and second["model"] == "mimo-v2.6-pro"
+    assert first["config_revision"] != second["config_revision"]
+    body = llm_api.LlmChatDTO(**{**first, "messages": [{"role": "user", "content": "hi"}]})
+    snapshot = _requested_chat_snapshot(database, SimpleNamespace(id=1), body)
+    assert snapshot.api_key == KEY and snapshot.model == first["model"]
+    assert snapshot.api_key.configuration["revision"] == first["config_revision"]
+    assert KEY not in repr(snapshot) and KEY not in json.dumps(first)
+    altered = (
+        first["route_token"][:50]
+        + ("A" if first["route_token"][50] != "A" else "B")
+        + first["route_token"][51:]
+    )
+    for uid, token, model in [
+        (2, first["route_token"], first["model"]),
+        (1, altered, first["model"]),
+        (1, first["route_token"], second["model"]),
+    ]:
+        with pytest.raises(HTTPException) as error:
+            keys.read_chat_route_token(token, uid, "xiaomi", model)
+        assert error.value.status_code == 409
+    monkeypatch.setattr(keys.time, "time", lambda: 10**12)
+    with pytest.raises(HTTPException):
+        keys.read_chat_route_token(first["route_token"], 1, "xiaomi", first["model"])
+
+
+@pytest.mark.asyncio
+async def test_invalid_asr_preference_requires_explicit_recovery(database):
+    from modstore_server import llm_api
+    from modstore_server.models import User
+
+    save("xiaomi", model="mimo-v2.6-flash")
+    user = database.get(User, 1)
+    user.default_llm_json = json.dumps({"provider": "xiaomi", "model": "mimo-v2.5-asr"})
+    database.commit()
+    with pytest.raises(HTTPException) as error:
+        await llm_api.resolve_default_llm_route(database, 1)
+    assert error.value.detail["code"] == "INVALID_CHAT_PREFERENCE"
+    assert "mimo-v2.5-asr" in user.default_llm_json
+    await llm_api.put_llm_preferences(llm_api.LlmPreferenceDTO(mode="platform"), database, user)
+    assert (await llm_api.resolve_default_llm_route(database, 1))["model"] == "mimo-v2.6-flash"
+
+
+@pytest.mark.asyncio
+async def test_byok_chat_empty_or_broken_never_switches_to_platform(database, monkeypatch):
+    from modstore_server import llm_api, llm_catalog
+    from modstore_server.models import UserLlmCredential
+
+    save()
+    row = UserLlmCredential(
+        user_id=1, provider="openai", api_key_encrypted=encrypt_secret("byok-test")
+    )
+    database.add(row)
+    database.commit()
+
+    async def asr_only(*_args, **_kwargs):
+        return {"models": ["whisper-1"], "runtime_models": []}
+
+    monkeypatch.setattr(llm_catalog, "get_models_for_credentials", asr_only)
+    for encrypted_key in [row.api_key_encrypted, "broken"]:
+        row.api_key_encrypted = encrypted_key
+        database.commit()
+        with pytest.raises(HTTPException) as error:
+            await llm_api.resolve_default_llm_route(database, 1)
+        assert error.value.detail["code"] == "NO_BYOK_CHAT_MODEL"
+    assert (await llm_api.resolve_default_llm_route(database, 2))["key_source"] == "platform"
+
+
+@pytest.mark.asyncio
+async def test_explicit_byok_mode_requires_owned_key_and_platform_mode_preserves_it(database):
+    from modstore_server import llm_api
+    from modstore_server.models import User, UserLlmCredential
+
+    save()
+    user = database.get(User, 1)
+    user.default_llm_json = json.dumps(
+        {"mode": "byok", "provider": "openai", "model": "custom-model"}
+    )
+    database.commit()
+    with pytest.raises(HTTPException) as error:
+        await llm_api.resolve_default_llm_route(database, 1)
+    assert error.value.detail["code"] == "NO_BYOK_CHAT_MODEL"
+    credential = UserLlmCredential(
+        user_id=1, provider="openai", api_key_encrypted=encrypt_secret("byok-test")
+    )
+    database.add(credential)
+    database.commit()
+    assert (await llm_api.resolve_default_llm_route(database, 1))["key_source"] == "user_override"
+    await llm_api.put_llm_preferences(llm_api.LlmPreferenceDTO(mode="platform"), database, user)
+    assert (await llm_api.resolve_default_llm_route(database, 1))["key_source"] == "platform"
+    assert database.get(UserLlmCredential, credential.id) is credential
+
+
+@pytest.mark.parametrize(
+    "base,expected",
+    [
+        ("https://token-plan-cn.xiaomimimo.com", "mimo-v2.6-flash"),
+        ("https://private.example.com/v1", "mimo-v2.5"),
+    ],
+)
+def test_snapshot_records_model_alias_actually_dispatched(database, monkeypatch, base, expected):
+    monkeypatch.setenv("XIAOMI_API_KEY", "environment-test-alpha")
+    monkeypatch.setenv("XIAOMI_BASE_URL", base)
+    snapshot = keys.resolve_chat_route_snapshot(database, 1, "xiaomi", "mimo-v2.5")
+    assert snapshot.model == expected
+    token = keys.chat_route_token(snapshot, 1)
+    assert keys.read_chat_route_token(token, 1, "xiaomi", expected).model == expected
+
+
+@pytest.mark.asyncio
+async def test_managed_asr_catalog_has_no_chat_default(database):
+    from modstore_server import llm_api, llm_catalog
+
+    save("xiaomi", model="mimo-v2.5-asr")
+    block = await llm_catalog.get_models_for_provider(database, 1, "xiaomi")
+    assert block["runtime_models"] == []
+    with pytest.raises(HTTPException) as error:
+        await llm_api.resolve_default_llm_route(database, 1)
+    assert error.value.detail["code"] == "INVALID_PLATFORM_CHAT_MODEL"
+    assert error.value.detail["recovery"] is None
+
+
+def test_revision_guard_without_master_key_rejects_rotation(database, monkeypatch):
+    from modstore_server.llm_api import LlmChatDTO
+    from modstore_server.llm_api_merged import _requested_chat_snapshot
+
+    monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY")
+    monkeypatch.setenv("OPENAI_API_KEY", "environment-test-alpha")
+    first = keys.resolve_chat_route_snapshot(database, 1, "openai", "gpt-4o-mini")
+    assert keys.chat_route_token(first, 1) is None
+    monkeypatch.setenv("OPENAI_API_KEY", "environment-test-beta")
+    body = LlmChatDTO(**first.public_metadata(), messages=[])
+    with pytest.raises(HTTPException) as error:
+        _requested_chat_snapshot(database, SimpleNamespace(id=1), body)
+    assert error.value.detail["code"] == "CHAT_ROUTE_CHANGED"
 
 
 @pytest.fixture

@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Literal, cast
 
+from app.infrastructure.modstore_transport import safe_route_metadata
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,9 @@ def capture_worker_llm_scope(context: dict[str, Any] | None = None) -> dict[str,
                 "default_provider": adapter.default_provider,
                 "default_model": adapter.default_model,
                 "timeout": adapter.timeout,
+                "route_snapshot": adapter._route_snapshots.get(
+                    (adapter._connection(), adapter.resolve_default_route())
+                ),
             }
         else:
             if not isinstance(client.api_key, str) or not client.api_key:
@@ -106,6 +110,51 @@ def capture_worker_llm_scope(context: dict[str, Any] | None = None) -> dict[str,
         return config
     except RECOVERABLE_ERRORS + (AttributeError, TypeError):
         return {"kind": "unavailable"}
+
+
+def scoped_route_metadata(client: Any = None) -> dict[str, str | int]:
+    """Read only an already-used scoped client; never resolve a lazy factory."""
+    if client is None:
+        scoped = _scoped_client.get()
+        if scoped is None or scoped[1] is None:
+            return {}
+        client = scoped[0]
+    if getattr(client, "is_modstore_openai_compatible", False) is True:
+        return safe_route_metadata(client.adapter.last_route_metadata)
+    return {}
+
+
+def record_worker_route_metadata(metadata: Any, captured_scope: dict[str, Any] | None) -> None:
+    """Accept a worker receipt only for its original account and pinned snapshot."""
+    scoped = _scoped_client.get()
+    if scoped is None or scoped[1] is None or not captured_scope:
+        return
+    client = scoped[0]
+    if (
+        captured_scope.get("kind") != "modstore"
+        or getattr(client, "is_modstore_openai_compatible", False) is not True
+    ):
+        return
+    adapter = client.adapter
+    if any(
+        getattr(adapter, field) != captured_scope.get(field)
+        for field in ("platform_url", "auth_token", "user_id")
+    ):
+        return
+    snapshot = captured_scope.get("route_snapshot")
+    expected = safe_route_metadata(snapshot)
+    route = safe_route_metadata(metadata)
+    if (
+        not expected
+        or not route
+        or any(route.get(field) != value for field, value in expected.items())
+    ):
+        return
+    current = adapter._route_snapshots.get(
+        (adapter._connection(), (expected.get("provider"), expected.get("model")))
+    )
+    if current == snapshot:
+        adapter.last_route_metadata = route
 
 
 def restore_worker_llm_client(config: dict[str, Any]) -> tuple[Any, str]:
@@ -127,10 +176,16 @@ def restore_worker_llm_client(config: dict[str, Any]) -> tuple[Any, str]:
             client = ModstoreOpenAICompatibleClient(adapter)
             return client, f"{client.default_provider}/{client.default_model}"
         adapter = ModstorePlatformAdapter(
-            **{k: v for k, v in config.items() if k not in {"kind", "model"}}
+            **{k: v for k, v in config.items() if k not in {"kind", "model", "route_snapshot"}}
         )
         for field in ("auth_token", "user_id", "default_provider", "default_model"):
             setattr(adapter, field, config[field])
+        snapshot = config.get("route_snapshot")
+        if isinstance(snapshot, dict) and snapshot.get("provider") and snapshot.get("model"):
+            route = snapshot["provider"], snapshot["model"]
+            adapter.default_provider, adapter.default_model = route
+            adapter._route_snapshots[(adapter._connection(), route)] = dict(snapshot)
+            adapter._account_default = (adapter._connection(), route)
         client = ModstoreOpenAICompatibleClient(adapter)
     elif config["kind"] == "openai":
         from openai import OpenAI

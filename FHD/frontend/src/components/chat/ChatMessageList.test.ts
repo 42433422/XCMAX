@@ -83,6 +83,15 @@ describe('ChatMessageList', () => {
     expect(wrapper.text()).not.toContain('保存失败')
   })
 
+  it('keeps ordinary persistence diagnostics collapsed and preserves true failures inline', () => {
+    const messages = ['local', 'saved'].map((status, i) => ({ role: 'user' as const, content: '记录', time: '12:00', persistence: { id: String(i), status: status as 'local' | 'saved' } }))
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages } })
+    expect(wrapper.find('.message-save-status').exists()).toBe(false)
+    expect(wrapper.get('.message-storage-details summary').text()).toBe('保存详情')
+    expect((wrapper.get('.message-storage-details').element as HTMLDetailsElement).open).toBe(false)
+    expect(wrapper.get('.message-storage-details').text()).toContain('服务端未核实：1 条')
+  })
+
   it('renders restored quote entities as normal punctuation', () => {
     const wrapper = mountList()
     expect(wrapper.get('.message-html').text()).toContain('"正常"')

@@ -26,8 +26,8 @@ from modstore_server.llm_chat_proxy import chat_dispatch
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
-    resolve_api_key,
-    resolve_base_url,
+    ChatRouteSnapshot,
+    resolve_chat_route_snapshot,
 )
 from modstore_server.llm_model_gates import assert_llm_chat_allowed
 from modstore_server.models import User
@@ -50,11 +50,14 @@ async def run_billed_llm_chat_once(
     messages: list[dict[str, Any]],
     max_tokens: Optional[int] = None,
     conversation_id: Optional[int] = None,
+    route_snapshot: ChatRouteSnapshot | None = None,
 ) -> dict[str, Any]:
     """Execute and settle a single provider/model chat attempt."""
     if provider not in KNOWN_PROVIDERS:
         raise HTTPException(400, "unknown provider")
-    api_key, key_source = resolve_api_key(db, user.id, provider)
+    route = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
+    provider, model = route.provider, route.model
+    api_key, key_source = route.api_key, route.key_source
     if not api_key:
         raise HTTPException(
             400,
@@ -63,11 +66,7 @@ async def run_billed_llm_chat_once(
             f"仅配置了其它厂商（如 DeepSeek）时，请把 LLM 默认供应商改为该厂商或切到「自选」。",
         )
     is_byok = key_source == "user_override"
-    base = (
-        resolve_base_url(db, user.id, provider)
-        if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
-    )
+    base = route.base_url if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS else None
     if not messages:
         raise HTTPException(400, "messages 不能为空")
     size_error = validate_multimodal_payload_size(messages)
@@ -210,9 +209,7 @@ async def run_billed_llm_chat_once(
         "usage": usage.__dict__,
         "charge_amount": float(charge),
         "hold_no": hold.hold_no,
-        "key_source": key_source,
+        **route.public_metadata(),
         "billed": not is_byok,
-        "provider": provider,
-        "model": model,
         "request_id": request_id,
     }

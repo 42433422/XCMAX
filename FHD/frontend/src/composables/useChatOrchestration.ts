@@ -523,10 +523,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
       queued = true
       enqueueChatBatchMessage(message, debounceMs, (msgs) => {
-        void executeRemoteChatRound(msgs, undefined, requestScope).finally(() => refreshHistorySessions())
+        void executeRemoteChatRound(msgs, undefined, requestScope).finally(async () => {
+          if (localScope.isCurrent()) await syncFromServer()
+          await refreshHistorySessions()
+        })
       })
     } finally {
-      if (!queued) generation.setLoading(false)
+      if (!queued) {
+        generation.setLoading(false)
+        if (localScope.isCurrent()) await syncFromServer()
+      }
     }
   }
 
