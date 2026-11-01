@@ -36,8 +36,6 @@ def test_gitleaks_disposition_registry_closes_matched_secrets(tmp_path: Path, mo
         "note": "unit",
     }
     ev_text = __import__("json").dumps(evidence, indent=2) + "\n"
-    import hashlib
-
     sha = hashlib.sha256(ev_text.encode()).hexdigest()
     root = tmp_path / "disp"
     (root / "evidence").mkdir(parents=True)
