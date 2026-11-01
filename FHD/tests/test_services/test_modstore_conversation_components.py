@@ -389,6 +389,192 @@ async def test_failover_uses_real_discovery_and_preserves_attempt_policy(monkeyp
         await current.close()
 
 
+@pytest.mark.parametrize(
+    "status,message", [(429, "synthetic quota exhausted"), (403, "synthetic insufficient_quota")]
+)
+@pytest.mark.asyncio
+async def test_async_explicit_no_failover_never_discovers_or_sends_backup(
+    monkeypatch, status, message
+):
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
+    calls = []
+
+    def respond(request):
+        assert request.method == "POST"
+        payload = json.loads(request.content)
+        calls.append((payload["provider"], payload["model"], payload["allow_failover"]))
+        return httpx.Response(status, text=message)
+
+    mock_async_transport(monkeypatch, respond)
+    current = adapter()
+    discovery = Mock(return_value=[("primary", "first"), ("backup", "second")])
+    monkeypatch.setattr(current, "_list_chat_failover_candidates_sync", discovery)
+    try:
+        with pytest.raises(ValueError, match=f"平台错误\\({status}\\)"):
+            await current.chat_completion(
+                [], provider="primary", model="first", allow_failover=False
+            )
+        discovery.assert_not_called()
+        assert calls == [("primary", "first", False)]
+    finally:
+        await current.close()
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+@pytest.mark.parametrize("status", [200, 429])
+@pytest.mark.asyncio
+async def test_audited_completion_keeps_hook_local_and_captures_exact_raw_before_parse(
+    monkeypatch, mode, status
+):
+    raw = b' { "content" : "synthetic reply", "usage" : { "total_tokens" : 3 } } \n'
+    events, captured, posted = [], [], []
+
+    class Response(httpx.Response):
+        def json(self, **kwargs):
+            events.append("parse")
+            assert events[0] == "capture"
+            return super().json(**kwargs)
+
+    def respond(request):
+        posted.append(json.loads(request.content))
+        assert "_reviewed_excel_audit_response" not in posted[-1]
+        return Response(status, content=raw, headers={"x-request-id": "synthetic-request"})
+
+    def capture(body, code, request_id):
+        events.append("capture")
+        captured.append((body, code, request_id))
+
+    sync_type = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    mock_async_transport(monkeypatch, respond)
+    monkeypatch.setattr(facade, "neuro_notify_ai_model_roundtrip", lambda **_: None)
+    current = adapter()
+    call = current.chat_completion if mode == "async" else current.chat_completion_sync
+    kwargs = {
+        "provider": "primary",
+        "model": "first",
+        "allow_failover": False,
+        "_reviewed_excel_audit_response": capture,
+    }
+    try:
+        if status >= 400:
+            with pytest.raises(ValueError, match="平台错误"):
+                if mode == "async":
+                    await call([], **kwargs)
+                else:
+                    call([], **kwargs)
+            assert events == ["capture"]
+        else:
+            result = await call([], **kwargs) if mode == "async" else call([], **kwargs)
+            assert result["choices"][0]["message"]["content"] == "synthetic reply"
+            assert events == ["capture", "parse"]
+        assert captured == [(raw, status, "synthetic-request")]
+        assert len(posted) == 1 and posted[0]["allow_failover"] is False
+    finally:
+        await current.close()
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+@pytest.mark.parametrize("failure_type", [ValueError, RuntimeError, httpx.ReadError])
+@pytest.mark.asyncio
+async def test_audit_archive_failure_propagates_without_backup_or_private_log(
+    monkeypatch, caplog, mode, failure_type
+):
+    posted, captured = [], []
+    failure = failure_type("synthetic-private-archive-quota-exhausted")
+
+    def respond(request):
+        posted.append(json.loads(request.content)["provider"])
+        return httpx.Response(429, content=b'{"error":"quota exhausted"}')
+
+    def capture(*args):
+        captured.append(args)
+        raise failure
+
+    sync_type = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    mock_async_transport(monkeypatch, respond)
+    current = adapter()
+    monkeypatch.setattr(
+        current,
+        "_list_chat_failover_candidates_sync",
+        lambda *_: [("primary", "first"), ("backup", "second")],
+    )
+    try:
+        with pytest.raises(failure_type) as error:
+            if mode == "async":
+                await current.chat_completion(
+                    [], provider="primary", model="first", _reviewed_excel_audit_response=capture
+                )
+            else:
+                current.chat_completion_sync(
+                    [], provider="primary", model="first", _reviewed_excel_audit_response=capture
+                )
+        assert error.value is failure
+        assert posted == ["primary"] and len(captured) == 1
+        assert "synthetic-private" not in caplog.text
+    finally:
+        await current.close()
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+@pytest.mark.asyncio
+async def test_audited_route_token_echo_is_never_archived_logged_or_retried(
+    monkeypatch, caplog, mode
+):
+    opaque = "synthetic-opaque-encrypted-route-token"
+    posted = []
+    capture = Mock()
+
+    def respond(request):
+        payload = json.loads(request.content)
+        posted.append(payload["provider"])
+        assert payload["route_token"] == opaque
+        return httpx.Response(
+            429, content=json.dumps({"error": "quota exhausted", "echo": opaque}).encode()
+        )
+
+    sync_type = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    mock_async_transport(monkeypatch, respond)
+    current = adapter()
+    monkeypatch.setattr(
+        current,
+        "_list_chat_failover_candidates_sync",
+        lambda *_: [("primary", "first"), ("backup", "second")],
+    )
+    kwargs = {
+        "provider": "primary",
+        "model": "first",
+        "route_token": opaque,
+        "key_source": "platform",
+        "_reviewed_excel_audit_response": capture,
+    }
+    try:
+        with pytest.raises(ValueError, match="敏感凭据，未归档") as failure:
+            if mode == "async":
+                await current.chat_completion([], **kwargs)
+            else:
+                current.chat_completion_sync([], **kwargs)
+        capture.assert_not_called()
+        assert posted == ["primary"]
+        assert opaque not in str(failure.value) + caplog.text
+    finally:
+        await current.close()
+
+
 @pytest.mark.parametrize("cancel", [False, True])
 @pytest.mark.asyncio
 async def test_async_stream_closes_http_body_on_close_or_cancellation(monkeypatch, cancel):
@@ -1180,6 +1366,72 @@ async def test_expired_snapshot_ends_turn_without_reselect_or_secret_echo(reques
         assert adapter.last_route_metadata.get("route_state") == "selected"
     finally:
         await adapter.close()
+
+
+@pytest.mark.parametrize("status", [200, 429])
+@pytest.mark.asyncio
+async def test_audited_snapshot_preserves_pin_raw_receipt_and_safe_failure(
+    request_market, monkeypatch, status
+):
+    identity = {
+        "provider": "xiaomi",
+        "model": "flash",
+        "route_source": "platform_default",
+        "key_source": "platform",
+        "config_revision": "r1",
+    }
+    body = (
+        {"content": "synthetic reply", **identity}
+        if status == 200
+        else {
+            "detail": {
+                **identity,
+                "route_state": "failed",
+                "error": "synthetic-private-upstream-quota",
+            }
+        }
+    )
+    raw = json.dumps(body, indent=2).encode()
+    requests, captured = [], []
+
+    class Response(httpx.Response):
+        def json(self, **kwargs):
+            assert captured == [(raw, status, "synthetic-audit-request")]
+            return super().json(**kwargs)
+
+    def respond(request):
+        requests.append(request.method)
+        if request.method == "GET":
+            return httpx.Response(
+                200, json={"ok": True, **identity, "route_token": "synthetic-snapshot"}
+            )
+        payload = json.loads(request.content)
+        assert payload["route_token"] == "synthetic-snapshot"
+        assert payload["key_source"] == "platform" and payload["config_revision"] == "r1"
+        assert payload["allow_failover"] is False
+        assert "_reviewed_excel_audit_response" not in payload
+        return Response(status, content=raw, headers={"x-request-id": "synthetic-audit-request"})
+
+    current = request_market(respond).adapter
+    discovery = Mock(side_effect=AssertionError("pinned audit cannot discover backup"))
+    monkeypatch.setattr(current, "_list_chat_failover_candidates_sync", discovery)
+    try:
+        call = current.chat_completion(
+            [], _reviewed_excel_audit_response=lambda *args: captured.append(args)
+        )
+        if status >= 400:
+            with pytest.raises(ValueError) as failure:
+                await call
+            assert "synthetic-private" not in str(failure.value)
+            assert current.last_route_metadata["route_state"] == "failed"
+        else:
+            result = await call
+            assert result["choices"][0]["message"]["content"] == "synthetic reply"
+        assert captured == [(raw, status, "synthetic-audit-request")]
+        assert requests == ["GET", "POST"]
+        discovery.assert_not_called()
+    finally:
+        await current.close()
 
 
 def test_explicit_alias_sends_and_reuses_canonical_snapshot_route(request_market):

@@ -46,9 +46,10 @@ from app.fastapi_routes.reviewed_excel_template import (
     _source,
 )
 from app.infrastructure.tenant_scope import tenant_scope
+from app.middleware.error_handler import ReviewedExcelRoute
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
-router = APIRouter()
+router = APIRouter(route_class=ReviewedExcelRoute)
 
 
 @router.get("/api/templates/reviewed-excel/archive-quota")

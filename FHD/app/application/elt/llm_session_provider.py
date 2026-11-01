@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from contextvars import ContextVar, Token
 from typing import Any, cast
 
@@ -33,17 +32,10 @@ class SessionMarketProvider:
     ) -> dict[str, Any] | None:
         import httpx
 
+        from app.application.elt_login_authorization import _platform_url, assert_login_notice_route
         from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
-        platform_url = (
-            (
-                os.environ.get("XCAGI_MARKET_BASE_URL")
-                or os.environ.get("MODSTORE_PLATFORM_URL")
-                or "http://127.0.0.1:8765"
-            )
-            .strip()
-            .rstrip("/")
-        )
+        platform_url = _platform_url()
         timeout = self._timeout_seconds
         headers = {"Authorization": f"Bearer {self._token}"}
         async with httpx.AsyncClient(
@@ -57,6 +49,14 @@ class SessionMarketProvider:
         model_name = str(route.get("model") or "").strip()
         if not route.get("ok") or not provider_name or not model_name:
             raise ValueError("market default LLM route unavailable")
+        assert_login_notice_route(
+            platform_url,
+            provider_name,
+            model_name,
+            key_source=route.get("key_source"),
+            config_revision=route.get("config_revision"),
+            recipient=route.get("recipient"),
+        )
         adapter = ModstorePlatformAdapter(
             platform_url=platform_url,
             auth_token=self._token,
@@ -65,6 +65,12 @@ class SessionMarketProvider:
             default_model=model_name,
             timeout=timeout,
         )
+        for key in ("route_token", "key_source", "config_revision"):
+            kwargs.pop(key, None)
+            value = route.get(key)
+            if isinstance(value, str) and value:
+                kwargs[key] = value
+        kwargs.update(provider=provider_name, model=model_name, allow_failover=False)
         try:
             return cast(
                 "dict[str, Any] | None",
@@ -95,9 +101,14 @@ def current_owner_market_provider(*, timeout_seconds: float) -> SessionMarketPro
     owner_user_id = current_etl_llm_owner()
     if owner_user_id is None:
         return None
-    from app.fastapi_routes.market_account import latest_session_market_token
+    from app.application.elt_login_authorization import current_login_notice_session_id
+    from app.fastapi_routes.market_account import latest_session_market_token, session_market_token
 
-    token = latest_session_market_token(user_id=owner_user_id)
+    session_id = current_login_notice_session_id(owner_user_id)
+    if session_id is not None:
+        token = session_market_token(session_id) if session_id else ""
+    else:
+        token = latest_session_market_token(user_id=owner_user_id)
     if not token:
         return None
     return SessionMarketProvider(

@@ -56,7 +56,13 @@ class ChatInput:
             payload["stream"] = True
         if allow_failover is not None:
             payload["allow_failover"] = allow_failover
-        payload.update({key: value for key, value in self.extra.items() if key != "timeout"})
+        payload.update(
+            {
+                key: value
+                for key, value in self.extra.items()
+                if key not in {"timeout", "_reviewed_excel_audit_response"}
+            }
+        )
         if connection.user_id:
             payload["user_id"] = connection.user_id
         return payload

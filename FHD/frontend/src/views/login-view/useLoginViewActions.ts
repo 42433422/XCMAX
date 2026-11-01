@@ -4,6 +4,7 @@ import { authApi } from '@/api/auth'
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences'
 import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, resolveAdminConsoleLoginUrl } from '@/utils/adminConsoleUrl'
 import { isDesktopShell } from '@/utils/desktopShell'
+import { DATA_PROCESSING_NOTICE_VERSION } from '@/constants/legalDocuments'
 import type { LoginViewState } from './useLoginViewState'
 import type { useLoginViewQr } from './useLoginViewQr'
 
@@ -53,7 +54,7 @@ export function useLoginViewActions(
     if (!autoLogin.value || !rememberPassword.value) return
     if (!username.value.trim() || !password.value) return
     autoLoginAttempted = true
-    await submitLogin()
+    await submitLogin(undefined, true)
   }
 
   async function sendPhoneCode() {
@@ -132,7 +133,7 @@ export function useLoginViewActions(
     window.location.href = url
   }
 
-  async function submitLogin() {
+  async function submitLogin(_event?: Event, automatic = false) {
     if (!canSubmit.value) {
       errorMessage.value = loginMode.value === 'phone' ? t('login.errNeedPhoneAndCode') : t('login.errNeedUsernamePassword')
       return
@@ -140,12 +141,11 @@ export function useLoginViewActions(
     loading.value = true
     errorMessage.value = ''
     try {
+      const notice = automatic ? {} : { dataProcessingNoticeVersion: DATA_PROCESSING_NOTICE_VERSION }
       const result =
         loginMode.value === 'phone'
-          ? await authApi.loginWithPhoneCode(phone.value.trim(), smsCode.value.trim(), accountKind.value)
-          : invitationCode.value.trim()
-            ? await authApi.login(username.value.trim(), password.value, accountKind.value, invitationCode.value.trim())
-            : await authApi.login(username.value.trim(), password.value, accountKind.value)
+          ? await authApi.loginWithPhoneCode(phone.value.trim(), smsCode.value.trim(), accountKind.value, notice)
+          : await authApi.login(username.value.trim(), password.value, accountKind.value, invitationCode.value.trim(), notice)
       const raw = result as unknown as Record<string, unknown>
       const ok = raw?.success === true || (raw?.data as Record<string, unknown> | undefined)?.success === true
       if (!ok) {
@@ -189,6 +189,10 @@ export function useLoginViewActions(
     }
   }
 
+  async function submitBasicLogin() {
+    await submitLogin(undefined, true)
+  }
+
   function startOidcLogin() {
     window.location.href = '/api/auth/oidc/start'
   }
@@ -202,6 +206,7 @@ export function useLoginViewActions(
     selectEnterpriseLogin,
     selectAdminLogin,
     submitLogin,
+    submitBasicLogin,
     startOidcLogin,
   }
 }

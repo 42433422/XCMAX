@@ -5,6 +5,7 @@ import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 
 const api = vi.hoisted(() => ({
+  reviewedExcelIdentity: vi.fn().mockResolvedValue({ actor: "1:7" }),
   archiveClassifyExcel: vi.fn(),
   archiveAssets: vi.fn(),
   classifyArchiveVersion: vi.fn(),

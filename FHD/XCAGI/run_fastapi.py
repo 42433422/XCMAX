@@ -156,10 +156,69 @@ def _bootstrap_stage(stage: str) -> None:
         print(f"[bootstrap] {time.time():.3f} {stage}", file=sys.stderr, flush=True)
 
 
+def _verify_frozen_elt_runtime() -> None:
+    """Exercise safe XML parsing and the real XLSX slice path without user data or AI."""
+    from hashlib import sha256
+    from io import BytesIO
+
+    from defusedxml import ElementTree as safe_xml
+    from defusedxml.common import DTDForbidden
+    from openpyxl import Workbook, load_workbook
+    from openpyxl.worksheet.print_settings import PrintArea
+
+    from app.application.reviewed_excel_template import (
+        derive_document_workbook,
+        inspect_workbook,
+    )
+
+    # Importing alone does not prove the bundled parser or derivation path works.
+    try:
+        safe_xml.fromstring(b"<!DOCTYPE probe><probe/>", forbid_dtd=True)
+    except DTDForbidden:
+        pass
+    else:
+        raise RuntimeError("frozen ELT runtime probe did not reject a DTD")
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Synthetic"
+    sheet.append(["Item", "Quantity"])
+    sheet.append(["Sample", 2])
+    sheet.append(["Total", "=SUM(B2:B2)"])
+    sheet.auto_filter.ref = "A1:B3"
+    sheet.print_area = "A1:B3"
+    stream = BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    source = stream.getvalue()
+    source_sha = sha256(source).digest()
+    if inspect_workbook(source)["sheets"] != ["Synthetic"]:
+        raise RuntimeError("frozen ELT runtime probe could not inspect its workbook")
+    derived = derive_document_workbook(
+        source, [{"sheet": "Synthetic", "range": "A1:B3"}], print_area_mode="selected"
+    )
+    checked = load_workbook(BytesIO(derived), data_only=False, keep_links=True, rich_text=True)
+    try:
+        result = checked["Synthetic"]
+        if (
+            checked.sheetnames != ["Synthetic"]
+            or list(result.values)
+            != [("Item", "Quantity"), ("Sample", 2), ("Total", "=SUM(B2:B2)")]
+            or result.auto_filter.ref != "A1:B3"
+            or {str(area) for area in PrintArea.from_string(result.print_area).ranges} != {"A1:B3"}
+            or sha256(source).digest() != source_sha
+        ):
+            raise RuntimeError("frozen ELT runtime probe did not preserve its workbook")
+    finally:
+        checked.close()
+    print("[run_fastapi] frozen ELT runtime probe OK: defusedxml + XLSX inspect/derive/readback")
+
+
 def _verify_frozen_critical_runtime() -> None:
     """Exercise critical office and voice dependencies in the frozen executable."""
     import tempfile
 
+    print("[frozen-runtime-probe] voice and PDF imports begin", file=sys.stderr, flush=True)
     import av
     import faster_whisper
     from pypdf import PdfReader
@@ -168,9 +227,15 @@ def _verify_frozen_critical_runtime() -> None:
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont  # type: ignore[import-untyped]
     from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 
+    print("[frozen-runtime-probe] ELT derivation begin", file=sys.stderr, flush=True)
+    _verify_frozen_elt_runtime()
+    print("[frozen-runtime-probe] ELT derivation complete", file=sys.stderr, flush=True)
+
     # Validate string-loaded sync appliers that static PyInstaller analysis cannot discover.
+    print("[frozen-runtime-probe] sync applier import begin", file=sys.stderr, flush=True)
     from app.domain.shared_services.xcmax_sync_service import _ENTITY_APPLIERS
 
+    print("[frozen-runtime-probe] sync applier import complete", file=sys.stderr, flush=True)
     required_sync_appliers = {
         "personnel",
         "department",
@@ -209,10 +274,13 @@ def _verify_frozen_critical_runtime() -> None:
             raise RuntimeError("frozen PDF runtime probe produced an invalid document")
 
         if _is_frozen():
+            print("[frozen-runtime-probe] desktop seed import begin", file=sys.stderr, flush=True)
             from app.desktop_runtime.desktop_runtime_paths import configure_desktop_environment
 
-            data_root = Path(tmp) / "desktop-data"
+            print("[frozen-runtime-probe] desktop seed setup begin", file=sys.stderr, flush=True)
+            data_root = Path(os.environ["XCAGI_DATA_DIR"])
             configure_desktop_environment(data_root)
+            print("[frozen-runtime-probe] desktop seed setup complete", file=sys.stderr, flush=True)
             bundled_root = Path(sys._MEIPASS) / "mods" / "_employees"  # type: ignore[attr-defined]
             installed_root = data_root / "mods" / "_employees"
             bundled = {
@@ -236,6 +304,69 @@ def _verify_frozen_critical_runtime() -> None:
         "XCMAX sync appliers + pypdf + reportlab + "
         f"PyAV {av.__version__} + faster-whisper {faster_whisper.__version__}"
     )
+
+
+def _run_frozen_critical_probe(data_dir: str | None) -> None:
+    """Isolate diagnostics before importing application bootstrap packages."""
+    import faulthandler
+    import tempfile
+    import traceback
+
+    with tempfile.TemporaryDirectory(prefix="xcagi-critical-probe-") as temporary:
+        root = Path(data_dir or temporary).resolve()
+        for name in ("data", "logs", "mods"):
+            (root / name).mkdir(parents=True, exist_ok=True)
+        database_url = "sqlite:///" + (root / "data" / "probe.db").as_posix()
+        isolated_env = {
+            "PYTHON_DOTENV_DISABLED": "1",
+            "XCAGI_DESKTOP_MODE": "1",
+            "XCAGI_DATA_DIR": str(root),
+            "XCAGI_DESKTOP_DATA_DIR": str(root),
+            "XCAGI_MODS_ROOT": str(root / "mods"),
+            "XCAGI_LOG_DIR": str(root / "logs"),
+            "DATABASE_URL": database_url,
+            "VECTOR_DB_URL": database_url,
+            "XCAGI_DESKTOP_DATABASE_URL": database_url,
+            "XCAGI_DESKTOP_VECTOR_DB_URL": database_url,
+            "DATABASE_PATH": str(root / "data"),
+            "WORKSPACE_ROOT": str(root),
+            "XCAGI_WORKSPACE_ROOT": str(root),
+            "XCAGI_FORCE_SYNC_TASKS": "1",
+            "XCAGI_DISABLE_REDIS": "1",
+            "CACHE_REDIS_URL": "",
+            "CELERY_BROKER_URL": "memory://",
+            "CELERY_RESULT_BACKEND": "cache+memory://",
+        }
+        previous_env = {name: os.environ.get(name) for name in isolated_env}
+        os.environ.update(isolated_env)
+        try:
+            _force_stdio_utf8(str(root))
+            print("[frozen-runtime-probe] isolated entry", file=sys.stderr, flush=True)
+            _ensure_sys_path()
+            print("[frozen-runtime-probe] source path ready", file=sys.stderr, flush=True)
+            with (root / "logs" / "frozen-runtime-probe.log").open(
+                "w", encoding="utf-8", buffering=1
+            ) as diagnostics:
+                # Dump Python stacks if an import stalls; the caller also bounds
+                # this one process. No locals, arguments or environment are logged.
+                faulthandler.dump_traceback_later(60, repeat=True, file=diagnostics)
+                try:
+                    _verify_frozen_critical_runtime()
+                except BOUNDARY_ERRORS as exc:  # isolated command records failure and exits nonzero
+                    traceback.print_exc(file=diagnostics)
+                    diagnostics.flush()
+                    traceback.print_exc(file=sys.stderr)
+                    # A windowed PyInstaller executable displays unhandled errors
+                    # in a blocking dialog. An explicit failed exit keeps CI usable.
+                    raise SystemExit(1) from exc
+                finally:
+                    faulthandler.cancel_dump_traceback_later()
+        finally:
+            for name, value in previous_env.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -300,6 +431,9 @@ def _resolve_reload(desktop: bool) -> bool:
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
+    if args.verify_frozen_critical_runtime:
+        _run_frozen_critical_probe(args.data_dir)
+        return
     _force_stdio_utf8(args.data_dir)
     _bootstrap_stage("entry")
     _ensure_sys_path()
@@ -323,10 +457,6 @@ def main(argv: list[str] | None = None) -> None:
         if not backup.is_file() or not backup.stat().st_size or not integrity_check_ok(backup):
             raise SystemExit(1)
         print(f"XCAGI_BACKUP_VALID={backup}")
-        return
-
-    if args.verify_frozen_critical_runtime:
-        _verify_frozen_critical_runtime()
         return
 
     _load_dotenv_if_present(_XCAGI_DIR / ".env")

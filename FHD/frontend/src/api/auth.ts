@@ -63,7 +63,7 @@ export interface RegisterRequest {
 }
 
 const LOGIN_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const
-type AuthOperationOptions = { signal?: AbortSignal }
+type AuthOperationOptions = { signal?: AbortSignal; dataProcessingNoticeVersion?: string }
 
 async function withAuthDeadline<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number, caller?: AbortSignal): Promise<T> {
   caller?.throwIfAborted()
@@ -152,11 +152,15 @@ export const authApi = {
     return loginRequest('/api/auth/login', {
       username, password, account_kind: accountKind,
       ...(invitationCode.trim() ? { invitation_code: invitationCode.trim() } : {}),
+      ...(options.dataProcessingNoticeVersion ? { data_processing_notice_version: options.dataProcessingNoticeVersion } : {}),
     }, options)
   },
 
   async loginWithPhoneCode(phone: string, code: string, accountKind: AccountKind = 'enterprise', options: AuthOperationOptions = {}): Promise<ApiResponse<LoginResponse>> {
-    return loginRequest('/api/auth/login-with-phone-code', { phone, code, account_kind: accountKind }, options)
+    return loginRequest('/api/auth/login-with-phone-code', {
+      phone, code, account_kind: accountKind,
+      ...(options.dataProcessingNoticeVersion ? { data_processing_notice_version: options.dataProcessingNoticeVersion } : {}),
+    }, options)
   },
 
   async sendPhoneCode(phone: string): Promise<ApiResponse<{ message?: string }>> {

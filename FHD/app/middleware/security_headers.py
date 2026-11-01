@@ -16,7 +16,7 @@ class SecurityHeadersMiddleware:
 
         async def send_with_headers(message):
             if message["type"] == "http.response.start":
-                headers = dict(message.get("headers", []))
+                headers = list(message.get("headers", []))
                 path = normalize_lan_guard_path(scope.get("path") or "/")
                 qs = dict(
                     pair.split(b"=", 1)
@@ -64,9 +64,9 @@ class SecurityHeadersMiddleware:
                     security_headers[b"strict-transport-security"] = (
                         b"max-age=31536000; includeSubDomains"
                     )
-                for key, value in security_headers.items():
-                    headers[key] = value
-                message["headers"] = list(headers.items())
+                message["headers"] = [
+                    (key, value) for key, value in headers if key.lower() not in security_headers
+                ] + list(security_headers.items())
             await send(message)
 
         await self.app(scope, receive, send_with_headers)

@@ -136,6 +136,26 @@ def assert_no_writes(store):
     assert store.starts == []
 
 
+def test_auto_ingest_start_failure_keeps_safe_diagnostics_and_saved_receipt(
+    intake_store, monkeypatch, caplog
+):
+    store = intake_store
+    data, _plan, _business = prepare(store)
+
+    def failed_start(**_):
+        raise RuntimeError("synthetic-private-cell-and-provider-credential")
+
+    monkeypatch.setattr(store.intake, "start_background", failed_start)
+    result = store.client.post(f"{BASE}/save", data=data)
+    assert result.status_code == 200
+    failure = result.json()["auto_ingest"]
+    assert failure["error"] == "auto_ingest_failed" and failure["stage"] == "save"
+    assert failure["request_id"] in caplog.text
+    assert "synthetic-private-cell" not in caplog.text + result.text
+    replay = store.client.post(f"{BASE}/save", data=data).json()
+    assert replay["replayed"] and replay["auto_ingest"] == failure
+
+
 def test_exact_prepared_run_is_confirmed_once_without_recleaning(intake_store, monkeypatch):
     store = intake_store
     data, plan, business = prepare(store)

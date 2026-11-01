@@ -150,17 +150,21 @@ def _template_platform_complete(
     import asyncio
     import logging
 
-    from app.application.elt import llm_assist
-    from app.application.elt.llm_assist_runtime import etl_llm_mode, etl_llm_timeout_seconds
-    from app.application.elt.llm_session_provider import (
-        bind_etl_llm_owner,
-        current_owner_market_provider,
-        reset_etl_llm_owner,
-    )
     from app.application.reviewed_excel_audit import ModelRequestNotSent, response_capture
-    from app.application.reviewed_excel_budget import template_timeout_seconds
-    from app.infrastructure.llm.structured_output import extract_json
-    from app.utils.operational_errors import BOUNDARY_ERRORS
+    from app.utils.operational_errors import BOUNDARY_ERRORS, INFRA_TRANSIENT
+
+    try:
+        from app.application.elt import llm_assist
+        from app.application.elt.llm_assist_runtime import etl_llm_mode, etl_llm_timeout_seconds
+        from app.application.elt.llm_session_provider import (
+            bind_etl_llm_owner,
+            current_owner_market_provider,
+            reset_etl_llm_owner,
+        )
+        from app.application.reviewed_excel_budget import template_timeout_seconds
+        from app.infrastructure.llm.structured_output import extract_json
+    except ImportError:
+        raise ModelRequestNotSent("平台模型组件未就绪；未调用模型") from None
 
     if llm_assist.etl_llm_mode() == "off" or etl_llm_mode() == "off":
         raise ModelRequestNotSent("模板平台模型已关闭；未调用模型")
@@ -169,9 +173,12 @@ def _template_platform_complete(
         token = bind_etl_llm_owner(int(owner_id))
     try:
         timeout_seconds = template_timeout_seconds()
-        provider = current_owner_market_provider(timeout_seconds=etl_llm_timeout_seconds())
-        if provider is None or not provider.is_configured:
-            raise ModelRequestNotSent("平台模型未登录或不可用；未调用模型")
+        try:
+            provider = current_owner_market_provider(timeout_seconds=etl_llm_timeout_seconds())
+            if provider is None or not provider.is_configured:
+                raise ModelRequestNotSent("平台模型未登录或不可用；未调用模型")
+        except INFRA_TRANSIENT:
+            raise ModelRequestNotSent("平台模型初始化失败；未调用模型") from None
         audit_callback = response_capture()
 
         async def call():
@@ -200,6 +207,8 @@ def _template_platform_complete(
             return llm_assist.LlmAssistResult(
                 used_llm=True, model=model, data=data, provider="platform"
             )
+        except ModelRequestNotSent:
+            raise
         except BOUNDARY_ERRORS:
             logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
             raise ReviewedExcelError(
@@ -405,7 +414,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
             except BOUNDARY_ERRORS:
                 wb.close()
                 raise
-    except (BadZipFile, KeyError, OSError, ParseError, InvalidFileException) as exc:
+    except (BadZipFile, KeyError, IndexError, OSError, ParseError, InvalidFileException) as exc:
         raise ReviewedExcelError("无法读取 XLSX 工作簿") from exc
     cells: list[dict[str, Any]] = []
     layout: list[dict[str, Any]] = []

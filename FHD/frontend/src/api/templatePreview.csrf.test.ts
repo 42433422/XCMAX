@@ -78,6 +78,21 @@ describe('reviewed Excel CSRF handling', () => {
     expect(seen).toEqual(['csrf_token=first', 'csrf_token=second'])
   })
 
+  it('keeps safe failure diagnostics visible without retrying or exposing arbitrary stage data', async () => {
+    const data = { request_id: 'elt-request-7', stage: 'render_candidates' }
+    mock.post.mockRejectedValueOnce(new ApiError('文件处理失败', 500, data))
+    await expect(templatePreviewApi.reviewExcel(new FormData())).rejects.toMatchObject({
+      message: '文件处理失败（阶段：渲染候选） 请求编号：elt-request-7', status: 500, data,
+    })
+    expect(mock.post).toHaveBeenCalledTimes(1)
+    for (const bad of [{ request_id: 'secret\nvalue', stage: 'render_candidates' }, { request_id: 'safe', stage: 'private workbook content' }]) {
+      mock.post.mockRejectedValueOnce(new ApiError('文件处理失败', 500, bad))
+      const failure = await templatePreviewApi.reviewExcel(new FormData()).catch(error => error)
+      expect(failure.message).not.toContain('secret')
+      expect(failure.message).not.toContain('private workbook')
+    }
+  })
+
   it.each(['A→B', 'A→B→A'])('rejects a late identity response across %s without sending the original file', async transition => {
     const identity = deferred<{ actor: string }>()
     mock.get.mockReturnValue(identity.promise)

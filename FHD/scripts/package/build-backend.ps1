@@ -9,6 +9,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Windows redirects Python output through the runner's legacy code page unless
+# this is set before the first source/dependency check.
+$env:PYTHONUTF8 = '1'
+$env:PYTHONIOENCODING = 'utf-8'
 . (Join-Path $PSScriptRoot 'product-version.ps1')
 $Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
@@ -36,6 +40,7 @@ if ($ProductSku) {
 }
 
 if (-not $SkipFrontend) {
+  Write-Host "[backend-build] $(Get-Date -Format o) frontend started"
   Push-Location (Join-Path $Root "frontend")
   if (-not (Test-Path "node_modules")) {
     npm install
@@ -57,6 +62,9 @@ if (-not $SkipFrontend) {
   }
   Pop-Location
   # 桌面包不构建 admin-console（管理端仅网页 SSOT）
+  Write-Host "[backend-build] $(Get-Date -Format o) frontend command completed"
+} else {
+  Write-Host "[backend-build] $(Get-Date -Format o) frontend skipped by request"
 }
 
 # 硬门禁：缺 Vite 产物会打出「白屏/无页面」桌面包。
@@ -71,11 +79,15 @@ if ($jsCount -lt 1) {
 }
 Write-Host "[ok] vue-dist gate: index.html present, assets/js count=$jsCount"
 
+Write-Host "[backend-build] $(Get-Date -Format o) runtime dependency installation started"
 python -m pip install --upgrade pip
-python -m pip install -e ".[server-api]"
+python -m pip install -c deploy/requirements-server-api.lock.txt -e ".[server-api]"
 if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api] failed" }
+python -m pip check
+if ($LASTEXITCODE -ne 0) { throw "server-api runtime dependencies are inconsistent" }
 python -m pip install "pyinstaller>=6.0" appdirs
 if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller/appdirs failed" }
+Write-Host "[backend-build] $(Get-Date -Format o) runtime dependency installation completed"
 
 $env:XCAGI_VERSION = $Version
 if ($ProductSku) {
@@ -95,8 +107,10 @@ if ($ProductSku) {
     $env:XCAGI_STAGED_INDUSTRY_SEEDS_DIR = $industryStageDir
   }
 }
+Write-Host "[backend-build] $(Get-Date -Format o) PyInstaller started"
 python -m PyInstaller --noconfirm --clean "scripts\package\xcagi_backend.spec"
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller xcagi_backend.spec failed" }
+Write-Host "[backend-build] $(Get-Date -Format o) PyInstaller completed"
 
 $bundledIndex = Join-Path $Root 'dist\xcagi-backend\_internal\templates\vue-dist\index.html'
 if (-not (Test-Path $bundledIndex)) {
@@ -107,6 +121,45 @@ if ($bundledJs -lt 1) {
   throw 'bundled vue-dist/assets/js empty — desktop would show no page'
 }
 Write-Host "[ok] bundled vue-dist ($bundledJs js)"
+
+$backendExe = Join-Path $Root 'dist\xcagi-backend\xcagi-backend.exe'
+if (-not (Test-Path -LiteralPath $backendExe)) {
+  throw "PyInstaller output missing backend executable: $backendExe"
+}
+# Use the finished windowed executable outside the source checkout. A developer
+# Python environment can mask missing bundled dependencies such as defusedxml.
+$probeDir = Join-Path ([System.IO.Path]::GetTempPath()) ("xcagi-frozen-probe-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $probeDir | Out-Null
+try {
+  Write-Host "[backend-build] $(Get-Date -Format o) frozen runtime probe started"
+  $probe = Start-Process -FilePath $backendExe `
+    -ArgumentList @('--verify-frozen-critical-runtime', '--data-dir', "`"$(Join-Path $probeDir 'data')`"") `
+    -WorkingDirectory $probeDir -PassThru `
+    -RedirectStandardOutput (Join-Path $probeDir 'stdout.log') `
+    -RedirectStandardError (Join-Path $probeDir 'stderr.log')
+  if (-not $probe.WaitForExit(300000)) {
+    # Stop only the probe created above; do not terminate other desktop runtimes.
+    Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
+    [void]$probe.WaitForExit(5000)
+    throw "Frozen critical runtime probe timed out after 300 seconds (pid=$($probe.Id))"
+  }
+  $probe.Refresh()
+  if ($probe.ExitCode -ne 0) {
+    throw "Frozen critical runtime probe failed with exit code $($probe.ExitCode)"
+  }
+  Write-Host "[backend-build] $(Get-Date -Format o) frozen runtime probe completed"
+} finally {
+  # Windowed Python can fall back to its bootstrap file when stdio is absent.
+  # Emit all synthetic probe diagnostics to the CI log before removing them.
+  foreach ($relativeLog in @('stdout.log', 'stderr.log', 'data\logs\backend-bootstrap.log', 'data\logs\frozen-runtime-probe.log')) {
+    $probeLog = Join-Path $probeDir $relativeLog
+    if (Test-Path -LiteralPath $probeLog) {
+      Write-Host "[frozen-runtime-probe] $relativeLog"
+      Get-Content -LiteralPath $probeLog -ErrorAction SilentlyContinue
+    }
+  }
+  Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 if ($ProductSku) {
   Remove-Item Env:XCAGI_STAGED_MODS_DIR -ErrorAction SilentlyContinue

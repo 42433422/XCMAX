@@ -229,7 +229,7 @@ describe('LoginView functions – selectEnterpriseLogin / selectAdminLogin', () 
     await wrapper.find('#lv-invitation-code').setValue('one-use-code')
     await wrapper.find('.login-form').trigger('submit.prevent')
     await flushPromises()
-    expect(mockAuthApiLogin).toHaveBeenCalledWith('member', 'password', 'enterprise', 'one-use-code')
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('member', 'password', 'enterprise', 'one-use-code', { dataProcessingNoticeVersion: '2026-11-01' })
   })
 
   it('selectAdminLogin navigates to admin console URL', async () => {
@@ -463,7 +463,7 @@ describe('LoginView functions – tryAutoLogin', () => {
     mockAuthApiLogin.mockResolvedValue({ success: true })
     await mountLoginView()
     await flushPromises()
-    expect(mockAuthApiLogin).toHaveBeenCalledWith('autouser', 'autopass', 'enterprise')
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('autouser', 'autopass', 'enterprise', '', {})
   })
 
   it('tryAutoLogin does not trigger when autoLogin is false', async () => {
@@ -476,6 +476,19 @@ describe('LoginView functions – tryAutoLogin', () => {
     await mountLoginView()
     await flushPromises()
     expect(mockAuthApiLogin).not.toHaveBeenCalled()
+  })
+
+  it.each(['password', 'phone'] as const)('allows %s basic login without optional model authorization', async mode => {
+    mockLoadLoginPreferences.mockReturnValue({ rememberPassword: false, autoLogin: false, username: '', password: '' })
+    mockAuthApiLogin.mockResolvedValue({ success: false, message: 'synthetic' })
+    mockAuthApiLoginWithPhoneCode.mockResolvedValue({ success: false, message: 'synthetic' })
+    const { wrapper } = await mountLoginView()
+    const vm = wrapper.vm as any
+    vm.loginMode = mode
+    vm.username = 'synthetic'; vm.password = 'synthetic'; vm.phone = '13800138000'; vm.smsCode = '123456'
+    await vm.submitBasicLogin(); await flushPromises()
+    if (mode === 'password') expect(mockAuthApiLogin).toHaveBeenCalledWith('synthetic', 'synthetic', 'enterprise', '', {})
+    else expect(mockAuthApiLoginWithPhoneCode).toHaveBeenCalledWith('13800138000', '123456', 'enterprise', {})
   })
 })
 

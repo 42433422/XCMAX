@@ -55,6 +55,7 @@ export const SHELL_CORE_ROUTE_NAMES = new Set([
   'lan-gate',
   'login',
   'login-help',
+  'login-legal',
   'login-register',
   'login-forgot-account',
   'login-forgot-password',

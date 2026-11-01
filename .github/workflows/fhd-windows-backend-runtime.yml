@@ -1,0 +1,101 @@
+# CI SSOT: generated from FHD/.github/workflows/windows-backend-runtime.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Windows backend runtime candidate
+
+on:
+  pull_request:
+    paths:
+      - "FHD/pyproject.toml"
+      - "FHD/requirements-server-api.txt"
+      - "FHD/deploy/requirements-server-api.lock.txt"
+      - "FHD/uv.lock"
+      - "FHD/XCAGI/run_fastapi.py"
+      - "FHD/app/application/reviewed_excel*.py"
+      - "FHD/scripts/package/xcagi_backend.spec"
+      - "FHD/scripts/package/build-backend.ps1"
+      - "FHD/scripts/package/verify-windows-installed-runtime.ps1"
+      - "FHD/.github/workflows/*backend-runtime.yml"
+      - ".github/workflows/fhd-windows-backend-runtime.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-backend-runtime-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  frozen-backend-runtime:
+    name: Windows frozen backend synthetic XLSX
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            FHD/pyproject.toml
+            FHD/deploy/requirements-server-api.lock.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Create runtime-only build environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -ne $env:GITHUB_SHA) { throw 'Candidate source SHA mismatch' }
+          $venv = Join-Path $env:RUNNER_TEMP 'backend-runtime-venv'
+          python -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated runtime environment' }
+          (Join-Path $venv 'Scripts') >> $env:GITHUB_PATH
+          "VIRTUAL_ENV=$venv" >> $env:GITHUB_ENV
+      - name: Install locked frontend dependencies
+        shell: pwsh
+        working-directory: FHD/frontend
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency installation failed' }
+      - name: Build backend and execute frozen runtime probe
+        id: build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force 'build/runtime-candidate' | Out-Null
+          # This is a branch acceptance build, with no installer, signing or publication.
+          scripts/package/build-backend.ps1 -ProductSku enterprise 2>&1 |
+            Tee-Object -FilePath 'build/runtime-candidate/build-and-probe.log'
+          python -c "import importlib.util; assert importlib.util.find_spec('pip_audit') is None, 'dev audit dependency masked runtime installation'"
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime environment unexpectedly contains dev dependencies' }
+      - name: Record candidate evidence
+        if: always()
+        shell: pwsh
+        env:
+          PROBE_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          New-Item -ItemType Directory -Force 'build/runtime-candidate' | Out-Null
+          $backend = 'dist/xcagi-backend/xcagi-backend.exe'
+          $hash = if (Test-Path -LiteralPath $backend) { (Get-FileHash -LiteralPath $backend -Algorithm SHA256).Hash.ToLowerInvariant() } else { $null }
+          @{
+            kind = 'branch_acceptance_candidate'; source_sha = (git rev-parse HEAD).Trim()
+            runner = $env:RUNNER_OS; probe = '--verify-frozen-critical-runtime'
+            outcome = $env:PROBE_OUTCOME; backend_sha256 = $hash
+            installer_tested = $false; published = $false
+          } | ConvertTo-Json | Set-Content -Encoding UTF8 'build/runtime-candidate/receipt.json'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-backend-runtime-candidate-${{ github.sha }}
+          path: FHD/build/runtime-candidate/
+          if-no-files-found: error
+          retention-days: 7

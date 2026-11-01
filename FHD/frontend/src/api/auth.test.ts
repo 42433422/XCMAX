@@ -51,6 +51,16 @@ describe('authApi', () => {
     )
   })
 
+  it('only forwards an explicit displayed notice version for credential login', async () => {
+    const options = { dataProcessingNoticeVersion: 'synthetic-notice-version' }
+    await authApi.login('u', 'p', 'enterprise', '', options)
+    expect(apiMock.post.mock.calls.at(-1)?.[1]).toMatchObject({ data_processing_notice_version: options.dataProcessingNoticeVersion })
+    await authApi.loginWithPhoneCode('139', '0000', 'enterprise', options)
+    expect(apiMock.post.mock.calls.at(-1)?.[1]).toMatchObject({ data_processing_notice_version: options.dataProcessingNoticeVersion })
+    await authApi.login('u', 'p')
+    expect(apiMock.post.mock.calls.at(-1)?.[1]).not.toHaveProperty('data_processing_notice_version')
+  })
+
   it('covers remaining endpoints', async () => {
     await authApi.sendPhoneCode('139')
     await authApi.getOidcStatus()

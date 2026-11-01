@@ -26,6 +26,61 @@ def input_digest(messages):
     ).hexdigest()
 
 
+def test_invalid_shared_string_is_a_file_error_in_all_intake_routes(review_store):
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    from app.application.elt.errors import ReviewedExcelError
+
+    original = sample()
+    damaged = BytesIO()
+    with ZipFile(BytesIO(original)) as source, ZipFile(damaged, "w", ZIP_DEFLATED) as target:
+        for item in source.infolist():
+            data = source.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                data = data.replace(b't="inlineStr"><is><t>', b't="s"><v>99</v><is><t>', 1)
+            target.writestr(item, data)
+    body = damaged.getvalue()
+    with pytest.raises(ReviewedExcelError, match="无法读取 XLSX"):
+        inspect_workbook(body)
+    for endpoint in ["preview", "archive-classify", "classify"]:
+        response = review_store.client.post(
+            f"/api/templates/reviewed-excel/{endpoint}",
+            files={"files" if endpoint == "classify" else "file": ("synthetic.xlsx", body)},
+            data={"expected_actor": "1:7", "request_key": "invalid-synthetic"},
+        )
+        if endpoint == "classify":
+            assert response.status_code == 200
+            assert response.json()["files"][0]["status"] == "unsupported"
+        else:
+            assert response.status_code == 400
+        assert "无法读取 XLSX" in response.text
+    assert inspect_workbook(original)["sha256"] == hashlib.sha256(original).hexdigest()
+    with review_store.engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
+        assert conn.execute(text("SELECT count(*) FROM etl_archive_assets")).scalar_one() == 0
+
+
+def test_unexpected_candidate_failure_is_correlated_without_source_logging(
+    review_store, monkeypatch, caplog
+):
+    def failed_render(*_):
+        raise RuntimeError("synthetic-private-cell-and-provider-credential")
+
+    monkeypatch.setattr(routes, "_build_candidate_previews", failed_render)
+    response = review_store.client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", sample())},
+        data={"expected_actor": "1:7"},
+    )
+    assert response.status_code == 500
+    assert response.json()["stage"] == "render_candidates"
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
+    assert "RuntimeError" in caplog.text
+    assert "synthetic-private-cell" not in caplog.text + response.text
+    with review_store.engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
+
+
 def test_clean_formula_workbook_without_calculation_properties():
     wb = Workbook()
     wb.active["A1"] = 12
@@ -2090,6 +2145,27 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
     assert "input_messages" not in proposal["model"]
 
 
+def test_platform_initialization_outage_keeps_local_preview(monkeypatch, review_store):
+    from app.application.elt import llm_session_provider as sessions
+
+    def unavailable(**_):
+        raise RuntimeError("synthetic-private-provider-initialization")
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "platform")
+    monkeypatch.setattr(sessions, "current_owner_market_provider", unavailable)
+    response = review_store.client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", sample())},
+        data={"model_opt_in": "true", "own_file_authorized": "true", "expected_actor": "1:7"},
+    )
+    assert response.status_code == 200
+    proposal = response.json()["proposal"]
+    assert proposal["model"]["status"] == "unavailable" and len(proposal["candidates"]) == 3
+    assert "未调用模型" in proposal["model"]["message"]
+    assert "synthetic-private" not in response.text
+
+
 def test_owner_file_template_authorization_uses_platform_by_default(monkeypatch, review_store):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
@@ -2159,6 +2235,236 @@ def test_owner_file_template_authorization_uses_platform_by_default(monkeypatch,
         refined.json()["proposal"]["model"]["authorization"]["scope"]
         == "this_document_bounded_cells_and_feedback"
     )
+
+
+@pytest.mark.parametrize("published", [False, True])
+def test_login_notice_preview_without_effective_receipt_stays_local_and_refine_cannot_send(
+    review_store, monkeypatch, published
+):
+    from unittest.mock import Mock
+
+    from app.application import elt_login_authorization as notice
+    from tests.test_application.test_elt_login_authorization import publication_record
+
+    if published:
+        monkeypatch.setenv(notice.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
+    else:
+        monkeypatch.delenv(notice.NOTICE_PUBLICATION_ENV, raising=False)
+    send = Mock(side_effect=AssertionError("unauthorized model call"))
+    monkeypatch.setattr(routes, "refine_proposal", send)
+    response = review_store.client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", sample())},
+        data={
+            "expected_actor": "1:7",
+            "use_login_notice": "true",
+            "model_opt_in": "true",
+            "own_file_authorized": "true",
+            "sample_authorized": "true",
+        },
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["proposal"]["model"]["status"] == "not_called"
+    assert result["proposal"]["model"]["login_authorization"]["status"] == (
+        "login_notice_required" if published else "notice_not_published"
+    )
+    assert "authorization" not in result["proposal"]["model"]
+    rejected = review_store.client.post(
+        "/api/templates/reviewed-excel/refine",
+        data={
+            "review_id": result["review_id"],
+            "parent_version": result["proposal"]["version"],
+            "feedback": "synthetic",
+            "use_login_notice": "true",
+            "consent": "true",
+            "own_file_authorized": "true",
+        },
+    )
+    assert rejected.status_code == 403
+    identity = review_store.client.get("/api/templates/reviewed-excel/identity").json()
+    assert identity["login_authorization"]["operations"]["classification"] != "authorized"
+    rejected = review_store.client.post(
+        "/api/templates/reviewed-excel/classifications/synthetic/analyze",
+        data={"version": "synthetic", "use_login_notice": "true", "own_file_authorized": "true"},
+    )
+    assert rejected.status_code == 403
+    send.assert_not_called()
+
+
+@pytest.mark.parametrize("multibatch", [False, True])
+def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_pipeline(
+    review_store, monkeypatch, multibatch
+):
+    import asyncio
+    import time
+    from http.cookies import SimpleCookie
+    from unittest.mock import AsyncMock
+
+    from fastapi.responses import JSONResponse
+
+    from app.application import elt_login_authorization as notice
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    monkeypatch.setenv("SECRET_KEY", "synthetic-login-notice-key-for-route-tests-123456789")
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "platform")
+    from tests.test_application.test_elt_login_authorization import publication_record, recipient
+
+    monkeypatch.setenv(notice.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
+    monkeypatch.setattr(
+        notice,
+        "_active_session",
+        lambda sid: {
+            "owner": 7,
+            "tenant": 1,
+            "expires": int(time.time()) + 3600,
+        },
+    )
+    route = {
+        "base": "https://xiu-ci.com",
+        "provider": "xiaomi",
+        "model": "mimo-v2.6-flash",
+        "key_source": "platform",
+        "config_revision": "synthetic-revision-A",
+        "recipient": recipient(),
+    }
+    monkeypatch.setattr(notice, "_resolve_login_route", AsyncMock(return_value=route))
+    response = asyncio.run(
+        notice.attach_login_notice(
+            JSONResponse({}),
+            {"success": True, "session_id": "synthetic-session", "user": {"id": 7}},
+            {"data_processing_notice_version": notice.NOTICE_VERSION},
+        )
+    )
+    cookies = SimpleCookie()
+    for header in response.headers.getlist("set-cookie"):
+        cookies.load(header)
+    client = review_store.client
+    client.cookies.set(notice.NOTICE_COOKIE, cookies[notice.NOTICE_COOKIE].value)
+    client.cookies.set("session_id", "synthetic-session")
+    calls = []
+
+    def fake(*args, **kwargs):
+        notice.assert_login_notice_route(
+            route["base"],
+            route["provider"],
+            route["model"],
+            key_source=route["key_source"],
+            config_revision=route["config_revision"],
+            recipient=route["recipient"],
+        )
+        assert notice.current_login_notice_session_id(7) == "synthetic-session"
+        calls.append(kwargs["owner_id"])
+        payload = json.loads(args[0][1]["content"])
+        data = (
+            {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+            if "candidates" in args[1]["properties"]
+            else synthetic_document_answer(payload)
+        )
+        if "ranges" in payload:
+            data["documents"] = [
+                {"ranges": [part], "reason": "synthetic separate document"}
+                for part in data["documents"][0]["ranges"]
+            ]
+        return LlmAssistResult(
+            used_llm=True,
+            provider="platform",
+            model=route["model"],
+            data=data,
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", fake)
+    source = sample()
+    if multibatch:
+        workbook = load_workbook(BytesIO(source))
+        workbook.copy_worksheet(workbook.active).title = "第二"
+        stream = BytesIO()
+        workbook.save(stream)
+        workbook.close()
+        source = stream.getvalue()
+        monkeypatch.setattr(
+            routes,
+            "plan_semantic_batches",
+            lambda review, **_: (
+                [
+                    [cell for cell in review["cells"] if cell["sheet"] == sheet]
+                    for sheet in review["sheets"]
+                ],
+                4,
+            ),
+        )
+    classification = client.post(
+        "/api/templates/reviewed-excel/archive-classify",
+        files={"file": ("synthetic.xlsx", source)},
+        data={"expected_actor": "1:7", "request_key": "synthetic-notice-pipeline"},
+    ).json()
+    path = f"/api/templates/reviewed-excel/classifications/{classification['classification_id']}"
+    form = {"version": classification["version"], "use_login_notice": "true", "auto_group": "true"}
+    identity = client.get("/api/templates/reviewed-excel/identity").json()
+    assert identity["login_authorization"]["operations"]["classification"] == "authorized"
+    analyzed = client.post(path + "/analyze", data=form)
+    assert analyzed.status_code == 200, analyzed.text
+    if multibatch:
+        assert analyzed.json()["phase"] == "pending" and calls == [7]
+        analyzed = client.post(path + "/analyze", data=form)
+        assert analyzed.status_code == 200, analyzed.text
+    analyzed = analyzed.json()
+    classification_calls = 3 if multibatch else 1
+    assert analyzed["model_status"] == "returned" and calls == [7] * classification_calls
+    assert analyzed["model_authorization"]["notice_operation"] == "classification"
+    assert (
+        analyzed["model_authorization"]["notice_scope"]
+        == notice.notice_operation_scopes()["classification"]
+    )
+    assert (
+        client.post(path + "/analyze", data=form).status_code == 409
+        and calls == [7] * classification_calls
+    )
+    slices = client.get(path + f"/auto-slices/{analyzed['version']}")
+    assert slices.status_code == 200, slices.text
+    assert slices.json()["slices"][0]["basis"] == "model_group"
+    result = client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", source)},
+        data={
+            "expected_actor": "1:7",
+            "use_login_notice": "true",
+            "classification_id": classification["classification_id"],
+            "classification_version": analyzed["version"],
+            "auto_slice_index": "0",
+        },
+    )
+    assert result.status_code == 200, result.text
+    result = result.json()
+    auth = result["proposal"]["model"]["authorization"]
+    assert auth["kind"] == "owner_file" and auth["notice_version"] == notice.NOTICE_VERSION
+    assert auth["source_sha256"] == hashlib.sha256(source).hexdigest()
+    assert auth["derived_sha256"] == result["sha256"]
+    assert auth["classification_id"] == classification["classification_id"]
+    assert auth["classification_version"] == analyzed["version"]
+    assert auth["document"]["auto_slice_index"] == 0 and auth["document"]["fragments"]
+    assert auth["model_route"] == {
+        key: route[key]
+        for key in ("provider", "model", "key_source", "config_revision", "recipient")
+    }
+    assert result["proposal"]["model"]["login_authorization"]["status"] == "authorized"
+    assert calls == [7] * (classification_calls + 1)
+    revised = client.post(
+        "/api/templates/reviewed-excel/refine",
+        data={
+            "review_id": result["review_id"],
+            "parent_version": result["proposal"]["version"],
+            "feedback": "synthetic feedback",
+            "use_login_notice": "true",
+        },
+    )
+    assert revised.status_code == 200, revised.text
+    assert (
+        revised.json()["proposal"]["model"]["authorization"]["source_sha256"]
+        == hashlib.sha256(source).hexdigest()
+    )
+    assert calls == [7] * (classification_calls + 2)
 
 
 def test_model_input_spreads_across_sheets_and_reports_uncovered(monkeypatch):
@@ -5110,8 +5416,9 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
     url = "/api/templates/reviewed-excel/archive-classify"
     data = {"expected_actor": "1:7", "request_key": "copy-cleanup"}
     if commit_unknown:
-        with pytest.raises(RuntimeError, match="lost commit receipt"):
-            client.post(url, data=data, files={"file": ("sample.xlsx", body)})
+        failure = client.post(url, data=data, files={"file": ("sample.xlsx", body)})
+        assert failure.status_code == 500
+        assert failure.json()["stage"] == "archive-classify"
     else:
         response = client.post(url, data=data, files={"file": ("sample.xlsx", body)})
         assert response.status_code == 400

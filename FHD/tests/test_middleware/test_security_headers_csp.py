@@ -14,6 +14,7 @@ import asyncio
 
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -38,6 +39,31 @@ def test_default_security_headers_added():
     assert r.headers["x-frame-options"] == "DENY"
     assert "default-src 'self'" in r.headers["content-security-policy"]
     assert r.headers.get("strict-transport-security") is None  # http scheme
+
+
+def test_login_preserves_session_cookie_when_clearing_unpublished_notice(monkeypatch):
+    from app.application import elt_login_authorization as notice
+    from app.fastapi_routes.domains.auth.session_cookies import SessionCookies
+
+    monkeypatch.delenv(notice.NOTICE_PUBLICATION_ENV, raising=False)
+    app = FastAPI()
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    @app.post("/api/auth/login")
+    async def login():
+        response = SessionCookies({}).attach(JSONResponse({"success": True}), "synthetic-session")
+        response.headers["Content-Security-Policy"] = "obsolete-policy"
+        await notice.attach_login_notice(response, {"success": True}, {})
+        return response
+
+    client = TestClient(app)
+    response = client.post("/api/auth/login")
+    assert response.status_code == 200
+    assert len(response.headers.get_list("set-cookie")) == 2
+    assert client.cookies.get("session_id") == "synthetic-session"
+    assert notice.NOTICE_COOKIE not in client.cookies
+    assert len(response.headers.get_list("content-security-policy")) == 1
+    assert "default-src 'self'" in response.headers["content-security-policy"]
 
 
 def test_desktop_mode_allows_vue_i18n_runtime_compile(monkeypatch):

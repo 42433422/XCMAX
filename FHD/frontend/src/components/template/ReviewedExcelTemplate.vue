@@ -10,12 +10,13 @@ import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCent
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
-type Proposal = { version: string; parent_version: string | null; candidates: Candidate[]; result_previews?: { candidate_id: string; sha256: string; layout: Layout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; cells_sent?: number; cells_total?: number; truncated?: boolean; values_truncated?: boolean; input_messages?: unknown[]; input_summary?: unknown } }
+type LoginAuthorization = { status: 'authorized' | 'login_notice_required' | 'notice_not_published'; version?: string; purpose?: string; provider?: string; model?: string }
+type Proposal = { version: string; parent_version: string | null; candidates: Candidate[]; result_previews?: { candidate_id: string; sha256: string; layout: Layout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; login_authorization?: LoginAuthorization; cells_sent?: number; cells_total?: number; truncated?: boolean; values_truncated?: boolean; input_messages?: unknown[]; input_summary?: unknown } }
 type LayoutCell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 type Layout = { sheet: string; widths: number[]; rows: { height: number; cells: LayoutCell[] }[]; truncated: boolean }
 type Review = { usage_restrictions?: string[]; review_id: string; sha256: string; cells: Cell[]; sheets: string[]; model: string; proposal: Proposal; versions?: Proposal[]; layout?: Layout[]; layout_truncated?: boolean; selected_region?: { selection_basis?: string; print_area_mode?: string; source_print_areas?: { sheet: string; value: string }[]; derived_print_area?: string | null } | null }
 type ClassificationRegion = { splitDraft?: string; value_extent?: string | null; suggested_labels?: string[]; context_warning?: string; reason?: string; continuation_context?: { parent_range: string; parent_header_row: number; header_row: number; matched_columns: number[] } | null; range: string; original_range?: string; labels: string[]; label_source?: string; range_source?: string; modified?: boolean; checked_cells: number; parent_heading: string; dependency_status: string; needs_confirmation: boolean; header_cells: { cell: string; value: string }[]; merged_ranges: string[]; dependencies?: { sheet: string; cell: string }[]; possible_shared_context: { cell: string; kind: string }[]; evidence: { label: string; cell: string; matched: string }[] }
-type ClassificationSheet = { sheet: string; labels: string[]; checked_cells: number; evidence: { label: string; cell: string; matched: string }[]; regions: ClassificationRegion[] }
+type ClassificationSheet = { sheet: string; sheet_state?: string; processable?: boolean; processing_message?: string; labels: string[]; checked_cells: number; evidence: { label: string; cell: string; matched: string }[]; regions: ClassificationRegion[] }
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
@@ -33,7 +34,6 @@ const archiveProgress = ref('')
 const archiveQuotaInfo = ref('')
 const archiveQuotaMiB = ref<number | null>(null)
 const composerDragOver = ref(false)
-const templatePickerOpen = ref(false)
 const composerDraft = ref('')
 const requirementNotes = ref<string[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -41,6 +41,19 @@ type ArchiveAsset = { id: string; name: string; state: string; versions: { id: s
 const archiveAssets = ref<ArchiveAsset[]>([])
 const versionUploads = ref<Record<string, { file: File; requestKey: string }>>({})
 const classifications = ref<Classification[]>([])
+const loginModelFiles = ref<string[]>([])
+const loginAuthorizationStatus = ref<LoginAuthorization | null>(null)
+const currentClassification = computed(() => classifications.value[files.value.indexOf(file.value as File)])
+const loginModelFlow = computed(() => !!currentClassification.value?.classification_id && loginModelFiles.value.includes(currentClassification.value.classification_id))
+const currentLoginSlices = computed(() => {
+  const item = currentClassification.value
+  const stored = item?.classification_id && autoSlices.value[item.classification_id]
+  return stored && stored.version === item?.version ? stored.slices : []
+})
+function processableSheet(sheet: ClassificationSheet) { return sheet.processable !== false && (!sheet.sheet_state || sheet.sheet_state === 'visible') }
+function processableSlice(item: Classification, slice: AutoSlice) {
+  return slice.basis === 'model_group' && !!slice.fragments.length && slice.fragments.every(part => item.sheets.some(sheet => sheet.sheet === part.sheet && processableSheet(sheet)))
+}
 const selectedRows = ref<string[]>([])
 const classificationConfirmed = computed(() => !!file.value && !!classifications.value[files.value.indexOf(file.value)]?.confirmed)
 const classificationSampleAuthorized = ref(false)
@@ -67,7 +80,7 @@ async function refreshPlatformModel() {
     /* Keep generic「平台模型」 when resolve is unavailable for this session. */
   }
 }
-onMounted(() => { void refreshPlatformModel() })
+onMounted(() => { if (!props.archiveOnSelect) void refreshPlatformModel() })
 const cancelAnalysis = ref(false)
 const analysisProgress = ref('')
 const classificationNotice = ref('')
@@ -82,7 +95,7 @@ const previewSelectionReady = computed(() => {
   const coordinates = selectedRegionCoordinates.value
   if (!coordinates) return !props.archiveOnSelect && !selectedRegionNeedsChoice.value
   const item = classifications.value[files.value.indexOf(file.value as File)]
-  return item?.sheets.filter(sheet => sheet.sheet === coordinates.sheet)
+  return item?.sheets.filter(sheet => sheet.sheet === coordinates.sheet && processableSheet(sheet))
     .flatMap(sheet => sheet.regions).filter(region => region.range === coordinates.range).length === 1
 })
 const selectedPrintArea = ref(false)
@@ -115,6 +128,15 @@ const candidateIndex = ref(0)
 const proposals = ref<Proposal[]>([])
 const selectedVersion = ref(0)
 const proposal = computed(() => proposals.value[selectedVersion.value])
+const processingDiagnostic = computed(() => {
+  const model = proposal.value?.model
+  const authorization = model?.login_authorization || loginAuthorizationStatus.value
+  if (model?.status === 'returned') return '模型已返回候选建议，仍需核对。'
+  if (model?.status === 'unavailable') return '模型调用未完成，当前显示本地规则候选。'
+  if (authorization?.status === 'notice_not_published') return '当前显示本地规则候选；登录数据处理条款尚未发布，本次未调用模型。'
+  if (authorization?.status === 'login_notice_required') return '当前显示本地规则候选；当前登录会话没有完整的分类与模板候选授权，本次未调用模型。'
+  return '当前显示本地规则候选，本次未调用模型。'
+})
 const feedback = ref('')
 const initialModel = ref(false)
 const selectedSliceKey = ref('')
@@ -278,6 +300,8 @@ function resetReview() {
   feedback.value = ''; consent.value = false; publishToTenant.value = false
 }
 function resetSelectionState() {
+  loginModelFiles.value = []
+  loginAuthorizationStatus.value = null
   autoSlices.value = {}; retryBudget.value = {}; selectedSliceKey.value = ''
   clearTemplateModelAuthorization()
   resetReview()
@@ -310,6 +334,8 @@ function openFilePicker() {
   fileInputRef.value?.click()
 }
 function startProcessing() {
+  if (!alive || busy.value) return
+  if (props.archiveOnSelect && review.value) return
   const note = composerDraft.value.trim()
   if (note) {
     requirementNotes.value = [...requirementNotes.value, note]
@@ -322,13 +348,15 @@ function submitComposerRequirement() {
   if (!alive || busy.value) return
   const note = composerDraft.value.trim()
   if (!note) return
+  if (props.archiveOnSelect && review.value && proposal.value?.model.login_authorization?.status !== 'authorized') {
+    error.value = '模型尚未启用，整理要求未执行，草稿已保留。'
+    return
+  }
   requirementNotes.value = [...requirementNotes.value, note]
   feedback.value = note
   composerDraft.value = ''
   if (props.archiveOnSelect && review.value) {
-    consent.value = true
-    if (!sampleAuthorized.value && !templateOwnFileAuthorized.value) sampleAuthorized.value = true
-    void refine()
+    if (proposal.value?.model.login_authorization?.status === 'authorized') void refine()
     return
   }
   if (props.archiveOnSelect && files.value.length && !review.value) void classify()
@@ -359,7 +387,6 @@ function applyChosenFiles(list: File[]) {
   error.value = files.value.length > 200 ? '一次最多上传 200 个文件，请分批上传' : ''
   analysisProgress.value = ''; analysisErrors.value = {}
   classificationNotice.value = ''
-  templatePickerOpen.value = false
   emit('stage', 'archive')
 }
 function onComposerDrop(event: DragEvent) {
@@ -434,7 +461,7 @@ async function classify() {
     classifications.value = results
     const allOk = results.every((item) => item.status === 'classified')
     archiveProgress.value = props.archiveOnSelect && allOk
-      ? '处理完成，正在生成候选模板…'
+      ? '归档分类完成，正在准备候选模板…'
       : allOk
         ? '原件已归档并完成规则预筛，请继续核对单据分类、片段边界和续表关系。'
         : '本批处理结束；失败或结果未知的文件不可继续，请核对后重试。'
@@ -449,10 +476,36 @@ async function classify() {
     error.value = failed.map((item) => item.message || `${item.name}未完成`).join('；')
     return
   }
+  const selectedItem = currentClassification.value
+  if (!selectedItem?.sheets.some(sheet => processableSheet(sheet) && sheet.regions.length)) {
+    error.value = selectedItem?.sheets.find(sheet => !processableSheet(sheet))?.processing_message || '当前文件没有可处理的可见工作表区域；原件保持不变。'
+    archiveProgress.value = '当前文件无法生成独立候选，请选择可处理的可见区域。'
+    return
+  }
+  if (review.value) return
+  busy.value = true
+  try {
+    const identity = await templatePreviewApi.reviewedExcelIdentity() as { login_authorization?: LoginAuthorization & { operations?: { classification?: string; template_candidates?: string } } }
+    if (!current()) return
+    const operations = identity.login_authorization?.operations
+    loginAuthorizationStatus.value = identity.login_authorization || null
+    if (operations?.classification === 'authorized' && operations.template_candidates === 'authorized' && selectedItem.classification_id) {
+      if (!loginModelFiles.value.includes(selectedItem.classification_id)) loginModelFiles.value.push(selectedItem.classification_id)
+    } else {
+      loginModelFiles.value = loginModelFiles.value.filter(id => id !== selectedItem.classification_id)
+      if (loginAuthorizationStatus.value?.status === 'authorized') loginAuthorizationStatus.value = { ...loginAuthorizationStatus.value, status: 'login_notice_required' }
+    }
+  } catch (err) {
+    if (current()) { error.value = err instanceof Error ? err.message : '无法核实平台模型处理状态，请重试。'; archiveProgress.value = '平台模型状态核实未完成，尚未开始后续处理。' }
+    return
+  } finally { if (current()) busy.value = false }
+  if (!current()) return
+  if (loginModelFlow.value) { await runLoginModelPipeline(); return }
   if (classifications.value.some((item) => item.status === 'classified' && !item.confirmed)) {
     await confirmClassifications()
   }
   if (!current()) return
+  if (!classificationConfirmed.value || !previewSelectionReady.value) archiveProgress.value = '处理已暂停，请在页面内核对分类和片段后继续。'
   if (requirementNotes.value.length) feedback.value = requirementNotes.value[requirementNotes.value.length - 1]
   if (classificationConfirmed.value && previewSelectionReady.value && !review.value) {
     await preview()
@@ -580,14 +633,16 @@ function selectFile(index: number) {
   selectedPrintArea.value = false
   clearTemplateModelAuthorization(); publishToTenant.value = false; selectedSliceKey.value = ''
   name.value = file.value.name.replace(/\.xlsx$/i, '')
-  const firstSheet = classifications.value[index]?.sheets[0]
+  const firstSheet = classifications.value[index]?.sheets.find(sheet => processableSheet(sheet) && sheet.regions.length)
   selectedRegion.value = firstSheet?.regions[0] ? `${firstSheet.sheet} / ${firstSheet.regions[0].range}` : ''
   selectedRegionCoordinates.value = firstSheet?.regions[0] ? { sheet: firstSheet.sheet, range: firstSheet.regions[0].range } : null
-  selectedRegionNeedsChoice.value = false
+  selectedRegionNeedsChoice.value = !firstSheet
   resetReview()
   emit('stage', classifications.value[index].confirmed ? 'cleaning' : 'fragments')
 }
 function selectRegion(i: number, j: number, k: number) {
+  const target = classifications.value[i]?.sheets[j]
+  if (busy.value || !target || !processableSheet(target) || !target.regions[k]) return
   const neededChoice = selectedRegionNeedsChoice.value
   if (file.value !== files.value[i]) selectFile(i)
   const sheet = classifications.value[i].sheets[j]
@@ -683,14 +738,14 @@ async function reconcileCheckpoint(item: Classification, current: () => boolean)
     if (checkpoint && checkpoint.version === item.version && ['ready', 'paused', 'failed', 'inflight'].includes(checkpoint.phase)) item.checkpoint = checkpoint
   } catch { /* Keep the unknown-outcome lock when the persisted state cannot be verified. */ }
 }
-async function analyzeClassifications(retryItem?: Classification, extendBudget = false) {
+async function analyzeClassifications(retryItem?: Classification, extendBudget = false, loginMode = false) {
   const current = captureFileOperation()
   if (!current() || busy.value) return
-  if (classificationSampleAuthorized.value === classificationOwnFileAuthorized.value) return
+  if (!loginMode && classificationSampleAuthorized.value === classificationOwnFileAuthorized.value) return
   if (retryItem && (retryItem.checkpoint?.phase !== 'failed' || ((retryItem.checkpoint.calls_in_round ?? 0) >= retryItem.checkpoint.max_calls && !extendBudget))) return
   busy.value = true; error.value = ''; cancelAnalysis.value = false
   const selectedFile = classifications.value[files.value.indexOf(file.value as File)]
-  const pending = classifications.value.filter((item) => (!classificationOwnFileAuthorized.value || item === selectedFile) && item.status === 'classified' && item.model_status !== 'returned' && !item.confirmed && item.checkpoint?.phase !== 'inflight' && (retryItem ? item === retryItem : item.checkpoint?.phase !== 'failed'))
+  const pending = classifications.value.filter((item) => (!(loginMode || classificationOwnFileAuthorized.value) || item === selectedFile) && item.status === 'classified' && item.model_status !== 'returned' && (loginMode || !item.confirmed) && item.checkpoint?.phase !== 'inflight' && (retryItem ? item === retryItem : item.checkpoint?.phase !== 'failed'))
   try {
     for (const [index, item] of pending.entries()) {
       if (cancelAnalysis.value) break
@@ -698,7 +753,8 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
       try {
         if (!item.classification_id || !item.version) throw new Error('分类来源或版本缺失，请重新分类')
         while (!cancelAnalysis.value) {
-          const form = new FormData(); form.append('version', item.version); form.append(classificationOwnFileAuthorized.value ? 'own_file_authorized' : 'sample_authorized', 'true')
+          const form = new FormData(); form.append('version', item.version)
+          form.append(loginMode ? 'use_login_notice' : classificationOwnFileAuthorized.value ? 'own_file_authorized' : 'sample_authorized', 'true')
           form.append('auto_group', 'true')
           if (item.checkpoint?.phase === 'paused') form.append('continue_authorized', 'true')
           if (retryItem && item.checkpoint?.phase === 'failed') {
@@ -715,7 +771,11 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
             continue
           }
           delete retryBudget.value[item.classification_id]
-          item.checkpoint = null; item.version = result.version; item.sheets = result.sheets; item.model_status = result.model_status; item.budget = result.budget; item.suggested_documents = result.suggested_documents; item.suggested_document_count = result.suggested_document_count; item.fragment_links = result.fragment_links; item.coverage = result.coverage; item.input_messages = result.input_messages; item.input_summaries = result.input_summaries; item.confirmed = false
+          const previousSheets = item.sheets
+          item.checkpoint = null; item.version = result.version; item.sheets = result.sheets.map(sheet => {
+            const source = previousSheets.find(entry => entry.sheet === sheet.sheet)
+            return { ...sheet, sheet_state: source?.sheet_state || sheet.sheet_state, processable: source?.processable === false ? false : sheet.processable, processing_message: sheet.processing_message || source?.processing_message }
+          }); item.model_status = result.model_status; item.budget = result.budget; item.suggested_documents = result.suggested_documents; item.suggested_document_count = result.suggested_document_count; item.fragment_links = result.fragment_links; item.coverage = result.coverage; item.input_messages = result.input_messages; item.input_summaries = result.input_summaries; item.confirmed = false
           await loadAutoSlices(item, current)
           break
         }
@@ -758,12 +818,41 @@ async function reloadAutoSlices(item: Classification) {
 }
 async function previewAutoSlice(index: number, slice: AutoSlice) {
   if (busy.value) return
+  const source = classifications.value[index]
+  if (!source || !processableSlice(source, slice)) { error.value = '此切片包含隐藏或不可处理的工作表，或模型尚未确定完整关系；原件不变。'; return }
   if (file.value !== files.value[index]) selectFile(index)
   const item = classifications.value[index]
   const key = JSON.stringify([item?.classification_id, item?.version, slice.index, slice.sha256])
   if (selectedSliceKey.value !== key) { clearTemplateModelAuthorization(); selectedSliceKey.value = key }
   name.value = slice.filename.replace(/\.xlsx$/i, '')
   await preview(slice)
+}
+async function runLoginModelPipeline(extendBudget = false) {
+  const current = captureFileOperation(), item = currentClassification.value
+  if (!current() || busy.value || !item?.classification_id || !loginModelFlow.value || review.value) return
+  if (item.checkpoint?.phase === 'inflight') {
+    error.value = '上次平台模型请求结果未知，不可重复发送；请核对服务端记录。'; return
+  }
+  if (item.checkpoint?.phase === 'failed' && (item.checkpoint.calls_in_round ?? 0) >= item.checkpoint.max_calls && !extendBudget) {
+    error.value = '本轮模型预算已用完；请明确确认新一轮预算后重试。'; return
+  }
+  if (item.model_status !== 'returned') {
+    archiveProgress.value = '正在进行平台模型分类与文档切片…'
+    await analyzeClassifications(item.checkpoint?.phase === 'failed' ? item : undefined, extendBudget, true)
+  } else if (!autoSlices.value[item.classification_id] || autoSlices.value[item.classification_id].version !== item.version) {
+    busy.value = true
+    try { await loadAutoSlices(item, current) }
+    finally { if (current()) busy.value = false }
+  }
+  if (!current()) return
+  if (cancelAnalysis.value || item.model_status !== 'returned' || analysisErrors.value[item.classification_id]) {
+    error.value = analysisErrors.value[item.classification_id] || item.checkpoint?.message || '平台模型分类未完成，请继续或核对后重试。'
+    archiveProgress.value = '平台模型分类或切片未完成，尚未生成模板候选。'
+    return
+  }
+  const slices = currentLoginSlices.value.filter(slice => processableSlice(item, slice))
+  if (slices.length === 1) await previewAutoSlice(files.value.indexOf(file.value as File), slices[0])
+  else archiveProgress.value = slices.length ? '平台模型分类与切片已完成，请在页面内选择单据生成候选。' : '没有可处理的模型文档切片；隐藏或关系未确定的片段不能生成候选，原件不变。'
 }
 async function downloadAutoSlice(item: Classification, slice: AutoSlice) {
   const current = captureFileOperation()
@@ -780,7 +869,7 @@ async function downloadAutoSlice(item: Classification, slice: AutoSlice) {
 }
 async function confirmClassifications() {
   const current = captureFileOperation()
-  if (!current()) return
+  if (!current() || busy.value) return
   busy.value = true; error.value = ''
   try {
     for (const item of classifications.value) {
@@ -800,7 +889,6 @@ async function confirmClassifications() {
     if (classificationConfirmed.value && previewSelectionReady.value) {
       classificationNotice.value = ''
       emit('stage', 'cleaning')
-      if (props.archiveOnSelect) templatePickerOpen.value = true
     }
     else emit('stage', 'fragments')
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类确认失败，请刷新后重试' }
@@ -848,20 +936,34 @@ async function restoreClassification(item: RecentClassification) {
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '恢复分类失败' }
   finally { if (current()) busy.value = false }
 }
+function retrySelectedPrintArea() {
+  if (!props.archiveOnSelect || busy.value || !file.value || !classificationConfirmed.value || !previewSelectionReady.value) return
+  if (!error.value.includes('请明确选择所选片段作为派生打印区域')) return
+  selectedPrintArea.value = true
+  void preview()
+}
 async function preview(slice?: AutoSlice) {
   if (busy.value) return
   const current = captureFileOperation()
   if (!current()) return
   if (!file.value || (!slice && (!classificationConfirmed.value || !previewSelectionReady.value))) return
+  if (props.archiveOnSelect && loginModelFlow.value && !slice) return
+  const useModel = !props.archiveOnSelect && initialModel.value
+  if (useModel && sampleAuthorized.value === templateOwnFileAuthorized.value) {
+    error.value = '请先选择一种当前文件授权，或关闭模型选项使用本地规则。'
+    return
+  }
   resetReview()
   busy.value = true
   error.value = ''
+  if (props.archiveOnSelect) archiveProgress.value = '正在生成候选模板…'
   try {
     const form = new FormData()
     form.append('file', file.value)
-    form.append('model_opt_in', String(initialModel.value))
-    form.append('sample_authorized', String(sampleAuthorized.value))
-    form.append('own_file_authorized', String(templateOwnFileAuthorized.value))
+    form.append('model_opt_in', String(useModel))
+    form.append('sample_authorized', String(!props.archiveOnSelect && sampleAuthorized.value))
+    form.append('own_file_authorized', String(!props.archiveOnSelect && templateOwnFileAuthorized.value))
+    if (props.archiveOnSelect) form.append('use_login_notice', String(loginModelFlow.value && !!slice))
     const selectedFile = classifications.value[files.value.indexOf(file.value)]
     if (/\.xls$/i.test(file.value.name)) {
       if (!selectedFile?.classification_id) throw new Error('旧 XLS 必须先通过归档转换校验')
@@ -887,9 +989,11 @@ async function preview(slice?: AutoSlice) {
     selectedVersion.value = proposals.value.length - 1
     candidateIndex.value = 0
     review.value = result
+    if (props.archiveOnSelect) archiveProgress.value = result.proposal.model.status === 'returned'
+      ? '平台模型候选已生成，请核对。' : result.proposal.model.status === 'unavailable'
+        ? '平台模型处理未完成，当前显示本地规则候选，请查看处理诊断。' : '当前仅生成本地规则候选，平台模型尚未启用。'
     emit('stage', 'template')
-    if (props.archiveOnSelect) templatePickerOpen.value = true
-  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '预览失败' }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '预览失败'; if (props.archiveOnSelect) archiveProgress.value = '候选生成未完成，请重试生成候选。' }
   finally { if (current()) busy.value = false }
 }
 function canCommitSelectedTemplate() {
@@ -952,7 +1056,8 @@ async function save() {
 async function refine() {
   const current = captureFileOperation()
   if (!current()) return
-  if (!file.value || !review.value || !proposal.value || !consent.value || !feedback.value.trim()) return
+  if (busy.value || !file.value || !review.value || !proposal.value || selectedVersion.value !== proposals.value.length - 1 || !feedback.value.trim()) return
+  if (props.archiveOnSelect ? proposal.value.model.login_authorization?.status !== 'authorized' : !consent.value || sampleAuthorized.value === templateOwnFileAuthorized.value) return
   busy.value = true
   error.value = ''
   try {
@@ -961,9 +1066,10 @@ async function refine() {
     form.append('parent_version', proposal.value.version)
     form.append('feedback', feedback.value.trim())
     form.append('current', JSON.stringify(selected.value))
-    form.append('consent', 'true')
-    form.append('sample_authorized', String(sampleAuthorized.value))
-    form.append('own_file_authorized', String(templateOwnFileAuthorized.value))
+    form.append('consent', String(!props.archiveOnSelect && consent.value))
+    form.append('sample_authorized', String(!props.archiveOnSelect && sampleAuthorized.value))
+    form.append('own_file_authorized', String(!props.archiveOnSelect && templateOwnFileAuthorized.value))
+    if (props.archiveOnSelect) form.append('use_login_notice', 'true')
     const result = await templatePreviewApi.refineReviewedExcel(form) as { proposal: Proposal }
     if (!current()) return
     proposals.value.push(result.proposal)
@@ -1016,7 +1122,7 @@ async function downloadCandidate(index: number) {
     <div class="elt-intake-feed" aria-live="polite">
       <div v-if="!files.length && !classifications.length" class="elt-intake-empty">
         <p class="elt-intake-empty__title">上传文件，挑选模板</p>
-        <p>把文件拖到底部对话框，也可输入整理要求；点「开始处理」后弹出选模板。</p>
+        <p>把文件拖到底部对话框，也可输入整理要求；点「开始处理」后直接处理，在页面内核对候选模板。</p>
         <p class="elt-quiet">已保存的模板请到「模板库」查看管理。</p>
       </div>
       <div v-if="files.length" class="elt-bubble elt-bubble--user">
@@ -1026,7 +1132,7 @@ async function downloadCandidate(index: number) {
         整理要求：{{ note }}
       </div>
       <div v-if="archiveProgress" class="elt-bubble elt-bubble--system" role="status">{{ archiveProgress }}</div>
-      <div v-if="error && !review" class="elt-bubble elt-bubble--error" role="alert">{{ error }}</div>
+      <div v-if="error" class="elt-bubble elt-bubble--error" role="alert">{{ error }}</div>
 
     <details v-if="!archiveOnSelect" class="elt-admin-panel"><summary>管理员与档案（配额、撤回）</summary>
       <p class="elt-quiet">原件长期保留；未显式配置时默认 10 GiB，配额不足时不能归档。打印版式未验证，不可发布企业模板库。</p>
@@ -1050,7 +1156,18 @@ async function downloadCandidate(index: number) {
       </div>
     </details>
 
-      <div v-if="!archiveOnSelect">
+      <div v-if="archiveOnSelect && loginModelFlow && !review" aria-label="平台模型文档切片">
+        <button v-if="busy && analysisProgress" type="button" @click="cancelAnalysis = true">停止后续分析</button>
+        <button v-if="currentClassification?.checkpoint?.phase === 'failed'" type="button" :disabled="busy" @click="runLoginModelPipeline((currentClassification!.checkpoint!.calls_in_round ?? 0) >= currentClassification!.checkpoint!.max_calls)">{{ (currentClassification.checkpoint.calls_in_round ?? 0) >= currentClassification.checkpoint.max_calls ? '确认新一轮预算并重试模型分类' : '重试模型分类' }}</button>
+        <button v-if="currentClassification?.checkpoint?.phase === 'paused'" type="button" :disabled="busy" @click="runLoginModelPipeline()">继续模型分类</button>
+        <button v-if="currentClassification?.model_status === 'returned'" type="button" :disabled="busy" @click="runLoginModelPipeline()">重新加载切片（不调用模型分类）</button>
+        <p v-for="slice in currentLoginSlices" :key="slice.index">
+          {{ slice.fragments.map(part => `${part.sheet}!${part.range}`).join('、') }} · {{ slice.filename }}
+          <small v-if="!processableSlice(currentClassification!, slice)">包含隐藏或不可处理工作表，或模型未确定完整关系；不能生成候选，原件不变。</small>
+          <button type="button" :disabled="busy || !processableSlice(currentClassification!, slice)" @click="previewAutoSlice(files.indexOf(file as File), slice)">用此单据生成模板</button>
+        </p>
+      </div>
+      <div v-if="!archiveOnSelect || (!loginModelFlow && !busy && classifications.some(item => item.status === 'classified') && (!classificationConfirmed || !previewSelectionReady))">
 
     <div class="reviewed-template__step" data-elt-stage="classification">
     <h3 v-if="!archiveOnSelect">第二步：文件分类</h3>
@@ -1066,12 +1183,14 @@ async function downloadCandidate(index: number) {
       </div>
     </details>
     <div v-if="classifications.length" class="classification-results">
+      <template v-if="!archiveOnSelect">
       <label><input v-model="classificationSampleAuthorized" type="checkbox" :disabled="busy"> 确认所有待分析文件为获准发送的合成或公开样本，同意发送有界单元格及结构（每文件每轮默认一次，按服务配置最多四次，逐次执行；预算用完需再次确认）</label>
       <label v-if="file"><input v-model="classificationOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的内容发送至{{ platformModelLabel }}：每批最多 500 个单元格的文本、公式和结构坐标可能包含敏感数据；仅发送当前文件，逐批分析，每轮最多四次。</label>
       <p class="reviewed-template__platform-model" role="status">模型调用走软件当前平台默认模型<span v-if="platformModelId">：{{ platformModelProvider ? `${platformModelProvider}/` : '' }}{{ platformModelId }}</span>；可在系统设置的平台模型配置中调整。离线批测用的 Luna/Terra 私有别名不作为本页默认。</p>
       <button type="button" :disabled="busy || classificationSampleAuthorized === classificationOwnFileAuthorized" @click="analyzeClassifications()">模型分析已分类文件</button>
       <button v-if="busy && analysisProgress" type="button" @click="cancelAnalysis = true">停止后续分析</button>
       <p v-if="analysisProgress">{{ analysisProgress }}</p>
+      </template>
       <details><summary>分类说明（可选）</summary>
         <p>下方坐标是物理片段；是否属于同一业务文档需另行核对。同类别不会自动合并，范围可能包含空白边缘，不表示已精确裁剪。</p>
       </details>
@@ -1085,7 +1204,7 @@ async function downloadCandidate(index: number) {
         <p v-for="warning in restrictions(item)" :key="warning" role="alert">{{ warning }}</p>
         <p v-if="item.read_only_print_areas?.length">原打印区域：{{ item.read_only_print_areas.map((area) => `${area.sheet}: ${area.value}`).join('；') }}。逐文档提取时可能需要确认派生打印区域。</p>
         <small v-if="item.checkpoint">批次 {{ item.checkpoint.completed }}/{{ item.checkpoint.total }}；本轮 {{ item.checkpoint.calls_in_round ?? 0 }}/{{ item.checkpoint.max_calls }} 次：{{ item.checkpoint.message }}；停止只在批次之间生效。</small>
-        <template v-if="item.checkpoint?.phase === 'failed' && item.classification_id">
+        <template v-if="!archiveOnSelect && item.checkpoint?.phase === 'failed' && item.classification_id">
           <p>服务端已记录失败响应；重试会再次调用模型，不会自动重发。</p>
           <label v-if="(item.checkpoint.calls_in_round ?? 0) >= item.checkpoint.max_calls"><input v-model="retryBudget[item.classification_id]" type="checkbox" :disabled="busy"> 本轮预算已用完，我确认开启新一轮预算并重试此次失败请求</label>
           <button type="button" :disabled="busy || classificationSampleAuthorized === classificationOwnFileAuthorized || (classificationOwnFileAuthorized && file !== files[i]) || ((item.checkpoint.calls_in_round ?? 0) >= item.checkpoint.max_calls && !retryBudget[item.classification_id])" @click="analyzeClassifications(item, retryBudget[item.classification_id] === true)">上次响应失败，确认再次调用模型重试</button>
@@ -1125,8 +1244,9 @@ async function downloadCandidate(index: number) {
         </div>
         <div v-for="(sheet, j) in item.sheets" :key="j">
           <strong>{{ sheet.sheet }}（已读取 {{ sheet.checked_cells }} 个非空格）</strong>
+          <p v-if="!processableSheet(sheet)">{{ sheet.processing_message || '隐藏工作表不能作为独立模板提取；原件保持不变。' }}</p>
           <div v-for="(region, k) in sheet.regions" :key="k" class="classification-region">
-            <label><input type="radio" name="template-region" :checked="file === files[i] && selectedRegion === `${sheet.sheet} / ${region.range}`" :disabled="busy" @change="selectRegion(i, j, k)"> 选择此区域定位</label>
+            <label><input type="radio" name="template-region" :checked="file === files[i] && selectedRegion === `${sheet.sheet} / ${region.range}`" :disabled="busy || !processableSheet(sheet)" @change="selectRegion(i, j, k)"> 选择此区域定位</label>
             <label><input v-model="selectedRows" type="checkbox" :value="`${i}:${j}:${k}`" :disabled="busy"> {{ region.range }} {{ region.parent_heading }}（边界待确认）</label>
             <small v-if="region.modified || region.label_source === 'user' || region.range_source === 'user'">用户修正</small>
             <label v-for="(label, key) in labelNames" :key="key"><input type="checkbox" :checked="region.labels.includes(key)" :disabled="busy" @change="toggleLabel(region, key, ($event.target as HTMLInputElement).checked)"> {{ label }}</label>
@@ -1155,18 +1275,16 @@ async function downloadCandidate(index: number) {
         </div>
       </div>
       <button type="button" :disabled="!file || busy" @click="confirmClassifications">确认分类并继续</button>
-      <button v-if="archiveOnSelect" type="button" :disabled="!classificationConfirmed || !previewSelectionReady || busy" @click="templatePickerOpen = true">选模板</button>
       <small>预览前需确认分类；未知会保留为未知，用户可确认继续。</small>
     </div>
     </div>
 
       </div>
-      <div class="elt-template-picker" role="dialog" aria-label="选模板" v-show="templatePickerOpen || !!review || !!savedId">
+      <div class="elt-template-picker" aria-label="候选模板与处理选项" :aria-busy="busy" v-show="!archiveOnSelect || !!file || !!savedId">
 
-    <div class="reviewed-template__step" data-elt-stage="template" v-show="!archiveOnSelect || templatePickerOpen || !!review || !!savedId">
+    <div class="reviewed-template__step" data-elt-stage="template">
     <div v-if="archiveOnSelect" class="elt-template-picker__bar">
-      <h3>选模板</h3>
-      <button type="button" class="elt-template-picker__close" :disabled="busy" @click="templatePickerOpen = false">关闭</button>
+      <h3>候选模板</h3>
     </div>
     <h3 v-else>第三步：清理 Excel 并保存到模板库</h3>
     <p v-for="group in classifications[files.indexOf(file as File)]?.logical_documents || []" :key="group.logical_document_id">已确认的文档片段：{{ group.fragments.map((part) => `${part.sheet}!${part.range}`).join('、') }}。</p>
@@ -1175,14 +1293,28 @@ async function downloadCandidate(index: number) {
       <p>归档原件长期保留；模板生成过程中的临时副本按既有规则在 7 天后清理，已保存模板按模板库规则保留。旧记录及旧副本不会自动迁移。记录中的预览或模型输出仍可能包含表格内容。</p>
     </details>
     <p v-if="file">当前文件：{{ file.name }}</p>
+    <details v-if="archiveOnSelect && classifications.some(item => item.status === 'classified')"><summary>切换处理文件或片段</summary>
+      <div v-for="(item, i) in classifications" :key="i">
+        <template v-if="item.status === 'classified'">
+          <button type="button" :disabled="busy || file === files[i]" @click="selectFile(i)">{{ item.name }}</button>
+          <template v-for="(sheet, j) in item.sheets" :key="sheet.sheet">
+            <button v-for="(region, k) in sheet.regions" :key="region.range" type="button" :disabled="busy || !processableSheet(sheet)" @click="selectRegion(i, j, k)">{{ sheet.sheet }} / {{ region.range }}</button>
+            <small v-if="!processableSheet(sheet)">{{ sheet.processing_message || '隐藏工作表不能作为独立模板提取；原件保持不变。' }}</small>
+          </template>
+        </template>
+      </div>
+    </details>
     <p v-if="selectedRegion">所选区域：{{ selectedRegion }}。若该区域属于已确认的多片段文档，将一起提取。</p>
+    <details v-if="!archiveOnSelect"><summary>处理选项与模型授权</summary>
+    <p>默认仅使用本地规则。模型优化需授权当前文件；切换文件或片段后须重新授权。</p>
     <label v-if="selectedRegion"><input v-model="selectedPrintArea" type="checkbox" :disabled="busy"> 同意在派生文件中将打印范围设为所选片段，可能超出原打印范围并包含原未打印的签字栏；原件不变，页眉页脚保留。</label>
     <label>模板名称 <input v-model="name" :disabled="busy"></label>
     <label><input v-model="initialModel" type="checkbox" :disabled="busy"> 首轮使用模型生成三个候选</label>
-    <label><input v-model="sampleAuthorized" type="checkbox" :disabled="busy"> 确认此文件是获准发送的合成或公开样本，同意发送有界文本及结构概览</label>
-    <label v-if="file"><input v-model="templateOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的所选文档发送至{{ platformModelLabel }}：最多 100 个非空单元格、每格最多 160 字，以及结构与反馈；可能包含敏感数据。</label>
-    <button type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview()">预览清理候选</button>
-    <p v-if="error" role="alert">{{ error }}</p>
+    <label><input v-model="sampleAuthorized" type="checkbox" :disabled="busy" @change="sampleAuthorized && (templateOwnFileAuthorized = false)"> 确认此文件是获准发送的合成或公开样本，同意发送有界文本及结构概览</label>
+    <label v-if="file"><input v-model="templateOwnFileAuthorized" type="checkbox" :disabled="busy" @change="templateOwnFileAuthorized && (sampleAuthorized = false)"> 我有权授权当前文件 {{ file.name }} 的所选文档发送至{{ platformModelLabel }}：最多 100 个非空单元格、每格最多 160 字，以及结构与反馈；可能包含敏感数据。</label>
+    </details>
+    <button type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (archiveOnSelect && loginModelFlow) || (!archiveOnSelect && initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview()">预览清理候选</button>
+    <button v-if="archiveOnSelect && error.includes('请明确选择所选片段作为派生打印区域')" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy" @click="retrySelectedPrintArea">按所选片段生成副本并重试（原件不变）</button>
     <div v-if="review">
       <p v-if="review.selected_region?.print_area_mode === 'selected'">已按您的选择设置派生打印范围：原范围 {{ review.selected_region.source_print_areas?.map((area) => area.value).join('；') || '未设置' }} → 派生范围 {{ review.selected_region.derived_print_area || '未设置' }}；原件不变。</p>
       <details><summary>预览说明</summary>
@@ -1232,14 +1364,20 @@ async function downloadCandidate(index: number) {
         </div>
       </div>
       <p class="reviewed-template__a4-hint">{{ archiveOnSelect ? '点击卡片仅选择模板；核对后点击「使用此模板并入库」开始写入。绿=已选，黄=未选。' : '点选卡片选用；黄胶囊=未选，绿胶囊=已选。' }}</p>
-      <p>版本 {{ selectedVersion + 1 }} · {{ proposal.model.status === 'returned' ? '模型已返回建议，尚待用户确认' : proposal.model.status === 'unavailable' ? '模型不可用，显示确定性规则建议' : '确定性规则建议，未调用模型' }}<span v-if="proposal.model.status === 'returned'"> · 输入 {{ proposal.model.cells_sent }}/{{ proposal.model.cells_total }} 格{{ proposal.model.truncated ? '（已截断）' : '' }}</span></p>
+      <p v-if="!archiveOnSelect">版本 {{ selectedVersion + 1 }} · {{ proposal.model.status === 'returned' ? '模型已返回建议，尚待用户确认' : proposal.model.status === 'unavailable' ? '模型不可用，显示确定性规则建议' : '确定性规则建议，未调用模型' }}<span v-if="proposal.model.status === 'returned'"> · 输入 {{ proposal.model.cells_sent }}/{{ proposal.model.cells_total }} 格{{ proposal.model.truncated ? '（已截断）' : '' }}</span></p>
+      <details v-if="archiveOnSelect" class="reviewed-template__diagnostics"><summary>处理诊断</summary>
+        <p>{{ processingDiagnostic }}</p>
+        <p v-if="proposal.model.login_authorization?.provider || proposal.model.login_authorization?.model">授权模型：{{ [proposal.model.login_authorization.provider, proposal.model.login_authorization.model].filter(Boolean).join('/') }}</p>
+      </details>
       <details v-if="proposal.model.input_summary"><summary>查看模型输入摘要及来源坐标（不含正文）</summary><pre>{{ JSON.stringify(proposal.model.input_summary, null, 2) }}</pre></details>
       <details v-if="proposal.model.input_messages"><summary>历史记录中的模型输入正文（旧记录未自动清理）</summary><pre>{{ JSON.stringify(proposal.model.input_messages, null, 2) }}</pre></details>
       <button v-for="(_, index) in proposals" :key="index" type="button" :disabled="busy || selectedVersion === index" @click="switchVersion(index)">查看版本 {{ index + 1 }}</button>
+      <template v-if="!archiveOnSelect">
       <label>自然语言修改建议 <input v-model="feedback" :disabled="busy" placeholder="例如：保留客户信息，清理产品明细"></label>
       <label><input v-model="consent" type="checkbox" :disabled="busy"> 同意向已配置模型发送最多 100 个非空单元格的文本样本及修改要求（单格最多 160 字）</label>
       <button type="button" :disabled="busy || selectedVersion !== proposals.length - 1 || !consent || sampleAuthorized === templateOwnFileAuthorized || !feedback.trim()" @click="refine">生成新一轮三个模板</button>
       <p>服务端保留 {{ proposals.length }} 个提案版本；历史版本仅供查看，保存和修改需使用最新版本。</p>
+      </template>
       <p v-for="warning in currentRestrictions" :key="warning" role="alert">{{ warning }}</p>
       <section class="reviewed-template__intake-plan" aria-label="本次入库范围">
         <p v-if="intakePending" role="status">正在预演入库目标和记录数量，尚未写入模板、知识库或业务数据…</p>
@@ -1409,41 +1547,8 @@ async function downloadCandidate(index: number) {
   color: #5f6f7e;
   font-size: 13px;
 }
-.elt-template-picker {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgb(15 23 42 / 45%);
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-}
-.elt-template-picker > .reviewed-template__step {
-  width: min(56rem, 96vw);
-  max-height: min(92vh, 46rem);
-  overflow: auto;
-  margin: 0;
-  background: #fff;
-  box-shadow: 0 20px 50px rgb(0 0 0 / 20%);
-}
-.elt-template-picker__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.35rem 0.5rem 0;
-}
+.elt-template-picker { min-width: 0; }
 .elt-template-picker__bar h3 { margin: 0; }
-.elt-template-picker__close {
-  border: 1px solid #d5deea;
-  background: #fff;
-  border-radius: 8px;
-  padding: 0.35rem 0.7rem;
-}
 .elt-composer {
   position: sticky;
   bottom: 0;

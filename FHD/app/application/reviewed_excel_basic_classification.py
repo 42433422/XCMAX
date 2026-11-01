@@ -155,6 +155,11 @@ def classify_review_workbook(review: dict) -> list[dict]:
         results.append(
             {
                 "sheet": sheet,
+                "sheet_state": dimensions.get("sheet_state", "visible"),
+                "processable": dimensions.get("sheet_state", "visible") == "visible",
+                "processing_message": ""
+                if dimensions.get("sheet_state", "visible") == "visible"
+                else "隐藏工作表无法作为独立模板处理；请选择可见工作表。",
                 "labels": [item["label"] for item in evidence] or ["unknown"],
                 "evidence": evidence,
                 "checked_cells": len(cells),

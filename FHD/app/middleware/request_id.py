@@ -22,7 +22,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         request_id = raw or str(uuid.uuid4())
         request.state.request_id = request_id
         response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Request-ID"] = request.state.request_id
         return response
 
 
