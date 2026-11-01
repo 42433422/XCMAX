@@ -221,7 +221,7 @@ class AutoIngestService:
         )
         if knowledge != plan.get("knowledge"):
             raise EltError("ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409)
-        return get_elt_service().get_run(db, run_id=run.id, owner_user_id=owner_user_id)
+        return dict(get_elt_service().get_run(db, run_id=run.id, owner_user_id=owner_user_id))
 
     def run(
         self,
