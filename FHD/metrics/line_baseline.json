@@ -1,5 +1,5 @@
 {
-  "lines": 2407113,
-  "updated": "2026-10-31",
-  "note": "生产7项路径门禁修复及两fd精确误报维护，含已核数据库属主的prepared-intake兼容链补齐：原安全实现/负测净499行，再加83行真实路由身份传递与跨owner/tenant/过期/raw伪造回归，总净582行。按AGENTS及主任务授权保留必要安全证据，不放宽全局根、不降断言。"
+  "lines": 2407348,
+  "updated": "2026-11-01",
+  "note": "User-approved protected single-port config transaction; independent review adds metadata CAS to prevent clobbering concurrent permission changes"
 }

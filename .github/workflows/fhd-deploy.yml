@@ -26,6 +26,8 @@ on:
           - restart-only
           - freeze-manifest
           - unfreeze-manifest
+          - align-port-5100
+          - restore-port-5000
       action_id:
         description: Required for production apply-latest; exact release:<40-char git sha>
         required: false
@@ -68,6 +70,7 @@ permissions:
 
 jobs:
   cvm-rolling:
+    if: ${{ inputs.action != 'align-port-5100' && inputs.action != 'restore-port-5000' }}
     name: CVM rolling (${{ inputs.environment }})
     runs-on: ubuntu-latest
     environment:
@@ -522,3 +525,48 @@ jobs:
           fi
           echo "::error::Autonomy failure callback returned HTTP $status"
           exit 1
+
+  fixed-port-configuration:
+    name: Explicit production config WRITE (no restart)
+    if: ${{ inputs.action == 'align-port-5100' || inputs.action == 'restore-port-5000' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment:
+      name: production
+    steps:
+      - name: Validate fixed production action identity
+        env:
+          TARGET_ENV: ${{ inputs.environment }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          ACTION_ID: ${{ inputs.action_id }}
+        run: |
+          set -euo pipefail
+          test "$TARGET_ENV" = production
+          test "$RELEASE_SHA" = 9a7e4cc0f4fbfe07d083d9807eb0f857072e9f4d
+          test "$ACTION_ID" = config-port:9a7e4cc0:5000-to-5100
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Apply only the approved fixed configuration transaction
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+          FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          CONFIG_ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          test -n "${FHD_PUSH_HOST:-}"
+          test -n "${FHD_PUSH_SSH_KEY_RAW:-}"
+          case "$CONFIG_ACTION" in align-port-5100|restore-port-5000) ;; *) exit 64;; esac
+          umask 077
+          key="${RUNNER_TEMP}/fixed-port-configuration-key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$key"
+          unset FHD_PUSH_SSH_KEY_RAW
+          timeout --kill-after=5s 90s ssh -T -i "$key" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            -o ConnectTimeout=15 -o ConnectionAttempts=1 \
+            -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}" "python3 - $CONFIG_ACTION" \
+            < FHD/scripts/deploy/align_production_port_5100.py
