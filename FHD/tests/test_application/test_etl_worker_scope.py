@@ -89,6 +89,7 @@ def test_auto_ingest_thread_keeps_confirming_mod_after_request_ends(
 
     service = auto_ingest_service.AutoIngestService()
     monkeypatch.setattr(auto_ingest_service, "get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     source = tmp_path / "confirmed.txt"
     source.write_text("confirmed")
     release, completed = Event(), Event()

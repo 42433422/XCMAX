@@ -7,15 +7,11 @@ called as coroutines with mocked dependencies.
 
 from __future__ import annotations
 
-import sys
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-# ---------------------------------------------------------------------------
-# Module fixture: ensure the extension module is loaded exactly once
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
@@ -25,17 +21,9 @@ def _fake_circle_report_transport(monkeypatch):
     )
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _load_ext_module():
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401
-    yield
-
-
 @pytest.fixture
 def m():
-    """Return the already-imported extension module."""
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 # ---------------------------------------------------------------------------

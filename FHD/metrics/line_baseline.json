@@ -1,5 +1,5 @@
 {
-  "lines": 2406562,
+  "lines": 2406795,
   "updated": "2026-11-01",
-  "note": "PR #2888: net-delete 27 lines by removing import-time RAG package mocks and isolating the real dataset service fixture; preserve all assertions and verify old singleton/import-order failures. Cumulative maintained delta +3307 versus main d20ae2492 (original UX/CodeQL +2532, CI integrity/performance +775); complete shard evidence and safety gates retained."
+  "note": "PR #2891: maintained baseline is +233 versus main: original +259 security unblock, +7 managed-template jail and real-resolver regression fix, minus 33 redundant mobile test-loader lines. All 549 mobile cases pass with explicit per-fixture imports in isolated files."
 }

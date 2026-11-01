@@ -1,0 +1,20 @@
+{
+  "schema": "gitleaks-disposition-evidence/v1",
+  "n": 10,
+  "disposition": "evidence-pack-ready",
+  "bucket": "INC-MIMO",
+  "rule": "generic-api-key",
+  "path": "成都修茈科技有限公司/vibe-coding/test_vibe_quick.py",
+  "line": 11,
+  "commit_sha": "bd82363655b570611240eeea9da69d06aaa5b235",
+  "note": "OLD 401 + NEW 200 + owner default-revoke-on-rotate; pack INC-MIMO; owner reviewer confirmed; resolved registry PR opening",
+  "linked_evidence_refs": [
+    "cred-rotate/packs/INC-MIMO/MANIFEST.json",
+    "cred-rotate/mimo/OLD_REJECT_PROOF.json",
+    "cred-rotate/OWNER_DEFAULT_REVOKE_ON_ROTATE.json"
+  ],
+  "author": "codex-security-remediation",
+  "reviewer": "42433422",
+  "reviewed_at": "2026-11-01T02:00:00Z",
+  "review_due": "2027-01-30T00:00:00Z"
+}

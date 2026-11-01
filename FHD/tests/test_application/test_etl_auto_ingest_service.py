@@ -32,6 +32,12 @@ def ledger_root(tmp_path, monkeypatch):
     return tmp_path / "data"
 
 
+@pytest.fixture
+def allow_tmp_ingest_paths(tmp_path, monkeypatch):
+    """Trust only this test's workspace through the real ETL path resolver."""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
+
 def _shipment_xlsx(path: Path) -> Path:
     wb = Workbook()
     ws = wb.active
@@ -45,7 +51,7 @@ def _shipment_xlsx(path: Path) -> Path:
 
 
 def test_auto_ingest_writes_knowledge_and_records_business(
-    rag_service, ledger_root, tmp_path, monkeypatch
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
     xlsx = _shipment_xlsx(tmp_path / "26鑫顺.xlsx")
     fake_etl = MagicMock()
@@ -93,7 +99,7 @@ def test_auto_ingest_writes_knowledge_and_records_business(
 
 
 def test_auto_ingest_withdraw_rolls_back_kb_and_business(
-    rag_service, ledger_root, tmp_path, monkeypatch
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
     xlsx = _shipment_xlsx(tmp_path / "ship.xlsx")
     fake_etl = MagicMock()
@@ -130,7 +136,9 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
     assert all(d.get("document_id") != doc_id for d in docs_after)
 
 
-def test_auto_ingest_progress_tracks_real_stages(rag_service, ledger_root, tmp_path, monkeypatch):
+def test_auto_ingest_progress_tracks_real_stages(
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
+):
     xlsx = _shipment_xlsx(tmp_path / "progress.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-p"}
@@ -167,7 +175,7 @@ def test_auto_ingest_progress_tracks_real_stages(rag_service, ledger_root, tmp_p
 
 @pytest.mark.parametrize("terminal", ["completed", "failed", "interrupted", "outcome_unknown"])
 def test_async_business_receipts_follow_actual_run_without_reexecution(
-    rag_service, ledger_root, tmp_path, monkeypatch, terminal
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch, terminal
 ):
     from contextlib import nullcontext
 
@@ -229,7 +237,7 @@ def test_async_business_receipts_follow_actual_run_without_reexecution(
 
 
 def test_business_failure_preserves_completed_knowledge_receipt(
-    rag_service, ledger_root, tmp_path, monkeypatch
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
     from app.application.elt.errors import EltError
 
