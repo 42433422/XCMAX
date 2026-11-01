@@ -145,7 +145,7 @@ onUnmounted(() => {
     </aside>
 
     <!-- 右侧登录区 -->
-    <section class="login-panel" aria-labelledby="login-heading">
+    <section class="login-panel" aria-labelledby="login-heading" aria-describedby="login-data-processing-notice">
       <LoginAccountActions v-if="!isAdminConsoleSpa()" :enterprise="isEnterpriseEdition" />
 
       <div class="login-panel-inner">
@@ -154,6 +154,10 @@ onUnmounted(() => {
           <template v-if="accountKind === 'admin'">{{ $t('login.subheadingAdmin') }}</template>
           <template v-else>{{ $t('login.subheadingEnterprise') }}</template>
         </p>
+        <i18n-t keypath="login.dataProcessingNotice" scope="global" tag="p" id="login-data-processing-notice" class="login-hint" role="note">
+          <template #agreement><RouterLink :to="{ name: 'login-legal', params: { document: 'service-agreement' }, query: route.query }">{{ $t('login.serviceAgreement') }}</RouterLink></template>
+          <template #privacy><RouterLink :to="{ name: 'login-legal', params: { document: 'privacy-policy' }, query: route.query }">{{ $t('login.privacyPolicy') }}</RouterLink></template>
+        </i18n-t>
 
         <div v-if="accountKind === 'enterprise'" class="login-mode-tabs" role="tablist">
           <button type="button" role="tab" :class="{ active: loginMode === 'password' }" @click="switchLoginMode('password')">
@@ -167,7 +171,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <form v-if="loginMode !== 'qr'" class="login-form" @submit.prevent="submitLogin" novalidate>
+        <form v-if="loginMode !== 'qr'" class="login-form" aria-describedby="login-data-processing-notice" @submit.prevent="submitLogin" novalidate>
           <template v-if="loginMode === 'password'">
             <div class="login-field" :class="{ 'is-focused': usernameFocused }">
               <label class="login-label" for="lv-username">{{ $t('login.labelUsername') }}</label>
@@ -279,7 +283,7 @@ onUnmounted(() => {
             </div>
           </transition>
 
-          <button class="login-submit" type="submit" :disabled="!canSubmit || loading">
+          <button class="login-submit" type="submit" aria-describedby="login-data-processing-notice" :disabled="!canSubmit || loading">
             <span>{{ loading ? $t('login.submitting') : $t('login.submit') }}</span>
             <span v-if="loading" class="login-spinner" aria-hidden="true"></span>
             <svg v-else viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
