@@ -1,5 +1,5 @@
 {
-  "lines": 2407289,
+  "lines": 2407308,
   "updated": "2026-11-01",
-  "note": "User approved isolated read-only startup diagnostic, fixed service/window and sanitized output; no main merge"
+  "note": "Authorized fixed-window startup JSON diagnosis bounded to5000 entries4MiB with strict allowlist; isolated diagnostic branch only"
 }
