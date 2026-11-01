@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { after, test } from 'node:test'
-import { copyFileSync, cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -107,8 +107,9 @@ test('real Vitest V8 four-shard merge equals full run and rejects coverage-free 
   copyFileSync(path.join(frontend, 'vitest.polyfill.cjs'), path.join(fixture, 'vitest.polyfill.cjs'))
   writeFileSync(path.join(fixture, 'src/math.js'), `export function calculate(flag) {\n let value = 0\n${Array.from({ length: 30 }, () => ' value += 1').join('\n')}\n return flag ? value : -value\n}\n`)
   writeFileSync(path.join(fixture, 'src/unimported.js'), 'export const uncovered = 1\n')
+  const executions = path.join(fixture, 'executions.log')
   for (let n = 1; n <= 4; n++) {
-    writeFileSync(path.join(fixture, `tests/${n}.test.js`), `import { test, expect } from 'vitest'\nimport { calculate } from '../src/math.js'\ntest('executes ${n}', () => expect(calculate(${n % 2 === 0})).toBe(${n % 2 === 0 ? 30 : -30}))\ntest.skip('declared skip ${n}', () => {})\n`)
+    writeFileSync(path.join(fixture, `tests/${n}.test.js`), `import { test, expect } from 'vitest'\nimport { appendFileSync } from 'node:fs'\nimport { calculate } from '../src/math.js'\ntest('executes ${n}', () => { appendFileSync(${JSON.stringify(executions)}, '${n}\\n'); expect(calculate(${n % 2 === 0})).toBe(${n % 2 === 0 ? 30 : -30}) })\ntest.skip('declared skip ${n}', () => {})\n`)
   }
   writeFileSync(path.join(fixture, 'vitest.config.js'), `export default { test: { include: ['tests/*.test.js'], maxWorkers: 1, coverage: { provider: 'v8', include: ['src/**/*.js'], reporter: ['json', 'json-summary'], thresholds: { lines: 92, branches: 81, functions: 90, statements: 92 } } } }\n`)
   const version = get(path.join(frontend, 'node_modules/vitest/package.json')).version
@@ -117,12 +118,31 @@ test('real Vitest V8 four-shard merge equals full run and rejects coverage-free 
   const shards = path.join(fixture, 'shards')
   mkdirSync(shards)
   for (let index = 1; index <= 4; index++) runShard({ ...ctx, env: { ...env, FRONTEND_SHARD_INDEX: String(index) } }, path.join(shards, `shard-${index}`))
+  const executedOnce = readFileSync(executions, 'utf8')
+  assert.equal(executedOnce.trim().split('\n').length, 4)
+  for (let index = 1; index <= 4; index++) {
+    const shard = path.join(shards, `shard-${index}`)
+    const junit = readFileSync(path.join(shard, 'junit.xml'), 'utf8')
+    assert.equal((junit.match(/<testcase\b/g) || []).length, 2)
+    assert.equal((junit.match(/<skipped\b/g) || []).length, 1)
+    assert.equal(get(path.join(shard, 'manifest.json')).outputs['junit.xml'], sha256(junit))
+  }
   mergeShards(ctx, shards)
+  assert.equal(readFileSync(executions, 'utf8'), executedOnce, 'Merging JUnit must not execute tests again')
+  const junit = readFileSync(path.join(fixture, 'test-results/junit.xml'), 'utf8')
+  assert.equal((junit.match(/<testcase\b/g) || []).length, 8)
+  assert.equal((junit.match(/<skipped\b/g) || []).length, 4)
+  for (let n = 1; n <= 4; n++) {
+    assert.match(junit, new RegExp(`name="executes ${n}"`))
+    assert.match(junit, new RegExp(`<testcase[^>]*name="declared skip ${n}"[^>]*>\\s*<skipped`))
+  }
   const merged = get(path.join(fixture, 'coverage/coverage-summary.json'))
   assert(Object.keys(merged).some(file => file.endsWith('/src/unimported.js')), 'Unimported source must stay in the denominator')
   const monolithic = spawnSync(process.execPath, [path.join(frontend, 'node_modules/vitest/vitest.mjs'), 'run', '--coverage'], { cwd: fixture, env, encoding: 'utf8' })
   assert.equal(monolithic.status, 0, monolithic.stderr + monolithic.stdout)
   assert.deepEqual(get(path.join(fixture, 'coverage/coverage-summary.json')), merged)
+  const executedTwice = readFileSync(executions, 'utf8')
+  assert.equal(executedTwice.trim().split('\n').length, 8)
   // Prove the aggregate still obeys the source config's global floors. Raising
   // only this fixture's line floor must fail; no shard is re-executed.
   const configFile = path.join(fixture, 'vitest.config.js')
@@ -142,4 +162,15 @@ test('real Vitest V8 four-shard merge equals full run and rejects coverage-free 
   manifest.outputs['blob.json'] = sha256(readFileSync(blob))
   put(manifestFile, manifest)
   assert.throws(() => mergeShards(ctx, damaged, '.bad-merge'), /Native Vitest/)
+  writeFileSync(path.join(damaged, 'shard-1/junit.xml'), 'altered report')
+  assert.throws(() => mergeShards(ctx, damaged, '.bad-junit-merge'), /Changed\/missing junit.xml/)
+  assert.equal(readFileSync(executions, 'utf8'), executedTwice, 'Failed report merges must not rerun tests')
+
+  // Failed shards still provide diagnostic JUnit without a success manifest.
+  writeFileSync(path.join(fixture, 'tests/failure.test.js'), "import { test, expect } from 'vitest'\ntest('intentional failure', () => expect(1).toBe(2))\n")
+  writeFileSync(configFile, originalConfig.replace("'tests/*.test.js'", "'tests/failure.test.js'"))
+  const failed = path.join(fixture, 'failed-shard')
+  assert.throws(() => runShard({ ...ctx, total: 1, env: { ...env, FRONTEND_SHARD_TOTAL: '1', FRONTEND_SHARD_INDEX: '1' } }, failed), /Vitest shard failed/)
+  assert.match(readFileSync(path.join(failed, 'junit.xml'), 'utf8'), /<failure\b/)
+  assert.equal(existsSync(path.join(failed, 'manifest.json')), false)
 })

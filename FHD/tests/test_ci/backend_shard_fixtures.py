@@ -2,7 +2,7 @@
 
 import json
 
-from scripts.ci.backend_shards import partition, seal
+from scripts.ci.backend_shards import object_digest, partition, seal, source_inventory
 
 IDENTITY = {
     "GITHUB_SHA": "a" * 40,
@@ -12,19 +12,44 @@ IDENTITY = {
 }
 
 
+def artifact_source(root):
+    return root.with_name(root.name + "-source")
+
+
 def make_artifacts(root, total):
-    nodes = [f"test_{n:02}.py::test_a" for n in range(max(4, total))]
+    source = artifact_source(root)
+    source.mkdir()
+    (source / "pytest.ini").write_text("[pytest]\n")
+    for n in range(max(4, total)):
+        (source / f"test_{n:02}.py").write_text("def test_a(): pass\n")
+    configuration, files = source_inventory(source)
     for index in range(1, total + 1):
         directory = root / f"shard-{index}"
         directory.mkdir(parents=True)
-        selected = partition(nodes, total)[index - 1]
+        assigned = sorted(partition(list(files), total)[index - 1])
+        selected = [f"{name}::test_a" for name in assigned]
         data = dict(
             IDENTITY,
+            schema=2,
             index=index,
             total=total,
             partition_profile="count-v1",
-            full=nodes,
+            configuration=configuration,
+            files=files,
+            source_inventory_sha256=object_digest({"configuration": configuration, "files": files}),
+            assigned_files=assigned,
+            collected=selected,
             selected=selected,
+            excluded_ramp=[],
+            collection_reports={
+                name: [
+                    {
+                        "outcome": "passed",
+                        "children": [{"nodeid": f"{name}::test_a", "collector": False}],
+                    }
+                ]
+                for name in assigned
+            },
             exitstatus=0,
             collection_errors=[],
             collection_skips=[],

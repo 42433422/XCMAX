@@ -265,10 +265,15 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: "pip"
-          cache-dependency-path: |
+      - name: Set up cached uv installer
+        if: needs.classify.outputs.backend_skip != 'true'
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
             FHD/requirements-server-api.txt
             FHD/deploy/requirements-dev.txt
+            FHD/uv.lock
             FHD/pyproject.toml
             FHD/packages/**/pyproject.toml
 
@@ -278,9 +283,9 @@ jobs:
           set -euo pipefail
           pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
           [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
-          python -m pip install --upgrade pip
-          pip install -r requirements-server-api.txt
-          pip install -r deploy/requirements-dev.txt "$pytest_pin"
+          uv --version
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r deploy/requirements-dev.txt "$pytest_pin"
+          uv pip check --system --python "$(command -v python)"
 
       - name: Set up the real private Mod frontend compiler
         if: needs.classify.outputs.backend_skip != 'true'
@@ -388,10 +393,14 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: "pip"
-          cache-dependency-path: |
+      - name: Set up cached uv installer
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
             FHD/requirements-server-api.txt
             FHD/deploy/requirements-dev.txt
+            FHD/uv.lock
             FHD/pyproject.toml
             FHD/packages/**/pyproject.toml
 
@@ -400,9 +409,9 @@ jobs:
           set -euo pipefail
           pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
           [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
-          python -m pip install --upgrade pip
-          pip install -r requirements-server-api.txt
-          pip install -r deploy/requirements-dev.txt "$pytest_pin"
+          uv --version
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r deploy/requirements-dev.txt "$pytest_pin"
+          uv pip check --system --python "$(command -v python)"
           python -m pip list --format=json > dependency-versions.json
 
       - name: Set up the real private Mod frontend compiler
@@ -555,10 +564,13 @@ jobs:
         if: needs.classify.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: npm ci --no-audit --no-fund
-      - name: Run ESLint
+      - name: Run ESLint including test assertion guards
         if: needs.classify.outputs.frontend == 'true'
         working-directory: FHD/frontend
-        run: npm run lint
+        run: npx eslint src/ "tests/**/*.test.{js,ts}"
+      - name: Frontend coverage stub ratchet
+        if: needs.classify.outputs.frontend == 'true'
+        run: python scripts/dev/count_frontend_coverage_stubs.py --check
       - name: Verify native shard and coverage contracts
         if: needs.classify.outputs.frontend == 'true'
         working-directory: FHD/frontend
@@ -679,6 +691,14 @@ jobs:
         if: needs.classify.outputs.frontend == 'true'
         working-directory: FHD/frontend
         run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
+      - name: Upload merged JUnit report
+        if: always() && needs.classify.outputs.frontend == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-junit-${{ github.run_id }}
+          path: FHD/frontend/test-results/junit.xml
+          if-no-files-found: warn
+          retention-days: 14
       - name: Upload frontend coverage and partition summary
         if: always() && needs.classify.outputs.frontend == 'true'
         uses: actions/upload-artifact@v4
@@ -689,11 +709,39 @@ jobs:
             FHD/frontend/.frontend-merge/summary.json
           include-hidden-files: true
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
-  # PR/push E2E: mock API (E2E_VITE_MOCK_API=1) — npm run test:e2e:p0 → 8 pass / 6 skip
-  # (smoke 3 pass + 1 skip, critical-paths 5 pass, plan2026-skeleton 5 skip w/o E2E_FULL_STACK).
-  # Full-stack 14/14: root e2e.yml on schedule or workflow_dispatch (see e2e-playwright-reusable.yml).
+  # Preserve the previous standalone check contexts without executing the suite twice.
+  # Classified skips are validated by frontend-test; an actually skipped gate fails here.
+  vitest:
+    name: Vitest (173 文件 · jsdom)
+    needs: frontend-test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the verified frontend result
+        working-directory: .
+        env:
+          FRONTEND_RESULT: ${{ needs.frontend-test.result }}
+        run: test "$FRONTEND_RESULT" = success
+
+  frontend-smoke:
+    needs: frontend-test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the verified frontend result
+        working-directory: .
+        env:
+          FRONTEND_RESULT: ${{ needs.frontend-test.result }}
+        run: test "$FRONTEND_RESULT" = success
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+      - name: Preserve the original repository hygiene prerequisite
+        run: bash scripts/ci/check_repo_hygiene.sh
+
+  # Run mock contracts once here; e2e.yml retains the real API + strict-build path.
   frontend-e2e:
     needs: [guard-temp-scripts, classify]
     if: needs.classify.outputs.backend == 'true' || needs.classify.outputs.frontend == 'true'
@@ -1297,6 +1345,17 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up cached uv installer
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            FHD/requirements-server-api.txt
+            FHD/deploy/requirements-dev.txt
+            FHD/uv.lock
+            FHD/pyproject.toml
+            FHD/packages/**/pyproject.toml
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -1309,8 +1368,9 @@ jobs:
           set -euo pipefail
           pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
           [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
-          python -m pip install --upgrade pip
-          pip install -r requirements-server-api.txt -r deploy/requirements-dev.txt "$pytest_pin"
+          uv --version
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r deploy/requirements-dev.txt "$pytest_pin"
+          uv pip check --system --python "$(command -v python)"
 
       - name: Install frontend deps
         working-directory: FHD/frontend

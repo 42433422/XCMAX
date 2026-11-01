@@ -107,8 +107,11 @@ def test_sse_event_line() -> None:
 
 
 def test_thinking_steps_from_planner_stream_text() -> None:
-    text = 'data: {"type":"thinking","content":"step1"}\n\n'
-    assert _thinking_steps_from_planner_stream_text(text) is not None or text
+    assert _thinking_steps_from_planner_stream_text("普通回复") is None
+    text = "[正在调用工具:搜索]正文[正在调用工具:搜索][工具已返回][需要授权:读取]"
+    assert _thinking_steps_from_planner_stream_text(text) == (
+        "[正在调用工具:搜索]\n[工具已返回]\n[需要授权:读取]"
+    )
 
 
 def test_xcagi_compat_reply_plain_text() -> None:

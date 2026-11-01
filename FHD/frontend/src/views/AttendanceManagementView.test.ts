@@ -21,7 +21,7 @@ function mountView(section: 'personnel' | 'departments' | 'schedules' | 'records
     props: { section },
     global: {
       stubs: {
-        RouterLink: { template: '<a><slot /></a>' },
+        RouterLink: { props: ['to'], template: '<a :data-route="to.name"><slot /></a>' },
       },
     },
   })
@@ -32,6 +32,23 @@ describe('AttendanceManagementView', () => {
     apiFetch.mockReset()
     HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
     HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
+  })
+
+  it('guides empty attendance records to import and clears a no-match filter', async () => {
+    apiFetch.mockReturnValue(response({ items: [], total: 0, months: [] }))
+    const wrapper = mountView('records')
+    await flushPromises()
+    expect(wrapper.get('.empty-state a').attributes('data-route')).toBe('business-docking')
+    expect(wrapper.get('.empty-state').text()).toContain('考勤表')
+    await wrapper.get('.toolbar-card input').setValue('不存在的姓名')
+    await wrapper.findAll('button').find(button => button.text() === '查询')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.empty-state').text()).toContain('没有符合筛选条件')
+    await wrapper.get('.empty-state button').trigger('click')
+    await flushPromises()
+    expect(apiFetch.mock.lastCall?.[0]).toMatch(/search=$/)
+    expect(wrapper.get('.empty-state a').text()).toBe('导入考勤资料')
+    wrapper.unmount()
   })
 
   it('moves a searched person to an absolute roster position and reloads saved order', async () => {

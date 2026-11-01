@@ -178,19 +178,21 @@ PR Fast CI
 
 否则默认继续执行本 SSOT。普通 bug fix 的目标为「修改 → 快测 → PR 验证 → 合并」尽量在分钟级完成，开发速度以**有效修复数量 / 单位时间**衡量，而非「跑了多少次 CI」。
 
-## 分片执行与耗时观测（2026-10-21）
+## 分片执行与耗时观测（2026-11-01）
 
 本轮保留现有 11 个 required checks、测试全集及覆盖率基线，调整工作流依赖与报告成本。`backend-test`、`frontend-test` 仍是最终聚合门禁；质量检查与分片只等待 `guard-temp-scripts` 和分类完成；`SSOT Drift Gate` 同时运行，两个最终聚合门禁仍显式要求守卫与 SSOT 均成功。聚合使用 `always()`，分类失败、质量失败、分片缺失或取消不能变成成功。
 
 | 环节 | 执行与验证口径 |
 | --- | --- |
 | 统一分类 | `change_classifier.py --all` 只读一次 diff；绑定实际 checkout SHA。PR 使用 merge SHA；base/head 只负责分类。diff 缺失或为空时全跑。 |
-| 后端分片 | 默认 8 片，最多同时 8 片；手动 `backend_shards` 可选 4/8/16/24。按现有模块耗时分配；全集、选中项、结果、run/attempt/source、文件哈希全部验证。 |
-| 后端安装 | 保留现有 requirements 安装口径，pip 缓存显式绑定服务端、开发及本地包声明。每片保存解析后的依赖版本，未切换到不同版本的 uv 锁文件。 |
+| 后端分片 | 默认 8 片，最多同时 8 片；手动 `backend_shards` 可选 4/8/16/24。导入前按当前 pytest 配置枚举文件、按历史模块耗时分配，各片只收集自己的文件。汇总从同版源码独立重算文件全集与分配，逐文件核对收集回执、用例和执行结果，保留 run/attempt/source 与文件哈希校验。 |
+| 后端安装 | uv 使用同一 Python 安装现有 requirements 和锁定 pytest；缓存绑定 requirements、uv.lock 及本地包声明。安装后校验依赖一致性，每片保存解析版本。更换解析器不代表间接依赖版本必然相同，以实际清单和回归为准。 |
 | 后端报告 | stdlib 先验证所有证据及工具链，再只安装分片实际使用的 coverage 版本。full/behavior 数据隔离生成 JSON，保留 XML 和两道 ratchet；HTML 仅手动 `--html`。逐阶段耗时保存在 `backend-aggregate-timings.json`。 |
-| 前端分片 | 4 片 Vitest；原生 blob/V8 合并后再执行原全局阈值及 `--require-frontend`。验证完整文件集合、片号唯一、身份及原始报告哈希。ESLint、any 棘轮及现有 advisory vue-tsc 在质量任务执行。 |
+| 前端分片 | 全集只运行 4 片 Vitest，合并原生 blob/V8 和 JUnit 后执行原全局阈值及 `--require-frontend`。验证完整文件集合、片号唯一、身份及原始报告哈希。源码与测试 ESLint、stub/any 棘轮及现有 advisory vue-tsc 在质量任务执行。 |
 | 下游验证 | mock E2E 与打包提前开始；容器扫描等待实际打包产物。镜像发布仍等待前后端聚合、E2E、安全、容器扫描、打包和架构检查。 |
 | 无关变更 | 只有守卫和 SSOT 均成功、有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip；空输出或未知状态均失败。 |
+
+原 `Vitest (173 文件 · jsdom)` 与 `frontend-smoke` 检查名称保留为轻量兼容任务，显式要求 `frontend-test` 聚合成功；上游失败、取消或跳过均拒绝。`frontend-smoke` 还运行原仓库卫生检查。独立重复 Vitest、smoke 子集和 mock E2E 已移除；真实全栈 E2E、严格构建、安全扫描及覆盖率门禁保留。当前 `coverage_ramp` 为零时，后端复用已验证的 full 结果作为 behavior 结果，不重复执行测试。
 
 ### 比较时间的方法
 
@@ -227,9 +229,9 @@ python scripts/ci/measure_required_checks.py snapshot.json --output report.json
 
 > **生成 vs 手写**：根仓 `fhd-*.yml` / `modstore-*.yml` 由 publish 脚本从实现源生成，文件头为
 > `# CI SSOT: generated from … — DO NOT edit here`。**请改实现源后重跑 publish**，勿直接改根副本。
-> 以下 **6 个根仓 workflow 为手写**（无生成头，直接在根仓维护）：
+> 以下根仓 workflow 为手写（无生成头，直接在根仓维护）：
 > `archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
-> `e2e.yml`、`e2e-playwright-reusable.yml`、`frontend-unit.yml`。
+> `e2e.yml`、`e2e-playwright-reusable.yml`。
 
 ## 常用 workflow
 
@@ -238,8 +240,8 @@ python scripts/ci/measure_required_checks.py snapshot.json --output report.json
 | FHD 后端 + 前端 + Docker | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) |
 | FHD 轻量 smoke（path 过滤） | [`fhd-test.yml`](../.github/workflows/fhd-test.yml) |
 | FHD Release gate | [`fhd-release-gate-ci.yml`](../.github/workflows/fhd-release-gate-ci.yml) |
-| 前端 Vitest | [`frontend-unit.yml`](../.github/workflows/frontend-unit.yml) |
-| Playwright P0 | [`e2e.yml`](../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml) |
+| 前端 Vitest | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → `frontend-test-shard` / `frontend-test` |
+| Playwright 全栈 | [`e2e.yml`](../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml) |
 | Flutter Android+iOS CI | [`fhd-ci-mobile-flutter.yml`](../.github/workflows/fhd-ci-mobile-flutter.yml) |
 | Flutter Android 发布 | [`fhd-release-android.yml`](../.github/workflows/fhd-release-android.yml) |
 | Flutter iOS / TestFlight 发布 | [`fhd-release-ios.yml`](../.github/workflows/fhd-release-ios.yml) |
@@ -486,7 +488,7 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 | 场景 | Workflow | 模式 | 用例 |
 |------|----------|------|------|
 | FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **8 pass / 6 skip** |
-| 前端 path 过滤 / nightly | `e2e.yml` → `e2e-playwright-reusable.yml` | mock 同上；`schedule` / `workflow_dispatch` 额外 `E2E_FULL_STACK=1` | 全栈 **14/14**（含 `plan2026-skeleton`） |
+| 前端/后端 path 过滤、nightly、手动 | `e2e.yml` → `e2e-playwright-reusable.yml` | 每次运行均为 `E2E_FULL_STACK=1`，含严格构建和真实 FastAPI | 全栈 P0 与 `plan2026-skeleton`，结果以当次报告为准 |
 
 SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scripts/dev/e2e-full.sh`。
 

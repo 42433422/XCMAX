@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextvars import copy_context
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
@@ -219,7 +220,7 @@ class DraftServiceMixin:
                 with SUBMITTED_LOCK:
                     SUBMITTED.discard(run_id)
 
-        EXECUTOR.submit(work)
+        EXECUTOR.submit(copy_context().run, work)
 
     def _validate_draft(self, draft: dict[str, Any], adapter: TargetAdapter) -> None:
         mappings = draft.get("field_mappings")

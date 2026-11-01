@@ -136,7 +136,7 @@ def session_database(monkeypatch):
     Base.metadata.create_all(engine)
     sessions = sessionmaker(bind=engine)
     with sessions.begin() as db:
-        for uid in (71, 72):
+        for uid in (71, 72, 73):
             db.add(User(id=uid, username=f"synthetic-{uid}", password="unused", is_active=True))
             db.add(
                 Session(
@@ -144,7 +144,7 @@ def session_database(monkeypatch):
                     user_id=uid,
                     created_at=utc_now_naive() + timedelta(seconds=uid),
                     expires_at=utc_now_naive() + timedelta(hours=1),
-                    market_access_token=f"synthetic-owned-{uid}",
+                    market_access_token=f"synthetic-owned-{uid}" if uid != 73 else None,
                 )
             )
         db.add(
@@ -161,6 +161,9 @@ def session_database(monkeypatch):
             yield db
 
     monkeypatch.setattr("app.db.session.get_db", database)
+    monkeypatch.setattr("app.db.session.get_host_db", database)
+    monkeypatch.setattr("app.infrastructure.session.session_manager.get_host_db", database)
+    monkeypatch.setattr("app.application.session_account_meta.get_host_db", database)
     try:
         yield
     finally:
@@ -204,6 +207,57 @@ def test_new_sse_event_resets_metadata_filter_after_blank_separator():
     )
 
     assert list(facade._iter_market_sse_data_payloads(response)) == ['{"delta":"visible"}']
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+@pytest.mark.parametrize(
+    "status,message",
+    [
+        (400, "模型服务未接受请求，请查看模型状态；平台模型配置请联系管理员核对。"),
+        (401, "模型服务鉴权失败，请查看模型状态；平台模型授权请联系管理员核对。"),
+        (503, "模型服务暂不可用，请查看模型状态后重试。"),
+        (None, "模型服务请求失败，请查看模型状态后重试。"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_named_gateway_error_preserves_diagnosis_and_never_retries(
+    monkeypatch, mode, status, message
+):
+    from app.fastapi_routes.xcagi_compat_chat_helpers import _xcagi_chat_http_exc
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            text=f"event: error\ndata: {json.dumps({'ok': False, 'error': message, 'status': status})}\n\n",
+        )
+
+    sync_type = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: sync_type(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    mock_async_transport(monkeypatch, respond)
+    current = adapter()
+    try:
+        with pytest.raises(MarketModelError) as failure:
+            if mode == "sync":
+                list(
+                    facade.ModstoreOpenAICompatibleClient(current).chat.completions.create(
+                        messages=[], stream=True
+                    )
+                )
+            else:
+                [chunk async for chunk in current.stream_chat_completion([])]
+        projected = _xcagi_chat_http_exc(failure.value)
+        assert (projected.status_code, projected.detail) == (status or 502, message)
+        assert len(requests) == 1
+    finally:
+        await current.close()
 
 
 def test_closing_openai_stream_closes_retained_upstream_generator(monkeypatch):
@@ -466,3 +520,347 @@ def test_capabilities_import_without_importing_public_adapter():
         check=False,
     )
     assert completed.returncode == 0, completed.stderr + completed.stdout
+
+
+@pytest.fixture
+def request_market(monkeypatch):
+    """Real request adapter with synthetic account credentials and HTTP transport."""
+    monkeypatch.setenv("MODSTORE_PLATFORM_URL", "https://market.invalid")
+    monkeypatch.setenv("LLM_PROVIDER", "stale-local")
+    monkeypatch.setenv("LLM_MODEL", "stale-model")
+    monkeypatch.setattr(
+        facade.authentication,
+        "resolve_credential",
+        lambda *args: facade.authentication.Credential("synthetic-account", "session"),
+    )
+    sync_type = httpx.Client
+
+    def build(handler):
+        monkeypatch.setattr(
+            httpx,
+            "Client",
+            lambda **kwargs: sync_type(transport=httpx.MockTransport(handler), **kwargs),
+        )
+        mock_async_transport(monkeypatch, handler)
+        return facade.create_modstore_openai_client_from_request(Mock())
+
+    return build
+
+
+@pytest.mark.parametrize("source", ["platform_configuration", "byok", "preference"])
+def test_main_chat_auto_uses_server_route_before_local_fallback(
+    request_market, monkeypatch, source
+):
+    from app.legacy.chat import legacy_chat_adapter as planner
+
+    requests = []
+
+    def respond(request):
+        requests.append((request.method, request.url.path))
+        assert request.headers["Authorization"] == "Bearer synthetic-account"
+        if request.method == "GET":
+            assert request.url.path == "/api/llm/resolve-chat-default"
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "provider": "openai",
+                    "model": "server-default",
+                    "source": source,
+                },
+            )
+        body = json.loads(request.content)
+        assert (body["provider"], body["model"]) == ("openai", "server-default")
+        return httpx.Response(
+            200,
+            text='event: delta\ndata: {"delta":"测试成功"}\n\nevent: done\ndata: {"ok":true,"content":"测试成功"}\n\n',
+        )
+
+    client = request_market(respond)
+    assert requests == []
+    monkeypatch.setattr(planner, "_get_workflow_tool_registry", lambda: [])
+    events = list(
+        planner.chat_stream_sse_events(
+            "UX体验测试：只回复‘测试成功’，不要执行任何业务操作。", client=client
+        )
+    )
+    assert [event["type"] for event in events] == ["token", "done"]
+    assert events[0]["text"] == "测试成功"
+    assert requests == [("GET", "/api/llm/resolve-chat-default"), ("POST", "/api/llm/chat/stream")]
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_explicit_model_bypasses_unavailable_server_default(request_market, stream):
+    requests = []
+
+    def respond(request):
+        requests.append(request.method)
+        assert request.method == "POST", "Explicit selection must not depend on default discovery"
+        payload = json.loads(request.content)
+        assert (payload["provider"], payload["model"]) == ("byok", "chosen")
+        return (
+            httpx.Response(200, text='data: {"delta":"selected"}\n\n')
+            if stream
+            else httpx.Response(200, json={"content": "selected"})
+        )
+
+    client = request_market(respond)
+    result = client.chat.completions.create(messages=[], model="byok/chosen", stream=stream)
+    if stream:
+        assert list(result)[-1].choices[0].delta.content == "selected"
+    else:
+        assert result.choices[0].message.content == "selected"
+    assert requests == ["POST"]
+
+
+@pytest.mark.parametrize(
+    "status,payload",
+    [
+        (400, {"detail": "synthetic-private"}),
+        (503, {}),
+        (200, {"ok": False}),
+        (200, {"ok": True, "provider": "openai"}),
+    ],
+)
+def test_unresolved_default_never_sends_stale_local_model(request_market, status, payload):
+    requests = []
+
+    def respond(request):
+        requests.append(request.method)
+        assert request.method == "GET"
+        return httpx.Response(status, json=payload)
+
+    client = request_market(respond)
+    with pytest.raises(ValueError) as failure:
+        list(client.chat.completions.create(messages=[], stream=True))
+    assert "synthetic-private" not in str(failure.value)
+    assert requests == ["GET"]
+
+
+def test_server_default_cache_does_not_cross_account_credentials(request_market):
+    accounts = []
+
+    def respond(request):
+        account = request.headers["Authorization"]
+        accounts.append(account)
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "provider": "openai",
+                "model": "first" if account.endswith("synthetic-account") else "second",
+            },
+        )
+
+    client = request_market(respond)
+    assert client.default_model == "first"
+    assert client.default_provider == "openai"
+    client.adapter.auth_token = "synthetic-next-account"
+    assert client.default_model == "second"
+    assert accounts == ["Bearer synthetic-account", "Bearer synthetic-next-account"]
+
+
+def test_explicit_session_defaults_override_host_environment(request_market):
+    request_market(
+        lambda request: pytest.fail("Explicit session selection must not discover defaults")
+    )
+    selected = facade.ModstorePlatformAdapter.from_request(
+        Mock(), default_provider="explicit", default_model="selected"
+    )
+    client = facade.ModstoreOpenAICompatibleClient(selected)
+    assert (client.default_provider, client.default_model) == ("explicit", "selected")
+    # Process-configured direct adapters retain their existing environment route.
+    assert facade.ModstorePlatformAdapter().resolve_default_route() == (
+        "stale-local",
+        "stale-model",
+    )
+
+
+@pytest.mark.parametrize("mode", ["async", "async-stream"])
+@pytest.mark.asyncio
+async def test_async_adapter_uses_account_default(request_market, mode):
+    methods = []
+
+    def respond(request):
+        methods.append(request.method)
+        if request.method == "GET":
+            return httpx.Response(200, json={"ok": True, "provider": "openai", "model": "server"})
+        payload = json.loads(request.content)
+        assert (payload["provider"], payload["model"]) == ("openai", "server")
+        return (
+            httpx.Response(200, text='data: {"delta":"reply"}\n\n')
+            if mode == "async-stream"
+            else httpx.Response(200, json={"content": "reply"})
+        )
+
+    current = request_market(respond).adapter
+    try:
+        if mode == "async":
+            assert (await current.chat_completion([]))["choices"][0]["message"][
+                "content"
+            ] == "reply"
+        else:
+            assert [value async for value in current.stream_chat_completion([])] == [
+                '{"delta":"reply"}'
+            ]
+        assert methods == ["GET", "POST"]
+    finally:
+        await current.close()
+
+
+@pytest.mark.asyncio
+async def test_async_default_route_and_chat_keep_the_same_credential_snapshot(request_market):
+    observed = []
+
+    def respond(request):
+        observed.append((request.method, request.headers["Authorization"]))
+        if request.method == "GET":
+            return httpx.Response(
+                200, json={"ok": True, "provider": "openai", "model": "owned-model"}
+            )
+        assert json.loads(request.content)["model"] == "owned-model"
+        return httpx.Response(200, json={"content": "reply"})
+
+    current = request_market(respond).adapter
+    current._default_route_lock.acquire()
+    task = asyncio.create_task(current.chat_completion([]))
+    # Let the async request capture its credential, then hold model discovery
+    # until another session refresh changes the adapter's mutable token.
+    await asyncio.sleep(0)
+    current.auth_token = "synthetic-next-account"
+    current._default_route_lock.release()
+    try:
+        assert (await task)["choices"][0]["message"]["content"] == "reply"
+        assert observed == [
+            ("GET", "Bearer synthetic-account"),
+            ("POST", "Bearer synthetic-account"),
+        ]
+    finally:
+        await current.close()
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_sync_default_route_and_chat_keep_the_same_credential_snapshot(request_market, stream):
+    observed = []
+
+    def respond(request):
+        observed.append((request.method, request.headers["Authorization"]))
+        if request.method == "GET":
+            current.auth_token = "synthetic-next-account"
+            return httpx.Response(
+                200, json={"ok": True, "provider": "openai", "model": "owned-model"}
+            )
+        assert json.loads(request.content)["model"] == "owned-model"
+        return (
+            httpx.Response(200, text='data: {"delta":"reply"}\n\n')
+            if stream
+            else httpx.Response(200, json={"content": "reply"})
+        )
+
+    current = request_market(respond).adapter
+    if stream:
+        assert list(current.stream_chat_completion_sync([])) == ['{"delta":"reply"}']
+    else:
+        assert current.chat_completion_sync([])["choices"][0]["message"]["content"] == "reply"
+    assert observed == [("GET", "Bearer synthetic-account"), ("POST", "Bearer synthetic-account")]
+
+
+@pytest.fixture
+def desktop_model_status_client(session_database, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.legacy.routes.legacy_compat import _register_xcagi_compat_routes
+    from app.utils.deployment import is_desktop_mode
+
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    monkeypatch.setenv("MODSTORE_PLATFORM_URL", "https://market.invalid")
+    assert is_desktop_mode()
+    application = FastAPI()
+    _register_xcagi_compat_routes(application)
+    with TestClient(application) as client:
+        yield client
+
+
+def test_desktop_model_status_binds_real_session_and_returns_only_public_route(
+    desktop_model_status_client, monkeypatch
+):
+    seen = []
+
+    def respond(request):
+        assert request.method == "GET"
+        assert request.url.path == "/api/llm/resolve-chat-default"
+        token = request.headers["Authorization"]
+        seen.append(token)
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "provider": "openai",
+                "model": "model-71" if token.endswith("71") else "model-72",
+                "api_key": "synthetic-secret",
+                "base_url": "https://private.invalid",
+            },
+        )
+
+    monkeypatch.setattr(
+        facade,
+        "_httpx_sync_client",
+        lambda **kwargs: httpx.Client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    client = desktop_model_status_client
+    for uid in (71, 72):
+        client.cookies.set("session_id", f"synthetic-session-{uid}")
+        response = client.get(
+            "/api/conversation/model-status?user_id=999&session_id=synthetic-session-other",
+            headers={"Authorization": "Bearer synthetic-foreign-market-token", "X-User-ID": "999"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"ok": True, "provider": "openai", "model": f"model-{uid}"}
+        assert response.headers["Cache-Control"] == "no-store"
+    assert seen == ["Bearer synthetic-owned-71", "Bearer synthetic-owned-72"]
+
+
+@pytest.mark.parametrize("session_id", [None, "synthetic-unknown", "synthetic-session-73"])
+def test_model_status_requires_real_session_and_its_market_binding(
+    desktop_model_status_client, monkeypatch, session_id
+):
+    outbound = Mock(
+        side_effect=AssertionError(
+            "No discovery without both local identity and its market binding"
+        )
+    )
+    monkeypatch.setattr(facade, "_httpx_sync_client", outbound)
+    monkeypatch.setenv("MODSTORE_AUTH_TOKEN", "synthetic-host-token")
+    if session_id:
+        desktop_model_status_client.cookies.set("session_id", session_id)
+    response = desktop_model_status_client.get(
+        "/api/conversation/model-status", headers={"X-User-ID": "71"}
+    )
+    assert response.status_code == 401
+    outbound.assert_not_called()
+
+
+@pytest.mark.parametrize("status", [400, 401, 503])
+def test_model_status_failure_never_exposes_upstream_error_body(
+    desktop_model_status_client, monkeypatch, status
+):
+    monkeypatch.setattr(
+        facade,
+        "_httpx_sync_client",
+        lambda **kwargs: httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    status,
+                    json={"message": "synthetic-secret", "endpoint": "https://private.invalid"},
+                )
+            ),
+            **kwargs,
+        ),
+    )
+    desktop_model_status_client.cookies.set("session_id", "synthetic-session-71")
+    response = desktop_model_status_client.get("/api/conversation/model-status")
+    assert response.status_code == status
+    assert "synthetic-secret" not in response.text
+    assert "private.invalid" not in response.text
+    assert "模型" in response.json()["detail"]

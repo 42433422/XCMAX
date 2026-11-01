@@ -83,8 +83,8 @@ export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
 
 /** 行业核心槽位使用行业/Mod 标签，并抑制同名 bridge 菜单；权限由角色规则过滤。 */
 export const INDUSTRY_DELIVERY_CORE_ITEMS: CoreMenuCatalogItem[] = [
-  { key: 'products', name: '业务对象', iconClass: 'fa-cubes' },
-  { key: 'customers', name: '组织管理', iconClass: 'fa-users' },
+  { key: 'products', name: '产品管理', iconClass: 'fa-cubes' },
+  { key: 'customers', name: '客户管理', iconClass: 'fa-users' },
   { key: 'orders', name: '业务单据', iconClass: 'fa-file-text-o' },
   { key: 'shipment-records', name: '业务记录', iconClass: 'fa-industry' },
   { key: 'materials', name: '资源库', iconClass: 'fa-archive' },

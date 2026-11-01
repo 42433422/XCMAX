@@ -241,8 +241,8 @@ watch([currentRouteName, routeChunkErrorPath], () => {
   syncPendingSidebarWithRoute()
 })
 
-/** 侧栏选中「智能对话」时隐藏悬浮入口（含 Mod 门面 /mod/.../chat） */
-const shouldShowFloatingChatAssistant = computed(() => !isChatSidebarActive(currentRouteName.value, route) && !documentPreviewPip.visible)
+/** 对话与信息页收起悬浮入口，避免遮挡客服和员工的输入工具条。 */
+const shouldShowFloatingChatAssistant = computed(() => !isChatSidebarActive(currentRouteName.value, route) && currentRouteName.value !== 'im' && !documentPreviewPip.visible)
 
 const {
   paneStyle: sidebarShellStyle,

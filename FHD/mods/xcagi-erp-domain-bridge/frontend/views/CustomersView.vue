@@ -5,8 +5,7 @@
         <div class="customers-header-main">
           <h2>{{ pageNavTitle }}</h2>
           <p class="muted customers-header-desc">
-            购买单位与「{{ productsNavLabel }}」「{{ shipmentNavLabel }}」同源；可选单位筛选客户列表。
-            <span v-if="pageNavTitle !== '客户管理'" class="customers-header-note">（当前行业显示为「{{ pageNavTitle }}」，数据实体为购买单位/客户）</span>
+            购买单位与「{{ productsNavLabel }}」「{{ shipmentNavLabel }}」同源；可选单位筛选{{ entityName }}列表。
           </p>
           <div class="customers-unit-filter">
             <label class="customers-unit-label" for="customers-purchase-unit">购买单位</label>
@@ -32,7 +31,7 @@
             v-model="selectedTemplateId"
             class="template-select"
             :disabled="loadingTemplateOptions || templateOptions.length === 0"
-            title="客户管理导出模板"
+            :title="`${entityName}导出模板`"
           >
             <option value="" disabled>{{ loadingTemplateOptions ? '加载模板中...' : '请选择导出模板' }}</option>
             <option v-for="tpl in templateOptions" :key="tpl.id" :value="tpl.id">
@@ -60,14 +59,14 @@
               <path stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none" d="M7 7l10 10M17 7L7 17"/>
             </svg>
           </button>
-          <button class="btn btn-primary" data-tutorial-id="customer-create" @click="openAddModal">+ 新建客户</button>
+          <button class="btn btn-primary" data-tutorial-id="customer-create" @click="openAddModal">+ 新建{{ entityName }}</button>
           <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="handleBatchDelete">批量删除 ({{ selectedIds.length }})</button>
         </div>
       </div>
       <div class="stat-cards">
         <div class="stat-card">
           <div class="number">{{ totalCustomers }}</div>
-          <div class="label">客户总数</div>
+          <div class="label">{{ entityName }}总数</div>
         </div>
       </div>
       <div class="card">
@@ -79,7 +78,7 @@
           :selected-ids="selectedIds"
           :has-more="hasMore"
           row-key="id"
-          empty-text="暂无客户数据"
+          :empty-text="`暂无${entityName}数据`"
           @update:selected-ids="selectedIds = $event"
           @load-more="loadMoreCustomers"
         >
@@ -118,7 +117,7 @@
     <ConfirmDialog
       v-model="showDeleteConfirm"
       title="确认删除"
-      :message="`确定删除客户 &quot;${itemToDelete?.customer_name || itemToDelete?.unit_name || ''}&quot; 吗？`"
+      :message="`确定删除${entityName} &quot;${itemToDelete?.customer_name || itemToDelete?.unit_name || ''}&quot; 吗？`"
       confirm-text="删除"
       confirm-class="btn-danger"
       @confirm="confirmDelete"
@@ -127,7 +126,7 @@
     <ConfirmDialog
       v-model="showBatchDeleteConfirm"
       title="批量删除"
-      :message="`确定要删除选中的 ${selectedIds.length} 个客户吗？`"
+      :message="`确定要删除选中的 ${selectedIds.length} 个${entityName}吗？`"
       confirm-text="批量删除"
       confirm-class="btn-danger"
       @confirm="confirmBatchDelete"
@@ -136,13 +135,13 @@
     <div v-if="showAddModal" class="modal-overlay" @click.self="closeAddModal">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>新建客户</h3>
+          <h3>新建{{ entityName }}</h3>
           <button class="btn btn-icon" @click="closeAddModal">×</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>客户名称 *</label>
-            <input data-tutorial-id="customer-name" type="text" v-model="addForm.customer_name" placeholder="请输入客户名称" />
+            <label>{{ entityName }}名称 *</label>
+            <input data-tutorial-id="customer-name" type="text" v-model="addForm.customer_name" :placeholder="`请输入${entityName}名称`" />
           </div>
           <div class="form-group">
             <label>联系人</label>
@@ -167,13 +166,13 @@
     <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>编辑客户</h3>
+          <h3>编辑{{ entityName }}</h3>
           <button class="btn btn-icon" @click="closeEditModal">×</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>客户名称</label>
-            <input type="text" v-model="editForm.customer_name" placeholder="请输入客户名称" />
+            <label>{{ entityName }}名称</label>
+            <input type="text" v-model="editForm.customer_name" :placeholder="`请输入${entityName}名称`" />
           </div>
           <div class="form-group">
             <label>联系人</label>
@@ -205,7 +204,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { useCustomers } from './customers/useCustomers'
 
 const {
-  pageNavTitle, productsNavLabel, shipmentNavLabel,
+  pageNavTitle, entityName, productsNavLabel, shipmentNavLabel,
   customers, purchaseUnitOptions, selectedPurchaseUnit, loading, selectedIds,
   totalCustomers, hasMore, importFileInput,
   showEditModal, showDeleteConfirm, showBatchDeleteConfirm, showAddModal,

@@ -160,7 +160,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       if (isOwnerCurrent()) await deps.saveMessage(...args)
     }
     const addRoundMessage = async (text: string, extras?: UiChatMessageExtras) => {
-      if (round.isActive()) addMessage(text, 'ai', extras, { speak: ttsEnabled.value })
+      if (round.isActive()) addMessage(text, 'ai', { turnId: requestScope.turnId, ...extras }, { speak: ttsEnabled.value })
     }
     if (!opts?.fromWriteUnlock) {
       pendingDbWriteChatRetryMessages.value = null
@@ -307,6 +307,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       let killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
       const streamMessage = messages.value[msgIndex]
+      if (streamMessage) streamMessage.turnId = requestScope.turnId
       const syncStreamRun = (payload: unknown, attachTrace = false) => {
         const runId = extractAgentRunId(payload) || streamRunId
         if (!round.isActive() || !runId) return
@@ -464,6 +465,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] ${errText}`
             : timedOut && streamRunId ? errText : `处理失败：${errText}`
           applyPlainTextToMessageIndex(msgIndex, visibleError)
+          if (streamMessage) streamMessage.workflowAction = 'failed'
         }
         if (streamRunId) syncStreamRun({ run_id: streamRunId })
       } finally {
@@ -543,7 +545,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             if (!round.isActive()) return
             attachAgentRunTraceToLastAiMessage(extractAgentRunId(part))
           } else {
-            await addRoundMessage('处理失败: ' + (part.message || '未知错误'))
+            await addRoundMessage('处理失败: ' + (part.message || '未知错误'), { workflowAction: 'failed' })
           }
         }
         attachContextSummaryToLastAiMessage()
@@ -578,7 +580,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           maybeCloseAssistantFloatForShipmentTask(lastTask.task, lastAction?.autoAction)
         }
       } else {
-        await addRoundMessage('处理失败: ' + (data.message || '批量请求失败'))
+        await addRoundMessage('处理失败: ' + (data.message || '批量请求失败'), { workflowAction: 'failed' })
       }
       return
     }
@@ -619,7 +621,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         maybeCloseAssistantFloatForShipmentTask(data.task, data.autoAction)
       }
     } else {
-      await addRoundMessage('处理失败: ' + (data.message || '未知错误'))
+      await addRoundMessage('处理失败: ' + (data.message || '未知错误'), { workflowAction: 'failed' })
     }
   }
 

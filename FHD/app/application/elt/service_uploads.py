@@ -42,9 +42,13 @@ class UploadServiceMixin:
         safe_name = clean_filename(file_name)
         safe_batch_id = clean_batch_id(batch_id)
         safe_relative_path = clean_relative_path(relative_path, safe_name)
-        suffix = Path(safe_name).suffix.lower()
-        if suffix not in SUPPORTED_SUFFIXES:
-            raise EltError("ELT_FILE_TYPE_UNSUPPORTED", f"不支持的文件类型: {suffix}")
+        requested_suffix = Path(safe_name).suffix.lower()
+        # Physical paths use a server-owned suffix constant, never part of the supplied name.
+        suffix = next(
+            (allowed for allowed in SUPPORTED_SUFFIXES if allowed == requested_suffix), None
+        )
+        if suffix is None:
+            raise EltError("ELT_FILE_TYPE_UNSUPPORTED", f"不支持的文件类型: {requested_suffix}")
         upload_id = new_id()
         root = (
             Path(get_app_data_dir()).resolve()
@@ -60,8 +64,10 @@ class UploadServiceMixin:
 
         digest = hashlib.sha256()
         total = 0
+        created = False
         try:
             with destination.open("xb") as handle:
+                created = True
                 for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                     total += len(chunk)
                     if total > MAX_FILE_BYTES:
@@ -73,7 +79,8 @@ class UploadServiceMixin:
                     digest.update(chunk)
                     handle.write(chunk)
         except RECOVERABLE_ERRORS:
-            destination.unlink(missing_ok=True)
+            if created:
+                destination.unlink(missing_ok=True)
             raise
         if total == 0:
             destination.unlink(missing_ok=True)

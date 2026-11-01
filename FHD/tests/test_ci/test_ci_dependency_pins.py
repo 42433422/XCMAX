@@ -137,7 +137,7 @@ with open(os.environ["INSTALL_LOG"], "a") as stream:
 if "--format=json" in sys.argv:
     print("[]")
 """
-    for name in ("python", "pip"):
+    for name in ("python", "pip", "uv"):
         path = fakebin / name
         path.write_text(wrapper)
         path.chmod(0o755)
@@ -183,3 +183,29 @@ if "--format=json" in sys.argv:
             assert test_installs and all("pytest==9.1.1" in args for args in test_installs)
         else:
             assert not calls, "A bad or missing lock must stop before any installer runs"
+
+
+def test_uv_installer_preserves_dependency_inputs_and_checks_the_target_interpreter() -> None:
+    jobs = yaml.safe_load((_REPO_ROOT / "FHD/.github/workflows/ci-cd.yml").read_text())["jobs"]
+    for name in ("backend-quality", "backend-test-shard", "release-verify"):
+        steps = jobs[name]["steps"]
+        setup = next(step for step in steps if step.get("uses") == "astral-sh/setup-uv@v6")
+        assert setup["with"]["enable-cache"] is True
+        assert set(setup["with"]["cache-dependency-glob"].splitlines()) == {
+            "FHD/requirements-server-api.txt",
+            "FHD/deploy/requirements-dev.txt",
+            "FHD/uv.lock",
+            "FHD/pyproject.toml",
+            "FHD/packages/**/pyproject.toml",
+        }
+        python = next(step for step in steps if step.get("uses") == "actions/setup-python@v7")
+        assert "cache" not in python["with"]
+        command = next(step["run"] for step in steps if "--pytest-pin" in step.get("run", ""))
+        install = 'uv pip install --system --python "$(command -v python)"'
+        check = 'uv pip check --system --python "$(command -v python)"'
+        assert (
+            install + ' -r requirements-server-api.txt -r deploy/requirements-dev.txt "$pytest_pin"'
+            in command
+        )
+        assert command.index("--pytest-pin") < command.index(install) < command.index(check)
+        assert "--upgrade pip" not in command

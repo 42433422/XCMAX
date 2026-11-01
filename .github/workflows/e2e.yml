@@ -1,6 +1,6 @@
 name: e2e
 
-# 5 条 P0 关键路径回归（Playwright）— 实现见 .github/workflows/e2e-playwright-reusable.yml
+# 真实全栈 P0 回归（Playwright）— 实现见 .github/workflows/e2e-playwright-reusable.yml
 on:
   push:
     branches: [main, master]
@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Every run gates both fast mock contracts and a real FastAPI + browser path.
+  # Every run gates a real FastAPI + browser path; main CI owns mock contracts.
   playwright-p0-paths:
     name: Playwright P0 关键路径
     uses: ./.github/workflows/e2e-playwright-reusable.yml

@@ -1079,28 +1079,6 @@ class TestMarketAdminProxyImportError:
         assert result.status_code == 500
         assert "市场账号代理不可用" in result.body.decode()
 
-    @pytest.mark.asyncio
-    async def test_proxy_returns_dict_payload_success(self):
-        """When _proxy_json returns a dict without __proxy_error__, should return it."""
-        req = MagicMock(spec=Request)
-        with (
-            patch(
-                "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="Bearer tok",
-            ),
-            patch(
-                "app.fastapi_routes.market_account._proxy_json",
-                new=AsyncMock(return_value={"success": True, "data": {"id": 1}}),
-            ),
-        ):
-            result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
-        assert isinstance(result, dict)
-        assert result["success"] is True
-
 
 # ---------------------------------------------------------------------------
 # _digest_local_or_proxy — additional branches

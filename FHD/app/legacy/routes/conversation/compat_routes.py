@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.application.planner_compat_service import (
     compat_chat_stream_async,
@@ -20,9 +20,45 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
 )
+from app.infrastructure.auth.dependencies import get_logged_in_user
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
+
+
+@router.get("/conversation/model-status", deprecated=False)
+def conversation_model_status(request: Request, _user=Depends(get_logged_in_user)):
+    """Read only this local session's server-resolved route; never run a model probe."""
+    import httpx
+
+    from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    headers = {"Cache-Control": "no-store"}
+    client = create_modstore_openai_client_from_request(request)
+    if not client.adapter.auth_token:
+        raise HTTPException(
+            status_code=401,
+            detail="当前会话未绑定模型服务授权，请重新登录市场账号或联系管理员。",
+            headers=headers,
+        )
+    try:
+        provider, model = client.adapter.resolve_default_route()
+    except RECOVERABLE_ERRORS as exc:
+        status = (
+            exc.status_code
+            if isinstance(exc, MarketModelError)
+            else 504
+            if isinstance(exc, httpx.TimeoutException)
+            else 503
+            if isinstance(exc, httpx.ConnectError)
+            else 502
+        )
+        raise HTTPException(
+            status_code=status, detail=str(MarketModelError({"status": status})), headers=headers
+        ) from None
+    return JSONResponse({"ok": True, "provider": provider, "model": model}, headers=headers)
 
 
 async def _chat_stream_with_slot_release(

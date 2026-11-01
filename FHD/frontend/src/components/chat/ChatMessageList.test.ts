@@ -310,3 +310,41 @@ it('copies the condensed visible summary when a plan is collapsed', async () => 
   expect(writeText).toHaveBeenCalledWith('执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。')
   wrapper.unmount()
 })
+
+
+it('offers failure recovery with visible original text without sending a request or showing continuation suggestions', async () => {
+  const messages = [
+    { role: 'user' as const, content: '仅回答测试', time: '12:00', turnId: 'turn-a' },
+    { role: 'ai' as const, content: '处理失败：模型未返回正文', time: '12:00', turnId: 'turn-a', workflowAction: 'failed' },
+  ]
+  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages } })
+  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('仅回答测试')
+  expect(wrapper.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
+  await wrapper.findAll('button').find(button => button.text().includes('填入原文'))!.trigger('click')
+  expect(wrapper.emitted('fill-example')).toEqual([['仅回答测试']])
+  await wrapper.findAll('button').find(button => button.text() === '查看模型状态')!.trigger('click')
+  expect(wrapper.emitted('model-settings')).toHaveLength(1)
+})
+
+it('shows an empty conversation example that only fills the composer', async () => {
+  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [], emptyIntro: '当前工作区用于考勤查询。' } })
+  expect(wrapper.text()).toContain('当前工作区用于考勤查询')
+  expect(wrapper.text()).toContain('可用能力以当前配置为准')
+  await wrapper.get('.chat-welcome button').trigger('click')
+  expect(wrapper.emitted('fill-example')).toEqual([['请用一句话介绍你能做什么。仅回答，不执行操作。']])
+})
+
+it('retries only the exact user turn and does not substitute a later unbound message', async () => {
+  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [
+    { role: 'user', content: '本轮原文', time: '12:00', turnId: 'turn-a' },
+    { role: 'user', content: '另一个未绑定输入', time: '12:01' },
+    { role: 'ai', content: '处理失败：请重试', time: '12:02', turnId: 'turn-a' },
+  ] } })
+  await wrapper.findAll('button').find(button => button.text().includes('填入原文'))!.trigger('click')
+  expect(wrapper.emitted('fill-example')).toEqual([['本轮原文']])
+  await wrapper.setProps({ messages: [
+    { role: 'user', content: '未绑定输入', time: '12:00' },
+    { role: 'ai', content: '处理失败：请重试', time: '12:02', turnId: 'turn-b' },
+  ] })
+  expect(wrapper.findAll('button').some(button => button.text().includes('填入原文'))).toBe(false)
+})

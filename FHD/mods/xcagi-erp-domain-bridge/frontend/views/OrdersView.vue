@@ -5,7 +5,7 @@
         <h2>出货单记录</h2>
         <div style="display: flex; gap: 10px;">
           <button class="btn btn-primary" @click="goCreateOrder">+ 新建订单</button>
-          <button class="btn btn-danger" @click="handleClearAll" :disabled="store.loading">清空全部</button>
+          <button class="btn btn-danger" @click="handleClearAll" :disabled="!canClearAll" title="清空当前业务空间内全部出货记录，不限于当前筛选结果">清空全部出货记录</button>
         </div>
       </div>
       <div class="search-box">
@@ -57,7 +57,7 @@
     <ConfirmDialog
       v-model="showClearConfirm"
       title="清空全部"
-      message="确定要清空所有出货记录吗？此操作不可恢复！"
+      message="确定要清空当前业务空间内全部出货记录吗？包括筛选外的记录，此操作不可恢复！"
       confirm-text="清空"
       confirm-class="btn-danger"
       @confirm="confirmClearAll"
@@ -93,6 +93,7 @@ function goCreateOrder() {
 
 const searchQuery = ref('');
 const showClearConfirm = ref(false);
+const canClearAll = computed(() => !store.loading && !store.error && store.orders.length > 0);
 
 const columns = [
   { key: 'order_number', label: '单号' },
@@ -127,6 +128,7 @@ async function handleDelete(orderNumber) {
 }
 
 async function handleClearAll() {
+  if (!canClearAll.value) return;
   const key = await appPrompt('请输入密钥确认清空:', '', { title: '密钥验证' });
   if (key !== '61408693') {
     await appAlert('密钥错误');
@@ -136,6 +138,7 @@ async function handleClearAll() {
 }
 
 async function confirmClearAll() {
+  if (!canClearAll.value) return;
   await store.clearAllOrders();
 }
 

@@ -90,6 +90,7 @@ def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
 
 router = APIRouter()
 _manage = require_permission("etl.template.manage")
+_execute = require_permission("etl.execute")
 _read = require_permission("etl.read")
 _archive_admin = require_permission("admin.manage_users")
 _READY = "template_review_ready"
@@ -1613,6 +1614,141 @@ async def reviewed_excel_refine(
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
+def _intake_selection_key(run, proposal_version, candidate_id, selected, name, note):
+    return hashlib.sha256(
+        dump_json(
+            {
+                "review_id": run.id,
+                "source_sha256": run.file_sha256,
+                "version": proposal_version,
+                "candidate": candidate_id,
+                "selections": selected,
+                "name": name.strip(),
+                "note": note.strip(),
+            }
+        ).encode()
+    ).hexdigest()
+
+
+def _authorize_intake(request, expected, target_type=""):
+    from app.domain.app_pure.auth_permission_resolver import require_allowed
+    from app.request_active_mod_ctx import get_request_active_mod_id
+
+    user = _execute(request)
+    if _identity(user) != expected:
+        raise HTTPException(status_code=403, detail="入库账号已变化，请重新预演")
+    mod_id = get_request_active_mod_id()
+    require_allowed(user=user, mod_id=mod_id)
+    if target_type == "attendance":
+        raise HTTPException(
+            status_code=409, detail="当前考勤写入目标无法核实业务空间，请使用考勤工作区授权导入"
+        )
+    return mod_id
+
+
+@router.post("/api/templates/reviewed-excel/intake-preview")
+def reviewed_excel_intake_preview(
+    request: Request,
+    review_id: str = Form(..., max_length=36),
+    proposal_version: str = Form(..., max_length=64),
+    candidate_id: str = Form(..., max_length=64),
+    selections: str = Form(..., max_length=500_000),
+    name: str = Form(..., max_length=160),
+    composer_note: str = Form("", max_length=4000),
+    user=Depends(_manage),
+):
+    """Stage the selected bytes and a reviewable business run; never write business/KB data."""
+    from app.application.elt.auto_ingest_service import get_auto_ingest_service
+    from app.application.elt.service import get_elt_service
+
+    tenant, owner = _identity(user)
+    mod_id = _authorize_intake(request, (tenant, owner))
+    staged_path = None
+    preview_started = False
+    try:
+        selected = json.loads(selections)
+        if not isinstance(selected, list) or not name.strip():
+            raise ReviewedExcelError("请选择模板并填写名称")
+        with tenant_scope(tenant), get_db() as db:
+            review = _run(db, review_id, tenant, owner)
+            _review_source_version(db, review, tenant, owner)
+            state, versions = _proposals(review)
+            if review.status != _READY or versions[-1]["version"] != proposal_version:
+                raise HTTPException(status_code=409, detail="审阅版本已变化，请重新选择候选")
+            candidate = next(
+                (item for item in versions[-1]["candidates"] if item["id"] == candidate_id), None
+            )
+            if candidate is None:
+                raise HTTPException(status_code=409, detail="候选不属于该审阅版本")
+            old_draft = review.draft_json
+            key = _intake_selection_key(
+                review, proposal_version, candidate_id, selected, name, composer_note
+            )
+            cleaned = clean_workbook(
+                _source(db, review, tenant, owner), review.file_sha256, selected
+            )
+            service = get_elt_service()
+            upload = service.save_upload(
+                db,
+                owner_user_id=owner,
+                file_name=f"{name.strip()}.xlsx",
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                stream=BytesIO(cleaned),
+            )
+            source = db.get(EltUpload, upload["upload_id"])
+            path = staged_path = Path(source.storage_path)
+            summary = load_json(review.summary_json, {})
+            region = summary.get("selected_region") or {}
+            labels = [
+                str(region.get(field) or summary.get(field) or "")
+                for field in ("document_type", "semantic_label", "label", "sheet")
+            ]
+            labels.append(composer_note.strip())
+            intake = get_auto_ingest_service()
+            detection = intake.detect_target(path, labels)
+            target_type = str(detection.get("target_type") or "")
+            if not target_type or str(detection.get("reason") or "").startswith(
+                "safe_structured_fallback"
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="尚未识别业务目标，未开始写入；请核对文件表头或补充整理要求后重新预演",
+                )
+            _authorize_intake(request, (tenant, owner), target_type)
+            knowledge = intake.knowledge_plan(
+                path=path, file_name=name.strip(), note=composer_note.strip(), owner_user_id=owner
+            )
+            preview_started = True
+            business = service.create_preview(
+                db, owner_user_id=owner, upload_id=upload["upload_id"], target_type=target_type
+            )
+            plan = {
+                "run_id": business["id"],
+                "upload_id": upload["upload_id"],
+                "selection_key": key,
+                "source_sha256": review.file_sha256,
+                "candidate_sha256": upload["sha256"],
+                "target_type": target_type,
+                "mod_id": mod_id,
+                "name": name.strip(),
+                "note": composer_note.strip(),
+                "detection": detection,
+                "knowledge": knowledge,
+            }
+            _recheck(request, (tenant, owner))
+            _review_source_version(db, review, tenant, owner)
+            state["intake_preview"] = plan
+            _cas(db, review, old_draft, draft_json=dump_json(state))
+            return {"success": True, "intake": {**plan, "business": business}}
+    except (ValueError, TypeError, EltError) as exc:
+        raise HTTPException(
+            status_code=getattr(exc, "status_code", 400), detail=public_excel_error(exc)
+        ) from None
+    finally:
+        if staged_path is not None and not preview_started:
+            staged_path.unlink(missing_ok=True)
+
+
 @router.post("/api/templates/reviewed-excel/save")
 async def reviewed_excel_save(
     request: Request,
@@ -1623,6 +1759,9 @@ async def reviewed_excel_save(
     name: str = Form(..., max_length=160),
     publish_to_tenant: bool = Form(False),
     private_intake: bool = Form(False),
+    intake_run_id: str = Form("", max_length=36),
+    preview_revision: str = Form("", max_length=64),
+    valid_rows_only: bool = Form(False),
     composer_note: str = Form("", max_length=4000),
     user=Depends(_manage),
 ):
@@ -1641,6 +1780,7 @@ async def reviewed_excel_save(
         if not isinstance(selected, list):
             raise ReviewedExcelError("清理范围无效")
         summary_for_ingest: dict = {}
+        confirmed_plan: dict | None = None
         with tenant_scope(tenant), get_db() as db:
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
@@ -1658,6 +1798,16 @@ async def reviewed_excel_save(
                         "candidate": candidate_id,
                         "selections": selected,
                         "name": name.strip(),
+                        **(
+                            {
+                                "intake_run_id": intake_run_id,
+                                "preview_revision": preview_revision,
+                                "valid_rows_only": valid_rows_only,
+                                "note": composer_note.strip(),
+                            }
+                            if intake_run_id
+                            else {}
+                        ),
                     }
                 ).encode()
             ).hexdigest()
@@ -1668,6 +1818,13 @@ async def reviewed_excel_save(
                         "success": True,
                         "template_id": receipt["template_id"],
                         "replayed": True,
+                        "auto_ingest": receipt.get("auto_ingest")
+                        or {
+                            "success": False,
+                            "error": "outcome_unknown"
+                            if intake_run_id
+                            else "confirmation_required",
+                        },
                     }
                 raise HTTPException(status_code=409, detail="此审阅已保存；新的清理范围请新建审阅")
             if run.status != _READY or versions[-1]["version"] != proposal_version:
@@ -1678,7 +1835,55 @@ async def reviewed_excel_save(
             if candidate is None:
                 raise HTTPException(status_code=409, detail="候选不属于该审阅版本")
             body = _source(db, run, tenant, owner)
-            cleaned = clean_workbook(body, run.file_sha256, selected)
+            if private_intake and not intake_run_id:
+                raise HTTPException(
+                    status_code=409, detail="请先核对入库目标和记录数量，再确认入库"
+                )
+            if intake_run_id:
+                from app.application.elt.auto_ingest_service import get_auto_ingest_service
+                from app.application.elt.service import get_elt_service
+
+                plan = state.get("intake_preview") or {}
+                expected_key = _intake_selection_key(
+                    run, proposal_version, candidate_id, selected, name, composer_note
+                )
+                mod_id = _authorize_intake(
+                    request, (tenant, owner), str(plan.get("target_type") or "")
+                )
+                if (
+                    plan.get("run_id") != intake_run_id
+                    or plan.get("selection_key") != expected_key
+                    or plan.get("source_sha256") != run.file_sha256
+                    or plan.get("mod_id") != mod_id
+                ):
+                    raise HTTPException(
+                        status_code=409, detail="候选、整理要求或业务空间已变化，请重新预演"
+                    )
+                upload = get_elt_service()._owned_upload(db, plan["upload_id"], owner)
+                if upload.tenant_id != tenant:
+                    raise HTTPException(status_code=403, detail="无权使用该入库预演")
+                prepared_path = Path(upload.storage_path)
+                business = get_auto_ingest_service().validate_prepared(
+                    db,
+                    plan=plan,
+                    path=prepared_path,
+                    owner_user_id=owner,
+                    tenant_id=tenant,
+                    preview_revision=preview_revision,
+                )
+                if business.get("summary", {}).get("error") and not valid_rows_only:
+                    raise HTTPException(
+                        status_code=409, detail="预演存在错误行，请修正或明确确认仅写入正确行"
+                    )
+                confirmed_plan = {
+                    **plan,
+                    "preview_revision": preview_revision,
+                    "valid_rows_only": valid_rows_only,
+                }
+                cleaned = prepared_path.read_bytes()
+            else:
+                # Old template-library clients authorize one template only, never implicit business writes.
+                cleaned = clean_workbook(body, run.file_sha256, selected)
             before = {(i["sheet"], i["cell"]) for i in candidate["clear"]}
             after = {(i["sheet"], i["cell"]) for i in selected}
             state["confirmation"] = {
@@ -1696,7 +1901,21 @@ async def reviewed_excel_save(
                 _recheck(request, (tenant, owner))
                 db.expire_all()
                 _review_source_version(db, run, tenant, owner)
-            except HTTPException:
+                if confirmed_plan:
+                    if (
+                        _authorize_intake(request, (tenant, owner), confirmed_plan["target_type"])
+                        != confirmed_plan["mod_id"]
+                    ):
+                        raise HTTPException(status_code=409, detail="业务空间已变化，请重新预演")
+                    get_auto_ingest_service().validate_prepared(
+                        db,
+                        plan=confirmed_plan,
+                        path=prepared_path,
+                        owner_user_id=owner,
+                        tenant_id=tenant,
+                        preview_revision=preview_revision,
+                    )
+            except (HTTPException, EltError):
                 _release_failed_review(
                     db, run.id, tenant, owner, saving_draft, old_draft, classification_lock
                 )
@@ -1793,40 +2012,35 @@ async def reviewed_excel_save(
                 # The legacy library commits in a separate transaction; do not retry or remove
                 # files when its outcome may have succeeded but its receipt was lost.
                 raise
-        auto_ingest = None
-        try:
-            from app.application.elt.auto_ingest_service import get_auto_ingest_service
+        auto_ingest = {"success": False, "error": "confirmation_required"}
+        if confirmed_plan:
+            try:
+                from app.application.elt.auto_ingest_service import get_auto_ingest_service
 
-            labels: list[str] = []
-            summary = summary_for_ingest
-            selected_region = summary.get("selected_region") or {}
-            for key in ("document_type", "semantic_label", "label", "sheet"):
-                val = selected_region.get(key) or summary.get(key)
-                if val:
-                    labels.append(str(val))
-            note = (composer_note or "").strip()[:4000]
-            if note:
-                labels.append(note)
-            # Background ingest so FE can poll /auto-ingest/batches/{id}/progress for true bars.
-            auto_ingest = get_auto_ingest_service().start_background(
-                owner_user_id=owner,
-                tenant_id=tenant,
-                source_path=str(path),
-                file_name=name.strip() or Path(path).name,
-                template_id=str(template_id),
-                review_id=review_id,
-                classification_id=str(summary.get("classification_id") or ""),
-                composer_note=note,
-                labels=labels,
-            )
-        except BOUNDARY_ERRORS as exc:  # intake save must not roll back on ingest faults
-            # Template save already succeeded; surface ingest failure without undoing save.
-            logger.exception(
-                "auto-ingest after reviewed-excel save failed review_id=%s err=%s",
-                review_id,
-                type(exc).__name__,
-            )
-            auto_ingest = {"success": False, "error": "auto_ingest_failed"}
+                auto_ingest = get_auto_ingest_service().start_background(
+                    owner_user_id=owner,
+                    tenant_id=tenant,
+                    source_path=str(path),
+                    file_name=name.strip(),
+                    template_id=str(template_id),
+                    review_id=review_id,
+                    classification_id=str(summary_for_ingest.get("classification_id") or ""),
+                    composer_note=composer_note.strip(),
+                    prepared_plan=confirmed_plan,
+                )
+            except BOUNDARY_ERRORS as exc:
+                logger.exception(
+                    "confirmed auto-ingest failed review_id=%s err=%s",
+                    review_id,
+                    type(exc).__name__,
+                )
+                auto_ingest = {"success": False, "error": "auto_ingest_failed"}
+            with tenant_scope(tenant), get_db() as db:
+                persisted_run = _run(db, review_id, tenant, owner)
+                receipt = load_json(persisted_run.receipt_json, {})
+                receipt["auto_ingest"] = auto_ingest
+                persisted_run.receipt_json = dump_json(receipt)
+                db.commit()
         return {
             "success": True,
             "template_id": template_id,
@@ -1834,7 +2048,9 @@ async def reviewed_excel_save(
             "auto_ingest": auto_ingest,
         }
     except (ValueError, TypeError, EltError) as exc:
-        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
+        raise HTTPException(
+            status_code=getattr(exc, "status_code", 400), detail=public_excel_error(exc)
+        ) from None
 
 
 @router.get("/api/templates/reviewed-excel/{template_id}/download")

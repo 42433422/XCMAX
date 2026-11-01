@@ -4,10 +4,20 @@
 import type { Ref } from 'vue'
 import type { EltCapabilities, EltRun, EltRunRow } from '@/api/elt'
 
+export function targetLabel(type: string) {
+  return ({ auto: '智能识别（推荐）', template_review: '模板审阅', template_classification: '文件分类',
+    customers: '客户', customer: '客户', products: '产品', customer_products: '客户及产品',
+    shipment_records: '发货记录', purchase_orders: '采购订单', attendance: '考勤', knowledge: '知识库',
+    export_xlsx: 'Excel 导出', export_csv: 'CSV 导出', webhook: '外部系统' } as Record<string, string>)[type] || '其他业务目标'
+}
+
+export function autoIngestStatusLabel(status?: string) {
+  return ({ running: '入库处理中', awaiting_confirmation: '知识已处理，业务待确认', applied: '批次处理结束，请核对分项结果', failed: '入库失败，请核对已写入部分', withdrawn: '已撤回' } as Record<string, string>)[status || ''] || '状态待核对'
+}
+
 export function createTargetLabel(capabilities: Ref<EltCapabilities | null>) {
   return (type: string) => {
-    if (type === 'auto') return '智能识别（推荐）'
-    return capabilities.value?.targets.find((item) => item.type === type)?.label || type
+    return capabilities.value?.targets.find((item) => item.type === type)?.label || targetLabel(type)
   }
 }
 
@@ -33,6 +43,7 @@ export function resultNeedsVerification(run: EltRun) {
 }
 
 export function stageLabel(stage: string, targetType?: string) {
+  if (stage.startsWith('template_review_') || stage.startsWith('classification_')) return statusLabel(stage)
   if (stage === 'executing') return targetOperation(targetType).processing
   return (
     (
@@ -66,6 +77,11 @@ export function statusLabel(status: string, rollbackStatus?: string | null, targ
         completed: '已写入',
         failed: '失败',
         interrupted: '已中断',
+        template_review_ready: '待核对模板',
+        template_review_saving: '模板保存中',
+        template_review_saved: '模板已保存',
+        classification_ready: '分类结果可用',
+        classification_template_saving: '分类已锁定，正在保存模板',
       } as Record<string, string>
     )[status] || status
   )

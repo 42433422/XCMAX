@@ -1868,63 +1868,35 @@ def test_save_replay_scope_expiry_and_history(review_store):
         assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
 
 
-def test_private_intake_save_skips_enterprise_publish_gate(review_store, monkeypatch):
-    """User intake may save+auto-ingest without publish_to_tenant checkbox."""
-    started = {}
-
-    class _FakeIngest:
-        def start_background(self, **kwargs):
-            started.update(kwargs)
-            return {
-                "success": True,
-                "batch_id": "batch-private",
-                "status": "running",
-                "kb_progress": {"pct": 0, "stage": "queued"},
-                "business_progress": {"pct": 0, "stage": "queued"},
-            }
-
-    monkeypatch.setattr(
-        "app.application.elt.auto_ingest_service.get_auto_ingest_service",
-        lambda: _FakeIngest(),
-    )
+def test_private_intake_requires_a_reviewed_business_plan_before_writing(review_store):
     client = review_store.client
-    upload = {
-        "file": (
-            "sample.xlsx",
-            sample(),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    }
     preview = client.post(
-        "/api/templates/reviewed-excel/preview", files=upload, data={"expected_actor": "1:7"}
-    )
-    assert preview.status_code == 200, preview.text
-    body = preview.json()
-    candidate = body["proposal"]["candidates"][0]
-    saved = client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={
+            "file": (
+                "sample.xlsx",
+                sample(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"expected_actor": "1:7"},
+    ).json()
+    response = client.post(
         "/api/templates/reviewed-excel/save",
         data={
-            "review_id": body["review_id"],
-            "name": "私有入库模板",
-            "proposal_version": body["proposal"]["version"],
-            "candidate_id": candidate["id"],
+            "review_id": preview["review_id"],
+            "name": "合成入库模板",
+            "proposal_version": preview["proposal"]["version"],
+            "candidate_id": preview["proposal"]["candidates"][0]["id"],
             "publish_to_tenant": "false",
             "private_intake": "true",
             "selections": "[]",
-            "composer_note": "整理要求：保留客户与单号",
         },
     )
-    assert saved.status_code == 200, saved.text
-    payload = saved.json()
-    assert payload["success"] is True
-    assert payload["template_id"]
-    assert "auto_ingest" in payload
-    assert payload["auto_ingest"].get("success") is True
-    assert payload["auto_ingest"].get("batch_id") == "batch-private"
-    # Must start background ingest using plain snapshots (no detached EltRun access).
-    assert started.get("review_id") == body["review_id"]
-    assert started.get("composer_note") == "整理要求：保留客户与单号"
-    assert "整理要求：保留客户与单号" in (started.get("labels") or [])
+    assert response.status_code == 409
+    assert "先核对入库目标和记录数量" in response.text
+    with review_store.engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 0
 
 
 def test_quotation_proposals_identify_table_and_identity_without_touching_rules():

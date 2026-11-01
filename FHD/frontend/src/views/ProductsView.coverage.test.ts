@@ -776,19 +776,7 @@ describe('ProductsView.coverage', () => {
       const event = { target: { files: [file], value: 'test.xlsx' } }
       await state.handleImport(event)
       await flushPromises()
-      expect(mockAppAlert).toHaveBeenCalledWith('未解析到任何数据行，请检查表头或换用「考勤统计表·明细导入人员」。')
-    })
-
-    it('解析成功但无数据行时弹告警（考勤明细模式）', async () => {
-      mockApiPost.mockResolvedValueOnce({ success: true, rows: [], headers: [] })
-      const wrapper = await mountProducts()
-      const state = getSetupState(wrapper)
-      setSetupValue(wrapper, 'useAttendanceDetailImport', true)
-      const file = new File(['content'], 'test.xlsx')
-      const event = { target: { files: [file], value: 'test.xlsx' } }
-      await state.handleImport(event)
-      await flushPromises()
-      expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('未从「明细」表解析到任何人员行'))
+      expect(mockAppAlert).toHaveBeenCalledWith('未解析到任何数据行，请检查产品表头及内容。')
     })
 
     it('导入成功时弹告警并刷新列表', async () => {
@@ -861,7 +849,7 @@ describe('ProductsView.coverage', () => {
       expect(mockAppAlert).toHaveBeenCalledWith('导入失败: 网络中断')
     })
 
-    it('考勤明细模式时传递 parse_mode 并启用 replace', async () => {
+    it('产品导入只写产品，不启用考勤解析或人员清理', async () => {
       mockApiPost.mockResolvedValueOnce({
         success: true,
         rows: [{ name: 'P1' }],
@@ -874,8 +862,6 @@ describe('ProductsView.coverage', () => {
       })
       const wrapper = await mountProducts()
       const state = getSetupState(wrapper)
-      setSetupValue(wrapper, 'useAttendanceDetailImport', true)
-      setSetupValue(wrapper, 'replaceTaggedAttendancePersonnel', true)
       const file = new File(['content'], 'test.xlsx')
       const event = { target: { files: [file], value: 'test.xlsx' } }
       await state.handleImport(event)
@@ -885,7 +871,9 @@ describe('ProductsView.coverage', () => {
       expect(firstCall[2].headers).toEqual({ 'Content-Type': 'multipart/form-data' })
       const secondCall = mockApiPost.mock.calls[1]
       expect(secondCall[0]).toBe('/api/excel/data/import/products')
-      expect(secondCall[1].options.replace_attendance_detail_tagged).toBe(true)
+      expect(firstCall[1].has('parse_mode')).toBe(false)
+      expect(secondCall[1].options.replace_attendance_detail_tagged).toBeUndefined()
+      expect(wrapper.text()).not.toContain('导入人员')
     })
 
     it('导入完成后清空 input value', async () => {

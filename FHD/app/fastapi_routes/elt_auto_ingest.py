@@ -144,7 +144,7 @@ def get_auto_ingest_batch(batch_id: str, user: Any = Depends(_read)):
     from app.infrastructure.tenant_scope import tenant_id_for_write
 
     batch = get_auto_ingest_service().get_batch(
-        tenant_id=int(tenant_id_for_write()), batch_id=batch_id
+        tenant_id=int(tenant_id_for_write()), batch_id=batch_id, owner_user_id=_user_id(user)
     )
     if batch is None:
         raise HTTPException(

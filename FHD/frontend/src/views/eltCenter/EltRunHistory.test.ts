@@ -1303,4 +1303,18 @@ describe('existing ETL run history and confirmed actions', () => {
     wrapper.unmount()
   })
 
+  it.each([['template_review_ready', '待核对模板'], ['template_review_saving', '模板保存中'], ['template_review_saved', '模板已保存']])('labels %s consistently while retaining diagnostic codes', async (status, label) => {
+    const run = { ...queuedRun('review-1', '测试模板.xlsx'), target_type: 'template_review', status, stage: status }
+    eltApiMock.runs.mockResolvedValue([run])
+    eltApiMock.run.mockResolvedValue(run)
+    const wrapper = await mountView(run.id)
+    expect(wrapper.get('.etl-history__item').text()).toContain('模板审阅')
+    expect(wrapper.get('.etl-history__item').text()).toContain(label)
+    expect(wrapper.get('.etl-history__item').text()).not.toContain(status)
+    expect(wrapper.get('.etl-receipt dl').text()).toContain(label)
+    expect(wrapper.get('.etl-technical-receipt').text()).toContain(status)
+    expect(wrapper.get('.etl-technical-receipt').text()).toContain('template_review')
+    wrapper.unmount()
+  })
+
 })

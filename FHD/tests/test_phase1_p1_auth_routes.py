@@ -266,9 +266,14 @@ def test_auth_qr_status_not_found(auth_client: TestClient) -> None:
 
 
 def test_auth_profile_unauthenticated(auth_client: TestClient) -> None:
-    with patch.object(auth_routes, "resolve_session_user", return_value=None):
+    with patch.object(auth_routes, "_profile") as profile:
         r = auth_client.get("/api/auth/profile")
-    assert r.status_code in (200, 401)
+    assert r.status_code == 401
+    assert r.json()["detail"] == {
+        "success": False,
+        "message": {"code": "UNAUTHORIZED", "message": "请先登录"},
+    }
+    profile.assert_not_called()
 
 
 @patch("app.application.auth_app_service.get_auth_app_service")

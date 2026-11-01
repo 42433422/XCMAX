@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any, Dict
 
 from app.application.market_llm.protocols import Messages, OpenAIPorts, Payload
+from app.infrastructure.modstore_transport import MarketModelError
 
 
 def _to_openai_object(value: Any) -> Any:
@@ -46,6 +47,11 @@ def _platform_stream_payload_to_openai_chunk(data: str) -> Dict[str, Any] | None
     except json.JSONDecodeError:
         return {"choices": [{"delta": {"content": raw_text}, "finish_reason": None}]}
 
+    if isinstance(raw, dict) and (
+        raw.get("type") == "error" or raw.get("ok") is False or raw.get("success") is False
+    ):
+        raise MarketModelError(raw)
+
     if isinstance(raw, dict) and raw.get("choices"):
         choices = raw.get("choices") or []
         return {
@@ -54,9 +60,6 @@ def _platform_stream_payload_to_openai_chunk(data: str) -> Dict[str, Any] | None
                 _normalize_stream_choice(c if isinstance(c, dict) else {}) for c in choices
             ],
         }
-
-    if isinstance(raw, dict) and raw.get("type") == "error":
-        raise ValueError(str(raw.get("message") or raw.get("error") or "平台模型流式错误"))
 
     if isinstance(raw, dict):
         content = raw.get("content") or raw.get("text") or raw.get("delta") or ""

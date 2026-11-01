@@ -549,3 +549,37 @@ describe('queueVoice and clearVoiceQueue', () => {
   writes.mockRestore()
   vi.useRealTimers()
  })
+
+
+it('restores two same-minute failures once each across repeated server syncs', async () => {
+  localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks()
+  const chatApi = (await import('@/api/chat')).default
+  const api = useChatMessages(ref('failure-restoration'))
+  api.loadMessages([
+    { role: 'user', content: '测试一', time: '12:00', persistence: { id: 'user-a', status: 'local' } },
+    { role: 'ai', content: '处理失败：模型未返回可显示的正文，已停止重复请求。请检查模型服务后重试。', time: '12:00', persistence: { id: 'reply-a', status: 'local' } },
+    { role: 'user', content: '测试二', time: '12:00', persistence: { id: 'user-b', status: 'local' } },
+    { role: 'ai', content: '处理失败：模型未返回可显示的正文，已停止重复请求。请检查模型服务后重试。', time: '12:00', persistence: { id: 'reply-b', status: 'local' } },
+  ])
+  const serverMessages = api.messages.value.map((row, index) => ({ id: index + 1, role: row.role, content: row.content.replace('处理失败：', ''), time: row.time }))
+  vi.mocked(chatApi.getConversation).mockResolvedValue({ success: true, messages: serverMessages } as never)
+  await api.syncFromServer()
+  await api.syncFromServer()
+  expect(api.messages.value).toHaveLength(4)
+  expect(api.messages.value.every(row => row.persistence?.status === 'saved')).toBe(true)
+  expect(chatApi.saveMessage).not.toHaveBeenCalled()
+})
+
+it.each([undefined, 'explicit-turn'])('preserves the user turn through the save envelope and server restoration (override=%s)', async override => {
+  localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks()
+  const chatApi = (await import('@/api/chat')).default
+  vi.mocked(chatApi.saveMessage).mockResolvedValueOnce({ success: true, saved: true, durable: true } as never)
+  const api = useChatMessages(ref('user-turn-persistence'))
+  api.addMessage('本轮原文', 'user', { turnId: 'local-turn' })
+  await api.saveMessage('user', '本轮原文', undefined, override ? { turnId: override } : undefined)
+  const payload = vi.mocked(chatApi.saveMessage).mock.calls[0]![0] as { metadata: string; client_message_id: string }
+  const storedMetadata = { ...JSON.parse(payload.metadata), client_message_id: payload.client_message_id }
+  const restored = chatMessageExtrasFromServerRow({ id: 41, role: 'user', metadata: JSON.stringify(storedMetadata) })
+  expect(restored.turnId).toBe(override || 'local-turn')
+  expect(restored.persistence).toEqual({ id: payload.client_message_id, status: 'saved' })
+})

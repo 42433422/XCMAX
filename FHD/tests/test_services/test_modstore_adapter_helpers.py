@@ -50,7 +50,7 @@ class TestModstoreAdapterHelpers:
         assert out["choices"][0]["delta"]["content"] == "x"
 
     def test_platform_stream_error_raises(self) -> None:
-        with pytest.raises(ValueError, match="boom"):
+        with pytest.raises(ValueError, match="模型服务请求失败"):
             _platform_stream_payload_to_openai_chunk('{"type":"error","message":"boom"}')
 
     def test_iter_market_sse_skips_meta_and_surfaces_done_content(self) -> None:

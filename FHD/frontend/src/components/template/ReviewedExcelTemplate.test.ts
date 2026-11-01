@@ -1,7 +1,8 @@
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), downloadClassificationSource: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
-const etl = vi.hoisted(() => ({ autoIngestProgress: vi.fn(), autoIngestBatches: vi.fn(), withdrawAutoIngestBatch: vi.fn() }))
+const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), downloadClassificationSource: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
+const etl = vi.hoisted(() => ({ run: vi.fn(), autoIngestProgress: vi.fn(), autoIngestBatches: vi.fn(), withdrawAutoIngestBatch: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/elt', () => ({ eltApi: etl }))
 vi.mock('@/api/xcmaxMarketProxy', () => ({
@@ -17,8 +18,28 @@ const candidates = [
   { id: 'identity', label: '模板三', explanation: '清理更多', clear: [{ sheet: '报价', cell: 'B2' }] },
 ]
 const proposal = (version: string) => ({ version, parent_version: null, candidates, evidence: [], model: { status: 'not_called' }, result_previews: candidates.map((c, i) => ({ candidate_id: c.id, sha256: String(i), layout: layout(i ? '' : '客户甲'), layout_truncated: false })) })
+const intakeResult = (summary = { new: 2, update: 1, skip: 3, error: 0, executed: 0 }) => ({ intake: {
+  run_id: 'intake-run', mod_id: '', candidate_sha256: 'candidate-sha', knowledge: { action: 'new', documents: 1 },
+  business: { id: 'intake-run', target_type: 'customer_products', status: 'preview_ready', preview_revision: 'revision-1', summary },
+} })
+async function mountIntakeCandidate() {
+  const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+  const file = new File(['synthetic'], 'intake.xlsx')
+  const input = wrapper.get('input[type=file]')
+  Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+  await input.trigger('change')
+  const state = wrapper.vm.$.setupState as Record<string, unknown>
+  state.classifications = [{ name: file.name, confirmed: true, sheets: [] }]
+  state.file = file; state.name = '合成模板'
+  state.review = { review_id: 'review-intake', sheets: [], cells: [], proposal: proposal('v1'), selected_region: { selection_basis: 'model_group' } }
+  state.proposals = [proposal('v1')]
+  await flushPromises()
+  const save = () => wrapper.findAll('button').find(button => button.text() === '使用此模板并入库')!
+  return { wrapper, state, save }
+}
 describe('reviewed Excel template', () => {
   beforeEach(() => {
+    api.previewReviewedIntake.mockReset().mockImplementation(async () => intakeResult())
     api.archiveClassifyExcel.mockReset().mockImplementation(async (form: FormData) => {
       const response = await api.classifyExcel(form)
       const file = form.get('file') as File
@@ -787,7 +808,7 @@ describe('reviewed Excel template', () => {
 
 
 
-  it('on archiveOnSelect, picking an A4 capsule saves with private_intake and starts ingest poll', async () => {
+  it('on archiveOnSelect, candidate selection waits for explicit import and preserves private intake', async () => {
     api.saveReviewedExcel.mockResolvedValue({
       template_id: 'db:42',
       auto_ingest: { batch_id: 'batch-pick', status: 'running', kb_progress: { pct: 5, stage: 'queued', message: '排队' }, business_progress: { pct: 0, stage: 'queued', message: '排队' } },
@@ -808,25 +829,34 @@ describe('reviewed Excel template', () => {
       state.requirementNotes = ['保留客户栏，清理空白行']
       state.templatePickerOpen = true
       await flushPromises()
-      expect(wrapper.text()).toContain('点选绿胶囊即选用并开始自动入库')
+      expect(wrapper.text()).toContain('点击卡片仅选择模板')
       expect(wrapper.findAll('button').some(b => b.text() === '保存所选模板')).toBe(false)
       expect(wrapper.findAll('button').some(b => b.text() === '使用此模板并入库')).toBe(true)
       expect(wrapper.findAll('input[type=checkbox]').some(el => el.element.closest('label')?.textContent?.includes('确认发布'))).toBe(false)
       await wrapper.findAll('.reviewed-template__preview--a4')[1].trigger('click')
+      await flushPromises()
+      expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain('本次处理 1 份所选文档（pick.xlsx）')
+      expect(wrapper.text()).toContain('预计新增 2 行、更新 1 行、跳过 3 行、错误 0 行')
+      expect(wrapper.text()).toContain('知识库：新增 1 份文档')
+      await wrapper.findAll('button').find(b => b.text() === '使用此模板并入库')!.trigger('click')
       await flushPromises()
       expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
       expect(form.get('private_intake')).toBe('true')
       expect(form.get('publish_to_tenant')).toBe('false')
       expect(form.get('candidate_id')).toBe('table')
+      expect(form.get('intake_run_id')).toBe('intake-run')
+      expect(form.get('preview_revision')).toBe('revision-1')
+      expect(form.get('valid_rows_only')).toBe('false')
       expect(form.get('composer_note')).toBe('保留客户栏，清理空白行')
       expect(wrapper.emitted('saved')).toHaveLength(1)
       expect(etl.autoIngestProgress).toHaveBeenCalledWith('batch-pick')
     } finally { wrapper.unmount() }
   })
 
-  it('on archiveOnSelect, print/layout restrictions still allow private intake save', async () => {
-    api.saveReviewedExcel.mockResolvedValue({ template_id: 'db:99', auto_ingest: { batch_id: 'batch-lim', status: 'running' } })
+  it.each([true, false])('on archiveOnSelect, print/layout restrictions allow private intake and report ingest start (%s)', async (ingestStarted) => {
+    api.saveReviewedExcel.mockResolvedValue({ template_id: 'db:99', auto_ingest: ingestStarted ? { batch_id: 'batch-lim', status: 'running' } : { success: false, error: 'auto_ingest_failed' } })
     const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     try {
       const file = new File(['x'], 'limited.xlsx')
@@ -848,6 +878,7 @@ describe('reviewed Excel template', () => {
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
       expect(form.get('private_intake')).toBe('true')
       expect(form.get('publish_to_tenant')).toBe('false')
+      if (!ingestStarted) expect(wrapper.text()).toContain('模板已保存，但自动入库未能启动')
     } finally { wrapper.unmount() }
   })
 
@@ -878,6 +909,88 @@ describe('reviewed Excel template', () => {
       click.mockRestore()
       wrapper.unmount()
     }
+  })
+
+  it.each(['account', 'unmount', 'new-batch'])('ignores progress from the previous %s scope', async (change) => {
+    let resolveProgress!: (value: unknown) => void
+    etl.autoIngestProgress.mockImplementationOnce(() => new Promise(resolve => { resolveProgress = resolve }))
+      .mockResolvedValue({ status: 'running', kb_progress: { pct: 0 }, business_progress: { pct: 0 } })
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    const state = wrapper.vm.$.setupState as Record<string, unknown>
+    ;(state.startIngestPoll as (id: string) => void)('old-batch')
+    if (change === 'account') productReadAccountEpoch.value++
+    else if (change === 'unmount') wrapper.unmount()
+    else (state.startIngestPoll as (id: string) => void)('new-batch')
+    resolveProgress({ status: 'applied', kb_progress: { pct: 100, message: '旧账号私有结果' }, business_progress: { pct: 100 } })
+    await flushPromises()
+    expect(state.savedModelStatus).not.toContain('old-batch')
+    expect(JSON.stringify(state.kbProgress)).not.toContain('旧账号私有结果')
+    if (change !== 'unmount') wrapper.unmount()
+  })
+
+  it('shows pending preview and requires explicit valid-row consent before writing', async () => {
+    let finish!: (value: unknown) => void
+    api.previewReviewedIntake.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const { wrapper, save } = await mountIntakeCandidate()
+    expect(wrapper.get('[aria-label="本次入库范围"]').text()).toContain('尚未写入模板、知识库或业务数据')
+    expect(save().attributes('disabled')).toBeDefined()
+    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+    finish(intakeResult({ new: 2, update: 1, skip: 3, error: 1, executed: 0 }))
+    await flushPromises()
+    expect(save().attributes('disabled')).toBeDefined()
+    await wrapper.get('[aria-label="本次入库范围"] input').setValue(true)
+    expect(save().attributes('disabled')).toBeUndefined()
+    api.saveReviewedExcel.mockResolvedValue({ template_id: 'confirmed', auto_ingest: { success: false, error: 'confirmation_required' } })
+    await save().trigger('click'); await flushPromises()
+    expect((api.saveReviewedExcel.mock.calls[0][0] as FormData).get('valid_rows_only')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it.each(['failed', 'missing-revision', 'wrong-mod'])('blocks unconfirmed %s preview results', async failure => {
+    const result = intakeResult()
+    if (failure === 'failed') result.intake.business.status = 'failed'
+    else if (failure === 'missing-revision') result.intake.business.preview_revision = ''
+    else result.intake.mod_id = 'another-workspace'
+    api.previewReviewedIntake.mockResolvedValue(result)
+    const { wrapper, save } = await mountIntakeCandidate()
+    expect(save().attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[aria-label="本次入库范围"] [role=alert]').text()).toContain('未开始写入')
+    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('invalidates edited intake metadata without parsing on every keystroke', async () => {
+    const { wrapper, state, save } = await mountIntakeCandidate()
+    expect(save().attributes('disabled')).toBeUndefined()
+    const initialCalls = api.previewReviewedIntake.mock.calls.length
+    state.name = '新名称'; await flushPromises()
+    expect(save().attributes('disabled')).toBeDefined()
+    expect(api.previewReviewedIntake).toHaveBeenCalledTimes(initialCalls)
+    await wrapper.findAll('button').find(button => button.text() === '重新预演入库范围')!.trigger('click')
+    await flushPromises()
+    expect(save().attributes('disabled')).toBeUndefined()
+    expect((api.previewReviewedIntake.mock.calls.at(-1)![0] as FormData).get('name')).toBe('新名称')
+    wrapper.unmount()
+  })
+
+  it('ignores a late previous candidate plan and saves only the displayed run revision', async () => {
+    let finishOld!: (value: unknown) => void
+    api.previewReviewedIntake.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const { wrapper, save } = await mountIntakeCandidate()
+    const latest = intakeResult()
+    latest.intake.run_id = latest.intake.business.id = 'latest-run'
+    latest.intake.business.preview_revision = 'latest-revision'
+    api.previewReviewedIntake.mockResolvedValueOnce(latest)
+    await wrapper.findAll('.reviewed-template__preview--a4')[1].trigger('click'); await flushPromises()
+    finishOld(intakeResult({ new: 999, update: 0, skip: 0, error: 0, executed: 0 }))
+    await flushPromises()
+    expect(wrapper.get('[aria-label="本次入库范围"]').text()).not.toContain('999')
+    api.saveReviewedExcel.mockResolvedValue({ template_id: 'bound' })
+    await save().trigger('click'); await flushPromises()
+    const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
+    expect(form.get('intake_run_id')).toBe('latest-run')
+    expect(form.get('preview_revision')).toBe('latest-revision')
+    wrapper.unmount()
   })
 
 })

@@ -62,10 +62,11 @@ function configuration(ctx, directory, phase) {
   // A partial shard cannot satisfy global coverage floors. Only native merging
   // uses the unmodified source thresholds, followed by the existing ratchet.
   const collect = phase === 'collect'
+  const junit = path.join(collect ? directory : path.join(ctx.root, 'test-results'), 'junit.xml')
   writeFileSync(file, `import base from ${JSON.stringify(pathToFileURL(path.join(ctx.root, 'vitest.config.js')).href)}\n` +
     `export default { ...base, root: ${JSON.stringify(ctx.root)}, test: { ...base.test,\n` +
-    `  reporters: ['default', ${collect ? "'blob', " : ''}${JSON.stringify(reporter)}],\n` +
-    `  outputFile: { blob: ${JSON.stringify(path.join(directory, 'blob.json'))} },\n` +
+    `  reporters: ['default', 'junit', ${collect ? "'blob', " : ''}${JSON.stringify(reporter)}],\n` +
+    `  outputFile: { blob: ${JSON.stringify(path.join(directory, 'blob.json'))}, junit: ${JSON.stringify(junit)} },\n` +
     `  coverage: { ...base.test.coverage, enabled: true, reportOnFailure: true,\n` +
     (collect ? `    thresholds: {}, reporter: ['json'], reportsDirectory: ${JSON.stringify(path.join(directory, 'coverage'))},\n` : '') +
     `  } } }\n`)
@@ -91,7 +92,7 @@ export function runShard(ctx, directory) {
   assert(selected.every(file => full.includes(file)), 'Foreign selected test file')
   const coverage = coverageEvidence(JSON.parse(readRegular(path.join(directory, 'coverage/coverage-final.json'))), ctx.root)
   assert.deepEqual(coverage, report.coverage, 'Raw coverage differs from the blob reporter input')
-  const outputs = Object.fromEntries(['blob.json', 'report.json', 'coverage/coverage-final.json'].map(file => [file, sha256(readRegular(path.join(directory, file)))]))
+  const outputs = Object.fromEntries(['blob.json', 'report.json', 'junit.xml', 'coverage/coverage-final.json'].map(file => [file, sha256(readRegular(path.join(directory, file)))]))
   writeJson(path.join(directory, 'manifest.json'), {
     schema: 1, ...ctx.expected, index, total: ctx.total, root: ctx.root,
     vitest_version: ctx.version, config_sha256: ctx.configSha, exit_code: 0,
@@ -108,6 +109,7 @@ export function mergeShards(ctx, directory, output = '.frontend-merge') {
   const blobs = path.join(output, 'blobs')
   mkdirSync(blobs)
   for (const manifest of manifests) {
+    assert.equal(sha256(readRegular(path.join(manifest.directory, 'junit.xml'))), manifest.outputs['junit.xml'], 'Changed/missing junit.xml')
     copyFileSync(path.join(manifest.directory, 'blob.json'), path.join(blobs, `shard-${manifest.index}.json`))
   }
   const plan = path.join(output, 'merge-plan.json')

@@ -32,6 +32,7 @@ import {
   statusLabel,
 } from './eltCenterShared'
 
+defineEmits<{ 'return-to-import': [] }>()
 const route = useRoute()
 const router = useRouter()
 

@@ -36,7 +36,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/products',
       name: 'products',
       component: () => import('../../views/ProductsView.vue'),
-      meta: { title: '业务对象' },
+      meta: { title: '产品管理' },
     },
     {
       path: '/materials',
@@ -82,7 +82,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/customers',
       name: 'customers',
       component: () => import('../../views/CustomersView.vue'),
-      meta: { title: '组织管理' },
+      meta: { title: '客户管理' },
     },
     {
       path: '/data-sources',

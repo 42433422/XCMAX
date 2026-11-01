@@ -11,7 +11,7 @@ describe('resolveCoreNavLabel mod override', () => {
 
   it('skips hidden overrides', () => {
     const mods = [{ menu_overrides: [{ key: 'products', label: '隐藏', hidden: true }] }]
-    expect(resolveCoreNavLabel('products', '通用', mods)).toBe('业务对象')
+    expect(resolveCoreNavLabel('products', '通用', mods)).toBe('产品管理')
   })
 
   it('empty menu key returns empty', () => {

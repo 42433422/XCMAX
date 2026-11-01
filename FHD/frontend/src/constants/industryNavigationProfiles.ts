@@ -205,8 +205,8 @@ const onboardingCategoryByIndustryId = new Map(ONBOARDING_INDUSTRY_OPTIONS.map((
 const FINE_GRAINED_INDUSTRY_PROFILES: Record<string, Partial<IndustryNavigationProfile>> = {
   通用: {
     menuLabels: {
-      products: '业务对象',
-      customers: '组织管理',
+      products: '产品管理',
+      customers: '客户管理',
       orders: '业务单据',
       'shipment-records': '业务记录',
       'approval-hub': '审批工作台',

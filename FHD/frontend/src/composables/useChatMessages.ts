@@ -105,6 +105,9 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
       .map((item) => asRecord(item))
       .filter((item) => Object.keys(item).length > 0)
   const extras: ChatMessageExtras = {}
+  const turnId = asString(ui.turnId || asRecord(metadata.business_harness).turn_id || asRecord(metadata.summary).turn_id).trim()
+  if (turnId) extras.turnId = turnId
+  if (row.role !== 'user' && asRecord(metadata.summary).success === false) extras.workflowAction = 'failed'
   const savedId = asString(metadata.client_message_id || row.client_message_id).trim()
   const persisted = asRecord(ui.persistence)
   const localId = asString(persisted.id).trim()
@@ -486,8 +489,12 @@ export function useChatMessages(sessionId: Ref<string>) {
       })
       const sanitized = sanitizeMessagesList(mapped)
       if (!sanitized.length) return false
-      const unsaved = messages.value.filter(local => local.persistence?.status !== 'saved'
-        && !sanitized.some(server => samePersistedMessage(local, server, toPlainText)))
+      const matched = new Set<number>()
+      const unsaved = messages.value.filter(local => {
+        const index = sanitized.findIndex((server, i) => !matched.has(i) && samePersistedMessage(local, server, toPlainText))
+        if (index >= 0) { matched.add(index); sanitized[index] = { ...local, ...sanitized[index] }; return false }
+        return local.persistence?.status !== 'saved'
+      })
       loadMessages([...sanitized, ...unsaved.filter(message => !isWelcomeMessage(message))])
       return true
     } catch (_e) {

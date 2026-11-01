@@ -100,6 +100,43 @@ def test_usage_only_frames_are_ignored_without_index_error(fixture_tools):
     fixture_tools.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "prompt,answer",
+    [
+        ("UX体验测试：只回复‘测试成功’，不要执行任何业务操作。", "测试成功"),
+        ("UX复测：你好，请用一句话介绍你能做什么。仅回答，不执行操作。", "我可以帮你查询资料。"),
+    ],
+)
+def test_report_prompts_receive_visible_market_stream_answers(
+    fixture_tools, monkeypatch, prompt, answer
+):
+    from app.domain.shared_services.conversation import modstore_adapter as market
+
+    platform = market.ModstorePlatformAdapter(
+        platform_url="https://market.invalid", auth_token="synthetic"
+    )
+    wire = NS(
+        iter_lines=lambda: iter(
+            [
+                "event: delta",
+                f"data: {json.dumps({'delta': answer})}",
+                "",
+                "event: done",
+                f"data: {json.dumps({'ok': True, 'content': answer})}",
+                "",
+            ]
+        )
+    )
+    upstream = Mock(side_effect=lambda **kwargs: market._iter_market_sse_data_payloads(wire))
+    monkeypatch.setattr(platform, "stream_chat_completion_sync", upstream)
+    cli = market.ModstoreOpenAICompatibleClient(platform)
+    events = list(adapter.chat_stream_sse_events(prompt, client=cli, model="synthetic"))
+    assert events[-1]["type"] == "done"
+    assert "".join(event["text"] for event in events if event["type"] == "token") == answer
+    upstream.assert_called_once()
+    fixture_tools.assert_not_called()
+
+
 @pytest.mark.parametrize("stream", [False, True])
 def test_missing_choices_is_explicit_empty_failure(fixture_tools, stream):
     cli = client(lambda **_: iter([NS(choices=[])]) if stream else NS(choices=[]))

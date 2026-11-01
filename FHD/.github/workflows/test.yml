@@ -16,6 +16,7 @@ on:
       - "metrics/coverage_ratchet_baseline.json"
       - "FHD/scripts/ci/check_coverage_ssot.py"
       - "FHD/scripts/ci/guard_temp_scripts.py"
+      - "FHD/scripts/ci/check_repo_hygiene.sh"
       - "FHD/scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-test.yml"
   pull_request:
@@ -31,6 +32,7 @@ on:
       - "metrics/coverage_ratchet_baseline.json"
       - "FHD/scripts/ci/check_coverage_ssot.py"
       - "FHD/scripts/ci/guard_temp_scripts.py"
+      - "FHD/scripts/ci/check_repo_hygiene.sh"
       - "FHD/scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-test.yml"
   workflow_dispatch:
@@ -49,35 +51,7 @@ jobs:
 
       - name: Fail on tracked secrets or dependency caches
         shell: bash
-        run: |
-          set -euo pipefail
-          bad=""
-          while IFS= read -r f; do
-            [ -z "${f}" ] && continue
-            f="${f#\"}"
-            f="${f%\"}"
-            [[ "${f}" =~ \.example$ ]] && continue
-            [[ "${f}" =~ /\.env\.generic$ ]] && continue
-            [[ "${f}" =~ /\.env\.minimal$ ]] && continue
-            if [[ "${f}" =~ (^|/)\.env(\.|$) ]] || \
-               [[ "${f}" =~ (^|/)secret\.yaml$ ]] || \
-               [[ "${f}" =~ login_out\.json$ ]] || \
-               [[ "${f}" =~ \.der$ ]] || \
-               [[ "${f}" =~ /\.nm- ]] || \
-               [[ "${f}" =~ /node_modules/ ]] || \
-               [[ "${f}" =~ /__pycache__/ ]] || \
-               [[ "${f}" =~ /chroma/ ]] || \
-               [[ "${f}" =~ /chroma_db/ ]] || \
-               [[ "${f}" =~ /vector_data/.*\.sqlite ]]; then
-              bad+="${f}"$'\n'
-            fi
-          done < <(git ls-files)
-          if [ -n "${bad}" ]; then
-            echo "Tracked paths that must stay gitignored:"
-            printf '%s' "${bad}"
-            exit 1
-          fi
-          echo "Repo hygiene check passed."
+        run: bash scripts/ci/check_repo_hygiene.sh
 
   backend-smoke:
     needs: repo-hygiene
@@ -123,28 +97,3 @@ jobs:
         env:
           SECRET_KEY: "ci-agent-eval-secret-at-least-32-bytes"
         run: python evals/run_agent_eval.py
-
-  frontend-smoke:
-    needs: repo-hygiene
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: ESLint
-        working-directory: frontend
-        run: npm run lint
-
-      - name: Vitest smoke
-        working-directory: frontend
-        run: npm run test:smoke

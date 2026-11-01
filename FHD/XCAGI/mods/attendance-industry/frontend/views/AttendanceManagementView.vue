@@ -253,12 +253,14 @@
       <div v-if="!rows.length" class="empty-state">
         <strong>{{ emptyTitle }}</strong>
         <span>{{ emptyDescription }}</span>
-        <button v-if="isEditable" type="button" class="btn btn-primary" @click="startCreate">
+        <button v-if="hasFilters" type="button" class="btn" @click="clearFilters">清除筛选</button>
+        <button v-else-if="isEditable" type="button" class="btn btn-primary" @click="startCreate">
           {{ section === 'personnel' ? '新增第一位人员' : '新增第一个部门' }}
         </button>
         <router-link v-else-if="conversionEnabled" class="btn btn-primary" :to="{ name: 'attendance-industry-home' }"
           >上传考勤表</router-link
         >
+        <router-link v-else class="btn btn-primary" :to="{ name: 'business-docking' }">导入考勤资料</router-link>
       </div>
 
       <footer v-if="total > pageSize" class="pagination">
@@ -355,18 +357,21 @@
         schedules: '',
       })[props.section]
   );
-  const emptyTitle = computed(() =>
-    props.section === 'personnel'
-      ? '暂无人员'
-      : props.section === 'departments'
-        ? '暂无部门'
-        : '暂无考勤记录'
+  const hasFilters = computed(() => Boolean(search.value.trim() || month.value));
+  const emptyTitle = computed(() => hasFilters.value ? '没有符合筛选条件的记录' :
+    props.section === 'personnel' ? '暂无人员' : props.section === 'departments' ? '暂无部门' : '暂无考勤记录'
   );
-  const emptyDescription = computed(() =>
-    props.section === 'records'
-      ? '当前没有符合条件的入库明细。'
-      : `当前${pageTitle.value}还没有符合条件的数据。`
+  const emptyDescription = computed(() => hasFilters.value
+    ? '请调整姓名、部门或月份，或清除筛选查看全部记录。'
+    : props.section === 'records'
+      ? '请准备含人员、日期与打卡明细的考勤表，通过数据对接中心核对模板并确认导入。'
+      : `当前${pageTitle.value}还没有数据。`
   );
+  function clearFilters() {
+    search.value = '';
+    month.value = '';
+    applyFilters();
+  }
   const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 
   async function requestJson(url: string, init?: RequestInit) {

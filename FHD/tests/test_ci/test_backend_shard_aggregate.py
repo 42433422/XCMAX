@@ -22,7 +22,17 @@ def run(command, root, env):
 
 @pytest.fixture(scope="module")
 def measured_shards(tmp_path_factory):
-    root = tmp_path_factory.mktemp("coverage-aggregation")
+    return measure_shards(tmp_path_factory.mktemp("coverage-aggregation"), mark_stub=True)
+
+
+@pytest.fixture(scope="module")
+def identical_measured_shards(tmp_path_factory):
+    return measure_shards(
+        tmp_path_factory.mktemp("identical-coverage-aggregation"), mark_stub=False
+    )
+
+
+def measure_shards(root, *, mark_stub):
     (root / "pytest.ini").write_text("[pytest]\nmarkers = coverage_ramp\n")
     (root / ".coveragerc").write_text("[run]\nbranch = true\nsource = demo\n")
     (root / "demo.py").write_text("def pick(n):\n    if n:\n        return 1\n    return 0\n")
@@ -30,7 +40,8 @@ def measured_shards(tmp_path_factory):
         (root / f"test_{name}.py").write_text(
             "import pytest\nfrom demo import pick\n"
             "def test_real(): assert pick(0) == 0\n"
-            "@pytest.mark.coverage_ramp\ndef test_stub(): assert pick(1) == 1\n"
+            + ("@pytest.mark.coverage_ramp\n" if mark_stub else "")
+            + "def test_stub(): assert pick(1) == 1\n"
         )
     env = {
         key: value
@@ -144,9 +155,9 @@ def test_gate_failure_keeps_exit_code_and_timing(measured_shards):
 
 
 @pytest.fixture
-def identical_shards(measured_shards, tmp_path, monkeypatch):
+def identical_shards(identical_measured_shards, tmp_path, monkeypatch):
     monkeypatch.delenv("BACKEND_TIMINGS_FILE", raising=False)
-    source, env = measured_shards
+    source, env = identical_measured_shards
     root = tmp_path / "identical"
     shutil.copytree(source, root)
     configuration = root / ".coveragerc"
@@ -203,7 +214,8 @@ def test_equal_coverage_bytes_do_not_override_different_scopes(identical_shards,
     root, _ = identical_shards
     shards = root / "shards"
     summaries = [
-        verify(shards, 2, mode, IDENTITY, "backend-shard-1-") for mode in ("full", "behavior")
+        verify(shards, 2, mode, IDENTITY, "backend-shard-1-", source_root=root)
+        for mode in ("full", "behavior")
     ]
     assert identical_measurements(shards, 2, "backend-shard-1-", summaries)
     summaries[1][field] = "different"
@@ -217,7 +229,8 @@ def test_equal_scopes_require_equal_raw_coverage_on_every_shard(identical_shards
     root, _ = identical_shards
     shards = root / "shards"
     summaries = [
-        verify(shards, 2, mode, IDENTITY, "backend-shard-1-") for mode in ("full", "behavior")
+        verify(shards, 2, mode, IDENTITY, "backend-shard-1-", source_root=root)
+        for mode in ("full", "behavior")
     ]
     target = shards / "backend-shard-1-2/.coverage.behavior"
     original = target.read_bytes()

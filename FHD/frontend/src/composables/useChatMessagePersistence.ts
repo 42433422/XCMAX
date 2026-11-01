@@ -15,8 +15,16 @@ export function samePersistedMessage(local: UiChatMessage, server: UiChatMessage
     // server:<row.id> identifies a legacy row without a client-message binding.
     if (localId.startsWith('server:') === serverId.startsWith('server:')) return false
   }
+  if (local.role !== server.role) return false
+  const text = (message: UiChatMessage) => plainText(message.content).trim()
+  const failureText = (message: UiChatMessage) => text(message).replace(/^处理失败[：:]\s*/, '')
+  const failed = (message: UiChatMessage) => ['failed', 'error', 'workflow_failed', 'planner_failed'].includes(message.workflowAction || '')
+    || message.agentRunTrace?.status === 'failed' || failureText(message) === '模型未返回可显示的正文，已停止重复请求。请检查模型服务后重试。'
+  const sameText = () => local.role === 'ai' && (local.turnId && server.turnId || failed(local) && failed(server))
+    ? failureText(local) === failureText(server) : text(local) === text(server)
+  if (local.turnId && server.turnId) return local.turnId === server.turnId && sameText()
   if (local.persistence?.request && local.persistence.status !== 'saved') return false
-  return local.role === server.role && local.time === server.time && plainText(local.content) === plainText(server.content)
+  return local.time === server.time && sameText()
 }
 
 export function useChatMessagePersistence(deps: {
@@ -90,7 +98,7 @@ export function useChatMessagePersistence(deps: {
       list.push(message)
     }
     message.persistence ||= localMessagePersistence()
-    const ui = { ...(extras || {}) }
+    const ui = { ...(message.turnId ? { turnId: message.turnId } : {}), ...(extras || {}) }
     delete ui.persistence
     message.persistence.request ||= { role, content: visible, ...(Object.keys(ui).length ? { metadata: JSON.stringify({ ui }) } : {}) }
     await persistMessage(message, list, sid)

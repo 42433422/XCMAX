@@ -17,8 +17,8 @@ function route(pathSuffix, name, viewFile, title) {
 }
 
 const modRoutes = [
-  route('/products', 'mod-erp-products', 'ProductsView.vue', '业务对象'),
-  route('/customers', 'mod-erp-customers', 'CustomersView.vue', '组织管理'),
+  route('/products', 'mod-erp-products', 'ProductsView.vue', '产品管理'),
+  route('/customers', 'mod-erp-customers', 'CustomersView.vue', '客户管理'),
   route('/orders', 'mod-erp-orders', 'OrdersView.vue', '业务单据'),
   route('/orders/create', 'mod-erp-orders-create', 'CreateOrderView.vue', '新建业务单据'),
   route('/shipment-records', 'mod-erp-shipment-records', 'ShipmentRecordsView.vue', '业务记录'),
@@ -40,8 +40,8 @@ const modRoutes = [
 
 const modMenu = [
   { id: 'mod-erp-purchase', label: '采购管理', icon: 'fa-shopping-cart', path: `${PREFIX}/purchase` },
-  { id: 'mod-erp-products', label: '业务对象', icon: 'fa-cubes', path: `${PREFIX}/products` },
-  { id: 'mod-erp-customers', label: '组织管理', icon: 'fa-users', path: `${PREFIX}/customers` },
+  { id: 'mod-erp-products', label: '产品管理', icon: 'fa-cubes', path: `${PREFIX}/products` },
+  { id: 'mod-erp-customers', label: '客户管理', icon: 'fa-users', path: `${PREFIX}/customers` },
   { id: 'mod-erp-orders', label: '业务单据', icon: 'fa-file-text-o', path: `${PREFIX}/orders` },
   { id: 'mod-erp-shipment-records', label: '业务记录', icon: 'fa-industry', path: `${PREFIX}/shipment-records` },
   { id: 'mod-erp-materials', label: '资源库', icon: 'fa-archive', path: `${PREFIX}/materials` },

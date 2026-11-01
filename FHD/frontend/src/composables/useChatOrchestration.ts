@@ -476,14 +476,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (isLoading.value) stopReply()
     const generation = chatSessionActivity.beginRound(taskSessionId)
     generation.setLoading(true)
-    addMessage(message, 'user')
+    const turnId = createBusinessHarnessId('turn')
+    addMessage(message, 'user', { turnId })
     const requestScope = {
       identity: resolveChatIdentity(String(modsStore.activeModId || '')),
       signal: generation.signal,
       isCurrent: generation.isCurrent,
       sessionId: taskSessionId,
       messages: [...messages.value],
-      turnId: createBusinessHarnessId('turn'),
+      turnId,
       taskId: createBusinessHarnessId('task'),
     }
     const localScope = captureLocalScope()

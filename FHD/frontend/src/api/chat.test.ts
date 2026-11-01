@@ -39,6 +39,10 @@ beforeEach(() => {
 })
 
 describe('chatApi thin wrappers', () => {
+  it('reads model status through the session-owned client endpoint without selecting another account', async () => {
+    await chatApi.getModelStatus()
+    expect(apiMock.get).toHaveBeenCalledWith('/api/conversation/model-status', {}, { timeoutMs: 20_000, cache: 'no-store' })
+  })
   it('covers post/get endpoints', async () => {
     await chatApi.sendChat({ message: 'hi' } as never)
     await chatApi.getContext({ user_id: 'u' })

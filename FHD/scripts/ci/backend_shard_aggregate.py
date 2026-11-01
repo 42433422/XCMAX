@@ -15,7 +15,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.ci.backend_shards import configured_total, digest, identity, verify
+from scripts.ci.backend_shards import configured_total, digest, identity, verify, verify_scopes
 
 
 def identical_measurements(root: Path, total: int, prefix: str, summaries: list[dict]) -> bool:
@@ -67,6 +67,7 @@ def aggregate(
             )
             for mode in ("full", "behavior")
         ]
+        verify_scopes(summaries)
         required_coverage = summaries[0]["report_toolchain"]["coverage"]
         if importlib.metadata.version("coverage") != required_coverage:
             raise ValueError("Installed coverage differs from verified shard toolchain")
