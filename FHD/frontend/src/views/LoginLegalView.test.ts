@@ -29,7 +29,10 @@ describe('login legal documents', () => {
         expect(wrapper.text()).toContain('版本 【发布前待确认】')
         expect(wrapper.text()).toContain('生效日期 【发布前待确认】')
         expect(wrapper.findAll('section')).toHaveLength(7)
-        for (const unverified of ['2026-11-01', 'support@xiu-ci.com', '成都修茈科技有限公司', '所有数据均存储于企业自有服务器']) {
+        expect(wrapper.text()).toContain('成都修茈科技有限公司')
+        expect(wrapper.text()).toContain('住所为【发布前待确认：营业执照上的住所】')
+        expect(wrapper.get('a[href="mailto:970882904@qq.com"]').text()).toBe('隐私联系：970882904@qq.com')
+        for (const unverified of ['2026-11-01', 'support@xiu-ci.com', '所有数据均存储于企业自有服务器']) {
           expect(wrapper.text()).not.toContain(unverified)
         }
         expect(wrapper.text()).toContain('【发布前待确认：')

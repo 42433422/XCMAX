@@ -20,6 +20,7 @@ watchEffect(() => { document.title = `${documentContent.value.title} · XCAGI` }
         <h2>{{ section.title }}</h2>
         <p v-for="(paragraph, index) in section.paragraphs" :key="index">{{ paragraph }}</p>
       </section>
+      <footer><a href="mailto:970882904@qq.com">隐私联系：970882904@qq.com</a></footer>
     </article>
   </main>
 </template>
