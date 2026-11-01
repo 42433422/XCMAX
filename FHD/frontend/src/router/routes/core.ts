@@ -19,7 +19,7 @@ export const CORE_ROUTES: RouteRecordRaw[] = [
     meta: { title: '登录帮助', publicAccess: true, hideChrome: true },
   },
   {
-    path: '/login/legal/:document(service-agreement|privacy-policy)',
+    path: '/login/legal/:document(service-agreement|privacy-policy|model-recipients)',
     name: 'login-legal',
     component: () => import('../../views/LoginLegalView.vue'),
     props: true,

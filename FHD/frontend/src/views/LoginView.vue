@@ -79,6 +79,7 @@ const {
   selectEnterpriseLogin,
   selectAdminLogin,
   submitLogin,
+  submitBasicLogin,
   startOidcLogin,
 } = actions
 const { completeLoginSuccess } = session
@@ -157,6 +158,7 @@ onUnmounted(() => {
         <i18n-t keypath="login.dataProcessingNotice" scope="global" tag="p" id="login-data-processing-notice" class="login-hint" role="note">
           <template #agreement><RouterLink :to="{ name: 'login-legal', params: { document: 'service-agreement' }, query: route.query }">{{ $t('login.serviceAgreement') }}</RouterLink></template>
           <template #privacy><RouterLink :to="{ name: 'login-legal', params: { document: 'privacy-policy' }, query: route.query }">{{ $t('login.privacyPolicy') }}</RouterLink></template>
+          <template #recipients><RouterLink :to="{ name: 'login-legal', params: { document: 'model-recipients' }, query: route.query }">{{ $t('login.modelRecipients') }}</RouterLink></template>
         </i18n-t>
 
         <div v-if="accountKind === 'enterprise'" class="login-mode-tabs" role="tablist">
@@ -294,6 +296,7 @@ onUnmounted(() => {
               />
             </svg>
           </button>
+          <button class="login-sso login-basic" type="button" :disabled="!canSubmit || loading" @click="submitBasicLogin">{{ $t('login.basicSubmit') }}</button>
         </form>
 
         <div v-else class="login-qr-panel">

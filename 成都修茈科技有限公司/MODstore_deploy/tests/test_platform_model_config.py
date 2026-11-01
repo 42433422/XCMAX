@@ -480,6 +480,109 @@ def test_snapshot_records_model_alias_actually_dispatched(database, monkeypatch,
     assert keys.read_chat_route_token(token, 1, "xiaomi", expected).model == expected
 
 
+@pytest.mark.parametrize(
+    "base,attested",
+    [
+        ("https://token-plan-cn.xiaomimimo.com", True),
+        ("https://token-plan-cn.xiaomimimo.com/v1/", True),
+        ("http://token-plan-cn.xiaomimimo.com/v1", False),
+        ("https://token-plan-cn.xiaomimimo.com.evil.invalid/v1", False),
+        ("https://token-plan.xiaomimimo.com/v1", False),
+        ("https://token-plan-cn.xiaomimimo.com/v2", False),
+        ("https://private.example.invalid/v1", False),
+    ],
+)
+def test_recipient_attestation_uses_exact_normalized_dispatch_endpoint(base, attested):
+    snapshot = keys.chat_route_snapshot(
+        "xiaomi", "mimo-v2.6-flash", KEY, base, "platform", "explicit"
+    )
+    metadata = snapshot.public_metadata()
+    assert ("recipient" in metadata) is attested
+    if attested:
+        assert metadata["recipient"] == {
+            "id": "xiaomi-mimo-cn",
+            "provider": snapshot.provider,
+            "api_base": "https://token-plan-cn.xiaomimimo.com/v1",
+            "region": "CN",
+            "disclosure_version": "2026-11-01",
+        }
+    else:
+        assert base not in json.dumps(metadata)
+    assert KEY not in json.dumps(metadata)
+
+
+@pytest.mark.parametrize(
+    "bound_base,other_base,attested",
+    [
+        (
+            "https://private.example.invalid/v1",
+            "https://token-plan-cn.xiaomimimo.com/v1",
+            False,
+        ),
+        (
+            "https://token-plan-cn.xiaomimimo.com/v1",
+            "https://private.example.invalid/v1",
+            True,
+        ),
+        (
+            "https://token-plan-cn.xiaomimimo.com/v1/",
+            "https://private.example.invalid/v1",
+            True,
+        ),
+    ],
+)
+def test_recipient_attestation_reads_key_bound_actual_endpoint(bound_base, other_base, attested):
+    key = config.PlatformApiKey(
+        KEY,
+        {
+            "provider": "xiaomi",
+            "base_url": bound_base,
+            "model": "mimo-v2.6-flash",
+            "display_name": "Synthetic",
+            "revision": "synthetic-bound-revision",
+        },
+    )
+    snapshot = keys.chat_route_snapshot(
+        "xiaomi", "mimo-v2.6-flash", key, other_base, "platform", "explicit"
+    )
+    assert ("recipient" in snapshot.public_metadata()) is attested
+    assert snapshot.config_revision == "synthetic-bound-revision"
+
+
+@pytest.mark.parametrize("provider,source", [("xiaomi", "user_override"), ("openai", "platform")])
+def test_recipient_attestation_does_not_authorize_other_provider_or_byok(provider, source):
+    snapshot = keys.chat_route_snapshot(
+        provider, "mimo-v2.6-flash", KEY, "https://token-plan-cn.xiaomimimo.com/v1", source, "explicit"
+    )
+    assert "recipient" not in snapshot.public_metadata()
+
+
+@pytest.mark.asyncio
+async def test_resolver_endpoint_rotation_changes_revision_and_removes_attestation(
+    database,
+):
+    from modstore_server import llm_api
+
+    save(
+        "xiaomi",
+        base_url="https://token-plan-cn.xiaomimimo.com/v1",
+        model="mimo-v2.6-flash",
+    )
+    first = await llm_api.resolve_default_llm_route(database, 1)
+    assert first["recipient"]["id"] == "xiaomi-mimo-cn"
+    save(
+        "xiaomi",
+        base_url=BASE,
+        model=first["model"],
+        expected_revision=first["config_revision"],
+    )
+    second = await llm_api.resolve_default_llm_route(database, 1)
+    assert second["provider"] == first["provider"] and second["model"] == first["model"]
+    assert second["config_revision"] != first["config_revision"]
+    assert "recipient" not in second and BASE not in json.dumps(second)
+    assert KEY not in json.dumps(first) + json.dumps(second)
+
+
 @pytest.mark.asyncio
 async def test_managed_asr_catalog_has_no_chat_default(database):
     from modstore_server import llm_api, llm_catalog

@@ -3,13 +3,14 @@
 import json
 import logging
 import time
+from datetime import UTC, datetime, timedelta
 from http.cookies import SimpleCookie
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import jwt
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.application import elt_login_authorization as auth
@@ -17,19 +18,38 @@ from app.application.reviewed_excel_audit import ModelRequestNotSent
 from app.fastapi_routes.domains.auth.credential_login import CredentialLogin
 
 
+def publication_record():
+    return {
+        "notice_version": "2026-11-01",
+        "recipient_disclosure_version": "2026-11-01",
+        "published_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def recipient():
+    return {
+        "id": "xiaomi-mimo-cn",
+        "provider": "xiaomi",
+        "api_base": "https://token-plan-cn.xiaomimimo.com/v1",
+        "region": "CN",
+        "disclosure_version": "2026-11-01",
+    }
+
+
 @pytest.fixture
 def login(monkeypatch):
-    monkeypatch.setattr(auth, "NOTICE_PUBLISHED", True)
+    monkeypatch.setenv(auth.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
     monkeypatch.setenv("SECRET_KEY", "synthetic-login-notice-signing-key-1234567890")
-    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic-platform.invalid")
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "platform")
     identity = {"owner": 7, "tenant": 9, "expires": int(time.time()) + 3600}
     route = {
-        "base": "https://synthetic-platform.invalid",
-        "provider": "synthetic",
-        "model": "synthetic-model",
+        "base": "https://xiu-ci.com",
+        "provider": "xiaomi",
+        "model": "mimo-v2.6-flash",
         "key_source": "platform",
         "config_revision": "synthetic-revision-A",
+        "recipient": recipient(),
     }
     monkeypatch.setattr(
         auth, "_active_session", lambda sid: identity if sid == "synthetic-session" else None
@@ -77,6 +97,103 @@ async def test_successful_explicit_login_records_version_scope_identity_and_sess
     assert result["session_id"] not in repr(grant)
     assert "HttpOnly" in response.headers.getlist("set-cookie")[-1]
     assert auth.login_notice_status(request(receipt), 9, 7)["status"] == "authorized"
+    assert grant["publication"] == auth.notice_publication()
+    assert grant["recipient_disclosure_version"] == "2026-11-01"
+    assert grant["route"]["recipient"] == recipient()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutation", ["absent", "invalid", "old_notice", "old_recipient", "naive", "future"]
+)
+async def test_publication_record_must_identify_actual_matching_published_versions(
+    login, monkeypatch, mutation
+):
+    result, _ = login
+    receipt, _ = await receipt_for(result)
+    record = publication_record()
+    if mutation == "old_notice":
+        record["notice_version"] = "old"
+    if mutation == "old_recipient":
+        record["recipient_disclosure_version"] = "old"
+    if mutation == "naive":
+        record["published_at"] = "2026-01-01T00:00:00"
+    if mutation == "future":
+        record["published_at"] = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    monkeypatch.setenv(
+        auth.NOTICE_PUBLICATION_ENV,
+        "" if mutation == "absent" else "not-json" if mutation == "invalid" else json.dumps(record),
+    )
+    assert auth.notice_publication() is None
+    assert (await receipt_for(result))[0] == ""
+    assert auth.login_notice_grant(request(receipt), 9, 7) is None
+
+
+@pytest.mark.asyncio
+async def test_changed_actual_publication_record_invalidates_old_receipt(login, monkeypatch):
+    result, _ = login
+    receipt, _ = await receipt_for(result)
+    monkeypatch.setenv(auth.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
+    assert auth.login_notice_grant(request(receipt), 9, 7) is None
+
+
+@pytest.mark.asyncio
+async def test_file_audit_and_checkpoint_bind_publication_without_credentials(login):
+    result, _ = login
+    receipt, _ = await receipt_for(result)
+    grant = auth.login_notice_grant(request(receipt), 9, 7, "classification")
+    authorization = auth.classification_notice_scope(
+        grant, "synthetic-classification", "synthetic-version"
+    )
+    assert authorization["notice_publication"] == grant["publication"]
+    assert authorization["recipient_disclosure_version"] == "2026-11-01"
+    assert authorization["data_categories"] == grant["data_categories"]
+    assert result["session_id"] not in json.dumps(authorization)
+    auth.validate_classification_notice({"authorization": authorization}, grant)
+    authorization["notice_publication"]["record_sha256"] = "synthetic-other-publication"
+    with pytest.raises(HTTPException) as error:
+        auth.validate_classification_notice({"authorization": authorization}, grant)
+    assert error.value.status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"provider": "doubao"},
+        {"key_source": "user_override"},
+        {"model": "mimo-v2.6-pro"},
+        {"model": "mimo-v2-flash"},
+        {"recipient": None},
+        {"recipient": {**recipient(), "provider": "doubao"}},
+        {"recipient": {**recipient(), "api_base": "https://custom.invalid/v1"}},
+        {"recipient": {**recipient(), "region": "US"}},
+        {"recipient": {**recipient(), "disclosure_version": "old"}},
+    ],
+)
+async def test_only_disclosed_platform_mimo_flash_recipient_can_receive_new_grants(
+    login, monkeypatch, changes
+):
+    result, route = login
+    monkeypatch.setattr(auth, "_resolve_login_route", AsyncMock(return_value={**route, **changes}))
+    assert (await receipt_for(result))[0] == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "relay,authorized",
+    [
+        ("https://xiu-ci.com/market/", True),
+        ("https://custom.invalid", False),
+        ("http://xiu-ci.com", False),
+    ],
+)
+async def test_authorization_uses_existing_api_origin_normalizer_and_disclosed_relay_only(
+    login, monkeypatch, relay, authorized
+):
+    result, route = login
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", relay)
+    assert bool((await receipt_for(result))[0]) is authorized
 
 
 @pytest.mark.asyncio
@@ -173,7 +290,7 @@ async def test_invalid_optional_model_url_keeps_successful_login_response(login,
 async def test_unpublished_draft_cannot_issue_or_reuse_model_authorization(login, monkeypatch):
     result, _ = login
     receipt, _ = await receipt_for(result)
-    monkeypatch.setattr(auth, "NOTICE_PUBLISHED", False)
+    monkeypatch.delenv(auth.NOTICE_PUBLICATION_ENV)
     assert (await receipt_for(result))[0] == ""
     assert auth.login_notice_grant(request(receipt), 9, 7) is None
     assert auth.login_notice_status(request(receipt), 9, 7)["status"] == "notice_not_published"
@@ -184,7 +301,7 @@ async def test_login_resolves_only_metadata_with_the_exact_new_session(monkeypat
     from app.fastapi_routes import market_account
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "platform")
-    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic-platform.invalid/")
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com/")
     monkeypatch.setattr(
         market_account,
         "session_market_token",
@@ -194,10 +311,11 @@ async def test_login_resolves_only_metadata_with_the_exact_new_session(monkeypat
         raise_for_status=lambda: None,
         json=lambda: {
             "ok": True,
-            "provider": "synthetic",
-            "model": "synthetic-model",
+            "provider": "xiaomi",
+            "model": "mimo-v2.6-flash",
             "key_source": "platform",
             "config_revision": "synthetic-revision-A",
+            "recipient": recipient(),
         },
     )
     client = SimpleNamespace(get=AsyncMock(return_value=response))
@@ -206,15 +324,14 @@ async def test_login_resolves_only_metadata_with_the_exact_new_session(monkeypat
     monkeypatch.setattr(auth.httpx, "AsyncClient", lambda **kwargs: context)
     assert await auth._resolve_login_route("old-session") is None
     assert await auth._resolve_login_route("new-session") == {
-        "base": "https://synthetic-platform.invalid",
-        "provider": "synthetic",
-        "model": "synthetic-model",
+        "base": "https://xiu-ci.com",
+        "provider": "xiaomi",
+        "model": "mimo-v2.6-flash",
         "key_source": "platform",
         "config_revision": "synthetic-revision-A",
+        "recipient": recipient(),
     }
-    client.get.assert_awaited_once_with(
-        "https://synthetic-platform.invalid/api/llm/resolve-chat-default"
-    )
+    client.get.assert_awaited_once_with("https://xiu-ci.com/api/llm/resolve-chat-default")
 
 
 @pytest.mark.asyncio
@@ -296,6 +413,7 @@ async def test_route_scope_blocks_changed_supplier_or_model_before_dispatch_and_
             route["model"],
             key_source=route["key_source"],
             config_revision=route["config_revision"],
+            recipient=route["recipient"],
         )
         for provider, model in [
             ("other-supplier", route["model"]),
@@ -308,6 +426,7 @@ async def test_route_scope_blocks_changed_supplier_or_model_before_dispatch_and_
                     model,
                     key_source=route["key_source"],
                     config_revision=route["config_revision"],
+                    recipient=route["recipient"],
                 )
     auth.assert_login_notice_route("admin-existing-route", "admin", "admin")
 
@@ -320,6 +439,9 @@ async def test_route_scope_blocks_changed_supplier_or_model_before_dispatch_and_
         {"config_revision": "synthetic-revision-B"},
         {"key_source": "user_override"},
         {"config_revision": None},
+        {"model": "mimo-v2.6-pro"},
+        {"model": "mimo-v2-flash"},
+        {"recipient": None},
     ],
 )
 async def test_final_resolved_route_change_cannot_reach_model_adapter(login, monkeypatch, change):
@@ -402,9 +524,11 @@ async def test_legacy_unbound_provider_accepts_old_metadata_without_caller_snaps
     from app.domain.shared_services.conversation import modstore_adapter
 
     route = {"ok": True, "provider": "synthetic", "model": "synthetic-model"}
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com/market/")
     response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: route)
     context = AsyncMock()
-    context.__aenter__.return_value = SimpleNamespace(get=AsyncMock(return_value=response))
+    resolve = AsyncMock(return_value=response)
+    context.__aenter__.return_value = SimpleNamespace(get=resolve)
     monkeypatch.setattr(auth.httpx, "AsyncClient", lambda **kwargs: context)
     adapter = SimpleNamespace(
         chat_completion=AsyncMock(return_value={"model": route["model"]}), close=AsyncMock()
@@ -422,6 +546,7 @@ async def test_legacy_unbound_provider_accepts_old_metadata_without_caller_snaps
     assert sent["provider"] == route["provider"] and sent["model"] == route["model"]
     assert sent["allow_failover"] is False and sent["_reviewed_excel_audit_response"] is audit
     assert not any(key in sent for key in ("route_token", "key_source", "config_revision"))
+    resolve.assert_awaited_once_with("https://xiu-ci.com/api/llm/resolve-chat-default")
 
 
 @pytest.mark.asyncio

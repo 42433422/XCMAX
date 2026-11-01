@@ -14,28 +14,48 @@ vi.mock('@/constants/platformShellMode', async importOriginal => ({
 afterEach(() => { mode.shell = false; window.history.replaceState({}, '', '/'); document.title = '' })
 
 describe('login legal documents', () => {
-  it.each(['normal', 'shell', 'sandbox'])('can read both local documents before login in %s mode and return without losing the destination', async variant => {
+  it.each(['normal', 'shell', 'sandbox'])('can read all local documents before login in %s mode and return without losing the destination', async variant => {
     mode.shell = variant === 'shell'
     window.history.replaceState({}, '', variant === 'sandbox' ? '/?sandbox' : '/')
     const router = createRouter({ history: createMemoryHistory(), routes: resolveInitialRoutes(CORE_ROUTES) })
     const wrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router] } })
     try {
-      for (const kind of ['service-agreement', 'privacy-policy'] as const) {
+      for (const kind of ['service-agreement', 'privacy-policy', 'model-recipients'] as const) {
         await router.push({ name: 'login-legal', params: { document: kind }, query: { redirect: '/business-docking' } })
         await flushPromises()
         expect(router.currentRoute.value.meta).toMatchObject({ publicAccess: true, hideChrome: true })
         expect(wrapper.get('h1').text()).toBe(LEGAL_DOCUMENTS[kind].title)
-        expect(wrapper.text()).toContain('审阅草案，尚未作为生效条款发布')
-        expect(wrapper.text()).toContain('版本 【发布前待确认】')
-        expect(wrapper.text()).toContain('生效日期 【发布前待确认】')
-        expect(wrapper.findAll('section')).toHaveLength(7)
-        expect(wrapper.text()).toContain('成都修茈科技有限公司')
-        expect(wrapper.text()).toContain('住所为【发布前待确认：营业执照上的住所】')
+        expect(wrapper.text()).toContain('版本 2026-11-01')
+        expect(wrapper.text()).not.toContain('生效日期')
+        expect(wrapper.findAll('section')).toHaveLength({ 'service-agreement': 7, 'privacy-policy': 8, 'model-recipients': 1 }[kind])
+        expect(wrapper.text()).not.toMatch(/\*\*|\]\(https:\/\//)
         expect(wrapper.get('a[href="mailto:970882904@qq.com"]').text()).toBe('隐私联系：970882904@qq.com')
-        for (const unverified of ['2026-11-01', 'support@xiu-ci.com', '所有数据均存储于企业自有服务器']) {
+        for (const unverified of ['审阅草案', '发布前待确认', 'support@xiu-ci.com', '所有数据均存储于企业自有服务器']) {
           expect(wrapper.text()).not.toContain(unverified)
         }
-        expect(wrapper.text()).toContain('【发布前待确认：')
+        expect(wrapper.get('nav[aria-label="协议与接收方说明"]').findAll('a')).toHaveLength(3)
+        if (kind === 'service-agreement') {
+          const emphasized = wrapper.findAll('strong').map(item => item.text())
+          expect(emphasized).toContain('平台模型调用计费，并非默认免费。')
+          expect(emphasized).toContain('AI 结果可能存在遗漏、误识别或不准确内容。')
+        }
+        if (kind === 'privacy-policy') {
+          expect(wrapper.text()).toContain('十五个工作日内答复处理结果或说明仍需核实的事项')
+          expect(wrapper.text()).toContain('原始上传文件目前设有7天到期时间')
+          expect(wrapper.text()).toContain('不是到点立即执行的定时删除保证')
+          expect(wrapper.text()).toContain('独立的手动保留机制')
+          expect(wrapper.text()).toContain('创建时间超过90天')
+          expect(wrapper.text()).toContain('此规则不代表运行概要')
+          expect(wrapper.find('a[href="https://privacy.mi.com/support"]').exists()).toBe(true)
+        }
+        if (kind === 'model-recipients') {
+          expect(wrapper.findAll('table tr')).toHaveLength(13)
+          expect(wrapper.text()).toContain('北京小米移动软件有限公司及其关联公司')
+          expect(wrapper.text()).toContain('中国集群')
+          for (const url of ['https://token-plan-cn.xiaomimimo.com/v1', 'https://privacy.mi.com/support', 'https://privacy.mi.com/XiaomiMiMoPlatform/zh_CN/']) {
+            expect(wrapper.get(`a[href="${url}"]`).attributes('rel')).toBe('noopener noreferrer')
+          }
+        }
         expect(wrapper.get('a').attributes('href')).toBe('/login?redirect=/business-docking')
         expect(document.title).toContain(LEGAL_DOCUMENTS[kind].title)
         expect(wrapper.find('[role=dialog]').exists()).toBe(false)

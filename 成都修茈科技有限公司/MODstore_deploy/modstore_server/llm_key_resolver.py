@@ -362,11 +362,27 @@ class ChatRouteSnapshot:
     api_key: str = field(repr=False)
     base_url: str | None = field(repr=False)
 
-    def public_metadata(self) -> dict[str, str]:
-        return {
+    def public_metadata(self) -> dict[str, Any]:
+        metadata: dict[str, Any] = {
             name: getattr(self, name)
             for name in ("provider", "model", "route_source", "key_source", "config_revision")
         }
+        if self.provider == "xiaomi" and self.key_source == "platform":
+            from modstore_server.llm_chat_proxy import _normalize_openai_base
+
+            approved_base = "https://token-plan-cn.xiaomimimo.com/v1"
+            effective_base = _normalize_openai_base(
+                self.provider, self.base_url, self.api_key
+            ).rstrip("/")
+            if effective_base == approved_base:
+                metadata["recipient"] = {
+                    "id": "xiaomi-mimo-cn",
+                    "provider": self.provider,
+                    "api_base": approved_base,
+                    "region": "CN",
+                    "disclosure_version": "2026-11-01",
+                }
+        return metadata
 
 
 def chat_route_snapshot(

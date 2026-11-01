@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Literal, cast
 
 import httpx
@@ -17,10 +18,26 @@ from fastapi import HTTPException, Request, Response
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-NOTICE_VERSION = "2026-11-01-draft"
-# The current legal text is a review draft. Publishing a verified notice is a
-# separate reviewed release change; runtime configuration cannot bypass this.
-NOTICE_PUBLISHED = False
+NOTICE_VERSION = "2026-11-01"
+RECIPIENT_DISCLOSURE_VERSION = "2026-11-01"
+NOTICE_PUBLICATION_ENV = "FHD_ELT_NOTICE_PUBLICATION"
+_COVERED_RELAY = "https://xiu-ci.com"
+_DISCLOSED_RECIPIENT = {
+    "id": "xiaomi-mimo-cn",
+    "api_base": "https://token-plan-cn.xiaomimimo.com/v1",
+    "region": "CN",
+    "disclosure_version": RECIPIENT_DISCLOSURE_VERSION,
+}
+_DATA_CATEGORIES = (
+    "instructions",
+    "file_text",
+    "formulas",
+    "table_structure",
+    "cell_coordinates",
+    "task_business_fields",
+    "related_context",
+    "necessary_request_parameters",
+)
 NOTICE_COOKIE = "xcagi_elt_notice"
 NOTICE_PURPOSE = "elt_file_processing"
 _AUDIENCE = "xcagi-elt-login-notice"
@@ -93,6 +110,10 @@ def _active_session(session_id: str) -> dict | None:
 
 
 def _platform_url() -> str:
+    if os.environ.get("XCAGI_MARKET_BASE_URL"):
+        from app.fastapi_routes.market_bridge.settings import _market_api_base_url
+
+        return _market_api_base_url()
     return (
         (
             os.environ.get("XCAGI_MARKET_BASE_URL")
@@ -105,7 +126,51 @@ def _platform_url() -> str:
 
 
 def _public_model_route(route: dict) -> dict:
-    return {key: route[key] for key in _PUBLIC_ROUTE_FIELDS}
+    return {
+        **{key: route[key] for key in _PUBLIC_ROUTE_FIELDS},
+        "recipient": dict(route["recipient"]),
+    }
+
+
+def notice_publication() -> dict | None:
+    """Only a publisher-supplied, version-matching actual release can enable new grants."""
+    try:
+        record = json.loads(os.environ.get(NOTICE_PUBLICATION_ENV, ""))
+        if not isinstance(record, dict) or set(record) != {
+            "notice_version",
+            "recipient_disclosure_version",
+            "published_at",
+        }:
+            return None
+        if (
+            record["notice_version"] != NOTICE_VERSION
+            or record["recipient_disclosure_version"] != RECIPIENT_DISCLOSURE_VERSION
+            or not isinstance(record["published_at"], str)
+        ):
+            return None
+        published = datetime.fromisoformat(record["published_at"].replace("Z", "+00:00"))
+        if published.tzinfo is None or published > datetime.now(UTC):
+            return None
+        canonical = {**record, "published_at": published.astimezone(UTC).isoformat()}
+        return {
+            **canonical,
+            "record_sha256": hashlib.sha256(
+                json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+        }
+    except (ValueError, TypeError):
+        return None
+
+
+def _covered_recipient(route: dict) -> bool:
+    return (
+        route.get("base") == _COVERED_RELAY
+        and route.get("key_source") == "platform"
+        and route.get("provider") == "xiaomi"
+        and route.get("model") == "mimo-v2.6-flash"
+        and isinstance(route.get("recipient"), dict)
+        and route["recipient"] == {**_DISCLOSED_RECIPIENT, "provider": route.get("provider")}
+    )
 
 
 def _valid_model_snapshot(route: dict) -> bool:
@@ -130,6 +195,8 @@ async def _resolve_login_route(session_id: str) -> dict | None:
     if not token:
         return None
     base = _platform_url()
+    if base != _COVERED_RELAY:
+        return None
     async with httpx.AsyncClient(
         timeout=3.0, headers={"Authorization": f"Bearer {token}"}
     ) as client:
@@ -144,7 +211,7 @@ async def _resolve_login_route(session_id: str) -> dict | None:
     provider, model = provider.strip(), model.strip()
     if not 0 < len(provider) <= 200 or not 0 < len(model) <= 200:
         return None
-    if not _valid_model_snapshot(route):
+    if not _valid_model_snapshot(route) or not _covered_recipient({**route, "base": base}):
         return None
     return {"base": base, **_public_model_route(route), "provider": provider, "model": model}
 
@@ -154,7 +221,8 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
     if not result.get("success"):
         return response
     response.delete_cookie(NOTICE_COOKIE, path="/")
-    if not NOTICE_PUBLISHED or body.get("data_processing_notice_version") != NOTICE_VERSION:
+    publication = notice_publication()
+    if not publication or body.get("data_processing_notice_version") != NOTICE_VERSION:
         return response
     session_id = str(result.get("session_id") or "")
     if not session_id:
@@ -165,7 +233,12 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
         if not identity or identity["owner"] != (result.get("user") or {}).get("id"):
             return response
         route = await _resolve_login_route(session_id)
-        if not route or not _valid_model_snapshot(route):
+        if (
+            not route
+            or route.get("base") != _platform_url()
+            or not _valid_model_snapshot(route)
+            or not _covered_recipient(route)
+        ):
             return response
         now = int(time.time())
         expires = min(identity["expires"], now + 12 * 3600)
@@ -175,6 +248,9 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
             "exp": expires,
             "version": NOTICE_VERSION,
             "purpose": NOTICE_PURPOSE,
+            "publication": publication,
+            "recipient_disclosure_version": RECIPIENT_DISCLOSURE_VERSION,
+            "data_categories": list(_DATA_CATEGORIES),
             "session": _session_digest(session_id),
             "owner": identity["owner"],
             "tenant": identity["tenant"],
@@ -207,7 +283,8 @@ def login_notice_grant(
     from app.application.reviewed_excel_template import configured_template_llm_provider
     from app.infrastructure.auth.dependencies import session_id_from_request
 
-    if not NOTICE_PUBLISHED or operation not in notice_operation_scopes():
+    publication = notice_publication()
+    if not publication or operation not in notice_operation_scopes():
         return None
     try:
         raw = request.cookies.get(NOTICE_COOKIE, "")
@@ -238,14 +315,18 @@ def login_notice_grant(
             or receipt["session"] != _session_digest(session_id)
             or receipt["version"] != NOTICE_VERSION
             or receipt["purpose"] != NOTICE_PURPOSE
+            or receipt.get("publication") != publication
+            or receipt.get("recipient_disclosure_version") != RECIPIENT_DISCLOSURE_VERSION
+            or receipt.get("data_categories") != list(_DATA_CATEGORIES)
             or receipt["owner"] != owner_id
             or receipt["tenant"] != tenant_id
             or not isinstance(receipt.get("scopes"), dict)
             or receipt["scopes"].get(operation) != notice_operation_scopes()[operation]
             or not isinstance(route, dict)
             or route.get("base") != _platform_url()
-            or set(route) != {"base", *_PUBLIC_ROUTE_FIELDS}
+            or set(route) != {"base", "recipient", *_PUBLIC_ROUTE_FIELDS}
             or not _valid_model_snapshot(route)
+            or not _covered_recipient(route)
         ):
             return None
         return _LoginNoticeGrant(receipt, session_id)
@@ -261,10 +342,11 @@ def login_notice_status(
         "status": "authorized"
         if grant
         else "login_notice_required"
-        if NOTICE_PUBLISHED
+        if notice_publication()
         else "notice_not_published",
         "version": NOTICE_VERSION,
         "purpose": NOTICE_PURPOSE,
+        "recipient_disclosure_version": RECIPIENT_DISCLOSURE_VERSION,
         "operation": operation,
         "scope": notice_operation_scopes().get(operation),
         **(_public_model_route(grant["route"]) if grant else {}),
@@ -311,6 +393,9 @@ def notice_document_scope(grant: dict | None, selected_region: dict) -> dict:
     return {
         "notice_version": grant["version"],
         "notice_accepted_at": grant["iat"],
+        "notice_publication": dict(grant["publication"]),
+        "recipient_disclosure_version": grant["recipient_disclosure_version"],
+        "data_categories": list(grant["data_categories"]),
         "model_route": _public_model_route(grant["route"]),
         "classification_id": selected_region.get("classification_id"),
         "classification_version": selected_region.get("version"),
@@ -365,6 +450,10 @@ def classification_notice_scope(grant: dict | None, classification_id: str, vers
 def validate_classification_notice(checkpoint: dict | None, grant: dict) -> None:
     if checkpoint and (
         checkpoint.get("authorization", {}).get("notice_version") != grant["version"]
+        or checkpoint.get("authorization", {}).get("notice_publication") != grant["publication"]
+        or checkpoint.get("authorization", {}).get("recipient_disclosure_version")
+        != grant["recipient_disclosure_version"]
+        or checkpoint.get("authorization", {}).get("data_categories") != grant["data_categories"]
         or checkpoint.get("authorization", {}).get("model_route")
         != _public_model_route(grant["route"])
         or checkpoint.get("authorization", {}).get("notice_scope")
@@ -402,6 +491,7 @@ def assert_login_notice_route(
     *,
     key_source: str | None = None,
     config_revision: str | None = None,
+    recipient: dict | None = None,
 ) -> None:
     expected = _route_scope.get()
     actual = {
@@ -410,8 +500,11 @@ def assert_login_notice_route(
         "model": model,
         "key_source": key_source,
         "config_revision": config_revision,
+        "recipient": recipient,
     }
-    if expected is not None and (not _valid_model_snapshot(actual) or expected != actual):
+    if expected is not None and (
+        not _valid_model_snapshot(actual) or not _covered_recipient(actual) or expected != actual
+    ):
         from app.application.reviewed_excel_audit import ModelRequestNotSent
 
         raise ModelRequestNotSent("平台模型目的地已变化；当前登录授权不适用，未调用模型")

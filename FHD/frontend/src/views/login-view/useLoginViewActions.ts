@@ -189,6 +189,10 @@ export function useLoginViewActions(
     }
   }
 
+  async function submitBasicLogin() {
+    await submitLogin(undefined, true)
+  }
+
   function startOidcLogin() {
     window.location.href = '/api/auth/oidc/start'
   }
@@ -202,6 +206,7 @@ export function useLoginViewActions(
     selectEnterpriseLogin,
     selectAdminLogin,
     submitLogin,
+    submitBasicLogin,
     startOidcLogin,
   }
 }

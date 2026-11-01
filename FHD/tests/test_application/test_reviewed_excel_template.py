@@ -2244,8 +2244,12 @@ def test_login_notice_preview_without_effective_receipt_stays_local_and_refine_c
     from unittest.mock import Mock
 
     from app.application import elt_login_authorization as notice
+    from tests.test_application.test_elt_login_authorization import publication_record
 
-    monkeypatch.setattr(notice, "NOTICE_PUBLISHED", published)
+    if published:
+        monkeypatch.setenv(notice.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
+    else:
+        monkeypatch.delenv(notice.NOTICE_PUBLICATION_ENV, raising=False)
     send = Mock(side_effect=AssertionError("unauthorized model call"))
     monkeypatch.setattr(routes, "refine_proposal", send)
     response = review_store.client.post(
@@ -2303,9 +2307,11 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("SECRET_KEY", "synthetic-login-notice-key-for-route-tests-123456789")
-    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic-platform.invalid")
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "platform")
-    monkeypatch.setattr(notice, "NOTICE_PUBLISHED", True)
+    from tests.test_application.test_elt_login_authorization import publication_record, recipient
+
+    monkeypatch.setenv(notice.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
     monkeypatch.setattr(
         notice,
         "_active_session",
@@ -2316,11 +2322,12 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
         },
     )
     route = {
-        "base": "https://synthetic-platform.invalid",
-        "provider": "synthetic",
-        "model": "synthetic-model",
+        "base": "https://xiu-ci.com",
+        "provider": "xiaomi",
+        "model": "mimo-v2.6-flash",
         "key_source": "platform",
         "config_revision": "synthetic-revision-A",
+        "recipient": recipient(),
     }
     monkeypatch.setattr(notice, "_resolve_login_route", AsyncMock(return_value=route))
     response = asyncio.run(
@@ -2345,6 +2352,7 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
             route["model"],
             key_source=route["key_source"],
             config_revision=route["config_revision"],
+            recipient=route["recipient"],
         )
         assert notice.current_login_notice_session_id(7) == "synthetic-session"
         calls.append(kwargs["owner_id"])
@@ -2437,7 +2445,8 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     assert auth["classification_version"] == analyzed["version"]
     assert auth["document"]["auto_slice_index"] == 0 and auth["document"]["fragments"]
     assert auth["model_route"] == {
-        key: route[key] for key in ("provider", "model", "key_source", "config_revision")
+        key: route[key]
+        for key in ("provider", "model", "key_source", "config_revision", "recipient")
     }
     assert result["proposal"]["model"]["login_authorization"]["status"] == "authorized"
     assert calls == [7] * (classification_calls + 1)

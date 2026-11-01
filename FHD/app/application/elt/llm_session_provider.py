@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from contextvars import ContextVar, Token
 from typing import Any, cast
 
@@ -33,17 +32,10 @@ class SessionMarketProvider:
     ) -> dict[str, Any] | None:
         import httpx
 
+        from app.application.elt_login_authorization import _platform_url, assert_login_notice_route
         from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
-        platform_url = (
-            (
-                os.environ.get("XCAGI_MARKET_BASE_URL")
-                or os.environ.get("MODSTORE_PLATFORM_URL")
-                or "http://127.0.0.1:8765"
-            )
-            .strip()
-            .rstrip("/")
-        )
+        platform_url = _platform_url()
         timeout = self._timeout_seconds
         headers = {"Authorization": f"Bearer {self._token}"}
         async with httpx.AsyncClient(
@@ -57,14 +49,13 @@ class SessionMarketProvider:
         model_name = str(route.get("model") or "").strip()
         if not route.get("ok") or not provider_name or not model_name:
             raise ValueError("market default LLM route unavailable")
-        from app.application.elt_login_authorization import assert_login_notice_route
-
         assert_login_notice_route(
             platform_url,
             provider_name,
             model_name,
             key_source=route.get("key_source"),
             config_revision=route.get("config_revision"),
+            recipient=route.get("recipient"),
         )
         adapter = ModstorePlatformAdapter(
             platform_url=platform_url,

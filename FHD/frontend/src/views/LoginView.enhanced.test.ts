@@ -258,7 +258,7 @@ describe('LoginView.vue – submitLogin', () => {
     await wrapper.find('#lv-username').setValue('testuser')
     await wrapper.find('#lv-password').setValue('testpass')
     await wrapper.find('.login-form').trigger('submit.prevent')
-    expect(mockAuthApiLogin).toHaveBeenCalledWith('testuser', 'testpass', 'enterprise', '', { dataProcessingNoticeVersion: '2026-11-01-draft' })
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('testuser', 'testpass', 'enterprise', '', { dataProcessingNoticeVersion: '2026-11-01' })
   })
 
   it('shows error on login failure', async () => {

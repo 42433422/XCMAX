@@ -43,6 +43,8 @@ describe('LoginView.vue', () => {
     expect(notice.text()).toContain('登录前请阅读')
     expect(notice.text()).toContain('任务所需内容并产生费用')
     expect(notice.text()).not.toContain('登录即表示同意')
+    expect(wrapper.get('.login-submit').text()).toBe('同意说明并登录')
+    expect(wrapper.get('.login-basic').text()).toBe('仅登录')
     for (const element of ['.login-panel', '.login-form', '.login-submit']) {
       expect(wrapper.get(element).attributes('aria-describedby')).toBe(notice.attributes('id'))
     }
@@ -79,8 +81,8 @@ describe('LoginView.vue', () => {
     const wrapper = mount(LoginView, { global: { plugins: [router] } })
     try {
       const links = wrapper.get('#login-data-processing-notice').findAll('a')
-      expect(links.map(link => link.text())).toEqual(['《服务协议》', '《隐私政策》'])
-      for (const [index, document] of ['service-agreement', 'privacy-policy'].entries()) {
+      expect(links.map(link => link.text())).toEqual(['《服务协议》', '《隐私政策》', '当前模型接收方'])
+      for (const [index, document] of ['service-agreement', 'privacy-policy', 'model-recipients'].entries()) {
         await links[index].trigger('click'); await flushPromises()
         await vi.waitFor(() => expect(router.currentRoute.value).toMatchObject({ name: 'login-legal', params: { document }, query: { redirect: '/business-docking' } }))
       }
