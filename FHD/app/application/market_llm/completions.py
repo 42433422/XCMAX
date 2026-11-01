@@ -26,6 +26,17 @@ from .protocols import (
 from .responses import _response_status_code, finish_completion
 
 
+def _capture_reviewed_response(
+    request: ChatInput, connection: Connection, response: httpx.Response
+):
+    callback = request.extra.get("_reviewed_excel_audit_response")
+    if callback is not None:
+        raw = response.content
+        if connection.auth_token and connection.auth_token.encode() in raw:
+            raise ValueError("模型响应包含敏感凭据，未归档")
+        callback(raw, response.status_code, response.headers.get("x-request-id"))
+
+
 def post_sync(
     connection: Connection,
     route: Route,
@@ -48,6 +59,7 @@ def post_sync(
                 connection, route, request.messages, allow_failover=allow_failover
             ),
         )
+        _capture_reviewed_response(request, connection, response)
         latency_ms = (response_ports.clock() - start) * 1000.0
         status = _response_status_code(response)
         if status >= 400:
@@ -78,6 +90,8 @@ def complete_sync(
                 extra=request.extra or None,
             )
         except ValueError as exc:
+            if request.extra.get("_reviewed_excel_audit_response") is not None:
+                raise
             last_error = exc
             match = re.search(r"平台错误\((\d{3})\)", str(exc))
             status = int(match.group(1)) if match else None
@@ -112,17 +126,6 @@ async def complete_async(
                 json=payload,
                 headers=connection.headers(),
             )
-            latency_ms = (ports.response.clock() - start) * 1000.0
-            status = ports.status_code(response, 200)
-            if status >= 400:
-                error = ValueError(f"平台错误({status}): {response.text[:500]}")
-                if index + 1 < len(candidates) and ports.failoverable(status, response.text[:500]):
-                    last_error = error
-                    continue
-                raise error
-            return finish_completion(
-                response.json(), connection, candidate, latency_ms, ports.response
-            )
         except httpx.HTTPError as exc:
             last_error = exc
             if index + 1 < len(candidates) and ports.failoverable(None, str(exc)):
@@ -133,6 +136,16 @@ async def complete_async(
         except RECOVERABLE_ERRORS as exc:
             ports.response.logger.error("[Modstore] 调用异常: %s", exc, exc_info=True)
             raise
+        _capture_reviewed_response(request, connection, response)
+        latency_ms = (ports.response.clock() - start) * 1000.0
+        status = ports.status_code(response, 200)
+        if status >= 400:
+            error = ValueError(f"平台错误({status}): {response.text[:500]}")
+            if index + 1 < len(candidates) and ports.failoverable(status, response.text[:500]):
+                last_error = error
+                continue
+            raise error
+        return finish_completion(response.json(), connection, candidate, latency_ms, ports.response)
     if last_error is not None:
         raise last_error
     raise ValueError("平台聊天失败且无可用备用模型")
