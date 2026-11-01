@@ -51,4 +51,24 @@ class Tests(unittest.TestCase):
             for result in ('skipped', 'failure', 'cancelled', 'success'):
                 observed = eval(expression, {'__builtins__': {}}, {'action': action, 'result': result, 'environment': 'production', 'action_id': 'fixed'})
                 self.assertEqual(observed, action == 'apply-latest' and result != 'success', (action, result))
+    def test_config_write_requires_original_exact_sha_security_gate(self):
+        import yaml
+        workflow = Path(__file__).resolve().parents[3] / '.github/workflows/fhd-deploy.yml'
+        job = yaml.safe_load(workflow.read_text())['jobs']['fixed-port-configuration']
+        steps = job['steps']
+        names = [step.get('name', '') for step in steps]
+        gate = names.index('Enforce fresh exact-SHA security clearance')
+        write = names.index('Apply only the approved fixed configuration transaction')
+        self.assertLess(gate, write)
+        self.assertIn('candidate-security-verification/FHD/scripts/security/verify_security_scan_pair.py', steps[gate]['run'])
+        self.assertIn('--previous-dir', steps[gate]['run'])
+        self.assertIn('--current-dir', steps[gate]['run'])
+        self.assertIn('--release-sha', steps[gate]['run'])
+        for step in steps[:write+1]:
+            self.assertFalse(step.get('continue-on-error', False))
+            self.assertNotIn('always()', step.get('if', ''))
+        for name in ('Download normalized security evidence', 'Download compatibility security evidence', 'Verify exact candidate checkout'):
+            self.assertLess(names.index(name), gate)
+        self.assertIn('test "$CURRENT_SCAN" = 41284323055', steps[0]['run'])
+        self.assertIn('test "$PREVIOUS_SCAN" = 41284323055', steps[0]['run'])
 if __name__=='__main__':unittest.main()

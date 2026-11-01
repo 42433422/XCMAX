@@ -1,5 +1,5 @@
 {
-  "lines": 2407362,
+  "lines": 2407415,
   "updated": "2026-11-01",
-  "note": "User approved fixed-port transaction; persisted action/result callback matrix prevents skipped config jobs touching release ledger"
+  "note": "Required production security prerequisites: reuse exact candidate scan verification before approved fixed config write; isolated ops branch"
 }

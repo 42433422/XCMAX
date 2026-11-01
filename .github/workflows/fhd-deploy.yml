@@ -539,15 +539,48 @@ jobs:
           TARGET_ENV: ${{ inputs.environment }}
           RELEASE_SHA: ${{ inputs.release_sha }}
           ACTION_ID: ${{ inputs.action_id }}
+          CURRENT_SCAN: ${{ inputs.security_scan_run_id }}
+          PREVIOUS_SCAN: ${{ inputs.previous_security_scan_run_id }}
         run: |
           set -euo pipefail
           test "$TARGET_ENV" = production
           test "$RELEASE_SHA" = 9a7e4cc0f4fbfe07d083d9807eb0f857072e9f4d
           test "$ACTION_ID" = config-port:9a7e4cc0:5000-to-5100
+          test "$CURRENT_SCAN" = 41284323055
+          test "$PREVIOUS_SCAN" = 41284323055
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Checkout exact candidate security verifier
+        uses: actions/checkout@v4
+        with:
+          ref: 9a7e4cc0f4fbfe07d083d9807eb0f857072e9f4d
+          path: candidate-security-verification
+          sparse-checkout: FHD/scripts/security
+          persist-credentials: false
+      - name: Verify exact candidate checkout
+        run: test "$(git -C candidate-security-verification rev-parse HEAD)" = 9a7e4cc0f4fbfe07d083d9807eb0f857072e9f4d
+      - name: Download normalized security evidence
+        uses: actions/download-artifact@v8
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/current
+          run-id: ${{ inputs.security_scan_run_id }}
+          github-token: ${{ github.token }}
+      - name: Download compatibility security evidence
+        uses: actions/download-artifact@v8
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/previous
+          run-id: ${{ inputs.previous_security_scan_run_id }}
+          github-token: ${{ github.token }}
+      - name: Enforce fresh exact-SHA security clearance
+        run: |
+          python candidate-security-verification/FHD/scripts/security/verify_security_scan_pair.py \
+            --previous-dir "${{ runner.temp }}/security-reports/previous" \
+            --current-dir "${{ runner.temp }}/security-reports/current" \
+            --release-sha "${{ inputs.release_sha }}"
       - name: Apply only the approved fixed configuration transaction
         env:
           FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
