@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import re
 import stat
-import tempfile
+import uuid
 
 class Refused(Exception):
     pass
@@ -32,8 +32,28 @@ def aligned_bytes(data):
     return data[:start] + b'5100' + data[start + 4:]
 
 
+def parent_fd(path):
+    path = Path(path)
+    if not path.is_absolute() or '..' in path.parts:
+        raise Refused('absolute_fixed_path_required')
+    fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in path.parent.parts[1:]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = child
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def read_regular(path):
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    directory = parent_fd(path)
+    try:
+        fd = os.open(Path(path).name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+    finally:
+        os.close(directory)
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
@@ -48,23 +68,24 @@ def read_regular(path):
 
 
 def atomic_write(path, data, mode, uid, gid):
-    fd, temporary = tempfile.mkstemp(prefix='.port-alignment-', dir=Path(path).parent)
+    directory = parent_fd(path)
+    temporary = '.port-alignment-' + uuid.uuid4().hex
     try:
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory)
         os.fchown(fd, uid, gid)
         os.fchmod(fd, mode)
         with os.fdopen(fd, 'wb') as stream:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
-        directory = os.open(Path(path).parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        os.replace(temporary, Path(path).name, src_dir_fd=directory, dst_dir_fd=directory)
+        os.fsync(directory)
     finally:
-        if os.path.lexists(temporary):
-            os.unlink(temporary)
+        try:
+            os.unlink(temporary, dir_fd=directory)
+        except FileNotFoundError:
+            pass
+        os.close(directory)
 
 
 def prepare(path):
@@ -190,22 +211,58 @@ def inspect_state():
         result['current_matches_receipt_metadata'] = (stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid) == (receipt.get('mode'), receipt.get('uid'), receipt.get('gid'))
     return result
 
+def owner_uid_is_running():
+    with os.scandir('/proc') as entries:
+        for entry in entries:
+            if not entry.name.isdigit():
+                continue
+            try:
+                with open('/proc/' + entry.name + '/status', encoding='ascii', errors='strict') as stream:
+                    for line in stream:
+                        if line.startswith('Uid:'):
+                            if 501 in [int(value) for value in line.split()[1:]]:
+                                return True
+                            break
+                    else:
+                        raise Refused('process_uid_unavailable')
+            except FileNotFoundError:
+                continue
+    return False
+
+
+def validate_fixed_target_owner():
+    parent, target = TARGET.parent.lstat(), TARGET.lstat()
+    if not stat.S_ISDIR(parent.st_mode) or not stat.S_ISREG(target.st_mode) or target.st_nlink != 1:
+        raise Refused('unsafe_target_type')
+    if any((info.st_uid, info.st_gid) != (501, 20) or info.st_mode & 0o022 for info in (parent, target)):
+        raise Refused('fixed_owner_metadata_mismatch')
+    try:
+        pwd.getpwuid(501)
+    except KeyError:
+        pass
+    else:
+        raise Refused('historical_owner_account_exists')
+    if owner_uid_is_running():
+        raise Refused('historical_owner_process_exists')
+
 def main():
     if sys.argv[1:] == ['inspect-port-alignment']:
         print(json.dumps(inspect_state(), sort_keys=True))
         return
     if os.geteuid() != 0 or sys.argv[1:] not in (['align-port-5100'], ['restore-port-5000']):
         raise Refused('fixed_root_action_required')
-    for directory in (Path('/opt'), TARGET.parent, RECOVERY.parent):
+    for directory in (Path('/opt'), RECOVERY.parent):
         info = directory.lstat()
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
             raise Refused('unsafe_parent_directory')
+    validate_fixed_target_owner()
     lock = os.open('/tmp/fhd-auto-update.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         info = os.fstat(lock)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1:
             raise Refused('unsafe_lock')
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        validate_fixed_target_owner()
         if not RECOVERY.exists():
             RECOVERY.mkdir(mode=0o700)
         info = RECOVERY.lstat()

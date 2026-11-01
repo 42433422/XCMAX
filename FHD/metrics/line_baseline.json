@@ -1,5 +1,5 @@
 {
-  "lines": 2407530,
+  "lines": 2407609,
   "updated": "2026-11-01",
-  "note": "Authorized exact-artifact owner inspection synthetic tar metadata and wrong-hash failclosed regression test"
+  "note": "Authorized exact observed orphan501:20 target with no-account/no-process guard, dirfd nofollow and unchanged CAS/gates; no arbitrary ownership allowance"
 }

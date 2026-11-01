@@ -99,4 +99,26 @@ class Tests(unittest.TestCase):
             self.assertEqual(module.artifact_owner(root),{'verified':True,'directory_member':True,'uid':1001,'gid':1001})
             manifest['sha256']='0'*64;(root/'fhd-manifest.json').write_text(json.dumps(manifest))
             self.assertEqual(module.artifact_owner(root),{'verified':False})
+    def test_fixed_owner_requires_orphan_and_no_process(self):
+        import align_production_port_5100 as module
+        from unittest.mock import patch, Mock
+        import stat
+        parent=Mock(st_uid=501, st_gid=20, st_mode=stat.S_IFDIR|0o755)
+        target=Mock(st_uid=501, st_gid=20, st_mode=stat.S_IFREG|0o600, st_nlink=1)
+        path=Mock();path.parent.lstat.return_value=parent;path.lstat.return_value=target
+        with patch.object(module,'TARGET',path), patch.object(module.pwd,'getpwuid',side_effect=KeyError), patch.object(module,'owner_uid_is_running',return_value=False):
+            module.validate_fixed_target_owner()
+            parent.st_uid=1001
+            with self.assertRaises(Refused):module.validate_fixed_target_owner()
+            parent.st_uid=501
+        with patch.object(module,'TARGET',path), patch.object(module.pwd,'getpwuid',return_value=object()):
+            with self.assertRaises(Refused):module.validate_fixed_target_owner()
+        with patch.object(module,'TARGET',path), patch.object(module.pwd,'getpwuid',side_effect=KeyError), patch.object(module,'owner_uid_is_running',return_value=True):
+            with self.assertRaises(Refused):module.validate_fixed_target_owner()
+    def test_dirfd_refuses_symlink_parent(self):
+        import align_production_port_5100 as module
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);real=root/'real';real.mkdir();(real/'.env').write_bytes(b'FASTAPI_PORT=5000\n')
+            link=root/'link';link.symlink_to(real,target_is_directory=True)
+            with self.assertRaises(OSError):module.read_regular(link/'.env')
 if __name__=='__main__':unittest.main()
