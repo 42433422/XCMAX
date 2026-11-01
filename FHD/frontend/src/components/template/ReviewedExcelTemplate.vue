@@ -10,7 +10,8 @@ import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCent
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
-type Proposal = { version: string; parent_version: string | null; candidates: Candidate[]; result_previews?: { candidate_id: string; sha256: string; layout: Layout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; cells_sent?: number; cells_total?: number; truncated?: boolean; values_truncated?: boolean; input_messages?: unknown[]; input_summary?: unknown } }
+type LoginAuthorization = { status: 'authorized' | 'login_notice_required' | 'notice_not_published'; version?: string; purpose?: string; provider?: string; model?: string }
+type Proposal = { version: string; parent_version: string | null; candidates: Candidate[]; result_previews?: { candidate_id: string; sha256: string; layout: Layout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; login_authorization?: LoginAuthorization; cells_sent?: number; cells_total?: number; truncated?: boolean; values_truncated?: boolean; input_messages?: unknown[]; input_summary?: unknown } }
 type LayoutCell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 type Layout = { sheet: string; widths: number[]; rows: { height: number; cells: LayoutCell[] }[]; truncated: boolean }
 type Review = { usage_restrictions?: string[]; review_id: string; sha256: string; cells: Cell[]; sheets: string[]; model: string; proposal: Proposal; versions?: Proposal[]; layout?: Layout[]; layout_truncated?: boolean; selected_region?: { selection_basis?: string; print_area_mode?: string; source_print_areas?: { sheet: string; value: string }[]; derived_print_area?: string | null } | null }
@@ -114,6 +115,14 @@ const candidateIndex = ref(0)
 const proposals = ref<Proposal[]>([])
 const selectedVersion = ref(0)
 const proposal = computed(() => proposals.value[selectedVersion.value])
+const processingDiagnostic = computed(() => {
+  const model = proposal.value?.model
+  if (model?.status === 'returned') return '模型已返回候选建议，仍需核对。'
+  if (model?.status === 'unavailable') return '模型调用未完成，当前显示本地规则候选。'
+  if (model?.login_authorization?.status === 'notice_not_published') return '当前显示本地规则候选；登录数据处理条款尚未发布，本次未调用模型。'
+  if (model?.login_authorization?.status === 'login_notice_required') return '当前显示本地规则候选；当前登录会话没有有效授权，本次未调用模型。'
+  return '当前显示本地规则候选，本次未调用模型。'
+})
 const feedback = ref('')
 const initialModel = ref(false)
 const selectedSliceKey = ref('')
@@ -325,7 +334,10 @@ function submitComposerRequirement() {
   requirementNotes.value = [...requirementNotes.value, note]
   feedback.value = note
   composerDraft.value = ''
-  if (props.archiveOnSelect && review.value) return
+  if (props.archiveOnSelect && review.value) {
+    if (proposal.value?.model.login_authorization?.status === 'authorized') void refine()
+    return
+  }
   if (props.archiveOnSelect && files.value.length && !review.value) void classify()
 }
 function onComposerDragEnter(event: DragEvent) {
@@ -868,6 +880,7 @@ async function preview(slice?: AutoSlice) {
     form.append('model_opt_in', String(useModel))
     form.append('sample_authorized', String(!props.archiveOnSelect && sampleAuthorized.value))
     form.append('own_file_authorized', String(!props.archiveOnSelect && templateOwnFileAuthorized.value))
+    if (props.archiveOnSelect) form.append('use_login_notice', 'true')
     const selectedFile = classifications.value[files.value.indexOf(file.value)]
     if (/\.xls$/i.test(file.value.name)) {
       if (!selectedFile?.classification_id) throw new Error('旧 XLS 必须先通过归档转换校验')
@@ -958,7 +971,8 @@ async function save() {
 async function refine() {
   const current = captureFileOperation()
   if (!current()) return
-  if (busy.value || !file.value || !review.value || !proposal.value || !consent.value || sampleAuthorized.value === templateOwnFileAuthorized.value || !feedback.value.trim()) return
+  if (busy.value || !file.value || !review.value || !proposal.value || selectedVersion.value !== proposals.value.length - 1 || !feedback.value.trim()) return
+  if (props.archiveOnSelect ? proposal.value.model.login_authorization?.status !== 'authorized' : !consent.value || sampleAuthorized.value === templateOwnFileAuthorized.value) return
   busy.value = true
   error.value = ''
   try {
@@ -967,9 +981,10 @@ async function refine() {
     form.append('parent_version', proposal.value.version)
     form.append('feedback', feedback.value.trim())
     form.append('current', JSON.stringify(selected.value))
-    form.append('consent', 'true')
-    form.append('sample_authorized', String(sampleAuthorized.value))
-    form.append('own_file_authorized', String(templateOwnFileAuthorized.value))
+    form.append('consent', String(!props.archiveOnSelect && consent.value))
+    form.append('sample_authorized', String(!props.archiveOnSelect && sampleAuthorized.value))
+    form.append('own_file_authorized', String(!props.archiveOnSelect && templateOwnFileAuthorized.value))
+    if (props.archiveOnSelect) form.append('use_login_notice', 'true')
     const result = await templatePreviewApi.refineReviewedExcel(form) as { proposal: Proposal }
     if (!current()) return
     proposals.value.push(result.proposal)
@@ -1200,7 +1215,7 @@ async function downloadCandidate(index: number) {
     <label><input v-model="sampleAuthorized" type="checkbox" :disabled="busy" @change="sampleAuthorized && (templateOwnFileAuthorized = false)"> 确认此文件是获准发送的合成或公开样本，同意发送有界文本及结构概览</label>
     <label v-if="file"><input v-model="templateOwnFileAuthorized" type="checkbox" :disabled="busy" @change="templateOwnFileAuthorized && (sampleAuthorized = false)"> 我有权授权当前文件 {{ file.name }} 的所选文档发送至{{ platformModelLabel }}：最多 100 个非空单元格、每格最多 160 字，以及结构与反馈；可能包含敏感数据。</label>
     </details>
-    <button type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview()">预览清理候选</button>
+    <button type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (!archiveOnSelect && initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview()">预览清理候选</button>
     <button v-if="archiveOnSelect && error.includes('请明确选择所选片段作为派生打印区域')" type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy" @click="retrySelectedPrintArea">按所选片段生成副本并重试（原件不变）</button>
     <div v-if="review">
       <p v-if="review.selected_region?.print_area_mode === 'selected'">已按您的选择设置派生打印范围：原范围 {{ review.selected_region.source_print_areas?.map((area) => area.value).join('；') || '未设置' }} → 派生范围 {{ review.selected_region.derived_print_area || '未设置' }}；原件不变。</p>
@@ -1252,6 +1267,10 @@ async function downloadCandidate(index: number) {
       </div>
       <p class="reviewed-template__a4-hint">{{ archiveOnSelect ? '点击卡片仅选择模板；核对后点击「使用此模板并入库」开始写入。绿=已选，黄=未选。' : '点选卡片选用；黄胶囊=未选，绿胶囊=已选。' }}</p>
       <p v-if="!archiveOnSelect">版本 {{ selectedVersion + 1 }} · {{ proposal.model.status === 'returned' ? '模型已返回建议，尚待用户确认' : proposal.model.status === 'unavailable' ? '模型不可用，显示确定性规则建议' : '确定性规则建议，未调用模型' }}<span v-if="proposal.model.status === 'returned'"> · 输入 {{ proposal.model.cells_sent }}/{{ proposal.model.cells_total }} 格{{ proposal.model.truncated ? '（已截断）' : '' }}</span></p>
+      <details v-if="archiveOnSelect" class="reviewed-template__diagnostics"><summary>处理诊断</summary>
+        <p>{{ processingDiagnostic }}</p>
+        <p v-if="proposal.model.login_authorization?.provider || proposal.model.login_authorization?.model">授权模型：{{ [proposal.model.login_authorization.provider, proposal.model.login_authorization.model].filter(Boolean).join('/') }}</p>
+      </details>
       <details v-if="proposal.model.input_summary"><summary>查看模型输入摘要及来源坐标（不含正文）</summary><pre>{{ JSON.stringify(proposal.model.input_summary, null, 2) }}</pre></details>
       <details v-if="proposal.model.input_messages"><summary>历史记录中的模型输入正文（旧记录未自动清理）</summary><pre>{{ JSON.stringify(proposal.model.input_messages, null, 2) }}</pre></details>
       <button v-for="(_, index) in proposals" :key="index" type="button" :disabled="busy || selectedVersion === index" @click="switchVersion(index)">查看版本 {{ index + 1 }}</button>

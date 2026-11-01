@@ -9,6 +9,7 @@ from logging import Logger
 from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
+from app.application.elt_login_authorization import attach_login_notice
 from app.application.session_account_meta import AccountKind
 from app.domain.auth.ports import (
     AttachCookie,
@@ -89,6 +90,7 @@ class CredentialLogin:
                 except self.infra_errors():
                     self.logger.exception("issue web tokens failed")
         resp = self.attach_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+        await attach_login_notice(resp, result or {}, body)
         self.observe_login("password", self.clock() - login_start)
         return resp
 
@@ -126,5 +128,6 @@ class CredentialLogin:
             self.observe_login("phone_code", self.clock() - login_start)
             return err
         resp = self.attach_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+        await attach_login_notice(resp, result or {}, body)
         self.observe_login("phone_code", self.clock() - login_start)
         return resp

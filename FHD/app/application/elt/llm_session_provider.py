@@ -57,6 +57,9 @@ class SessionMarketProvider:
         model_name = str(route.get("model") or "").strip()
         if not route.get("ok") or not provider_name or not model_name:
             raise ValueError("market default LLM route unavailable")
+        from app.application.elt_login_authorization import assert_login_notice_route
+
+        assert_login_notice_route(platform_url, provider_name, model_name)
         adapter = ModstorePlatformAdapter(
             platform_url=platform_url,
             auth_token=self._token,

@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 import hashlib
 import json
 import os
+from contextlib import nullcontext
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,11 @@ from app.application.elt.archive_store import (
 from app.application.elt.errors import EltError, ReviewedExcelError, public_excel_error
 from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
 from app.application.elt.service_uploads import UploadServiceMixin
+from app.application.elt_login_authorization import (
+    bind_login_notice_grant,
+    login_notice_grant,
+    login_notice_status,
+)
 from app.application.reviewed_excel_audit import ModelRequestNotSent, record_not_sent
 from app.application.reviewed_excel_classification import (
     _classify_semantic_batch,
@@ -104,6 +110,21 @@ def _identity(user):
     if getattr(user, "tenant_id", None) is None or getattr(user, "id", None) is None:
         raise HTTPException(status_code=403, detail="需要登录并具有租户上下文")
     return int(user.tenant_id), int(user.id)
+
+
+def _notice_document_scope(grant, selected_region):
+    return {
+        "notice_version": grant["version"],
+        "notice_accepted_at": grant["iat"],
+        "model_route": {key: grant["route"][key] for key in ("provider", "model")},
+        "classification_id": selected_region.get("classification_id"),
+        "classification_version": selected_region.get("version"),
+        "document": {
+            key: selected_region[key]
+            for key in ("sheet", "range", "fragments", "auto_slice_index")
+            if key in selected_region
+        },
+    }
 
 
 @router.get("/api/templates/reviewed-excel/identity")
@@ -1250,6 +1271,7 @@ async def reviewed_excel_preview(
     model_opt_in: bool = Form(False),
     sample_authorized: bool = Form(False),
     own_file_authorized: bool = Form(False),
+    use_login_notice: bool = Form(False),
     expected_actor: str = Form(..., max_length=80),
     classification_id: str = Form("", max_length=36),
     classification_version: str = Form("", max_length=64),
@@ -1261,6 +1283,10 @@ async def reviewed_excel_preview(
 ):
     _expected_actor(expected_actor, user)
     tenant, owner = _identity(user)
+    notice_grant = login_notice_grant(request, tenant, owner) if use_login_notice else None
+    if use_login_notice:
+        model_opt_in = own_file_authorized = bool(notice_grant)
+        sample_authorized = False
     try:
         request.state.elt_stage = "read_workbook"
         body = await _body(file)
@@ -1413,7 +1439,10 @@ async def reviewed_excel_preview(
                 )
             try:
                 request.state.elt_stage = "model_candidates"
-                with tenant_scope(tenant):
+                with (
+                    tenant_scope(tenant),
+                    bind_login_notice_grant(notice_grant) if notice_grant else nullcontext(),
+                ):
                     proposal = await run_in_threadpool(
                         refine_proposal,
                         review,
@@ -1434,7 +1463,14 @@ async def reviewed_excel_preview(
                 "derived_sha256": review["sha256"],
                 "scope": "this_document_bounded_cells_and_structure",
                 "authorized_at": utcnow().isoformat(),
+                **(
+                    _notice_document_scope(notice_grant, selected_region or {})
+                    if notice_grant
+                    else {}
+                ),
             }
+        if use_login_notice:
+            proposal["model"]["login_authorization"] = login_notice_status(request, tenant, owner)
         request.state.elt_stage = "render_candidates"
         for version in versions:
             _build_candidate_previews(body, review, version)
@@ -1563,9 +1599,18 @@ async def reviewed_excel_refine(
     consent: bool = Form(False),
     sample_authorized: bool = Form(False),
     own_file_authorized: bool = Form(False),
+    use_login_notice: bool = Form(False),
     user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
+    notice_grant = login_notice_grant(request, tenant, owner) if use_login_notice else None
+    if use_login_notice:
+        if not notice_grant:
+            raise HTTPException(
+                status_code=403, detail="缺少有效的本次模型处理授权，请核对登录状态。"
+            )
+        consent = own_file_authorized = True
+        sample_authorized = False
     if not consent or sample_authorized == own_file_authorized:
         raise HTTPException(status_code=400, detail="请明确选择获授权样本或授权本人文件发送模型")
     from app.application.reviewed_excel_template import configured_template_llm_provider
@@ -1589,15 +1634,16 @@ async def reviewed_excel_refine(
             body = _source(db, run, tenant, owner)
             review = inspect_workbook(body)
             clean_workbook(body, run.file_sha256, current_cells)
-            proposal = await run_in_threadpool(
-                refine_proposal,
-                review,
-                parent_version,
-                feedback,
-                owner_id=owner,
-                current=current_cells,
-                initial=True,
-            )
+            with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
+                proposal = await run_in_threadpool(
+                    refine_proposal,
+                    review,
+                    parent_version,
+                    feedback,
+                    owner_id=owner,
+                    current=current_cells,
+                    initial=True,
+                )
             source_scope = load_json(run.summary_json, {}).get("selected_region") or {}
             proposal["model"]["authorization"] = {
                 "kind": "owner_file" if own_file_authorized else "authorized_sample",
@@ -1608,7 +1654,12 @@ async def reviewed_excel_refine(
                 "derived_sha256": run.file_sha256,
                 "scope": "this_document_bounded_cells_and_feedback",
                 "authorized_at": utcnow().isoformat(),
+                **(_notice_document_scope(notice_grant, source_scope) if notice_grant else {}),
             }
+            if use_login_notice:
+                proposal["model"]["login_authorization"] = login_notice_status(
+                    request, tenant, owner
+                )
             _build_candidate_previews(body, review, proposal)
             _recheck(request, (tenant, owner))
             if len(versions) >= 50:

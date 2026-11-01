@@ -229,7 +229,7 @@ describe('LoginView functions – selectEnterpriseLogin / selectAdminLogin', () 
     await wrapper.find('#lv-invitation-code').setValue('one-use-code')
     await wrapper.find('.login-form').trigger('submit.prevent')
     await flushPromises()
-    expect(mockAuthApiLogin).toHaveBeenCalledWith('member', 'password', 'enterprise', 'one-use-code')
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('member', 'password', 'enterprise', 'one-use-code', { dataProcessingNoticeVersion: '2026-11-01-draft' })
   })
 
   it('selectAdminLogin navigates to admin console URL', async () => {
@@ -463,7 +463,7 @@ describe('LoginView functions – tryAutoLogin', () => {
     mockAuthApiLogin.mockResolvedValue({ success: true })
     await mountLoginView()
     await flushPromises()
-    expect(mockAuthApiLogin).toHaveBeenCalledWith('autouser', 'autopass', 'enterprise')
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('autouser', 'autopass', 'enterprise', '', {})
   })
 
   it('tryAutoLogin does not trigger when autoLogin is false', async () => {

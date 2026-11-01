@@ -88,6 +88,7 @@ describe('inline ELT processing', () => {
     await stageFile(); await start()
     const form = api.reviewExcel.mock.calls[0][0] as FormData
     expect([form.get('model_opt_in'), form.get('sample_authorized'), form.get('own_file_authorized')]).toEqual(['false', 'false', 'false'])
+    expect(form.get('use_login_notice')).toBe('true')
     await wrapper.get('.elt-composer__input').setValue('保留备注')
     await button('发送').trigger('click'); await flushPromises()
     expect(api.refineReviewedExcel).not.toHaveBeenCalled()
@@ -95,6 +96,64 @@ describe('inline ELT processing', () => {
     expect(wrapper.text()).not.toContain('合成或公开样本')
     expect(wrapper.text()).not.toContain('我有权授权')
     expect(wrapper.findAll('.elt-bubble--user').map(el => el.text())).toContain('整理要求：保留备注')
+  })
+
+  it.each(['notice_not_published', 'login_notice_required'] as const)('keeps %s local and puts its exact reason in folded diagnostics', async status => {
+    const result = reviewed()
+    api.reviewExcel.mockResolvedValueOnce({ ...result, proposal: { ...result.proposal, model: {
+      status: 'not_called', login_authorization: { status, version: 'synthetic-notice', purpose: 'elt_bounded_preview' },
+    } } })
+    await stageFile(); await start()
+    const diagnostics = wrapper.get('.reviewed-template__diagnostics')
+    expect((diagnostics.element as HTMLDetailsElement).open).toBe(false)
+    expect(diagnostics.get('summary').text()).toBe('处理诊断')
+    expect(diagnostics.text()).toContain(status === 'notice_not_published' ? '条款尚未发布' : '会话没有有效授权')
+    expect(diagnostics.text()).toContain('本次未调用模型')
+    expect(wrapper.get('[role=status]').text()).toBe('候选模板已生成，请在页面内核对。')
+    await wrapper.get('.elt-composer__input').setValue('保留备注')
+    await button('发送').trigger('click'); await flushPromises()
+    expect(api.refineReviewedExcel).not.toHaveBeenCalled()
+    expect(wrapper.findAll('input[type=checkbox]')).toHaveLength(0)
+  })
+
+  it('uses a verified server login grant for feedback without inventing per-file or sample consent', async () => {
+    const result = reviewed(), login_authorization = { status: 'authorized', version: 'synthetic-published', purpose: 'elt_bounded_preview', provider: 'platform', model: 'synthetic-model' }
+    const authorized = { ...result.proposal, model: { status: 'returned', login_authorization } }
+    api.reviewExcel.mockResolvedValueOnce({ ...result, proposal: authorized })
+    api.refineReviewedExcel.mockResolvedValueOnce({ proposal: { ...authorized, version: 'v2', parent_version: 'v1' } })
+    await stageFile(); await start()
+    const state = wrapper.vm.$.setupState as Record<string, unknown>
+    state.initialModel = true; state.sampleAuthorized = false; state.templateOwnFileAuthorized = false
+    await flushPromises()
+    expect(button('预览清理候选').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('.reviewed-template__diagnostics').text()).toContain('模型已返回候选建议')
+    expect((wrapper.get('.reviewed-template__diagnostics').element as HTMLDetailsElement).open).toBe(false)
+    await wrapper.get('.elt-composer__input').setValue('保留备注')
+    await button('发送').trigger('click'); await flushPromises()
+    expect(api.refineReviewedExcel).toHaveBeenCalledTimes(1)
+    const form = api.refineReviewedExcel.mock.calls[0][0] as FormData
+    expect(form.get('use_login_notice')).toBe('true')
+    expect([form.get('consent'), form.get('sample_authorized'), form.get('own_file_authorized')]).toEqual(['false', 'false', 'false'])
+    expect(form.get('feedback')).toBe('保留备注')
+    expect(wrapper.findAll('input[type=checkbox]')).toHaveLength(0)
+    await button('查看版本 1').trigger('click'); await flushPromises()
+    await wrapper.get('.elt-composer__input').setValue('旧版本不要再发')
+    await button('发送').trigger('click'); await flushPromises()
+    expect(api.refineReviewedExcel).toHaveBeenCalledTimes(1)
+    await stageFile('new-ungranted.xlsx'); await start()
+    await wrapper.get('.elt-composer__input').setValue('新文件没有授权')
+    await button('发送').trigger('click'); await flushPromises()
+    expect(api.refineReviewedExcel).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports an unavailable authorized model inside diagnostics without claiming generation succeeded with AI', async () => {
+    const result = reviewed()
+    api.reviewExcel.mockResolvedValueOnce({ ...result, proposal: { ...result.proposal, model: {
+      status: 'unavailable', login_authorization: { status: 'authorized', version: 'synthetic-published' },
+    } } })
+    await stageFile(); await start()
+    expect(wrapper.get('.reviewed-template__diagnostics').text()).toContain('模型调用未完成，当前显示本地规则候选')
+    expect(wrapper.get('[role=status]').text()).toBe('候选模板已生成，请在页面内核对。')
   })
 
   it('retries candidate failures in place without rearchiving or enabling a model', async () => {
