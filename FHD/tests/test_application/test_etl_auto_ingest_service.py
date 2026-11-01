@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -264,3 +265,224 @@ def test_business_failure_preserves_completed_knowledge_receipt(
     assert saved["kb_progress"]["pct"] == 100
     assert saved["business"]["run_id"] == "run-error"
     assert "勿重复提交" in saved["business_progress"]["message"]
+
+
+@pytest.mark.parametrize(
+    "reader",
+    [
+        ais._extract_text,
+        ais.detect_etl_target,
+        ais._resolve_auto_ingest_source,
+        AutoIngestService.detect_target,
+    ],
+)
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+@pytest.mark.parametrize("attack", ["outside", "leaf_swap", "parent_swap"])
+def test_auto_ingest_readers_reject_untrusted_or_swapped_files(
+    tmp_path, monkeypatch, reader, suffix, attack
+):
+    from app.application import shipment_excel_etl_security as security
+    from app.application.elt.errors import EltError
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    parent = allowed / "incoming"
+    parent.mkdir()
+    outside = tmp_path / "private"
+    outside.mkdir()
+    source = parent / f"客户😀{suffix}"
+    secret = outside / source.name
+    for path in (source, secret):
+        if suffix == ".xlsx":
+            _shipment_xlsx(path)
+        else:
+            path.write_text("送货单,产品名称,数量\n", encoding="utf-8-sig")
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    if attack == "outside":
+        source = secret
+    else:
+        probe = allowed / "link-probe"
+        try:
+            probe.symlink_to(secret)
+            probe.unlink()
+        except OSError as exc:
+            if os.name == "nt":
+                pytest.skip(f"Windows symlink privilege unavailable: {exc}")
+            raise
+        original = security._open_directory_under_root
+
+        def replace_after_pin(*args, **kwargs):
+            fd = original(*args, **kwargs)
+            try:
+                source.unlink()
+                source.symlink_to(secret)
+            except OSError:
+                os.close(fd)
+                raise
+            return fd
+
+        if attack == "parent_swap":
+            original_resolve = security.resolve_etl_path
+
+            def replace_after_resolve(*args, **kwargs):
+                resolved = original_resolve(*args, **kwargs)
+                parent.rename(allowed / "original")
+                parent.symlink_to(outside, target_is_directory=True)
+                return resolved
+
+            monkeypatch.setattr(security, "resolve_etl_path", replace_after_resolve)
+        else:
+            monkeypatch.setattr(security, "_open_directory_under_root", replace_after_pin)
+    with pytest.raises((security.ShipmentEtlPathError, EltError, OSError)):
+        reader(source)
+
+
+def test_auto_ingest_csv_keeps_bom_and_newline_semantics(tmp_path, monkeypatch):
+    from app.application import shipment_excel_etl_security as security
+
+    source = tmp_path / "客户😀.csv"
+    source.write_bytes("送货单,产品名称,数量\r\n商品,油漆,2\r\n".encode("utf-8-sig"))
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [tmp_path])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    assert ais.detect_etl_target(source)["target_type"] == "shipment_records"
+    assert ais._extract_text(source) == "\ufeff送货单,产品名称,数量\n商品,油漆,2\n"
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+def test_saved_upload_detection_preserves_owner_and_tenant_boundary(tmp_path, monkeypatch, suffix):
+    import io
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.application import shipment_excel_etl_security as security
+    from app.application.elt.errors import EltError, EltNotFound
+    from app.application.elt.service_uploads import UploadServiceMixin
+    from app.db.models.elt import EltUpload
+    from app.db.tenant_filter import install_tenant_filter
+
+    install_tenant_filter()
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    service = UploadServiceMixin()
+    content = io.BytesIO("送货单,产品名称,数量\n油漆,产品,2\n".encode())
+    if suffix == ".xlsx":
+        workbook = Workbook()
+        workbook.active.append(["送货单", "产品名称", "数量"])
+        content = io.BytesIO()
+        workbook.save(content)
+        workbook.close()
+        content.seek(0)
+    engine = create_engine("sqlite://")
+    EltUpload.__table__.create(engine)
+    try:
+        with Session(engine) as db, tenant_scope(42):
+            receipt = service.save_upload(
+                db,
+                owner_user_id=7,
+                file_name=f"客户😀{suffix}",
+                content_type=None,
+                stream=content,
+            )
+            source = service._owned_upload(db, receipt["upload_id"], 7)
+            assert (
+                ais.detect_etl_target(source.storage_path, owner_user_id=7)["target_type"]
+                == "shipment_records"
+            )
+            with pytest.raises(EltError):
+                ais._resolve_auto_ingest_source(source.storage_path)
+            with pytest.raises(security.ShipmentEtlPathError):
+                ais.detect_etl_target(source.storage_path, owner_user_id=8)
+            with tenant_scope(43), pytest.raises(security.ShipmentEtlPathError):
+                ais.detect_etl_target(source.storage_path, owner_user_id=7)
+            with pytest.raises(EltNotFound):
+                service._owned_upload(db, receipt["upload_id"], 8)
+            with tenant_scope(43), pytest.raises(EltNotFound):
+                service._owned_upload(db, receipt["upload_id"], 7)
+            private = tmp_path / "etl" / "auto_ingest" / "batches.csv"
+            private.parent.mkdir()
+            private.write_text("private")
+            with pytest.raises(security.ShipmentEtlPathError):
+                ais.detect_etl_target(private)
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("operation", ["validate", "upload"])
+def test_prepared_hash_and_business_upload_reject_outside_input(tmp_path, monkeypatch, operation):
+    from app.application import shipment_excel_etl_security as security
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "private.csv"
+    outside.write_text("private")
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    service = AutoIngestService()
+    with pytest.raises(security.ShipmentEtlPathError):
+        if operation == "validate":
+            db = MagicMock()
+            run = db.query.return_value.filter.return_value.first.return_value
+            run.target_type, run.upload_id, run.file_sha256 = "customers", "up-1", "sha"
+            plan = {
+                "target_type": "customers",
+                "upload_id": "up-1",
+                "candidate_sha256": "sha",
+                "mod_id": ais.get_request_active_mod_id(),
+            }
+            service.validate_prepared(
+                db,
+                plan=plan,
+                path=outside,
+                owner_user_id=7,
+                tenant_id=42,
+                preview_revision="rev-1",
+            )
+        else:
+            service._ingest_business(
+                MagicMock(),
+                owner_user_id=7,
+                path=outside,
+                file_name=outside.name,
+                target_type="customers",
+                batch_id="batch-1",
+            )
+
+
+@pytest.mark.parametrize("component", ["tenant", "owner"])
+def test_owned_upload_root_swap_cannot_change_identity(tmp_path, monkeypatch, component):
+    from app.application import shipment_excel_etl_security as security
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    tenant_root = tmp_path / "etl" / "uploads" / "42"
+    owner_root = tenant_root / "7"
+    owner_root.mkdir(parents=True)
+    source = owner_root / "input.csv"
+    source.write_text("own")
+    victim = tmp_path / "etl" / "uploads" / "43" / "7"
+    victim.mkdir(parents=True)
+    secret = victim / "input.csv"
+    secret.write_text("other tenant")
+    swap = tenant_root if component == "tenant" else owner_root
+    target = victim.parent if component == "tenant" else victim
+    original = security._open_directory_under_root
+
+    def swap_before_pin(*args, **kwargs):
+        swap.rename(swap.with_name(swap.name + "-original"))
+        try:
+            swap.symlink_to(target, target_is_directory=True)
+        except OSError as exc:
+            if os.name == "nt":
+                pytest.skip(f"Windows symlink privilege unavailable: {exc}")
+            raise
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(security, "_open_directory_under_root", swap_before_pin)
+    with tenant_scope(42), pytest.raises(security.ShipmentEtlPathError):
+        with security.open_etl_input_file(source, owner_user_id=7):
+            pytest.fail("a swapped tenant/owner directory must not be followed")
+    with tenant_scope(42), pytest.raises(security.ShipmentEtlPathError):
+        with security.open_etl_input_file(secret, owner_user_id=7):
+            pytest.fail("canonicalizing a swapped root must not authorize another tenant")

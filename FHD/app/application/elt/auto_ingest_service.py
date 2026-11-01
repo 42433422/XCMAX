@@ -9,6 +9,7 @@ Product paths reused:
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 import threading
@@ -24,6 +25,7 @@ from app.application.elt.errors import EltError
 from app.application.elt.target_detection import detect_etl_target
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
+    open_etl_input_file,
     resolve_etl_path,
 )
 from app.infrastructure.tenant_scope import tenant_id_for_write
@@ -100,26 +102,35 @@ def _extract_text(path: Path) -> str:
         from openpyxl import load_workbook
 
         lines: list[str] = []
-        wb = load_workbook(path, read_only=True, data_only=True, keep_links=False)
-        try:
-            for ws in wb.worksheets[:20]:
-                lines.append(f"# sheet:{ws.title}")
-                for index, row in enumerate(ws.iter_rows(values_only=True)):
-                    cells = [str(c).strip() for c in row if c not in (None, "")]
-                    if cells:
-                        lines.append(" | ".join(cells))
-                    if index >= 120:
-                        break
-        finally:
-            wb.close()
+        with open_etl_input_file(path) as stream:
+            wb = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
+            try:
+                for ws in wb.worksheets[:20]:
+                    lines.append(f"# sheet:{ws.title}")
+                    for index, row in enumerate(ws.iter_rows(values_only=True)):
+                        cells = [str(c).strip() for c in row if c not in (None, "")]
+                        if cells:
+                            lines.append(" | ".join(cells))
+                        if index >= 120:
+                            break
+            finally:
+                wb.close()
         return "\n".join(lines)[:80_000]
-    return path.read_text(encoding="utf-8", errors="replace")[:80_000]
+    with (
+        open_etl_input_file(path) as stream,
+        io.TextIOWrapper(stream, encoding="utf-8", errors="replace") as text,
+    ):
+        return text.read(80_000)
 
 
 def _resolve_auto_ingest_source(source_path: str | Path) -> Path:
     """Jail auto-ingest inputs under ETL trusted roots (CodeQL path-injection)."""
     try:
-        return resolve_etl_path(source_path)
+        path = resolve_etl_path(source_path)
+        with open_etl_input_file(path):
+            return path
+    except (FileNotFoundError, IsADirectoryError) as exc:
+        raise EltError("ETL_AUTO_INGEST_SOURCE_MISSING", "自动入库找不到源文件") from exc
     except ShipmentEtlPathError as exc:
         raise EltError(
             "ETL_AUTO_INGEST_PATH_INVALID",
@@ -216,13 +227,18 @@ class AutoIngestService:
             )
             .first()
         )
+
+        def candidate_sha256() -> str:
+            with open_etl_input_file(path) as stream:
+                return hashlib.sha256(stream.read()).hexdigest()
+
         if (
             run is None
             or plan.get("mod_id") != get_request_active_mod_id()
             or run.target_type != plan.get("target_type")
             or run.upload_id != plan.get("upload_id")
             or run.file_sha256 != plan.get("candidate_sha256")
-            or hashlib.sha256(path.read_bytes()).hexdigest() != plan.get("candidate_sha256")
+            or candidate_sha256() != plan.get("candidate_sha256")
             or run.status != "preview_ready"
         ):
             raise EltError(
@@ -255,8 +271,6 @@ class AutoIngestService:
         prepared_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         path = _resolve_auto_ingest_source(source_path)
-        if not path.is_file():
-            raise EltError("ETL_AUTO_INGEST_SOURCE_MISSING", "自动入库找不到源文件")
         safe_name = (file_name or path.name).strip() or path.name
         batch_id = batch_id or f"aib-{uuid4().hex[:16]}"
         run_token = f"auto-ingest:{batch_id}"
@@ -429,8 +443,6 @@ class AutoIngestService:
     ) -> dict[str, Any]:
         """Create ledger row and finish ingest off-request so FE can poll true progress."""
         path = _resolve_auto_ingest_source(source_path)
-        if not path.is_file():
-            raise EltError("ETL_AUTO_INGEST_SOURCE_MISSING", "自动入库找不到源文件")
         batch_id = f"aib-{uuid4().hex[:16]}"
         safe_name = (file_name or path.name).strip() or path.name
         batch = {
@@ -803,7 +815,7 @@ class AutoIngestService:
                 )
         else:
             _notify("uploading", 20, "上传业务文件")
-            with path.open("rb") as handle:
+            with open_etl_input_file(path) as handle:
                 upload = service.save_upload(
                     db,
                     owner_user_id=owner_user_id,

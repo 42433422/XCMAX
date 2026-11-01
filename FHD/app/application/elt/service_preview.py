@@ -81,6 +81,7 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
             target_detection = detect_etl_target(
                 upload.storage_path,
                 suffix=upload.suffix,
+                owner_user_id=upload.owner_user_id,
             )
             target_type = str(target_detection["target_type"])
         adapter = get_adapter(target_type)

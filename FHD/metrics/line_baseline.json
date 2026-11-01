@@ -1,5 +1,5 @@
 {
-  "lines": 2406531,
-  "updated": "2026-11-01",
-  "note": "PR #2896 after merging #2891: test-quality cleanup net deletion plus delivery plan None-safe expected_delivery_at; recompute maintained line baseline post-merge."
+  "lines": 2407030,
+  "updated": "2026-10-31",
+  "note": "用户明确确认生产7项路径门禁修复及仅2处fd误报维护：复用安全句柄、租户/用户精确根；新增跨路径/身份竞态与CSV/XLSX回归，2 sink按全模块和调用AST指纹failclosed并跨Python验证。总净增499行必要代码/安全负测，按AGENTS经主任务批准，不删无关代码或放宽安全门禁。"
 }
