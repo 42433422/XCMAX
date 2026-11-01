@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from datetime import UTC, datetime
@@ -362,10 +363,21 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
                 properties = (
                     row.get("properties") if isinstance(row.get("properties"), dict) else {}
                 )
+                partial = (
+                    row.get("partialFingerprints")
+                    if isinstance(row.get("partialFingerprints"), dict)
+                    else {}
+                )
+                location = ((row.get("locations") or [{}])[0] or {}).get("physicalLocation") or {}
+                artifact = location.get("artifactLocation") or {}
+                region = location.get("region") or {}
                 findings.append(
                     _finding(
                         row.get("ruleId"),
                         properties.get("security-severity") or row.get("level") or "high",
+                        path=str(artifact.get("uri") or ""),
+                        line=region.get("startLine"),
+                        commit_sha=str(partial.get("commitSha") or ""),
                     )
                 )
     return findings
@@ -411,6 +423,126 @@ def _credential_resolution_is_valid(row: dict[str, Any]) -> bool:
     )
 
 
+def _parse_iso_utc(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def apply_gitleaks_disposition(
+    findings: list[dict[str, Any]],
+    *,
+    registry_path: Path,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Close gitleaks findings only when a committed disposition attestation matches.
+
+    Unmatched findings stay ``secret=True``. Evidence files must exist and match
+    the registry attestation digest. Author and reviewer must differ. This is not
+    an allowlist: registry absence leaves all findings open.
+    """
+
+    if not registry_path.is_file():
+        return findings
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return findings
+    if not isinstance(registry, dict) or registry.get("schema") != "gitleaks-disposition-registry/v1":
+        return findings
+    rows = registry.get("rows") if isinstance(registry.get("rows"), list) else []
+    by_key: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if isinstance(row, dict) and str(row.get("key") or "").strip():
+            by_key[str(row["key"])] = row
+    current = (now or datetime.now(UTC)).astimezone(UTC)
+    root = registry_path.parent
+    out: list[dict[str, Any]] = []
+    for index, finding in enumerate(findings, start=1):
+        new_f = dict(finding)
+        key = _gitleaks_fingerprint(finding)
+        # Prefer rule id without prior suffixes for matching.
+        rule = str(finding.get("id") or "")
+        key = "|".join(
+            (
+                rule,
+                str(finding.get("path") or ""),
+                str(finding.get("commit_sha") or ""),
+                str(finding.get("line") or ""),
+            )
+        )
+        row = by_key.get(key)
+        new_f["id"] = f"{rule}:n{index}"
+        if not isinstance(row, dict) or row.get("closed") is not True:
+            out.append(new_f)
+            continue
+        author = str(row.get("author") or "").strip()
+        reviewer = str(row.get("reviewer") or "").strip()
+        reviewed_at = _parse_iso_utc(row.get("reviewed_at"))
+        review_due = _parse_iso_utc(row.get("review_due"))
+        evidence = str(row.get("evidence") or "").strip()
+        if (
+            not author
+            or not reviewer
+            or author.casefold() == reviewer.casefold()
+            or not evidence
+            or reviewed_at is None
+            or review_due is None
+            or reviewed_at > current
+            or review_due < current
+        ):
+            out.append(new_f)
+            continue
+        evidence_files = row.get("evidence_files") if isinstance(row.get("evidence_files"), list) else []
+        expected_sha = str(row.get("attestation_sha256") or "").strip().lower()
+        if not evidence_files or not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
+            out.append(new_f)
+            continue
+        digest = hashlib.sha256()
+        missing = False
+        for rel in evidence_files:
+            rel_s = str(rel or "").strip().lstrip("./")
+            if not rel_s or ".." in Path(rel_s).parts or rel_s.startswith("/"):
+                missing = True
+                break
+            ev_path = root / rel_s
+            if not ev_path.is_file():
+                missing = True
+                break
+            raw = ev_path.read_bytes()
+            digest.update(rel_s.encode())
+            digest.update(hashlib.sha256(raw).digest())
+            # Primary attestation file must match registry digest when alone.
+            if len(evidence_files) == 1 and hashlib.sha256(raw).hexdigest() != expected_sha:
+                missing = True
+                break
+        if missing:
+            out.append(new_f)
+            continue
+        if len(evidence_files) > 1 and digest.hexdigest() != expected_sha:
+            out.append(new_f)
+            continue
+        new_f["status"] = "closed"
+        new_f["secret"] = False
+        new_f["gitleaks_disposition"] = str(row.get("disposition") or "")
+        new_f["author"] = author
+        new_f["false_positive_approval"] = {
+            "reviewer": reviewer,
+            "reviewed_at": str(row.get("reviewed_at") or ""),
+            "evidence": evidence,
+            "review_due": str(row.get("review_due") or ""),
+        }
+        if str(row.get("disposition") or "") in {"false-positive", "false_positive"}:
+            new_f["disposition"] = "false_positive"
+        out.append(new_f)
+    return out
+
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scanner", required=True)
@@ -441,6 +573,8 @@ def main() -> int:
             if args.scanner == "gitleaks":
                 for finding in findings:
                     finding["secret"] = True
+                registry = Path(".github/security/gitleaks-disposition/registry.json")
+                findings = apply_gitleaks_disposition(findings, registry_path=registry)
         except (OSError, TypeError, ValueError) as exc:
             available = False
             if args.kind == "codeql":

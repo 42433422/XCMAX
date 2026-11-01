@@ -32,6 +32,16 @@ def ledger_root(tmp_path, monkeypatch):
     return tmp_path / "data"
 
 
+@pytest.fixture
+def allow_tmp_ingest_paths(monkeypatch):
+    """Tests place fixtures under pytest tmp; bypass ETL root jail for unit scope."""
+    monkeypatch.setattr(
+        ais,
+        "resolve_etl_path",
+        lambda source_path, **_kwargs: Path(source_path).expanduser().resolve(),
+    )
+
+
 def _shipment_xlsx(path: Path) -> Path:
     wb = Workbook()
     ws = wb.active
@@ -45,7 +55,7 @@ def _shipment_xlsx(path: Path) -> Path:
 
 
 def test_auto_ingest_writes_knowledge_and_records_business(
-    rag_service, ledger_root, tmp_path, monkeypatch
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
     xlsx = _shipment_xlsx(tmp_path / "26鑫顺.xlsx")
     fake_etl = MagicMock()
@@ -93,7 +103,7 @@ def test_auto_ingest_writes_knowledge_and_records_business(
 
 
 def test_auto_ingest_withdraw_rolls_back_kb_and_business(
-    rag_service, ledger_root, tmp_path, monkeypatch
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
     xlsx = _shipment_xlsx(tmp_path / "ship.xlsx")
     fake_etl = MagicMock()
@@ -130,7 +140,7 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
     assert all(d.get("document_id") != doc_id for d in docs_after)
 
 
-def test_auto_ingest_progress_tracks_real_stages(rag_service, ledger_root, tmp_path, monkeypatch):
+def test_auto_ingest_progress_tracks_real_stages(rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch):
     xlsx = _shipment_xlsx(tmp_path / "progress.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-p"}

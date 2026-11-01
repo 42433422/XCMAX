@@ -22,6 +22,10 @@ from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
 from app.application.elt.target_detection import detect_etl_target
+from app.application.shipment_excel_etl_security import (
+    ShipmentEtlPathError,
+    resolve_etl_path,
+)
 from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.request_active_mod_ctx import get_request_active_mod_id
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
@@ -110,6 +114,18 @@ def _extract_text(path: Path) -> str:
             wb.close()
         return "\n".join(lines)[:80_000]
     return path.read_text(encoding="utf-8", errors="replace")[:80_000]
+
+
+
+def _resolve_auto_ingest_source(source_path: str | Path) -> Path:
+    """Jail auto-ingest inputs under ETL trusted roots (CodeQL path-injection)."""
+    try:
+        return resolve_etl_path(source_path)
+    except ShipmentEtlPathError as exc:
+        raise EltError(
+            "ETL_AUTO_INGEST_PATH_INVALID",
+            f"自动入库路径无效：{exc}",
+        ) from exc
 
 
 class AutoIngestService:
@@ -239,7 +255,7 @@ class AutoIngestService:
         batch_id: str | None = None,
         prepared_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        path = Path(source_path).expanduser().resolve()
+        path = _resolve_auto_ingest_source(source_path)
         if not path.is_file():
             raise EltError("ETL_AUTO_INGEST_SOURCE_MISSING", "自动入库找不到源文件")
         safe_name = (file_name or path.name).strip() or path.name
@@ -413,7 +429,7 @@ class AutoIngestService:
         prepared_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create ledger row and finish ingest off-request so FE can poll true progress."""
-        path = Path(source_path).expanduser().resolve()
+        path = _resolve_auto_ingest_source(source_path)
         if not path.is_file():
             raise EltError("ETL_AUTO_INGEST_SOURCE_MISSING", "自动入库找不到源文件")
         batch_id = f"aib-{uuid4().hex[:16]}"
