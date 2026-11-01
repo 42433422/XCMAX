@@ -1,5 +1,5 @@
 {
-  "lines": 2406574,
+  "lines": 2406589,
   "updated": "2026-11-01",
-  "note": "PR #2888 CI optimization adds 802 maintained lines for early file sharding, independently verified source and collector receipts, configuration/cross-mode rejection and regression coverage; removes duplicate frontend jobs and weak duplicate tests, restores 41 hidden tests by zero-content renames. Existing UX/CodeQL scope remains +2532 versus main e70b175f0; cumulative +3334. No unrelated deletion or coverage threshold reduction."
+  "note": "PR #2888: preserve the same +3334 maintained-line delta (UX/CodeQL +2532, CI optimization +802) after syncing main d20ae2492, whose already-merged credential incident metadata adds 15 lines. CI additions enforce independently verified early sharding and regression coverage; duplicate runs/tests removed, all safety and coverage gates retained."
 }
