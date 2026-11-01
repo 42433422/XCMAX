@@ -366,3 +366,23 @@ def test_unknown_template_commit_receipt_cannot_replay_intake(intake_store, monk
         assert db.query(PurchaseUnit).count() == 0
         assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
     assert store.rag.status(dataset_id="office-docking", tenant_id="1")["documents"] == []
+
+
+@pytest.mark.parametrize("change,status", [("owner", 404), ("tenant", 404), ("expired", 410)])
+def test_prepared_upload_record_must_still_be_owned_and_live(intake_store, change, status):
+    from datetime import UTC, datetime, timedelta
+
+    store = intake_store
+    data, plan, _ = prepare(store)
+    with tenant_scope(1), store.factory() as db:
+        upload = db.get(EltUpload, plan["upload_id"])
+        if change == "owner":
+            upload.owner_user_id = 8
+        elif change == "tenant":
+            upload.tenant_id = 2
+        else:
+            upload.expires_at = datetime.now(UTC) - timedelta(days=1)
+        db.commit()
+    response = store.client.post(f"{BASE}/save", data=data)
+    assert response.status_code == status, response.text
+    assert_no_writes(store)

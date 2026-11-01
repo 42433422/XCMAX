@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import csv
+import io
 import re
 from pathlib import Path
 from typing import Any, Iterable
 
 from app.application.elt.parsers import KNOWLEDGE_ONLY_SUFFIXES
+from app.application.shipment_excel_etl_security import open_etl_input_file
 
 _DELIVERY_RE = re.compile(r"(送货单|发货单|出货单|delivery)", re.I)
 _PRODUCT_RE = re.compile(r"(产品名称|商品名称|货品名称|品名)")
@@ -73,7 +75,9 @@ def _classify(lines: list[str], *, suffix: str) -> dict[str, Any]:
     }
 
 
-def detect_etl_target(path: str | Path, *, suffix: str = "") -> dict[str, Any]:
+def detect_etl_target(
+    path: str | Path, *, suffix: str = "", owner_user_id: int | None = None
+) -> dict[str, Any]:
     source = Path(path)
     ext = str(suffix or source.suffix).lower()
     if ext in KNOWLEDGE_ONLY_SUFFIXES:
@@ -85,7 +89,10 @@ def detect_etl_target(path: str | Path, *, suffix: str = "") -> dict[str, Any]:
         }
     if ext == ".csv":
         lines: list[str] = []
-        with source.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
+        with (
+            open_etl_input_file(source, owner_user_id=owner_user_id) as stream,
+            io.TextIOWrapper(stream, encoding="utf-8-sig", errors="replace", newline="") as handle,
+        ):
             for index, row in enumerate(csv.reader(handle)):
                 lines.append(_joined(row))
                 if index >= 30:
@@ -94,17 +101,18 @@ def detect_etl_target(path: str | Path, *, suffix: str = "") -> dict[str, Any]:
     if ext in {".xlsx", ".xlsm"}:
         from openpyxl import load_workbook
 
-        workbook = load_workbook(source, read_only=True, data_only=True, keep_links=False)
-        workbook_lines: list[str] = []
-        try:
-            for worksheet in workbook.worksheets[:30]:
-                workbook_lines.append(worksheet.title)
-                for index, sheet_row in enumerate(worksheet.iter_rows(values_only=True)):
-                    workbook_lines.append(_joined(sheet_row))
-                    if index >= 79:
-                        break
-        finally:
-            workbook.close()
+        with open_etl_input_file(source, owner_user_id=owner_user_id) as stream:
+            workbook = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
+            workbook_lines: list[str] = []
+            try:
+                for worksheet in workbook.worksheets[:30]:
+                    workbook_lines.append(worksheet.title)
+                    for index, sheet_row in enumerate(worksheet.iter_rows(values_only=True)):
+                        workbook_lines.append(_joined(sheet_row))
+                        if index >= 79:
+                            break
+            finally:
+                workbook.close()
         return _classify(workbook_lines, suffix=ext)
     filename = source.name
     if _DELIVERY_RE.search(filename):

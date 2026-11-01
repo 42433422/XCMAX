@@ -302,6 +302,10 @@ class TestProductIdentity:
 # target_detection.py
 # ---------------------------------------------------------------------------
 class TestTargetDetection:
+    @pytest.fixture(autouse=True)
+    def trusted_workspace(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_knowledge_only_suffix(self, tmp_path):
         path = tmp_path / "a.docx"
         path.write_text("x")

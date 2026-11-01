@@ -762,28 +762,48 @@ def open_etl_input_file(
     file_path: str | Path,
     *,
     workspace_root: str | Path | None = None,
+    owner_user_id: int | None = None,
 ) -> Iterator[BinaryIO]:
     """Open a regular input file beneath a pinned, trusted directory handle."""
-    path = resolve_etl_path(file_path, workspace_root=workspace_root)
-    roots = etl_allowed_roots(workspace_root)
-    path_text = os.path.realpath(os.path.normpath(str(path)))
-    root = None
-    for allowed_root in roots:
-        root_text = os.path.realpath(str(allowed_root))
-        try:
-            common = os.path.commonpath((path_text, root_text))
-        except ValueError:
-            continue
-        root_prefix = os.path.normcase(root_text.rstrip(os.sep) + os.sep)
-        path_key = os.path.normcase(path_text)
-        if os.path.normcase(common) == os.path.normcase(root_text) and path_key.startswith(
-            root_prefix
+    if owner_user_id is not None:
+        if type(owner_user_id) is not int or owner_user_id <= 0:
+            raise ShipmentEtlPathError("invalid upload owner")
+        from app.infrastructure.tenant_scope import tenant_id_for_write
+        from app.utils.path_io.path_utils import get_app_data_dir
+
+        # Only callers that checked upload ownership supply this identity.
+        # Pin from app_data, not a canonicalized tenant/owner directory: a
+        # replaced owner directory must never become another owner's root.
+        root = Path(get_app_data_dir()).resolve()
+        upload_root = root / "etl" / "uploads" / str(tenant_id_for_write()) / str(owner_user_id)
+        path = Path(os.path.normpath(str(file_path)))
+        if (
+            ".." in Path(file_path).parts
+            or path == upload_root
+            or not _is_under_root(str(path), str(upload_root))
         ):
-            root = Path(root_text)
-            break
+            raise ShipmentEtlPathError("path not under owned upload directory")
+    else:
+        roots = etl_allowed_roots(workspace_root)
+        path = resolve_etl_path(file_path, workspace_root=workspace_root)
+        path_text = os.path.realpath(os.path.normpath(str(path)))
+        root = None
+        for allowed_root in roots:
+            root_text = os.path.realpath(str(allowed_root))
+            try:
+                common = os.path.commonpath((path_text, root_text))
+            except ValueError:
+                continue
+            root_prefix = os.path.normcase(root_text.rstrip(os.sep) + os.sep)
+            path_key = os.path.normcase(path_text)
+            if os.path.normcase(common) == os.path.normcase(root_text) and path_key.startswith(
+                root_prefix
+            ):
+                root = Path(root_text)
+                break
+        path = Path(path_text)
     if root is None:
         raise ShipmentEtlPathError("path not under allowed dirs")
-    path = Path(path_text)
     parent_fd = _open_directory_under_root(root, path.parent, create=False)
     descriptor: int | None = None
     try:

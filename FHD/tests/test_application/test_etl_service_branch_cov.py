@@ -1440,13 +1440,17 @@ class TestServicePreview:
         self, etl_db, svc, app_data, fake_adapter, no_background, monkeypatch
     ):
         up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
+        detect = MagicMock(return_value={"target_type": "shipment_records"})
         monkeypatch.setattr(
             "app.application.elt.target_detection.detect_etl_target",
-            lambda path, suffix: {"target_type": "shipment_records"},
+            detect,
         )
         fake_adapter.type = "shipment_records"
         run = svc.create_preview(etl_db, owner_user_id=1, upload_id="upx", target_type="auto")
         assert run["id"]
+        detect.assert_called_once_with(
+            up.storage_path, suffix=up.suffix, owner_user_id=up.owner_user_id
+        )
 
     def test_create_preview_knowledge_only_rejected(
         self, etl_db, svc, app_data, fake_adapter, no_background
