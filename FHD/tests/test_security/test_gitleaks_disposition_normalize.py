@@ -18,7 +18,12 @@ def _normalizer_module():
         / "normalize_security_report.py"
     ).resolve()
     # FHD/tests/test_security -> FHD/scripts/security
-    script = Path(__file__).resolve().parents[2] / "scripts" / "security" / "normalize_security_report.py"
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "security"
+        / "normalize_security_report.py"
+    )
     spec = importlib.util.spec_from_file_location("normalize_security_report", script)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

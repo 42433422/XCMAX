@@ -452,7 +452,10 @@ def apply_gitleaks_disposition(
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError):
         return findings
-    if not isinstance(registry, dict) or registry.get("schema") != "gitleaks-disposition-registry/v1":
+    if (
+        not isinstance(registry, dict)
+        or registry.get("schema") != "gitleaks-disposition-registry/v1"
+    ):
         return findings
     rows = registry.get("rows") if isinstance(registry.get("rows"), list) else []
     by_key: dict[str, dict[str, Any]] = {}
@@ -495,7 +498,9 @@ def apply_gitleaks_disposition(
         ):
             out.append(new_f)
             continue
-        evidence_files = row.get("evidence_files") if isinstance(row.get("evidence_files"), list) else []
+        evidence_files = (
+            row.get("evidence_files") if isinstance(row.get("evidence_files"), list) else []
+        )
         expected_sha = str(row.get("attestation_sha256") or "").strip().lower()
         if not evidence_files or not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
             out.append(new_f)
@@ -538,7 +543,6 @@ def apply_gitleaks_disposition(
             new_f["disposition"] = "false_positive"
         out.append(new_f)
     return out
-
 
 
 def main() -> int:

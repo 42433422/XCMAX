@@ -140,7 +140,9 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
     assert all(d.get("document_id") != doc_id for d in docs_after)
 
 
-def test_auto_ingest_progress_tracks_real_stages(rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch):
+def test_auto_ingest_progress_tracks_real_stages(
+    rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
+):
     xlsx = _shipment_xlsx(tmp_path / "progress.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-p"}

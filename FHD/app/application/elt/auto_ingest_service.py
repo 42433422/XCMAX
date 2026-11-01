@@ -116,7 +116,6 @@ def _extract_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")[:80_000]
 
 
-
 def _resolve_auto_ingest_source(source_path: str | Path) -> Path:
     """Jail auto-ingest inputs under ETL trusted roots (CodeQL path-injection)."""
     try:
