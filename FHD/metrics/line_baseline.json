@@ -1,5 +1,5 @@
 {
-  "lines": 2407380,
+  "lines": 2407434,
   "updated": "2026-11-01",
-  "note": "Authorized same-window known Uvicorn listen message: only host category and numeric port, no URL/env; diagnostic branch only"
+  "note": "Authorized fixed runtime configuration diagnosis: four exact env paths and only three numeric port keys; no other environment output; diagnostic branch"
 }

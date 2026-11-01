@@ -2,6 +2,8 @@
 import json
 import re
 import subprocess
+import shlex
+import os
 
 SERVICE = 'fhd-full.service'
 EXCEPTIONS = frozenset(('ModuleNotFoundError', 'ImportError', 'SyntaxError', 'IndentationError', 'NameError', 'AttributeError', 'TypeError', 'ValueError', 'RuntimeError', 'PermissionError', 'FileNotFoundError', 'OSError', 'KeyError', 'AssertionError', 'OperationalError'))
@@ -91,6 +93,55 @@ def read(args):
     result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=15, check=False)
     return result.returncode, result.stdout
 
+
+PORT_KEYS = ('FASTAPI_PORT', 'XCAGI_API_PORT', 'PORT')
+CONFIG_PATHS = (
+    '/opt/fhd-full/XCAGI/.env',
+    '/opt/fhd-full/.env',
+    '/opt/fhd-full-backups/pre-20261101-163908/XCAGI/.env',
+    '/opt/fhd-full-backups/pre-20261101-163908/.env',
+)
+
+def port_value(value):
+    value = value.strip().strip('"').strip("'")
+    return int(value) if re.fullmatch(r'[0-9]{1,5}', value) and 1 <= int(value) <= 65535 else 'invalid'
+
+def allowed_port_lines(lines):
+    result = dict.fromkeys(PORT_KEYS, 'absent')
+    for line in lines:
+        match = re.match(r'^\s*(?:export\s+)?(FASTAPI_PORT|XCAGI_API_PORT|PORT)\s*=(.*)$', line)
+        if match:
+            result[match[1]] = port_value(match[2])
+    return result
+
+def config_summary():
+    output = {}
+    for path in CONFIG_PATHS:
+        item = {'exists': os.path.lexists(path), 'symlink': os.path.islink(path)}
+        if item['exists'] and not item['symlink']:
+            try:
+                with open(path, encoding='utf-8', errors='replace') as stream:
+                    item['ports'] = allowed_port_lines(stream)
+            except OSError:
+                item['read_failed'] = True
+        output[path] = item
+    code, raw = read(['systemctl', 'show', SERVICE, '-p', 'Environment', '--value'])
+    ports = dict.fromkeys(PORT_KEYS, 'absent')
+    try:
+        lexer = shlex.shlex(raw, posix=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ''
+        for assignment in lexer:
+            key, _, value = assignment.partition('=')
+            if key in PORT_KEYS:
+                ports[key] = port_value(value)
+    except ValueError:
+        output['systemd_environment_parse_failed'] = True
+    del raw
+    output['systemd_ports'] = ports
+    output['systemd_environment_read_ok'] = code == 0
+    return output
+
 def main():
     code, raw = read(['journalctl', '-u', SERVICE, '--since', '2026-11-01 08:39:20 UTC', '--until', '2026-11-01 08:44:20 UTC', '-n', '5000', '--no-pager', '-o', 'json'])
     size_ok = len(raw.encode('utf-8')) <= 4 * 1024 * 1024
@@ -133,6 +184,9 @@ def main():
             match = re.search(r'(?:^|[ {;])path=(/(?:usr/(?:local/)?bin|opt/fhd-full/\.venv/bin)/python[0-9.]*)\s*;', value)
             output['python_executable'] = match[1] if match else 'not-a-recognized-python-executable'
             output['known_entry_paths'] = [p for p in ('/opt/fhd-full/XCAGI/run.py', '/opt/fhd-full/XCAGI/run_fastapi.py', '/opt/fhd-full/run.py') if p in value]
+            port_arg = re.search(r'(?:^|\s)--port(?:=|\s+)([0-9]{1,5})(?:\s|;|$)', value)
+            output['cli_port'] = port_value(port_arg[1]) if port_arg else 'absent'
+    output['port_config_sources'] = config_summary()
     print(json.dumps(output, sort_keys=True))
 
 if __name__ == '__main__':
