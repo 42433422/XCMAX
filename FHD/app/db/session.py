@@ -107,7 +107,7 @@ def _db_session_scope():
         db.commit()
     except RECOVERABLE_ERRORS as e:
         db.rollback()
-        logger.error("数据库事务失败，已回滚: %s", e)
+        logger.error("数据库事务失败，已回滚: %s", type(e).__name__)
         raise
     finally:
         db.close()
@@ -127,7 +127,7 @@ def get_host_db():
         db.commit()
     except RECOVERABLE_ERRORS as e:
         db.rollback()
-        logger.error("宿主库事务失败，已回滚: %s", e)
+        logger.error("宿主库事务失败，已回滚: %s", type(e).__name__)
         raise
     finally:
         db.close()

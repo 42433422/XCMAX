@@ -605,6 +605,53 @@ def test_error_handler_unhandled() -> None:
     assert r.json()["error_code"] == "internal_error"
 
 
+@pytest.mark.parametrize("kind", ["unexpected", "http", "validation", "app"])
+def test_reviewed_excel_failure_has_safe_stage_and_request_id(caplog, kind) -> None:
+    from app.middleware.error_handler import ReviewedExcelRoute
+
+    app = FastAPI()
+    app.router.route_class = ReviewedExcelRoute
+    register_exception_handlers(app)
+    app.add_middleware(RequestIdMiddleware)
+
+    @app.post("/api/templates/reviewed-excel/preview")
+    def failed_preview(request: Request):
+        request.state.elt_stage = "render_candidates"
+        if kind == "http":
+            raise StarletteHTTPException(status_code=409, detail="synthetic private cell")
+        if kind == "validation":
+            raise RequestValidationError(
+                [
+                    {
+                        "loc": ("body", "file"),
+                        "msg": "invalid",
+                        "type": "synthetic",
+                        "input": "synthetic private cell",
+                    }
+                ]
+            )
+        if kind == "app":
+            raise AppError(ErrorCode.FILE_READ_ERROR, "synthetic private cell", status_code=400)
+        raise RuntimeError("synthetic private cell and credential must stay out of logs")
+
+    response = TestClient(app).post(
+        "/api/templates/reviewed-excel/preview", headers={"X-Request-ID": "unsafe id"}
+    )
+    assert (
+        response.status_code
+        == {"unexpected": 500, "http": 409, "validation": 422, "app": 400}[kind]
+    )
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
+    assert len(response.json()["request_id"]) == 32
+    assert response.json()["stage"] == "render_candidates"
+    if kind == "unexpected":
+        assert response.json()["error_code"] == "elt_processing_failed"
+        assert "RuntimeError" in caplog.text
+        assert "private cell" not in response.text
+    assert response.json()["request_id"] in caplog.text
+    assert "private cell" not in caplog.text and "unsafe id" not in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # db validators + errors + misc
 # ---------------------------------------------------------------------------

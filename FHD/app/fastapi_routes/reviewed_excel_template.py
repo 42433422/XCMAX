@@ -62,6 +62,7 @@ from app.db.models.elt import EltRun, EltUpload
 from app.db.session import get_db
 from app.infrastructure.auth.dependencies import require_permission
 from app.infrastructure.tenant_scope import tenant_scope
+from app.middleware.error_handler import ReviewedExcelRoute, _reviewed_excel_context
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
@@ -88,7 +89,7 @@ def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
         return draft
 
 
-router = APIRouter()
+router = APIRouter(route_class=ReviewedExcelRoute)
 _manage = require_permission("etl.template.manage")
 _execute = require_permission("etl.execute")
 _read = require_permission("etl.read")
@@ -1261,6 +1262,7 @@ async def reviewed_excel_preview(
     _expected_actor(expected_actor, user)
     tenant, owner = _identity(user)
     try:
+        request.state.elt_stage = "read_workbook"
         body = await _body(file)
         review = inspect_workbook(body)
         source_restrictions = list(review.get("usage_restrictions", []))
@@ -1382,6 +1384,7 @@ async def reviewed_excel_preview(
                         ]
                 selected_region["print_area_mode"] = print_area_mode
                 object_receipt: dict = {}
+                request.state.elt_stage = "extract_document"
                 body = derive_document_workbook(
                     body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
                 )
@@ -1393,6 +1396,7 @@ async def reviewed_excel_preview(
                     if sheet["sheet"] == region_sheet
                 )
                 selected_region["derived_sha256"] = review["sha256"]
+        request.state.elt_stage = "generate_candidates"
         proposal = make_proposals(review)
         versions = [proposal]
         if model_opt_in:
@@ -1408,6 +1412,7 @@ async def reviewed_excel_preview(
                     "本人文件仅授权已配置的平台模型；当前供应商不受支持，未调用模型"
                 )
             try:
+                request.state.elt_stage = "model_candidates"
                 with tenant_scope(tenant):
                     proposal = await run_in_threadpool(
                         refine_proposal,
@@ -1430,9 +1435,11 @@ async def reviewed_excel_preview(
                 "scope": "this_document_bounded_cells_and_structure",
                 "authorized_at": utcnow().isoformat(),
             }
+        request.state.elt_stage = "render_candidates"
         for version in versions:
             _build_candidate_previews(body, review, version)
         _recheck(request, (tenant, owner))
+        request.state.elt_stage = "save_preview"
         with tenant_scope(tenant), get_db() as db:
             if selected_region and selected_region.get("derived_sha256"):
                 current = _classification_run(
@@ -2044,12 +2051,13 @@ async def reviewed_excel_save(
                     prepared_plan=confirmed_plan,
                 )
             except BOUNDARY_ERRORS as exc:
-                logger.exception(
-                    "confirmed auto-ingest failed review_id=%s err=%s",
-                    review_id,
+                context = _reviewed_excel_context(request)
+                logger.error(
+                    "ELT auto-ingest failed stage=save request_id=%s error_type=%s",
+                    context["request_id"],
                     type(exc).__name__,
                 )
-                auto_ingest = {"success": False, "error": "auto_ingest_failed"}
+                auto_ingest = {"success": False, "error": "auto_ingest_failed", **context}
             with tenant_scope(tenant), get_db() as db:
                 persisted_run = _run(db, review_id, tenant, owner)
                 receipt = load_json(persisted_run.receipt_json, {})

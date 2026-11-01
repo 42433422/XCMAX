@@ -26,6 +26,61 @@ def input_digest(messages):
     ).hexdigest()
 
 
+def test_invalid_shared_string_is_a_file_error_in_all_intake_routes(review_store):
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    from app.application.elt.errors import ReviewedExcelError
+
+    original = sample()
+    damaged = BytesIO()
+    with ZipFile(BytesIO(original)) as source, ZipFile(damaged, "w", ZIP_DEFLATED) as target:
+        for item in source.infolist():
+            data = source.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                data = data.replace(b't="inlineStr"><is><t>', b't="s"><v>99</v><is><t>', 1)
+            target.writestr(item, data)
+    body = damaged.getvalue()
+    with pytest.raises(ReviewedExcelError, match="无法读取 XLSX"):
+        inspect_workbook(body)
+    for endpoint in ["preview", "archive-classify", "classify"]:
+        response = review_store.client.post(
+            f"/api/templates/reviewed-excel/{endpoint}",
+            files={"files" if endpoint == "classify" else "file": ("synthetic.xlsx", body)},
+            data={"expected_actor": "1:7", "request_key": "invalid-synthetic"},
+        )
+        if endpoint == "classify":
+            assert response.status_code == 200
+            assert response.json()["files"][0]["status"] == "unsupported"
+        else:
+            assert response.status_code == 400
+        assert "无法读取 XLSX" in response.text
+    assert inspect_workbook(original)["sha256"] == hashlib.sha256(original).hexdigest()
+    with review_store.engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
+        assert conn.execute(text("SELECT count(*) FROM etl_archive_assets")).scalar_one() == 0
+
+
+def test_unexpected_candidate_failure_is_correlated_without_source_logging(
+    review_store, monkeypatch, caplog
+):
+    def failed_render(*_):
+        raise RuntimeError("synthetic-private-cell-and-provider-credential")
+
+    monkeypatch.setattr(routes, "_build_candidate_previews", failed_render)
+    response = review_store.client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", sample())},
+        data={"expected_actor": "1:7"},
+    )
+    assert response.status_code == 500
+    assert response.json()["stage"] == "render_candidates"
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
+    assert "RuntimeError" in caplog.text
+    assert "synthetic-private-cell" not in caplog.text + response.text
+    with review_store.engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
+
+
 def test_clean_formula_workbook_without_calculation_properties():
     wb = Workbook()
     wb.active["A1"] = 12
@@ -5110,8 +5165,9 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
     url = "/api/templates/reviewed-excel/archive-classify"
     data = {"expected_actor": "1:7", "request_key": "copy-cleanup"}
     if commit_unknown:
-        with pytest.raises(RuntimeError, match="lost commit receipt"):
-            client.post(url, data=data, files={"file": ("sample.xlsx", body)})
+        failure = client.post(url, data=data, files={"file": ("sample.xlsx", body)})
+        assert failure.status_code == 500
+        assert failure.json()["stage"] == "archive-classify"
     else:
         response = client.post(url, data=data, files={"file": ("sample.xlsx", body)})
         assert response.status_code == 400

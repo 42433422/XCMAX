@@ -405,7 +405,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
             except BOUNDARY_ERRORS:
                 wb.close()
                 raise
-    except (BadZipFile, KeyError, OSError, ParseError, InvalidFileException) as exc:
+    except (BadZipFile, KeyError, IndexError, OSError, ParseError, InvalidFileException) as exc:
         raise ReviewedExcelError("无法读取 XLSX 工作簿") from exc
     cells: list[dict[str, Any]] = []
     layout: list[dict[str, Any]] = []
