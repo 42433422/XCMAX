@@ -1,5 +1,5 @@
 {
-  "lines": 2406821,
+  "lines": 2406828,
   "updated": "2026-11-01",
-  "note": "PR #2891: after excluding .github/security/gitleaks-disposition/ evidence from the line ratchet (parity with FHD/docs/evidence/), remaining +259 is intentional security gate unblock code (auto_ingest path jail, normalize disposition apply, unit tests, changelog, lock bumps already skipped)."
+  "note": "PR #2891: gitleaks evidence exclusion remains unchanged; baseline +266 versus main comprises the original +259 security unblock and +7 follow-up lines preserving the managed reviewed-template path, real-resolver fixtures, and sibling-directory rejection coverage. No security gate is weakened."
 }

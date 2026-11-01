@@ -528,6 +528,7 @@ def _trusted_base_roots() -> list[Path]:
             (
                 app_data / "temp_excel",
                 app_data / "outputs",
+                app_data / "templates" / "reviewed_excel",
                 Path(get_upload_dir()),
                 Path(get_data_dir()),
                 Path(get_shipment_output_dir()),

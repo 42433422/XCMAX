@@ -33,13 +33,9 @@ def ledger_root(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def allow_tmp_ingest_paths(monkeypatch):
-    """Tests place fixtures under pytest tmp; bypass ETL root jail for unit scope."""
-    monkeypatch.setattr(
-        ais,
-        "resolve_etl_path",
-        lambda source_path, **_kwargs: Path(source_path).expanduser().resolve(),
-    )
+def allow_tmp_ingest_paths(tmp_path, monkeypatch):
+    """Trust only this test's workspace through the real ETL path resolver."""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
 
 
 def _shipment_xlsx(path: Path) -> Path:
