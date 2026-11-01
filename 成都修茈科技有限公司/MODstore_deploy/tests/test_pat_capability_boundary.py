@@ -512,10 +512,21 @@ async def test_byok_rechecks_pat_before_upstream(pat_case, monkeypatch, state):
     request = SimpleNamespace(
         state=SimpleNamespace(llm_pat_user_id=8), headers={"authorization": "Bearer " + pat}
     )
+    from modstore_server.llm_key_resolver import ChatRouteSnapshot
+
     monkeypatch.setattr(
-        llm_billed_once, "resolve_api_key", lambda *args: ("synthetic", "user_override")
+        llm_billed_once,
+        "resolve_chat_route_snapshot",
+        lambda *args: ChatRouteSnapshot(
+            provider="openai",
+            model="synthetic",
+            api_key="synthetic",
+            base_url=None,
+            key_source="user_override",
+            route_source="explicit",
+            config_revision="synthetic",
+        ),
     )
-    monkeypatch.setattr(llm_billed_once, "resolve_base_url", lambda *args: None)
     monkeypatch.setattr(llm_billed_once, "assert_llm_chat_allowed", AsyncMock())
     monkeypatch.setattr(llm_billed_once, "enforce_risk_limits", Mock())
     dispatch = AsyncMock()

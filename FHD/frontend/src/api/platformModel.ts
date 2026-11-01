@@ -1,5 +1,12 @@
 import { api } from './core'
 
+export const PLATFORM_MODEL_CHANGED_EVENT = 'xcagi:platform-model-changed'
+export const PLATFORM_MODEL_CHANGED_KEY = 'xcagi_platform_model_changed'
+export function notifyPlatformModelChanged(): void {
+  window.dispatchEvent(new Event(PLATFORM_MODEL_CHANGED_EVENT))
+  try { localStorage.setItem(PLATFORM_MODEL_CHANGED_KEY, String(Date.now())) } catch { /* same-tab event still refreshes */ }
+}
+
 export interface PlatformModelConfig {
   provider: string
   label: string

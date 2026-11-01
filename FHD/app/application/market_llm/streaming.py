@@ -9,6 +9,7 @@ import httpx
 from app.infrastructure.chat_stream_lifetime import check_stream_active, owned_model_read
 
 from .protocols import ChatInput, Connection, Route, StreamPorts
+from .responses import market_response_error
 
 
 def stream_sync(
@@ -42,6 +43,9 @@ def stream_sync(
                     # could duplicate visible output or an upstream billed call.
                     yield from ports.sync_payloads(response)
                     return
+                if request.extra.get("key_source") or request.extra.get("route_token"):
+                    response.read()
+                    raise market_response_error(response, status)
                 text = response.read().decode("utf-8", errors="ignore")[:500]
                 error = ValueError(f"平台错误({status}): {text}")
                 if index + 1 >= len(candidates) or not ports.failoverable(status, text):
@@ -69,6 +73,10 @@ async def stream_async(
         json=payload,
         headers=connection.headers(),
     ) as response:
+        status = ports.status_code(response, 200)
+        if status >= 400 and (request.extra.get("key_source") or request.extra.get("route_token")):
+            await response.aread()
+            raise market_response_error(response, status)
         response.raise_for_status()
         async for data in ports.async_payloads(response):
             yield data

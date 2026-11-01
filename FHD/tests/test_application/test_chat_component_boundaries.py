@@ -4,6 +4,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 from app.application.agent_orchestrator.run_usage import RunUsageLedger
@@ -199,3 +201,98 @@ def test_injected_validation_rejects_before_dispatch_or_billing():
     executor.execute.assert_not_called()
     usage.record_tool_usage_entry.assert_not_called()
     assert step.status == "failed" and step.output["error_code"] == "invalid_input"
+
+
+@pytest.mark.parametrize("state", ["selected", "completed", "failed", "invalid"])
+def test_history_saves_only_public_route_receipt_for_the_authenticated_owner(state):
+    store = Mock(spec=ConversationStore)
+    public = {
+        "provider": "xiaomi",
+        "model": "flash",
+        "route_source": "platform_default",
+        "key_source": "platform",
+        "config_revision": "r1",
+    }
+    persist_chat_turn(
+        "forged-owner",
+        "hello",
+        {
+            "session_id": "owned-session",
+            "turn_id": "turn-1",
+            "local_user_id": 42,
+        },
+        {
+            "success": state == "completed",
+            "response": "reply",
+            "route_metadata": {
+                **public,
+                "route_state": state,
+                "route_token": "private-token",
+                "api_key": "private-key",
+                "api_key_masked": "private-mask",
+                "base_url": "https://private.invalid",
+            },
+        },
+        store=store,
+    )
+    calls = [call.kwargs for call in store.save_message.call_args_list]
+    assert {call["user_id"] for call in calls} == {"42"}
+    assert "route_metadata" not in json.loads(calls[0]["metadata"])
+    saved = json.loads(calls[1]["metadata"])["route_metadata"]
+    assert saved == {**public, **({"route_state": state} if state != "invalid" else {})}
+    assert "private-" not in calls[1]["metadata"] and "private.invalid" not in calls[1]["metadata"]
+
+
+def test_history_route_receipt_does_not_authorize_a_foreign_session_owner():
+    store = Mock(spec=ConversationStore)
+    persist_chat_turn(
+        "42",
+        "hello",
+        {"session_id": "foreign-session", "local_user_id": 42, "actor_id": 43},
+        {
+            "success": True,
+            "response": "reply",
+            "route_metadata": {"provider": "xiaomi", "model": "flash", "route_state": "completed"},
+        },
+        store=store,
+    )
+    store.save_message.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "detail,message",
+    [
+        ("safe failure", "safe failure"),
+        ({"message": "safe failure"}, "safe failure"),
+        (["private-mask"], "对话执行失败"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_sync_error_receipt_preserves_status_and_safe_history_for_any_detail(
+    monkeypatch, detail, message
+):
+    from unittest.mock import AsyncMock
+
+    from fastapi import HTTPException
+
+    from app.application import planner_compat_service as compat
+
+    body = SimpleNamespace()
+    route = {"provider": "xiaomi", "model": "flash", "route_state": "failed"}
+    monkeypatch.setattr(compat, "_prepare_compat_chat_body", lambda request, value: body)
+    monkeypatch.setattr(
+        compat,
+        "_execute_compat_chat_impl",
+        AsyncMock(side_effect=HTTPException(status_code=401, detail=detail)),
+    )
+    monkeypatch.setattr(compat, "request_route_metadata", lambda request: route)
+    persist = Mock()
+    monkeypatch.setattr(compat, "_persist_compat_chat_turn", persist)
+    with pytest.raises(HTTPException) as failure:
+        await compat.execute_compat_chat(SimpleNamespace(), body)
+    assert failure.value.status_code == 401
+    assert failure.value.detail == {"message": message, "route_metadata": route}
+    assert persist.call_args.args == (
+        body,
+        {"success": False, "response": message, "route_metadata": route},
+    )

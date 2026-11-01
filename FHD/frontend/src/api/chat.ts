@@ -4,6 +4,7 @@ import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 import type { RequestOptions } from './core'
 import type { ApiResponse } from '@/types/api'
 import type { ChatRequest, ChatResponse, ChatSession } from '@/types/chat'
+import type { ChatModelRoute } from '@/utils/chatModelRoute'
 import { readPlannerSseResponse, resolveChatStreamPath, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { asRecord, asString } from '@/utils/typeGuards'
 import {
@@ -63,12 +64,13 @@ function withMarketAuthorization(options: RequestOptions = {}): RequestOptions {
 }
 
 /** Planner SSE：非 2xx 时解析 JSON 错误文案 */
-export async function parseChatStreamErrorResponse(res: Response): Promise<string> {
+export async function parseChatStreamErrorResponse(res: Response, onRouteMetadata?: (value: unknown) => void): Promise<string> {
   let msg = `流式请求失败（${res.status}）`
   try {
     const ct = res.headers.get('content-type') || ''
     if (ct.includes('application/json')) {
       const j = asRecord(await res.json())
+      onRouteMetadata?.(j.route_metadata || asRecord(j.detail).route_metadata)
       msg = asString(j.message || j.detail) || msg
     }
   } catch {
@@ -78,8 +80,12 @@ export async function parseChatStreamErrorResponse(res: Response): Promise<strin
 }
 
 export const chatApi = {
-  getModelStatus(): Promise<{ ok: boolean; provider: string; model: string }> {
+  getModelStatus(): Promise<{ ok: boolean; provider: string; model: string } & Partial<ChatModelRoute>> {
     return api.get('/api/conversation/model-status', {}, { timeoutMs: 20_000, cache: 'no-store' })
+  },
+
+  followPlatformModel(): Promise<{ ok: boolean }> {
+    return api.put('/api/conversation/model-preference', { mode: 'platform' })
   },
 
   sendChat(payload: ChatRequest, options: RequestOptions = {}): Promise<ApiResponse<ChatResponse>> {

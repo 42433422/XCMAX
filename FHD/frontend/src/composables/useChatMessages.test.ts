@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, nextTick } from 'vue'
+import { lastChatModelRoute, recordChatModelRoute, type ChatModelRoute } from '@/utils/chatModelRoute'
+import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { setActivePinia, createPinia } from 'pinia'
 import { chatMessageExtrasFromServerRow, useChatMessages, queueVoice, clearVoiceQueue } from './useChatMessages'
 
@@ -35,6 +37,7 @@ vi.mock('@/constants/industryPresets', () => ({
 }))
 
 vi.mock('@/utils/chatStorageKeys', () => ({
+  resolveChatIdentity: (modId = '') => `identity:${modId}`,
   buildChatMessagesKey: (sid: string, modId: string) => `chat_${sid}_${modId}`,
   buildChatSessionMetaKey: (sid: string, modId: string) => `chat_meta_${sid}_${modId}`,
 }))
@@ -582,4 +585,70 @@ it.each([undefined, 'explicit-turn'])('preserves the user turn through the save 
   const restored = chatMessageExtrasFromServerRow({ id: 41, role: 'user', metadata: JSON.stringify(storedMetadata) })
   expect(restored.turnId).toBe(override || 'local-turn')
   expect(restored.persistence).toEqual({ id: payload.client_message_id, status: 'saved' })
+})
+
+
+it('restores only safe route receipts after server history, refresh and conversation reentry, and retires them on logout', async () => {
+  localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
+  const chatApi = (await import('@/api/chat')).default
+  const route: ChatModelRoute = { provider: 'xiaomi', model: 'flash', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'server-a', route_state: 'completed' }
+  const sid = ref('route-history')
+  const api = useChatMessages(sid)
+  vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ messages: [{ id: 10, role: 'assistant', content: '实际回复', time: '12:00', metadata: JSON.stringify({ route_metadata: { ...route, api_key: 'synthetic-never-render', route_token: 'synthetic-token' } }) }] } as never)
+  await api.syncFromServer()
+  expect(lastChatModelRoute('route-history')).toEqual(route)
+  expect(api.messages.value[0]?.routeMetadata).toEqual(route)
+  recordChatModelRoute('route-history', null)
+  const reopened = useChatMessages(ref('route-history'))
+  expect(reopened.messages.value[0]?.routeMetadata).toEqual(route)
+  expect(lastChatModelRoute('route-history')).toEqual(route)
+  sid.value = 'other-history'
+  expect(lastChatModelRoute('other-history')).toBeNull()
+  sid.value = 'route-history'
+  expect(lastChatModelRoute('route-history')).toEqual(route)
+  activeModIdRef.value = 'other-mod'
+  expect(lastChatModelRoute('route-history', 'identity:other-mod')).toBeNull()
+  invalidateEnterpriseSessionCache()
+  expect(lastChatModelRoute('route-history', 'identity:')).toBeNull()
+  expect(chatMessageExtrasFromServerRow({ role: 'user', metadata: { route_metadata: route } }).routeMetadata).toBeUndefined()
+})
+
+it('does not replace current selected or failed local metadata with an older completed history receipt', async () => {
+  localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
+  const chatApi = (await import('@/api/chat')).default
+  const old: ChatModelRoute = { provider: 'xiaomi', model: 'old-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'completed' }
+  const current: ChatModelRoute = { ...old, model: 'current-model', config_revision: 'b', route_state: 'selected' }
+  const api = useChatMessages(ref('live-history-fence'))
+  api.loadMessages([
+    { role: 'ai', content: 'older reply', time: '12:00', routeMetadata: old, persistence: { id: 'server:1', status: 'saved' } },
+    { role: 'ai', content: '已停止接收本轮回复', time: '12:01', routeMetadata: current, persistence: { id: 'local-current', status: 'local' } },
+  ])
+  vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ messages: [{ id: 1, role: 'assistant', content: 'older reply', time: '12:00', metadata: { route_metadata: old } }] } as never)
+  await api.syncFromServer()
+  expect(lastChatModelRoute('live-history-fence')).toEqual(current)
+  expect(useChatMessages(ref('live-history-fence')).messages.value.at(-1)?.routeMetadata).toEqual(current)
+})
+
+
+it('retires only cached streaming placeholders after refresh while preserving unconfirmed route identity across history and account scopes', async () => {
+  localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
+  const route: ChatModelRoute = { provider: 'xiaomi', model: 'selected-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'selected' }
+  const first = useChatMessages(ref('refresh-stream'))
+  const idx = first.pushStreamingAiShell()
+  first.messages.value[idx]!.routeMetadata = route
+  await nextTick()
+  expect(first.messages.value[idx]?.streamingShell).toBe(true)
+  const reopened = useChatMessages(ref('refresh-stream'))
+  expect(reopened.messages.value.at(-1)?.streamingShell).toBeUndefined()
+  expect(reopened.messages.value.at(-1)?.content).toContain('未收到完成回执')
+  expect(lastChatModelRoute('refresh-stream')).toEqual(route)
+  expect(first.messages.value[idx]?.streamingShell).toBe(true)
+  const sid = ref('other-conversation')
+  const history = useChatMessages(sid)
+  expect(lastChatModelRoute('other-conversation')).toBeNull()
+  sid.value = 'refresh-stream'
+  expect(history.messages.value.at(-1)?.streamingShell).toBeUndefined()
+  expect(history.messages.value.at(-1)?.routeMetadata).toEqual(route)
+  invalidateEnterpriseSessionCache()
+  expect(lastChatModelRoute('refresh-stream')).toBeNull()
 })

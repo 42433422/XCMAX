@@ -132,7 +132,8 @@ describe('shipped chat Mod task navigation', () => {
     'connects %s empty examples, safe retry and platform model status to the composer', async (_label, component) => {
       await mountView(summary(), false, component, true)
       await flushPromises()
-      expect(wrapper!.get('[data-testid="chat-model-status"] summary').text()).toContain('platform / configured-chat')
+      expect(wrapper!.get('[data-testid="chat-model-status"] summary').text()).toBe('模型信息')
+      expect((wrapper!.get('[data-testid="chat-model-status"]').element as HTMLDetailsElement).open).toBe(false)
       await wrapper!.get('.chat-welcome button').trigger('click')
       expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toContain('仅回答，不执行操作')
       ;(chatApi.messages as Ref<UiChatMessage[]>).value = [

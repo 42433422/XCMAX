@@ -25,6 +25,22 @@ def _step(action="read", **params):
 
 class FixtureExecutor(AgentToolExecutor):
     def execute(self, step, *, runtime_context):
+        if step.action in {"route_receipt", "route_receipt_async"}:
+            from app.infrastructure.llm.client import get_llm_client
+
+            async def complete():
+                get_llm_client().adapter.last_route_metadata = step.params["receipt"]
+
+            if step.action == "route_receipt_async":
+                import asyncio
+
+                asyncio.run(complete())
+            else:
+                get_llm_client().adapter.last_route_metadata = step.params["receipt"]
+            return {
+                "success": True,
+                **({"unserializable": object()} if step.params.get("invalid_result") else {}),
+            }
         if step.action == "llm":
             from app.application.employee_runtime.agent_loop import run_employee_agent_loop
             from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
@@ -385,3 +401,130 @@ def test_cleanup_races_preserve_results_and_unresolved_cleanup_blocks_reuse(
         assert executor._tool_cleanup_failed
         again = execute_with_tool_deadline(executor, _step(), runtime_context={}, timeout_seconds=5)
         assert again["error_code"] == "tool_cleanup_unresolved"
+
+
+def _route_receipt_client(owner="a", revision="r1"):
+    from app.domain.shared_services.conversation.modstore_adapter import (
+        ModstoreOpenAICompatibleClient,
+        ModstorePlatformAdapter,
+    )
+
+    adapter = ModstorePlatformAdapter(
+        platform_url="https://fixture.invalid", auth_token=f"fake-{owner}"
+    )
+    adapter.default_provider, adapter.default_model = "xiaomi", "flash"
+    route = {
+        "provider": "xiaomi",
+        "model": "flash",
+        "route_source": "platform_default",
+        "key_source": "platform",
+        "config_revision": revision,
+    }
+    snapshot = {**route, "route_token": f"fake-route-token-{revision}", "route_state": "selected"}
+    adapter._route_snapshots[(adapter._connection(), ("xiaomi", "flash"))] = snapshot
+    return ModstoreOpenAICompatibleClient(adapter), route, snapshot
+
+
+@pytest.mark.parametrize("invalid_result", [False, True])
+@pytest.mark.parametrize("action", ["route_receipt", "route_receipt_async"])
+def test_spawned_tool_route_receipt_returns_to_the_original_request(invalid_result, action):
+    from app.infrastructure.llm.client import llm_client_scope
+
+    client, route, _ = _route_receipt_client()
+    with llm_client_scope(client, "xiaomi/flash"):
+        result = execute_with_tool_deadline(
+            FixtureExecutor(),
+            _step(
+                action,
+                receipt={
+                    **route,
+                    "route_state": "completed",
+                    "api_key": "fake-private",
+                    "route_token": "private-token",
+                },
+                invalid_result=invalid_result,
+            ),
+            runtime_context={},
+            timeout_seconds=10,
+        )
+    assert client.adapter.last_route_metadata == {**route, "route_state": "completed"}
+    assert result.get("outcome") == "unknown" if invalid_result else result["success"] is True
+    assert "route_metadata" not in result  # Route receipt is outside the tool result protocol.
+
+
+@pytest.mark.parametrize("failure", ["account", "snapshot", "receipt"])
+def test_worker_metadata_cannot_attach_to_another_account_or_rotated_snapshot(failure):
+    from app.infrastructure.llm import client as routing
+
+    original, route, _ = _route_receipt_client()
+    with routing.llm_client_scope(original, "xiaomi/flash"):
+        captured = routing.capture_worker_llm_scope()
+    current, _, snapshot = _route_receipt_client(owner="b" if failure == "account" else "a")
+    if failure == "snapshot":
+        snapshot["route_token"] = "different-snapshot"
+    receipt = {**route, **({"config_revision": "r2"} if failure == "receipt" else {})}
+    with routing.llm_client_scope(current, "xiaomi/flash"):
+        routing.record_worker_route_metadata(receipt, captured)
+    assert current.adapter.last_route_metadata == {}
+
+
+def test_worker_metadata_inspection_never_instantiates_an_unused_client():
+    from unittest.mock import Mock
+
+    from app.infrastructure.llm import client as routing
+
+    factory = Mock(side_effect=AssertionError("must remain lazy"))
+    with routing.llm_client_factory_scope(factory):
+        assert routing.scoped_route_metadata() == {}
+        routing.record_worker_route_metadata({"provider": "xiaomi"}, {"kind": "modstore"})
+    factory.assert_not_called()
+
+
+@pytest.mark.parametrize("state", ["selected", "completed", "failed"])
+def test_worker_metadata_preserves_state_separately_from_snapshot_identity(state):
+    from app.infrastructure.llm import client as routing
+
+    client, route, _ = _route_receipt_client()
+    with routing.llm_client_scope(client, "xiaomi/flash"):
+        captured = routing.capture_worker_llm_scope()
+        key = (client.adapter._connection(), ("xiaomi", "flash"))
+        client.adapter._route_snapshots[key] = {
+            **client.adapter._route_snapshots[key],
+            "route_state": "failed",
+        }
+        receipt = {**route, "route_state": state}
+        routing.record_worker_route_metadata(receipt, captured)
+    assert client.adapter.last_route_metadata == receipt
+
+
+def test_worker_result_file_contains_only_public_route_identity(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    from app.application.agent_orchestrator import tool_process
+    from app.infrastructure.llm import client as routing
+
+    client, route, _ = _route_receipt_client()
+    monkeypatch.setattr(tool_process.os, "setsid", lambda: None, raising=False)
+    monkeypatch.setattr(routing, "restore_worker_llm_client", lambda _: (client, "xiaomi/flash"))
+    payload = json.dumps(
+        {
+            "step": _step(
+                "route_receipt",
+                receipt={**route, "route_token": "private-token", "api_key_masked": "private-mask"},
+            ).to_dict(),
+            "context": {},
+        }
+    )
+    tool_process._worker(
+        FixtureExecutor,
+        payload,
+        str(tmp_path),
+        Mock(),
+        Mock(),
+        Mock(),
+        time.monotonic() + 5,
+        {},
+    )
+    encoded = (tmp_path / "result").read_text()
+    assert json.loads(encoded)["llm_route_metadata"] == route
+    assert "private-token" not in encoded and "private-mask" not in encoded

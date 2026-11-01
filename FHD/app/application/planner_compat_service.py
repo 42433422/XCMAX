@@ -68,6 +68,7 @@ from app.domain.context.session_context import (
 )
 from app.domain.shared_services.conversation.modstore_adapter import (
     create_modstore_openai_client_from_request,
+    request_route_metadata,
 )
 from app.fastapi_routes.xcagi_compat_chat_helpers import (
     XcagiCompatChatBatchBody,
@@ -339,8 +340,31 @@ def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]
 
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
     body = _prepare_compat_chat_body(request, body)
-    with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
-        payload = await _execute_compat_chat_impl(request, body)
+    try:
+        with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+            payload = await _execute_compat_chat_impl(request, body)
+    except HTTPException as exc:
+        metadata = request_route_metadata(request)
+        if metadata:
+            message = (
+                exc.detail
+                if isinstance(exc.detail, str)
+                else str(exc.detail.get("message") or "对话执行失败")
+                if isinstance(exc.detail, dict)
+                else "对话执行失败"
+            )
+            _persist_compat_chat_turn(
+                body, {"success": False, "response": message, "route_metadata": metadata}
+            )
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={"message": message, "route_metadata": metadata},
+                headers=exc.headers,
+            ) from None
+        raise
+    metadata = request_route_metadata(request)
+    if metadata:
+        payload["route_metadata"] = metadata
     _persist_compat_chat_turn(body, payload)
     return payload
 
@@ -372,12 +396,17 @@ async def compat_chat_stream_async(
         logger,
     )
     pending = b""
+    last_metadata: dict[str, Any] = {}
     with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
         async with aclosing(stream.run(request, body, ai_tier=ai_tier)) as chunks:
             async for chunk in chunks:
+                if not pending and not chunk.startswith((b"data", b"event:")):
+                    yield chunk
+                    continue
                 pending += chunk
                 while b"\n\n" in pending:
                     event, pending = pending.split(b"\n\n", 1)
+                    encoded = event + b"\n\n"
                     for line in event.splitlines():
                         if not line.startswith(b"data: "):
                             continue
@@ -387,14 +416,26 @@ async def compat_chat_stream_async(
                             continue
                         if not isinstance(item, dict):
                             continue
+                        metadata = request_route_metadata(request)
+                        if metadata and metadata != last_metadata:
+                            yield _sse_event({"type": "route_metadata", "route_metadata": metadata})
+                            last_metadata = metadata
                         if item.get("type") == "done" and isinstance(item.get("result"), dict):
+                            if metadata:
+                                item["result"]["route_metadata"] = metadata
                             _persist_compat_chat_turn(body, item["result"])
                         elif item.get("type") == "error":
+                            if metadata:
+                                item["route_metadata"] = metadata
                             _persist_compat_chat_turn(
                                 body,
                                 {
                                     "success": False,
                                     "response": str(item.get("message") or "对话执行失败"),
+                                    **({"route_metadata": metadata} if metadata else {}),
                                 },
                             )
-                yield chunk
+                        encoded = _sse_event(item)
+                    yield encoded
+    if pending:
+        yield pending
