@@ -352,7 +352,7 @@ def _run_frozen_critical_probe(data_dir: str | None) -> None:
                 faulthandler.dump_traceback_later(60, repeat=True, file=diagnostics)
                 try:
                     _verify_frozen_critical_runtime()
-                except Exception as exc:  # noqa: BLE001 - isolated command boundary
+                except BOUNDARY_ERRORS as exc:  # isolated command records failure and exits nonzero
                     traceback.print_exc(file=diagnostics)
                     diagnostics.flush()
                     traceback.print_exc(file=sys.stderr)
