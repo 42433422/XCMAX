@@ -23,7 +23,7 @@ from .protocols import (
     Route,
     SyncClientFactory,
 )
-from .responses import _response_status_code, finish_completion
+from .responses import _response_status_code, finish_completion, market_response_error
 
 
 def _capture_reviewed_response(
@@ -32,7 +32,10 @@ def _capture_reviewed_response(
     callback = request.extra.get("_reviewed_excel_audit_response")
     if callback is not None:
         raw = response.content
-        if connection.auth_token and connection.auth_token.encode() in raw:
+        if any(
+            isinstance(token, str) and token and token.encode() in raw
+            for token in (connection.auth_token, request.extra.get("route_token"))
+        ):
             raise ValueError("模型响应包含敏感凭据，未归档")
         callback(raw, response.status_code, response.headers.get("x-request-id"))
 
@@ -63,6 +66,8 @@ def post_sync(
         latency_ms = (response_ports.clock() - start) * 1000.0
         status = _response_status_code(response)
         if status >= 400:
+            if request.extra.get("key_source") or request.extra.get("route_token"):
+                raise market_response_error(response, status)
             raise ValueError(f"平台错误({status}): {response.text[:500]}")
         result = response.json()
     return finish_completion(result, connection, route, latency_ms, response_ports)
@@ -140,6 +145,8 @@ async def complete_async(
         latency_ms = (ports.response.clock() - start) * 1000.0
         status = ports.status_code(response, 200)
         if status >= 400:
+            if request.extra.get("key_source") or request.extra.get("route_token"):
+                raise market_response_error(response, status)
             error = ValueError(f"平台错误({status}): {response.text[:500]}")
             if index + 1 < len(candidates) and ports.failoverable(status, response.text[:500]):
                 last_error = error

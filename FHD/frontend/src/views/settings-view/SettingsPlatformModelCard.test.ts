@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import SettingsPlatformModelCard from './SettingsPlatformModelCard.vue'
-import { platformModelApi, type PlatformModelConfig, type PlatformModelDraft, type PlatformModelList } from '@/api/platformModel'
+import { platformModelApi, notifyPlatformModelChanged, type PlatformModelConfig, type PlatformModelDraft, type PlatformModelList } from '@/api/platformModel'
 import { appConfirm } from '@/utils/appDialog'
 
-vi.mock('@/api/platformModel', () => ({ platformModelApi: { list: vi.fn(), save: vi.fn(), test: vi.fn() } }))
+vi.mock('@/api/platformModel', () => ({ notifyPlatformModelChanged: vi.fn(), platformModelApi: { list: vi.fn(), save: vi.fn(), test: vi.fn() } }))
 vi.mock('@/utils/appDialog', () => ({ appConfirm: vi.fn() }))
 
 const stored: PlatformModelConfig = {
@@ -66,6 +66,7 @@ describe('platform model settings', () => {
     expect(platformModelApi.save).toHaveBeenCalledWith('openai', expect.objectContaining({ display_name: '新展示名称', expected_revision: 'revision-1' }), expect.any(AbortSignal))
     expect(vi.mocked(platformModelApi.save).mock.calls[0][1]).not.toHaveProperty('api_key')
     expect(wrapper.text()).toContain('平台模型配置已保存')
+    expect(notifyPlatformModelChanged).toHaveBeenCalledTimes(1)
     expect(platformModelApi.test).not.toHaveBeenCalled()
   })
 

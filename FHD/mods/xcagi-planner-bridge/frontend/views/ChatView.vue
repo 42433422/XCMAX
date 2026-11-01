@@ -98,7 +98,7 @@
         @proactive-suggestions-change="persistProactiveEnabled"
         @toggle-tts="setTtsEnabled"
       />
-      <ChatModelStatus ref="modelStatusRef" />
+      <ChatModelStatus ref="modelStatusRef" :session-id="currentSessionId" :mod-id="String(modsStore.activeModId || '')" />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <span class="sheet-link-label">关联工作表：</span>
         <button

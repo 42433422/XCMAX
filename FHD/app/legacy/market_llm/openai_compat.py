@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from typing import Any, Dict
 
 from app.application.market_llm.protocols import Messages, OpenAIPorts, Payload
-from app.infrastructure.modstore_transport import MarketModelError
+from app.infrastructure.modstore_transport import MarketModelError, safe_route_metadata
 
 
 def _to_openai_object(value: Any) -> Any:
@@ -55,7 +55,10 @@ def _platform_stream_payload_to_openai_chunk(data: str) -> Dict[str, Any] | None
     if isinstance(raw, dict) and raw.get("choices"):
         choices = raw.get("choices") or []
         return {
-            **raw,
+            **{
+                key: raw[key] for key in ("id", "object", "created", "model", "usage") if key in raw
+            },
+            **({"route_metadata": route} if (route := safe_route_metadata(raw)) else {}),
             "choices": [
                 _normalize_stream_choice(c if isinstance(c, dict) else {}) for c in choices
             ],
@@ -70,8 +73,14 @@ def _platform_stream_payload_to_openai_chunk(data: str) -> Dict[str, Any] | None
         if tool_calls:
             delta["tool_calls"] = tool_calls
         finish_reason = raw.get("finish_reason")
-        if delta or finish_reason:
-            return {"choices": [{"delta": delta, "finish_reason": finish_reason}]}
+        route = safe_route_metadata(raw)
+        if delta or finish_reason or route:
+            return {
+                "choices": [{"delta": delta, "finish_reason": finish_reason}]
+                if delta or finish_reason
+                else [],
+                **({"route_metadata": route} if route else {}),
+            }
 
     return None
 
@@ -120,7 +129,11 @@ def stream_response(
         )
         choice = (result.get("choices") or [{}])[0]
         yield _to_openai_object(
-            {"choices": [_normalize_stream_choice(choice)], "model": result.get("model")}
+            {
+                "choices": [_normalize_stream_choice(choice)],
+                "model": result.get("model"),
+                "route_metadata": safe_route_metadata(result),
+            }
         )
         return
     source = ports.stream(

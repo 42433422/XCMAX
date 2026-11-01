@@ -3,8 +3,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
-from typing import Optional, Tuple
+import time
+from dataclasses import dataclass, field
+from typing import Any, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -281,14 +285,16 @@ def _load_user_row(session: Session, user_id: int, provider: str) -> Optional[Us
     )
 
 
-def platform_credentials(provider: str) -> tuple[Optional[str], Optional[str]]:
+def platform_credentials(
+    provider: str, *, state: dict[str, Any] | None = None
+) -> tuple[Optional[str], Optional[str]]:
     from modstore_server.platform_model_config import (
         PlatformApiKey,
         stored_config,
         stored_key,
     )
 
-    row = stored_config(provider)
+    row = stored_config(provider) if state is None else state["providers"].get(provider)
     if row is not None:
         return PlatformApiKey(stored_key(row), row), row["base_url"]
     key, base = _environment_api_key(provider), _environment_base_url(provider)
@@ -316,10 +322,12 @@ def platform_base_url(provider: str) -> Optional[str]:
 
 
 def resolve_credentials(
-    session: Session, user_id: int, provider: str
+    session: Session, user_id: int, provider: str, *, platform_state: dict[str, Any] | None = None
 ) -> tuple[Optional[str], Optional[str], str]:
     """Read key and endpoint from one snapshot; a platform key never uses a BYOK URL."""
     row = _load_user_row(session, user_id, provider)
+    if row and row.api_key_encrypted and not fernet_configured():
+        return None, None, "user_override"
     if row and row.api_key_encrypted and fernet_configured():
         try:
             k = decrypt_secret(row.api_key_encrypted).strip()
@@ -331,13 +339,156 @@ def resolve_credentials(
                     # A broken BYOK endpoint must not route its key to another account's endpoint.
                     base = decrypt_secret(row.base_url_encrypted).strip().rstrip("/") or base
                 return k, base, "user_override"
-        except ValueError:
-            if row.base_url_encrypted:
-                return None, None, "none"
-    pk, base = platform_credentials(provider)
+        except (ValueError, RuntimeError):
+            return None, None, "user_override"
+        return None, None, "user_override"
+    pk, base = (
+        platform_credentials(provider)
+        if platform_state is None
+        else platform_credentials(provider, state=platform_state)
+    )
     if pk:
         return pk, base, "platform"
     return None, base, "none"
+
+
+@dataclass(frozen=True)
+class ChatRouteSnapshot:
+    provider: str
+    model: str
+    route_source: str
+    key_source: str
+    config_revision: str
+    api_key: str = field(repr=False)
+    base_url: str | None = field(repr=False)
+
+    def public_metadata(self) -> dict[str, str]:
+        return {
+            name: getattr(self, name)
+            for name in ("provider", "model", "route_source", "key_source", "config_revision")
+        }
+
+
+def chat_route_snapshot(
+    provider: str,
+    model: str,
+    api_key: str | None,
+    base_url: str | None,
+    key_source: str,
+    route_source: str,
+) -> ChatRouteSnapshot:
+    from fastapi import HTTPException
+
+    from modstore_server.llm_chat_proxy import normalize_model
+    from modstore_server.llm_model_taxonomy import classify_model
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    if provider not in KNOWN_PROVIDERS or not api_key:
+        raise HTTPException(400, "所选供应商未配置可用密钥，请选择聊天模型或跟随平台")
+    model = normalize_model(provider, model, base_url)
+    if classify_model(provider, model) not in {"llm", "vlm"}:
+        raise HTTPException(
+            400,
+            {
+                "code": "INVALID_CHAT_PREFERENCE",
+                "message": "所选模型不支持聊天，请重新选择聊天模型或跟随平台",
+                "recovery": "choose_chat_model_or_follow_platform",
+            },
+        )
+    revision = (
+        str(api_key.configuration.get("revision") or "")
+        if isinstance(api_key, PlatformApiKey)
+        else ""
+    )
+    if not revision:
+        revision = hashlib.sha256(
+            json.dumps([provider, base_url, api_key, key_source]).encode()
+        ).hexdigest()
+    return ChatRouteSnapshot(provider, model, route_source, key_source, revision, api_key, base_url)
+
+
+def resolve_chat_route_snapshot(
+    session: Session, user_id: int, provider: str, model: str, route_source: str = "explicit"
+) -> ChatRouteSnapshot:
+    key, base, source = resolve_credentials(session, user_id, provider)
+    return chat_route_snapshot(provider, model, key, base, source, route_source)
+
+
+def chat_route_token(snapshot: ChatRouteSnapshot, user_id: int) -> str | None:
+    """Carry an encrypted, user-bound route across a single tool round; never log it."""
+    from modstore_server.llm_crypto import encrypt_secret
+
+    if not fernet_configured():
+        return None
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    return encrypt_secret(
+        json.dumps(
+            {
+                **snapshot.public_metadata(),
+                "api_key": str(snapshot.api_key),
+                "base_url": snapshot.base_url,
+                "user_id": int(user_id),
+                "expires": int(time.time()) + 600,
+                "platform_source": (
+                    snapshot.api_key.configuration["source"]
+                    if isinstance(snapshot.api_key, PlatformApiKey)
+                    else None
+                ),
+            }
+        )
+    )
+
+
+def read_chat_route_token(token: str, user_id: int, provider: str, model: str) -> ChatRouteSnapshot:
+    from fastapi import HTTPException
+
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    try:
+        payload = json.loads(decrypt_secret(token))
+        if (
+            payload["user_id"] != int(user_id)
+            or payload["expires"] <= time.time()
+            or payload["expires"] > time.time() + 601
+            or payload["provider"] != provider
+            or payload["model"] != model
+            or payload["key_source"] not in {"platform", "user_override"}
+            or not isinstance(payload["config_revision"], str)
+            or not isinstance(payload["route_source"], str)
+            or not isinstance(payload["base_url"], (str, type(None)))
+            or not payload["config_revision"]
+            or not payload["route_source"]
+            or not isinstance(payload["api_key"], str)
+            or not payload["api_key"]
+        ):
+            raise ValueError("route mismatch")
+        key = payload["api_key"]
+        if payload["key_source"] == "platform":
+            key = PlatformApiKey(
+                key,
+                {
+                    "provider": provider,
+                    "base_url": payload["base_url"],
+                    "model": model,
+                    "display_name": model,
+                    "revision": payload["config_revision"],
+                    "source": payload.get("platform_source") or "environment",
+                },
+            )
+        return ChatRouteSnapshot(
+            provider,
+            model,
+            payload["route_source"],
+            payload["key_source"],
+            payload["config_revision"],
+            key,
+            payload["base_url"],
+        )
+    except (ValueError, RuntimeError, KeyError, TypeError):
+        raise HTTPException(
+            409, {"code": "CHAT_ROUTE_EXPIRED", "message": "模型配置快照已失效，请重新发送此轮对话"}
+        ) from None
 
 
 def resolve_api_key(session: Session, user_id: int, provider: str) -> Tuple[Optional[str], str]:

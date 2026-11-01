@@ -2319,6 +2319,8 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
         "base": "https://synthetic-platform.invalid",
         "provider": "synthetic",
         "model": "synthetic-model",
+        "key_source": "platform",
+        "config_revision": "synthetic-revision-A",
     }
     monkeypatch.setattr(notice, "_resolve_login_route", AsyncMock(return_value=route))
     response = asyncio.run(
@@ -2337,7 +2339,13 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     calls = []
 
     def fake(*args, **kwargs):
-        notice.assert_login_notice_route(route["base"], route["provider"], route["model"])
+        notice.assert_login_notice_route(
+            route["base"],
+            route["provider"],
+            route["model"],
+            key_source=route["key_source"],
+            config_revision=route["config_revision"],
+        )
         assert notice.current_login_notice_session_id(7) == "synthetic-session"
         calls.append(kwargs["owner_id"])
         payload = json.loads(args[0][1]["content"])
@@ -2428,7 +2436,9 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     assert auth["classification_id"] == classification["classification_id"]
     assert auth["classification_version"] == analyzed["version"]
     assert auth["document"]["auto_slice_index"] == 0 and auth["document"]["fragments"]
-    assert auth["model_route"] == {key: route[key] for key in ("provider", "model")}
+    assert auth["model_route"] == {
+        key: route[key] for key in ("provider", "model", "key_source", "config_revision")
+    }
     assert result["proposal"]["model"]["login_authorization"]["status"] == "authorized"
     assert calls == [7] * (classification_calls + 1)
     revised = client.post(

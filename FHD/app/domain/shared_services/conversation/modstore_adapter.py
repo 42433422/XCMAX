@@ -11,7 +11,7 @@ import re as re
 import threading
 import time
 from collections.abc import AsyncIterator, Iterator
-from contextlib import aclosing
+from contextlib import aclosing, contextmanager
 from types import SimpleNamespace as SimpleNamespace
 from typing import Any, Dict, List, Optional, Self
 
@@ -116,6 +116,9 @@ class ModstorePlatformAdapter:
         self.timeout = timeout
         self._use_account_default = False
         self._account_default: tuple[Connection, tuple[str, str]] | None = None
+        self._route_snapshots: dict[tuple[Connection, tuple[str, str]], dict[str, Any]] = {}
+        self._route_aliases: dict[tuple[Connection, tuple[str, str]], tuple[str, str]] = {}
+        self.last_route_metadata: dict[str, Any] = {}
         self._default_route_lock = threading.Lock()
         self._source = "env"
         self._client: Optional[httpx.AsyncClient] = None
@@ -224,6 +227,8 @@ class ModstorePlatformAdapter:
         self, primary_provider: str, primary_model: str, connection: Connection | None = None
     ) -> list[tuple[str, str]]:
         connection = connection or self._connection()
+        if self._pinned_snapshot(connection, (primary_provider, primary_model)):
+            return [(primary_provider, primary_model)]
         cached = self._account_default
         return routing.FailoverDiscovery(
             connection,
@@ -258,7 +263,11 @@ class ModstorePlatformAdapter:
     def _normalize_response(
         self, raw_response: Dict[str, Any], provider: str, model: str
     ) -> Dict[str, Any]:
-        return normalize_market_chat_response(raw_response, provider, model)
+        result = normalize_market_chat_response(raw_response, provider, model)
+        metadata = routing.route_metadata(result.get("route_metadata") or {})
+        if metadata:
+            self.last_route_metadata = metadata
+        return result
 
     def resolve_default_route(self, connection: Connection | None = None) -> tuple[str, str]:
         if not self._use_account_default:
@@ -266,9 +275,65 @@ class ModstorePlatformAdapter:
         with self._default_route_lock:
             connection = connection or self._connection()
             if self._account_default is None or self._account_default[0] != connection:
-                route = routing.resolve_account_default(connection, _httpx_sync_client)
+                snapshot = routing.resolve_account_route(connection, _httpx_sync_client)
+                route = snapshot["provider"], snapshot["model"]
+                self._route_snapshots[(connection, route)] = snapshot
                 self._account_default = (connection, route)
             return self._account_default[1]
+
+    def follow_platform_default(self) -> None:
+        routing.follow_platform_default(self._connection(), _httpx_sync_client)
+
+    def resolve_default_route_metadata(self) -> dict[str, Any]:
+        connection = self._connection()
+        route = self.resolve_default_route(connection)
+        return routing.route_metadata(
+            self._route_snapshots.get((connection, route))
+            or {"provider": route[0], "model": route[1], "route_source": "explicit"}
+        )
+
+    def _pinned_snapshot(self, connection: Connection, route: tuple[str, str]) -> dict[str, Any]:
+        snapshot = self._route_snapshots.get((connection, route)) or {}
+        return snapshot if snapshot.get("key_source") or snapshot.get("route_token") else {}
+
+    def _chat_input(self, connection, route, messages, temperature, max_tokens, extra):
+        snapshot = self._pinned_snapshot(connection, route)
+        if snapshot:
+            self.last_route_metadata = {
+                **routing.route_metadata(snapshot),
+                "route_state": "selected",
+            }
+            extra = {
+                **extra,
+                **{
+                    key: snapshot[key]
+                    for key in ("route_token", "key_source", "config_revision")
+                    if key in snapshot
+                },
+                "allow_failover": False,
+            }
+        return ChatInput(messages, temperature, max_tokens, extra)
+
+    @contextmanager
+    def _route_observation(self):
+        try:
+            yield
+        except _transport.MarketModelError as exc:
+            metadata = routing.route_metadata(getattr(exc, "route_metadata", {}))
+            if metadata:
+                self.last_route_metadata = metadata
+            raise
+
+    def _observe_stream_payload(self, data: str) -> str:
+        try:
+            payload = json.loads(data)
+        except (ValueError, TypeError):
+            return data
+        if isinstance(payload, dict):
+            metadata = routing.route_metadata(payload.get("route_metadata") or {})
+            if metadata:
+                self.last_route_metadata = metadata
+        return data
 
     def _resolve_provider_model(
         self,
@@ -279,21 +344,57 @@ class ModstorePlatformAdapter:
     ) -> tuple[str, str]:
         if self._use_account_default and not provider and not model:
             return self.resolve_default_route(connection)
-        effective_provider = (provider or self.default_provider).lower()
+        cached = self._account_default
+        cached_provider = (
+            cached[1][0]
+            if cached and cached[0] == (connection or self._connection()) and model == cached[1][1]
+            else None
+        )
+        effective_provider = (provider or cached_provider or self.default_provider).lower()
         effective_model = model or self.default_model
         if provider is None and isinstance(effective_model, str) and ("/" in effective_model):
             left, right = effective_model.split("/", 1)
             if left.strip() and right.strip():
                 effective_provider = left.strip().lower()
                 effective_model = right.strip()
-        return (effective_provider, effective_model)
+        route = effective_provider, effective_model
+        connection = connection or self._connection()
+        requested_route = route
+        route = self._route_aliases.get((connection, route), route)
+        if (
+            cached
+            and cached[0] == connection
+            and cached[1] != route
+            and self._pinned_snapshot(connection, cached[1])
+        ):
+            raise _transport.MarketModelError({"status": 409})
+        if self._use_account_default:
+            connection = connection or self._connection()
+            with self._default_route_lock:
+                cached = self._account_default
+                if (
+                    cached
+                    and cached[0] == connection
+                    and cached[1] != route
+                    and self._pinned_snapshot(connection, cached[1])
+                ):
+                    raise _transport.MarketModelError({"status": 409})
+                if (connection, route) not in self._route_snapshots:
+                    snapshot = routing.resolve_account_route(connection, _httpx_sync_client, route)
+                    route = snapshot["provider"], snapshot["model"]
+                    self._route_snapshots[(connection, route)] = snapshot
+                    self._route_aliases[(connection, requested_route)] = route
+                self._account_default = (connection, route)
+        return route
 
     async def _resolve_provider_model_async(
         self, provider: str | None, model: str | None, connection: Connection
     ) -> tuple[str, str]:
         if self._use_account_default and not provider and not model:
             return await asyncio.to_thread(self.resolve_default_route, connection)
-        return self._resolve_provider_model(provider, model)
+        return await asyncio.to_thread(
+            self._resolve_provider_model, provider, model, connection=connection
+        )
 
     def _catalog_cache_key(self) -> tuple[str, str]:
         return catalog.cache_key(self._connection())
@@ -335,12 +436,14 @@ class ModstorePlatformAdapter:
     ) -> Dict[str, Any]:
         """执行异步平台补全，沿已配置候选链处理可重试的配额错误并返回 OpenAI 响应。"""
         connection = self._connection()
-        return await completions.complete_async(
-            connection,
-            await self._resolve_provider_model_async(provider, model, connection),
-            ChatInput(messages, temperature, max_tokens, kwargs),
-            self._completion_ports(connection),
-        )
+        route = await self._resolve_provider_model_async(provider, model, connection)
+        with self._route_observation():
+            return await completions.complete_async(
+                connection,
+                route,
+                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
+                self._completion_ports(connection),
+            )
 
     async def stream_chat_completion(
         self,
@@ -358,15 +461,17 @@ class ModstorePlatformAdapter:
             SSE数据行
         """
         connection = self._connection()
+        route = await self._resolve_provider_model_async(provider, model, connection)
         source = streaming.stream_async(
             connection,
-            await self._resolve_provider_model_async(provider, model, connection),
-            ChatInput(messages, temperature, max_tokens, kwargs),
+            route,
+            self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
             self._stream_ports(connection),
         )
-        async with aclosing(source) as chunks:
-            async for chunk in chunks:
-                yield chunk
+        with self._route_observation():
+            async with aclosing(source) as chunks:
+                async for chunk in chunks:
+                    yield self._observe_stream_payload(chunk)
 
     def chat_completion_sync(
         self,
@@ -379,12 +484,14 @@ class ModstorePlatformAdapter:
     ) -> Dict[str, Any]:
         """同步版平台补全，用于现有 Planner 的 OpenAI SDK 兼容调用栈。"""
         connection = self._connection()
-        return completions.complete_sync(
-            connection,
-            self._resolve_provider_model(provider, model, connection=connection),
-            ChatInput(messages, temperature, max_tokens, kwargs),
-            self._completion_ports(connection),
-        )
+        route = self._resolve_provider_model(provider, model, connection=connection)
+        with self._route_observation():
+            return completions.complete_sync(
+                connection,
+                route,
+                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
+                self._completion_ports(connection),
+            )
 
     def stream_chat_completion_sync(
         self,
@@ -397,12 +504,15 @@ class ModstorePlatformAdapter:
     ) -> Iterator[str]:
         """同步版平台流式补全，逐条产出 SSE data payload。"""
         connection = self._connection()
-        yield from streaming.stream_sync(
-            connection,
-            self._resolve_provider_model(provider, model, connection=connection),
-            ChatInput(messages, temperature, max_tokens, kwargs),
-            self._stream_ports(connection),
-        )
+        route = self._resolve_provider_model(provider, model, connection=connection)
+        with self._route_observation():
+            for data in streaming.stream_sync(
+                connection,
+                route,
+                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
+                self._stream_ports(connection),
+            ):
+                yield self._observe_stream_payload(data)
 
     async def get_available_providers(self) -> List[Dict[str, Any]]:
         """获取当前凭据可用的供应商列表。"""
@@ -580,7 +690,24 @@ class ModstoreOpenAICompatibleClient:
 
 
 def create_modstore_openai_client_from_request(request: Any) -> ModstoreOpenAICompatibleClient:
-    return ModstoreOpenAICompatibleClient(ModstorePlatformAdapter.from_request(request=request))
+    # A single HTTP turn may enter the planner, classifier and nested tools.
+    # Share only within that request; the next request resolves fresh configuration.
+    scope = getattr(request, "scope", None)
+    cached = scope.get("xcagi.modstore_client") if isinstance(scope, dict) else None
+    if isinstance(cached, ModstoreOpenAICompatibleClient):
+        return cached
+    client = ModstoreOpenAICompatibleClient(ModstorePlatformAdapter.from_request(request=request))
+    if isinstance(scope, dict):
+        scope["xcagi.modstore_client"] = client
+    return client
+
+
+def request_route_metadata(request: Any) -> dict[str, Any]:
+    scope = getattr(request, "scope", None)
+    client = scope.get("xcagi.modstore_client") if isinstance(scope, dict) else None
+    if isinstance(client, ModstoreOpenAICompatibleClient):
+        return dict(client.adapter.last_route_metadata)
+    return {}
 
 
 ModstoreProxyAdapter = ModstorePlatformAdapter

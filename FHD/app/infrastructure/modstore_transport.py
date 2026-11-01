@@ -10,17 +10,42 @@ from typing import Any
 import httpx
 
 
+def safe_route_metadata(payload: Any) -> dict[str, str | int]:
+    """Copy only public route identity, never credentials or credential hints."""
+    if not isinstance(payload, dict):
+        return {}
+    nested = payload.get("route_metadata")
+    source = nested if isinstance(nested, dict) else payload
+    route = {
+        field: source[field]
+        for field in ("provider", "model", "route_source", "key_source", "config_revision")
+        if isinstance(source.get(field), (str, int)) and not isinstance(source[field], bool)
+    }
+    state = source.get("route_state", payload.get("route_state"))
+    if isinstance(state, str) and state in {"selected", "completed", "failed"}:
+        route["route_state"] = state
+    return route
+
+
 class MarketModelError(ValueError):
     """An explicit gateway failure, distinct from a successful empty completion."""
 
+    code: str | None = None
+    recovery: str | None = None
+
     def __init__(self, payload: dict[str, Any]):
         # Gateway/provider error text may contain credentials, URLs or request data.
-        # Only the status is suitable for the durable, user-visible chat history.
+        # Only status and public route identity are suitable for chat history.
         try:
             status = int(payload.get("status") or 502)
         except (TypeError, ValueError):
             status = 502
         self.status_code = status if 400 <= status <= 599 else 502
+        self.route_metadata = safe_route_metadata(payload) or safe_route_metadata(
+            payload.get("detail")
+        )
+        if self.route_metadata:
+            self.route_metadata["route_state"] = "failed"
         super().__init__(
             {
                 400: "模型服务未接受请求，请查看模型状态；平台模型配置请联系管理员核对。",
@@ -29,6 +54,7 @@ class MarketModelError(ValueError):
                 403: "当前模型访问未获授权，请查看模型状态；平台模型权限请联系管理员核对。",
                 404: "当前模型或模型服务入口不可用，请查看模型状态并联系管理员核对平台配置。",
                 408: "模型服务响应超时，请检查连接后重试。",
+                409: "本轮模型配置已失效或发生变化，请重新发送本次请求。",
                 429: "模型服务请求受限，请稍后重试并检查可用额度。",
                 503: "模型服务暂不可用，请查看模型状态后重试。",
                 504: "模型服务响应超时，请检查连接后重试。",
@@ -110,8 +136,6 @@ class MarketSSEDecoder:
         if line_text == "[DONE]":
             self.done = True
             return None
-        if self.current_event == "meta":
-            return None
         if self.current_event == "error":
             # The gateway puts the event kind in the SSE header, not body.type.
             try:
@@ -119,18 +143,20 @@ class MarketSSEDecoder:
             except json.JSONDecodeError:
                 error = {"error": line_text}
             raise MarketModelError(error if isinstance(error, dict) else {"error": error})
-        if self.current_event == "done":
-            self.done = True
-            if not self.saw_delta_content:
-                try:
-                    raw = json.loads(line_text)
-                except json.JSONDecodeError:
-                    raw = None
-                if isinstance(raw, dict):
-                    content = raw.get("content") or raw.get("text") or raw.get("delta") or ""
-                    if content:
-                        return json.dumps({"delta": str(content)}, ensure_ascii=False)
-            return None
+        if self.current_event in {"meta", "done"}:
+            self.done = self.current_event == "done"
+            try:
+                raw = json.loads(line_text)
+            except json.JSONDecodeError:
+                return None
+            public: dict[str, Any] = {}
+            if route := safe_route_metadata(raw):
+                public["route_metadata"] = route
+            if self.done and not self.saw_delta_content and isinstance(raw, dict):
+                content = raw.get("content") or raw.get("text") or raw.get("delta") or ""
+                if content:
+                    public["delta"] = str(content)
+            return json.dumps(public, ensure_ascii=False) if public else None
         if self.payload_has_content(line_text):
             self.saw_delta_content = True
         return line_text
@@ -141,7 +167,7 @@ def iter_market_sse_data_payloads(
     *,
     payload_has_content: Callable[[str], bool],
 ) -> Iterator[str]:
-    """Yield data payloads, ignoring meta and avoiding duplicate done content."""
+    """Yield public route metadata and deltas, avoiding duplicate done content."""
     decoder = MarketSSEDecoder(payload_has_content)
     for line in response.iter_lines():
         data = decoder.feed(line)

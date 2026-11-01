@@ -59,7 +59,13 @@ class SessionMarketProvider:
             raise ValueError("market default LLM route unavailable")
         from app.application.elt_login_authorization import assert_login_notice_route
 
-        assert_login_notice_route(platform_url, provider_name, model_name)
+        assert_login_notice_route(
+            platform_url,
+            provider_name,
+            model_name,
+            key_source=route.get("key_source"),
+            config_revision=route.get("config_revision"),
+        )
         adapter = ModstorePlatformAdapter(
             platform_url=platform_url,
             auth_token=self._token,
@@ -68,6 +74,11 @@ class SessionMarketProvider:
             default_model=model_name,
             timeout=timeout,
         )
+        for key in ("route_token", "key_source", "config_revision"):
+            kwargs.pop(key, None)
+            value = route.get(key)
+            if isinstance(value, str) and value:
+                kwargs[key] = value
         kwargs.update(provider=provider_name, model=model_name, allow_failover=False)
         try:
             return cast(

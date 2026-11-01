@@ -29,6 +29,7 @@ _session_scope: ContextVar[tuple[str, int] | None] = ContextVar("elt_login_sessi
 logger = logging.getLogger(__name__)
 _LOGIN_NOTICE_ERRORS: tuple[type[Exception], ...] = (httpx.InvalidURL, *RECOVERABLE_ERRORS)
 _NOTICE_VERIFY_ERRORS: tuple[type[Exception], ...] = (jwt.PyJWTError, *RECOVERABLE_ERRORS)
+_PUBLIC_ROUTE_FIELDS = ("provider", "model", "key_source", "config_revision")
 
 
 class _LoginNoticeGrant(dict):
@@ -103,6 +104,22 @@ def _platform_url() -> str:
     )
 
 
+def _public_model_route(route: dict) -> dict:
+    return {key: route[key] for key in _PUBLIC_ROUTE_FIELDS}
+
+
+def _valid_model_snapshot(route: dict) -> bool:
+    return all(
+        isinstance(route.get(key), str) and 0 < len(route[key].strip()) <= limit
+        for key, limit in (
+            ("provider", 200),
+            ("model", 200),
+            ("key_source", 200),
+            ("config_revision", 128),
+        )
+    )
+
+
 async def _resolve_login_route(session_id: str) -> dict | None:
     from app.application.reviewed_excel_template import configured_template_llm_provider
     from app.fastapi_routes.market_account import session_market_token
@@ -127,7 +144,9 @@ async def _resolve_login_route(session_id: str) -> dict | None:
     provider, model = provider.strip(), model.strip()
     if not 0 < len(provider) <= 200 or not 0 < len(model) <= 200:
         return None
-    return {"base": base, "provider": provider, "model": model}
+    if not _valid_model_snapshot(route):
+        return None
+    return {"base": base, **_public_model_route(route), "provider": provider, "model": model}
 
 
 async def attach_login_notice(response: Response, result: dict, body: dict) -> Response:
@@ -146,7 +165,7 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
         if not identity or identity["owner"] != (result.get("user") or {}).get("id"):
             return response
         route = await _resolve_login_route(session_id)
-        if not route:
+        if not route or not _valid_model_snapshot(route):
             return response
         now = int(time.time())
         expires = min(identity["expires"], now + 12 * 3600)
@@ -159,7 +178,7 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
             "session": _session_digest(session_id),
             "owner": identity["owner"],
             "tenant": identity["tenant"],
-            "route": route,
+            "route": {"base": route["base"], **_public_model_route(route)},
             "scopes": notice_operation_scopes(),
         }
         raw_samesite = os.environ.get("SESSION_COOKIE_SAMESITE", "Lax").strip().lower()
@@ -225,10 +244,8 @@ def login_notice_grant(
             or receipt["scopes"].get(operation) != notice_operation_scopes()[operation]
             or not isinstance(route, dict)
             or route.get("base") != _platform_url()
-            or not all(
-                isinstance(route.get(key), str) and 0 < len(route[key]) <= 200
-                for key in ("provider", "model")
-            )
+            or set(route) != {"base", *_PUBLIC_ROUTE_FIELDS}
+            or not _valid_model_snapshot(route)
         ):
             return None
         return _LoginNoticeGrant(receipt, session_id)
@@ -250,11 +267,7 @@ def login_notice_status(
         "purpose": NOTICE_PURPOSE,
         "operation": operation,
         "scope": notice_operation_scopes().get(operation),
-        **(
-            {"provider": grant["route"]["provider"], "model": grant["route"]["model"]}
-            if grant
-            else {}
-        ),
+        **(_public_model_route(grant["route"]) if grant else {}),
     }
 
 
@@ -298,7 +311,7 @@ def notice_document_scope(grant: dict | None, selected_region: dict) -> dict:
     return {
         "notice_version": grant["version"],
         "notice_accepted_at": grant["iat"],
-        "model_route": {key: grant["route"][key] for key in ("provider", "model")},
+        "model_route": _public_model_route(grant["route"]),
         "classification_id": selected_region.get("classification_id"),
         "classification_version": selected_region.get("version"),
         "document": {
@@ -353,7 +366,7 @@ def validate_classification_notice(checkpoint: dict | None, grant: dict) -> None
     if checkpoint and (
         checkpoint.get("authorization", {}).get("notice_version") != grant["version"]
         or checkpoint.get("authorization", {}).get("model_route")
-        != {key: grant["route"][key] for key in ("provider", "model")}
+        != _public_model_route(grant["route"])
         or checkpoint.get("authorization", {}).get("notice_scope")
         != grant["scopes"]["classification"]
     ):
@@ -382,9 +395,23 @@ def current_login_notice_session_id(owner_id: int) -> str | None:
     return None if scoped is None else scoped[0] if scoped[1] == owner_id else ""
 
 
-def assert_login_notice_route(base: str, provider: str, model: str) -> None:
+def assert_login_notice_route(
+    base: str,
+    provider: str,
+    model: str,
+    *,
+    key_source: str | None = None,
+    config_revision: str | None = None,
+) -> None:
     expected = _route_scope.get()
-    if expected is not None and expected != {"base": base, "provider": provider, "model": model}:
+    actual = {
+        "base": base,
+        "provider": provider,
+        "model": model,
+        "key_source": key_source,
+        "config_revision": config_revision,
+    }
+    if expected is not None and (not _valid_model_snapshot(actual) or expected != actual):
         from app.application.reviewed_excel_audit import ModelRequestNotSent
 
         raise ModelRequestNotSent("平台模型目的地已变化；当前登录授权不适用，未调用模型")

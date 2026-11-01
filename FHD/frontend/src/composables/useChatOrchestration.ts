@@ -44,6 +44,7 @@ import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import agentRunsApi from '@/api/agentRuns'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { asRecord } from '@/utils/typeGuards'
+import { lastChatModelRoute } from '@/utils/chatModelRoute'
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -467,7 +468,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     plannerWriteUnlockResumeDraft.value = ''
     if (stopped) {
       for (const msg of messages.value) delete msg.streamingShell
-      addMessage('已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。', 'ai')
+      const routeMetadata = lastChatModelRoute(sessionId.value, resolveChatIdentity(String(modsStore.activeModId || '')))
+      addMessage('已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。', 'ai', routeMetadata ? { routeMetadata } : undefined)
     }
   }
 
@@ -523,10 +525,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
       queued = true
       enqueueChatBatchMessage(message, debounceMs, (msgs) => {
-        void executeRemoteChatRound(msgs, undefined, requestScope).finally(() => refreshHistorySessions())
+        void executeRemoteChatRound(msgs, undefined, requestScope).finally(async () => {
+          if (localScope.isCurrent()) await syncFromServer()
+          await refreshHistorySessions()
+        })
       })
     } finally {
-      if (!queued) generation.setLoading(false)
+      if (!queued) {
+        generation.setLoading(false)
+        if (localScope.isCurrent()) await syncFromServer()
+      }
     }
   }
 

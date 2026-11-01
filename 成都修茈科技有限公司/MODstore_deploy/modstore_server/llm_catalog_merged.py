@@ -298,12 +298,9 @@ async def get_models_for_provider(
 
 def resolve_catalog_credentials(session, user_id: int, provider: str):
     """Read credential values without retaining ORM rows or a database session."""
-    api_key, _src = _facade().resolve_api_key(session, user_id, provider)
-    base_url = (
-        _facade().resolve_base_url(session, user_id, provider)
-        if api_key and provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
-    )
+    from modstore_server.llm_key_resolver import resolve_credentials
+
+    api_key, base_url, _src = resolve_credentials(session, user_id, provider)
     return api_key, base_url
 
 
@@ -316,23 +313,12 @@ async def get_models_for_credentials(
     configured = configured_model(provider, api_key, base_url)
     if configured:
         model = configured["model"]
+        detailed = _facade().build_models_detailed(provider, [model])
+        detailed[0]["display_name"] = configured["display_name"]
         return {
             "models": [model],
-            "runtime_models": [model],
-            "models_detailed": [
-                {
-                    "id": model,
-                    "display_name": configured["display_name"],
-                    "category": "llm",
-                    "runtime_selectable": True,
-                    "capabilities": {
-                        "input_modalities": ["text"],
-                        "output_modalities": ["text"],
-                        "operations": ["chat"],
-                    },
-                    "capability_source": "administrator_configuration",
-                }
-            ],
+            "runtime_models": _facade()._runtime_model_ids(detailed),
+            "models_detailed": detailed,
             "source": "platform_configuration",
             "fetched_at": None,
             "error": None,

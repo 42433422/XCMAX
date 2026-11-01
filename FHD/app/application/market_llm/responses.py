@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from app.infrastructure.modstore_transport import MarketModelError, safe_route_metadata
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .protocols import Connection, Payload, ResponsePorts, Route
@@ -14,6 +17,15 @@ def _response_status_code(response: object, default: int = 200) -> int:
     if isinstance(raw, str) and raw.isdigit():
         return int(raw)
     return default
+
+
+def market_response_error(response: Any, status: int) -> MarketModelError:
+    try:
+        data = response.json()
+    except (ValueError, AttributeError):
+        data = {}
+    detail = data.get("detail", data) if isinstance(data, dict) else {}
+    return MarketModelError({"status": status, "route_metadata": safe_route_metadata(detail)})
 
 
 def neuro_notify_ai_model_roundtrip(

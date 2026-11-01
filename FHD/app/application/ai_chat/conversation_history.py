@@ -7,6 +7,8 @@ import re
 import uuid
 from typing import Any, Protocol
 
+from app.infrastructure.modstore_transport import safe_route_metadata
+
 
 class ConversationStore(Protocol):
     def save_message(
@@ -136,6 +138,11 @@ def persist_chat_turn(
     meta_assistant = json.dumps(
         {
             "role_hint": "assistant",
+            **(
+                {"route_metadata": safe_route_metadata(response_data)}
+                if safe_route_metadata(response_data)
+                else {}
+            ),
             "summary": summary,
             "business_harness": harness_metadata,
             "ui": ui_payload,

@@ -9,6 +9,19 @@ from fastapi import HTTPException
 
 from modstore_server import llm_billed_chat, llm_billed_once
 from modstore_server.llm_billing_values import WalletHold
+from modstore_server.llm_key_resolver import ChatRouteSnapshot
+
+
+def _route(_db, _uid, provider, model, **_kwargs):
+    return ChatRouteSnapshot(
+        provider=provider,
+        model=model,
+        route_source="explicit",
+        key_source="platform",
+        config_revision="synthetic-revision",
+        api_key="synthetic",
+        base_url=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -31,8 +44,7 @@ async def test_pat_uncertain_billing_does_not_release_or_failover(monkeypatch, d
         release=AsyncMock(),
     )
     monkeypatch.setattr(llm_billed_once, "JavaWalletClient", lambda **kwargs: wallet)
-    monkeypatch.setattr(llm_billed_once, "resolve_api_key", lambda *args: ("synthetic", "platform"))
-    monkeypatch.setattr(llm_billed_once, "resolve_base_url", lambda *args: None)
+    monkeypatch.setattr(llm_billed_once, "resolve_chat_route_snapshot", _route)
     monkeypatch.setattr(llm_billed_once, "assert_llm_chat_allowed", AsyncMock())
     monkeypatch.setattr(llm_billed_once, "enforce_risk_limits", Mock())
     monkeypatch.setattr(llm_billed_once, "estimate_preauthorization", lambda *args: Decimal("0.05"))
@@ -44,7 +56,7 @@ async def test_pat_uncertain_billing_does_not_release_or_failover(monkeypatch, d
     monkeypatch.setattr(
         llm_billed_chat, "_run_billed_llm_chat_once", llm_billed_once.run_billed_llm_chat_once
     )
-    monkeypatch.setattr(llm_billed_chat, "resolve_api_key", lambda *args: ("synthetic", "platform"))
+    monkeypatch.setattr(llm_billed_chat, "resolve_chat_route_snapshot", _route)
     monkeypatch.setattr(
         llm_billed_chat,
         "list_chat_failover_candidates",
@@ -69,8 +81,7 @@ async def test_pat_model_gate_denies_before_wallet_or_upstream(monkeypatch):
     request = SimpleNamespace(
         state=SimpleNamespace(llm_pat_user_id=7), headers={"authorization": "Bearer synthetic"}
     )
-    monkeypatch.setattr(llm_billed_once, "resolve_api_key", lambda *args: ("synthetic", "platform"))
-    monkeypatch.setattr(llm_billed_once, "resolve_base_url", lambda *args: None)
+    monkeypatch.setattr(llm_billed_once, "resolve_chat_route_snapshot", _route)
     monkeypatch.setattr(
         llm_billed_once,
         "assert_llm_chat_allowed",
@@ -104,8 +115,7 @@ async def test_unknown_preauthorization_does_not_dispatch_or_failover(monkeypatc
     )
     dispatch = AsyncMock()
     monkeypatch.setattr(llm_billed_once, "JavaWalletClient", lambda **kwargs: wallet)
-    monkeypatch.setattr(llm_billed_once, "resolve_api_key", lambda *args: ("synthetic", "platform"))
-    monkeypatch.setattr(llm_billed_once, "resolve_base_url", lambda *args: None)
+    monkeypatch.setattr(llm_billed_once, "resolve_chat_route_snapshot", _route)
     monkeypatch.setattr(llm_billed_once, "assert_llm_chat_allowed", AsyncMock())
     monkeypatch.setattr(llm_billed_once, "enforce_risk_limits", Mock())
     monkeypatch.setattr(llm_billed_once, "estimate_preauthorization", lambda *args: Decimal("0.05"))
@@ -113,7 +123,7 @@ async def test_unknown_preauthorization_does_not_dispatch_or_failover(monkeypatc
     monkeypatch.setattr(
         llm_billed_chat, "_run_billed_llm_chat_once", llm_billed_once.run_billed_llm_chat_once
     )
-    monkeypatch.setattr(llm_billed_chat, "resolve_api_key", lambda *args: ("synthetic", "platform"))
+    monkeypatch.setattr(llm_billed_chat, "resolve_chat_route_snapshot", _route)
     monkeypatch.setattr(
         llm_billed_chat,
         "list_chat_failover_candidates",

@@ -13,26 +13,42 @@ from app.infrastructure.llm.modstore_chat_failover import (
     chat_failover_max_attempts,
 )
 from app.infrastructure.modstore_transport import MarketModelError
+from app.infrastructure.modstore_transport import safe_route_metadata as route_metadata
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .protocols import Connection, Payload, Route, SyncClientFactory
 from .responses import _response_status_code
 
 
-def resolve_account_default(connection: Connection, client_factory: SyncClientFactory) -> Route:
+def resolve_account_route(
+    connection: Connection, client_factory: SyncClientFactory, route: Route | None = None
+) -> Payload:
     """Resolve account preferences/BYOK/platform defaults at their server-owned source."""
     with client_factory(
         timeout=httpx.Timeout(min(connection.timeout, 15.0), connect=5.0),
         headers=connection.headers(),
     ) as client:
-        response = client.get(f"{connection.platform_url}/api/llm/resolve-chat-default")
+        url = f"{connection.platform_url}/api/llm/resolve-chat-default"
+        response = (
+            client.get(url, params={"provider": route[0], "model": route[1]})
+            if route
+            else client.get(url)
+        )
         status = _response_status_code(response)
-        if status >= 400:
-            raise MarketModelError({"status": status})
         try:
             data = response.json()
         except ValueError as exc:
             raise MarketModelError({"status": 502}) from exc
+    if status >= 400:
+        detail = data.get("detail", data) if isinstance(data, dict) else {}
+        error = MarketModelError({"status": status})
+        if isinstance(detail, dict) and detail.get("code") in {
+            "INVALID_CHAT_PREFERENCE",
+            "NO_BYOK_CHAT_MODEL",
+        }:
+            error.code = detail["code"]
+            error.recovery = "choose_chat_model_or_follow_platform"
+        raise error
     if isinstance(data, dict) and data.get("ok") is not False:
         provider, model = data.get("provider"), data.get("model")
         if (
@@ -41,8 +57,37 @@ def resolve_account_default(connection: Connection, client_factory: SyncClientFa
             and provider.strip()
             and model.strip()
         ):
-            return provider.strip().lower(), model.strip()
+            return {
+                **route_metadata(data),
+                "provider": provider.strip().lower(),
+                "model": model.strip(),
+                "route_source": data.get("route_source") or data.get("source") or "unknown",
+                **(
+                    {"route_token": data["route_token"]}
+                    if isinstance(data.get("route_token"), str)
+                    else {}
+                ),
+            }
     raise MarketModelError({"status": 502})
+
+
+def resolve_account_default(connection: Connection, client_factory: SyncClientFactory) -> Route:
+    resolved = resolve_account_route(connection, client_factory)
+    return resolved["provider"], resolved["model"]
+
+
+def follow_platform_default(connection: Connection, client_factory: SyncClientFactory) -> None:
+    """Apply only the caller's explicit recovery action with their own authorization."""
+    with client_factory(
+        timeout=httpx.Timeout(min(connection.timeout, 15.0), connect=5.0),
+        headers=connection.headers(),
+    ) as client:
+        response = client.put(
+            f"{connection.platform_url}/api/llm/preferences", json={"mode": "platform"}
+        )
+        status = _response_status_code(response)
+        if status >= 400:
+            raise MarketModelError({"status": status})
 
 
 @dataclass(frozen=True)

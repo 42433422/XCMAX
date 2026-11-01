@@ -28,6 +28,8 @@ def login(monkeypatch):
         "base": "https://synthetic-platform.invalid",
         "provider": "synthetic",
         "model": "synthetic-model",
+        "key_source": "platform",
+        "config_revision": "synthetic-revision-A",
     }
     monkeypatch.setattr(
         auth, "_active_session", lambda sid: identity if sid == "synthetic-session" else None
@@ -75,6 +77,28 @@ async def test_successful_explicit_login_records_version_scope_identity_and_sess
     assert result["session_id"] not in repr(grant)
     assert "HttpOnly" in response.headers.getlist("set-cookie")[-1]
     assert auth.login_notice_status(request(receipt), 9, 7)["status"] == "authorized"
+
+
+@pytest.mark.asyncio
+async def test_receipt_excludes_ephemeral_snapshot_and_requires_public_revision(login, monkeypatch):
+    result, route = login
+    monkeypatch.setattr(
+        auth,
+        "_resolve_login_route",
+        AsyncMock(return_value={**route, "route_token": "synthetic-opaque-snapshot"}),
+    )
+    receipt, _ = await receipt_for(result)
+    claims = jwt.decode(receipt, auth._secret(), algorithms=["HS256"], audience=auth._AUDIENCE)
+    assert "route_token" not in claims["route"] and "synthetic-opaque-snapshot" not in json.dumps(
+        claims
+    )
+    for field in ("key_source", "config_revision"):
+        monkeypatch.setattr(
+            auth,
+            "_resolve_login_route",
+            AsyncMock(return_value={key: value for key, value in route.items() if key != field}),
+        )
+        assert (await receipt_for(result))[0] == ""
 
 
 @pytest.mark.asyncio
@@ -168,7 +192,13 @@ async def test_login_resolves_only_metadata_with_the_exact_new_session(monkeypat
     )
     response = SimpleNamespace(
         raise_for_status=lambda: None,
-        json=lambda: {"ok": True, "provider": "synthetic", "model": "synthetic-model"},
+        json=lambda: {
+            "ok": True,
+            "provider": "synthetic",
+            "model": "synthetic-model",
+            "key_source": "platform",
+            "config_revision": "synthetic-revision-A",
+        },
     )
     client = SimpleNamespace(get=AsyncMock(return_value=response))
     context = AsyncMock()
@@ -179,6 +209,8 @@ async def test_login_resolves_only_metadata_with_the_exact_new_session(monkeypat
         "base": "https://synthetic-platform.invalid",
         "provider": "synthetic",
         "model": "synthetic-model",
+        "key_source": "platform",
+        "config_revision": "synthetic-revision-A",
     }
     client.get.assert_awaited_once_with(
         "https://synthetic-platform.invalid/api/llm/resolve-chat-default"
@@ -258,29 +290,50 @@ async def test_route_scope_blocks_changed_supplier_or_model_before_dispatch_and_
     token, _ = await receipt_for(result)
     grant = auth.login_notice_grant(request(token), 9, 7)
     with auth.bind_login_notice_grant(grant):
-        auth.assert_login_notice_route(route["base"], route["provider"], route["model"])
+        auth.assert_login_notice_route(
+            route["base"],
+            route["provider"],
+            route["model"],
+            key_source=route["key_source"],
+            config_revision=route["config_revision"],
+        )
         for provider, model in [
             ("other-supplier", route["model"]),
             (route["provider"], "other-model"),
         ]:
             with pytest.raises(ModelRequestNotSent):
-                auth.assert_login_notice_route(route["base"], provider, model)
+                auth.assert_login_notice_route(
+                    route["base"],
+                    provider,
+                    model,
+                    key_source=route["key_source"],
+                    config_revision=route["config_revision"],
+                )
     auth.assert_login_notice_route("admin-existing-route", "admin", "admin")
 
 
 @pytest.mark.asyncio
-async def test_final_resolved_route_change_cannot_reach_model_adapter(login, monkeypatch):
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"provider": "changed"},
+        {"config_revision": "synthetic-revision-B"},
+        {"key_source": "user_override"},
+        {"config_revision": None},
+    ],
+)
+async def test_final_resolved_route_change_cannot_reach_model_adapter(login, monkeypatch, change):
     from unittest.mock import Mock
 
     from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.domain.shared_services.conversation import modstore_adapter
 
-    result, _ = login
+    result, route = login
     token, _ = await receipt_for(result)
     grant = auth.login_notice_grant(request(token), 9, 7)
     response = SimpleNamespace(
         raise_for_status=lambda: None,
-        json=lambda: {"ok": True, "provider": "changed", "model": "changed"},
+        json=lambda: {"ok": True, **route, **change},
     )
     client = SimpleNamespace(get=AsyncMock(return_value=response))
     context = AsyncMock()
@@ -303,7 +356,10 @@ async def test_dispatch_uses_resolved_route_without_failover_despite_env_or_call
     result, route = login
     receipt, _ = await receipt_for(result)
     grant = auth.login_notice_grant(request(receipt), 9, 7)
-    response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"ok": True, **route})
+    response = SimpleNamespace(
+        raise_for_status=lambda: None,
+        json=lambda: {"ok": True, **route, "route_token": "synthetic-opaque-snapshot"},
+    )
     client = SimpleNamespace(get=AsyncMock(return_value=response))
     context = AsyncMock()
     context.__aenter__.return_value = client
@@ -316,13 +372,56 @@ async def test_dispatch_uses_resolved_route_without_failover_despite_env_or_call
         result = await SessionMarketProvider(
             7, "synthetic-current-token", timeout_seconds=1
         ).chat_completion(
-            [], provider="caller-other", model="caller-other-model", allow_failover=True
+            [],
+            provider="caller-other",
+            model="caller-other-model",
+            allow_failover=True,
+            route_token="caller-snapshot",
+            key_source="caller-source",
+            config_revision="caller-revision",
         )
     assert result["model"] == route["model"]
     dispatched = complete.await_args.args
     assert dispatched[1] == (route["provider"], route["model"])
     assert dispatched[2].extra["allow_failover"] is False
+    assert {
+        key: dispatched[2].extra[key] for key in ("route_token", "key_source", "config_revision")
+    } == {
+        "route_token": "synthetic-opaque-snapshot",
+        "key_source": route["key_source"],
+        "config_revision": route["config_revision"],
+    }
     assert dispatched[0].auth_token == "synthetic-current-token"
+
+
+@pytest.mark.asyncio
+async def test_legacy_unbound_provider_accepts_old_metadata_without_caller_snapshot_override(
+    monkeypatch,
+):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.domain.shared_services.conversation import modstore_adapter
+
+    route = {"ok": True, "provider": "synthetic", "model": "synthetic-model"}
+    response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: route)
+    context = AsyncMock()
+    context.__aenter__.return_value = SimpleNamespace(get=AsyncMock(return_value=response))
+    monkeypatch.setattr(auth.httpx, "AsyncClient", lambda **kwargs: context)
+    adapter = SimpleNamespace(
+        chat_completion=AsyncMock(return_value={"model": route["model"]}), close=AsyncMock()
+    )
+    monkeypatch.setattr(modstore_adapter, "ModstorePlatformAdapter", lambda **kwargs: adapter)
+    audit = Mock()
+    await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion(
+        [],
+        route_token="caller-snapshot",
+        config_revision="caller-revision",
+        key_source="caller-source",
+        _reviewed_excel_audit_response=audit,
+    )
+    sent = adapter.chat_completion.await_args.kwargs
+    assert sent["provider"] == route["provider"] and sent["model"] == route["model"]
+    assert sent["allow_failover"] is False and sent["_reviewed_excel_audit_response"] is audit
+    assert not any(key in sent for key in ("route_token", "key_source", "config_revision"))
 
 
 @pytest.mark.asyncio
