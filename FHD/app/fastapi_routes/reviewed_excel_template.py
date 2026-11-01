@@ -1695,7 +1695,9 @@ def reviewed_excel_intake_preview(
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 stream=BytesIO(cleaned),
             )
-            source = db.get(EltUpload, upload["upload_id"])
+            source = service._owned_upload(db, upload["upload_id"], owner)
+            if source.tenant_id != tenant:
+                raise HTTPException(status_code=403, detail="无权使用该入库预演")
             path = staged_path = Path(source.storage_path)
             summary = load_json(review.summary_json, {})
             region = summary.get("selected_region") or {}
@@ -1705,7 +1707,9 @@ def reviewed_excel_intake_preview(
             ]
             labels.append(composer_note.strip())
             intake = get_auto_ingest_service()
-            detection = intake.detect_target(path, labels)
+            detection = intake.detect_target(
+                path, labels, owned_upload_user_id=source.owner_user_id
+            )
             target_type = str(detection.get("target_type") or "")
             if not target_type or str(detection.get("reason") or "").startswith(
                 "safe_structured_fallback"
@@ -1716,7 +1720,11 @@ def reviewed_excel_intake_preview(
                 )
             _authorize_intake(request, (tenant, owner), target_type)
             knowledge = intake.knowledge_plan(
-                path=path, file_name=name.strip(), note=composer_note.strip(), owner_user_id=owner
+                path=path,
+                file_name=name.strip(),
+                note=composer_note.strip(),
+                owner_user_id=owner,
+                owned_upload_user_id=source.owner_user_id,
             )
             preview_started = True
             business = service.create_preview(
@@ -1870,6 +1878,7 @@ async def reviewed_excel_save(
                     owner_user_id=owner,
                     tenant_id=tenant,
                     preview_revision=preview_revision,
+                    owned_upload_user_id=upload.owner_user_id,
                 )
                 if business.get("summary", {}).get("error") and not valid_rows_only:
                     raise HTTPException(
@@ -1880,7 +1889,12 @@ async def reviewed_excel_save(
                     "preview_revision": preview_revision,
                     "valid_rows_only": valid_rows_only,
                 }
-                cleaned = prepared_path.read_bytes()
+                from app.application.shipment_excel_etl_security import open_etl_input_file
+
+                with open_etl_input_file(
+                    prepared_path, owner_user_id=upload.owner_user_id
+                ) as source:
+                    cleaned = source.read()
             else:
                 # Old template-library clients authorize one template only, never implicit business writes.
                 cleaned = clean_workbook(body, run.file_sha256, selected)
@@ -1914,6 +1928,7 @@ async def reviewed_excel_save(
                         owner_user_id=owner,
                         tenant_id=tenant,
                         preview_revision=preview_revision,
+                        owned_upload_user_id=upload.owner_user_id,
                     )
             except (HTTPException, EltError):
                 _release_failed_review(

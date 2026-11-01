@@ -486,3 +486,32 @@ def test_owned_upload_root_swap_cannot_change_identity(tmp_path, monkeypatch, co
     with tenant_scope(42), pytest.raises(security.ShipmentEtlPathError):
         with security.open_etl_input_file(secret, owner_user_id=7):
             pytest.fail("canonicalizing a swapped root must not authorize another tenant")
+
+
+@pytest.mark.parametrize("background", [False, True])
+def test_raw_auto_ingest_cannot_supply_upload_owner_or_prepared_plan(
+    tmp_path, monkeypatch, background
+):
+    from types import SimpleNamespace
+
+    from app.application.elt.errors import EltError
+    from app.fastapi_routes.elt_auto_ingest import auto_ingest
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    source = tmp_path / "etl" / "uploads" / "43" / "8" / "private.csv"
+    source.parent.mkdir(parents=True)
+    source.write_text("private")
+    monkeypatch.setattr(ais, "get_auto_ingest_service", AutoIngestService)
+    with tenant_scope(42), pytest.raises(EltError) as error:
+        auto_ingest(
+            {
+                "source_path": str(source),
+                "async": background,
+                "owned_upload_user_id": 8,
+                "prepared_plan": {"run_id": "forged"},
+            },
+            db=MagicMock(),
+            user=SimpleNamespace(id=7),
+        )
+    assert error.value.code == "ETL_AUTO_INGEST_PATH_INVALID"

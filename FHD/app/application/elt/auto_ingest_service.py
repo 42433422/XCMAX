@@ -96,13 +96,13 @@ def _patch_batch(tenant_id: int | str, batch_id: str, **fields: Any) -> dict[str
         return dict(batch)
 
 
-def _extract_text(path: Path) -> str:
+def _extract_text(path: Path, *, owned_upload_user_id: int | None = None) -> str:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xlsm"}:
         from openpyxl import load_workbook
 
         lines: list[str] = []
-        with open_etl_input_file(path) as stream:
+        with open_etl_input_file(path, owner_user_id=owned_upload_user_id) as stream:
             wb = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
             try:
                 for ws in wb.worksheets[:20]:
@@ -117,7 +117,7 @@ def _extract_text(path: Path) -> str:
                 wb.close()
         return "\n".join(lines)[:80_000]
     with (
-        open_etl_input_file(path) as stream,
+        open_etl_input_file(path, owner_user_id=owned_upload_user_id) as stream,
         io.TextIOWrapper(stream, encoding="utf-8", errors="replace") as text,
     ):
         return text.read(80_000)
@@ -142,8 +142,12 @@ class AutoIngestService:
     """Create an ingest batch: knowledge + matching business domain writes."""
 
     @staticmethod
-    def detect_target(path: Path, labels: list[str] | None = None) -> dict[str, Any]:
-        detection = detect_etl_target(path, suffix=path.suffix.lower())
+    def detect_target(
+        path: Path, labels: list[str] | None = None, *, owned_upload_user_id: int | None = None
+    ) -> dict[str, Any]:
+        detection = detect_etl_target(
+            path, suffix=path.suffix.lower(), owner_user_id=owned_upload_user_id
+        )
         label_blob = " ".join(labels or [])
         if any(tok in label_blob for tok in ("出货", "送货", "发货", "shipment")):
             detection = {
@@ -169,12 +173,20 @@ class AutoIngestService:
         return detection
 
     def knowledge_plan(
-        self, *, path: Path, file_name: str, note: str, owner_user_id: int
+        self,
+        *,
+        path: Path,
+        file_name: str,
+        note: str,
+        owner_user_id: int,
+        owned_upload_user_id: int | None = None,
     ) -> dict[str, Any]:
         from app.application.elt.service_support import dump_json
         from app.application.elt.targets.knowledge import KnowledgeAdapter
 
-        text = _extract_text(path)
+        if owned_upload_user_id is not None and owned_upload_user_id != owner_user_id:
+            raise EltError("ELT_INTAKE_FORBIDDEN", "上传文件不属于当前用户", status_code=403)
+        text = _extract_text(path, owned_upload_user_id=owned_upload_user_id)
         body = text if not note.strip() else f"{note.strip()}\n\n{text}"
         content_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
         decision = KnowledgeAdapter().preview(
@@ -212,12 +224,15 @@ class AutoIngestService:
         owner_user_id: int,
         tenant_id: int,
         preview_revision: str,
+        owned_upload_user_id: int | None = None,
     ) -> dict[str, Any]:
         from app.application.elt.preview_confirmation import verify_preview
         from app.application.elt.service import get_elt_service
         from app.db.models.elt import EltRun
         from app.request_active_mod_ctx import get_request_active_mod_id
 
+        if owned_upload_user_id is not None and owned_upload_user_id != owner_user_id:
+            raise EltError("ELT_INTAKE_FORBIDDEN", "上传文件不属于当前用户", status_code=403)
         run = (
             db.query(EltRun)
             .filter(
@@ -229,7 +244,7 @@ class AutoIngestService:
         )
 
         def candidate_sha256() -> str:
-            with open_etl_input_file(path) as stream:
+            with open_etl_input_file(path, owner_user_id=owned_upload_user_id) as stream:
                 return hashlib.sha256(stream.read()).hexdigest()
 
         if (
@@ -248,7 +263,11 @@ class AutoIngestService:
             )
         verify_preview(db, run, preview_revision)
         knowledge = self.knowledge_plan(
-            path=path, file_name=plan["name"], note=plan["note"], owner_user_id=owner_user_id
+            path=path,
+            file_name=plan["name"],
+            note=plan["note"],
+            owner_user_id=owner_user_id,
+            owned_upload_user_id=owned_upload_user_id,
         )
         if knowledge != plan.get("knowledge"):
             raise EltError("ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409)
