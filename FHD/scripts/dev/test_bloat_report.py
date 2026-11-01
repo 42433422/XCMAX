@@ -9,15 +9,17 @@ P1-2 技术债治理：测试代码 45.8 万行远超业务源码，且大量为
 * 输出报告并追加到 metrics/test-bloat-history.jsonl
 * --check 门禁（棘轮）：以历史基线为起点，只拦截回退（比值/行数不增）
   存量已超标项不阻断，任何新增膨胀立即失败。绝对目标仅文档化。
+* --check 始终拒绝恒真断言及同时允许成功和服务端错误的状态码集合。
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -37,7 +39,8 @@ STUB_PREFIX = "test_coverage_ramp_"
 
 def _line_count(path: Path) -> int:
     try:
-        return sum(1 for _ in path.open(encoding="utf-8", errors="replace"))
+        with path.open(encoding="utf-8", errors="replace") as source:
+            return sum(1 for _ in source)
     except (OSError, UnicodeDecodeError):
         return 0
 
@@ -46,6 +49,46 @@ def _py_files(root: Path) -> list[Path]:
     if not root.is_dir():
         return []
     return [p for p in root.rglob("*.py") if "__pycache__" not in p.parts]
+
+
+def _assertion_errors() -> list[str]:
+    errors = []
+    for path in _py_files(TESTS_DIR):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (OSError, UnicodeError, SyntaxError) as exc:
+            errors.append(f"{path}: cannot parse test source: {exc}")
+            continue
+        for assertion in (node for node in ast.walk(tree) if isinstance(node, ast.Assert)):
+            message = None
+            if isinstance(assertion.test, ast.Constant) and assertion.test.value is True:
+                message = "literal assert True"
+            for node in ast.walk(assertion.test):
+                if not isinstance(node, ast.Compare):
+                    continue
+                for left, op, right in zip(
+                    [node.left, *node.comparators], node.ops, node.comparators
+                ):
+                    if not (
+                        (
+                            isinstance(left, ast.Attribute)
+                            and left.attr == "status_code"
+                            or isinstance(left, ast.Name)
+                            and left.id == "status_code"
+                        )
+                        and isinstance(op, ast.In)
+                        and isinstance(right, (ast.Tuple, ast.List, ast.Set))
+                    ):
+                        continue
+                    codes = [item.value for item in right.elts if isinstance(item, ast.Constant)]
+                    codes = [code for code in codes if type(code) is int]
+                    if any(200 <= code < 300 for code in codes) and any(
+                        500 <= code < 600 for code in codes
+                    ):
+                        message = "status_code set accepts both 2xx and 5xx"
+            if message:
+                errors.append(f"{path}:{assertion.lineno}: {message}")
+    return errors
 
 
 def collect() -> dict:
@@ -57,7 +100,7 @@ def collect() -> dict:
     stub_lines = sum(_line_count(p) for p in stub_files)
     ratio = round(test_lines / src_lines, 3) if src_lines else 0.0
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "test_files": len(test_files),
         "test_lines": test_lines,
         "src_files": len(src_files),
@@ -100,6 +143,10 @@ def cmd_report() -> int:
 
 
 def cmd_check(seed: bool = False, record: bool = False) -> int:
+    errors = _assertion_errors()
+    if errors:
+        print("\n".join(f"[test-bloat] FAIL: {error}" for error in errors), file=sys.stderr)
+        return 1
     rec = collect()
     ratio = rec["ratio"]
     stub_lines = rec["stub_lines"]

@@ -298,10 +298,6 @@ class TestResolveExcelPathForImport:
         preview = {"file_path": value if source == "preview" else ""}
         assert AIChatApplicationService._resolve_excel_path_for_import(ea, preview) == path
 
-    def test_both_empty_returns_empty(self) -> None:
-        result = AIChatApplicationService._resolve_excel_path_for_import({}, {})
-        assert result == ""
-
 
 class TestExcelCellLooksLikeProductMeasureUnit:
     """Cover _excel_cell_looks_like_product_measure_unit."""

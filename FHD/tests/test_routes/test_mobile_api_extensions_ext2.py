@@ -692,12 +692,27 @@ class TestMobileAuthQrConfirmAdditional:
                 return_value=42,
             ),
             patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="personal"),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=({"session_id": "session-bearer"}, None)),
+            ) as login,
+            patch("app.security.auth_qr_login.confirm_auth_qr", return_value=True) as confirm,
         ):
             body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="", password="pass")
             result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
-        # Should fail because password is provided but username comes from bearer
-        # Actually password is provided, so should proceed to login
-        assert result.status_code in (400, 401, 500, 200)
+        assert result == {
+            "code": 200,
+            "message": "success",
+            "success": True,
+            "data": {"confirmed": True, "qr_id": "a" * 8},
+        }
+        login.assert_awaited_once()
+        assert login.await_args.kwargs["username"] == "alice"
+        assert login.await_args.kwargs["password"] == "pass"
+        confirm.assert_called_once_with(
+            "a" * 8, session_id="session-bearer", login_payload={"session_id": "session-bearer"}
+        )
 
     @pytest.mark.asyncio
     async def test_bearer_auth_no_uid(self, ext_mod):

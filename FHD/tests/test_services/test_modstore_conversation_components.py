@@ -162,6 +162,7 @@ def session_database(monkeypatch):
 
     monkeypatch.setattr("app.db.session.get_db", database)
     monkeypatch.setattr("app.db.session.get_host_db", database)
+    monkeypatch.setattr("app.db.HostSessionLocal", sessions)
     monkeypatch.setattr("app.infrastructure.session.session_manager.get_host_db", database)
     monkeypatch.setattr("app.application.session_account_meta.get_host_db", database)
     try:
@@ -782,43 +783,107 @@ def desktop_model_status_client(session_database, monkeypatch):
         yield client
 
 
-def test_desktop_model_status_binds_real_session_and_returns_only_public_route(
-    desktop_model_status_client, monkeypatch
+def test_desktop_status_and_chat_keep_account_route_through_failure_and_retry(
+    desktop_model_status_client, monkeypatch, caplog
 ):
+    from app.legacy.chat import legacy_chat_adapter as planner
+
     seen = []
+    failed_once = False
 
     def respond(request):
-        assert request.method == "GET"
-        assert request.url.path == "/api/llm/resolve-chat-default"
+        nonlocal failed_once
         token = request.headers["Authorization"]
-        seen.append(token)
+        uid = 71 if token == "Bearer synthetic-owned-71" else 72
+        assert token == f"Bearer synthetic-owned-{uid}"
+        seen.append((request.method, request.url.path, uid))
+        if request.method == "GET":
+            assert request.url.path == "/api/llm/resolve-chat-default"
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "provider": "openai",
+                    "model": f"model-{uid}",
+                    "api_key": "synthetic-secret",
+                    "base_url": "https://private.invalid",
+                },
+            )
+        assert request.method == "POST" and request.url.path == "/api/llm/chat/stream"
+        payload = json.loads(request.content)
+        assert (payload["provider"], payload["model"]) == ("openai", f"model-{uid}")
+        assert payload["messages"][-1]["content"] == "只回复：会话验证成功。"
+        if uid == 71 and not failed_once:
+            failed_once = True
+            return httpx.Response(
+                200,
+                text='event: error\ndata: {"ok":false,"status":503,"error":"synthetic-secret https://private.invalid"}\n\n',
+            )
         return httpx.Response(
             200,
-            json={
-                "ok": True,
-                "provider": "openai",
-                "model": "model-71" if token.endswith("71") else "model-72",
-                "api_key": "synthetic-secret",
-                "base_url": "https://private.invalid",
-            },
+            text=f'event: delta\ndata: {{"delta":"会话{uid}验证成功"}}\n\nevent: done\ndata: {{"ok":true}}\n\n',
         )
 
+    monkeypatch.setenv("LLM_PROVIDER", "stale-local")
+    monkeypatch.setenv("LLM_MODEL", "stale-model")
+    monkeypatch.setattr(planner, "_get_workflow_tool_registry", lambda: [])
     monkeypatch.setattr(
         facade,
         "_httpx_sync_client",
         lambda **kwargs: httpx.Client(transport=httpx.MockTransport(respond), **kwargs),
     )
     client = desktop_model_status_client
-    for uid in (71, 72):
+    forged = {"Authorization": "Bearer synthetic-foreign-market-token", "X-User-ID": "999"}
+    for attempt, uid in enumerate((71, 72, 71)):
         client.cookies.set("session_id", f"synthetic-session-{uid}")
-        response = client.get(
+        status = client.get(
             "/api/conversation/model-status?user_id=999&session_id=synthetic-session-other",
-            headers={"Authorization": "Bearer synthetic-foreign-market-token", "X-User-ID": "999"},
+            headers=forged,
+        )
+        assert status.status_code == 200
+        assert status.json() == {"ok": True, "provider": "openai", "model": f"model-{uid}"}
+        assert status.headers["Cache-Control"] == "no-store"
+        response = client.post(
+            "/api/ai/chat/stream",
+            headers=forged,
+            json={
+                "message": "只回复：会话验证成功。",
+                "system_prompt": "只回答用户文本，不执行工具。",
+                "context": {"user_id": "999", "tenant_id": 999},
+            },
         )
         assert response.status_code == 200
-        assert response.json() == {"ok": True, "provider": "openai", "model": f"model-{uid}"}
-        assert response.headers["Cache-Control"] == "no-store"
-    assert seen == ["Bearer synthetic-owned-71", "Bearer synthetic-owned-72"]
+        assert response.headers["content-type"].startswith("text/event-stream")
+        events = [
+            json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+        ]
+        if attempt == 0:
+            errors = [event for event in events if event["type"] == "error"]
+            assert len(errors) == 1
+            assert errors[0].get("status_code") == 503, errors
+            assert errors[0]["message"] == "模型服务暂不可用，请查看模型状态后重试。"
+            assert not any(event["type"] in {"token", "done"} for event in events)
+        else:
+            assert not any(event["type"] == "error" for event in events)
+            assert (
+                "".join(event.get("text", "") for event in events if event["type"] == "token")
+                == f"会话{uid}验证成功"
+            )
+            done = [event for event in events if event["type"] == "done"]
+            assert len(done) == 1
+            assert done[0]["result"]["success"] is True
+            assert done[0]["result"]["response"] == f"会话{uid}验证成功"
+        assert "synthetic-secret" not in status.text + response.text + caplog.text
+        assert "private.invalid" not in status.text + response.text + caplog.text
+    assert seen == [
+        (method, path, uid)
+        for uid in (71, 72, 71)
+        for method, path in (
+            ("GET", "/api/llm/resolve-chat-default"),
+            ("GET", "/api/llm/resolve-chat-default"),
+            ("POST", "/api/llm/chat/stream"),
+        )
+    ]
 
 
 @pytest.mark.parametrize("session_id", [None, "synthetic-unknown", "synthetic-session-73"])

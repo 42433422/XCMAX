@@ -547,9 +547,14 @@ def test_service_bridge_receive_request(mock_get_db: MagicMock, bridge_client: T
 
 
 def test_service_bridge_ping_main(bridge_client: TestClient) -> None:
-    with patch("app.fastapi_routes.service_bridge._get_config_value", return_value=""):
+    with (
+        patch("app.fastapi_routes.service_bridge._get_config_value", return_value=""),
+        patch("app.fastapi_routes.service_bridge.httpx.AsyncClient") as remote,
+    ):
         r = bridge_client.get("/api/service-bridge/ping-main")
-    assert r.status_code in (200, 502, 503)
+    assert r.status_code == 200
+    assert r.json() == {"success": True, "connected": True, "main_server": "(本机直写)"}
+    remote.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
