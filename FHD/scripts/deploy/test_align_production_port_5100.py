@@ -36,4 +36,19 @@ class Tests(unittest.TestCase):
             with self.assertRaises(Refused):restore_locked(p,b,receipt)
             self.assertEqual(p.stat().st_mode & 0o777,0o640)
             self.assertIn(b'FASTAPI_PORT=5100',p.read_bytes())
+    def test_every_non_config_job_excludes_config_actions(self):
+        import yaml
+        workflow = Path(__file__).resolve().parents[3] / '.github/workflows/fhd-deploy.yml'
+        for name, job in yaml.safe_load(workflow.read_text())['jobs'].items():
+            if name != 'fixed-port-configuration':
+                self.assertIn("inputs.action != 'align-port-5100'", job['if'], name)
+                self.assertIn("inputs.action != 'restore-port-5000'", job['if'], name)
+        expression = yaml.safe_load(workflow.read_text())['jobs']['report-autonomy-failure']['if']
+        expression = expression.removeprefix('${{').removesuffix('}}').strip().replace('&&', ' and ').replace('always()', 'True')
+        for old, new in (("inputs.action_id", 'action_id'), ("inputs.environment", 'environment'), ("inputs.action", 'action'), ("needs['cvm-rolling'].result", 'result')):
+            expression = expression.replace(old, new)
+        for action in ('align-port-5100', 'restore-port-5000', 'apply-latest'):
+            for result in ('skipped', 'failure', 'cancelled', 'success'):
+                observed = eval(expression, {'__builtins__': {}}, {'action': action, 'result': result, 'environment': 'production', 'action_id': 'fixed'})
+                self.assertEqual(observed, action == 'apply-latest' and result != 'success', (action, result))
 if __name__=='__main__':unittest.main()

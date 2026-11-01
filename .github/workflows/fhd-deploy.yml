@@ -481,7 +481,7 @@ jobs:
   report-autonomy-failure:
     name: Report autonomy execution failure
     needs: cvm-rolling
-    if: ${{ always() && inputs.environment == 'production' && inputs.action_id != '' && needs['cvm-rolling'].result != 'success' }}
+    if: ${{ inputs.action != 'align-port-5100' && inputs.action != 'restore-port-5000' && always() && inputs.environment == 'production' && inputs.action_id != '' && needs['cvm-rolling'].result != 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Mark pending action terminal
