@@ -1040,7 +1040,9 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
     assert job_status.json()["job"]["job_id"] == job_id
 
 
-def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
+def test_knowledge_v1_dataset_rebuild_cancel_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
@@ -1050,6 +1052,13 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
         storage_path=tmp_path / "dataset_store.json",
         rebuild_workers_enabled=False,
     )
+    # Earlier HTTP tests may have initialized a service backed by another store.
+    # Both the real write getter and the read-only status path must use this test's service.
+    previous = DatasetRagApplicationService(
+        embedder=None, storage_path=tmp_path / "previous-store.json", rebuild_workers_enabled=False
+    )
+    assert previous.ingest_document(dataset_id="previous", text="Earlier dataset")["success"]
+    monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", previous)
     headers = {
         "X-Dataset-Tenant-ID": "tenant-route",
         "X-Dataset-Permissions": "dataset.read,dataset.write",
@@ -1057,9 +1066,7 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", DATASET_RAG_STORE_PATH=str(tmp_path / "dataset_store.json")),
-        patch(
-            "app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=svc
-        ),
+        patch.object(dataset_rag_module, "_dataset_rag_app_service", svc),
         # Keep the queue paused while exercising its HTTP admission/cancellation
         # contract. Host ownership and wake-up use real workers in the separate
         # HTTP/Agent lifecycle tests below; unrelated process startup must not
@@ -1096,7 +1103,12 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
     assert cancelled.status_code == 200
     assert cancelled.json()["success"] is True
     assert cancelled.json()["job"]["status"] == "cancelled"
-    assert job_status.json()["job"]["status"] == "cancelled"
+    status = job_status.json()
+    assert job_status.status_code == 200, status
+    assert status["success"] is True, status
+    assert status["job"]["job_id"] == job_id
+    assert status["job"]["status"] == "cancelled"
+    assert dataset_rag_module._dataset_rag_app_service is previous
 
 
 @pytest.mark.parametrize("entry", ["http", "agent"])

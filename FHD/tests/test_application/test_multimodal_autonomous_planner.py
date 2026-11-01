@@ -41,7 +41,7 @@ def test_multimodal_runtime_context_auto_plans_ingests_and_queries(
     finally:
         reset_dataset_rag_app_service_for_tests()
 
-    assert run.status == "completed"
+    assert run.status == "completed", f"{run.error}: {[step.output for step in run.steps]}"
     assert run.intent == "multimodal_artifact_rag"
     assert run.metadata["plan"]["metadata"]["source"] == "multimodal_autonomous_planner"
     assert run.metadata["artifact_count"] == 1

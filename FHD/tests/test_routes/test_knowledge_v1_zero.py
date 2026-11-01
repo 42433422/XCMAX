@@ -2,39 +2,20 @@
 
 from __future__ import annotations
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Mock the missing RAG classes before importing the module
-_mock_rag = MagicMock()
-_mock_rag.HybridRetriever = MagicMock
-_mock_rag.SemanticChunker = MagicMock
-_mock_rag.RetrievedChunk = MagicMock
-_mock_rag.get_default_embedder = MagicMock(return_value=None)
-_mock_rag.is_rag_enabled = MagicMock(return_value=False)
-
-# Patch the rag module in sys.modules before import
-_original_rag = sys.modules.get("app.infrastructure.rag")
-sys.modules["app.infrastructure.rag"] = _mock_rag
-
-try:
-    from app.fastapi_routes.knowledge_v1 import (
-        IngestRequest,
-        QueryRequest,
-        _KnowledgeIndex,
-        health,
-        ingest,
-        query,
-        router,
-        status,
-    )
-finally:
-    if _original_rag is not None:
-        sys.modules["app.infrastructure.rag"] = _original_rag
-    else:
-        del sys.modules["app.infrastructure.rag"]
+from app.fastapi_routes.knowledge_v1 import (
+    IngestRequest,
+    QueryRequest,
+    _KnowledgeIndex,
+    health,
+    ingest,
+    query,
+    router,
+    status,
+)
 
 
 class TestIngestRequest:

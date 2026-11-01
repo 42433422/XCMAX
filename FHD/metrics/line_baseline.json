@@ -1,5 +1,5 @@
 {
-  "lines": 2406589,
+  "lines": 2406562,
   "updated": "2026-11-01",
-  "note": "PR #2888: preserve the same +3334 maintained-line delta (UX/CodeQL +2532, CI optimization +802) after syncing main d20ae2492, whose already-merged credential incident metadata adds 15 lines. CI additions enforce independently verified early sharding and regression coverage; duplicate runs/tests removed, all safety and coverage gates retained."
+  "note": "PR #2888: net-delete 27 lines by removing import-time RAG package mocks and isolating the real dataset service fixture; preserve all assertions and verify old singleton/import-order failures. Cumulative maintained delta +3307 versus main d20ae2492 (original UX/CodeQL +2532, CI integrity/performance +775); complete shard evidence and safety gates retained."
 }
