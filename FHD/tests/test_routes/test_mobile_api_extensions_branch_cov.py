@@ -14,33 +14,17 @@ Focuses on REMAINING uncovered branches not addressed by ext/cov/ext2/ext3:
 
 from __future__ import annotations
 
+import importlib
 import json
-import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _load_ext_module():
-    # Always bind the extensions module by name. Importing mobile_api alone can
-    # race with other suites that pop sys.modules mid-session.
-    import importlib
-
-    importlib.import_module("app.fastapi_routes.mobile_api_extensions")
-    yield
-
-
 @pytest.fixture
 def m():
-    name = "app.fastapi_routes.mobile_api_extensions"
-    mod = sys.modules.get(name)
-    if mod is None:
-        import importlib
-
-        mod = importlib.import_module(name)
-    return mod
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 def _user(uid: int = 1, role: str = "admin"):

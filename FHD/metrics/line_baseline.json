@@ -1,5 +1,5 @@
 {
-  "lines": 2406837,
+  "lines": 2406795,
   "updated": "2026-11-01",
-  "note": "PR #2891: harden mobile_api_extensions branch-cov fixture import (CI shard flake)"
+  "note": "PR #2891: maintained baseline is +233 versus main: original +259 security unblock, +7 managed-template jail and real-resolver regression fix, minus 33 redundant mobile test-loader lines. All 549 mobile cases pass with explicit per-fixture imports in isolated files."
 }

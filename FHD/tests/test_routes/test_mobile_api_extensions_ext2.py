@@ -13,7 +13,7 @@ mobile_auth_oidc_exchange (auth fail, success).
 
 from __future__ import annotations
 
-import sys
+import importlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -35,16 +35,9 @@ def _fake_circle_report_transport(monkeypatch):
     )
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _resolve_circular_import():
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401
-    yield
-
-
 @pytest.fixture
 def ext_mod():
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 def _mock_user():
