@@ -1,5 +1,5 @@
 {
-  "lines": 2407415,
+  "lines": 2407469,
   "updated": "2026-11-01",
-  "note": "Required production security prerequisites: reuse exact candidate scan verification before approved fixed config write; isolated ops branch"
+  "note": "Authorized inspection refuses symlink ancestors before reading any fixed config content; no write protections weakened"
 }

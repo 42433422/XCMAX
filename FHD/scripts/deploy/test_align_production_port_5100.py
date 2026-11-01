@@ -43,11 +43,12 @@ class Tests(unittest.TestCase):
             if name != 'fixed-port-configuration':
                 self.assertIn("inputs.action != 'align-port-5100'", job['if'], name)
                 self.assertIn("inputs.action != 'restore-port-5000'", job['if'], name)
+                self.assertIn("inputs.action != 'inspect-port-alignment'", job['if'], name)
         expression = yaml.safe_load(workflow.read_text())['jobs']['report-autonomy-failure']['if']
         expression = expression.removeprefix('${{').removesuffix('}}').strip().replace('&&', ' and ').replace('always()', 'True')
         for old, new in (("inputs.action_id", 'action_id'), ("inputs.environment", 'environment'), ("inputs.action", 'action'), ("needs['cvm-rolling'].result", 'result')):
             expression = expression.replace(old, new)
-        for action in ('align-port-5100', 'restore-port-5000', 'apply-latest'):
+        for action in ('align-port-5100', 'restore-port-5000', 'inspect-port-alignment', 'apply-latest'):
             for result in ('skipped', 'failure', 'cancelled', 'success'):
                 observed = eval(expression, {'__builtins__': {}}, {'action': action, 'result': result, 'environment': 'production', 'action_id': 'fixed'})
                 self.assertEqual(observed, action == 'apply-latest' and result != 'success', (action, result))
@@ -71,4 +72,18 @@ class Tests(unittest.TestCase):
             self.assertLess(names.index(name), gate)
         self.assertIn('test "$CURRENT_SCAN" = 41284323055', steps[0]['run'])
         self.assertIn('test "$PREVIOUS_SCAN" = 41284323055', steps[0]['run'])
+    def test_inspection_does_not_write_or_disclose_content(self):
+        import align_production_port_5100 as module
+        from unittest.mock import patch
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); target = root / '.env'; recovery = root / 'private'
+            target.write_bytes(b'FASTAPI_PORT=5000\nSECRET=NEVER_PRINT_THIS\n')
+            before = target.stat()
+            with patch.object(module, 'TARGET', target), patch.object(module, 'RECOVERY', recovery), patch.object(module, 'atomic_write', side_effect=AssertionError('write forbidden')):
+                result = module.inspect_state()
+            self.assertEqual(result['port_state'], '5000')
+            self.assertNotIn('NEVER_PRINT_THIS', json.dumps(result))
+            self.assertEqual(before.st_mtime_ns, target.stat().st_mtime_ns)
+            self.assertFalse(recovery.exists())
 if __name__=='__main__':unittest.main()

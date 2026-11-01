@@ -28,6 +28,7 @@ on:
           - unfreeze-manifest
           - align-port-5100
           - restore-port-5000
+          - inspect-port-alignment
       action_id:
         description: Required for production apply-latest; exact release:<40-char git sha>
         required: false
@@ -70,7 +71,7 @@ permissions:
 
 jobs:
   cvm-rolling:
-    if: ${{ inputs.action != 'align-port-5100' && inputs.action != 'restore-port-5000' }}
+    if: ${{ inputs.action != 'align-port-5100' && inputs.action != 'restore-port-5000' && inputs.action != 'inspect-port-alignment' }}
     name: CVM rolling (${{ inputs.environment }})
     runs-on: ubuntu-latest
     environment:
@@ -481,7 +482,7 @@ jobs:
   report-autonomy-failure:
     name: Report autonomy execution failure
     needs: cvm-rolling
-    if: ${{ inputs.action != 'align-port-5100' && inputs.action != 'restore-port-5000' && always() && inputs.environment == 'production' && inputs.action_id != '' && needs['cvm-rolling'].result != 'success' }}
+    if: ${{ inputs.action != 'align-port-5100' && inputs.action != 'restore-port-5000' && inputs.action != 'inspect-port-alignment' && always() && inputs.environment == 'production' && inputs.action_id != '' && needs['cvm-rolling'].result != 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Mark pending action terminal
@@ -528,7 +529,7 @@ jobs:
 
   fixed-port-configuration:
     name: Explicit production config WRITE (no restart)
-    if: ${{ inputs.action == 'align-port-5100' || inputs.action == 'restore-port-5000' }}
+    if: ${{ inputs.action == 'align-port-5100' || inputs.action == 'restore-port-5000' || inputs.action == 'inspect-port-alignment' }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     environment:
@@ -591,7 +592,7 @@ jobs:
           set -euo pipefail
           test -n "${FHD_PUSH_HOST:-}"
           test -n "${FHD_PUSH_SSH_KEY_RAW:-}"
-          case "$CONFIG_ACTION" in align-port-5100|restore-port-5000) ;; *) exit 64;; esac
+          case "$CONFIG_ACTION" in align-port-5100|restore-port-5000|inspect-port-alignment) ;; *) exit 64;; esac
           umask 077
           key="${RUNNER_TEMP}/fixed-port-configuration-key"
           trap 'rm -f "$key"' EXIT

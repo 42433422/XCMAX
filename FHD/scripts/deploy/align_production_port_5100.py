@@ -110,7 +110,42 @@ def restore_locked(path, backup, receipt):
 TARGET = Path('/opt/fhd-full/.env')
 RECOVERY = Path('/opt/fhd-full-backups/port-alignment-9a7e4cc0')
 
+def inspect_state():
+    result = {'effective_root': os.geteuid() == 0, 'paths': {}, 'service_restarted': False}
+    for path in (Path('/opt'), TARGET.parent, RECOVERY.parent, TARGET, RECOVERY, RECOVERY / '.env.original', RECOVERY / 'receipt.json', Path('/tmp/fhd-auto-update.lock')):
+        item = {'exists': os.path.lexists(path)}
+        if item['exists']:
+            info = path.lstat()
+            item.update({'root_owned': info.st_uid == 0, 'group_or_world_writable': bool(info.st_mode & 0o022), 'symlink': stat.S_ISLNK(info.st_mode), 'regular': stat.S_ISREG(info.st_mode), 'directory': stat.S_ISDIR(info.st_mode), 'single_link': info.st_nlink == 1})
+        result['paths'][str(path)] = item
+    if any(result['paths'][str(path)].get('symlink', False) for path in (TARGET.parent, RECOVERY.parent, RECOVERY)):
+        result['unsafe_parent_symlink'] = True
+        return result
+    try:
+        current, info = read_regular(TARGET)
+        replacement = aligned_bytes(current)
+        result['port_state'] = '5100' if replacement == current else '5000'
+        result['target_parse_ok'] = True
+    except (Refused, OSError):
+        result['target_parse_ok'] = False
+        return result
+    backup = RECOVERY / '.env.original'
+    receipt_path = RECOVERY / 'receipt.json'
+    if os.path.lexists(backup):
+        original, _ = read_regular(backup)
+        result['current_matches_backup'] = current == original
+        result['current_matches_aligned_backup'] = current == aligned_bytes(original)
+    if os.path.lexists(receipt_path):
+        data, _ = read_regular(receipt_path)
+        receipt = json.loads(data)
+        result['current_matches_receipt_hash'] = hashlib.sha256(current).hexdigest() == receipt.get('expected_hash')
+        result['current_matches_receipt_metadata'] = (stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid) == (receipt.get('mode'), receipt.get('uid'), receipt.get('gid'))
+    return result
+
 def main():
+    if sys.argv[1:] == ['inspect-port-alignment']:
+        print(json.dumps(inspect_state(), sort_keys=True))
+        return
     if os.geteuid() != 0 or sys.argv[1:] not in (['align-port-5100'], ['restore-port-5000']):
         raise Refused('fixed_root_action_required')
     for directory in (Path('/opt'), TARGET.parent, RECOVERY.parent):
@@ -142,6 +177,9 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (Refused, OSError, ValueError, KeyError):
-        print('{"status":"refused","service_restarted":false}')
+    except Refused as exc:
+        print(json.dumps({'status': 'refused', 'reason': str(exc), 'service_restarted': False}))
+        raise SystemExit(1)
+    except (OSError, ValueError, KeyError):
+        print('{"status":"refused","reason":"os_or_state_error","service_restarted":false}')
         raise SystemExit(1)
