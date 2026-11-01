@@ -36,6 +36,8 @@ web = [
     "prometheus-client>=0.20",
     "pika>=1.3",
     "edge-tts>=6.1",
+    # Was previously pulled in transitively by qq-botpy; keep explicit after QQ Bot retirement.
+    "APScheduler>=3.10,<4",
 ]
 knowledge = [
     "chromadb>=0.5",
