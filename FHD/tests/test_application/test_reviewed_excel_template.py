@@ -2278,11 +2278,19 @@ def test_login_notice_preview_without_effective_receipt_stays_local_and_refine_c
         },
     )
     assert rejected.status_code == 403
+    identity = review_store.client.get("/api/templates/reviewed-excel/identity").json()
+    assert identity["login_authorization"]["operations"]["classification"] != "authorized"
+    rejected = review_store.client.post(
+        "/api/templates/reviewed-excel/classifications/synthetic/analyze",
+        data={"version": "synthetic", "use_login_notice": "true", "own_file_authorized": "true"},
+    )
+    assert rejected.status_code == 403
     send.assert_not_called()
 
 
+@pytest.mark.parametrize("multibatch", [False, True])
 def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_pipeline(
-    review_store, monkeypatch
+    review_store, monkeypatch, multibatch
 ):
     import asyncio
     import time
@@ -2330,36 +2338,76 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
 
     def fake(*args, **kwargs):
         notice.assert_login_notice_route(route["base"], route["provider"], route["model"])
+        assert notice.current_login_notice_session_id(7) == "synthetic-session"
         calls.append(kwargs["owner_id"])
+        payload = json.loads(args[0][1]["content"])
+        data = (
+            {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+            if "candidates" in args[1]["properties"]
+            else synthetic_document_answer(payload)
+        )
+        if "ranges" in payload:
+            data["documents"] = [
+                {"ranges": [part], "reason": "synthetic separate document"}
+                for part in data["documents"][0]["ranges"]
+            ]
         return LlmAssistResult(
             used_llm=True,
             provider="platform",
             model=route["model"],
-            data={"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]},
+            data=data,
         )
 
     monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", fake)
     source = sample()
-    classification = client.post(
-        "/api/templates/reviewed-excel/classify",
-        files={"files": ("synthetic.xlsx", source)},
-        data={"expected_actor": "1:7"},
-    ).json()["files"][0]
-    sheet = classification["sheets"][0]
-    region = sheet["regions"][0]
-    confirmed = client.post(
-        f"/api/templates/reviewed-excel/classifications/{classification['classification_id']}/confirm",
-        data={
-            "version": classification["version"],
-            "labels_json": json.dumps(
+    if multibatch:
+        workbook = load_workbook(BytesIO(source))
+        workbook.copy_worksheet(workbook.active).title = "第二"
+        stream = BytesIO()
+        workbook.save(stream)
+        workbook.close()
+        source = stream.getvalue()
+        monkeypatch.setattr(
+            routes,
+            "plan_semantic_batches",
+            lambda review, **_: (
                 [
-                    {"sheet": sheet["sheet"], "range": entry["range"], "labels": entry["labels"]}
-                    for entry in sheet["regions"]
-                ]
+                    [cell for cell in review["cells"] if cell["sheet"] == sheet]
+                    for sheet in review["sheets"]
+                ],
+                4,
             ),
-        },
+        )
+    classification = client.post(
+        "/api/templates/reviewed-excel/archive-classify",
+        files={"file": ("synthetic.xlsx", source)},
+        data={"expected_actor": "1:7", "request_key": "synthetic-notice-pipeline"},
+    ).json()
+    path = f"/api/templates/reviewed-excel/classifications/{classification['classification_id']}"
+    form = {"version": classification["version"], "use_login_notice": "true", "auto_group": "true"}
+    identity = client.get("/api/templates/reviewed-excel/identity").json()
+    assert identity["login_authorization"]["operations"]["classification"] == "authorized"
+    analyzed = client.post(path + "/analyze", data=form)
+    assert analyzed.status_code == 200, analyzed.text
+    if multibatch:
+        assert analyzed.json()["phase"] == "pending" and calls == [7]
+        analyzed = client.post(path + "/analyze", data=form)
+        assert analyzed.status_code == 200, analyzed.text
+    analyzed = analyzed.json()
+    classification_calls = 3 if multibatch else 1
+    assert analyzed["model_status"] == "returned" and calls == [7] * classification_calls
+    assert analyzed["model_authorization"]["notice_operation"] == "classification"
+    assert (
+        analyzed["model_authorization"]["notice_scope"]
+        == notice.notice_operation_scopes()["classification"]
     )
-    assert confirmed.status_code == 200 and confirmed.json()["confirmed"]
+    assert (
+        client.post(path + "/analyze", data=form).status_code == 409
+        and calls == [7] * classification_calls
+    )
+    slices = client.get(path + f"/auto-slices/{analyzed['version']}")
+    assert slices.status_code == 200, slices.text
+    assert slices.json()["slices"][0]["basis"] == "model_group"
     result = client.post(
         "/api/templates/reviewed-excel/preview",
         files={"file": ("synthetic.xlsx", source)},
@@ -2367,9 +2415,8 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
             "expected_actor": "1:7",
             "use_login_notice": "true",
             "classification_id": classification["classification_id"],
-            "classification_version": confirmed.json()["version"],
-            "region_sheet": sheet["sheet"],
-            "region_range": region["range"],
+            "classification_version": analyzed["version"],
+            "auto_slice_index": "0",
         },
     )
     assert result.status_code == 200, result.text
@@ -2379,13 +2426,11 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     assert auth["source_sha256"] == hashlib.sha256(source).hexdigest()
     assert auth["derived_sha256"] == result["sha256"]
     assert auth["classification_id"] == classification["classification_id"]
-    assert auth["classification_version"] == confirmed.json()["version"]
-    assert (
-        auth["document"]["sheet"] == sheet["sheet"] and auth["document"]["range"] == region["range"]
-    )
+    assert auth["classification_version"] == analyzed["version"]
+    assert auth["document"]["auto_slice_index"] == 0 and auth["document"]["fragments"]
     assert auth["model_route"] == {key: route[key] for key in ("provider", "model")}
     assert result["proposal"]["model"]["login_authorization"]["status"] == "authorized"
-    assert calls == [7]
+    assert calls == [7] * (classification_calls + 1)
     revised = client.post(
         "/api/templates/reviewed-excel/refine",
         data={
@@ -2400,7 +2445,7 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
         revised.json()["proposal"]["model"]["authorization"]["source_sha256"]
         == hashlib.sha256(source).hexdigest()
     )
-    assert calls == [7, 7]
+    assert calls == [7] * (classification_calls + 2)
 
 
 def test_model_input_spreads_across_sheets_and_reports_uncovered(monkeypatch):

@@ -66,8 +66,9 @@ async def test_successful_explicit_login_records_version_scope_identity_and_sess
     receipt, response = await receipt_for(result)
     grant = auth.login_notice_grant(request(receipt), 9, 7)
     assert grant["version"] == auth.NOTICE_VERSION
-    assert grant["purpose"] == "elt_template_candidates"
-    assert grant["max_cells"] == 100 and grant["max_chars_per_cell"] == 160
+    assert grant["purpose"] == "elt_file_processing"
+    assert grant["scopes"]["template_candidates"] == {"max_cells": 100, "max_chars_per_cell": 160}
+    assert grant["scopes"]["classification"] == auth.notice_operation_scopes()["classification"]
     assert grant["route"] == route
     assert grant["exp"] <= int(time.time()) + 3600
     assert result["session_id"] not in json.dumps(grant)
@@ -224,12 +225,31 @@ async def test_receipt_rejects_other_account_session_platform_tampering_expiry_a
         {"exp": int(time.time()) - 1},
         {"purpose": "all_files"},
         {"version": "old"},
-        {"max_cells": 1000},
+        {"scopes": {"template_candidates": {"max_cells": 1000, "max_chars_per_cell": 160}}},
     ]:
         altered = jwt.encode({**claims, **changes}, auth._secret(), algorithm="HS256")
         assert auth.login_notice_grant(request(altered), 9, 7) is None
     monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://other-platform.invalid")
     assert auth.login_notice_grant(request(token), 9, 7) is None
+
+
+@pytest.mark.asyncio
+async def test_classification_requires_its_own_exact_larger_envelope(login):
+    result, _ = login
+    receipt, _ = await receipt_for(result)
+    claims = jwt.decode(receipt, auth._secret(), algorithms=["HS256"], audience=auth._AUDIENCE)
+    candidate_only = {
+        **claims,
+        "scopes": {"template_candidates": claims["scopes"]["template_candidates"]},
+    }
+    token = jwt.encode(candidate_only, auth._secret(), algorithm="HS256")
+    assert auth.login_notice_grant(request(token), 9, 7) is not None
+    assert auth.login_notice_grant(request(token), 9, 7, "classification") is None
+    legacy = jwt.encode(
+        {**claims, "purpose": "elt_template_candidates"}, auth._secret(), algorithm="HS256"
+    )
+    assert auth.login_notice_grant(request(legacy), 9, 7, "classification") is None
+    assert auth.login_notice_grant(request(receipt), 9, 7, "classification") is not None
 
 
 @pytest.mark.asyncio

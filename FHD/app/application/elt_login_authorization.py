@@ -22,7 +22,7 @@ NOTICE_VERSION = "2026-11-01-draft"
 # separate reviewed release change; runtime configuration cannot bypass this.
 NOTICE_PUBLISHED = False
 NOTICE_COOKIE = "xcagi_elt_notice"
-NOTICE_PURPOSE = "elt_template_candidates"
+NOTICE_PURPOSE = "elt_file_processing"
 _AUDIENCE = "xcagi-elt-login-notice"
 _route_scope: ContextVar[dict | None] = ContextVar("elt_login_model_route", default=None)
 _session_scope: ContextVar[tuple[str, int] | None] = ContextVar("elt_login_session", default=None)
@@ -48,6 +48,27 @@ def _secret() -> str:
 
 def _session_digest(session_id: str) -> str:
     return hashlib.sha256(session_id.encode()).hexdigest()
+
+
+def notice_operation_scopes() -> dict:
+    from app.application.reviewed_excel_budget import MAX_CLASSIFICATION_BATCHES, MAX_REQUEST_BYTES
+    from app.application.reviewed_excel_evidence import (
+        MAX_MODEL_CELLS,
+        MAX_MODEL_TEXT_BYTES,
+        MAX_VALUE_CHARS,
+    )
+
+    return {
+        "template_candidates": {"max_cells": 100, "max_chars_per_cell": 160},
+        "classification": {
+            "max_cells": MAX_MODEL_CELLS,
+            "max_chars_per_cell": MAX_VALUE_CHARS,
+            "max_model_text_bytes": MAX_MODEL_TEXT_BYTES,
+            "max_request_bytes": MAX_REQUEST_BYTES,
+            "max_calls_per_round": 4,
+            "max_classification_batches": MAX_CLASSIFICATION_BATCHES,
+        },
+    }
 
 
 def _active_session(session_id: str) -> dict | None:
@@ -136,8 +157,7 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
             "owner": identity["owner"],
             "tenant": identity["tenant"],
             "route": route,
-            "max_cells": 100,
-            "max_chars_per_cell": 160,
+            "scopes": notice_operation_scopes(),
         }
         raw_samesite = os.environ.get("SESSION_COOKIE_SAMESITE", "Lax").strip().lower()
         samesite = cast(
@@ -158,12 +178,14 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
     return response
 
 
-def login_notice_grant(request: Request, tenant_id: int, owner_id: int) -> dict | None:
+def login_notice_grant(
+    request: Request, tenant_id: int, owner_id: int, operation: str = "template_candidates"
+) -> dict | None:
     """The caller must already have authenticated and checked the current account."""
     from app.application.reviewed_excel_template import configured_template_llm_provider
     from app.infrastructure.auth.dependencies import session_id_from_request
 
-    if not NOTICE_PUBLISHED:
+    if not NOTICE_PUBLISHED or operation not in notice_operation_scopes():
         return None
     try:
         raw = request.cookies.get(NOTICE_COOKIE, "")
@@ -196,8 +218,8 @@ def login_notice_grant(request: Request, tenant_id: int, owner_id: int) -> dict 
             or receipt["purpose"] != NOTICE_PURPOSE
             or receipt["owner"] != owner_id
             or receipt["tenant"] != tenant_id
-            or receipt.get("max_cells") != 100
-            or receipt.get("max_chars_per_cell") != 160
+            or not isinstance(receipt.get("scopes"), dict)
+            or receipt["scopes"].get(operation) != notice_operation_scopes()[operation]
             or not isinstance(route, dict)
             or route.get("base") != _platform_url()
             or not all(
@@ -211,8 +233,10 @@ def login_notice_grant(request: Request, tenant_id: int, owner_id: int) -> dict 
         return None
 
 
-def login_notice_status(request: Request, tenant_id: int, owner_id: int) -> dict:
-    grant = login_notice_grant(request, tenant_id, owner_id)
+def login_notice_status(
+    request: Request, tenant_id: int, owner_id: int, operation: str = "template_candidates"
+) -> dict:
+    grant = login_notice_grant(request, tenant_id, owner_id, operation)
     return {
         "status": "authorized"
         if grant
@@ -221,6 +245,8 @@ def login_notice_status(request: Request, tenant_id: int, owner_id: int) -> dict
         else "notice_not_published",
         "version": NOTICE_VERSION,
         "purpose": NOTICE_PURPOSE,
+        "operation": operation,
+        "scope": notice_operation_scopes().get(operation),
         **(
             {"provider": grant["route"]["provider"], "model": grant["route"]["model"]}
             if grant

@@ -36,6 +36,7 @@ from app.application.elt_login_authorization import (
     bind_login_notice_grant,
     login_notice_grant,
     login_notice_status,
+    notice_operation_scopes,
 )
 from app.application.reviewed_excel_audit import ModelRequestNotSent, record_not_sent
 from app.application.reviewed_excel_classification import (
@@ -128,9 +129,15 @@ def _notice_document_scope(grant, selected_region):
 
 
 @router.get("/api/templates/reviewed-excel/identity")
-def reviewed_excel_identity(user=Depends(_manage)):
+def reviewed_excel_identity(request: Request, user=Depends(_manage)):
     tenant, owner = _identity(user)
-    return {"actor": f"{tenant}:{owner}"}
+    authorization = login_notice_status(request, tenant, owner, "classification")
+    authorization["operations"] = {
+        operation: login_notice_status(request, tenant, owner, operation)["status"]
+        for operation in notice_operation_scopes()
+    }
+    authorization["scopes"] = notice_operation_scopes()
+    return {"actor": f"{tenant}:{owner}", "login_authorization": authorization}
 
 
 def _expected_actor(expected: str, user):
@@ -871,12 +878,23 @@ async def reviewed_excel_classification_analyze(
     version: str = Form(..., max_length=64),
     sample_authorized: bool = Form(False),
     own_file_authorized: bool = Form(False),
+    use_login_notice: bool = Form(False),
     continue_authorized: bool = Form(False),
     retry_authorized: bool = Form(False),
     auto_group: bool = Form(False),
     user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
+    notice_grant = (
+        login_notice_grant(request, tenant, owner, "classification") if use_login_notice else None
+    )
+    if use_login_notice:
+        if not notice_grant:
+            raise HTTPException(
+                status_code=403, detail="缺少有效的本次文件分类授权，请核对登录状态。"
+            )
+        own_file_authorized = True
+        sample_authorized = False
     if sample_authorized == own_file_authorized:
         raise HTTPException(status_code=400, detail="请明确选择获授权样本或授权本人文件发送模型")
     try:
@@ -901,6 +919,19 @@ async def reviewed_excel_classification_analyze(
             except ReviewedExcelError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             authorization_kind = "owner_file" if own_file_authorized else "authorized_sample"
+            if (
+                checkpoint
+                and use_login_notice
+                and (
+                    checkpoint.get("authorization", {}).get("notice_version")
+                    != notice_grant["version"]
+                    or checkpoint.get("authorization", {}).get("model_route")
+                    != {key: notice_grant["route"][key] for key in ("provider", "model")}
+                    or checkpoint.get("authorization", {}).get("notice_scope")
+                    != notice_grant["scopes"]["classification"]
+                )
+            ):
+                raise HTTPException(status_code=409, detail="登录授权范围已改变，请核对已有批次")
             if checkpoint and (
                 checkpoint.get("version") != version
                 or checkpoint.get("source_sha256") != run.file_sha256
@@ -975,6 +1006,22 @@ async def reviewed_excel_classification_analyze(
                         "provider_basis": "configured_before_call",
                         "scope": "this_file_bounded_cells_and_structure",
                         "authorized_at": utcnow().isoformat(),
+                        **(
+                            _notice_document_scope(
+                                notice_grant,
+                                {"classification_id": classification_id, "version": version},
+                            )
+                            if notice_grant
+                            else {}
+                        ),
+                        **(
+                            {
+                                "notice_operation": "classification",
+                                "notice_scope": notice_grant["scopes"]["classification"],
+                            }
+                            if notice_grant
+                            else {}
+                        ),
                     },
                 }
                 store_coordinate_plan(checkpoint, batches)
@@ -1024,15 +1071,16 @@ async def reviewed_excel_classification_analyze(
                 previous_calls = checkpoint.get("calls_in_round", 0)
                 audit_draft_before_response = claimed_draft
                 try:
-                    batch_result = await run_in_threadpool(
-                        _call_with_response_audit,
-                        _classify_semantic_batch,
-                        save_response,
-                        batch_review,
-                        reference_ids=auto_group,
-                        expected_request_sha256=request_sha,
-                        owner_id=owner,
-                    )
+                    with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
+                        batch_result = await run_in_threadpool(
+                            _call_with_response_audit,
+                            _classify_semantic_batch,
+                            save_response,
+                            batch_review,
+                            reference_ids=auto_group,
+                            expected_request_sha256=request_sha,
+                            owner_id=owner,
+                        )
                     claimed_draft = audit_holder[0]
                     _recheck(request, (tenant, owner))
                     _source(db, run, tenant, owner)
@@ -1116,15 +1164,16 @@ async def reviewed_excel_classification_analyze(
                 )
                 previous_calls = checkpoint.get("calls_in_round", 0)
                 try:
-                    result["suggested_documents"] = await run_in_threadpool(
-                        _call_with_response_audit,
-                        group_semantic_fragments,
-                        save_response,
-                        review,
-                        result,
-                        expected_request_sha256=request_sha,
-                        owner_id=owner,
-                    )
+                    with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
+                        result["suggested_documents"] = await run_in_threadpool(
+                            _call_with_response_audit,
+                            group_semantic_fragments,
+                            save_response,
+                            review,
+                            result,
+                            expected_request_sha256=request_sha,
+                            owner_id=owner,
+                        )
                 except ModelRequestNotSent as exc:
                     record_not_sent(state, request_sha, exc.public_message)
                     _classification_cas(db, run, claimed_draft, state)
@@ -1239,6 +1288,15 @@ async def reviewed_excel_classification_analyze(
                 "sheets": sheets,
                 "model_status": "returned",
                 "model_authorization": checkpoint.get("authorization"),
+                **(
+                    {
+                        "login_authorization": login_notice_status(
+                            request, tenant, owner, "classification"
+                        )
+                    }
+                    if use_login_notice
+                    else {}
+                ),
                 "actual_model_providers": actual_providers,
                 "read_only_print_areas": review["read_only_print_areas"],
                 "suggested_documents": result["suggested_documents"],
