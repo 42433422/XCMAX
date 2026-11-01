@@ -464,8 +464,6 @@ def apply_gitleaks_disposition(
     out: list[dict[str, Any]] = []
     for index, finding in enumerate(findings, start=1):
         new_f = dict(finding)
-        key = _gitleaks_fingerprint(finding)
-        # Prefer rule id without prior suffixes for matching.
         rule = str(finding.get("id") or "")
         key = "|".join(
             (
