@@ -1,4 +1,5 @@
 import { computed, ref, shallowRef, toRaw, watch, type Ref } from 'vue'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 
 export const PROACTIVE_SUGGESTIONS_STORAGE_KEY = 'xcagi_proactive_suggestions'
 
@@ -49,9 +50,10 @@ function isUser(m: ChatLikeMessage): boolean {
 }
 
 export function isFailedChatReply(message: ChatLikeMessage): boolean {
-  const text = messageText(message).replace(/<[^>]*>/g, '').trim()
-  return /failed|error/.test(message.workflowAction || '') || message.agentRunTrace?.status === 'failed'
-    || /^(?:处理失败[：:]|\[失败\]|\[回复未完成\]|模型未返回可显示|对话连接已超时|请求超时)/.test(text)
+  if (/failed|error/.test(message.workflowAction || '') || message.agentRunTrace?.status === 'failed') return true
+  const raw = messageText(message)
+  const text = raw.includes('<') || raw.includes('&') ? plainTextFromChatHtml(raw).trim() : raw
+  return /^(?:处理失败[：:]|\[失败\]|\[回复未完成\]|模型未返回可显示|对话连接已超时|请求超时)/.test(text)
 }
 
 /** Local heuristic fallback — never auto-executes; user must pick then send. */

@@ -1872,15 +1872,27 @@ def test_private_intake_requires_a_reviewed_business_plan_before_writing(review_
     client = review_store.client
     preview = client.post(
         "/api/templates/reviewed-excel/preview",
-        files={"file": ("sample.xlsx", sample(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={
+            "file": (
+                "sample.xlsx",
+                sample(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
         data={"expected_actor": "1:7"},
     ).json()
-    response = client.post("/api/templates/reviewed-excel/save", data={
-        "review_id": preview["review_id"], "name": "合成入库模板",
-        "proposal_version": preview["proposal"]["version"],
-        "candidate_id": preview["proposal"]["candidates"][0]["id"],
-        "publish_to_tenant": "false", "private_intake": "true", "selections": "[]",
-    })
+    response = client.post(
+        "/api/templates/reviewed-excel/save",
+        data={
+            "review_id": preview["review_id"],
+            "name": "合成入库模板",
+            "proposal_version": preview["proposal"]["version"],
+            "candidate_id": preview["proposal"]["candidates"][0]["id"],
+            "publish_to_tenant": "false",
+            "private_intake": "true",
+            "selections": "[]",
+        },
+    )
     assert response.status_code == 409
     assert "先核对入库目标和记录数量" in response.text
     with review_store.engine.connect() as conn:

@@ -13,6 +13,7 @@ import io
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -540,31 +541,81 @@ class TestServiceSupport:
 
 
 class TestServiceUploads:
-    def test_save_upload_success(self, etl_db, svc, app_data, fake_adapter):
+    @pytest.mark.parametrize(
+        "file_name",
+        [
+            "dir/a.xlsx",
+            "../../../outside.XLSX",
+            r"..\..\outside.XLSX",
+            "/tmp/outside.xlsx",
+            r"C:\fakepath\invoice.XLSX",
+            "账目/合成资料.XLSX",
+        ],
+    )
+    def test_save_upload_success(self, etl_db, svc, app_data, fake_adapter, file_name):
         stream = io.BytesIO(b"0123456789")
         info = svc.save_upload(
             etl_db,
             owner_user_id=1,
-            file_name="dir/a.xlsx",
+            file_name=file_name,
             content_type="application/vnd",
             stream=stream,
         )
-        assert info["file_name"] == "a.xlsx"
+        assert info["file_name"] == clean_filename(file_name)
         assert info["size_bytes"] == 10
         assert info["sha256"]
         assert info["suffix"] == ".xlsx"
-        assert etl_db.query(EltUpload).count() == 1
+        stored = etl_db.query(EltUpload).one()
+        destination = Path(stored.storage_path)
+        assert destination == app_data / "etl" / "uploads" / "1" / "1" / f"{info['upload_id']}.xlsx"
+        assert destination.read_bytes() == b"0123456789"
+        assert list(app_data.rglob("*xlsx")) == [destination]
 
-    def test_save_upload_unsupported_suffix(self, etl_db, svc, app_data, fake_adapter):
+    @pytest.mark.parametrize(
+        "file_name", ["a.exe", "a.xlsx.exe", "../../config", "../a.xlsx/../../payload.py"]
+    )
+    def test_save_upload_unsupported_suffix(self, etl_db, svc, app_data, fake_adapter, file_name):
         with pytest.raises(EltError) as ei:
             svc.save_upload(
                 etl_db,
                 owner_user_id=1,
-                file_name="a.exe",
+                file_name=file_name,
                 content_type=None,
                 stream=io.BytesIO(b"x"),
             )
         assert ei.value.code == "ELT_FILE_TYPE_UNSUPPORTED"
+        assert not (app_data / "etl").exists()
+        assert etl_db.query(EltUpload).count() == 0
+
+    @pytest.mark.parametrize("symlink", [False, True])
+    def test_save_upload_never_removes_an_existing_destination(
+        self, etl_db, svc, app_data, monkeypatch, symlink
+    ):
+        upload_id = str(uuid.uuid4())
+        monkeypatch.setattr("app.application.elt.service_uploads.new_id", lambda: upload_id)
+        root = app_data / "etl" / "uploads" / "1" / "1"
+        root.mkdir(parents=True)
+        destination = root / f"{upload_id}.xlsx"
+        original = app_data / "existing.xlsx" if symlink else destination
+        original.write_bytes(b"existing customer file")
+        if symlink:
+            try:
+                destination.symlink_to(original)
+            except OSError:
+                pytest.skip("symbolic links are unavailable")
+        with pytest.raises(EltError if symlink else FileExistsError) as error:
+            svc.save_upload(
+                etl_db,
+                owner_user_id=1,
+                file_name="../../existing.XLSX",
+                content_type=None,
+                stream=io.BytesIO(b"replacement"),
+            )
+        if symlink:
+            assert error.value.code == "ELT_UPLOAD_PATH_INVALID"
+            assert destination.is_symlink()
+        assert original.read_bytes() == b"existing customer file"
+        assert etl_db.query(EltUpload).count() == 0
 
     def test_save_upload_empty_file(self, etl_db, svc, app_data, fake_adapter):
         with pytest.raises(EltError) as ei:
@@ -576,6 +627,7 @@ class TestServiceUploads:
                 stream=io.BytesIO(b""),
             )
         assert ei.value.code == "ELT_FILE_EMPTY"
+        assert list((app_data / "etl" / "uploads" / "1" / "1").iterdir()) == []
 
     def test_save_upload_too_large(self, etl_db, svc, app_data, fake_adapter):
         big = io.BytesIO(b"x" * (MAX_FILE_BYTES + 1))
@@ -588,6 +640,7 @@ class TestServiceUploads:
                 stream=big,
             )
         assert ei.value.code == "ELT_FILE_TOO_LARGE"
+        assert list((app_data / "etl" / "uploads" / "1" / "1").iterdir()) == []
 
     def test_save_upload_invalid_batch_id(self, etl_db, svc, app_data, fake_adapter):
         with pytest.raises(EltError):

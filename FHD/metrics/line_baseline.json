@@ -1,5 +1,5 @@
 {
-  "lines": 2408108,
+  "lines": 2408514,
   "updated": "2026-11-01",
-  "note": "依据用户本轮全量修复体验报告14项并提交PR的授权：生产逻辑净增647行、行为与隔离回归净增1475行、更新说明1行，共2123行；包含服务器默认模型路由、绑定预演确认与账号/Mod隔离，已移除产品页考勤错绑分支，未删除无关代码凑数。按pre-push显式例外记录，PR正文同步说明。"
+  "note": "PR #2888 CodeQL/CI follow-up relative to 00f4a363: +406 maintained lines (300 Ruff formatting-only, 9 fix logic, 96 behavioral regressions, 1 changelog). Reuse DOMPurify, canonicalize upload suffixes, preserve colliding files, and verify product-only import; original 14-item authorized scope remains recorded in PR. No scanner suppression or unrelated deletion."
 }

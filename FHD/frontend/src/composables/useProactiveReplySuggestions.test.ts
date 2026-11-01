@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
-import { buildLocalProactiveSuggestions, proactiveReplyMessageId, PROACTIVE_SUGGESTIONS_STORAGE_KEY, useProactiveReplySuggestions } from './useProactiveReplySuggestions'
+import { buildLocalProactiveSuggestions, isFailedChatReply, proactiveReplyMessageId, PROACTIVE_SUGGESTIONS_STORAGE_KEY, useProactiveReplySuggestions } from './useProactiveReplySuggestions'
+
+it.each([
+  ['<span title=">">处理失败：暂不可用</span>', true],
+  ['&#91;失败&#93; 暂不可用', true],
+  ['<script>处理失败：隐藏脚本</script><p>正常回复</p>', false],
+  ['<style>处理失败：隐藏样式</style><p>正常回复</p>', false],
+  ['<p>处理失败：暂不可用</p><scr<script>ipt>bad()</scr<script>ipt>', true],
+  ['操作说明中的处理失败：请联系管理员', false],
+])('classifies visible reply text safely: %s', (content, failed) => {
+  const message = { role: 'ai', content }
+  expect(isFailedChatReply(message)).toBe(failed)
+  expect(buildLocalProactiveSuggestions([message])).toHaveLength(failed ? 0 : 3)
+})
 
 describe('buildLocalProactiveSuggestions', () => {
   it('returns exactly three suggestions', () => {
