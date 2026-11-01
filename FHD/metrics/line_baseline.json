@@ -1,5 +1,5 @@
 {
-  "lines": 2407487,
+  "lines": 2407530,
   "updated": "2026-11-01",
-  "note": "Authorized read-only fixed-service owner matching booleans; no owner names or numeric IDs output, no permission changes"
+  "note": "Authorized exact-artifact owner inspection synthetic tar metadata and wrong-hash failclosed regression test"
 }

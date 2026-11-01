@@ -5,6 +5,7 @@ import fcntl
 import sys
 import subprocess
 import pwd
+import tarfile
 import os
 from pathlib import Path
 import re
@@ -112,6 +113,29 @@ def restore_locked(path, backup, receipt):
 TARGET = Path('/opt/fhd-full/.env')
 RECOVERY = Path('/opt/fhd-full-backups/port-alignment-9a7e4cc0')
 
+def artifact_owner(root=Path('/var/www/update/releases/stable/server')):
+    data, _ = read_regular(root / 'fhd-manifest.json')
+    manifest = json.loads(data)
+    artifact = 'fhd-full-1.0.0.7-9a7e4cc0f4fb.tar.gz'
+    if manifest.get('git_sha') != '9a7e4cc0f4fbfe07d083d9807eb0f857072e9f4d' or manifest.get('artifact') != artifact or not re.fullmatch(r'[0-9a-f]{64}', str(manifest.get('sha256', ''))):
+        return {'verified': False}
+    fd = os.open(root / artifact, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            return {'verified': False}
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(chunk)
+        if digest.hexdigest() != manifest['sha256']:
+            return {'verified': False}
+        stream.seek(0)
+        with tarfile.open(fileobj=stream, mode='r|gz') as archive:
+            for member in archive:
+                if member.name.rstrip('/') in ('XCAGI', './XCAGI'):
+                    return {'verified': True, 'directory_member': member.isdir(), 'uid': member.uid, 'gid': member.gid}
+    return {'verified': False}
+
 def inspect_state():
     result = {'effective_root': os.geteuid() == 0, 'paths': {}, 'service_restarted': False}
     for path in (Path('/opt'), TARGET.parent, RECOVERY.parent, TARGET, RECOVERY, RECOVERY / '.env.original', RECOVERY / 'receipt.json', Path('/tmp/fhd-auto-update.lock')):
@@ -135,6 +159,13 @@ def inspect_state():
     else:
         owners['service_user_resolved'] = False
     result['owner_matches'] = owners
+    result['fixed_owner_ids'] = {'parent_uid': parent_info.st_uid, 'parent_gid': parent_info.st_gid, 'target_uid': target_info.st_uid, 'target_gid': target_info.st_gid}
+    try:
+        pwd.getpwuid(parent_info.st_uid)
+        result['parent_owner_account_resolves'] = True
+    except KeyError:
+        result['parent_owner_account_resolves'] = False
+    result['candidate_artifact_owner'] = artifact_owner()
     if any(result['paths'][str(path)].get('symlink', False) for path in (TARGET.parent, RECOVERY.parent, RECOVERY)):
         result['unsafe_parent_symlink'] = True
         return result
@@ -197,6 +228,6 @@ if __name__ == '__main__':
     except Refused as exc:
         print(json.dumps({'status': 'refused', 'reason': str(exc), 'service_restarted': False}))
         raise SystemExit(1)
-    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired, tarfile.TarError):
         print('{"status":"refused","reason":"os_or_state_error","service_restarted":false}')
         raise SystemExit(1)

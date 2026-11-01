@@ -80,11 +80,23 @@ class Tests(unittest.TestCase):
             root = Path(tmp); target = root / '.env'; recovery = root / 'private'
             target.write_bytes(b'FASTAPI_PORT=5000\nSECRET=NEVER_PRINT_THIS\n')
             before = target.stat()
-            with patch.object(module, 'TARGET', target), patch.object(module, 'RECOVERY', recovery), patch.object(module, 'atomic_write', side_effect=AssertionError('write forbidden')), patch.object(module.subprocess, 'run', return_value=type('Result', (), {'returncode': 0, 'stdout': str(os.geteuid())})()):
+            with patch.object(module, 'TARGET', target), patch.object(module, 'RECOVERY', recovery), patch.object(module, 'atomic_write', side_effect=AssertionError('write forbidden')), patch.object(module, 'artifact_owner', return_value={'verified': True, 'uid': 1001, 'gid': 1001}), patch.object(module.subprocess, 'run', return_value=type('Result', (), {'returncode': 0, 'stdout': str(os.geteuid())})()):
                 result = module.inspect_state()
             self.assertEqual(result['port_state'], '5000')
             self.assertTrue(all(result['owner_matches'].values()))
             self.assertNotIn('NEVER_PRINT_THIS', json.dumps(result))
             self.assertEqual(before.st_mtime_ns, target.stat().st_mtime_ns)
             self.assertFalse(recovery.exists())
+    def test_artifact_owner_requires_exact_archive_hash(self):
+        import align_production_port_5100 as module
+        import tarfile, hashlib, json
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); artifact='fhd-full-1.0.0.7-9a7e4cc0f4fb.tar.gz'
+            with tarfile.open(root/artifact,'w:gz') as archive:
+                member=tarfile.TarInfo('./XCAGI');member.type=tarfile.DIRTYPE;member.uid=1001;member.gid=1001;archive.addfile(member)
+            manifest={'git_sha':'9a7e4cc0f4fbfe07d083d9807eb0f857072e9f4d','artifact':artifact,'sha256':hashlib.sha256((root/artifact).read_bytes()).hexdigest()}
+            (root/'fhd-manifest.json').write_text(json.dumps(manifest))
+            self.assertEqual(module.artifact_owner(root),{'verified':True,'directory_member':True,'uid':1001,'gid':1001})
+            manifest['sha256']='0'*64;(root/'fhd-manifest.json').write_text(json.dumps(manifest))
+            self.assertEqual(module.artifact_owner(root),{'verified':False})
 if __name__=='__main__':unittest.main()
