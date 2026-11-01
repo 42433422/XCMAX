@@ -265,12 +265,6 @@ def _register_optional_routes(app: _facade().FastAPI, cfg: _facade().AppConfig) 
     for _m in modules:
         _facade()._include_optional(app, _m)
     try:
-        from modstore_server.butler_qq_botpy import start_botpy_background
-
-        start_botpy_background(app)
-    except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.exception("butler_qq_botpy start_botpy_background failed, skipping")
-    try:
         from modstore_server.workflow_api import workflow_hooks_router
 
         app.include_router(workflow_hooks_router)

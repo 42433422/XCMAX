@@ -296,7 +296,6 @@ export const admin = {
       body: JSON.stringify({ secret }),
     }),
   adminDeleteAiAccount: (id: number | string) => req(`/api/admin/ai-accounts/${encodeURIComponent(String(id))}`, { method: 'DELETE' }),
-  butlerQqStatus: () => req('/api/agent/butler/qq/status'),
   adminYuangonOnboardStatus: () => req('/api/admin/yuangon-onboard/status'),
   adminYuangonOnboardRun: (body: { dry_run?: boolean; force?: boolean; pkg_ids?: string }) =>
     req('/api/admin/yuangon-onboard/run', { method: 'POST', body: JSON.stringify(body || {}) }),

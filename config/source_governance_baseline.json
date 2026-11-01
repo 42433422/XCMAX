@@ -63,11 +63,6 @@
       "lines": 1315,
       "soft_cap": 800
     },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/butler_qq_bridge_merged.py": {
-      "stack": "modstore_backend",
-      "lines": 1301,
-      "soft_cap": 800
-    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/public_visualization_api_merged.py": {
       "stack": "modstore_backend",
       "lines": 1250,
@@ -238,7 +233,6 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/authoring_merged.py": 168,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_enterprise_identity.py": 18,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py": 835,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/butler_qq_bridge_merged.py": 318,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/craft_steps_merged.py": 196,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py": 412,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py": 295,

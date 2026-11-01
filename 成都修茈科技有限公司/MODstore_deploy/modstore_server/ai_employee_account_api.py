@@ -14,7 +14,7 @@
 
 ## 内部查询
 
-``lookup_active_account_for`` 给 ``butler_qq_bridge`` 之类的 runtime 使用：
+``lookup_active_account_for`` 给各渠道 runtime 使用：
 按 ``employee_id + platform`` 找当前 active 的账号，并把密钥文件解开成
 dict 返回；查不到返回 ``None``，让上层走 ENV fallback。
 """
@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -33,7 +33,6 @@ from modstore_server.ai_employee_account_secrets import (
     delete_secret,
     read_secret,
     secret_path_for,
-    validate_qq_secret,
     write_secret,
 )
 from modstore_server.api.deps import require_admin
@@ -49,8 +48,8 @@ router = APIRouter(prefix="/api/admin/ai-accounts", tags=["admin-ai-accounts"])
 
 
 class CreateAccountDTO(BaseModel):
-    platform: str = Field(..., description="qq / wechat / email / ...")
-    external_id: str = Field(..., description="该平台上的对外 id，如 QQ 号")
+    platform: str = Field(..., description="wechat / email / slack / feishu / ...（qq 已下线）")
+    external_id: str = Field(..., description="该平台上的对外 id，如邮箱或企业微信 id")
     employee_id: str = Field(..., description="挂到哪位 AI 员工名下，如 xc-digital-butler")
     display_name: str = ""
     sandbox: bool = False
@@ -74,44 +73,12 @@ class RotateSecretDTO(BaseModel):
 
 
 def _channel_paths(platform: str, employee_id: str) -> Dict[str, Any]:
-    """按平台 + 员工拼出该账号的"入站渠道地址"——给前端直接复制贴到 QQ 后台用。
+    """按平台 + 员工拼出入站渠道地址（仅路径，不含 host）。
 
-    QQ 平台暴露两条同等的 URL：
-
-    - ``/api/agent/butler/qq/by-employee/{employee_id}/webhook``
-      新员工首选，由 ``butler_qq_bridge`` 按 employee_id 解析凭证。
-    - ``/api/agent/butler/qq/{webhook_key}/webhook``
-      历史 webhook_key（task-router / employee-interview）；其他 platform
-      暂不返回，避免误用。
-
-    只是路径字符串，不含 host——前端拼协议域名即可。
+    QQ Bot 渠道已下线；当前各平台暂不导出 webhook URL，避免误贴到已退役后台。
     """
     plat = (platform or "").lower()
-    if plat != "qq":
-        return {"platform": plat, "paths": []}
-    eid = (employee_id or "").strip()
-    paths: List[Dict[str, str]] = []
-    if eid:
-        paths.append(
-            {
-                "label": "通用 webhook（按 employee_id）",
-                "path": f"/api/agent/butler/qq/by-employee/{eid}/webhook",
-            }
-        )
-    try:
-        from modstore_server.butler_qq_bridge import _SPECIFIC_WEBHOOKS
-
-        for webhook_key, spec in _SPECIFIC_WEBHOOKS.items():
-            if spec.get("employee_id") == eid:
-                paths.append(
-                    {
-                        "label": f"历史 URL（{webhook_key}）",
-                        "path": f"/api/agent/butler/qq/{webhook_key}/webhook",
-                    }
-                )
-    except RECOVERABLE_ERRORS:
-        pass
-    return {"platform": plat, "paths": paths}
+    return {"platform": plat, "paths": []}
 
 
 def _to_view(row: AIEmployeeAccount, *, has_secret: Optional[bool] = None) -> Dict[str, Any]:
@@ -145,28 +112,19 @@ def _to_view(row: AIEmployeeAccount, *, has_secret: Optional[bool] = None) -> Di
 
 
 def _invalidate_runtime_caches() -> None:
-    """admin CRUD/轮换后，让 QQ 桥接的凭证、bot ctx 缓存立刻失效。"""
-    try:
-        from modstore_server.butler_qq_bridge import (
-            invalidate_bot_ctx_cache,
-            invalidate_creds_cache,
-        )
+    """admin CRUD/轮换后的 runtime 缓存失效钩子。
 
-        invalidate_creds_cache()
-        invalidate_bot_ctx_cache()
-    except RECOVERABLE_ERRORS:
-        logger.debug("invalidate butler_qq_bridge caches failed", exc_info=True)
+    QQ Bot 桥接已下线；保留空实现，避免调用点再分支。
+    """
+    return
 
 
 def _validate_secret_for_platform(platform: str, secret: Dict[str, Any]) -> None:
     """各平台特有 schema 检查；不认得的平台至少要求 secret 非空。"""
+    if (platform or "").strip().lower() == "qq":
+        raise HTTPException(410, "QQ Bot 渠道已下线，不再接受 platform=qq 账号或密钥")
     if not isinstance(secret, dict) or not secret:
         raise HTTPException(400, "secret 不能为空")
-    if platform == "qq":
-        try:
-            validate_qq_secret(secret)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
 
 
 # ─── 内部查询：runtime 用 ──────────────────────────────────────────

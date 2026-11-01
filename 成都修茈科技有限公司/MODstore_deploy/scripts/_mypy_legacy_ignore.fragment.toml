@@ -13,8 +13,6 @@ module = [
     "modstore_server.app_helpers",
     "modstore_server.application.catalog",
     "modstore_server.auth_service",
-    "modstore_server.butler_qq_botpy",
-    "modstore_server.butler_qq_bridge",
     "modstore_server.catalog_store",
     "modstore_server.change_merge",
     "modstore_server.customer_service_api",
