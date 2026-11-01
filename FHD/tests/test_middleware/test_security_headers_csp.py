@@ -45,7 +45,7 @@ def test_login_preserves_session_cookie_when_clearing_unpublished_notice(monkeyp
     from app.application import elt_login_authorization as notice
     from app.fastapi_routes.domains.auth.session_cookies import SessionCookies
 
-    monkeypatch.setattr(notice, "NOTICE_PUBLISHED", False)
+    monkeypatch.delenv(notice.NOTICE_PUBLICATION_ENV, raising=False)
     app = FastAPI()
     app.add_middleware(SecurityHeadersMiddleware)
 
