@@ -11,7 +11,7 @@ on:
         required: true
         default: convergence
         type: choice
-        options: [convergence, upload-readback-9a7e4cc0]
+        options: [convergence, upload-readback-9a7e4cc0, startup-readback-9a7e4cc0]
       release_sha:
         description: Exact 40-character release SHA expected everywhere
         required: true
@@ -32,7 +32,7 @@ defaults:
 
 jobs:
   readback:
-    if: ${{ inputs.mode != 'upload-readback-9a7e4cc0' }}
+    if: ${{ inputs.mode == 'convergence' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -112,3 +112,33 @@ jobs:
             -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
             "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}" 'python3 -' \
             < scripts/deploy/read_upload_9a7e4cc0.py
+
+  startup-readback:
+    if: ${{ inputs.mode == 'startup-readback-9a7e4cc0' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Read only sanitized failed-startup evidence
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+          FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${FHD_PUSH_HOST:-}"
+          test -n "${FHD_PUSH_SSH_KEY_RAW:-}"
+          umask 077
+          key="${RUNNER_TEMP}/fixed-upload-readback-key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$key"
+          unset FHD_PUSH_SSH_KEY_RAW
+          timeout --kill-after=5s 90s ssh -T -i "$key" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            -o ConnectTimeout=15 -o ConnectionAttempts=1 \
+            -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}" 'python3 -' \
+            < scripts/deploy/read_startup_9a7e4cc0.py

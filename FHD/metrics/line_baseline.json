@@ -1,5 +1,5 @@
 {
-  "lines": 2407207,
+  "lines": 2407289,
   "updated": "2026-11-01",
-  "note": "用户于2026-11-01 08:21 UTC明确批准固定只读上传诊断；增加固定目标stat与白名单proc采样及既有workflow隔离模式，净增94行；仅诊断分支，不合入生产main。"
+  "note": "User approved isolated read-only startup diagnostic, fixed service/window and sanitized output; no main merge"
 }
