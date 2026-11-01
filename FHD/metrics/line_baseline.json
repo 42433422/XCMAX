@@ -1,5 +1,5 @@
 {
-  "lines": 2407434,
+  "lines": 2407463,
   "updated": "2026-11-01",
-  "note": "Authorized fixed runtime configuration diagnosis: four exact env paths and only three numeric port keys; no other environment output; diagnostic branch"
+  "note": "Authorized same-service verified MainPID runtime diagnosis only three numeric port fields; other environment never output; no main merge"
 }

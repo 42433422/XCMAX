@@ -142,6 +142,34 @@ def config_summary():
     output['systemd_environment_read_ok'] = code == 0
     return output
 
+
+def runtime_ports():
+    code, pid = read(['systemctl', 'show', SERVICE, '-p', 'MainPID', '--value'])
+    pid = pid.strip()
+    if code or not re.fullmatch(r'[1-9][0-9]{0,8}', pid):
+        return {'verified': False}
+    try:
+        with open('/proc/' + pid + '/cgroup', encoding='ascii', errors='replace') as stream:
+            owned = any(line.rstrip().endswith('/' + SERVICE) for line in stream)
+        if not owned:
+            return {'verified': False}
+        with open('/proc/' + pid + '/environ', 'rb') as stream:
+            raw = stream.read(1024 * 1024 + 1)
+        if len(raw) > 1024 * 1024:
+            return {'verified': False, 'size_limit': True}
+        ports = dict.fromkeys(PORT_KEYS, 'absent')
+        for entry in raw.split(b'\0'):
+            key, _, value = entry.partition(b'=')
+            if key in (b'FASTAPI_PORT', b'XCAGI_API_PORT', b'PORT'):
+                ports[key.decode('ascii')] = port_value(value.decode('ascii', errors='replace'))
+        del raw
+        code, current = read(['systemctl', 'show', SERVICE, '-p', 'MainPID', '--value'])
+        if code or current.strip() != pid:
+            return {'verified': False, 'pid_changed': True}
+        return {'verified': True, 'ports': ports}
+    except OSError:
+        return {'verified': False, 'read_failed': True}
+
 def main():
     code, raw = read(['journalctl', '-u', SERVICE, '--since', '2026-11-01 08:39:20 UTC', '--until', '2026-11-01 08:44:20 UTC', '-n', '5000', '--no-pager', '-o', 'json'])
     size_ok = len(raw.encode('utf-8')) <= 4 * 1024 * 1024
@@ -187,6 +215,7 @@ def main():
             port_arg = re.search(r'(?:^|\s)--port(?:=|\s+)([0-9]{1,5})(?:\s|;|$)', value)
             output['cli_port'] = port_value(port_arg[1]) if port_arg else 'absent'
     output['port_config_sources'] = config_summary()
+    output['current_service_runtime_ports'] = runtime_ports()
     print(json.dumps(output, sort_keys=True))
 
 if __name__ == '__main__':
