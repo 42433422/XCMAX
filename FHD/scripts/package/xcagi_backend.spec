@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import importlib.util
 import json
 import os
 import runpy
@@ -221,6 +222,11 @@ for module in ["ctranslate2", "av"]:
 # ReportLab are permissively licensed; do not replace them with the AGPL
 # PyMuPDF/fitz runtime unless a separate commercial license is recorded.
 # xlrd is also required by consent-bound ELT legacy XLS data-test conversion.
+# Reviewed Excel imports this parser lazily when deriving a slice. It is required,
+# so a missing runtime dependency must fail the build rather than skip collection.
+if importlib.util.find_spec("defusedxml") is None:
+    raise ModuleNotFoundError("Required ELT runtime dependency missing: defusedxml")
+hiddenimports.extend(collect_submodules("defusedxml", on_error="raise"))
 for module in ["docx", "openpyxl", "xlrd", "pptx", "xlsxwriter", "pypdf", "reportlab"]:
     try:
         hiddenimports.extend(collect_submodules(module))

@@ -156,6 +156,65 @@ def _bootstrap_stage(stage: str) -> None:
         print(f"[bootstrap] {time.time():.3f} {stage}", file=sys.stderr, flush=True)
 
 
+def _verify_frozen_elt_runtime() -> None:
+    """Exercise safe XML parsing and the real XLSX slice path without user data or AI."""
+    from hashlib import sha256
+    from io import BytesIO
+
+    from defusedxml import ElementTree as safe_xml
+    from defusedxml.common import DTDForbidden
+    from openpyxl import Workbook, load_workbook
+    from openpyxl.worksheet.print_settings import PrintArea
+
+    from app.application.reviewed_excel_template import (
+        derive_document_workbook,
+        inspect_workbook,
+    )
+
+    # Importing alone does not prove the bundled parser or derivation path works.
+    try:
+        safe_xml.fromstring(b'<!DOCTYPE probe><probe/>', forbid_dtd=True)
+    except DTDForbidden:
+        pass
+    else:
+        raise RuntimeError("frozen ELT runtime probe did not reject a DTD")
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Synthetic"
+    sheet.append(["Item", "Quantity"])
+    sheet.append(["Sample", 2])
+    sheet.append(["Total", "=SUM(B2:B2)"])
+    sheet.auto_filter.ref = "A1:B3"
+    sheet.print_area = "A1:B3"
+    stream = BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    source = stream.getvalue()
+    source_sha = sha256(source).digest()
+    if inspect_workbook(source)["sheets"] != ["Synthetic"]:
+        raise RuntimeError("frozen ELT runtime probe could not inspect its workbook")
+    derived = derive_document_workbook(
+        source, [{"sheet": "Synthetic", "range": "A1:B3"}], print_area_mode="selected"
+    )
+    checked = load_workbook(BytesIO(derived), data_only=False, keep_links=True, rich_text=True)
+    try:
+        result = checked["Synthetic"]
+        if (
+            checked.sheetnames != ["Synthetic"]
+            or list(result.values)
+            != [("Item", "Quantity"), ("Sample", 2), ("Total", "=SUM(B2:B2)")]
+            or result.auto_filter.ref != "A1:B3"
+            or {str(area) for area in PrintArea.from_string(result.print_area).ranges}
+            != {"A1:B3"}
+            or sha256(source).digest() != source_sha
+        ):
+            raise RuntimeError("frozen ELT runtime probe did not preserve its workbook")
+    finally:
+        checked.close()
+    print("[run_fastapi] frozen ELT runtime probe OK: defusedxml + XLSX inspect/derive/readback")
+
+
 def _verify_frozen_critical_runtime() -> None:
     """Exercise critical office and voice dependencies in the frozen executable."""
     import tempfile
@@ -167,6 +226,8 @@ def _verify_frozen_critical_runtime() -> None:
     from reportlab.pdfbase import pdfmetrics  # type: ignore[import-untyped]
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont  # type: ignore[import-untyped]
     from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
+
+    _verify_frozen_elt_runtime()
 
     # Validate string-loaded sync appliers that static PyInstaller analysis cannot discover.
     from app.domain.shared_services.xcmax_sync_service import _ENTITY_APPLIERS

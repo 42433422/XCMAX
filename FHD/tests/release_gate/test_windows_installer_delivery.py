@@ -139,6 +139,26 @@ def test_stable_lane_still_requires_signing():
     assert "verify-public-windows-signature" in workflow["jobs"]["publish-website-pointer"]["needs"]
 
 
+def test_branch_backend_runtime_candidate_builds_without_release_privileges():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/windows-backend-runtime.yml").read_text())
+    trigger = workflow.get("on", workflow.get(True))
+    assert set(trigger) == {"pull_request"}
+    assert "FHD/pyproject.toml" in trigger["pull_request"]["paths"]
+    assert "FHD/scripts/package/xcagi_backend.spec" in trigger["pull_request"]["paths"]
+    assert workflow["permissions"] == {"contents": "read"}
+    job = workflow["jobs"]["frozen-backend-runtime"]
+    assert job["runs-on"] == "windows-latest"
+    assert job["steps"][0]["with"]["ref"] == "${{ github.sha }}"
+    runs = "\n".join(step.get("run", "") for step in job["steps"])
+    assert "python -m venv $venv" in runs
+    assert "build-backend.ps1 -ProductSku enterprise" in runs
+    assert "pip_audit" in runs
+    assert "source_sha = (git rev-parse HEAD).Trim()" in runs
+    assert "installer_tested = $false; published = $false" in runs
+    assert "secrets." not in yaml.safe_dump(workflow)
+    assert "build-installer.ps1" not in runs
+
+
 def test_retired_customer_workflow_cannot_checkout_old_sources(tmp_path):
     workflow = yaml.safe_load((ROOT / ".github/workflows/sunbird-installer.yml").read_text())
     trigger = workflow.get("on", workflow.get(True))

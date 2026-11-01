@@ -151,6 +151,22 @@ try {
   & $signatureVerifier -Path $backendExe -ExpectedPublisher $ExpectedPublisher -AllowUnsigned:$AllowUnsigned
 
   Stop-XcagiProcesses
+  $probeDir = Join-Path (Split-Path -Parent $InstallDir) ("xcagi-installed-probe-" + [Guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Force -Path $probeDir | Out-Null
+  try {
+    Write-Host 'Verifying installed backend critical dependencies and synthetic XLSX derivation.'
+    $probe = Start-Process -FilePath $backendExe `
+      -ArgumentList @('--verify-frozen-critical-runtime', '--data-dir', "`"$(Join-Path $probeDir 'data')`"") `
+      -WorkingDirectory $probeDir -Wait -PassThru `
+      -RedirectStandardOutput (Join-Path $probeDir 'stdout.log') `
+      -RedirectStandardError (Join-Path $probeDir 'stderr.log')
+    Get-Content -LiteralPath (Join-Path $probeDir 'stdout.log'), (Join-Path $probeDir 'stderr.log') -ErrorAction SilentlyContinue
+    if ($probe.ExitCode -ne 0) {
+      throw "Installed backend critical runtime probe failed with exit code $($probe.ExitCode)"
+    }
+  } finally {
+    Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
   Write-Host "Launching installed desktop runtime: $installedExe"
   $appProcess = Start-Process `
     -FilePath $installedExe `

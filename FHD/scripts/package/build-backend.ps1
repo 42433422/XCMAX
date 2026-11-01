@@ -72,8 +72,10 @@ if ($jsCount -lt 1) {
 Write-Host "[ok] vue-dist gate: index.html present, assets/js count=$jsCount"
 
 python -m pip install --upgrade pip
-python -m pip install -e ".[server-api]"
+python -m pip install -c deploy/requirements-server-api.lock.txt -e ".[server-api]"
 if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api] failed" }
+python -m pip check
+if ($LASTEXITCODE -ne 0) { throw "server-api runtime dependencies are inconsistent" }
 python -m pip install "pyinstaller>=6.0" appdirs
 if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller/appdirs failed" }
 
@@ -107,6 +109,28 @@ if ($bundledJs -lt 1) {
   throw 'bundled vue-dist/assets/js empty — desktop would show no page'
 }
 Write-Host "[ok] bundled vue-dist ($bundledJs js)"
+
+$backendExe = Join-Path $Root 'dist\xcagi-backend\xcagi-backend.exe'
+if (-not (Test-Path -LiteralPath $backendExe)) {
+  throw "PyInstaller output missing backend executable: $backendExe"
+}
+# Use the finished windowed executable outside the source checkout. A developer
+# Python environment can mask missing bundled dependencies such as defusedxml.
+$probeDir = Join-Path ([System.IO.Path]::GetTempPath()) ("xcagi-frozen-probe-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $probeDir | Out-Null
+try {
+  $probe = Start-Process -FilePath $backendExe `
+    -ArgumentList @('--verify-frozen-critical-runtime', '--data-dir', "`"$(Join-Path $probeDir 'data')`"") `
+    -WorkingDirectory $probeDir -Wait -PassThru `
+    -RedirectStandardOutput (Join-Path $probeDir 'stdout.log') `
+    -RedirectStandardError (Join-Path $probeDir 'stderr.log')
+  Get-Content -LiteralPath (Join-Path $probeDir 'stdout.log'), (Join-Path $probeDir 'stderr.log') -ErrorAction SilentlyContinue
+  if ($probe.ExitCode -ne 0) {
+    throw "Frozen critical runtime probe failed with exit code $($probe.ExitCode)"
+  }
+} finally {
+  Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 if ($ProductSku) {
   Remove-Item Env:XCAGI_STAGED_MODS_DIR -ErrorAction SilentlyContinue
