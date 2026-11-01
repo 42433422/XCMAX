@@ -169,6 +169,86 @@ def test_template_timeout_is_separate_from_etl_row_limit(monkeypatch):
     assert template_timeout_seconds() == 180
 
 
+@pytest.mark.parametrize("failure_type", [RuntimeError, OSError, ImportError, TypeError])
+def test_platform_initialization_failure_is_presend_and_restores_owner(monkeypatch, failure_type):
+    from app.application.elt import llm_session_provider as sessions
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+    from app.application.reviewed_excel_template import _template_platform_complete
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    calls = []
+
+    def fail(**_):
+        calls.append(sessions.current_etl_llm_owner())
+        raise failure_type("synthetic-private-initialization-detail")
+
+    monkeypatch.setattr(sessions, "current_owner_market_provider", fail)
+    token = sessions.bind_etl_llm_owner(99)
+    try:
+        expected = TypeError if failure_type is TypeError else ModelRequestNotSent
+        with pytest.raises(expected) as error:
+            _template_platform_complete([], {}, 20, owner_id=7)
+        if expected is ModelRequestNotSent:
+            assert "未调用模型" in str(error.value) and "synthetic-private" not in str(error.value)
+        assert calls == [7] and sessions.current_etl_llm_owner() == 99
+    finally:
+        sessions.reset_etl_llm_owner(token)
+
+
+def test_platform_missing_component_is_presend(monkeypatch):
+    import builtins
+
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+    from app.application.reviewed_excel_template import _template_platform_complete
+
+    original_import = builtins.__import__
+
+    def missing(name, *args, **kwargs):
+        if name == "app.infrastructure.llm.structured_output":
+            raise ImportError("synthetic-private-component-detail")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", missing)
+    with pytest.raises(ModelRequestNotSent, match="组件未就绪；未调用模型"):
+        _template_platform_complete([], {}, 20, owner_id=7)
+
+
+@pytest.mark.parametrize("presend", [False, True])
+def test_platform_dispatch_preserves_presend_refusal_and_postsend_uncertainty(monkeypatch, presend):
+    from types import SimpleNamespace
+
+    from app.application.elt import llm_session_provider as sessions
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+    from app.application.reviewed_excel_template import _template_platform_complete
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    failure = (
+        ModelRequestNotSent("目标已改变；未调用模型")
+        if presend
+        else RuntimeError("synthetic transport failure")
+    )
+    calls = []
+
+    async def fail(*_args, **_kwargs):
+        calls.append(1)
+        raise failure
+
+    monkeypatch.setattr(
+        sessions,
+        "current_owner_market_provider",
+        lambda **_: SimpleNamespace(is_configured=True, chat_completion=fail),
+    )
+    before = sessions.current_etl_llm_owner()
+    with pytest.raises(ReviewedExcelError) as error:
+        _template_platform_complete([], {}, 20, owner_id=7)
+    if presend:
+        assert error.value is failure
+    else:
+        assert not isinstance(error.value, ModelRequestNotSent)
+        assert "可能已产生费用；未自动重试" in str(error.value)
+    assert calls == [1] and sessions.current_etl_llm_owner() == before
+
+
 def test_actual_prefix_request_sizes_are_monotone_with_fixed_edge_context():
     review = workbook_review(24)
     cells = review["cells"]

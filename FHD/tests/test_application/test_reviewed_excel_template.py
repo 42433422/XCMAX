@@ -2145,6 +2145,27 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
     assert "input_messages" not in proposal["model"]
 
 
+def test_platform_initialization_outage_keeps_local_preview(monkeypatch, review_store):
+    from app.application.elt import llm_session_provider as sessions
+
+    def unavailable(**_):
+        raise RuntimeError("synthetic-private-provider-initialization")
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "platform")
+    monkeypatch.setattr(sessions, "current_owner_market_provider", unavailable)
+    response = review_store.client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", sample())},
+        data={"model_opt_in": "true", "own_file_authorized": "true", "expected_actor": "1:7"},
+    )
+    assert response.status_code == 200
+    proposal = response.json()["proposal"]
+    assert proposal["model"]["status"] == "unavailable" and len(proposal["candidates"]) == 3
+    assert "未调用模型" in proposal["model"]["message"]
+    assert "synthetic-private" not in response.text
+
+
 def test_owner_file_template_authorization_uses_platform_by_default(monkeypatch, review_store):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
