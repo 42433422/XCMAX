@@ -213,14 +213,17 @@ class TestPlatformStreamPayloadToOpenaiChunk:
         result = _platform_stream_payload_to_openai_chunk(data)
         assert result["choices"][0]["delta"]["content"] == "hi"
 
-    def test_error_type_raises_value_error(self):
+    def test_error_type_raises_safe_value_error_without_upstream_details(self):
         from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
-        data = json.dumps({"type": "error", "message": "boom"})
-        with pytest.raises(ValueError, match="boom"):
+        data = json.dumps(
+            {"type": "error", "message": "boom https://provider.invalid/?key=synthetic-secret"}
+        )
+        with pytest.raises(ValueError) as error:
             _platform_stream_payload_to_openai_chunk(data)
+        assert str(error.value) == "模型服务请求失败，请查看模型状态后重试。"
 
     def test_plain_dict_with_content_returns_chunk(self):
         from app.domain.shared_services.conversation.modstore_adapter import (

@@ -1,5 +1,5 @@
 {
-  "lines": 2405769,
+  "lines": 2405772,
   "updated": "2026-11-01",
-  "note": "Sync main after #2886 removed QQ Bot code and lower the ratchet to the actual tree. PR #2888 still adds 2529 maintained lines relative to e70b175f0: 2123 for the authorized report fixes, 406 for CodeQL/CI corrections (300 formatting-only); no unrelated deletions or scanner suppressions."
+  "note": "PR #2888 CI follow-up adds 3 test lines to verify upstream URLs/secrets are never echoed in SSE errors. Actual tree after main #2886 sync: 2405772 lines; PR delta versus e70b175f0 is +2532 (2123 report fixes, 406 CodeQL/format/regressions, 3 error-redaction regression). No scanner suppression or unrelated deletion."
 }
