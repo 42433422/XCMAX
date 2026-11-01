@@ -20,6 +20,66 @@ def summarize(raw):
             frames.add((match[1], int(match[2])))
     return {'exception_types': sorted(types), 'missing_modules': sorted(modules), 'source_frames': [{'path': p, 'line': n} for p, n in sorted(frames)][:30]}
 
+
+# Exact startup guards: factory.py:97, lifespan.py:348/351, mod_startup.py:81.
+EVENT_PATTERNS = {
+    'exec_failed': r'Failed at step EXEC|Failed to execute|Failed to locate executable|can.t open file',
+    'working_directory_failed': r'Failed at step CHDIR|Changing to the requested working directory failed',
+    'permission_denied': r'Permission denied',
+    'bind_failed': r'address already in use|error while attempting to bind|Address family not supported',
+    'asgi_import_failed': r'Error loading ASGI app|Could not import module',
+    'start_limit': r'Start request repeated too quickly|start-limit-hit',
+    'signal_exit': r'code=killed|code=dumped|Killed process|oom-kill',
+    'main_process_exited': r'Main process exited',
+    'restart_scheduled': r'Scheduled restart job',
+    'started_process': r'Started server process',
+    'startup_waiting': r'Waiting for application startup',
+    'startup_complete': r'Application startup complete',
+    'startup_failed': r'Application startup failed',
+    'server_listening': r'Uvicorn running on',
+    'shutdown': r'Shutting down|Application shutdown complete',
+    'production_key_guard': r'SECRET_KEY must be set in production',
+    'database_init_failed': r'数据库初始化失败',
+    'mod_background_failed': r'background load_all_mods failed',
+    'guarded_runtime_failed': r'guarded (?:catalog|parent|application|identity|workers).*?(?:differs|changed|requires|unavailable|not drained)',
+}
+
+def record_summary(records):
+    events, metadata, message_types = {}, {}, {}
+    for record in records:
+        message = record.get('MESSAGE')
+        kind = 'str' if isinstance(message, str) else 'bytes_array' if isinstance(message, list) else 'other'
+        message_types[kind] = message_types.get(kind, 0) + 1
+        if kind == 'bytes_array':
+            try:
+                message = bytes(message).decode('utf-8', errors='replace')
+            except (ValueError, TypeError):
+                message = ''
+        if not isinstance(message, str):
+            message = ''
+        timestamp = str(record.get('__REALTIME_TIMESTAMP', ''))
+        timestamp = int(timestamp) if re.fullmatch(r'[0-9]{15,17}', timestamp) else None
+        for name, pattern in EVENT_PATTERNS.items():
+            if re.search(pattern, message, re.IGNORECASE):
+                event = events.setdefault(name, {'count': 0, 'first_us': timestamp, 'last_us': timestamp})
+                event['count'] += 1
+                event['last_us'] = timestamp
+        for field in ('MESSAGE_ID', 'EXIT_CODE', 'EXIT_STATUS', '_COMM'):
+            value = record.get(field)
+            allowed = isinstance(value, str) and (
+                (field == 'MESSAGE_ID' and re.fullmatch(r'[0-9a-f]{32}', value)) or
+                (field == 'EXIT_STATUS' and re.fullmatch(r'[0-9]{1,4}', value)) or
+                (field == 'EXIT_CODE' and value in ('exited', 'killed', 'dumped')) or
+                (field == '_COMM' and value in ('systemd', 'python', 'python3', 'uvicorn', 'gunicorn')))
+            if allowed:
+                key = field + ':' + value
+                metadata[key] = metadata.get(key, 0) + 1
+        match = re.search(r'code=(exited|killed|dumped), status=([0-9]{1,4})(?:/|\b)', message)
+        if match:
+            key = 'process_exit:' + match[1] + ':' + match[2]
+            metadata[key] = metadata.get(key, 0) + 1
+    return {'event_categories': events, 'structured_counts': metadata, 'message_types': message_types}
+
 def read(args):
     result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=15, check=False)
     return result.returncode, result.stdout
@@ -28,11 +88,14 @@ def main():
     code, raw = read(['journalctl', '-u', SERVICE, '--since', '2026-11-01 08:39:20 UTC', '--until', '2026-11-01 08:44:20 UTC', '-n', '5000', '--no-pager', '-o', 'json'])
     size_ok = len(raw.encode('utf-8')) <= 4 * 1024 * 1024
     messages = []
+    records = []
     invalid = 0
     if size_ok:
         for row in raw.splitlines():
             try:
-                message = json.loads(row).get('MESSAGE')
+                record = json.loads(row)
+                records.append(record)
+                message = record.get('MESSAGE')
                 if isinstance(message, str):
                     messages.append(message)
                 else:
@@ -40,6 +103,7 @@ def main():
             except (ValueError, AttributeError):
                 invalid += 1
     output = summarize('\n'.join(messages))
+    output.update(record_summary(records))
     output['journal_read_ok'] = code == 0
     output['journal_entries_examined'] = len(messages)
     output['journal_invalid_entries'] = invalid
@@ -61,6 +125,7 @@ def main():
         elif key == 'ExecStart':
             match = re.search(r'(?:^|[ {;])path=(/(?:usr/(?:local/)?bin|opt/fhd-full/\.venv/bin)/python[0-9.]*)\s*;', value)
             output['python_executable'] = match[1] if match else 'not-a-recognized-python-executable'
+            output['known_entry_paths'] = [p for p in ('/opt/fhd-full/XCAGI/run.py', '/opt/fhd-full/XCAGI/run_fastapi.py', '/opt/fhd-full/run.py') if p in value]
     print(json.dumps(output, sort_keys=True))
 
 if __name__ == '__main__':
