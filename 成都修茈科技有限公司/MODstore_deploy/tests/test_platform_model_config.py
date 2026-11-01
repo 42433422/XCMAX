@@ -552,7 +552,12 @@ def test_recipient_attestation_reads_key_bound_actual_endpoint(bound_base, other
 @pytest.mark.parametrize("provider,source", [("xiaomi", "user_override"), ("openai", "platform")])
 def test_recipient_attestation_does_not_authorize_other_provider_or_byok(provider, source):
     snapshot = keys.chat_route_snapshot(
-        provider, "mimo-v2.6-flash", KEY, "https://token-plan-cn.xiaomimimo.com/v1", source, "explicit"
+        provider,
+        "mimo-v2.6-flash",
+        KEY,
+        "https://token-plan-cn.xiaomimimo.com/v1",
+        source,
+        "explicit",
     )
     assert "recipient" not in snapshot.public_metadata()
 
