@@ -1,5 +1,5 @@
 {
-  "lines": 2406828,
+  "lines": 2406837,
   "updated": "2026-11-01",
-  "note": "PR #2891: gitleaks evidence exclusion remains unchanged; baseline +266 versus main comprises the original +259 security unblock and +7 follow-up lines preserving the managed reviewed-template path, real-resolver fixtures, and sibling-directory rejection coverage. No security gate is weakened."
+  "note": "PR #2891: harden mobile_api_extensions branch-cov fixture import (CI shard flake)"
 }

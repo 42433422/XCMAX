@@ -24,14 +24,23 @@ import pytest
 
 @pytest.fixture(autouse=True, scope="module")
 def _load_ext_module():
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401
+    # Always bind the extensions module by name. Importing mobile_api alone can
+    # race with other suites that pop sys.modules mid-session.
+    import importlib
+
+    importlib.import_module("app.fastapi_routes.mobile_api_extensions")
     yield
 
 
 @pytest.fixture
 def m():
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    name = "app.fastapi_routes.mobile_api_extensions"
+    mod = sys.modules.get(name)
+    if mod is None:
+        import importlib
+
+        mod = importlib.import_module(name)
+    return mod
 
 
 def _user(uid: int = 1, role: str = "admin"):
