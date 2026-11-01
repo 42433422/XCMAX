@@ -1,5 +1,5 @@
 {
-  "lines": 2405979,
+  "lines": 2405985,
   "updated": "2026-11-01",
-  "note": "docs: 新增 XCAGI 客户使用说明书 + README/DOCUMENTATION_MAP 入口（+174）"
+  "note": "fix(elt): 审阅 Excel 保存后快照 EltRun.summary_json，避免 DetachedInstanceError 导致 private_intake 自动入库失败；含测试加固与 CHANGELOG（净增约 6 行）"
 }
