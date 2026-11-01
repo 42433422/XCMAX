@@ -1,5 +1,5 @@
 {
-  "lines": 2407469,
+  "lines": 2407487,
   "updated": "2026-11-01",
-  "note": "Authorized inspection refuses symlink ancestors before reading any fixed config content; no write protections weakened"
+  "note": "Authorized read-only fixed-service owner matching booleans; no owner names or numeric IDs output, no permission changes"
 }

@@ -3,6 +3,8 @@ import hashlib
 import json
 import fcntl
 import sys
+import subprocess
+import pwd
 import os
 from pathlib import Path
 import re
@@ -118,6 +120,21 @@ def inspect_state():
             info = path.lstat()
             item.update({'root_owned': info.st_uid == 0, 'group_or_world_writable': bool(info.st_mode & 0o022), 'symlink': stat.S_ISLNK(info.st_mode), 'regular': stat.S_ISREG(info.st_mode), 'directory': stat.S_ISDIR(info.st_mode), 'single_link': info.st_nlink == 1})
         result['paths'][str(path)] = item
+    parent_info, target_info = TARGET.parent.lstat(), TARGET.lstat()
+    owners = {'parent_matches_file': parent_info.st_uid == target_info.st_uid, 'parent_matches_executor': parent_info.st_uid == os.geteuid(), 'file_matches_executor': target_info.st_uid == os.geteuid()}
+    service = subprocess.run(['systemctl', 'show', 'fhd-full.service', '-p', 'User', '--value'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=10, check=False)
+    if service.returncode == 0:
+        user = service.stdout.strip()
+        try:
+            uid = 0 if not user else int(user) if user.isdigit() else pwd.getpwnam(user).pw_uid
+            owners['service_user_resolved'] = True
+            owners['parent_matches_service'] = parent_info.st_uid == uid
+            owners['file_matches_service'] = target_info.st_uid == uid
+        except (KeyError, ValueError):
+            owners['service_user_resolved'] = False
+    else:
+        owners['service_user_resolved'] = False
+    result['owner_matches'] = owners
     if any(result['paths'][str(path)].get('symlink', False) for path in (TARGET.parent, RECOVERY.parent, RECOVERY)):
         result['unsafe_parent_symlink'] = True
         return result
@@ -180,6 +197,6 @@ if __name__ == '__main__':
     except Refused as exc:
         print(json.dumps({'status': 'refused', 'reason': str(exc), 'service_restarted': False}))
         raise SystemExit(1)
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
         print('{"status":"refused","reason":"os_or_state_error","service_restarted":false}')
         raise SystemExit(1)

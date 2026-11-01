@@ -80,9 +80,10 @@ class Tests(unittest.TestCase):
             root = Path(tmp); target = root / '.env'; recovery = root / 'private'
             target.write_bytes(b'FASTAPI_PORT=5000\nSECRET=NEVER_PRINT_THIS\n')
             before = target.stat()
-            with patch.object(module, 'TARGET', target), patch.object(module, 'RECOVERY', recovery), patch.object(module, 'atomic_write', side_effect=AssertionError('write forbidden')):
+            with patch.object(module, 'TARGET', target), patch.object(module, 'RECOVERY', recovery), patch.object(module, 'atomic_write', side_effect=AssertionError('write forbidden')), patch.object(module.subprocess, 'run', return_value=type('Result', (), {'returncode': 0, 'stdout': str(os.geteuid())})()):
                 result = module.inspect_state()
             self.assertEqual(result['port_state'], '5000')
+            self.assertTrue(all(result['owner_matches'].values()))
             self.assertNotIn('NEVER_PRINT_THIS', json.dumps(result))
             self.assertEqual(before.st_mtime_ns, target.stat().st_mtime_ns)
             self.assertFalse(recovery.exists())
