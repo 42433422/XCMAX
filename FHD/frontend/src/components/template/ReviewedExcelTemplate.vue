@@ -4,7 +4,9 @@ import { captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCach
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import templatePreviewApi from '@/api/templatePreview'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
-import { eltApi } from '@/api/elt'
+import { eltApi, type EltRun } from '@/api/elt'
+import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
+import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCenter/eltCenterShared'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
@@ -127,31 +129,107 @@ const error = ref('')
 const busy = ref(false)
 const savedId = ref('')
 const savedModelStatus = ref('')
+type IntakePlan = { run_id: string; mod_id: string; candidate_sha256: string; knowledge: { action: string; documents: number }; business: EltRun }
+const intakePlan = ref<IntakePlan | null>(null)
+const intakePending = ref(false)
+const intakeError = ref('')
+const intakeValidRowsOnly = ref(false)
+const currentComposerNote = computed(() => [...requirementNotes.value, composerDraft.value.trim()].filter(Boolean).join('\n').trim().slice(0, 4000))
+const intakeSelectionKey = computed(() => JSON.stringify([review.value?.review_id, proposal.value?.version,
+  proposal.value?.candidates[candidateIndex.value]?.id, selected.value, name.value.trim(), currentComposerNote.value]))
+let preparedSelectionKey = ''
+let intakeGeneration = 0
+let intakeTimer: ReturnType<typeof setTimeout> | null = null
+function resetIntake() {
+  intakeGeneration += 1
+  if (intakeTimer) clearTimeout(intakeTimer)
+  intakeTimer = null; intakePlan.value = null; intakePending.value = false; intakeError.value = ''; intakeValidRowsOnly.value = false
+  preparedSelectionKey = ''
+}
+const canConfirmIntake = computed(() => {
+  const run = intakePlan.value?.business
+  return canCommitSelectedTemplate() && !intakePending.value && !intakeError.value
+    && preparedSelectionKey === intakeSelectionKey.value && intakePlan.value?.mod_id === readActiveExtensionModIdFromStorage()
+    && run?.status === 'preview_ready' && !!run.preview_revision
+    && [run.summary.new, run.summary.update, run.summary.skip, run.summary.error].every(value => Number.isFinite(value) && value >= 0)
+    && (!run.summary.error || intakeValidRowsOnly.value)
+})
+async function prepareIntake() {
+  if (!canCommitSelectedTemplate()) return
+  resetIntake()
+  const generation = intakeGeneration, selection = intakeSelectionKey.value, modId = readActiveExtensionModIdFromStorage()
+  const fileCurrent = captureFileOperation()
+  const current = () => fileCurrent() && generation === intakeGeneration && selection === intakeSelectionKey.value && modId === readActiveExtensionModIdFromStorage()
+  intakePending.value = true
+  const accept = (run: EltRun) => {
+    if (!current()) return
+    intakePlan.value!.business = run
+    if (run.status === 'preview_ready' && run.preview_revision) {
+      preparedSelectionKey = selection; intakePending.value = false
+    } else if (['queued', 'previewing'].includes(run.status)) {
+      intakeTimer = setTimeout(() => { void poll() }, 800)
+    } else {
+      intakePending.value = false
+      intakeError.value = run.error?.message || '业务预演尚未得到可确认的结果，未开始写入；请重新预演。'
+    }
+  }
+  const poll = async () => {
+    if (!current() || !intakePlan.value) return
+    try {
+      const run = await eltApi.run(intakePlan.value.run_id)
+      if (current()) accept(run)
+    } catch (err) {
+      if (current()) { intakePending.value = false; intakeError.value = err instanceof Error ? err.message : '读取预演失败，未开始写入' }
+    }
+  }
+  try {
+    const form = new FormData()
+    form.append('review_id', review.value!.review_id); form.append('proposal_version', proposal.value.version)
+    form.append('candidate_id', proposal.value.candidates[candidateIndex.value].id)
+    form.append('selections', JSON.stringify(selected.value)); form.append('name', name.value.trim())
+    form.append('composer_note', currentComposerNote.value)
+    const result = await templatePreviewApi.previewReviewedIntake(form) as { intake: IntakePlan }
+    if (!current()) return
+    if (!result.intake?.run_id || result.intake.mod_id !== modId || result.intake.business?.id !== result.intake.run_id) throw new Error('预演范围无法核实，未开始写入；请重新预演。')
+    intakePlan.value = result.intake
+    accept(result.intake.business)
+  } catch (err) {
+    if (current()) { intakePending.value = false; intakeError.value = err instanceof Error ? err.message : '入库预演失败，未开始写入' }
+  }
+}
+watch(intakeSelectionKey, resetIntake, { flush: 'sync' })
+watch(() => [review.value?.review_id, proposal.value?.version, candidateIndex.value], () => {
+  if (review.value && canCommitSelectedTemplate()) void prepareIntake()
+}, { flush: 'post' })
 const ingestBatchId = ref('')
 const kbProgress = ref<{ stage?: string; pct?: number; message?: string; error?: string } | null>(null)
 const businessProgress = ref<{ stage?: string; pct?: number; message?: string; error?: string } | null>(null)
 let ingestPollTimer: ReturnType<typeof setInterval> | null = null
+let ingestPollGeneration = 0
 function stopIngestPoll() {
+  ingestPollGeneration += 1
   if (ingestPollTimer) {
     clearInterval(ingestPollTimer)
     ingestPollTimer = null
   }
 }
 async function pollIngestProgress() {
-  const id = ingestBatchId.value
-  if (!id) return
+  const id = ingestBatchId.value, generation = ingestPollGeneration
+  const sessionCurrent = captureOperation()
+  const current = () => sessionCurrent() && generation === ingestPollGeneration && id === ingestBatchId.value
+  if (!id || !current()) return
   try {
     const data = await eltApi.autoIngestProgress(id)
+    if (!current()) return
     kbProgress.value = data.kb_progress || null
     businessProgress.value = data.business_progress || null
-    const kbDone = Number(data.kb_progress?.pct || 0) >= 100
-    const bizDone = Number(data.business_progress?.pct || 0) >= 100
-    const terminal = ['applied', 'failed', 'withdrawn'].includes(String(data.status || ''))
-    if ((kbDone && bizDone) || terminal) {
+    const terminal = ['applied', 'failed', 'withdrawn', 'awaiting_confirmation'].includes(String(data.status || ''))
+    if (terminal) {
       stopIngestPoll()
-      savedModelStatus.value = `自动入库批次 ${id}（状态 ${data.status || 'unknown'}）。可在审批中心撤回。`
+      savedModelStatus.value = `自动入库批次 ${id}（状态 ${autoIngestStatusLabel(data.status)}）。请到审批工作台核对结果与可用的撤回操作。`
     }
   } catch (err) {
+    if (!current()) return
     businessProgress.value = {
       stage: 'error',
       pct: Number(businessProgress.value?.pct || 0),
@@ -194,6 +272,7 @@ function clearTemplateModelAuthorization() {
   initialModel.value = false; sampleAuthorized.value = false; templateOwnFileAuthorized.value = false; consent.value = false
 }
 function resetReview() {
+  resetIntake()
   review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0
   savedId.value = ''; savedModelStatus.value = ''; ingestBatchId.value = ''; kbProgress.value = null; businessProgress.value = null; stopIngestPoll(); sheetIndex.value = 0
   feedback.value = ''; consent.value = false; publishToTenant.value = false
@@ -201,6 +280,7 @@ function resetReview() {
 function resetSelectionState() {
   autoSlices.value = {}; retryBudget.value = {}; selectedSliceKey.value = ''
   clearTemplateModelAuthorization()
+  resetReview()
   file.value = null
   classifications.value = []
   classificationSampleAuthorized.value = false
@@ -211,18 +291,8 @@ function resetSelectionState() {
   selectedRegionNeedsChoice.value = false
   selectedPrintArea.value = false
   name.value = ''
-  review.value = null
-  proposals.value = []
-  selectedVersion.value = 0
-  feedback.value = ''
-  consent.value = false
-  publishToTenant.value = false
   sampleAuthorized.value = false
   templateOwnFileAuthorized.value = false
-  sheetIndex.value = 0
-  candidateIndex.value = 0
-  savedId.value = ''
-  savedModelStatus.value = ''
   analysisProgress.value = ''; analysisErrors.value = {}; classificationNotice.value = ''
 }
 watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
@@ -234,8 +304,7 @@ watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
   error.value = hadWork ? '登录身份已变化，已停止后续原件处理；请在当前账号重新选择文件，已发出的请求请在原账号核对。' : ''
   emit('stage', 'archive')
 }, { flush: 'sync' })
-onBeforeUnmount(() => { stopIngestPoll() })
-onBeforeUnmount(() => { alive = false; operationEpoch += 1; selectionEpoch += 1 })
+onBeforeUnmount(() => { resetIntake(); stopIngestPoll(); alive = false; operationEpoch += 1; selectionEpoch += 1 })
 function openFilePicker() {
   if (!alive || busy.value) return
   fileInputRef.value?.click()
@@ -830,10 +899,9 @@ function canCommitSelectedTemplate() {
   if (review.value.selected_region?.selection_basis !== 'model_group' && (!classificationConfirmed.value || !previewSelectionReady.value)) return false
   return true
 }
-async function pickCandidate(index: number) {
+function pickCandidate(index: number) {
   if (busy.value) return
   candidateIndex.value = index
-  if (props.archiveOnSelect) await save()
 }
 async function save() {
   const privateIntake = props.archiveOnSelect
@@ -846,7 +914,7 @@ async function save() {
   }
   const current = captureFileOperation()
   if (!current()) return
-  if (!canCommitSelectedTemplate()) return
+  if (!canConfirmIntake.value) return
   busy.value = true
   error.value = ''
   try {
@@ -854,24 +922,25 @@ async function save() {
     form.append('name', name.value.trim())
     form.append('publish_to_tenant', privateIntake ? 'false' : String(publishToTenant.value))
     form.append('private_intake', privateIntake ? 'true' : 'false')
+    form.append('intake_run_id', intakePlan.value!.run_id)
+    form.append('preview_revision', intakePlan.value!.business.preview_revision!)
+    form.append('valid_rows_only', String(intakeValidRowsOnly.value))
     form.append('review_id', review.value!.review_id)
     form.append('proposal_version', proposal.value.version)
     form.append('candidate_id', proposal.value.candidates[candidateIndex.value].id)
     form.append('selections', JSON.stringify(selected.value))
-    const noteParts = [...requirementNotes.value]
-    const draftNote = composerDraft.value.trim()
-    if (draftNote) noteParts.push(draftNote)
-    const composerNote = noteParts.join('\n').trim().slice(0, 4000)
-    if (composerNote) form.append('composer_note', composerNote)
+    if (currentComposerNote.value) form.append('composer_note', currentComposerNote.value)
     const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string }
     if (!current()) return
     savedId.value = result.template_id
-    const ingest = (result as { auto_ingest?: { batch_id?: string; status?: string; kb_progress?: { pct?: number }; business_progress?: { pct?: number } } }).auto_ingest
+    const ingest = (result as { auto_ingest?: { success?: boolean; error?: string; batch_id?: string; status?: string; kb_progress?: { pct?: number }; business_progress?: { pct?: number } } }).auto_ingest
     if (ingest?.batch_id) {
       kbProgress.value = ingest.kb_progress || { stage: 'queued', pct: 0, message: '排队写入知识库' }
       businessProgress.value = ingest.business_progress || { stage: 'queued', pct: 0, message: '排队写入业务域' }
-      savedModelStatus.value = `正在自动入库（批次 ${ingest.batch_id}，状态 ${ingest.status || 'running'}）…`
+      savedModelStatus.value = `正在自动入库（批次 ${ingest.batch_id}，状态 ${autoIngestStatusLabel(ingest.status)}）…`
       startIngestPoll(String(ingest.batch_id))
+    } else if (ingest?.success === false) {
+      savedModelStatus.value = ingest.error === 'confirmation_required' ? '仅模板已保存；知识与业务入库尚未确认，因此未启动。' : ingest.error === 'outcome_unknown' ? '模板已保存，入库回执尚未确认；请到审批工作台核对，勿重复提交。' : '模板已保存，但自动入库未能启动；请到审批工作台核对批次，勿重复提交。'
     } else {
       savedModelStatus.value = proposal.value.candidates[candidateIndex.value].id.startsWith('model_') ? '已选择模型建议，并以本次确认的清理范围保存。' : '本次保存使用规则或人工选择。'
     }
@@ -1162,7 +1231,7 @@ async function downloadCandidate(index: number) {
           </span>
         </div>
       </div>
-      <p class="reviewed-template__a4-hint">{{ archiveOnSelect ? '点选绿胶囊即选用并开始自动入库（知识库+业务）；黄=未选。' : '点选卡片选用；黄胶囊=未选，绿胶囊=已选。' }}</p>
+      <p class="reviewed-template__a4-hint">{{ archiveOnSelect ? '点击卡片仅选择模板；核对后点击「使用此模板并入库」开始写入。绿=已选，黄=未选。' : '点选卡片选用；黄胶囊=未选，绿胶囊=已选。' }}</p>
       <p>版本 {{ selectedVersion + 1 }} · {{ proposal.model.status === 'returned' ? '模型已返回建议，尚待用户确认' : proposal.model.status === 'unavailable' ? '模型不可用，显示确定性规则建议' : '确定性规则建议，未调用模型' }}<span v-if="proposal.model.status === 'returned'"> · 输入 {{ proposal.model.cells_sent }}/{{ proposal.model.cells_total }} 格{{ proposal.model.truncated ? '（已截断）' : '' }}</span></p>
       <details v-if="proposal.model.input_summary"><summary>查看模型输入摘要及来源坐标（不含正文）</summary><pre>{{ JSON.stringify(proposal.model.input_summary, null, 2) }}</pre></details>
       <details v-if="proposal.model.input_messages"><summary>历史记录中的模型输入正文（旧记录未自动清理）</summary><pre>{{ JSON.stringify(proposal.model.input_messages, null, 2) }}</pre></details>
@@ -1172,13 +1241,25 @@ async function downloadCandidate(index: number) {
       <button type="button" :disabled="busy || selectedVersion !== proposals.length - 1 || !consent || sampleAuthorized === templateOwnFileAuthorized || !feedback.trim()" @click="refine">生成新一轮三个模板</button>
       <p>服务端保留 {{ proposals.length }} 个提案版本；历史版本仅供查看，保存和修改需使用最新版本。</p>
       <p v-for="warning in currentRestrictions" :key="warning" role="alert">{{ warning }}</p>
+      <section class="reviewed-template__intake-plan" aria-label="本次入库范围">
+        <p v-if="intakePending" role="status">正在预演入库目标和记录数量，尚未写入模板、知识库或业务数据…</p>
+        <p v-if="intakeError" role="alert">{{ intakeError }}</p>
+        <template v-if="intakePlan && !intakePending && !intakeError">
+          <p>知识库：{{ actionLabel(intakePlan.knowledge.action) }} {{ intakePlan.knowledge.documents }} 份文档。</p>
+          <p v-if="intakePlan.business.target_type === 'knowledge'">业务数据：仅知识资料，无业务记录写入。</p>
+          <p v-else>业务目标：{{ targetLabel(intakePlan.business.target_type) }}；预计新增 {{ intakePlan.business.summary.new }} 行、更新 {{ intakePlan.business.summary.update }} 行、跳过 {{ intakePlan.business.summary.skip }} 行、错误 {{ intakePlan.business.summary.error }} 行。</p>
+          <label v-if="intakePlan.business.summary.error"><input v-model="intakeValidRowsOnly" type="checkbox" :disabled="busy"> 我已核对错误行，确认仅写入正确行；错误行不会写入。</label>
+          <p>确认后保存 1 份模板到当前企业模板库，并按上方同一预演写入；重复数据跳过，更新范围以预演为准。撤回仅回退本批知识和业务写入，原件和模板保留。</p>
+        </template>
+        <button type="button" :disabled="busy || intakePending || !canCommitSelectedTemplate()" @click="prepareIntake">重新预演入库范围</button>
+      </section>
       <template v-if="archiveOnSelect">
-        <p class="reviewed-template__intake-note">用户对接路径：选用模板后自动写入知识库与业务域；不发布到企业共享模板库。审批工作台仍可撤回。</p>
-        <button type="button" :disabled="!canCommitSelectedTemplate()" @click="save">使用此模板并入库</button>
+        <p class="reviewed-template__intake-note">本次处理 1 份所选文档（{{ file?.name }}{{ selectedRegion ? ` / ${selectedRegion}` : '' }}）。点击下方按钮会保存到当前企业模板库（同一业务空间内按模板权限可见），并将清理后的文档写入知识库及自动识别的业务域；目标和数量以上方预演为准。请先下载候选核对。撤回仅回退本批知识与业务写入，保留原件和模板。</p>
+        <button type="button" :disabled="!canConfirmIntake" @click="save">使用此模板并入库</button>
       </template>
       <template v-else>
-        <label><input v-model="publishToTenant" type="checkbox" :disabled="busy || publicationRestricted"> 确认发布清理后的文件到企业共享模板库；请检查是否仍有不应共享的信息。原件和审阅记录仍为私有。</label>
-        <button type="button" :disabled="publicationRestricted || !name.trim() || !publishToTenant || busy || selectedVersion !== proposals.length - 1 || proposal.result_previews?.length !== 3" @click="save">保存所选模板</button>
+        <label><input v-model="publishToTenant" type="checkbox" :disabled="busy || publicationRestricted"> 确认发布清理后的文件到企业共享模板库，并启动知识库及业务域入库（本次 1 份所选文档，目标及数量见上方预演）；请检查是否仍有不应共享的信息。原件和审阅记录仍为私有。</label>
+        <button type="button" :disabled="publicationRestricted || !publishToTenant || !canConfirmIntake" @click="save">保存所选模板</button>
       </template>
     </div>
     <p v-if="savedId">已保存到模板库。{{ savedModelStatus }} 可再次预览当前原件并保存新模板，已有模板不会被覆盖。<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>

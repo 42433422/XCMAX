@@ -46,6 +46,7 @@ from app.domain.context.session_context import (
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
+from app.infrastructure.modstore_transport import MarketModelError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -224,12 +225,20 @@ def _market_connection_label() -> str:
 
 
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
+    if isinstance(exc, MarketModelError):
+        if exc.status_code == 402 or "余额不足" in str(exc):
+            return HTTPException(
+                status_code=402, detail="修茈市场模型余额不足，请在「模型支付」充值后重试。"
+            )
+        return HTTPException(status_code=exc.status_code, detail=str(exc))
     if isinstance(exc, TimeoutError):
         msg = str(exc).strip() or "大模型响应超时，请稍后重试。"
         return HTTPException(status_code=504, detail=msg)
     try:
         import httpx
 
+        if isinstance(exc, httpx.TimeoutException):
+            return HTTPException(status_code=504, detail="模型服务响应超时，请检查连接后重试。")
         if isinstance(exc, httpx.ConnectError):
             return HTTPException(
                 status_code=503,

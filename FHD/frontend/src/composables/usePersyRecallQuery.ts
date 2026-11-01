@@ -41,11 +41,9 @@ export function usePersyRecallQuery(options: {
   }
 
   async function queryKnowledge(): Promise<void> {
+    if (querying.value) return
     const query = queryText.value.trim()
-    queryError.value = ''
-    queryMessage.value = ''
-    answerText.value = ''
-    resultChunks.value = []
+    resetRecall()
     if (!query) {
       queryError.value = '请输入问题'
       return
@@ -87,8 +85,9 @@ export function usePersyRecallQuery(options: {
       }
       const knowledgeChunks = knowledge?.success && Array.isArray(knowledge.chunks) ? knowledge.chunks : []
       const memoryChunks = memory?.success && Array.isArray(memory.chunks) ? memory.chunks : []
-      if (!knowledge?.success && !memory?.success) {
-        const reason = knowledgeFailure || memoryFailure || knowledge?.message || memory?.message || '检索失败'
+      if ((!knowledge?.success || memoryFailure || (memory && !memory.success)) &&
+          !knowledgeChunks.length && !memoryChunks.length) {
+        const reason = knowledgeFailure || memoryFailure || (!knowledge?.success ? knowledge?.message : memory?.message) || '检索失败'
         throw new Error(errorText(reason))
       }
       const seen = new Set<string>()
@@ -114,7 +113,7 @@ export function usePersyRecallQuery(options: {
         await Promise.allSettled([refreshMemories(), refreshGraph()])
       }
     } catch (error) {
-      queryError.value = errorText(error)
+      queryError.value = `知识检索失败：${errorText(error)}。请再次发送当前问题重试。`
     } finally {
       querying.value = false
     }

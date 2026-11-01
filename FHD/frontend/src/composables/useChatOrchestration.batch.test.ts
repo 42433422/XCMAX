@@ -249,7 +249,7 @@ describe('useChatOrchestration batch/json', () => {
       expect.any(Number),
       expect.objectContaining({ sessionId: 's' }),
     )
-    expect(addMessage).toHaveBeenCalledWith('part-1', 'ai', undefined, expect.any(Object))
+    expect(addMessage).toHaveBeenCalledWith('part-1', 'ai', { turnId: expect.any(String) }, expect.any(Object))
     expect(addAndSaveMessage).not.toHaveBeenCalled()
   })
 
@@ -267,7 +267,7 @@ describe('useChatOrchestration batch/json', () => {
     await api.sendMessage('执行计划')
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(requestChatByModeWithTimeout).toHaveBeenCalled()
-    expect(addMessage).toHaveBeenCalledWith('请确认', 'ai', undefined, expect.any(Object))
+    expect(addMessage).toHaveBeenCalledWith('请确认', 'ai', { turnId: expect.any(String) }, expect.any(Object))
     expect(addAndSaveMessage).not.toHaveBeenCalled()
     expect(agentListEvents).toHaveBeenCalledWith('run_1', {})
     // A confirmation response has not executed a tool yet. It must remain a

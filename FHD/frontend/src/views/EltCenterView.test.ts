@@ -7,6 +7,7 @@ const { archive, legacy } = vi.hoisted(() => ({
     confirmClassification: vi.fn(),
     reviewExcel: vi.fn(),
     saveReviewedExcel: vi.fn(),
+    previewReviewedIntake: vi.fn(),
     archiveAssets: vi.fn(),
     refineReviewedExcel: vi.fn(),
   },
@@ -55,6 +56,7 @@ beforeEach(() => {
   archive.confirmClassification.mockImplementation(async () => ({ ...classification(), version: 'v2', confirmed: true }))
   archive.reviewExcel.mockImplementation(async (form: FormData) => review(String(form.get('region_range'))))
   archive.saveReviewedExcel.mockResolvedValue({ template_id: '21' })
+  archive.previewReviewedIntake.mockResolvedValue({ intake: { run_id: 'intake-1', mod_id: '', candidate_sha256: 'sha', knowledge: { action: 'new', documents: 1 }, business: { id: 'intake-1', status: 'preview_ready', preview_revision: 'rev-1', target_type: 'customer_products', summary: { new: 2, update: 0, skip: 0, error: 0, executed: 0 } } } })
   legacy.capabilities.mockResolvedValue({ targets: [], transforms: [], compatibility_presets: [], inputs: {}, limits: {} })
   legacy.templates.mockResolvedValue([]); legacy.runs.mockResolvedValue([]); legacy.targetConfigs.mockResolvedValue([])
 })
@@ -84,6 +86,8 @@ describe('data docking user-only intake', () => {
     const dispatch = vi.spyOn(window, 'dispatchEvent')
     // User intake: pick capsule → private_intake save (no enterprise publish checkbox).
     await wrapper.findAll('.reviewed-template__preview--a4')[1].trigger('click'); await flushPromises()
+    expect(archive.saveReviewedExcel).not.toHaveBeenCalled()
+    await wrapper.findAll('button').find(item => item.text() === '使用此模板并入库')!.trigger('click'); await flushPromises()
     expect(archive.saveReviewedExcel).toHaveBeenCalledTimes(1)
     const form = archive.saveReviewedExcel.mock.calls[0][0] as FormData
     expect(form.get('review_id')).toBe('A1:D4')
@@ -132,10 +136,10 @@ describe('data docking user-only intake', () => {
     legacy.runs.mockResolvedValue([])
     const { wrapper, router, button } = await setup('run-42')
     expect(wrapper.find('button.active').text()).toContain('历史导入任务')
-    await button('导入').trigger('click'); await flushPromises()
+    await button('返回导入新文件').trigger('click'); await flushPromises()
     expect(router.currentRoute.value.query.run_id).toBeUndefined()
     expect(wrapper.find('button.active').text()).toContain('导入')
-    expect(wrapper.text()).toContain('上传 → 选模板')
+    expect(wrapper.text()).toContain('上传 → 自动分类 → 选模板并入库')
     wrapper.unmount()
   })
 

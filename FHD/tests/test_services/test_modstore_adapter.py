@@ -147,12 +147,13 @@ class TestPlatformStreamPayload:
         assert out is not None
         assert out["choices"][0]["delta"]["content"] == "x"
 
-    def test_error_type_raises(self):
-        with pytest.raises(ValueError, match="boom"):
-            _platform_stream_payload_to_openai_chunk('{"type":"error","message":"boom"}')
+    @pytest.mark.parametrize("marker", [{"type": "error"}, {"ok": False}, {"success": False}])
+    def test_error_type_raises(self, marker):
+        with pytest.raises(ValueError, match="模型服务请求失败"):
+            _platform_stream_payload_to_openai_chunk(json.dumps({**marker, "message": "boom"}))
 
     def test_error_type_with_error_field(self):
-        with pytest.raises(ValueError, match="err_msg"):
+        with pytest.raises(ValueError, match="模型服务请求失败"):
             _platform_stream_payload_to_openai_chunk('{"type":"error","error":"err_msg"}')
 
     def test_dict_with_content(self):

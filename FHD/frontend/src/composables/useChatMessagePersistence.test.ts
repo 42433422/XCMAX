@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { UiChatMessage } from '@/types/chat-ui'
-import { localMessagePersistence, useChatMessagePersistence } from './useChatMessagePersistence'
+import { localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
 const { save } = vi.hoisted(() => ({ save: vi.fn() }))
 vi.mock('@/api/chat', () => ({ default: { saveMessage: save } }))
 beforeEach(() => save.mockReset())
@@ -101,4 +101,35 @@ it('updates the surviving original session after switching to another session', 
   expect(cache.get('session-a')?.[0].persistence?.status).toBe('saved')
   expect(persist).toHaveBeenCalledTimes(2)
   expect(persist).toHaveBeenLastCalledWith(cache.get('session-a'), 'session-a')
+})
+
+
+it('reconciles failed stream replies by turn while keeping other turns and client IDs distinct', () => {
+  const local: UiChatMessage = { role: 'ai', content: '处理失败：模型未返回可显示的正文，已停止重复请求。请检查模型服务后重试。', time: '12:00', turnId: 'turn-a', persistence: { id: 'local-a', status: 'local' } }
+  const server: UiChatMessage = { role: 'ai', content: '模型未返回可显示的正文，已停止重复请求。请检查模型服务后重试。', time: '12:01', turnId: 'turn-a', persistence: { id: 'server:1', status: 'saved' } }
+  expect(samePersistedMessage(local, server, text => text)).toBe(true)
+  expect(samePersistedMessage(local, { ...server, turnId: 'turn-b', time: '12:00' }, text => text)).toBe(false)
+  expect(samePersistedMessage(local, { ...server, persistence: { id: 'other-client', status: 'saved' } }, text => text)).toBe(false)
+  expect(samePersistedMessage({ ...local, turnId: undefined }, { ...server, turnId: undefined }, text => text)).toBe(false)
+  expect(samePersistedMessage({ ...local, turnId: undefined }, { ...server, turnId: undefined, time: '12:00' }, text => text)).toBe(true)
+})
+
+
+it('does not normalize failure prefixes in user text or discard unacknowledged legacy saves', () => {
+  const local: UiChatMessage = { role: 'user', content: '处理失败：原始输入', time: '12:00', persistence: { id: 'local-user', status: 'local' } }
+  const server: UiChatMessage = { role: 'user', content: '原始输入', time: '12:00', persistence: { id: 'server:3', status: 'saved' } }
+  expect(samePersistedMessage(local, server, text => text)).toBe(false)
+  local.content = server.content
+  local.persistence!.request = { role: 'user', content: local.content }
+  expect(samePersistedMessage(local, server, text => text)).toBe(false)
+  expect(samePersistedMessage({ ...local, turnId: 'turn-a' }, { ...server, turnId: 'turn-a' }, text => text)).toBe(true)
+})
+
+it('does not merge a legacy failed reply with an unrelated same-minute successful reply', () => {
+  const local: UiChatMessage = { role: 'ai', content: '处理失败：订单 A', time: '12:00', persistence: { id: 'local-b', status: 'local' } }
+  const server: UiChatMessage = { role: 'ai', content: '订单 A', time: '12:00', persistence: { id: 'server:1', status: 'saved' } }
+  expect(samePersistedMessage(local, server, text => text)).toBe(false)
+  expect(samePersistedMessage({ ...local, workflowAction: 'failed' }, server, text => text)).toBe(false)
+  expect(samePersistedMessage({ ...local, workflowAction: 'failed' }, { ...server, workflowAction: 'failed' }, text => text)).toBe(true)
+  expect(samePersistedMessage({ ...local, content: '订单 B' }, server, text => text)).toBe(false)
 })

@@ -25,7 +25,7 @@ vi.mock('./PaneResizeHandle.vue', () => ({
 }))
 
 vi.mock('./FloatingChatAssistant.vue', () => ({
-  default: { template: '<div class="floating-chat-stub" />' },
+  default: { props: ['visible'], template: '<div v-if="visible" class="floating-chat-stub" />' },
 }))
 
 vi.mock('./TopAssistantFloat.vue', () => ({
@@ -184,11 +184,6 @@ vi.mock('@/constants/customerServiceMod', () => ({
   customerServiceModFrontendRoutesAvailable: () => false,
 }))
 
-vi.mock('@/utils/sidebarActiveKey', () => ({
-  isChatSidebarActive: () => false,
-  normalizeSidebarActiveKey: (key: string) => key,
-}))
-
 vi.mock('@/constants/accountModBinding', () => ({
   augmentEntitledModIdsForAccount: (_u: unknown, ids: string[]) => ids,
   isSunbirdAccountUsername: () => false,
@@ -226,6 +221,7 @@ function makeRouter() {
       },
       {
         path: '/im',
+        alias: ['/enterprise-customer-service', '/internal-customer-service'],
         name: 'im',
         component: { template: '<div>IM</div>' },
         meta: { title: '消息' },
@@ -258,6 +254,15 @@ async function mountMainLayout(props = {}) {
 // ── test suites ────────────────────────────────────────────
 
 describe('MainLayout.vue – component structure', () => {
+  it('keeps the floating assistant away from customer-service controls across repeated navigation', async () => {
+    const { wrapper, router } = await mountMainLayout()
+    for (const path of ['/settings', '/im?open=enterprise-cs', '/settings', '/enterprise-customer-service', '/internal-customer-service', '/']) {
+      await router.push(path)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('.floating-chat-stub').exists()).toBe(path === '/settings')
+    }
+    wrapper.unmount()
+  })
   it('mounts with sidebar stub', async () => {
     const { wrapper } = await mountMainLayout()
     expect(wrapper.find('.sidebar-stub').exists()).toBe(true)

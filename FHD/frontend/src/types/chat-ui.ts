@@ -33,6 +33,8 @@ export interface UiChatMessage {
   role: 'user' | 'ai' | 'task'
   content: string
   time: string
+  /** Request turn shared with server history; independent of local display text. */
+  turnId?: string
   persistence?: {
     id: string
     status: 'local' | 'saving' | 'saved' | 'failed'

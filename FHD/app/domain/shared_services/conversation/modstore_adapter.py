@@ -114,6 +114,9 @@ class ModstorePlatformAdapter:
         self.default_provider = os.environ.get("LLM_PROVIDER", default_provider).lower()
         self.default_model = os.environ.get("LLM_MODEL", default_model)
         self.timeout = timeout
+        self._use_account_default = False
+        self._account_default: tuple[Connection, tuple[str, str]] | None = None
+        self._default_route_lock = threading.Lock()
         self._source = "env"
         self._client: Optional[httpx.AsyncClient] = None
         logger.info(
@@ -160,6 +163,13 @@ class ModstorePlatformAdapter:
             },
         )
         instance._source = credential.source
+        instance._use_account_default = not any(
+            kwargs.get(key) for key in ("default_provider", "default_model")
+        )
+        for key in ("default_provider", "default_model"):
+            if kwargs.get(key):
+                value = str(kwargs[key]).strip()
+                setattr(instance, key, value.lower() if key == "default_provider" else value)
         # Request/session scoped construction must not inherit the host account id.
         if (session_id or request) and "user_id" not in kwargs:
             instance.user_id = None
@@ -211,11 +221,17 @@ class ModstorePlatformAdapter:
         return self._connection().headers()
 
     def _list_chat_failover_candidates_sync(
-        self, primary_provider: str, primary_model: str
+        self, primary_provider: str, primary_model: str, connection: Connection | None = None
     ) -> list[tuple[str, str]]:
-        connection = self._connection()
+        connection = connection or self._connection()
+        cached = self._account_default
         return routing.FailoverDiscovery(
-            connection, self._catalog_gateway(connection).read_sync, _httpx_sync_client
+            connection,
+            self._catalog_gateway(connection).read_sync,
+            _httpx_sync_client,
+            {"provider": cached[1][0], "model": cached[1][1]}
+            if cached is not None and cached[0] == connection
+            else None,
         ).candidates(primary_provider, primary_model)
 
     def _post_market_chat_sync(
@@ -228,9 +244,10 @@ class ModstorePlatformAdapter:
         max_tokens: int,
         allow_failover: bool,
         extra: Dict[str, Any] | None = None,
+        connection: Connection | None = None,
     ) -> Dict[str, Any]:
         return completions.post_sync(
-            self._connection(),
+            connection or self._connection(),
             (provider, model),
             ChatInput(messages, temperature, max_tokens, extra or {}),
             allow_failover,
@@ -243,9 +260,25 @@ class ModstorePlatformAdapter:
     ) -> Dict[str, Any]:
         return normalize_market_chat_response(raw_response, provider, model)
 
+    def resolve_default_route(self, connection: Connection | None = None) -> tuple[str, str]:
+        if not self._use_account_default:
+            return self.default_provider, self.default_model
+        with self._default_route_lock:
+            connection = connection or self._connection()
+            if self._account_default is None or self._account_default[0] != connection:
+                route = routing.resolve_account_default(connection, _httpx_sync_client)
+                self._account_default = (connection, route)
+            return self._account_default[1]
+
     def _resolve_provider_model(
-        self, provider: str | None = None, model: str | None = None
+        self,
+        provider: str | None = None,
+        model: str | None = None,
+        *,
+        connection: Connection | None = None,
     ) -> tuple[str, str]:
+        if self._use_account_default and not provider and not model:
+            return self.resolve_default_route(connection)
         effective_provider = (provider or self.default_provider).lower()
         effective_model = model or self.default_model
         if provider is None and isinstance(effective_model, str) and ("/" in effective_model):
@@ -254,6 +287,13 @@ class ModstorePlatformAdapter:
                 effective_provider = left.strip().lower()
                 effective_model = right.strip()
         return (effective_provider, effective_model)
+
+    async def _resolve_provider_model_async(
+        self, provider: str | None, model: str | None, connection: Connection
+    ) -> tuple[str, str]:
+        if self._use_account_default and not provider and not model:
+            return await asyncio.to_thread(self.resolve_default_route, connection)
+        return self._resolve_provider_model(provider, model)
 
     def _catalog_cache_key(self) -> tuple[str, str]:
         return catalog.cache_key(self._connection())
@@ -294,11 +334,12 @@ class ModstorePlatformAdapter:
         **kwargs,
     ) -> Dict[str, Any]:
         """执行异步平台补全，沿已配置候选链处理可重试的配额错误并返回 OpenAI 响应。"""
+        connection = self._connection()
         return await completions.complete_async(
-            self._connection(),
-            self._resolve_provider_model(provider, model),
+            connection,
+            await self._resolve_provider_model_async(provider, model, connection),
             ChatInput(messages, temperature, max_tokens, kwargs),
-            self._completion_ports(),
+            self._completion_ports(connection),
         )
 
     async def stream_chat_completion(
@@ -316,11 +357,12 @@ class ModstorePlatformAdapter:
         Yields:
             SSE数据行
         """
+        connection = self._connection()
         source = streaming.stream_async(
-            self._connection(),
-            self._resolve_provider_model(provider, model),
+            connection,
+            await self._resolve_provider_model_async(provider, model, connection),
             ChatInput(messages, temperature, max_tokens, kwargs),
-            self._stream_ports(),
+            self._stream_ports(connection),
         )
         async with aclosing(source) as chunks:
             async for chunk in chunks:
@@ -336,11 +378,12 @@ class ModstorePlatformAdapter:
         **kwargs,
     ) -> Dict[str, Any]:
         """同步版平台补全，用于现有 Planner 的 OpenAI SDK 兼容调用栈。"""
+        connection = self._connection()
         return completions.complete_sync(
-            self._connection(),
-            self._resolve_provider_model(provider, model),
+            connection,
+            self._resolve_provider_model(provider, model, connection=connection),
             ChatInput(messages, temperature, max_tokens, kwargs),
-            self._completion_ports(),
+            self._completion_ports(connection),
         )
 
     def stream_chat_completion_sync(
@@ -353,11 +396,12 @@ class ModstorePlatformAdapter:
         **kwargs,
     ) -> Iterator[str]:
         """同步版平台流式补全，逐条产出 SSE data payload。"""
+        connection = self._connection()
         yield from streaming.stream_sync(
-            self._connection(),
-            self._resolve_provider_model(provider, model),
+            connection,
+            self._resolve_provider_model(provider, model, connection=connection),
             ChatInput(messages, temperature, max_tokens, kwargs),
-            self._stream_ports(),
+            self._stream_ports(connection),
         )
 
     async def get_available_providers(self) -> List[Dict[str, Any]]:
@@ -408,21 +452,25 @@ class ModstorePlatformAdapter:
             self._normalize_response, neuro_notify_ai_model_roundtrip, time.perf_counter, logger
         )
 
-    def _completion_ports(self) -> CompletionPorts:
+    def _completion_ports(self, connection: Connection) -> CompletionPorts:
         return CompletionPorts(
-            self._list_chat_failover_candidates_sync,
+            lambda provider, model: self._list_chat_failover_candidates_sync(
+                provider, model, connection
+            ),
             self._prepare_messages_sync,
             self._prepare_messages,
-            self._post_market_chat_sync,
+            lambda **kwargs: self._post_market_chat_sync(connection=connection, **kwargs),
             self._get_client,
             is_market_chat_failoverable,
             self._response_ports(),
             _response_status_code,
         )
 
-    def _stream_ports(self) -> StreamPorts:
+    def _stream_ports(self, connection: Connection) -> StreamPorts:
         return StreamPorts(
-            self._list_chat_failover_candidates_sync,
+            lambda provider, model: self._list_chat_failover_candidates_sync(
+                provider, model, connection
+            ),
             self._prepare_messages_sync,
             self._prepare_messages,
             _httpx_sync_client,
@@ -524,11 +572,11 @@ class ModstoreOpenAICompatibleClient:
 
     @property
     def default_model(self) -> str:
-        return str(self.adapter.default_model)
+        return self.adapter.resolve_default_route()[1]
 
     @property
     def default_provider(self) -> str:
-        return str(self.adapter.default_provider)
+        return self.adapter.resolve_default_route()[0]
 
 
 def create_modstore_openai_client_from_request(request: Any) -> ModstoreOpenAICompatibleClient:

@@ -194,6 +194,50 @@ describe('PersyKnowledgeView', () => {
     expect(wrapper.text()).toContain('下午联系，并遵循续约制度。')
   })
 
+  it.each([true, false])('shows progress immediately and guides an empty result (empty space: %s)', async (empty) => {
+    if (empty) {
+      mocks.status.mockResolvedValue({ success: true, document_count: 0, chunk_count: 0, documents: [] })
+      mocks.memories.mockResolvedValue({ success: true, memories: [] })
+    }
+    let finish!: (value: unknown) => void
+    mocks.query.mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    const wrapper = await mountKnowledge()
+    await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('合成知识查询')
+    await wrapper.get('.ask-dock').trigger('submit')
+    expect(wrapper.get('.ask-dock__status').text()).toContain('正在检索知识')
+    expect(wrapper.get('.ask-dock').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('.ask-dock button').attributes('disabled')).toBeDefined()
+    await wrapper.get('.ask-dock').trigger('submit')
+    expect(mocks.query).toHaveBeenCalledOnce()
+
+    finish({ success: true, chunks: [], persy_memory: { available: true, count: 0 } })
+    await flushPromises()
+    expect(wrapper.find('.ask-dock__status').exists()).toBe(false)
+    expect(wrapper.get('.ask-dock button').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('.recall-empty').text()).toContain(empty ? '暂无可检索资料' : '未检索到相关知识')
+    await wrapper.get('.recall-panel .secondary-button').trigger('click')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
+  })
+
+  it('shows a failed query separately from no matches and retains the question for retry', async () => {
+    mocks.query.mockRejectedValueOnce(new Error('服务不可达'))
+    mocks.queryMemories.mockResolvedValue({ success: true, chunks: [] })
+    const wrapper = await mountKnowledge()
+    const input = wrapper.get('input[aria-label="向 Persy 提问"]')
+    await input.setValue('合成知识查询')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('.ask-dock__error').text()).toContain('知识检索失败：服务不可达')
+    expect(wrapper.find('.recall-empty').exists()).toBe(false)
+    expect(wrapper.find('.ask-dock__status').exists()).toBe(false)
+    expect(wrapper.get('.ask-dock button').attributes('disabled')).toBeUndefined()
+    expect((input.element as HTMLInputElement).value).toBe('合成知识查询')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('.ask-dock__error').exists()).toBe(false)
+    expect(wrapper.findAll('.evidence-list article')).toHaveLength(2)
+  })
+
   it('admin omniscient auto-switches to nonempty space and heals empty graph once', async () => {
     const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
     vi.mocked(isAdminConsoleSpa).mockReturnValue(true)

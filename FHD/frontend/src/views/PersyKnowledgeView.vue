@@ -170,7 +170,7 @@
           @import="openImport('file')"
         />
 
-        <form class="ask-dock" role="search" @submit.prevent="queryKnowledge">
+        <form class="ask-dock" role="search" :aria-busy="querying" @submit.prevent="queryKnowledge">
           <span class="ask-dock__icon" aria-hidden="true">
             <i class="fa fa-bolt"></i>
           </span>
@@ -185,7 +185,8 @@
           <button type="submit" :disabled="querying" aria-label="发送问题" title="发送问题">
             <i :class="querying ? 'fa fa-circle-o-notch fa-spin' : 'fa fa-arrow-right'" aria-hidden="true"></i>
           </button>
-          <p v-if="queryError" class="ask-dock__error" role="alert">{{ queryError }}</p>
+          <p v-if="querying" class="ask-dock__status" role="status">正在检索知识，请稍候…</p>
+          <p v-else-if="queryError" class="ask-dock__error" role="alert">{{ queryError }}</p>
         </form>
       </main>
 
@@ -311,8 +312,11 @@
         <div v-else class="inspector-scroll recall-panel">
           <template v-if="lastQuery">
             <span class="recall-panel__eyebrow">{{ lastQuery }}</span>
-            <div v-if="answerText" class="recall-answer">{{ answerText }}</div>
-            <p v-else-if="queryMessage" class="recall-empty">{{ queryMessage }}</p>
+            <template v-if="queryMessage">
+              <p class="recall-empty" role="status">{{ knowledgeEmpty ? '当前知识空间暂无可检索资料。请先导入文档或文本，再发起查询。' : `${queryMessage}。本次仅检索已入库的资料与可用记忆，可调整关键词或补充资料。` }}</p>
+              <button type="button" class="secondary-button" @click="openImport('file')">{{ knowledgeEmpty ? '导入第一份资料' : '补充知识资料' }}</button>
+            </template>
+            <div v-else-if="answerText" class="recall-answer">{{ answerText }}</div>
 
             <div v-if="resultChunks.length" class="evidence-list">
               <article v-for="(chunk, index) in resultChunks" :key="evidenceKey(chunk, index)">
@@ -351,7 +355,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import PersyKnowledgeGraph from '@/components/persy/PersyKnowledgeGraph.vue'
 import PersyImportDrawer from '@/components/persy/PersyImportDrawer.vue'
 import PersyMemoryList from '@/components/persy/PersyMemoryList.vue'
@@ -383,6 +387,10 @@ const {
   semanticAvailable, retrievalModeText, knowledgeNodes, omniscientHint,
   refreshStatus, refreshGraph, refreshMemories, refreshAll, applyDataset: switchDataset, rebuildActiveIndex,
 } = data
+const knowledgeEmpty = computed(() => {
+  const scope = adminOmniscient.value && omniscientQueryEnabled.value ? omniscient.value : status.value
+  return scope?.success === true && scope.document_count === 0 && scope.chunk_count === 0 && memories.value.length === 0
+})
 
 const recall = usePersyRecallQuery({
   activeDatasetId,

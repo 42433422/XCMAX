@@ -111,6 +111,8 @@ export function createEltCenterDerived({ state }: EltCenterDerivedDeps) {
   })
   const runOutcomeText = computed(() => {
     if (!currentRun.value) return ''
+    if (currentRun.value.target_type === 'template_review') return currentRun.value.status === 'template_review_saved'
+      ? '模板已保存；知识库与业务写入结果请到审批工作台核对。' : '请回到导入核对候选模板，确认使用后才会保存并入库。'
     const summary = currentRun.value.summary
     if (currentRun.value.rollback_status === 'completed') {
       const rollback = currentRun.value.receipt.rollback as { rows?: number } | undefined

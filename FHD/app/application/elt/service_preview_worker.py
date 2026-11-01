@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 import time
+from contextvars import copy_context
 from typing import TYPE_CHECKING, Any
 
 from app.application.elt.operation_owner import (
@@ -57,7 +58,7 @@ class PreviewWorkerMixin:
                     facade.SUBMITTED.discard(run_id)
 
         try:
-            facade.EXECUTOR.submit(work)
+            facade.EXECUTOR.submit(copy_context().run, work)
         except RECOVERABLE_ERRORS:
             with facade.SUBMITTED_LOCK:
                 facade.SUBMITTED.discard(run_id)

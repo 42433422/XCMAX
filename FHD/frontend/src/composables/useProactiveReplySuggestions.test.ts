@@ -122,3 +122,9 @@ describe('buildLocalProactiveSuggestions', () => {
     } finally { scope.stop() }
   })
 })
+
+
+it('does not suggest summaries or continuations for failed replies', () => {
+  expect(buildLocalProactiveSuggestions([{ role: 'user', content: '你好' }, { role: 'ai', content: '处理失败：模型未返回可显示的正文' }])).toEqual([])
+  expect(buildLocalProactiveSuggestions([{ role: 'ai', content: '服务不可达', workflowAction: 'failed' }])).toEqual([])
+})

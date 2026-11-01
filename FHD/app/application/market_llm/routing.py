@@ -12,10 +12,37 @@ from app.infrastructure.llm.modstore_chat_failover import (
     build_chat_failover_candidates,
     chat_failover_max_attempts,
 )
+from app.infrastructure.modstore_transport import MarketModelError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .protocols import Connection, Payload, Route, SyncClientFactory
 from .responses import _response_status_code
+
+
+def resolve_account_default(connection: Connection, client_factory: SyncClientFactory) -> Route:
+    """Resolve account preferences/BYOK/platform defaults at their server-owned source."""
+    with client_factory(
+        timeout=httpx.Timeout(min(connection.timeout, 15.0), connect=5.0),
+        headers=connection.headers(),
+    ) as client:
+        response = client.get(f"{connection.platform_url}/api/llm/resolve-chat-default")
+        status = _response_status_code(response)
+        if status >= 400:
+            raise MarketModelError({"status": status})
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise MarketModelError({"status": 502}) from exc
+    if isinstance(data, dict) and data.get("ok") is not False:
+        provider, model = data.get("provider"), data.get("model")
+        if (
+            isinstance(provider, str)
+            and isinstance(model, str)
+            and provider.strip()
+            and model.strip()
+        ):
+            return provider.strip().lower(), model.strip()
+    raise MarketModelError({"status": 502})
 
 
 @dataclass(frozen=True)
@@ -23,6 +50,7 @@ class FailoverDiscovery:
     connection: Connection
     read_catalog: Callable[[], Payload | None]
     client: SyncClientFactory
+    resolved_default: Payload | None = None
 
     def _fetch(self, path: str) -> Payload | None:
         try:
@@ -51,6 +79,6 @@ class FailoverDiscovery:
             primary_model=primary_model,
             status_payload=self._fetch("/api/llm/status"),
             catalog_payload=self.read_catalog(),
-            resolved_default=self._fetch("/api/llm/resolve-chat-default"),
+            resolved_default=self.resolved_default or self._fetch("/api/llm/resolve-chat-default"),
             max_attempts=chat_failover_max_attempts(),
         )

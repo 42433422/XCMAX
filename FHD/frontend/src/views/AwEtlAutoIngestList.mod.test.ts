@@ -1,11 +1,15 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import AwEtlAutoIngestList from '../../../mods/xcagi-approval-bridge/frontend/views/approval-workspace/AwEtlAutoIngestList.vue'
 
-const { autoIngestBatches, withdrawAutoIngestBatch } = vi.hoisted(() => ({
+const { autoIngestBatches, withdrawAutoIngestBatch, appConfirm } = vi.hoisted(() => ({
+  appConfirm: vi.fn(),
   autoIngestBatches: vi.fn(),
   withdrawAutoIngestBatch: vi.fn(),
 }))
+
+vi.mock('@/utils/appDialog', () => ({ appConfirm }))
 
 vi.mock('@/api/elt', () => ({
   eltApi: {
@@ -32,6 +36,7 @@ const withdrawnBatch = {
 
 describe('AwEtlAutoIngestList (approval Mod bridge)', () => {
   beforeEach(() => {
+    appConfirm.mockReset().mockResolvedValue(true)
     autoIngestBatches.mockReset()
     withdrawAutoIngestBatch.mockReset()
     autoIngestBatches.mockResolvedValue([])
@@ -53,9 +58,9 @@ describe('AwEtlAutoIngestList (approval Mod bridge)', () => {
     await flushPromises()
     const section = wrapper.get('[aria-label="数据对接自动入库"]')
     expect(section.text()).toContain('客户账.xlsx')
-    expect(section.text()).toContain('业务域 customer')
-    expect(section.text()).toContain('KB kb/abc')
-    expect(section.text()).toContain('ETL run-9')
+    expect(section.text()).toContain('业务域 客户')
+    expect(section.get('details').text()).toContain('kb/abc')
+    expect(section.get('details').text()).toContain('run-9')
     expect(section.text()).toContain('已撤批次.xlsx')
     const withdrawBtn = wrapper.findAll('button').find((b) => b.text() === '撤回')
     const withdrawnBtn = wrapper.findAll('button').find((b) => b.text() === '已撤回')
@@ -119,4 +124,47 @@ describe('AwEtlAutoIngestList (approval Mod bridge)', () => {
     expect(wrapper.text()).toContain('客户账.xlsx')
     wrapper.unmount()
   })
+  it('does not withdraw a running batch or submit after cancelling the scope confirmation', async () => {
+    autoIngestBatches.mockResolvedValue([appliedBatch, { ...withdrawnBatch, status: 'running' }])
+    appConfirm.mockResolvedValue(false)
+    const wrapper = mount(AwEtlAutoIngestList)
+    await flushPromises()
+    expect(wrapper.findAll('li')[1].get('button').attributes('disabled')).toBeDefined()
+    await wrapper.findAll('li')[0].get('button').trigger('click')
+    await flushPromises()
+    expect(appConfirm).toHaveBeenCalledWith(expect.stringContaining('原件和已保存模板保留'), { danger: true })
+    expect(withdrawAutoIngestBatch).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each(['account', 'unmount'])('retires a pending withdrawal after %s changes', async (change) => {
+    autoIngestBatches.mockResolvedValueOnce([appliedBatch]).mockResolvedValue([])
+    let resolveConfirm!: (confirmed: boolean) => void
+    appConfirm.mockImplementation(() => new Promise(resolve => { resolveConfirm = resolve }))
+    const wrapper = mount(AwEtlAutoIngestList)
+    await flushPromises()
+    await wrapper.findAll('li')[0].get('button').trigger('click')
+    if (change === 'account') productReadAccountEpoch.value++
+    else wrapper.unmount()
+    resolveConfirm(true)
+    await flushPromises()
+    expect(withdrawAutoIngestBatch).not.toHaveBeenCalled()
+    if (change === 'account') {
+      expect(wrapper.text()).not.toContain(appliedBatch.file_name)
+      wrapper.unmount()
+    }
+  })
+
+  it('ignores a prior account list response arriving after the new account', async () => {
+    let resolveOld!: (items: unknown[]) => void
+    autoIngestBatches.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve })).mockResolvedValue([])
+    const wrapper = mount(AwEtlAutoIngestList)
+    productReadAccountEpoch.value++
+    await flushPromises()
+    resolveOld([appliedBatch])
+    await flushPromises()
+    expect(wrapper.text()).not.toContain(appliedBatch.file_name)
+    wrapper.unmount()
+  })
+
 })

@@ -147,6 +147,10 @@ export const templatePreviewApi = {
     return api.download(`/api/templates/reviewed-excel/reviews/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/candidates/${encodeURIComponent(candidate)}/download`)
   },
 
+  previewReviewedIntake(formData: FormData) {
+    return reviewedExcelPost('/api/templates/reviewed-excel/intake-preview', formData)
+  },
+
   saveReviewedExcel(formData: FormData) {
     return reviewedExcelPost('/api/templates/reviewed-excel/save', formData)
   },

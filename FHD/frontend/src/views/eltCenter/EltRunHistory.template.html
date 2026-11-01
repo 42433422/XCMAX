@@ -1,5 +1,5 @@
 <section class="etl-run-history" aria-label="历史业务导入任务">
-  <p class="etl-history-note">这里只处理已有导入任务；新文件请返回原件归档流程。已有原件、任务和业务数据继续保留，写入和撤销仍需权限与明确确认。</p>
+  <p class="etl-history-note">这里只处理已有导入任务。新文件请返回「导入」：上传 → 自动分类 → 选模板并入库。历史任务的「核对写入」仍需单独确认。<button type="button" @click="$emit('return-to-import')">返回导入新文件</button></p>
   <div v-if="pageError" class="etl-alert etl-alert--error" role="alert">
     <strong>{{ pageError }}</strong><button type="button" @click="bootstrap">重试</button>
   </div>
@@ -484,6 +484,7 @@
       </div>
       <details class="etl-technical-receipt">
         <summary>查看技术回执</summary>
+        <p>任务类型：{{ currentRun.target_type }} · 状态码：{{ currentRun.status }} · 阶段码：{{ currentRun.stage }}</p>
         <pre>{{ JSON.stringify(currentRun.receipt, null, 2) }}</pre>
       </details>
     </article>

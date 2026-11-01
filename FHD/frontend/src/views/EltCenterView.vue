@@ -3,7 +3,7 @@
   <header class="etl-chat-header">
     <div>
       <h1>数据对接中心</h1>
-      <p>上传 → 选模板。已保存模板请到模板库查看。</p>
+      <p>上传 → 自动分类 → 选模板并入库。分类自动完成；核对所选文档后，点击「使用此模板并入库」才开始写入。</p>
     </div>
     <div class="etl-chat-header__actions">
       <RouterLink class="etl-chat-header__link" to="/template-preview">打开模板库</RouterLink>
@@ -21,7 +21,7 @@
     </ol>
     <ReviewedExcelTemplate archive-on-select @stage="setStage" @saved="onTemplateSaved" />
   </section>
-  <EltRunHistory v-if="workspace === 'history'" />
+  <EltRunHistory v-if="workspace === 'history'" @return-to-import="returnToArchive" />
 </main>
 </template>
 

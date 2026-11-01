@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import threading
+from contextvars import copy_context
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,8 @@ from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
 from app.application.elt.target_detection import detect_etl_target
+from app.infrastructure.tenant_scope import tenant_id_for_write
+from app.request_active_mod_ctx import get_request_active_mod_id
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
@@ -112,6 +115,76 @@ def _extract_text(path: Path) -> str:
 class AutoIngestService:
     """Create an ingest batch: knowledge + matching business domain writes."""
 
+    @staticmethod
+    def detect_target(path: Path, labels: list[str] | None = None) -> dict[str, Any]:
+        detection = detect_etl_target(path, suffix=path.suffix.lower())
+        label_blob = " ".join(labels or [])
+        if any(tok in label_blob for tok in ("出货", "送货", "发货", "shipment")):
+            detection = {
+                **detection,
+                "target_type": "shipment_records",
+                "reason": "classification_label_shipment",
+                "confidence": max(float(detection.get("confidence") or 0), 0.9),
+            }
+        elif any(tok in label_blob for tok in ("考勤", "attendance")):
+            detection = {
+                **detection,
+                "target_type": "attendance",
+                "reason": "classification_label_attendance",
+                "confidence": max(float(detection.get("confidence") or 0), 0.9),
+            }
+        elif any(tok in label_blob for tok in ("物料", "材料", "material")):
+            detection = {
+                **detection,
+                "target_type": "products",
+                "reason": "classification_label_material",
+                "confidence": max(float(detection.get("confidence") or 0), 0.85),
+            }
+        return detection
+
+    def knowledge_plan(self, *, path: Path, file_name: str, note: str, owner_user_id: int) -> dict[str, Any]:
+        from app.application.elt.service_support import dump_json
+        from app.application.elt.targets.knowledge import KnowledgeAdapter
+
+        text = _extract_text(path)
+        body = text if not note.strip() else f"{note.strip()}\n\n{text}"
+        content_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        decision = KnowledgeAdapter().preview(
+            None, {"content": body, "source_key": file_name},
+            allowed_update_fields={"content", "document_path"},
+            context={"owner_user_id": owner_user_id, "file_name": file_name, "file_sha256": content_hash},
+        )
+        if decision.action not in {"new", "update", "skip"}:
+            raise EltError("ELT_KNOWLEDGE_PREVIEW_FAILED", "知识库预演未通过，未开始写入", status_code=409)
+        fingerprint = hashlib.sha256(dump_json({
+            "action": decision.action, "match_ref": decision.match_ref,
+            "before": decision.before, "content_hash": content_hash,
+        }).encode()).hexdigest()
+        return {"action": decision.action, "documents": 1, "fingerprint": fingerprint}
+
+    def validate_prepared(self, db: Session, *, plan: dict[str, Any], path: Path,
+                          owner_user_id: int, tenant_id: int, preview_revision: str) -> dict[str, Any]:
+        from app.application.elt.preview_confirmation import verify_preview
+        from app.application.elt.service import get_elt_service
+        from app.db.models.elt import EltRun
+        from app.request_active_mod_ctx import get_request_active_mod_id
+
+        run = db.query(EltRun).filter(
+            EltRun.id == plan.get("run_id"), EltRun.tenant_id == tenant_id,
+            EltRun.owner_user_id == owner_user_id,
+        ).first()
+        if (run is None or plan.get("mod_id") != get_request_active_mod_id()
+                or run.target_type != plan.get("target_type") or run.upload_id != plan.get("upload_id")
+                or run.file_sha256 != plan.get("candidate_sha256")
+                or hashlib.sha256(path.read_bytes()).hexdigest() != plan.get("candidate_sha256")
+                or run.status != "preview_ready"):
+            raise EltError("ELT_INTAKE_PREVIEW_CHANGED", "入库范围或业务空间已变化，请重新预演", status_code=409)
+        verify_preview(db, run, preview_revision)
+        knowledge = self.knowledge_plan(path=path, file_name=plan["name"], note=plan["note"], owner_user_id=owner_user_id)
+        if knowledge != plan.get("knowledge"):
+            raise EltError("ELT_PREVIEW_STALE", "知识库已变化，请重新预演并确认", status_code=409)
+        return get_elt_service().get_run(db, run_id=run.id, owner_user_id=owner_user_id)
+
     def run(
         self,
         db: Session,
@@ -126,6 +199,7 @@ class AutoIngestService:
         composer_note: str = "",
         labels: list[str] | None = None,
         batch_id: str | None = None,
+        prepared_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         path = Path(source_path).expanduser().resolve()
         if not path.is_file():
@@ -139,6 +213,7 @@ class AutoIngestService:
             "created_at": _utcnow(),
             "updated_at": _utcnow(),
             "tenant_id": int(tenant_id),
+            "mod_id": get_request_active_mod_id(),
             "owner_user_id": int(owner_user_id),
             "template_id": template_id,
             "review_id": review_id,
@@ -158,6 +233,9 @@ class AutoIngestService:
             _save_ledger(tenant_id, ledger)
 
         try:
+            if prepared_plan:
+                self.validate_prepared(db, plan=prepared_plan, path=path, owner_user_id=owner_user_id,
+                                       tenant_id=tenant_id, preview_revision=prepared_plan["preview_revision"])
             _patch_batch(
                 tenant_id,
                 batch_id,
@@ -165,29 +243,7 @@ class AutoIngestService:
                 business_progress=_progress("waiting_kb", 0, message="等待知识库完成"),
             )
             text = _extract_text(path)
-            detection = detect_etl_target(path, suffix=path.suffix.lower())
-            label_blob = " ".join(labels or [])
-            if any(tok in label_blob for tok in ("出货", "送货", "发货", "shipment")):
-                detection = {
-                    **detection,
-                    "target_type": "shipment_records",
-                    "reason": "classification_label_shipment",
-                    "confidence": max(float(detection.get("confidence") or 0), 0.9),
-                }
-            elif any(tok in label_blob for tok in ("考勤", "attendance")):
-                detection = {
-                    **detection,
-                    "target_type": "attendance",
-                    "reason": "classification_label_attendance",
-                    "confidence": max(float(detection.get("confidence") or 0), 0.9),
-                }
-            elif any(tok in label_blob for tok in ("物料", "材料", "material")):
-                detection = {
-                    **detection,
-                    "target_type": "products",
-                    "reason": "classification_label_material",
-                    "confidence": max(float(detection.get("confidence") or 0), 0.85),
-                }
+            detection = prepared_plan["detection"] if prepared_plan else self.detect_target(path, labels)
             _patch_batch(
                 tenant_id,
                 batch_id,
@@ -203,6 +259,7 @@ class AutoIngestService:
                 content_hash=content_hash,
                 note=composer_note,
                 tenant_id=tenant_id,
+                expected_plan=prepared_plan.get("knowledge") if prepared_plan else None,
             )
             kb_done = _progress(
                 "done" if kb_receipt.get("action") != "skip" else "skipped",
@@ -223,6 +280,7 @@ class AutoIngestService:
                 file_name=safe_name,
                 target_type=str(detection.get("target_type") or "customer_products"),
                 batch_id=batch_id,
+                prepared_plan=prepared_plan,
                 progress_cb=lambda stage, pct, message="": _patch_batch(
                     tenant_id,
                     batch_id,
@@ -242,12 +300,14 @@ class AutoIngestService:
                     ),
                     error=str(business.get("error") or "") or None,
                 )
+            elif business.get("pending_execution"):
+                biz_prog = _progress("executing", 80, message="业务写入处理中，请等待实际回执")
             else:
                 biz_prog = _progress("done", 100, message="业务域已写入")
             final = _patch_batch(
                 tenant_id,
                 batch_id,
-                status="applied",
+                status=("running" if business.get("pending_execution") else "awaiting_confirmation" if business.get("pending_preview") else "failed" if business.get("failed") else "applied"),
                 detection=detection,
                 knowledge=kb_receipt,
                 business=business,
@@ -255,25 +315,13 @@ class AutoIngestService:
                 business_progress=biz_prog,
             )
             return final or batch
-        except BOUNDARY_ERRORS as exc:  # persist failure into ledger for progress API
-            _patch_batch(
-                tenant_id,
-                batch_id,
-                status="failed",
-                kb_progress=_progress(
-                    "failed",
-                    0,
-                    message="自动入库失败",
-                    error=type(exc).__name__,
-                ),
-                business_progress=_progress(
-                    "failed",
-                    0,
-                    message="自动入库失败",
-                    error=type(exc).__name__,
-                ),
-                error=type(exc).__name__,
-            )
+        except BOUNDARY_ERRORS as exc:  # Never erase a successful knowledge receipt after a business failure.
+            with _LOCK:
+                saved = (_load_ledger(tenant_id).get("batches") or {}).get(batch_id) or {}
+            kb_progress = saved.get("kb_progress") if saved.get("knowledge") else _progress("failed", 0, message="知识入库未完成，请核对结果", error=type(exc).__name__)
+            _patch_batch(tenant_id, batch_id, status="failed", kb_progress=kb_progress,
+                         business_progress=_progress("failed", 0, message="业务写入未完成，请核对已写入部分，勿重复提交", error=type(exc).__name__),
+                         error=type(exc).__name__)
             if isinstance(exc, EltError):
                 raise
             raise EltError("ETL_AUTO_INGEST_FAILED", f"自动入库失败：{type(exc).__name__}") from exc
@@ -290,6 +338,7 @@ class AutoIngestService:
         classification_id: str = "",
         composer_note: str = "",
         labels: list[str] | None = None,
+        prepared_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create ledger row and finish ingest off-request so FE can poll true progress."""
         path = Path(source_path).expanduser().resolve()
@@ -303,6 +352,7 @@ class AutoIngestService:
             "created_at": _utcnow(),
             "updated_at": _utcnow(),
             "tenant_id": int(tenant_id),
+            "mod_id": get_request_active_mod_id(),
             "owner_user_id": int(owner_user_id),
             "template_id": template_id,
             "review_id": review_id,
@@ -340,33 +390,78 @@ class AutoIngestService:
                         composer_note=composer_note,
                         labels=labels,
                         batch_id=batch_id,
+                        prepared_plan=prepared_plan,
                     )
                     db.commit()
             except BOUNDARY_ERRORS:
                 logger.exception("background auto-ingest failed batch_id=%s", batch_id)
 
-        threading.Thread(target=_worker, name=f"auto-ingest-{batch_id}", daemon=True).start()
+        context = copy_context()
+        threading.Thread(target=lambda: context.run(_worker), name=f"auto-ingest-{batch_id}", daemon=True).start()
         return dict(batch)
+
+    def _refresh_business(self, batch: dict[str, Any]) -> dict[str, Any]:
+        if batch.get("mod_id") != get_request_active_mod_id():
+            return batch
+        business = batch.get("business") or {}
+        if batch.get("status") not in {"running", "awaiting_confirmation", "failed"} or not business.get("run_id"):
+            return batch
+        from app.application.elt.service import get_elt_service
+        from app.db.session import get_db
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        try:
+            with tenant_scope(int(batch["tenant_id"])), get_db() as db:
+                run = get_elt_service().get_run(db, run_id=business["run_id"], owner_user_id=int(batch["owner_user_id"]))
+            status = str(run.get("status") or "")
+            if status == "completed":
+                batch_status, progress = "applied", _progress("done", 100, message="业务写入已完成")
+            elif status in {"failed", "interrupted", "outcome_unknown"}:
+                batch_status, progress = "failed", _progress("failed", int(run.get("progress") or 0), message="业务写入失败或结果待核对；请核对已写入部分，勿重复提交")
+            elif status == "preview_ready":
+                batch_status, progress = "awaiting_confirmation", _progress("pending", 70, message="业务预演待确认；请到历史导入任务核对")
+            else:
+                batch_status, progress = "running", _progress("executing", int(run.get("progress") or 0), message="业务处理仍在进行，请等待实际回执")
+            with _LOCK:
+                ledger = _load_ledger(batch["tenant_id"])
+                latest = (ledger.get("batches") or {}).get(batch["batch_id"])
+                if (not isinstance(latest, dict) or latest.get("status") == "withdrawn"
+                        or latest.get("status") != batch.get("status") or latest.get("business") != batch.get("business")):
+                    return dict(latest) if isinstance(latest, dict) else batch
+                latest.update(status=batch_status, business={**business, "status": status,
+                    "summary": run.get("summary"), "error": run.get("error")},
+                    business_progress=progress, updated_at=_utcnow())
+                _save_ledger(batch["tenant_id"], ledger)
+                return dict(latest)
+        except BOUNDARY_ERRORS:
+            # Reading a receipt must never resubmit execution or erase a known partial write.
+            return batch
 
     def list_batches(
         self, *, tenant_id: int, owner_user_id: int | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:
         with _LOCK:
             ledger = _load_ledger(tenant_id)
-        items = list((ledger.get("batches") or {}).values())
+        items = [b for b in (ledger.get("batches") or {}).values() if b.get("mod_id") == get_request_active_mod_id()]
         if owner_user_id is not None:
             items = [b for b in items if int(b.get("owner_user_id") or 0) == int(owner_user_id)]
         items.sort(key=lambda b: str(b.get("created_at") or ""), reverse=True)
-        return items[: max(1, min(int(limit or 50), 200))]
+        return [self._refresh_business(dict(batch)) for batch in items[: max(1, min(int(limit or 50), 200))]]
 
-    def get_batch(self, *, tenant_id: int, batch_id: str) -> dict[str, Any] | None:
+    def get_batch(self, *, tenant_id: int, batch_id: str, owner_user_id: int | None = None) -> dict[str, Any] | None:
         with _LOCK:
             ledger = _load_ledger(tenant_id)
         item = (ledger.get("batches") or {}).get(batch_id)
-        return dict(item) if isinstance(item, dict) else None
+        if not isinstance(item, dict) or item.get("mod_id") != get_request_active_mod_id():
+            return None
+        if owner_user_id is not None:
+            if int(item.get("owner_user_id") or 0) != owner_user_id:
+                raise EltError("ETL_AUTO_INGEST_FORBIDDEN", "无权查看该批次", status_code=403)
+            return self._refresh_business(dict(item))
+        return dict(item)
 
     def get_progress(self, *, tenant_id: int, owner_user_id: int, batch_id: str) -> dict[str, Any]:
-        batch = self.get_batch(tenant_id=tenant_id, batch_id=batch_id)
+        batch = self.get_batch(tenant_id=tenant_id, batch_id=batch_id, owner_user_id=owner_user_id)
         if batch is None:
             raise EltError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
         if int(batch.get("owner_user_id") or 0) != int(owner_user_id):
@@ -402,6 +497,8 @@ class AutoIngestService:
             batch = (ledger.get("batches") or {}).get(batch_id)
             if not isinstance(batch, dict):
                 raise EltError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
+            if batch.get("mod_id") != get_request_active_mod_id():
+                raise EltError("ELT_AUTO_INGEST_FORBIDDEN", "批次业务空间未核实或已变化，不能撤回此批次", status_code=403)
             if int(batch.get("owner_user_id") or 0) != int(owner_user_id):
                 raise EltError(
                     "ETL_AUTO_INGEST_FORBIDDEN", "只能撤回自己的入库批次", status_code=403
@@ -439,6 +536,7 @@ class AutoIngestService:
         content_hash: str,
         note: str,
         tenant_id: int,
+        expected_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         from app.application.elt.targets.knowledge import KnowledgeAdapter
         from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
@@ -459,6 +557,14 @@ class AutoIngestService:
             decision = adapter.preview(
                 None, data, allowed_update_fields={"content", "document_path"}, context=context
             )
+            if expected_plan:
+                from app.application.elt.service_support import dump_json
+                fingerprint = hashlib.sha256(dump_json({
+                    "action": decision.action, "match_ref": decision.match_ref,
+                    "before": decision.before, "content_hash": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+                }).encode()).hexdigest()
+                if fingerprint != expected_plan.get("fingerprint"):
+                    raise EltError("ELT_PREVIEW_STALE", "知识库已变化，请重新预演", status_code=409)
             if decision.action == "skip":
                 return {
                     "action": "skip",
@@ -519,6 +625,7 @@ class AutoIngestService:
         target_type: str,
         batch_id: str,
         poll_seconds: float = 30.0,
+        prepared_plan: dict[str, Any] | None = None,
         progress_cb=None,
     ) -> dict[str, Any]:
         import time
@@ -539,60 +646,70 @@ class AutoIngestService:
             return {"skipped": True, "reason": "knowledge_only_target", "target_type": target_type}
 
         service = get_elt_service()
-        _notify("uploading", 20, "上传业务文件")
-        with path.open("rb") as handle:
-            upload = service.save_upload(
+        if prepared_plan:
+            run_id = str(prepared_plan["run_id"])
+            upload_id = str(prepared_plan["upload_id"])
+            current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+            if (current.get("target_type") != target_type
+                    or current.get("preview_revision") != prepared_plan["preview_revision"]):
+                raise EltError("ELT_PREVIEW_STALE", "已确认的业务预演已变化，未执行", status_code=409)
+        else:
+            _notify("uploading", 20, "上传业务文件")
+            with path.open("rb") as handle:
+                upload = service.save_upload(
+                    db,
+                    owner_user_id=owner_user_id,
+                    file_name=file_name,
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    stream=handle,
+                    batch_id=batch_id,
+                    relative_path=file_name,
+                )
+            upload_id = str(upload.get("upload_id") or "")
+            _notify("preview", 45, "生成业务预演")
+            run = service.create_preview(
                 db,
                 owner_user_id=owner_user_id,
-                file_name=file_name,
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                stream=handle,
-                batch_id=batch_id,
-                relative_path=file_name,
+                upload_id=upload_id,
+                target_type=target_type,
             )
-        upload_id = str(upload.get("upload_id") or "")
-        _notify("preview", 45, "生成业务预演")
-        run = service.create_preview(
-            db,
-            owner_user_id=owner_user_id,
-            upload_id=upload_id,
-            target_type=target_type,
-        )
-        run_id = str(run.get("id") or "")
-        deadline = time.monotonic() + max(1.0, float(poll_seconds))
-        current = run
-        while time.monotonic() < deadline:
-            status = str(current.get("status") or "")
-            if status == "preview_ready":
-                break
-            if status in {"failed", "interrupted"}:
+            run_id = str(run.get("id") or "")
+            deadline = time.monotonic() + max(1.0, float(poll_seconds))
+            current = run
+            while time.monotonic() < deadline:
+                status = str(current.get("status") or "")
+                if status == "preview_ready":
+                    break
+                if status in {"failed", "interrupted"}:
+                    return {
+                        "target_type": target_type,
+                        "upload_id": upload_id,
+                        "run_id": run_id,
+                        "status": status,
+                        "error": current.get("error"),
+                        "failed": True,
+                    }
+                time.sleep(0.2)
+                current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+            if str(current.get("status") or "") != "preview_ready":
                 return {
                     "target_type": target_type,
                     "upload_id": upload_id,
                     "run_id": run_id,
-                    "status": status,
-                    "error": current.get("error"),
-                    "failed": True,
+                    "status": current.get("status"),
+                    "pending_preview": True,
+                    "message": "业务预演尚未完成；知识库已写入，可稍后在历史任务中执行或撤回",
                 }
-            time.sleep(0.2)
-            current = service.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
-        if str(current.get("status") or "") != "preview_ready":
-            return {
-                "target_type": target_type,
-                "upload_id": upload_id,
-                "run_id": run_id,
-                "status": current.get("status"),
-                "pending_preview": True,
-                "message": "业务预演尚未完成；知识库已写入，可稍后在历史任务中执行或撤回",
-            }
         preview_revision = current.get("preview_revision")
         _notify("executing", 80, "执行业务写入")
+        _patch_batch(tenant_id_for_write(), batch_id,
+                     business={"run_id": run_id, "upload_id": upload_id, "target_type": target_type, "status": "executing"})
         executed = service.execute(
             db,
             run_id=run_id,
             owner_user_id=owner_user_id,
             confirmed=True,
-            valid_rows_only=True,
+            valid_rows_only=bool(prepared_plan.get("valid_rows_only")) if prepared_plan else True,
             preview_revision=str(preview_revision or ""),
         )
         return {
@@ -602,6 +719,8 @@ class AutoIngestService:
             "preview_revision": preview_revision,
             "summary": executed.get("summary") if isinstance(executed, dict) else None,
             "status": executed.get("status") if isinstance(executed, dict) else None,
+            "pending_execution": isinstance(executed, dict) and executed.get("status") in {"queued", "executing"},
+            "failed": not isinstance(executed, dict) or executed.get("status") in {"failed", "interrupted", "outcome_unknown"},
         }
 
     def _withdraw_business(

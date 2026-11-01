@@ -14,6 +14,8 @@ type ChatLikeMessage = {
   type?: string
   content?: string
   text?: string
+  workflowAction?: string
+  agentRunTrace?: { status?: string }
 }
 
 function readEnabled(): boolean {
@@ -46,11 +48,18 @@ function isUser(m: ChatLikeMessage): boolean {
   return role === 'user' || role === 'human'
 }
 
+export function isFailedChatReply(message: ChatLikeMessage): boolean {
+  const text = messageText(message).replace(/<[^>]*>/g, '').trim()
+  return /failed|error/.test(message.workflowAction || '') || message.agentRunTrace?.status === 'failed'
+    || /^(?:处理失败[：:]|\[失败\]|\[回复未完成\]|模型未返回可显示|对话连接已超时|请求超时)/.test(text)
+}
+
 /** Local heuristic fallback — never auto-executes; user must pick then send. */
 export function buildLocalProactiveSuggestions(messages: ChatLikeMessage[]): ProactiveSuggestion[] {
   const recent = (messages || []).slice(-8)
   const lastAi = [...recent].reverse().find(isAssistant)
   const lastUser = [...recent].reverse().find(isUser)
+  if (lastAi && isFailedChatReply(lastAi)) return []
   const aiText = lastAi ? messageText(lastAi) : ''
   const userText = lastUser ? messageText(lastUser) : ''
 
@@ -140,7 +149,7 @@ export function useProactiveReplySuggestions(deps: UseProactiveReplySuggestionsD
     list.forEach((message, index) => {
       if (isUser(message)) { lastUser = message; userIndex = index }
       if (!isAssistant(message) || message.streamingShell
-        || (busy && index > latestUserIndex)) return
+        || (busy && index > latestUserIndex) || isFailedChatReply(message)) return
       const text = messageText(message)
       if (!text) return
       const contextUser = index - userIndex < 8 ? lastUser : undefined

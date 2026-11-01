@@ -124,9 +124,8 @@ def restore_worker_llm_client(config: dict[str, Any]) -> tuple[Any, str]:
                 raise RuntimeError("任务所属账号没有可用的模型登录凭据，请重新登录")
             adapter = ModstorePlatformAdapter.from_session(auth_token=token)
             adapter.user_id = None
-            return ModstoreOpenAICompatibleClient(
-                adapter
-            ), f"{adapter.default_provider}/{adapter.default_model}"
+            client = ModstoreOpenAICompatibleClient(adapter)
+            return client, f"{client.default_provider}/{client.default_model}"
         adapter = ModstorePlatformAdapter(
             **{k: v for k, v in config.items() if k not in {"kind", "model"}}
         )

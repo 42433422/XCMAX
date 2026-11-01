@@ -197,14 +197,32 @@ def test_platform_worker_scope_keeps_model_and_credentials_out_of_environment(mo
 
 
 def test_resumed_worker_resolves_only_the_authenticated_tasks_account(monkeypatch):
+    import httpx
+
+    from app.domain.shared_services.conversation import modstore_adapter
     from app.fastapi_routes import market_account
     from app.infrastructure.llm import client as routing
 
+    def resolved(request):
+        assert request.headers["Authorization"] == "Bearer fake-task-owner"
+        assert request.url.path == "/api/llm/resolve-chat-default"
+        return httpx.Response(
+            200, json={"ok": True, "provider": "account", "model": "task-default"}
+        )
+
+    monkeypatch.setattr(
+        modstore_adapter,
+        "_httpx_sync_client",
+        lambda **kwargs: httpx.Client(transport=httpx.MockTransport(resolved), **kwargs),
+    )
+    monkeypatch.setenv("MODSTORE_PLATFORM_URL", "https://market.invalid")
     reader = MagicMock(return_value="fake-task-owner")
     monkeypatch.setattr(market_account, "latest_session_market_token", reader)
     snapshot = routing.capture_worker_llm_scope({"local_user_id": 17})
     assert snapshot == {"kind": "account", "owner": 17}
-    assert routing.restore_worker_llm_client(snapshot)[0].adapter.auth_token == "fake-task-owner"
+    client, model = routing.restore_worker_llm_client(snapshot)
+    assert client.adapter.auth_token == "fake-task-owner"
+    assert model == "account/task-default"
     reader.assert_called_once_with(user_id=17)
     reader.return_value = ""
     with pytest.raises(RuntimeError, match="重新登录"):

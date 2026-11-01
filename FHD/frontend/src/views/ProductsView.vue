@@ -4,7 +4,7 @@
       <div class="page-header">
         <h2>{{ pageNavTitle }}</h2>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <button class="btn btn-secondary" @click="triggerImportExcel" title="上传 Excel 批量导入产品">
+          <button class="btn btn-secondary" @click="triggerImportExcel" :title="`上传 Excel 批量导入${entityName}`">
             <i class="fa fa-upload" aria-hidden="true"></i> 导入Excel
           </button>
           <input
@@ -19,32 +19,20 @@
           </button>
           <button class="btn btn-secondary" @click="exportPriceListExcel" title="导出为 Excel（与旧版一致）">导出Excel</button>
           <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="batchDelete" style="margin-right:10px;">批量删除 ({{ selectedIds.length }})</button>
-          <button class="btn btn-primary" data-tutorial-id="product-create" @click="showAddModal">+ 添加产品</button>
+          <button class="btn btn-primary" data-tutorial-id="product-create" @click="showAddModal">+ 添加{{ entityName }}</button>
         </div>
       </div>
       <div class="search-box" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
-        <label style="white-space:nowrap;">产品单位：</label>
+        <label style="white-space:nowrap;">{{ entityName }}单位：</label>
         <select v-model="selectedUnit" style="min-width:180px;" @change="loadProducts">
-          <option value="">请选择产品单位</option>
+          <option value="">请选择{{ entityName }}单位</option>
           <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
         </select>
         <select v-model="selectedWordTemplateSlug" style="min-width:240px;" title="Word 价目表模板（在「模板预览」管理 .docx）">
           <option value="">默认 Word 模板（price_list_default）</option>
           <option v-for="tpl in wordTemplateOptions" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
         </select>
-        <input v-model="searchQuery" type="text" placeholder="搜索产品型号或名称..." @input="loadProducts">
-        <label class="lbl-inline" title="从考勤统计表「明细」工作表读取：第4行起每6行一块，A部门 B性质 C姓名">
-          <input v-model="useAttendanceDetailImport" type="checkbox" />
-          考勤统计表·明细导入人员
-        </label>
-        <label
-          v-show="useAttendanceDetailImport"
-          class="lbl-inline"
-          title="仅删除此前通过本导入方式写入的记录（内部标记），不动其它产品"
-        >
-          <input v-model="replaceTaggedAttendancePersonnel" type="checkbox" />
-          导入前移除上次「明细」导入的人员
-        </label>
+        <input v-model="searchQuery" type="text" :placeholder="`搜索${entityName}型号或名称...`" @input="loadProducts">
       </div>
       <div v-if="productReadError || (!fresh && products.length) || productListNotice" role="status" class="product-read-status">
         <span>{{ productReadError ? '产品读取失败：' + productReadError : (!fresh ? '产品数据需要更新，请刷新后再编辑。' : productListNotice) }}</span>
@@ -60,7 +48,7 @@
           :has-more="hasMore"
           :height="'500px'"
           row-key="id"
-          empty-text="暂无产品数据"
+          :empty-text="`暂无${entityName}数据`"
           @update:selected-ids="selectedIds = $event"
           @load-more="loadMoreProducts"
         >
@@ -87,7 +75,7 @@
     <ConfirmDialog
       v-model="showDeleteConfirm"
       title="确认删除"
-      :message="`确定要删除该产品吗？`"
+      :message="`确定要删除该${entityName}吗？`"
       confirm-text="删除"
       confirm-class="btn-danger"
       @confirm="confirmDelete"
@@ -96,7 +84,7 @@
     <ConfirmDialog
       v-model="showBatchDeleteConfirm"
       title="批量删除"
-      :message="`确定要删除选中的 ${selectedIds.length} 个产品吗？`"
+      :message="`确定要删除选中的 ${selectedIds.length} 个${entityName}吗？`"
       confirm-text="批量删除"
       confirm-class="btn-danger"
       @confirm="confirmBatchDelete"
@@ -112,7 +100,7 @@
           </div>
           <div class="form-group">
             <label>{{ fieldLabel('name', '产品名称') }} *</label>
-            <input v-model="formData.name" data-tutorial-id="product-name" type="text" placeholder="产品名称">
+            <input v-model="formData.name" data-tutorial-id="product-name" type="text" :placeholder="`${entityName}名称`">
           </div>
           <div class="form-group">
             <label>{{ fieldLabel('specification', '规格') }}</label>
@@ -211,11 +199,6 @@ const showDeleteConfirm = ref(false);
 const showBatchDeleteConfirm = ref(false);
 const itemToDelete = ref(null);
 const importExcelInput = ref(null);
-/** 使用 /api/excel/data/extract/upload 的 attendance_detail 解析（与太阳鸟考勤模板「明细」一致） */
-const useAttendanceDetailImport = ref(false);
-/** 删除 description 为考勤明细标记的旧记录后再导入 */
-const replaceTaggedAttendancePersonnel = ref(true);
-
 const columns = computed(() => [
   { key: 'model_number', label: fieldLabel('model_number', '型号') },
   { key: 'name', label: fieldLabel('name', '名称') },
@@ -331,9 +314,6 @@ const handleImport = async (e) => {
     // 1. 上传并提取Excel数据 (使用 extract/upload 端点)
     const formData = new FormData();
     formData.append('excel_file', file);
-    if (useAttendanceDetailImport.value) {
-      formData.append('parse_mode', 'attendance_detail');
-    }
     const extractRes = await api.post('/api/excel/data/extract/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
@@ -344,11 +324,7 @@ const handleImport = async (e) => {
     }
     const rows = extractRes.rows || [];
     if (!rows.length) {
-      await appAlert(
-        useAttendanceDetailImport.value
-          ? '未从「明细」表解析到任何人员行。请确认 Excel 含「明细」工作表，且第4行起为每人6行（A部门、B性质、C姓名）。'
-          : '未解析到任何数据行，请检查表头或换用「考勤统计表·明细导入人员」。'
-      );
+      await appAlert('未解析到任何数据行，请检查产品表头及内容。');
       return;
     }
 
@@ -364,8 +340,6 @@ const handleImport = async (e) => {
         skip_duplicates: true,
         validate_before_import: true,
         clean_data: true,
-        replace_attendance_detail_tagged:
-          useAttendanceDetailImport.value && replaceTaggedAttendancePersonnel.value,
       }
     });
 

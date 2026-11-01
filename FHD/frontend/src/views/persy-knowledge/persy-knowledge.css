@@ -782,7 +782,8 @@
   color: #ffffff;
 }
 
-.ask-dock__error {
+.ask-dock__error,
+.ask-dock__status {
   position: absolute;
   right: 0;
   bottom: calc(100% + 7px);
@@ -792,6 +793,11 @@
   color: #8d2f27;
   background: #fff1ef;
   font-size: 11px;
+}
+
+.ask-dock__status {
+  color: #27352f;
+  background: #edf5f0;
 }
 
 .secondary-button {

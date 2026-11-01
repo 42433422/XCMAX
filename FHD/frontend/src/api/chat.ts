@@ -78,6 +78,10 @@ export async function parseChatStreamErrorResponse(res: Response): Promise<strin
 }
 
 export const chatApi = {
+  getModelStatus(): Promise<{ ok: boolean; provider: string; model: string }> {
+    return api.get('/api/conversation/model-status', {}, { timeoutMs: 20_000, cache: 'no-store' })
+  },
+
   sendChat(payload: ChatRequest, options: RequestOptions = {}): Promise<ApiResponse<ChatResponse>> {
     return api.post<ApiResponse<ChatResponse>>(resolvePlannerChatPath(), payload, withMarketAuthorization(options))
   },

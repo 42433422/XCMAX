@@ -8,6 +8,12 @@
     </nav>
     <div class="chat-messages" id="chatMessages" ref="messagesHostRef" role="list" aria-label="聊天消息"
       @scroll.passive="onScroll" @xcagi-reveal-chat-message="revealMessage">
+      <div v-if="!messages.length && !isLoading" class="message ai chat-welcome" role="listitem">
+        <h2>开始新的对话</h2>
+        <p>{{ emptyIntro || '你可以描述问题、查询资料，或说明需要协助的业务任务。' }}</p>
+        <p>可用能力以当前配置为准。点击示例只填入输入框，请检查后发送。</p>
+        <button type="button" class="btn btn-secondary" @click="$emit('fill-example', '请用一句话介绍你能做什么。仅回答，不执行操作。')">试试：介绍你能做什么</button>
+      </div>
       <div
         v-for="{ msg, idx } in visibleMessages"
         :key="presentation(msg).key"
@@ -144,8 +150,14 @@
             <i class="fa" :class="playingMsgIdx === idx ? 'fa-stop' : 'fa-volume-up'" aria-hidden="true"></i>
           </button>
         </div>
+        <div v-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg)" class="proactive-suggestions" data-testid="chat-error-recovery">
+          <p>请先检查模型状态。重试会发起新请求，已执行的业务操作不会撤销。</p>
+          <details v-if="originalRequest(idx)"><summary>查看本次原始输入</summary><p>{{ originalRequest(idx) }}</p></details>
+          <button v-if="originalRequest(idx)" type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" @click="$emit('fill-example', originalRequest(idx))">重试本次请求（填入原文）</button>
+          <button type="button" class="btn btn-secondary btn-sm" @click="$emit('model-settings')">查看模型状态</button>
+        </div>
         <div
-          v-if="!isMessageCollapsed(msg, idx) && suggestionsFor(msg).length"
+          v-else-if="!isMessageCollapsed(msg, idx) && suggestionsFor(msg).length"
           class="proactive-suggestions"
           data-testid="proactive-suggestions"
           :data-reply-id="proactiveReplyMessageId(msg)"
@@ -175,7 +187,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
-import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
+import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
@@ -186,7 +198,7 @@ import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
 import { approvalCardId } from '@/utils/chatApprovalCard'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
-import { proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
+import { isFailedChatReply, proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
 
 useI18n()
 
@@ -194,6 +206,7 @@ const saveLabels = { local: '本机副本 · 服务端未核实', saving: '正�
 
 const props = defineProps<{
   messages: ChatMessage[]
+  emptyIntro?: string
   sessionKey?: string
   proactiveSuggestions?: ReadonlyMap<string, readonly ProactiveReplySuggestion[]>
   isLoading: boolean
@@ -220,10 +233,19 @@ const emit = defineEmits<{
   'retry-save': [id: string]
   'approve-run': [runId: string]
   'pick-proactive-suggestion': [item: ProactiveReplySuggestion]
+  'fill-example': [text: string]
+  'model-settings': []
 }>()
 
+function originalRequest(index: number): string {
+  const reply = props.messages[index]
+  const user = props.messages.slice(0, index).reverse().find(message => message.role === 'user'
+    && (!reply?.turnId || reply.turnId === message.turnId))
+  return user ? plainTextFromChatHtml(user.content) : ''
+}
+
 function suggestionsFor(message: ChatMessage): readonly ProactiveReplySuggestion[] {
-  if (message.role !== 'ai' || message.streamingShell) return []
+  if (message.role !== 'ai' || message.streamingShell || isFailedChatReply(message)) return []
   const messageId = proactiveReplyMessageId(message)
   return (props.proactiveSuggestions?.get(messageId) || [])
     .filter(item => item.scopeKey === (props.sessionKey || '') && item.messageId === messageId)

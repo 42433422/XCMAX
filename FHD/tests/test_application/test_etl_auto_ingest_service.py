@@ -163,3 +163,52 @@ def test_auto_ingest_progress_tracks_real_stages(rag_service, ledger_root, tmp_p
     assert progress["business_progress"]["pct"] == 100
     assert progress["kb_progress"]["stage"] in {"done", "skipped"}
     assert progress["business_progress"]["stage"] == "done"
+
+
+@pytest.mark.parametrize("terminal", ["completed", "failed", "interrupted", "outcome_unknown"])
+def test_async_business_receipts_follow_actual_run_without_reexecution(
+    rag_service, ledger_root, tmp_path, monkeypatch, terminal
+):
+    from contextlib import nullcontext
+
+    fake = MagicMock()
+    fake.save_upload.return_value = {"upload_id": "up-async"}
+    fake.create_preview.return_value = {"id": "run-async", "status": "preview_ready", "preview_revision": "rev"}
+    fake.execute.return_value = {"id": "run-async", "status": "executing", "summary": {"executed": 0}}
+    fake.get_run.return_value = {"id": "run-async", "status": "executing", "progress": 30, "summary": {"executed": 0}}
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
+    monkeypatch.setattr("app.db.session.get_db", lambda: nullcontext(MagicMock()))
+    service = AutoIngestService()
+    with tenant_scope(42):
+        batch = service.run(MagicMock(), owner_user_id=7, tenant_id=42,
+                            source_path=_shipment_xlsx(tmp_path / "async.xlsx"), file_name="async.xlsx")
+        assert batch["status"] == "running"
+        assert batch["business_progress"]["pct"] < 100
+        assert service.get_progress(tenant_id=42, owner_user_id=7, batch_id=batch["batch_id"])["status"] == "running"
+        fake.get_run.return_value = {"id": "run-async", "status": terminal, "progress": 100, "summary": {"executed": 1}}
+        final = service.get_progress(tenant_id=42, owner_user_id=7, batch_id=batch["batch_id"])
+        assert final["status"] == ("applied" if terminal == "completed" else "failed")
+        assert final["kb_progress"]["pct"] == 100
+        assert service.list_batches(tenant_id=42, owner_user_id=7)[0]["business"]["summary"]["executed"] == 1
+        fake.execute.assert_called_once()
+        ais._patch_batch(42, batch["batch_id"], status="withdrawn")
+        assert service._refresh_business(batch)["status"] == "withdrawn"
+
+
+def test_business_failure_preserves_completed_knowledge_receipt(rag_service, ledger_root, tmp_path, monkeypatch):
+    from app.application.elt.errors import EltError
+
+    fake = MagicMock()
+    fake.save_upload.return_value = {"upload_id": "up-error"}
+    fake.create_preview.return_value = {"id": "run-error", "status": "preview_ready", "preview_revision": "rev"}
+    fake.execute.side_effect = EltError("ELT_PREVIEW_STALE", "业务预演已变化")
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
+    with tenant_scope(42), pytest.raises(EltError):
+        AutoIngestService().run(MagicMock(), owner_user_id=7, tenant_id=42,
+                               source_path=_shipment_xlsx(tmp_path / "error.xlsx"), file_name="error.xlsx")
+    saved = next(iter(ais._load_ledger(42)["batches"].values()))
+    assert saved["status"] == "failed"
+    assert saved["knowledge"]["match_ref"]
+    assert saved["kb_progress"]["pct"] == 100
+    assert saved["business"]["run_id"] == "run-error"
+    assert "勿重复提交" in saved["business_progress"]["message"]

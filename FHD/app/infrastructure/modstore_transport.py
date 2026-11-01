@@ -10,6 +10,32 @@ from typing import Any
 import httpx
 
 
+class MarketModelError(ValueError):
+    """An explicit gateway failure, distinct from a successful empty completion."""
+
+    def __init__(self, payload: dict[str, Any]):
+        # Gateway/provider error text may contain credentials, URLs or request data.
+        # Only the status is suitable for the durable, user-visible chat history.
+        try:
+            status = int(payload.get("status") or 502)
+        except (TypeError, ValueError):
+            status = 502
+        self.status_code = status if 400 <= status <= 599 else 502
+        super().__init__(
+            {
+                400: "模型服务未接受请求，请查看模型状态；平台模型配置请联系管理员核对。",
+                401: "模型服务鉴权失败，请查看模型状态；平台模型授权请联系管理员核对。",
+                402: "修茈市场模型余额不足，请在「模型支付」充值后重试。",
+                403: "当前模型访问未获授权，请查看模型状态；平台模型权限请联系管理员核对。",
+                404: "当前模型或模型服务入口不可用，请查看模型状态并联系管理员核对平台配置。",
+                408: "模型服务响应超时，请检查连接后重试。",
+                429: "模型服务请求受限，请稍后重试并检查可用额度。",
+                503: "模型服务暂不可用，请查看模型状态后重试。",
+                504: "模型服务响应超时，请检查连接后重试。",
+            }.get(self.status_code, "模型服务请求失败，请查看模型状态后重试。")
+        )
+
+
 def market_connect_timeout() -> float:
     """Allow slow desktop TUN/TLS handshakes while remaining configurable."""
     try:
@@ -86,6 +112,13 @@ class MarketSSEDecoder:
             return None
         if self.current_event == "meta":
             return None
+        if self.current_event == "error":
+            # The gateway puts the event kind in the SSE header, not body.type.
+            try:
+                error = json.loads(line_text)
+            except json.JSONDecodeError:
+                error = {"error": line_text}
+            raise MarketModelError(error if isinstance(error, dict) else {"error": error})
         if self.current_event == "done":
             self.done = True
             if not self.saw_delta_content:
