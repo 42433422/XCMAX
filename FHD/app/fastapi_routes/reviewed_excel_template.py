@@ -34,9 +34,14 @@ from app.application.elt.service_support import dump_json, load_json, new_id, ut
 from app.application.elt.service_uploads import UploadServiceMixin
 from app.application.elt_login_authorization import (
     bind_login_notice_grant,
+    classification_login_status,
+    classification_notice_scope,
     login_notice_grant,
+    login_notice_identity,
     login_notice_status,
-    notice_operation_scopes,
+    require_login_notice_grant,
+    template_model_authorization,
+    validate_classification_notice,
 )
 from app.application.reviewed_excel_audit import ModelRequestNotSent, record_not_sent
 from app.application.reviewed_excel_classification import (
@@ -113,31 +118,10 @@ def _identity(user):
     return int(user.tenant_id), int(user.id)
 
 
-def _notice_document_scope(grant, selected_region):
-    return {
-        "notice_version": grant["version"],
-        "notice_accepted_at": grant["iat"],
-        "model_route": {key: grant["route"][key] for key in ("provider", "model")},
-        "classification_id": selected_region.get("classification_id"),
-        "classification_version": selected_region.get("version"),
-        "document": {
-            key: selected_region[key]
-            for key in ("sheet", "range", "fragments", "auto_slice_index")
-            if key in selected_region
-        },
-    }
-
-
 @router.get("/api/templates/reviewed-excel/identity")
 def reviewed_excel_identity(request: Request, user=Depends(_manage)):
     tenant, owner = _identity(user)
-    authorization = login_notice_status(request, tenant, owner, "classification")
-    authorization["operations"] = {
-        operation: login_notice_status(request, tenant, owner, operation)["status"]
-        for operation in notice_operation_scopes()
-    }
-    authorization["scopes"] = notice_operation_scopes()
-    return {"actor": f"{tenant}:{owner}", "login_authorization": authorization}
+    return login_notice_identity(request, tenant, owner)
 
 
 def _expected_actor(expected: str, user):
@@ -886,13 +870,11 @@ async def reviewed_excel_classification_analyze(
 ):
     tenant, owner = _identity(user)
     notice_grant = (
-        login_notice_grant(request, tenant, owner, "classification") if use_login_notice else None
+        require_login_notice_grant(request, tenant, owner, "classification")
+        if use_login_notice
+        else None
     )
-    if use_login_notice:
-        if not notice_grant:
-            raise HTTPException(
-                status_code=403, detail="缺少有效的本次文件分类授权，请核对登录状态。"
-            )
+    if notice_grant:
         own_file_authorized = True
         sample_authorized = False
     if sample_authorized == own_file_authorized:
@@ -919,19 +901,8 @@ async def reviewed_excel_classification_analyze(
             except ReviewedExcelError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             authorization_kind = "owner_file" if own_file_authorized else "authorized_sample"
-            if (
-                checkpoint
-                and use_login_notice
-                and (
-                    checkpoint.get("authorization", {}).get("notice_version")
-                    != notice_grant["version"]
-                    or checkpoint.get("authorization", {}).get("model_route")
-                    != {key: notice_grant["route"][key] for key in ("provider", "model")}
-                    or checkpoint.get("authorization", {}).get("notice_scope")
-                    != notice_grant["scopes"]["classification"]
-                )
-            ):
-                raise HTTPException(status_code=409, detail="登录授权范围已改变，请核对已有批次")
+            if notice_grant:
+                validate_classification_notice(checkpoint, notice_grant)
             if checkpoint and (
                 checkpoint.get("version") != version
                 or checkpoint.get("source_sha256") != run.file_sha256
@@ -1006,22 +977,7 @@ async def reviewed_excel_classification_analyze(
                         "provider_basis": "configured_before_call",
                         "scope": "this_file_bounded_cells_and_structure",
                         "authorized_at": utcnow().isoformat(),
-                        **(
-                            _notice_document_scope(
-                                notice_grant,
-                                {"classification_id": classification_id, "version": version},
-                            )
-                            if notice_grant
-                            else {}
-                        ),
-                        **(
-                            {
-                                "notice_operation": "classification",
-                                "notice_scope": notice_grant["scopes"]["classification"],
-                            }
-                            if notice_grant
-                            else {}
-                        ),
+                        **classification_notice_scope(notice_grant, classification_id, version),
                     },
                 }
                 store_coordinate_plan(checkpoint, batches)
@@ -1288,15 +1244,7 @@ async def reviewed_excel_classification_analyze(
                 "sheets": sheets,
                 "model_status": "returned",
                 "model_authorization": checkpoint.get("authorization"),
-                **(
-                    {
-                        "login_authorization": login_notice_status(
-                            request, tenant, owner, "classification"
-                        )
-                    }
-                    if use_login_notice
-                    else {}
-                ),
+                **classification_login_status(request, tenant, owner, use_login_notice),
                 "actual_model_providers": actual_providers,
                 "read_only_print_areas": review["read_only_print_areas"],
                 "suggested_documents": result["suggested_documents"],
@@ -1512,21 +1460,14 @@ async def reviewed_excel_preview(
                 versions.append(proposal)
             except ValueError as exc:
                 proposal["model"] = {"status": "unavailable", "message": public_excel_error(exc)}
-            proposal["model"]["authorization"] = {
-                "kind": "owner_file" if own_file_authorized else "authorized_sample",
-                "provider": configured_template_llm_provider(),
-                "tenant_id": tenant,
-                "owner_user_id": owner,
-                "source_sha256": (selected_region or {}).get("source_sha256", review["sha256"]),
-                "derived_sha256": review["sha256"],
-                "scope": "this_document_bounded_cells_and_structure",
-                "authorized_at": utcnow().isoformat(),
-                **(
-                    _notice_document_scope(notice_grant, selected_region or {})
-                    if notice_grant
-                    else {}
-                ),
-            }
+            proposal["model"]["authorization"] = template_model_authorization(
+                notice_grant,
+                tenant,
+                owner,
+                own_file_authorized,
+                review["sha256"],
+                selected_region or {},
+            )
         if use_login_notice:
             proposal["model"]["login_authorization"] = login_notice_status(request, tenant, owner)
         request.state.elt_stage = "render_candidates"
@@ -1661,12 +1602,8 @@ async def reviewed_excel_refine(
     user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
-    notice_grant = login_notice_grant(request, tenant, owner) if use_login_notice else None
-    if use_login_notice:
-        if not notice_grant:
-            raise HTTPException(
-                status_code=403, detail="缺少有效的本次模型处理授权，请核对登录状态。"
-            )
+    notice_grant = require_login_notice_grant(request, tenant, owner) if use_login_notice else None
+    if notice_grant:
         consent = own_file_authorized = True
         sample_authorized = False
     if not consent or sample_authorized == own_file_authorized:
@@ -1703,17 +1640,15 @@ async def reviewed_excel_refine(
                     initial=True,
                 )
             source_scope = load_json(run.summary_json, {}).get("selected_region") or {}
-            proposal["model"]["authorization"] = {
-                "kind": "owner_file" if own_file_authorized else "authorized_sample",
-                "provider": configured_template_llm_provider(),
-                "tenant_id": tenant,
-                "owner_user_id": owner,
-                "source_sha256": source_scope.get("source_sha256", run.file_sha256),
-                "derived_sha256": run.file_sha256,
-                "scope": "this_document_bounded_cells_and_feedback",
-                "authorized_at": utcnow().isoformat(),
-                **(_notice_document_scope(notice_grant, source_scope) if notice_grant else {}),
-            }
+            proposal["model"]["authorization"] = template_model_authorization(
+                notice_grant,
+                tenant,
+                owner,
+                own_file_authorized,
+                run.file_sha256,
+                source_scope,
+                feedback=True,
+            )
             if use_login_notice:
                 proposal["model"]["login_authorization"] = login_notice_status(
                     request, tenant, owner

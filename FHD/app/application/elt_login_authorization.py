@@ -13,7 +13,7 @@ from typing import Literal, cast
 
 import httpx
 import jwt
-from fastapi import Request, Response
+from fastapi import HTTPException, Request, Response
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -27,6 +27,8 @@ _AUDIENCE = "xcagi-elt-login-notice"
 _route_scope: ContextVar[dict | None] = ContextVar("elt_login_model_route", default=None)
 _session_scope: ContextVar[tuple[str, int] | None] = ContextVar("elt_login_session", default=None)
 logger = logging.getLogger(__name__)
+_LOGIN_NOTICE_ERRORS: tuple[type[Exception], ...] = (httpx.InvalidURL, *RECOVERABLE_ERRORS)
+_NOTICE_VERIFY_ERRORS: tuple[type[Exception], ...] = (jwt.PyJWTError, *RECOVERABLE_ERRORS)
 
 
 class _LoginNoticeGrant(dict):
@@ -120,11 +122,12 @@ async def _resolve_login_route(session_id: str) -> dict | None:
     if not isinstance(route, dict) or not route.get("ok"):
         return None
     provider, model = route.get("provider"), route.get("model")
-    if not all(
-        isinstance(value, str) and 0 < len(value.strip()) <= 200 for value in (provider, model)
-    ):
+    if not isinstance(provider, str) or not isinstance(model, str):
         return None
-    return {"base": base, "provider": provider.strip(), "model": model.strip()}
+    provider, model = provider.strip(), model.strip()
+    if not 0 < len(provider) <= 200 or not 0 < len(model) <= 200:
+        return None
+    return {"base": base, "provider": provider, "model": model}
 
 
 async def attach_login_notice(response: Response, result: dict, body: dict) -> Response:
@@ -173,7 +176,7 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
             samesite=samesite,
             path="/",
         )
-    except (httpx.InvalidURL, *RECOVERABLE_ERRORS) as exc:
+    except _LOGIN_NOTICE_ERRORS as exc:
         logger.info("ELT login notice receipt unavailable error_type=%s", type(exc).__name__)
     return response
 
@@ -229,7 +232,7 @@ def login_notice_grant(
         ):
             return None
         return _LoginNoticeGrant(receipt, session_id)
-    except (jwt.PyJWTError, *RECOVERABLE_ERRORS):
+    except _NOTICE_VERIFY_ERRORS:
         return None
 
 
@@ -253,6 +256,108 @@ def login_notice_status(
             else {}
         ),
     }
+
+
+def login_notice_identity(request: Request, tenant_id: int, owner_id: int) -> dict:
+    authorization = login_notice_status(request, tenant_id, owner_id, "classification")
+    authorization["operations"] = {
+        operation: login_notice_status(request, tenant_id, owner_id, operation)["status"]
+        for operation in notice_operation_scopes()
+    }
+    authorization["scopes"] = notice_operation_scopes()
+    return {"actor": f"{tenant_id}:{owner_id}", "login_authorization": authorization}
+
+
+def classification_login_status(
+    request: Request, tenant_id: int, owner_id: int, enabled: bool
+) -> dict:
+    return (
+        {"login_authorization": login_notice_status(request, tenant_id, owner_id, "classification")}
+        if enabled
+        else {}
+    )
+
+
+def require_login_notice_grant(
+    request: Request, tenant_id: int, owner_id: int, operation: str = "template_candidates"
+) -> dict:
+    grant = login_notice_grant(request, tenant_id, owner_id, operation)
+    if not grant:
+        message = (
+            "缺少有效的本次文件分类授权，请核对登录状态。"
+            if operation == "classification"
+            else "缺少有效的本次模型处理授权，请核对登录状态。"
+        )
+        raise HTTPException(status_code=403, detail=message)
+    return grant
+
+
+def notice_document_scope(grant: dict | None, selected_region: dict) -> dict:
+    if not grant:
+        return {}
+    return {
+        "notice_version": grant["version"],
+        "notice_accepted_at": grant["iat"],
+        "model_route": {key: grant["route"][key] for key in ("provider", "model")},
+        "classification_id": selected_region.get("classification_id"),
+        "classification_version": selected_region.get("version"),
+        "document": {
+            key: selected_region[key]
+            for key in ("sheet", "range", "fragments", "auto_slice_index")
+            if key in selected_region
+        },
+    }
+
+
+def template_model_authorization(
+    grant: dict | None,
+    tenant_id: int,
+    owner_id: int,
+    own_file: bool,
+    derived_sha256: str,
+    selected_region: dict,
+    *,
+    feedback: bool = False,
+) -> dict:
+    from app.application.elt.service_support import utcnow
+    from app.application.reviewed_excel_template import configured_template_llm_provider
+
+    return {
+        "kind": "owner_file" if own_file else "authorized_sample",
+        "provider": configured_template_llm_provider(),
+        "tenant_id": tenant_id,
+        "owner_user_id": owner_id,
+        "source_sha256": selected_region.get("source_sha256", derived_sha256),
+        "derived_sha256": derived_sha256,
+        "scope": "this_document_bounded_cells_and_feedback"
+        if feedback
+        else "this_document_bounded_cells_and_structure",
+        "authorized_at": utcnow().isoformat(),
+        **notice_document_scope(grant, selected_region),
+    }
+
+
+def classification_notice_scope(grant: dict | None, classification_id: str, version: str) -> dict:
+    if not grant:
+        return {}
+    return {
+        **notice_document_scope(
+            grant, {"classification_id": classification_id, "version": version}
+        ),
+        "notice_operation": "classification",
+        "notice_scope": grant["scopes"]["classification"],
+    }
+
+
+def validate_classification_notice(checkpoint: dict | None, grant: dict) -> None:
+    if checkpoint and (
+        checkpoint.get("authorization", {}).get("notice_version") != grant["version"]
+        or checkpoint.get("authorization", {}).get("model_route")
+        != {key: grant["route"][key] for key in ("provider", "model")}
+        or checkpoint.get("authorization", {}).get("notice_scope")
+        != grant["scopes"]["classification"]
+    ):
+        raise HTTPException(status_code=409, detail="登录授权范围已改变，请核对已有批次")
 
 
 @contextmanager
