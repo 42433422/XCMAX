@@ -173,7 +173,7 @@ def _verify_frozen_elt_runtime() -> None:
 
     # Importing alone does not prove the bundled parser or derivation path works.
     try:
-        safe_xml.fromstring(b'<!DOCTYPE probe><probe/>', forbid_dtd=True)
+        safe_xml.fromstring(b"<!DOCTYPE probe><probe/>", forbid_dtd=True)
     except DTDForbidden:
         pass
     else:
@@ -205,8 +205,7 @@ def _verify_frozen_elt_runtime() -> None:
             or list(result.values)
             != [("Item", "Quantity"), ("Sample", 2), ("Total", "=SUM(B2:B2)")]
             or result.auto_filter.ref != "A1:B3"
-            or {str(area) for area in PrintArea.from_string(result.print_area).ranges}
-            != {"A1:B3"}
+            or {str(area) for area in PrintArea.from_string(result.print_area).ranges} != {"A1:B3"}
             or sha256(source).digest() != source_sha
         ):
             raise RuntimeError("frozen ELT runtime probe did not preserve its workbook")

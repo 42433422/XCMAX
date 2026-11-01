@@ -9,6 +9,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Windows redirects Python output through the runner's legacy code page unless
+# this is set before the first source/dependency check.
+$env:PYTHONUTF8 = '1'
+$env:PYTHONIOENCODING = 'utf-8'
 . (Join-Path $PSScriptRoot 'product-version.ps1')
 $Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
@@ -124,11 +128,19 @@ try {
     -WorkingDirectory $probeDir -Wait -PassThru `
     -RedirectStandardOutput (Join-Path $probeDir 'stdout.log') `
     -RedirectStandardError (Join-Path $probeDir 'stderr.log')
-  Get-Content -LiteralPath (Join-Path $probeDir 'stdout.log'), (Join-Path $probeDir 'stderr.log') -ErrorAction SilentlyContinue
   if ($probe.ExitCode -ne 0) {
     throw "Frozen critical runtime probe failed with exit code $($probe.ExitCode)"
   }
 } finally {
+  # Windowed Python can fall back to its bootstrap file when stdio is absent.
+  # Emit all synthetic probe diagnostics to the CI log before removing them.
+  foreach ($relativeLog in @('stdout.log', 'stderr.log', 'data\logs\backend-bootstrap.log')) {
+    $probeLog = Join-Path $probeDir $relativeLog
+    if (Test-Path -LiteralPath $probeLog) {
+      Write-Host "[frozen-runtime-probe] $relativeLog"
+      Get-Content -LiteralPath $probeLog -ErrorAction SilentlyContinue
+    }
+  }
   Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 

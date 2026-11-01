@@ -429,7 +429,17 @@ def test_windows_package_probes_real_elt_runtime_without_development_dependencie
         assert "$probe.ExitCode -ne 0" in script
     build = (REPO_ROOT / "scripts/package/build-backend.ps1").read_text(encoding="utf-8-sig")
     assert 'pip install -c deploy/requirements-server-api.lock.txt -e ".[server-api]"' in build
-    assert build.index("PyInstaller --noconfirm") < build.index("Start-Process -FilePath $backendExe")
+    assert build.index("PyInstaller --noconfirm") < build.index(
+        "Start-Process -FilePath $backendExe"
+    )
+    first_python = build.index("& python scripts/dev/mods_ssot.py check")
+    assert build.index("$env:PYTHONUTF8 = '1'") < first_python
+    assert build.index("$env:PYTHONIOENCODING = 'utf-8'") < first_python
+    cleanup = build.split("} finally {", 1)[1]
+    assert "data\\logs\\backend-bootstrap.log" in cleanup
+    assert cleanup.index("Get-Content -LiteralPath $probeLog") < cleanup.index(
+        "Remove-Item -LiteralPath $probeDir"
+    )
 
 
 def test_desktop_package_includes_and_probes_dynamic_xcmax_sync_appliers() -> None:
