@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import sys
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,17 +17,9 @@ def _fake_circle_report_transport(monkeypatch):
     )
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _resolve_circular_import():
-    """Resolve circular import between mobile_api and mobile_api_extensions."""
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401
-    yield
-
-
 @pytest.fixture
 def ext_mod():
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 def _build_db_mock(rows):
