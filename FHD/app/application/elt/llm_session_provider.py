@@ -68,6 +68,7 @@ class SessionMarketProvider:
             default_model=model_name,
             timeout=timeout,
         )
+        kwargs.update(provider=provider_name, model=model_name, allow_failover=False)
         try:
             return cast(
                 "dict[str, Any] | None",
@@ -98,9 +99,14 @@ def current_owner_market_provider(*, timeout_seconds: float) -> SessionMarketPro
     owner_user_id = current_etl_llm_owner()
     if owner_user_id is None:
         return None
-    from app.fastapi_routes.market_account import latest_session_market_token
+    from app.application.elt_login_authorization import current_login_notice_session_id
+    from app.fastapi_routes.market_account import latest_session_market_token, session_market_token
 
-    token = latest_session_market_token(user_id=owner_user_id)
+    session_id = current_login_notice_session_id(owner_user_id)
+    if session_id is not None:
+        token = session_market_token(session_id) if session_id else ""
+    else:
+        token = latest_session_market_token(user_id=owner_user_id)
     if not token:
         return None
     return SessionMarketProvider(

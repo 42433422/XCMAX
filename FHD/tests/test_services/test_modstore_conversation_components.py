@@ -386,6 +386,37 @@ async def test_failover_uses_real_discovery_and_preserves_attempt_policy(monkeyp
         await current.close()
 
 
+@pytest.mark.parametrize(
+    "status,message", [(429, "synthetic quota exhausted"), (403, "synthetic insufficient_quota")]
+)
+@pytest.mark.asyncio
+async def test_async_explicit_no_failover_never_discovers_or_sends_backup(
+    monkeypatch, status, message
+):
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
+    calls = []
+
+    def respond(request):
+        assert request.method == "POST"
+        payload = json.loads(request.content)
+        calls.append((payload["provider"], payload["model"], payload["allow_failover"]))
+        return httpx.Response(status, text=message)
+
+    mock_async_transport(monkeypatch, respond)
+    current = adapter()
+    discovery = Mock(return_value=[("primary", "first"), ("backup", "second")])
+    monkeypatch.setattr(current, "_list_chat_failover_candidates_sync", discovery)
+    try:
+        with pytest.raises(ValueError, match=f"平台错误\\({status}\\)"):
+            await current.chat_completion(
+                [], provider="primary", model="first", allow_failover=False
+            )
+        discovery.assert_not_called()
+        assert calls == [("primary", "first", False)]
+    finally:
+        await current.close()
+
+
 @pytest.mark.parametrize("cancel", [False, True])
 @pytest.mark.asyncio
 async def test_async_stream_closes_http_body_on_close_or_cancellation(monkeypatch, cancel):

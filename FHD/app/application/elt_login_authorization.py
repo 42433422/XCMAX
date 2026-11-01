@@ -25,7 +25,18 @@ NOTICE_COOKIE = "xcagi_elt_notice"
 NOTICE_PURPOSE = "elt_template_candidates"
 _AUDIENCE = "xcagi-elt-login-notice"
 _route_scope: ContextVar[dict | None] = ContextVar("elt_login_model_route", default=None)
+_session_scope: ContextVar[tuple[str, int] | None] = ContextVar("elt_login_session", default=None)
 logger = logging.getLogger(__name__)
+
+
+class _LoginNoticeGrant(dict):
+    """Keep the verified credential selector out of JSON, repr and audit mappings."""
+
+    __slots__ = ("_session_id",)
+
+    def __init__(self, receipt: dict, session_id: str):
+        super().__init__(receipt)
+        self._session_id = session_id
 
 
 def _secret() -> str:
@@ -142,7 +153,7 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
             samesite=samesite,
             path="/",
         )
-    except RECOVERABLE_ERRORS as exc:
+    except (httpx.InvalidURL, *RECOVERABLE_ERRORS) as exc:
         logger.info("ELT login notice receipt unavailable error_type=%s", type(exc).__name__)
     return response
 
@@ -195,7 +206,7 @@ def login_notice_grant(request: Request, tenant_id: int, owner_id: int) -> dict 
             )
         ):
             return None
-        return receipt
+        return _LoginNoticeGrant(receipt, session_id)
     except (jwt.PyJWTError, *RECOVERABLE_ERRORS):
         return None
 
@@ -220,12 +231,24 @@ def login_notice_status(request: Request, tenant_id: int, owner_id: int) -> dict
 
 @contextmanager
 def bind_login_notice_grant(grant: dict):
-    """Copy the verified route through the worker thread to the final model dispatch."""
+    """Copy the verified route and exact session through the model worker thread."""
+    if not isinstance(grant, _LoginNoticeGrant):
+        from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+        raise ModelRequestNotSent("登录授权会话无法核实，未调用模型")
     token = _route_scope.set(dict(grant["route"]))
+    session_token = _session_scope.set((grant._session_id, grant["owner"]))
     try:
         yield
     finally:
+        _session_scope.reset(session_token)
         _route_scope.reset(token)
+
+
+def current_login_notice_session_id(owner_id: int) -> str | None:
+    """None means legacy authorization; an owner mismatch must fail closed."""
+    scoped = _session_scope.get()
+    return None if scoped is None else scoped[0] if scoped[1] == owner_id else ""
 
 
 def assert_login_notice_route(base: str, provider: str, model: str) -> None:

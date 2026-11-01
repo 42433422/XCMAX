@@ -96,11 +96,14 @@ async def complete_async(
 ) -> Payload:
     if not connection.platform_url:
         raise ValueError("修茈市场平台URL未配置 (MODSTORE_PLATFORM_URL)")
-    candidates = await asyncio.to_thread(ports.candidates, *route)
+    allow_failover = request.extra.get("allow_failover") is not False
+    candidates = await asyncio.to_thread(ports.candidates, *route) if allow_failover else [route]
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         messages = await ports.prepare_async(request.messages, *candidate)
-        payload = request.payload(connection, candidate, messages, allow_failover=index == 0)
+        payload = request.payload(
+            connection, candidate, messages, allow_failover=allow_failover and index == 0
+        )
         start = ports.response.clock()
         try:
             client = await ports.client()

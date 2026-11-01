@@ -5,7 +5,7 @@ import logging
 import time
 from http.cookies import SimpleCookie
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import jwt
 import pytest
@@ -71,8 +71,77 @@ async def test_successful_explicit_login_records_version_scope_identity_and_sess
     assert grant["route"] == route
     assert grant["exp"] <= int(time.time()) + 3600
     assert result["session_id"] not in json.dumps(grant)
+    assert result["session_id"] not in repr(grant)
     assert "HttpOnly" in response.headers.getlist("set-cookie")[-1]
     assert auth.login_notice_status(request(receipt), 9, 7)["status"] == "authorized"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exact_token", ["synthetic-current-token", ""])
+async def test_bound_grant_uses_exact_session_only_and_resets_after_worker_failure(
+    login, monkeypatch, exact_token
+):
+    from starlette.concurrency import run_in_threadpool
+
+    from app.application.elt.llm_session_provider import (
+        bind_etl_llm_owner,
+        current_owner_market_provider,
+        reset_etl_llm_owner,
+    )
+    from app.fastapi_routes import market_account
+
+    result, _ = login
+    receipt, _ = await receipt_for(result)
+    grant = auth.login_notice_grant(request(receipt), 9, 7)
+    exact = Mock(return_value=exact_token)
+    latest = Mock(return_value="synthetic-other-session-token")
+    monkeypatch.setattr(market_account, "session_market_token", exact)
+    monkeypatch.setattr(market_account, "latest_session_market_token", latest)
+    owner = bind_etl_llm_owner(7)
+    try:
+        with pytest.raises(RuntimeError, match="synthetic failure"):
+            with auth.bind_login_notice_grant(grant):
+                assert auth.current_login_notice_session_id(7) == result["session_id"]
+                assert auth.current_login_notice_session_id(8) == ""
+                provider = await run_in_threadpool(current_owner_market_provider, timeout_seconds=1)
+                assert (provider._token if provider else "") == exact_token
+                other_owner = bind_etl_llm_owner(8)
+                try:
+                    assert current_owner_market_provider(timeout_seconds=1) is None
+                finally:
+                    reset_etl_llm_owner(other_owner)
+                exact.assert_called_once_with(result["session_id"])
+                latest.assert_not_called()
+                raise RuntimeError("synthetic failure")
+        assert auth.current_login_notice_session_id(7) is None
+        assert (
+            current_owner_market_provider(timeout_seconds=1)._token
+            == "synthetic-other-session-token"
+        )
+        latest.assert_called_once_with(user_id=7)
+        with pytest.raises(ModelRequestNotSent), auth.bind_login_notice_grant(dict(grant)):
+            pytest.fail("serialized grant cannot select a credential")
+    finally:
+        reset_etl_llm_owner(owner)
+
+
+@pytest.mark.asyncio
+async def test_invalid_optional_model_url_keeps_successful_login_response(login, monkeypatch):
+    result, _ = login
+    monkeypatch.setattr(
+        auth,
+        "_resolve_login_route",
+        AsyncMock(side_effect=auth.httpx.InvalidURL("synthetic-invalid-url")),
+    )
+    response = JSONResponse({"success": True})
+    actual = await auth.attach_login_notice(
+        response, result, {"data_processing_notice_version": auth.NOTICE_VERSION}
+    )
+    assert actual is response and actual.status_code == 200
+    cookies = SimpleCookie()
+    for header in actual.headers.getlist("set-cookie"):
+        cookies.load(header)
+    assert cookies[auth.NOTICE_COOKIE].value == ""
 
 
 @pytest.mark.asyncio
@@ -202,6 +271,38 @@ async def test_final_resolved_route_change_cannot_reach_model_adapter(login, mon
     with auth.bind_login_notice_grant(grant), pytest.raises(ModelRequestNotSent):
         await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
     adapter.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_uses_resolved_route_without_failover_despite_env_or_caller_overrides(
+    login, monkeypatch
+):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.domain.shared_services.conversation import modstore_adapter
+
+    result, route = login
+    receipt, _ = await receipt_for(result)
+    grant = auth.login_notice_grant(request(receipt), 9, 7)
+    response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"ok": True, **route})
+    client = SimpleNamespace(get=AsyncMock(return_value=response))
+    context = AsyncMock()
+    context.__aenter__.return_value = client
+    monkeypatch.setattr(auth.httpx, "AsyncClient", lambda **kwargs: context)
+    monkeypatch.setenv("LLM_PROVIDER", "environment-other")
+    monkeypatch.setenv("LLM_MODEL", "environment-other-model")
+    complete = AsyncMock(return_value={"model": route["model"]})
+    monkeypatch.setattr(modstore_adapter.completions, "complete_async", complete)
+    with auth.bind_login_notice_grant(grant):
+        result = await SessionMarketProvider(
+            7, "synthetic-current-token", timeout_seconds=1
+        ).chat_completion(
+            [], provider="caller-other", model="caller-other-model", allow_failover=True
+        )
+    assert result["model"] == route["model"]
+    dispatched = complete.await_args.args
+    assert dispatched[1] == (route["provider"], route["model"])
+    assert dispatched[2].extra["allow_failover"] is False
+    assert dispatched[0].auth_token == "synthetic-current-token"
 
 
 @pytest.mark.asyncio
