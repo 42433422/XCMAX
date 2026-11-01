@@ -1,6 +1,8 @@
 /**
  * 管理员 AI 员工账号池视图逻辑（由 AdminAiAccountsView.vue 原单文件机械迁出，行为不变）。
- * 覆盖：账号列表/过滤、新建/编辑/轮换/删除、QQ 桥接状态与 webhook URL 复制。
+ * 覆盖：账号列表/过滤、新建/编辑/轮换/删除。
+ *
+ * QQ Bot 渠道已下线：不再拉取 QQ 桥接状态，也不再接受 platform=qq。
  *
  * 设计原则：
  * - 不在前端缓存任何明文密钥；所有 secret 字段在表单提交后立即清空。
@@ -30,25 +32,6 @@ export type Account = {
   channel: Channel
 }
 export type ListResp = { items: Account[]; total: number; limit: number; offset: number }
-export type FirstClassEmp = {
-  employee_id: string
-  app_id: string
-  webhook_key: string
-  webhook_path: string
-  by_employee_path: string
-  app_secret_env: string
-  app_secret_present: boolean
-  uses_executor: boolean
-}
-export type QqStatus = {
-  configured: boolean
-  credential_source: string
-  app_id: string | null
-  butler_employee_id: string
-  first_class_employees: FirstClassEmp[]
-  sandbox: boolean
-  api_base: string
-}
 
 export function useAdminAiAccounts() {
   const router = useRouter()
@@ -63,24 +46,20 @@ export function useAdminAiAccounts() {
   const filterEmployee = ref('')
   const filterStatus = ref('')
 
-  const qqStatus = ref<QqStatus | null>(null)
-
   const createOpen = ref(false)
   const createForm = reactive({
-    platform: 'qq',
+    platform: 'email',
     external_id: '',
     employee_id: '',
     display_name: '',
     sandbox: false,
     notes: '',
-    app_id: '',
-    app_secret: '',
-    bot_token: '',
+    secret_json: '',
   })
   const createBusy = ref(false)
 
   const rotateOpenId = ref<number | null>(null)
-  const rotateForm = reactive({ app_id: '', app_secret: '', bot_token: '' })
+  const rotateForm = reactive({ secret_json: '' })
   const rotateBusy = ref(false)
 
   const editOpenId = ref<number | null>(null)
@@ -101,6 +80,18 @@ export function useAdminAiAccounts() {
     }))
   })
 
+  function parseSecretJson(raw: string): Record<string, unknown> | null {
+    const text = (raw || '').trim()
+    if (!text) return null
+    try {
+      const parsed = JSON.parse(text) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+      return parsed as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+
   async function loadAll() {
     if (!isAdmin.value) return
     loading.value = true
@@ -113,11 +104,6 @@ export function useAdminAiAccounts() {
       const resp = (await api.adminListAiAccounts(params as never)) as ListResp
       items.value = resp.items || []
       total.value = resp.total || 0
-      try {
-        qqStatus.value = (await api.butlerQqStatus()) as QqStatus
-      } catch {
-        qqStatus.value = null
-      }
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : String(e)
     } finally {
@@ -126,22 +112,19 @@ export function useAdminAiAccounts() {
   }
 
   function openCreate() {
-    createForm.platform = 'qq'
+    createForm.platform = 'email'
     createForm.external_id = ''
     createForm.employee_id = ''
     createForm.display_name = ''
     createForm.sandbox = false
     createForm.notes = ''
-    createForm.app_id = ''
-    createForm.app_secret = ''
-    createForm.bot_token = ''
+    createForm.secret_json = ''
     createOpen.value = true
   }
 
   function closeCreate() {
     createOpen.value = false
-    createForm.app_secret = ''
-    createForm.bot_token = ''
+    createForm.secret_json = ''
   }
 
   async function submitCreate() {
@@ -150,17 +133,18 @@ export function useAdminAiAccounts() {
       error.value = 'platform / external_id / employee_id 都不能为空'
       return
     }
-    if (createForm.platform === 'qq' && (!createForm.app_id || !createForm.app_secret || !createForm.bot_token)) {
-      error.value = 'QQ 平台需要 app_id / app_secret / bot_token 三个字段'
+    if (createForm.platform === 'qq') {
+      error.value = 'QQ Bot 渠道已下线，请改用其他平台'
+      return
+    }
+    const secret = parseSecretJson(createForm.secret_json)
+    if (!secret) {
+      error.value = 'secret 必须是非空 JSON 对象'
       return
     }
     createBusy.value = true
     error.value = ''
     try {
-      const secret =
-        createForm.platform === 'qq'
-          ? { app_id: createForm.app_id, app_secret: createForm.app_secret, bot_token: createForm.bot_token }
-          : {}
       await api.adminCreateAiAccount({
         platform: createForm.platform,
         external_id: createForm.external_id,
@@ -213,29 +197,23 @@ export function useAdminAiAccounts() {
 
   function openRotate(a: Account) {
     rotateOpenId.value = a.id
-    rotateForm.app_id = ''
-    rotateForm.app_secret = ''
-    rotateForm.bot_token = ''
+    rotateForm.secret_json = ''
   }
   function closeRotate() {
     rotateOpenId.value = null
-    rotateForm.app_secret = ''
-    rotateForm.bot_token = ''
+    rotateForm.secret_json = ''
   }
   async function submitRotate() {
     if (rotateOpenId.value == null || rotateBusy.value) return
-    if (!rotateForm.app_id || !rotateForm.app_secret || !rotateForm.bot_token) {
-      error.value = 'QQ 轮换需要 app_id / app_secret / bot_token 三个字段（粘贴 QQ 后台最新值）'
+    const secret = parseSecretJson(rotateForm.secret_json)
+    if (!secret) {
+      error.value = 'secret 必须是非空 JSON 对象'
       return
     }
     rotateBusy.value = true
     error.value = ''
     try {
-      await api.adminRotateAiAccountSecret(rotateOpenId.value, {
-        app_id: rotateForm.app_id,
-        app_secret: rotateForm.app_secret,
-        bot_token: rotateForm.bot_token,
-      })
+      await api.adminRotateAiAccountSecret(rotateOpenId.value, secret)
       closeRotate()
       await loadAll()
     } catch (e: unknown) {
@@ -285,7 +263,6 @@ export function useAdminAiAccounts() {
     filterPlatform,
     filterEmployee,
     filterStatus,
-    qqStatus,
     createOpen,
     createForm,
     createBusy,

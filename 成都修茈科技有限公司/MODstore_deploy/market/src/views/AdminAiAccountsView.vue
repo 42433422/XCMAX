@@ -1,12 +1,12 @@
 <script setup lang="ts">
-// 拆分后本文件为组装入口（façade）：账号池 CRUD/QQ 桥接逻辑在 ./admin-ai-accounts/，
+// 拆分后本文件为组装入口（façade）：账号池 CRUD 逻辑在 ./admin-ai-accounts/，
 // 样式在 ./admin-ai-accounts/adminAiAccounts.css。defineExpose 面保持不变。
 import { useAdminAiAccounts } from './admin-ai-accounts/useAdminAiAccounts'
 
 /* eslint-disable @typescript-eslint/no-unused-vars -- 测试兼容面：既有测试经 setupState 访问 */
 const {
   router, isAdmin, loading, error, items, total,
-  filterPlatform, filterEmployee, filterStatus, qqStatus,
+  filterPlatform, filterEmployee, filterStatus,
   createOpen, createForm, createBusy,
   rotateOpenId, rotateForm, rotateBusy,
   editOpenId, editForm, editBusy,
@@ -30,7 +30,7 @@ defineExpose({ fullWebhookList })
     <header class="aa-head">
       <div>
         <h1>AI 员工账号池</h1>
-        <p class="aa-lead">管理 AI 员工的外部平台账号与密钥。</p>
+        <p class="aa-lead">管理 AI 员工的外部平台账号与密钥。QQ Bot 渠道已下线。</p>
       </div>
       <div class="aa-actions">
         <button type="button" class="btn ghost" :disabled="loading" @click="loadAll">
@@ -42,30 +42,6 @@ defineExpose({ fullWebhookList })
 
     <p v-if="error" class="aa-err">{{ error }}</p>
 
-    <!-- ─── QQ 桥接状态 ───────────────────────────────── -->
-    <section v-if="qqStatus" class="aa-card">
-      <h2>QQ 桥接</h2>
-      <p>
-        <span :class="qqStatus.configured ? 'ok' : 'bad'">{{ qqStatus.configured ? '已连接' : '未配置' }}</span>
-        <span class="muted"> · {{ qqStatus.credential_source || '-' }} · {{ qqStatus.sandbox ? '沙箱' : '正式' }}</span>
-      </p>
-      <ul v-if="qqStatus.first_class_employees?.length" class="aa-fc-list">
-        <li v-for="emp in qqStatus.first_class_employees" :key="emp.employee_id" class="aa-fc-item">
-          <p>
-            <strong>{{ emp.employee_id }}</strong>
-            <span class="muted">AppID {{ emp.app_id }}</span>
-            <span :class="emp.app_secret_present ? 'ok' : 'bad'">{{ emp.app_secret_present ? '✓' : '✕ 密钥缺失' }}</span>
-          </p>
-          <ul class="aa-url-list">
-            <li>
-              <code class="aa-code">{{ host() }}{{ emp.by_employee_path }}</code>
-              <button type="button" class="btn link" @click="copyText(host() + emp.by_employee_path)">复制</button>
-            </li>
-          </ul>
-        </li>
-      </ul>
-    </section>
-
     <!-- ─── 过滤 + 列表 ───────────────────────────────── -->
     <section class="aa-card">
       <div class="aa-filters">
@@ -73,7 +49,6 @@ defineExpose({ fullWebhookList })
           <span>平台</span>
           <select v-model="filterPlatform" class="aa-input" @change="loadAll">
             <option value="">全部</option>
-            <option value="qq">qq</option>
             <option value="wechat">wechat</option>
             <option value="email">email</option>
             <option value="slack">slack</option>
@@ -152,9 +127,10 @@ defineExpose({ fullWebhookList })
         <label class="aa-field">
           <span>平台</span>
           <select v-model="createForm.platform" class="aa-input">
-            <option value="qq">qq</option>
-            <option value="wechat" disabled>wechat（暂未实现）</option>
-            <option value="email" disabled>email（暂未实现）</option>
+            <option value="email">email</option>
+            <option value="wechat">wechat</option>
+            <option value="slack">slack</option>
+            <option value="feishu">feishu</option>
           </select>
         </label>
         <label class="aa-field">
@@ -162,8 +138,8 @@ defineExpose({ fullWebhookList })
           <input v-model="createForm.employee_id" class="aa-input" placeholder="如 task-router-officer" />
         </label>
         <label class="aa-field">
-          <span>external_id（QQ 号 / AppID）</span>
-          <input v-model="createForm.external_id" class="aa-input" placeholder="如 1903978019" />
+          <span>external_id</span>
+          <input v-model="createForm.external_id" class="aa-input" placeholder="如 bot@example.com" />
         </label>
         <label class="aa-field">
           <span>显示名称（可选）</span>
@@ -175,23 +151,12 @@ defineExpose({ fullWebhookList })
         </label>
         <label class="aa-check">
           <input v-model="createForm.sandbox" type="checkbox" />
-          <span>使用 QQ 沙箱环境</span>
+          <span>沙箱环境</span>
         </label>
-        <template v-if="createForm.platform === 'qq'">
-          <h3>QQ 凭证</h3>
-          <label class="aa-field">
-            <span>app_id</span>
-            <input v-model="createForm.app_id" class="aa-input" />
-          </label>
-          <label class="aa-field">
-            <span>app_secret</span>
-            <input v-model="createForm.app_secret" class="aa-input" type="password" autocomplete="off" />
-          </label>
-          <label class="aa-field">
-            <span>bot_token</span>
-            <input v-model="createForm.bot_token" class="aa-input" type="password" autocomplete="off" />
-          </label>
-        </template>
+        <label class="aa-field">
+          <span>secret（JSON 对象）</span>
+          <textarea v-model="createForm.secret_json" class="aa-input" rows="4" placeholder='{"token":"..."}' />
+        </label>
         <div class="aa-modal-actions">
           <button type="button" class="btn ghost" :disabled="createBusy" @click="closeCreate">取消</button>
           <button type="button" class="btn primary" :disabled="createBusy" @click="submitCreate">
@@ -223,7 +188,7 @@ defineExpose({ fullWebhookList })
         </label>
         <label class="aa-check">
           <input v-model="editForm.sandbox" type="checkbox" />
-          <span>使用 QQ 沙箱</span>
+          <span>沙箱环境</span>
         </label>
         <label class="aa-field">
           <span>备注</span>
@@ -244,16 +209,8 @@ defineExpose({ fullWebhookList })
         <h2>轮换密钥（账号 #{{ rotateOpenId }}）</h2>
         <p class="muted">提交后会**覆盖**密钥文件，旧密钥立刻作废。</p>
         <label class="aa-field">
-          <span>app_id</span>
-          <input v-model="rotateForm.app_id" class="aa-input" />
-        </label>
-        <label class="aa-field">
-          <span>app_secret</span>
-          <input v-model="rotateForm.app_secret" class="aa-input" type="password" autocomplete="off" />
-        </label>
-        <label class="aa-field">
-          <span>bot_token</span>
-          <input v-model="rotateForm.bot_token" class="aa-input" type="password" autocomplete="off" />
+          <span>secret（JSON 对象）</span>
+          <textarea v-model="rotateForm.secret_json" class="aa-input" rows="4" placeholder='{"token":"..."}' />
         </label>
         <div class="aa-modal-actions">
           <button type="button" class="btn ghost" :disabled="rotateBusy" @click="closeRotate">取消</button>

@@ -710,15 +710,12 @@ class TestSafeJson:
 
 
 class TestResolveCorpCredentials:
-    def test_prefers_platform_runtime_route_over_qq_llm(self, monkeypatch, mock_db):
+    def test_prefers_platform_runtime_route_when_corp_unset(self, monkeypatch, mock_db):
         from modstore_server.agent_butler_api import _resolve_corp_credentials
 
         monkeypatch.delenv("BUTLER_CORP_PROVIDER", raising=False)
         monkeypatch.delenv("BUTLER_CORP_API_KEY", raising=False)
         monkeypatch.delenv("BUTLER_CORP_MODEL", raising=False)
-        monkeypatch.setenv("BUTLER_QQ_LLM_PROVIDER", "xiaomi")
-        monkeypatch.setenv("BUTLER_QQ_LLM_API_KEY", "sk-mimo-exhausted")
-        monkeypatch.setenv("BUTLER_QQ_LLM_MODEL", "mimo-v2.5-pro")
 
         with (
             patch(

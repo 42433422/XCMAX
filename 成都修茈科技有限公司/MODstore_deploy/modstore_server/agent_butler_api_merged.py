@@ -657,7 +657,6 @@ def _resolve_corp_credentials(db: _facade().Session):
     1. 显式 ``BUTLER_CORP_*`` 钉死（运维手动覆盖）
     2. 平台运行时路由（``llm-ops-engineer`` / ``runtime_route.json``）
     3. ``BUTLER_CORP_USER_ID`` / 分 provider 的 corp key
-    4. 遗留 ``BUTLER_QQ_LLM_*``
     """
     provider = (_facade().os.environ.get("BUTLER_CORP_PROVIDER") or "").strip()
     model = (_facade().os.environ.get("BUTLER_CORP_MODEL") or "").strip()
@@ -710,22 +709,6 @@ def _resolve_corp_credentials(db: _facade().Session):
                 break
         if not provider:
             provider = "openai"
-    if not api_key:
-        qq_key = (_facade().os.environ.get("BUTLER_QQ_LLM_API_KEY") or "").strip()
-        if qq_key:
-            api_key = qq_key
-            if not (_facade().os.environ.get("BUTLER_CORP_PROVIDER") or "").strip():
-                provider = (
-                    _facade().os.environ.get("BUTLER_QQ_LLM_PROVIDER") or provider or "openai"
-                ).strip()
-            if not model:
-                qq_model = (_facade().os.environ.get("BUTLER_QQ_LLM_MODEL") or "").strip()
-                if qq_model:
-                    model = qq_model
-            if base_url is None:
-                qq_base = (_facade().os.environ.get("BUTLER_QQ_LLM_BASE_URL") or "").strip()
-                if qq_base:
-                    base_url = qq_base
     if not model:
         model = "gpt-4o-mini"
     if not api_key:
