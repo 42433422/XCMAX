@@ -18,8 +18,17 @@ def client(monkeypatch):
     monkeypatch.setenv("LAN_GUARD_ENABLED", "0")
     monkeypatch.setenv("LAN_CIDR_GUARD_ENABLED", "0")
     from app.fastapi_app.factory import create_fastapi_app
+    from app.fastapi_app.mod_startup import wait_for_background_mod_load
 
-    return TestClient(create_fastapi_app(enable_cors=False))
+    app = create_fastapi_app(enable_cors=False)
+    test_client = TestClient(app)
+    try:
+        yield test_client
+    finally:
+        try:
+            assert wait_for_background_mod_load(app, timeout=30.0), "Mod test worker did not stop"
+        finally:
+            test_client.close()
 
 
 def test_pairing_issue_and_exchange(monkeypatch):
