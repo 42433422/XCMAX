@@ -3,6 +3,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const { archive, legacy } = vi.hoisted(() => ({
   archive: {
+    reviewedExcelIdentity: vi.fn().mockResolvedValue({ actor: "1:7" }),
     archiveClassifyExcel: vi.fn(),
     confirmClassification: vi.fn(),
     reviewExcel: vi.fn(),

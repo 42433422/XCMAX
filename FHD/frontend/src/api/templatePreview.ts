@@ -98,6 +98,8 @@ function wrapServiceAvailabilityError(error: unknown, actionName: string, endpoi
 export const templatePreviewApi = {
   endpoints: TEMPLATE_ENDPOINTS,
 
+  reviewedExcelIdentity() { return api.get('/api/templates/reviewed-excel/identity') },
+
   classifyExcel(formData: FormData) {
     return reviewedExcelPost('/api/templates/reviewed-excel/classify', formData)
   },

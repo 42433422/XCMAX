@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import EltCenterView from './EltCenterView.vue'
 
 const archive = vi.hoisted(() => ({
+  reviewedExcelIdentity: vi.fn().mockResolvedValue({ actor: "1:7" }),
   archiveClassifyExcel: vi.fn(),
   confirmClassification: vi.fn(),
   reviewExcel: vi.fn(),
