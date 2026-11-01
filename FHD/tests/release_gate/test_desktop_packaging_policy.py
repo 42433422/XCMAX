@@ -425,13 +425,26 @@ def test_windows_package_probes_real_elt_runtime_without_development_dependencie
         script = (REPO_ROOT / "scripts/package" / filename).read_text(encoding="utf-8-sig")
         assert "Start-Process -FilePath $backendExe" in script
         assert "--verify-frozen-critical-runtime" in script
-        assert "-WorkingDirectory $probeDir -Wait -PassThru" in script
+        assert "-WorkingDirectory $probeDir -PassThru" in script
+        assert "$probe.WaitForExit(300000)" in script
+        assert "Stop-Process -Id $probe.Id -Force" in script
+        assert "$probe.WaitForExit(5000)" in script
         assert "$probe.ExitCode -ne 0" in script
     build = (REPO_ROOT / "scripts/package/build-backend.ps1").read_text(encoding="utf-8-sig")
     assert 'pip install -c deploy/requirements-server-api.lock.txt -e ".[server-api]"' in build
     assert build.index("PyInstaller --noconfirm") < build.index(
         "Start-Process -FilePath $backendExe"
     )
+    for phase in (
+        "frontend started",
+        "runtime dependency installation started",
+        "runtime dependency installation completed",
+        "PyInstaller started",
+        "PyInstaller completed",
+        "frozen runtime probe started",
+        "frozen runtime probe completed",
+    ):
+        assert phase in build
     first_python = build.index("& python scripts/dev/mods_ssot.py check")
     assert build.index("$env:PYTHONUTF8 = '1'") < first_python
     assert build.index("$env:PYTHONIOENCODING = 'utf-8'") < first_python

@@ -157,14 +157,27 @@ try {
     Write-Host 'Verifying installed backend critical dependencies and synthetic XLSX derivation.'
     $probe = Start-Process -FilePath $backendExe `
       -ArgumentList @('--verify-frozen-critical-runtime', '--data-dir', "`"$(Join-Path $probeDir 'data')`"") `
-      -WorkingDirectory $probeDir -Wait -PassThru `
+      -WorkingDirectory $probeDir -PassThru `
       -RedirectStandardOutput (Join-Path $probeDir 'stdout.log') `
       -RedirectStandardError (Join-Path $probeDir 'stderr.log')
-    Get-Content -LiteralPath (Join-Path $probeDir 'stdout.log'), (Join-Path $probeDir 'stderr.log') -ErrorAction SilentlyContinue
+    if (-not $probe.WaitForExit(300000)) {
+      # Stop only the probe created above; do not terminate other desktop runtimes.
+      Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
+      [void]$probe.WaitForExit(5000)
+      throw "Installed backend critical runtime probe timed out after 300 seconds (pid=$($probe.Id))"
+    }
+    $probe.Refresh()
     if ($probe.ExitCode -ne 0) {
       throw "Installed backend critical runtime probe failed with exit code $($probe.ExitCode)"
     }
   } finally {
+    foreach ($relativeLog in @('stdout.log', 'stderr.log', 'data\logs\backend-bootstrap.log', 'data\logs\frozen-runtime-probe.log')) {
+      $probeLog = Join-Path $probeDir $relativeLog
+      if (Test-Path -LiteralPath $probeLog) {
+        Write-Host "[installed-runtime-probe] $relativeLog"
+        Get-Content -LiteralPath $probeLog -ErrorAction SilentlyContinue
+      }
+    }
     Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue
   }
   Write-Host "Launching installed desktop runtime: $installedExe"
