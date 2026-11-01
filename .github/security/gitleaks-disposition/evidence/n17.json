@@ -1,0 +1,20 @@
+{
+  "schema": "gitleaks-disposition-evidence/v1",
+  "n": 17,
+  "disposition": "console-revoked",
+  "bucket": "INC-QQ",
+  "rule": "generic-api-key",
+  "path": "成都修茈科技有限公司/MODstore_deploy/tests/test_butler_qq_bridge.py",
+  "line": 25,
+  "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+  "note": "q.qq.com AppSecret reset+注销中 attested; pack INC-QQ; owner reviewer confirmed; resolved registry PR opening",
+  "linked_evidence_refs": [
+    "cred-rotate/qq/REVOKE_META.json",
+    "cred-rotate/packs/INC-QQ/MANIFEST.json",
+    "cred-rotate/DRAFT_resolved_all_three.json"
+  ],
+  "author": "codex-security-remediation",
+  "reviewer": "42433422",
+  "reviewed_at": "2026-11-01T02:00:00Z",
+  "review_due": "2027-01-30T00:00:00Z"
+}

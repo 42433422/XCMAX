@@ -13,10 +13,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Module fixture: ensure the extension module is loaded exactly once
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture(autouse=True)
 def _fake_circle_report_transport(monkeypatch):

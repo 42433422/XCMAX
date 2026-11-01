@@ -673,7 +673,7 @@ def test_etl_path_resolver_does_not_trust_cwd_or_global_temp(tmp_path, monkeypat
     assert Path.cwd().parent.resolve() not in security._trusted_base_roots()
 
 
-def test_etl_trusts_only_managed_employee_output_subdirectory(tmp_path, monkeypatch):
+def test_etl_trusts_only_managed_output_and_reviewed_template_subdirectories(tmp_path, monkeypatch):
     from app.application import shipment_excel_etl_security as security
 
     app_data = tmp_path / "app-data"
@@ -685,6 +685,13 @@ def test_etl_trusts_only_managed_employee_output_subdirectory(tmp_path, monkeypa
     assert app_data not in roots
     output = security.resolve_etl_output_path(app_data / "outputs" / "report.xlsx")
     assert output == app_data / "outputs" / "report.xlsx"
+
+    reviewed = app_data / "templates" / "reviewed_excel" / "1" / "confirmed.xlsx"
+    reviewed.parent.mkdir(parents=True)
+    reviewed.write_bytes(b"confirmed")
+    assert security.resolve_etl_path(reviewed) == reviewed
+    with pytest.raises(security.ShipmentEtlPathError, match="path not under allowed dirs"):
+        security.resolve_etl_path(app_data / "templates" / "private.xlsx")
 
     outside = tmp_path / "outside" / "report.xlsx"
     with pytest.raises(security.ShipmentEtlPathError):

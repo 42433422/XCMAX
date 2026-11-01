@@ -1,0 +1,21 @@
+{
+  "schema": "gitleaks-disposition-evidence/v1",
+  "n": 3,
+  "disposition": "live-rejected",
+  "bucket": "mobile_relay",
+  "rule": "generic-api-key",
+  "path": "FHD/mobile_relay_desktop.json",
+  "line": 3,
+  "commit_sha": "2833a2d7586fc342258fdbb7ee721eb711706e3d",
+  "http_status": 404,
+  "desktop_token_sha16": "bb00245f4b0dd076",
+  "note": "LIVE poll HTTP 404 rejected; token sha16 bb00245f4b0dd076",
+  "linked_evidence_refs": [
+    "gitleaks23/relay-reject/n03_bb00245f4b0dd076.json",
+    "gitleaks23/relay-reject/SUMMARY.json"
+  ],
+  "author": "codex-security-remediation",
+  "reviewer": "42433422",
+  "reviewed_at": "2026-11-01T02:00:00Z",
+  "review_due": "2027-01-30T00:00:00Z"
+}

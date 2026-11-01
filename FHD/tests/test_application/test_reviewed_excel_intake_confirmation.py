@@ -21,6 +21,7 @@ from app.db.models import PurchaseUnit
 from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.tenant_scope import tenant_scope
+from app.utils.path_io import path_utils
 from tests.test_application.test_etl_auto_ingest_service import rag_service as rag_service
 from tests.test_application.test_etl_preview_task_boundaries import ObservedExecutor
 from tests.test_application.test_reviewed_excel_template import review_store as review_store
@@ -40,6 +41,7 @@ def intake_store(review_store, rag_service, monkeypatch):
     store.actor.update(execute=True, mod="erp-test")
     monkeypatch.setenv("FHD_ETL_LLM", "off")
     monkeypatch.setattr(ais, "get_app_data_dir", lambda: str(store.root))
+    monkeypatch.setattr(path_utils, "get_app_data_dir", lambda **_: str(store.root))
     monkeypatch.setattr(ais, "get_auto_ingest_service", lambda: store.intake)
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: store.service)
     monkeypatch.setattr(
