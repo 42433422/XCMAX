@@ -49,5 +49,3 @@ def test_delete_reports_presence(tmp_path, monkeypatch) -> None:
 def test_secret_path_rejects_unsafe_platform(platform: str) -> None:
     with pytest.raises(ValueError):
         secret_path_for(platform, 1)
-
-
