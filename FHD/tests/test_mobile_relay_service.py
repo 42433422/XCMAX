@@ -127,6 +127,11 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
     assert recycled["pairing_code"] == expired["pairing_code"]
 
 
+def test_relay_service_can_accept_a_composition_root_url():
+    service = relay.MobileRelayService(default_public_base_url="https://relay-config.test/api")
+    assert service._pairing.ports.public_base_url == "https://relay-config.test/api"
+
+
 def test_completion_push_static_helper_covers_statuses_and_body_sources(monkeypatch):
     """直接覆盖完成推送的状态/正文分支,避免新增旁路拖低全量 branch ratchet。"""
     import app.domain.shared_services.mobile_push as mobile_push
