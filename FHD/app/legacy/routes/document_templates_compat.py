@@ -25,8 +25,9 @@ from io import BytesIO
 from typing import Any, BinaryIO
 
 from app.application.facades.template_facade import document_templates_service as _tpl
+from app.infrastructure.tenant_scope import current_tenant_id
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_io.path_utils import get_base_dir
+from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir
 
 
 class _UploadLikeFile:
@@ -78,19 +79,19 @@ def run_archive_template_delete(
     payload: dict | None, *, base_dir: str | None = None
 ) -> tuple[dict, int]:
     data = dict(payload or {})
-    template_id = str(data.get("id") or "").strip()
+    raw_id = str(data.get("id") or "")
+    template_id = raw_id if raw_id.startswith("fs:") else raw_id.strip()
     if not template_id:
         return {"success": False, "message": "缺少模板 id"}, 400
+    tenant_id = current_tenant_id()
+    if tenant_id is None:
+        return {"success": False, "message": "缺少租户上下文，无法删除模板"}, 403
 
     if template_id.startswith("fs:"):
-        raw_filename = template_id.split(":", 1)[1].strip()
+        raw_filename = template_id.split(":", 1)[1]
         if not raw_filename:
             return {"success": False, "message": "模板文件名无效"}, 400
 
-        # 安全：合法的 fs: id 永远是「裸文件名」（来自 os.listdir，见
-        # template_store_impl.py:110/159）。任何含目录分隔符、".." 或绝对路径
-        # 的输入都属于路径遍历攻击（如 fs:/etc/passwd / fs:../../../etc/hosts），
-        # 因为 os.path.join 会丢弃前缀直接拼成绝对路径。一律拒绝。
         filename = os.path.basename(raw_filename)
         if (
             not filename
@@ -99,46 +100,65 @@ def run_archive_template_delete(
             or os.path.isabs(raw_filename)
             or "/" in raw_filename
             or "\\" in raw_filename
+            or ":" in raw_filename
+            or "\0" in raw_filename
+            or os.path.splitext(raw_filename)[1].lower() not in {".xlsx", ".xls", ".docx"}
             or os.sep in raw_filename
             or (os.altsep and os.altsep in raw_filename)
         ):
             return {"success": False, "message": "模板文件名无效"}, 400
 
         root = str(base_dir or get_base_dir())
-        # 受信任的模板根目录（与 fs 扫描目录一致）。删除目标的 realpath 必须
-        # 严格落在其中之一的 realpath 之内，避免符号链接逃逸。
-        allowed_roots = [
-            os.path.realpath(root),
-            os.path.realpath(os.path.join(root, "templates")),
-            os.path.realpath(os.path.join(root, "resources", "templates")),
-        ]
-        candidates = [
-            os.path.join(root, filename),
-            os.path.join(root, "templates", filename),
-            os.path.join(root, "resources", "templates", filename),
-        ]
-
-        target_path = None
-        for path in candidates:
-            real_path = os.path.realpath(path)
-            real_dir = os.path.dirname(real_path)
-            # 必须直接位于某个受信任根目录下，且解析后的真实文件仍是常规文件
-            # （拒绝符号链接指向外部 / 拒绝越界路径）。
-            within_trusted = any(
-                real_dir == allowed or real_dir.startswith(allowed + os.sep)
-                for allowed in allowed_roots
+        # fs IDs contain only a filename: a built-in collision cannot identify
+        # a tenant file unambiguously. Never mutate installation resources.
+        if any(
+            os.path.lexists(os.path.join(folder, filename))
+            for folder in (
+                root,
+                os.path.join(root, "templates"),
+                os.path.join(root, "resources", "templates"),
             )
-            if not within_trusted:
-                continue
-            if os.path.islink(path):
-                continue
-            if os.path.isfile(real_path) and os.path.isfile(path):
-                target_path = path
-                break
-
-        if not target_path:
+        ):
+            return {"success": False, "message": "内置模板不可删除，请先另存为自定义模板"}, 403
+        runtime = os.path.realpath(get_app_data_dir())
+        tenant_root = os.path.join(runtime, "tenants", str(tenant_id))
+        candidates = []
+        for folder in ("templates", "document_templates"):
+            path = os.path.join(tenant_root, folder, filename)
+            if os.path.realpath(path) != os.path.abspath(path):
+                return {"success": False, "message": "模板路径包含符号链接，无法删除"}, 403
+            if os.path.isfile(path):
+                candidates.append(path)
+        if not candidates:
             return {"success": False, "message": f"模板文件不存在: {filename}"}, 404
-        os.remove(target_path)
+        if len(candidates) != 1:
+            return {"success": False, "message": "存在同名模板，无法确定删除目标"}, 409
+        target_path = candidates[0]
+        from sqlalchemy import text
+
+        from app.db.session import get_db
+
+        # Keep even inactive/cross-tenant references intact; a DB-backed template
+        # is removed by its db ID using the existing soft-delete contract below.
+        try:
+            with get_db() as db:
+                paths = db.execute(
+                    text(
+                        "SELECT original_file_path FROM templates WHERE original_file_path IS NOT NULL"
+                    )
+                ).scalars()
+                if any(
+                    os.path.normcase(os.path.realpath(p)) == os.path.normcase(target_path)
+                    for p in paths
+                    if p
+                ):
+                    return {
+                        "success": False,
+                        "message": "模板文件仍被引用，请通过已保存模板移除",
+                    }, 409
+            os.remove(target_path)
+        except RECOVERABLE_ERRORS:
+            return {"success": False, "message": "无法安全删除模板，请稍后重试"}, 503
         return {
             "success": True,
             "message": "模板删除成功",
@@ -159,7 +179,6 @@ def run_archive_template_delete(
         from app.db.session import get_db
         from app.infrastructure.templates.tenant_scope import (
             ensure_templates_tenant_column,
-            templates_tenant_where_sql,
         )
 
         try:
@@ -167,7 +186,7 @@ def run_archive_template_delete(
             ensure_templates_tenant_column()
         except RECOVERABLE_ERRORS:
             pass
-        tenant_sql, tenant_bind = templates_tenant_where_sql()
+        tenant_sql, tenant_bind = "tenant_id = :tenant_id", {"tenant_id": int(tenant_id)}
         with get_db() as db:
             row = db.execute(
                 text(f"SELECT id FROM templates WHERE id = :id AND ({tenant_sql})"),

@@ -1,133 +1,182 @@
-"""回归测试：模板删除路径遍历漏洞（VULN-3）。
-
-针对 ``app.legacy.routes.document_templates_compat.run_archive_template_delete``
-的 ``fs:`` 分支：合法 id 永远是裸文件名（来自 os.listdir）。任何含目录分隔符、
-``..`` 或绝对路径的输入都属于路径遍历攻击。
-
-修复前：``os.path.join(root, "/etc/hosts")`` 会丢弃 root 直接得到 ``/etc/hosts``，
-``fs:/etc/hosts`` / ``fs:../../secret.txt`` 可删除仓库外任意文件。
-修复后：这些 payload 被拒（4xx），os.remove 不会被以越界路径调用，合法裸文件名
-删除仍正常。
-"""
+"""Synthetic filesystem deletion contracts: tenant ownership, references and paths."""
 
 from __future__ import annotations
 
-import os
+import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
-from app.legacy.routes.document_templates_compat import run_archive_template_delete
+from app.infrastructure.tenant_scope import tenant_scope
+from app.legacy.routes import document_templates_compat as compat
 
 
-def test_absolute_path_traversal_is_rejected(tmp_path):
-    """fs:/etc/hosts 被拒，且 tmp 外的真实文件不会被删除。"""
-    # 在 tmp 外造一个"受害"文件，作为遍历目标的替身（不动真正的 /etc/hosts）。
-    victim = tmp_path.parent / "victim_abs_traversal.txt"
-    victim.write_text("do-not-delete", encoding="utf-8")
+@pytest.fixture
+def files(tmp_path, monkeypatch):
+    base, runtime = tmp_path / "install", tmp_path / "runtime"
+    base.mkdir()
+    engine = create_engine(f"sqlite:///{tmp_path / 'templates.db'}")
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "CREATE TABLE templates (id INTEGER PRIMARY KEY, tenant_id INTEGER, "
+                "original_file_path TEXT, is_active INTEGER, updated_at TEXT)"
+            )
+        )
+    monkeypatch.setattr(compat, "get_app_data_dir", lambda: str(runtime), raising=False)
+    monkeypatch.setattr("app.db.session.get_db", sessionmaker(bind=engine))
+    monkeypatch.setattr("app.db.init_db.init_template_tables", lambda: None)
+    monkeypatch.setattr(
+        "app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column", lambda: None
+    )
     try:
-        payload = {"id": f"fs:{victim}"}
-        data, code = run_archive_template_delete(payload, base_dir=str(tmp_path))
-        assert code >= 400, f"期望 4xx，实际 {code}: {data}"
-        assert data.get("success") is False
-        assert victim.exists(), "遍历 payload 不应删除 tmp 外文件"
+        with tenant_scope(11):
+            yield base, runtime, engine
     finally:
-        if victim.exists():
-            victim.unlink()
+        engine.dispose()
 
 
-def test_relative_path_traversal_is_rejected(tmp_path):
-    """fs:../../secret.txt 被拒，且对应文件不会被删除。"""
-    secret = tmp_path.parent / "secret_rel_traversal.txt"
-    secret.write_text("top-secret", encoding="utf-8")
+def _file(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"synthetic template")
+    return path
+
+
+def _delete(base, template_id="fs:sample.xlsx", expected=403):
+    data, code = compat.run_archive_template_delete({"id": template_id}, base_dir=str(base))
+    assert code == expected, data
+    assert data["success"] is (expected == 200)
+    return data
+
+
+@pytest.mark.parametrize("folder", ["", "templates", "resources/templates"])
+@pytest.mark.parametrize("collision", [False, True])
+def test_builtin_is_never_deleted(files, folder, collision):
+    base, runtime, _engine = files
+    builtin = _file(base / folder / "sample.xlsx")
+    private = _file(runtime / "tenants/11/templates/sample.xlsx") if collision else None
+    _delete(base)
+    assert builtin.read_bytes() == b"synthetic template"
+    assert private is None or private.exists()
+
+
+@pytest.mark.parametrize("folder", ["templates", "document_templates"])
+def test_unique_tenant_file_deleted_without_touching_same_name_in_other_tenant(files, folder):
+    base, runtime, _engine = files
+    own = _file(runtime / "tenants/11" / folder / "sample.xlsx")
+    other = _file(runtime / "tenants/22" / folder / "sample.xlsx")
+    data = _delete(base, expected=200)
+    assert data["deleted"]["id"] == "fs:sample.xlsx"
+    assert not own.exists() and other.exists()
+    _delete(base, expected=404)
+    assert other.read_bytes() == b"synthetic template"
+
+
+@pytest.mark.parametrize("name,status", [(" sample.xlsx", 200), ("sample.xlsx ", 400)])
+def test_filename_whitespace_never_aliases_another_file(files, name, status):
+    base, runtime, _engine = files
+    normal = _file(runtime / "tenants/11/templates/sample.xlsx")
+    requested = _file(normal.parent / name)
+    data = _delete(base, f"fs:{name}", expected=status)
+    assert normal.read_bytes() == b"synthetic template"
+    assert requested.exists() is (status != 200)
+    if status == 200:
+        assert data["deleted"]["id"] == f"fs:{name}"
+
+
+def test_same_name_in_both_tenant_directories_is_ambiguous(files):
+    base, runtime, _engine = files
+    targets = [
+        _file(runtime / "tenants/11" / folder / "sample.xlsx")
+        for folder in ("templates", "document_templates")
+    ]
+    _delete(base, expected=409)
+    assert all(path.exists() for path in targets)
+
+
+@pytest.mark.parametrize("tenant,active", [(11, 1), (11, 0), (22, 1), (22, 0)])
+def test_referenced_file_retained_including_inactive_or_other_tenant_record(files, tenant, active):
+    base, runtime, engine = files
+    target = _file(runtime / "tenants/11/templates/sample.xlsx")
+    with engine.begin() as db:
+        db.execute(
+            text("INSERT INTO templates VALUES (1, :tenant, :path, :active, NULL)"),
+            {"tenant": tenant, "path": str(target), "active": active},
+        )
+    _delete(base, expected=409)
+    assert target.read_bytes() == b"synthetic template"
+
+
+def test_missing_tenant_cannot_delete(files):
+    base, runtime, _engine = files
+    target = _file(runtime / "tenants/11/templates/sample.xlsx")
+    with tenant_scope(None):
+        _delete(base)
+    assert target.exists()
+
+
+def test_unknown_id_does_not_resolve_another_tenants_file(files):
+    base, runtime, _engine = files
+    other = _file(runtime / "tenants/22/templates/sample.xlsx")
+    _delete(base, expected=404)
+    assert other.exists()
+
+
+def test_reference_query_failure_retains_file(files):
+    base, runtime, engine = files
+    target = _file(runtime / "tenants/11/templates/sample.xlsx")
+    with engine.begin() as db:
+        db.execute(text("DROP TABLE templates"))
+    _delete(base, expected=503)
+    assert target.read_bytes() == b"synthetic template"
+
+
+def test_filesystem_failure_never_reports_success(files, monkeypatch):
+    base, runtime, _engine = files
+    target = _file(runtime / "tenants/11/templates/sample.xlsx")
+
+    def denied(_path):
+        raise PermissionError("synthetic refusal")
+
+    monkeypatch.setattr(compat.os, "remove", denied)
+    _delete(base, expected=503)
+    assert target.read_bytes() == b"synthetic template"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "/sample.xlsx",
+        "../sample.xlsx",
+        "a/sample.xlsx",
+        r"a\sample.xlsx",
+        "..",
+        "",
+        "C:sample.xlsx",
+        "sample\0.xlsx",
+        "sample.txt",
+    ],
+)
+def test_path_traversal_is_rejected_without_changes(files, name):
+    base, runtime, _engine = files
+    target = _file(runtime / "tenants/11/templates/sample.xlsx")
+    _delete(base, f"fs:{name}", expected=400)
+    assert target.read_bytes() == b"synthetic template"
+
+
+@pytest.mark.parametrize("kind", ["file", "parent"])
+def test_symlink_file_or_parent_is_rejected(files, kind):
+    base, runtime, _engine = files
+    outside = _file(runtime / "outside/sample.xlsx")
+    folder = runtime / "tenants/11/templates"
+    folder.parent.mkdir(parents=True)
     try:
-        payload = {"id": "fs:../../secret_rel_traversal.txt"}
-        data, code = run_archive_template_delete(payload, base_dir=str(tmp_path))
-        assert code >= 400, f"期望 4xx，实际 {code}: {data}"
-        assert data.get("success") is False
-        assert secret.exists(), "遍历 payload 不应删除目标文件"
-    finally:
-        if secret.exists():
-            secret.unlink()
-
-
-def test_legitimate_bare_filename_delete_succeeds(tmp_path):
-    """合法裸文件名 fs:a.docx 正常删除，返回结构不变。"""
-    target = tmp_path / "a.docx"
-    target.write_text("template body", encoding="utf-8")
-
-    payload = {"id": "fs:a.docx"}
-    data, code = run_archive_template_delete(payload, base_dir=str(tmp_path))
-
-    assert code == 200, f"期望 200，实际 {code}: {data}"
-    assert data.get("success") is True
-    assert data.get("deleted", {}).get("id") == "fs:a.docx"
-    assert "path" in data.get("deleted", {})
-    assert not target.exists(), "合法删除后文件应被移除"
-
-
-def test_legitimate_delete_in_templates_subdir(tmp_path):
-    """受信任的 templates/ 子目录下的裸文件名删除成功。"""
-    sub = tmp_path / "templates"
-    sub.mkdir()
-    target = sub / "b.xlsx"
-    target.write_text("xlsx body", encoding="utf-8")
-
-    data, code = run_archive_template_delete({"id": "fs:b.xlsx"}, base_dir=str(tmp_path))
-
-    assert code == 200, f"{code}: {data}"
-    assert data.get("success") is True
-    assert not target.exists()
-
-
-def test_os_remove_not_called_on_traversal(tmp_path, monkeypatch):
-    """遍历 payload 时 os.remove 绝不被以越界路径调用。"""
-    victim = tmp_path.parent / "victim_no_remove.txt"
-    victim.write_text("keep-me", encoding="utf-8")
-
-    removed_paths: list[str] = []
-    real_remove = os.remove
-
-    def _tracking_remove(path, *args, **kwargs):
-        removed_paths.append(str(path))
-        return real_remove(path, *args, **kwargs)
-
-    monkeypatch.setattr(os, "remove", _tracking_remove)
-
-    try:
-        for bad_id in (
-            f"fs:{victim}",
-            "fs:../../victim_no_remove.txt",
-            "fs:../../../../etc/hosts",
-            "fs:/etc/hosts",
-            "fs:foo/bar.docx",
-            "fs:..",
-        ):
-            data, code = run_archive_template_delete({"id": bad_id}, base_dir=str(tmp_path))
-            assert code >= 400, f"{bad_id} 应被拒，实际 {code}: {data}"
-
-        assert removed_paths == [], f"遍历 payload 不应触发 os.remove，但调用了: {removed_paths}"
-        assert victim.exists()
-    finally:
-        if victim.exists():
-            victim.unlink()
-
-
-def test_symlink_escape_is_rejected(tmp_path):
-    """受信任目录中的符号链接指向外部文件时，删除被拒，外部文件保留。"""
-    outside = tmp_path.parent / "outside_symlink_target.txt"
-    outside.write_text("external", encoding="utf-8")
-    link = tmp_path / "evil.docx"
-    try:
-        os.symlink(str(outside), str(link))
+        if kind == "parent":
+            folder.symlink_to(outside.parent, target_is_directory=True)
+        else:
+            folder.mkdir()
+            (folder / outside.name).symlink_to(outside)
     except (OSError, NotImplementedError):
-        # 平台不支持符号链接则跳过本断言（不视为失败）。
-        outside.unlink()
-        return
-
-    try:
-        data, code = run_archive_template_delete({"id": "fs:evil.docx"}, base_dir=str(tmp_path))
-        assert code >= 400, f"符号链接逃逸应被拒，实际 {code}: {data}"
-        assert outside.exists(), "符号链接目标（外部文件）不应被删除"
-    finally:
-        if link.exists() or os.path.islink(str(link)):
-            os.unlink(str(link))
-        if outside.exists():
-            outside.unlink()
+        pytest.skip("symlinks unavailable")
+    _delete(base)
+    assert (folder / outside.name).is_file()
+    assert outside.read_bytes() == b"synthetic template"
