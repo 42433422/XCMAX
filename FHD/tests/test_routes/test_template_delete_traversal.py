@@ -158,6 +158,27 @@ def test_removed_copy_does_not_block_removing_later_visible_same_name(files):
     assert old.read_bytes() == new.read_bytes() == b"synthetic template"
 
 
+def test_restoring_one_duplicate_marker_restores_db_card_but_keeps_fs_hidden(files):
+    base, runtime, engine = files
+    target = _file(runtime / "tenants/11/templates/sample.xlsx")
+    marker_id = _delete(base, expected=200)["deleted"]["db_id"]
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "INSERT INTO templates (tenant_id, original_file_path, is_active, template_key, template_name, template_type) "
+                "SELECT tenant_id, original_file_path, 0, template_key, template_name, template_type "
+                "FROM templates WHERE id = :id"
+            ),
+            {"id": marker_id},
+        )
+        db.execute(text("UPDATE templates SET is_active = 1 WHERE id = :id"), {"id": marker_id})
+    _assert_hidden(base, target)
+    store = FileSystemTemplateStore(str(base))
+    assert any(t["id"] == f"db:{marker_id}" for t in store.list_templates())
+    assert store.resolve_template_file(f"db:{marker_id}") == str(target)
+    assert target.read_bytes() == b"synthetic template"
+
+
 def test_inactive_database_path_using_runtime_alias_stays_hidden(files, monkeypatch):
     base, runtime, engine = files
     target = _file(runtime / "tenants/11/templates/sample.xlsx")
