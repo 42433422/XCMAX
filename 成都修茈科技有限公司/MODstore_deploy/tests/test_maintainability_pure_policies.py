@@ -51,7 +51,16 @@ def test_triage_lane_compatibility(intent, lane):
 
 @pytest.mark.parametrize(
     ("value", "enabled"),
-    [(True, True), (False, False), (" YES ", True), ("on", True), ("1", True), ("no", False), (0, False), (None, False)],
+    [
+        (True, True),
+        (False, False),
+        (" YES ", True),
+        ("on", True),
+        ("1", True),
+        ("no", False),
+        (0, False),
+        (None, False),
+    ],
 )
 def test_executor_flag_policy(value, enabled):
     assert _flag_enabled(value) is enabled
