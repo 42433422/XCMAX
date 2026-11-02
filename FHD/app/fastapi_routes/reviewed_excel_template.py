@@ -61,6 +61,10 @@ from app.application.reviewed_excel_evidence import (
     bounded_range,
     unresolved_fragments,
 )
+from app.application.reviewed_excel_review_projection import (
+    build_candidate_previews,
+    compose_usage_restrictions,
+)
 from app.application.reviewed_excel_template import (
     MAX_BYTES,
     classify_review_workbook,
