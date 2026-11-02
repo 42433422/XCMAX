@@ -31,10 +31,6 @@ from app.application.elt.archive_store import (
 )
 from app.application.elt.errors import EltError, ReviewedExcelError, public_excel_error
 from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
-from app.application.reviewed_excel_review_projection import (
-    build_candidate_previews,
-    compose_usage_restrictions,
-)
 from app.application.elt.service_uploads import UploadServiceMixin
 from app.application.elt_login_authorization import (
     bind_login_notice_grant,
