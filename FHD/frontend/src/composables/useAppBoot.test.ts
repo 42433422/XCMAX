@@ -8,7 +8,7 @@ const state = await vi.hoisted(async () => {
     route: vue.reactive({ name: 'chat', fullPath: '/', path: '/', meta: {} as Record<string, unknown>, query: {} }),
     authEpoch: vue.ref(0),
     accountEpoch: vue.ref(0),
-    account: vue.reactive({ workspaceReady: true, sessionCheckUnavailable: false, loaded: true }),
+    account: vue.reactive({ workspaceReady: true, workspaceHydrationReady: true, sessionCheckUnavailable: false, loaded: true }),
     mods: vue.reactive({ isLoaded: false, clientModsUiOff: false, loadError: null as string | null, initialize: vi.fn() }),
     ensureAuth: vi.fn(),
     router: { isReady: vi.fn(), replace: vi.fn(), push: vi.fn() },
@@ -78,6 +78,7 @@ beforeEach(() => {
   state.route.name = 'chat'; state.route.path = '/'; state.route.fullPath = '/'; state.route.meta = {}
   state.authEpoch.value = 0; state.accountEpoch.value = 0
   state.account.workspaceReady = true; state.account.sessionCheckUnavailable = false
+  state.account.workspaceHydrationReady = true
   state.mods.isLoaded = false; state.mods.clientModsUiOff = false; state.mods.loadError = null
   state.ensureAuth.mockReset().mockResolvedValue({ ok: true, entitledModIds: ['owned-mod'], accountUsername: 'synthetic-user' })
   state.mods.initialize.mockReset().mockImplementation(async () => { state.mods.isLoaded = true })
@@ -94,6 +95,18 @@ afterEach(() => {
 })
 
 describe('workspace startup readiness', () => {
+  it('keeps verified workspace data while waiting for the latest hydration', async () => {
+    state.account.workspaceHydrationReady = false
+    const boot = mountBoot()
+    await settle()
+    expect(state.account.workspaceReady).toBe(true)
+    expect(boot.startupVisible.value).toBe(true)
+    expect(boot.appReady.value).toBe(false)
+    expect(state.mods.initialize).not.toHaveBeenCalled()
+    state.account.workspaceHydrationReady = true
+    await settle()
+    expect(boot.appReady.value).toBe(true)
+  })
   it('waits for authentication while keeping the view mounted underneath', async () => {
     const auth = deferred<{ ok: boolean; entitledModIds: string[] }>()
     state.ensureAuth.mockReturnValue(auth.promise)
@@ -142,13 +155,13 @@ describe('workspace startup readiness', () => {
     const { boot } = mountBootWithPage(prepare)
     await settle()
     expect(prepare).toHaveBeenCalledOnce()
-    state.account.workspaceReady = false
+    state.account.workspaceHydrationReady = false
     page.resolve()
     await settle()
     expect(boot.appReady.value).toBe(false)
     expect(boot.startupVisible.value).toBe(true)
     expect(boot.startupError.value).toBe('')
-    if (outcome === 'ready') state.account.workspaceReady = true
+    if (outcome === 'ready') state.account.workspaceHydrationReady = true
     else state.account.sessionCheckUnavailable = true
     await settle()
     expect(boot.appReady.value).toBe(outcome === 'ready')

@@ -48,9 +48,10 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
   }
 
   async function waitForWorkspace(current: () => boolean, signal: AbortSignal) {
-    await waitUntil(() => account.workspaceReady || account.sessionCheckUnavailable, signal)
+    const ready = () => account.workspaceReady && account.workspaceHydrationReady
+    await waitUntil(() => ready() || account.sessionCheckUnavailable, signal)
     if (!current()) return false
-    if (!account.workspaceReady || account.sessionCheckUnavailable) {
+    if (!ready() || account.sessionCheckUnavailable) {
       throw new Error('工作空间资料未就绪，请重试')
     }
     return true

@@ -79,18 +79,25 @@ afterEach(async () => {
 })
 
 describe('account workspace hydration ownership', () => {
-  it.each(['me', 'login'] as const)('immediately closes prior readiness when new %s hydration starts', async source => {
+  it.each(['me', 'login'] as const)('retains verified workspace data while new %s hydration freshness is pending', async source => {
     const store = useAccountProfileStore()
+    expect(store.workspaceHydrationReady).toBe(false)
     await ready(store)
     expect(store.workspaceReady).toBe(true)
     const next = observe(source === 'me' ? store.applyFromMeData(account(1)) : store.applyFromLoginPayload({ data: account(1) }))
-    expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(false)
     await preferencesReady(1)
-    expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(false)
     boundary.industries[1].resolve()
     await next.done
     expect(next.result.error).toBeUndefined()
     expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(true)
+    store.clear(false)
+    expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceHydrationReady).toBe(false)
   })
 
   it('keeps a superseded refresh waiting for the same-account hydration when the older me response arrives', async () => {
@@ -102,11 +109,13 @@ describe('account workspace hydration ownership', () => {
     await flushPromises()
     expect(boundary.getCurrentUser).toHaveBeenCalledOnce()
     const latest = observe(store.applyFromMeData(account(1, 'latest-hydration')))
-    expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(false)
     respond({ success: true, data: account(1, 'older-me-response') })
     await flushPromises()
     expect(refresh.result.settled).toBe(false)
-    expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(false)
     await preferencesReady(1)
     boundary.industries[1].resolve()
     await Promise.all([refresh.done, latest.done])
@@ -128,7 +137,8 @@ describe('account workspace hydration ownership', () => {
     validate({ success: true, data: { valid: true } })
     await flushPromises()
     expect(refresh.result.settled).toBe(false)
-    expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(false)
     await preferencesReady(1)
     boundary.industries[1].resolve()
     await Promise.all([refresh.done, latest.done])
@@ -155,14 +165,16 @@ describe('account workspace hydration ownership', () => {
     await Promise.all([refresh.done, latest.done])
     expect(latest.result.error).toBe(error)
     expect(refresh.result.error).toBeUndefined()
-    expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceHydrationReady).toBe(false)
     if (failure === 'network') {
+      expect(store.workspaceReady).toBe(true)
       expect(store.sessionCheckUnavailable).toBe(true)
       expect(store.loaded).toBe(true)
       expect(store.tenantId).toBe(1)
       expect(store.localUserId).toBe(100)
       expect(store.companyBrand).toBe('latest-identity')
     } else {
+      expect(store.workspaceReady).toBe(false)
       expect(store.sessionCheckUnavailable).toBe(false)
       expect(store.loaded).toBe(false)
       expect(store.tenantId).toBeNull()
@@ -201,11 +213,13 @@ describe('account workspace hydration ownership', () => {
     boundary.industries[1].resolve()
     await latest.done
     expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(true)
     boundary.industries[0].resolve()
     await old.done
     expect(old.result.error).toBeUndefined()
     expect(store.companyBrand).toBe('latest')
     expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(true)
   })
 
   it.each(['success', 'error'] as const)('keeps an old same-account %s caller waiting for the latest pending hydration', async outcome => {
@@ -219,12 +233,14 @@ describe('account workspace hydration ownership', () => {
     expect(old.result.settled).toBe(false)
     expect(latest.result.settled).toBe(false)
     expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceHydrationReady).toBe(false)
     await preferencesReady(1)
     boundary.industries[1].resolve()
     await Promise.all([old.done, latest.done])
     expect(old.result.error).toBeUndefined()
     expect(latest.result.error).toBeUndefined()
     expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(true)
   })
 
   it.each(['success', 'error'] as const)('propagates the latest real failure to a superseded %s caller', async outcome => {
@@ -243,6 +259,7 @@ describe('account workspace hydration ownership', () => {
     expect(old.result.error).toBe(error)
     expect(latest.result.error).toBe(error)
     expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceHydrationReady).toBe(false)
   })
 
   it('does not let a cleared caller join a new login to the same account', async () => {
@@ -256,11 +273,13 @@ describe('account workspace hydration ownership', () => {
     expect(old.result.error).toBeInstanceOf(Error)
     expect(latest.result.settled).toBe(false)
     expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceHydrationReady).toBe(false)
     await preferencesReady(2)
     boundary.industries[1].resolve()
     await latest.done
     expect(latest.result.error).toBeUndefined()
     expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(true)
   })
 
   it('rejects both old scopes across A → B → A while the new A is still pending', async () => {
@@ -274,11 +293,13 @@ describe('account workspace hydration ownership', () => {
     expect(accountB.result.error).toBeInstanceOf(Error)
     expect(currentA.result.settled).toBe(false)
     expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceHydrationReady).toBe(false)
     await preferencesReady(2)
     boundary.industries[0].resolve()
     await currentA.done
     expect(currentA.result.error).toBeUndefined()
     expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(true)
   })
 
   it('rejects hydration from an invalidated auth session even without another account scope', async () => {
@@ -290,6 +311,7 @@ describe('account workspace hydration ownership', () => {
     await old.done
     expect(old.result.error).toBeInstanceOf(Error)
     expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceHydrationReady).toBe(false)
   })
 
   it('does not let a pre-relogin caller join or release the new same-account login', async () => {
@@ -303,10 +325,12 @@ describe('account workspace hydration ownership', () => {
     expect(old.result.error).toBeInstanceOf(Error)
     expect(latest.result.settled).toBe(false)
     expect(store.workspaceReady).toBe(false)
+    expect(store.workspaceHydrationReady).toBe(false)
     await preferencesReady(1)
     boundary.industries[1].resolve()
     await latest.done
     expect(latest.result.error).toBeUndefined()
     expect(store.workspaceReady).toBe(true)
+    expect(store.workspaceHydrationReady).toBe(true)
   })
 })

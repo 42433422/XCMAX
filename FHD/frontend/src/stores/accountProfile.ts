@@ -66,6 +66,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const loaded = ref(false)
   const sessionCheckUnavailable = ref(false)
   const workspaceEpoch = ref(-1)
+  const workspaceHydrationReady = ref(false)
   const workspaceReady = computed(() => loaded.value && workspaceEpoch.value === productReadAccountEpoch.value)
   let hydrationEpoch = 0
   let clearedEpoch = 0
@@ -84,7 +85,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   function applySessionFields(data: Record<string, unknown>): Promise<void> {
     sessionCheckUnavailable.value = false
     const epoch = ++hydrationEpoch
-    workspaceEpoch.value = -1
+    workspaceHydrationReady.value = false
     const kind = String(data.account_kind || 'enterprise').trim()
     if (kind === 'personal' || kind === 'enterprise' || kind === 'admin') {
       accountKind.value = kind
@@ -150,7 +151,10 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
         if (observed !== hydrationEpoch) break
         if (failed) throw error
         // Earlier same-owner reads join the newest result; only its own read publishes readiness.
-        if (epoch === hydrationEpoch) workspaceEpoch.value = productReadAccountEpoch.value
+        if (epoch === hydrationEpoch) {
+          workspaceEpoch.value = productReadAccountEpoch.value
+          workspaceHydrationReady.value = true
+        }
         return
       }
       throw new Error('登录工作空间已改变，请重试')
@@ -246,6 +250,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     latestHydration = null
     sessionCheckUnavailable.value = false
     workspaceEpoch.value = -1
+    workspaceHydrationReady.value = false
     accountKind.value = 'enterprise'
     companyBrand.value = ''
     marketIsAdmin.value = false
@@ -290,6 +295,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     userRole,
     loaded,
     workspaceReady,
+    workspaceHydrationReady,
     isAdminAccount,
     isImpersonating,
     displayBrand,

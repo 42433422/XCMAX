@@ -94,9 +94,21 @@ test.describe('Real SettingsView deep-link readiness', () => {
 
   test('two successful hydrations for the same account reach the real Settings read without a false account-change error', async ({ page }) => {
     const mock = await installStartupReadinessMocks(page)
-    const allowHost = deferred(), releaseFirstHydration = deferred()
+    const allowHost = deferred(), releaseFirstHydration = deferred(), releaseLatestHydration = deferred()
     let settingsHydration = false, hostHydration = false, settingsReads = 0
-    // The renderer has mounted with verified account 1. Start Settings hydration A
+    let verifiedBeforeHydration: boolean | undefined
+    const readiness = () => page.evaluate(() => {
+      const app = (document.querySelector('#app') as unknown as {
+        __vue_app__?: { config: { globalProperties: { $pinia: { _s: Map<string, Record<string, unknown>> } } } }
+      }).__vue_app__
+      const account = app?.config.globalProperties.$pinia._s.get('accountProfile')
+      return { verified: account?.workspaceReady, hydrated: account?.workspaceHydrationReady }
+    })
+    mock.handlers.set('/api/system/industry', async route => {
+      if (hostHydration) await releaseLatestHydration.promise
+      await respond(route, industry())
+    })
+    // The renderer is mounting account 1. Start Settings hydration A
     // before allowing AppBoot's same-account verification to produce hydration B.
     mock.handlers.set('/api/auth/session/validate', async route => {
       await allowHost.promise
@@ -114,9 +126,26 @@ test.describe('Real SettingsView deep-link readiness', () => {
       }
       if (path === '/api/system/industries' && fromSource(stack, '/composables/settings/useSettingsMods.ts')) settingsReads++
     })
+    await interceptSettingsRead(page, '/api/auth/me', async route => {
+      if (verifiedBeforeHydration === undefined) {
+        await expect.poll(async () => typeof (await readiness()).verified).toBe('boolean')
+        verifiedBeforeHydration = (await readiness()).verified as boolean
+      }
+      await route.fallback()
+    }, '/composables/settings/useSettingsAccount.ts')
     try {
       await page.goto('/settings', { waitUntil: 'domcontentloaded' })
       await expect.poll(() => settingsHydration && hostHydration, { timeout: 20_000 }).toBe(true)
+      // Existing verified data remains usable during a same-owner background
+      // refresh. A new workspace entry still waits for the latest hydration.
+      expect(verifiedBeforeHydration).toEqual(expect.any(Boolean))
+      await expect.poll(readiness).toEqual({ verified: verifiedBeforeHydration, hydrated: false })
+      test.info().annotations.push({ type: 'synthetic-same-owner-readiness',
+        description: `historical workspaceReady=${verifiedBeforeHydration} retained while latest workspaceHydrationReady=false` })
+      await expect(overlay(page)).toHaveAttribute('data-state', 'loading')
+      await expect(workspace(page)).toHaveAttribute('inert')
+      expect(settingsReads).toBe(0)
+      releaseLatestHydration.release()
       // Every response is 200 for the same authenticated identity. Supersession
       // must await the latest verified hydration instead of rejecting this page.
       await expect.poll(() => settingsReads, {
@@ -125,8 +154,9 @@ test.describe('Real SettingsView deep-link readiness', () => {
       }).toBeGreaterThan(0)
       await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
       await expect(overlay(page)).toHaveCount(0)
+      await expect.poll(readiness).toEqual({ verified: true, hydrated: true })
       await expect(page.locator('.settings-profile__name')).toContainText('startup-test-1')
-    } finally { allowHost.release(); releaseFirstHydration.release() }
+    } finally { allowHost.release(); releaseFirstHydration.release(); releaseLatestHydration.release() }
   })
 
   test('a new account keeps its Settings detail masked when the old account detail arrives late', async ({ page }) => {
