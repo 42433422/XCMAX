@@ -177,7 +177,7 @@ test.describe('Real SettingsView deep-link readiness', () => {
       phase = 1; mock.setUser(2)
       await page.locator('#lv-username').fill('startup-test-2')
       await page.locator('#lv-password').fill('Synthetic@2026')
-      await page.locator('.login-basic').click()
+      await page.locator('.login-submit').click()
       await expect.poll(() => newRequested, { timeout: 20_000 }).toBe(true)
       old.release()
       await page.waitForTimeout(150)

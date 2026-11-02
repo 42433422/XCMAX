@@ -495,4 +495,42 @@ describe('workspace startup readiness', () => {
     expect(state.bridge.uninstall).toHaveBeenCalledOnce()
     expect(state.sync.stop).toHaveBeenCalled()
   })
+
+  it('retries startup when the route changes while the gate is still visible', async () => {
+    const font = deferred<unknown[]>()
+    state.loadFont.mockReturnValue(font.promise)
+    const boot = mountBoot()
+    await settle()
+    expect(boot.startupVisible.value).toBe(true)
+    const before = state.loadFont.mock.calls.length
+    state.route.fullPath = '/settings'
+    await settle()
+    expect(state.loadFont.mock.calls.length).toBeGreaterThan(before)
+    font.resolve([{ status: 'loaded' }]); await settle()
+  })
+
+  it('re-initializes mods when the tab becomes visible after a ready workspace lost its catalog', async () => {
+    const boot = mountBoot()
+    await settle()
+    expect(boot.appReady.value).toBe(true)
+    state.mods.isLoaded = false
+    state.mods.initialize.mockClear()
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await settle()
+    expect(state.mods.initialize).toHaveBeenCalled()
+  })
+
+  it('retries startup from a persisted pageshow after bfcache restore', async () => {
+    const font = deferred<unknown[]>()
+    state.loadFont.mockReturnValue(font.promise)
+    const boot = mountBoot()
+    await settle()
+    expect(boot.startupVisible.value).toBe(true)
+    const before = state.loadFont.mock.calls.length
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+    await settle()
+    expect(state.loadFont.mock.calls.length).toBeGreaterThan(before)
+    font.resolve([{ status: 'loaded' }]); await settle()
+  })
 })
