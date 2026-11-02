@@ -21,6 +21,7 @@ function mountView(section: 'personnel' | 'departments' | 'schedules' | 'records
     props: { section },
     global: {
       stubs: {
+        TransitionGroup: false,
         RouterLink: { props: ['to'], template: '<a :data-route="to.name"><slot /></a>' },
       },
     },
