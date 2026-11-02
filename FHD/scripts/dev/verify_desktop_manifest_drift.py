@@ -54,10 +54,21 @@ def _iter_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
 def _trusted(url: str, base_url: str) -> bool:
     target = urllib.parse.urlsplit(url)
     base = urllib.parse.urlsplit(base_url)
+    # Only explicit loopback fixtures may use HTTP. Production remains HTTPS-only.
+    if base.scheme == "http" and base.hostname in {"127.0.0.1", "localhost", "::1"}:
+        return (
+            target.scheme == "http"
+            and target.netloc == base.netloc
+            and not target.username
+            and not target.password
+        )
     return bool(
-        base.scheme == "https" and target.scheme == "https"
-        and not target.username and not target.password
-        and target.port in (None, 443) and target.hostname
+        base.scheme == "https"
+        and target.scheme == "https"
+        and not target.username
+        and not target.password
+        and target.port in (None, 443)
+        and target.hostname
         and (target.hostname == base.hostname or target.hostname.endswith(".xiu-ci.com"))
     )
 
@@ -104,9 +115,11 @@ def main() -> int:
         manifest = json.loads(_fetch(manifest_url).decode("utf-8"))
         sha = str(manifest.get("git_sha") or "")
         report["manifest_git_sha"] = sha
+        if manifest.get("version") != version:
+            raise ValueError("manifest_version_mismatch")
         if (
             manifest.get("schema") != "xcagi.download_manifest/v1"
-            or manifest.get("version") != version or not SHA.fullmatch(sha)
+            or not SHA.fullmatch(sha)
             or manifest.get("release_id") != f"xcagi-{version}-{sha}"
             or (expected_sha is not None and expected_sha != sha)
         ):
@@ -130,10 +143,13 @@ def main() -> int:
                 report["drift"].append({"filename": name, "reason": "invalid_artifact_identity"})
                 continue
             actual = _content_length(url)
+            if actual is None:
+                report["drift"].append({"filename": name, "reason": "artifact_unreachable"})
+                continue
             if actual != size:
                 report["drift"].append({
-                    "filename": name, "reason": "size_mismatch_or_unreachable",
-                    "expected_size": size, "actual_size": actual,
+                    "filename": name, "reason": "size_mismatch",
+                    "declared_size": size, "actual_size": actual,
                 })
                 continue
             if args.full_sha256:
