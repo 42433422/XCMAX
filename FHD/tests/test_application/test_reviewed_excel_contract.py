@@ -25,7 +25,6 @@ def archived_v7_atom_contract(monkeypatch):
 
 
 def test_independent_contract_is_identical_for_unseen_structures(monkeypatch):
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     hashes = []
     for sheet_name, address, merged in [
         ("甲", "B3", False),
@@ -202,7 +201,6 @@ def test_layout_source_enums_do_not_replace_sheet_range_pair_guard(monkeypatch):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.application.reviewed_excel_template import _validate_template_schema
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     review = source_protocol_review()
     request = _classify_semantic_batch(review, prepare_only=True, reference_ids=False)
     data = {
@@ -225,8 +223,8 @@ def test_layout_source_enums_do_not_replace_sheet_range_pair_guard(monkeypatch):
     }
     assert _validate_template_schema(request["schema"], data)
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *args: LlmAssistResult(used_llm=True, data=data),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **kwargs: LlmAssistResult(used_llm=True, data=data),
     )
     with pytest.raises(ReviewedExcelError, match="布局引用"):
         _classify_semantic_batch(review, reference_ids=False)

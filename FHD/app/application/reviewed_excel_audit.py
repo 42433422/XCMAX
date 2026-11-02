@@ -10,7 +10,7 @@ MAX_ARCHIVE_BYTES = 20_000_000
 
 
 class ModelRequestNotSent(ReviewedExcelError):
-    """Only local pre-send validation may raise this; never use for transport errors."""
+    """Only failures known to precede model dispatch may raise this."""
 
 
 def record_not_sent(state: dict, expected: str, reason: str) -> None:

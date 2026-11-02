@@ -43,12 +43,13 @@ describe('LoginView.vue', () => {
     expect(notice.text()).toContain('登录前请阅读')
     expect(notice.text()).toContain('任务所需内容并产生费用')
     expect(notice.text()).not.toContain('登录即表示同意')
-    for (const element of ['#login-heading', '.login-form', '.login-submit', '.login-basic']) {
+    for (const element of ['#login-heading', '.login-form', '.login-submit']) {
       expect(wrapper.get(element).element.compareDocumentPosition(notice.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     }
     expect(notice.element.compareDocumentPosition(wrapper.get('.login-footer').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(wrapper.get('.login-submit').text()).toBe('同意说明并登录')
-    expect(wrapper.get('.login-basic').text()).toBe('仅登录')
+    expect(wrapper.find('.login-basic').exists()).toBe(false)
+    expect(notice.text()).not.toContain('也可选择仅登录')
     for (const element of ['.login-panel', '.login-form', '.login-submit']) {
       expect(wrapper.get(element).attributes('aria-describedby')).toBe(notice.attributes('id'))
     }

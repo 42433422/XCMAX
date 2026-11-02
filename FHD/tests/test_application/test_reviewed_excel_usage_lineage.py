@@ -32,11 +32,12 @@ def without_custom_properties(body):
 
 
 def save_data(preview):
+    candidate = preview["proposal"]["candidates"][0]
     return {
         "review_id": preview["review_id"],
         "proposal_version": preview["proposal"]["version"],
-        "candidate_id": "preserve",
-        "selections": "[]",
+        "candidate_id": candidate["id"],
+        "selections": json.dumps(candidate["clear"]),
         "name": "synthetic restriction test",
         "publish_to_tenant": "true",
     }

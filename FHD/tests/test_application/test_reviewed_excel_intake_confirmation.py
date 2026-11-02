@@ -25,7 +25,7 @@ from app.utils.path_io import path_utils
 from tests.test_application.test_etl_auto_ingest_service import rag_service as rag_service
 from tests.test_application.test_etl_preview_task_boundaries import ObservedExecutor
 from tests.test_application.test_reviewed_excel_template import (
-    authorized_notice_client as authorized_notice_client,
+    account_session_client as account_session_client,
 )
 from tests.test_application.test_reviewed_excel_template import (
     candidate_form,
@@ -38,7 +38,7 @@ BASE = "/api/templates/reviewed-excel"
 
 
 @pytest.fixture
-def intake_store(review_store, rag_service, monkeypatch, authorized_notice_client):
+def intake_store(review_store, rag_service, monkeypatch, account_session_client):
     store = review_store
     Base.metadata.create_all(store.engine)
     store.factory = sessionmaker(bind=store.engine)

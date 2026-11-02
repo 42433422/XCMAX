@@ -25,13 +25,25 @@ export function runtimeHealthPresentation(data, connection = 'ready') {
     return { tone: 'offline', text: '业务服务异常', detail: '业务服务存在阻断问题。请打开设置检查服务状态，处理后再执行业务操作。' }
   }
   if (status === 'degraded' || runtime.status === 'degraded' || reasons.length) {
-    const onlyLocalAi = reasons.length === 1 && reasons[0] === 'LLM_RUNTIME_UNAVAILABLE'
-    return onlyLocalAi
-      ? { tone: 'warning', text: '部分 AI 能力未就绪', detail: '业务服务可连接，本地 AI 运行能力尚未就绪。云端模型是否可用请在设置的模型服务中确认。' }
+    const modelStatus = data?.sessionModel?.status
+    if (modelStatus === 'login_required' || modelStatus === 'auth_error') {
+      return { tone: 'warning', text: 'AI 账号连接异常', detail: '当前登录会话未通过模型服务验证。请在系统设置检查账号连接后重试。' }
+    }
+    if (modelStatus === 'configuration_error') {
+      return { tone: 'warning', text: '默认 AI 配置不可用', detail: '当前账号的默认模型配置未通过检查。请在系统设置的模型服务中选择可用模型或跟随平台默认。' }
+    }
+    if (modelStatus === 'connection_error') {
+      return { tone: 'warning', text: 'AI 服务连接未完成', detail: '暂时无法确认当前账号的模型服务连接，系统会自动重试。请在系统设置检查连接。' }
+    }
+    const onlyAi = reasons.length === 1 && reasons[0] === 'LLM_RUNTIME_UNAVAILABLE'
+    return onlyAi
+      ? { tone: 'warning', text: '部分 AI 能力未就绪', detail: '业务服务可连接，尚未确认可用的模型配置。请打开系统设置检查当前账号的模型服务。' }
       : { tone: 'warning', text: '部分服务异常', detail: '服务当前以降级状态运行，部分能力可能不可用。请打开设置检查相关服务。' }
   }
   if (['healthy', 'ok'].includes(status)) {
-    return { tone: 'online', text: '系统正常', detail: '最近一次检查：业务服务及健康接口报告的依赖均正常。点击打开系统设置。' }
+    return { tone: 'online', text: '系统正常', detail: data?.sessionModel?.status === 'configured'
+      ? '业务服务正常，当前账号的模型配置已确认；实际模型响应以具体任务为准。'
+      : '最近一次检查：业务服务及健康接口报告的依赖均正常。点击打开系统设置。' }
   }
   return { tone: 'pending', text: '服务状态待确认', detail: '尚未取得有效的服务健康状态。请打开设置检查，系统会自动重试。' }
 }

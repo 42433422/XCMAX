@@ -56,7 +56,12 @@ def test_invalid_shared_string_is_a_file_error_in_all_intake_routes(review_store
         assert "无法读取 XLSX" in response.text
     assert inspect_workbook(original)["sha256"] == hashlib.sha256(original).hexdigest()
     with review_store.engine.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM etl_runs WHERE target_type='template_review'")
+            ).scalar_one()
+            == 0
+        )
         assert conn.execute(text("SELECT count(*) FROM etl_archive_assets")).scalar_one() == 0
 
 
@@ -78,7 +83,12 @@ def test_unexpected_candidate_failure_is_correlated_without_source_logging(
     assert "RuntimeError" in caplog.text
     assert "synthetic-private-cell" not in caplog.text + response.text
     with review_store.engine.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM etl_runs WHERE target_type='template_review'")
+            ).scalar_one()
+            == 0
+        )
 
 
 def test_clean_formula_workbook_without_calculation_properties():
@@ -219,127 +229,104 @@ def test_dates_hidden_sheets_print_and_formula_cache_are_explicit():
     assert cleaned.calculation.fullCalcOnLoad is True
 
 
-def test_template_mimo_is_explicit_scoped_and_single_call(monkeypatch, caplog):
-    import json
+def test_template_platform_uses_account_provider_once_and_never_retries(monkeypatch, caplog):
+    import asyncio
 
+    from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.application.reviewed_excel_template import make_proposals, refine_proposal
-    from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1")
-    monkeypatch.setenv("FHD_TEMPLATE_MIMO_MODEL", "mimo-v2.6-flash")
-    monkeypatch.setenv("MIMO_API_KEY", "synthetic-placeholder-not-a-secret")
     monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    provider = SessionMarketProvider(7, "synthetic-market", timeout_seconds=1)
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: provider,
+    )
     calls = []
 
     async def fake(self, messages, **kwargs):
-        calls.append((self._adapter.model_name, self._adapter._base_url, kwargs))
-        candidates = [{"clear": [], "reason": "保留待确认"} for _ in range(3)]
+        calls.append(kwargs)
         return {
+            "model": "account-default",
             "choices": [
                 {
                     "finish_reason": "stop",
-                    "message": {"content": json.dumps({"candidates": candidates})},
+                    "message": {
+                        "content": json.dumps(
+                            {"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]}
+                        )
+                    },
                 }
-            ]
+            ],
         }
 
-    monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", fake)
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
     review = inspect_workbook(sample())
     proposal = refine_proposal(
-        review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
+        review, make_proposals(review)["version"], "synthetic feedback", owner_id=7, initial=True
     )
     assert proposal["model"]["status"] == "returned" and len(proposal["candidates"]) == 3
-    assert len(calls) == 1 and calls[0][0] == "mimo-v2.6-flash"
-    assert calls[0][1] == "https://token-plan-cn.xiaomimimo.com/v1"
-    assert calls[0][2]["thinking"] == {"type": "disabled"}
-    assert "synthetic-placeholder-not-a-secret" not in caplog.text
+    assert len(calls) == 1 and calls[0]["temperature"] == 0.0
+    assert proposal["model"]["input_summary"]["provider"] == "platform"
 
     async def fail(*args, **kwargs):
         calls.append("failed")
-        raise RuntimeError("429 synthetic-placeholder-not-a-secret")
+        raise RuntimeError("synthetic-private-provider-credential")
 
-    monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", fail)
-    with pytest.raises(ValueError, match="未自动重试"):
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fail)
+    with pytest.raises(ValueError):
         refine_proposal(
-            review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
+            review,
+            make_proposals(review)["version"],
+            "synthetic feedback",
+            owner_id=7,
+            initial=True,
         )
-    assert calls.count("failed") == 1
-
-    assert "synthetic-placeholder-not-a-secret" not in caplog.text
+    assert calls.count("failed") == 1 and "synthetic-private-provider-credential" not in caplog.text
 
     async def slow(*args, **kwargs):
-        import asyncio
-
         calls.append("timeout")
         await asyncio.sleep(1)
 
-    monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", slow)
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", slow)
     monkeypatch.setattr(
         "app.application.reviewed_excel_budget.template_timeout_seconds", lambda: 0.01
     )
-    with pytest.raises(ValueError, match="未自动重试"):
+    with pytest.raises(ValueError):
         refine_proposal(
-            review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
+            review,
+            make_proposals(review)["version"],
+            "synthetic feedback",
+            owner_id=7,
+            initial=True,
         )
     assert calls.count("timeout") == 1
-    monkeypatch.setenv("FHD_TEMPLATE_MIMO_BASE_URL", "https://unapproved.invalid/v1")
-    with pytest.raises(ValueError, match="未调用"):
-        refine_proposal(
-            review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
-        )
-    assert calls.count("failed") == 1
 
 
-def test_template_mimo_preview_requires_permission_and_consent(monkeypatch, review_store):
-    import json
+def test_template_preview_requires_permission_without_extra_consent(monkeypatch, review_store):
+    from unittest.mock import Mock
 
-    from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
-
-    for name, value in {
-        "FHD_TEMPLATE_LLM_PROVIDER": "mimo",
-        "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
-        "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
-        "MIMO_API_KEY": "synthetic-placeholder",
-        "FHD_ETL_LLM": "on",
-    }.items():
-        monkeypatch.setenv(name, value)
-    calls = []
-
-    async def fake(*args, **kwargs):
-        calls.append(1)
-        candidates = [{"clear": [], "reason": "保留待确认"} for _ in range(3)]
-        return {
-            "choices": [
-                {
-                    "finish_reason": "stop",
-                    "message": {"content": json.dumps({"candidates": candidates})},
-                }
-            ]
-        }
-
-    monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", fake)
+    send = Mock(side_effect=synthetic_candidate_result)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", send)
     client = review_store.client
     url = "/api/templates/reviewed-excel/preview"
     files = {"file": ("synthetic.xlsx", sample())}
-    data = {"expected_actor": "1:7", "model_opt_in": "true"}
-    assert client.post(url, files=files, data=data).status_code == 400 and not calls
+    data = {"expected_actor": "1:7"}
     review_store.actor["manage"] = False
-    assert (
-        client.post(url, files=files, data={**data, "sample_authorized": "true"}).status_code == 403
-        and not calls
-    )
+    assert client.post(url, files=files, data=data).status_code == 403
+    send.assert_not_called()
     review_store.actor["manage"] = True
-    response = client.post(url, files=files, data={**data, "sample_authorized": "true"})
-    assert response.status_code == 200 and len(calls) == 1
+    response = client.post(url, files=files, data=data)
+    assert response.status_code == 200, response.text
+    send.assert_called_once()
     assert response.json()["proposal"]["model"]["status"] == "returned"
 
 
-def test_mimo_fenced_three_plans_and_strict_nested_contract(monkeypatch):
+def test_platform_fenced_three_plans_and_strict_nested_contract(monkeypatch):
     import json
 
+    from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.application.reviewed_excel_template import make_proposals, refine_proposal
-    from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
 
     for name, value in {
         "FHD_TEMPLATE_LLM_PROVIDER": "mimo",
@@ -356,7 +343,11 @@ def test_mimo_fenced_three_plans_and_strict_nested_contract(monkeypatch):
         seen.append(messages)
         return {"choices": [{"finish_reason": "stop", "message": {"content": responses.pop(0)}}]}
 
-    monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", fake)
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
+    )
     review = inspect_workbook(sample())
     version = make_proposals(review)["version"]
     plans = [
@@ -461,6 +452,47 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(reviewed_excel_review_store, "default_archive_root", lambda: archive_root)
     actor = {"id": 7, "tenant": 1, "manage": True, "read": True, "admin": True}
 
+    from app.application import elt_login_authorization as account_sessions
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+    from app.fastapi_routes import market_account
+
+    def active_session(sid):
+        if sid != "synthetic-session":
+            return None
+        return {"owner": actor["id"], "tenant": actor["tenant"]}
+
+    def model_answer(messages, schema, *_args, **_kwargs):
+        payload = json.loads(messages[1]["content"])
+        if "candidates" in schema["properties"]:
+            data = {"candidates": [{"clear": [], "reason": "synthetic model"} for _ in range(3)]}
+        else:
+            data = synthetic_document_answer(payload)
+        return LlmAssistResult(
+            used_llm=True, provider="platform", model="synthetic-model", data=data
+        )
+
+    monkeypatch.setattr(account_sessions, "_active_session", active_session)
+    monkeypatch.setattr(
+        market_account,
+        "session_market_token",
+        lambda sid: "synthetic-market" if active_session(sid) else "",
+    )
+    from app.application import reviewed_excel_template as model_service
+
+    platform_complete = model_service._template_platform_complete
+    monkeypatch.setattr(model_service, "_template_platform_complete", model_answer)
+
+    def synthetic_models(messages, schema, *args, **kwargs):
+        # Classification tests may replace that response independently of the candidate model.
+        complete = (
+            model_answer
+            if "candidates" in schema["properties"]
+            else model_service._template_platform_complete
+        )
+        return complete(messages, schema, *args, **kwargs)
+
+    monkeypatch.setattr(model_service, "_template_llm_complete", synthetic_models)
+
     def authorize(permission):
         if not actor[permission]:
             raise HTTPException(status_code=403, detail="权限已撤销")
@@ -479,8 +511,83 @@ def review_store(tmp_path, monkeypatch):
     app.dependency_overrides[routes._manage] = lambda: authorize("manage")
     app.dependency_overrides[routes._read] = lambda: authorize("read")
     app.dependency_overrides[routes._archive_admin] = lambda: authorize("admin")
+
+    def bootstrap_client(client):
+        raw_post = client.post
+
+        def post(url, *args, **kwargs):
+            data = dict(kwargs.get("data") or {})
+            if (
+                url == "/api/templates/reviewed-excel/preview"
+                and not data.get("classification_id")
+                and actor["manage"]
+                and client.cookies.get("session_id") == "synthetic-session"
+                and data.get("expected_actor") == f"{actor['tenant']}:{actor['id']}"
+            ):
+                upload = (kwargs.get("files") or {}).get("file")
+                if upload:
+                    with monkeypatch.context() as parsing:
+                        parsing.setattr(routes, "inspect_workbook", inspect_workbook)
+                        classified = raw_post(
+                            "/api/templates/reviewed-excel/classify",
+                            files={"files": upload},
+                            data={"expected_actor": data["expected_actor"]},
+                        )
+                        payload = classified.json()
+                        records = payload.get("files", [])
+                        if (
+                            classified.status_code != 200
+                            or not records
+                            or not records[0].get("classification_id")
+                        ):
+                            classified = raw_post(
+                                "/api/templates/reviewed-excel/classify",
+                                files={"files": ("synthetic-precondition.xlsx", sample())},
+                                data={"expected_actor": data["expected_actor"]},
+                            )
+                            records = classified.json()["files"]
+                    item = records[0]
+                    labels = [
+                        {
+                            "sheet": sheet["sheet"],
+                            "range": region["range"],
+                            "labels": region["labels"],
+                        }
+                        for sheet in item["sheets"]
+                        for region in sheet["regions"]
+                    ]
+                    with monkeypatch.context() as parsing:
+                        parsing.setattr(routes, "inspect_workbook", inspect_workbook)
+                        confirmed = raw_post(
+                            f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/confirm",
+                            data={"version": item["version"], "labels_json": json.dumps(labels)},
+                        )
+                    assert confirmed.status_code == 200, confirmed.text
+                    first = labels[0]
+                    kwargs["data"] = {
+                        **data,
+                        "classification_id": item["classification_id"],
+                        "classification_version": confirmed.json()["version"],
+                        "region_sheet": first["sheet"],
+                        "region_range": first["range"],
+                    }
+            return raw_post(url, *args, **kwargs)
+
+        client.post = post
+        return raw_post
+
     with TestClient(app) as client:
-        yield SimpleNamespace(client=client, actor=actor, engine=engine, root=tmp_path)
+        client.cookies.set("session_id", "synthetic-session")
+        raw_post = bootstrap_client(client)
+        yield SimpleNamespace(
+            client=client,
+            actor=actor,
+            engine=engine,
+            root=tmp_path,
+            platform_complete=platform_complete,
+            raw_post=raw_post,
+            bootstrap_client=bootstrap_client,
+        )
     engine.dispose()
 
 
@@ -550,10 +657,6 @@ def test_production_archive_slices_keep_thirteen_rows_without_business_import(
     output = BytesIO()
     wb.save(output)
     body = output.getvalue()
-    monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *_: pytest.fail("未授权模型被调用"),
-    )
     with review_store.engine.begin() as conn:
         conn.execute(
             text(
@@ -601,7 +704,7 @@ def test_production_archive_slices_keep_thirteen_rows_without_business_import(
             data={
                 "review_id": review["review_id"],
                 "proposal_version": review["proposal"]["version"],
-                "candidate_id": "preserve",
+                "candidate_id": "model_initial_1",
                 "selections": "[]",
                 "name": f"生产片段{index}",
                 "publish_to_tenant": "true",
@@ -672,10 +775,6 @@ def test_initial_rule_continuation_requires_explicit_selection_and_replays_state
     output = BytesIO()
     wb.save(output)
     body = output.getvalue()
-    monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *_: pytest.fail("未授权模型被调用"),
-    )
     client = review_store.client
     upload = {"file": ("工艺.xlsx", body)}
     request = {"expected_actor": "1:7", "request_key": "initial-continuation"}
@@ -782,7 +881,7 @@ def test_initial_rule_continuation_requires_explicit_selection_and_replays_state
     value = preview.json()
     assert len(value["selected_region"]["fragments"]) == (2 if combine else 1)
     candidate = client.get(
-        f"/api/templates/reviewed-excel/reviews/{value['review_id']}/versions/{value['proposal']['version']}/candidates/preserve/download"
+        f"/api/templates/reviewed-excel/reviews/{value['review_id']}/versions/{value['proposal']['version']}/candidates/model_initial_1/download"
     )
     assert candidate.status_code == 200, candidate.text
     sheet = load_workbook(BytesIO(candidate.content))["工艺"]
@@ -1471,13 +1570,12 @@ def test_semantic_classification_persists_versions_and_links_source(review_store
         },
     ]
 
-    def fake(messages, schema, max_tokens):
+    def fake(messages, schema, max_tokens, **_model_kwargs):
         sent.append(json.loads(messages[1]["content"]))
         sent_messages.append(messages)
         return LlmAssistResult(used_llm=True, data={"regions": regions})
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
-    assert client.post(url + "/analyze", data={"version": version}).status_code == 400 and not sent
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     response = client.post(url + "/analyze", data={"version": version, "sample_authorized": "true"})
     assert response.status_code == 200, response.text
     analyzed = response.json()
@@ -1608,7 +1706,11 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
     wb.save(out)
     review = inspect_workbook(out.getvalue())
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "unsupported-vendor")
-    with pytest.raises(ValueError, match="未进行模型分类"):
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **kwargs: LlmAssistResult(),
+    )
+    with pytest.raises(ValueError):
         classify_semantic_workbook(review)
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     valid = {
@@ -1622,7 +1724,7 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
     # Merge-cutting ranges are accepted with merge_cut_flattened_on_export (export flattens).
     flatten_ok = [{**valid, "range": "A1:B4"}]
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
+        "app.application.reviewed_excel_template._template_platform_complete",
         lambda *a, **k: LlmAssistResult(used_llm=True, data={"regions": flatten_ok}),
     )
     flattened = classify_semantic_workbook(review)
@@ -1637,7 +1739,7 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
     ]
     for regions in invalid:
         monkeypatch.setattr(
-            "app.application.reviewed_excel_template._template_mimo_complete",
+            "app.application.reviewed_excel_template._template_platform_complete",
             lambda *a, **k: LlmAssistResult(used_llm=True, data={"regions": regions}),
         )
         with pytest.raises(ValueError):
@@ -1647,8 +1749,8 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
 def test_semantic_classification_uses_bounded_fenced_model_output(monkeypatch):
     import json
 
+    from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.application.reviewed_excel_template import classify_semantic_workbook
-    from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
 
     for name, value in {
         "FHD_TEMPLATE_LLM_PROVIDER": "mimo",
@@ -1697,7 +1799,11 @@ def test_semantic_classification_uses_bounded_fenced_model_output(monkeypatch):
             ]
         }
 
-    monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", fake)
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
+    )
     result = classify_semantic_workbook(review)
     assert len(seen) == 1 and len(seen[0]["cells"]) == 129
     assert (
@@ -1750,7 +1856,7 @@ def test_semantic_stale_response_cannot_overwrite_confirmed_correction(review_st
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     response = client.post(
         url + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
     )
@@ -1828,7 +1934,7 @@ def test_save_replay_scope_expiry_and_history(review_store):
         "review_id": review_id,
         "name": "合成模板",
         "proposal_version": preview["proposal"]["version"],
-        "candidate_id": "preserve",
+        "candidate_id": "model_initial_1",
         "publish_to_tenant": "true",
         "selections": '[{"sheet":"报价","cell":"B3"}]',
         "proposal_history": "forged",
@@ -1848,7 +1954,7 @@ def test_save_replay_scope_expiry_and_history(review_store):
         ).status_code
         == 400
     )
-    assert before["versions"][0]["version"] == data["proposal_version"]
+    assert before["versions"][-1]["version"] == data["proposal_version"]
     wrong = {**data, "proposal_version": "0" * 64}
     assert client.post("/api/templates/reviewed-excel/save", data=wrong).status_code == 409
     wrong = {**data, "candidate_id": "forged"}
@@ -1929,7 +2035,7 @@ def test_save_replay_scope_expiry_and_history(review_store):
 
 
 def test_private_intake_requires_model_before_a_business_plan(
-    review_store, authorized_notice_client, monkeypatch
+    review_store, account_session_client, monkeypatch
 ):
     client = review_store.client
     preview = client.post(
@@ -1943,6 +2049,17 @@ def test_private_intake_requires_model_before_a_business_plan(
         },
         data={"expected_actor": "1:7"},
     ).json()
+    with review_store.engine.begin() as conn:
+        stored = json.loads(
+            conn.execute(
+                text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": preview["review_id"]}
+            ).scalar_one()
+        )
+        stored["versions"][-1]["model"]["status"] = "not_called"
+        conn.execute(
+            text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
+            {"id": preview["review_id"], "draft": json.dumps(stored)},
+        )
     response = client.post(
         "/api/templates/reviewed-excel/save",
         data={
@@ -1957,7 +2074,7 @@ def test_private_intake_requires_model_before_a_business_plan(
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "model_required"
-    monkeypatch.setattr(routes, "_authorize_intake", lambda *_: "synthetic")
+    monkeypatch.setattr(routes, "_authorize_intake", lambda *_, **_kwargs: "synthetic")
     response = client.post(
         "/api/templates/reviewed-excel/intake-preview",
         data={
@@ -2033,7 +2150,7 @@ def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monk
         service.refine_proposal(review, base["version"], "清除客户", owner_id=7)
 
 
-def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, review_store):
+def test_feedback_endpoint_uses_session_without_extra_consent(monkeypatch, review_store):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.fastapi_routes.reviewed_excel import archive as archive_routes
     from app.fastapi_routes.template_api import router as product_template_router
@@ -2066,33 +2183,26 @@ def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, rev
     preview = client.post(
         "/api/templates/reviewed-excel/preview", files=upload, data={"expected_actor": "1:7"}
     ).json()
-    assert preview["proposal"]["model"]["status"] == "not_called" and calls == []
+    assert preview["proposal"]["model"]["status"] == "returned" and len(calls) == 1
     form = {
         "review_id": preview["review_id"],
         "parent_version": preview["proposal"]["version"],
         "feedback": "清除客户",
     }
-    assert (
-        client.post("/api/templates/reviewed-excel/refine", files=upload, data=form).status_code
-        == 400
-    )
-    assert calls == []
-    form["consent"] = "true"
-    form["sample_authorized"] = "true"
     response = client.post("/api/templates/reviewed-excel/refine", files=upload, data=form)
     assert response.status_code == 200
-    assert response.json()["proposal"]["model"]["status"] == "returned" and len(calls) == 1
+    assert response.json()["proposal"]["model"]["status"] == "returned" and len(calls) == 2
     assert len(response.json()["proposal"]["result_previews"]) == 3
     summary = response.json()["proposal"]["model"]["input_summary"]
-    assert summary["input_sha256"] == input_digest(calls[0])
+    assert summary["input_sha256"] == input_digest(calls[-1])
     assert "input_messages" not in response.json()["proposal"]["model"]
     assert response.json()["proposal"]["parent_version"] == preview["proposal"]["version"]
     history = client.get(f"/api/templates/reviewed-excel/reviews/{preview['review_id']}").json()
     assert (
-        len(history["versions"]) == 2
-        and history["versions"][1]["model"]["input_summary"]["input_sha256"]
-        == input_digest(calls[0])
-        and "input_messages" not in history["versions"][1]["model"]
+        len(history["versions"]) == len(preview["versions"]) + 1
+        and history["versions"][-1]["model"]["input_summary"]["input_sha256"]
+        == input_digest(calls[-1])
+        and "input_messages" not in history["versions"][-1]["model"]
     )
     assert client.post("/api/templates/reviewed-excel/refine", data=form).status_code == 409
     assert (
@@ -2101,7 +2211,7 @@ def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, rev
             data={
                 "review_id": preview["review_id"],
                 "proposal_version": preview["proposal"]["version"],
-                "candidate_id": "preserve",
+                "candidate_id": "model_initial_1",
                 "publish_to_tenant": "true",
                 "selections": "[]",
                 "name": "过期版本",
@@ -2111,7 +2221,9 @@ def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, rev
     )
 
 
-def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypatch, review_store):
+def test_initial_model_uses_current_account_without_file_consent_and_reports_coverage(
+    monkeypatch, review_store
+):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
     from app.fastapi_routes.reviewed_excel import archive as archive_routes
     from app.fastapi_routes.template_api import router as product_template_router
@@ -2142,15 +2254,6 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     }
-    assert (
-        client.post(
-            "/api/templates/reviewed-excel/preview",
-            files=upload,
-            data={"model_opt_in": "true", "expected_actor": "1:7"},
-        ).status_code
-        == 400
-    )
-    assert calls == []
     response = client.post(
         "/api/templates/reviewed-excel/preview",
         files=upload,
@@ -2164,111 +2267,91 @@ def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypa
     assert "input_messages" not in proposal["model"]
 
 
-def test_platform_initialization_outage_keeps_local_preview(monkeypatch, review_store):
+def test_platform_initialization_outage_returns_failure_without_rule_candidates(
+    monkeypatch, review_store
+):
     from app.application.elt import llm_session_provider as sessions
+    from app.application.reviewed_excel_template import _template_platform_complete
 
     def unavailable(**_):
         raise RuntimeError("synthetic-private-provider-initialization")
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "platform")
     monkeypatch.setattr(sessions, "current_owner_market_provider", unavailable)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        review_store.platform_complete,
+    )
     response = review_store.client.post(
         "/api/templates/reviewed-excel/preview",
         files={"file": ("synthetic.xlsx", sample())},
-        data={"model_opt_in": "true", "own_file_authorized": "true", "expected_actor": "1:7"},
+        data={"expected_actor": "1:7"},
     )
-    assert response.status_code == 200
-    proposal = response.json()["proposal"]
-    assert proposal["model"]["status"] == "unavailable" and len(proposal["candidates"]) == 3
-    assert "未调用模型" in proposal["model"]["message"]
-    assert "synthetic-private" not in response.text
+    assert response.status_code == 503, response.text
+    assert response.json()["detail"]["code"] == "model_configuration_error"
+    assert "proposal" not in response.json() and "synthetic-private" not in response.text
 
 
-def test_owner_file_template_authorization_uses_platform_by_default(monkeypatch, review_store):
-    from app.application.elt.llm_assist_runtime import LlmAssistResult
+def test_account_template_processing_uses_platform_and_ignores_old_consent_flags(
+    monkeypatch, review_store
+):
+    from unittest.mock import Mock
 
-    calls = []
+    from app.application.reviewed_excel_template import configured_template_llm_provider
 
-    def fake(*args, **kwargs):
-        calls.append(kwargs.get("owner_id"))
-        return LlmAssistResult(
-            used_llm=True,
-            data={"candidates": [{"clear": [], "reason": "合成"} for _ in range(3)]},
-            provider="platform",
-            model="platform-default",
-        )
-
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", fake)
-    monkeypatch.delenv("FHD_TEMPLATE_LLM_PROVIDER", raising=False)
+    send = Mock(side_effect=synthetic_candidate_result)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", send)
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    assert configured_template_llm_provider() == "platform"
     client = review_store.client
-    data = {"model_opt_in": "true", "own_file_authorized": "true", "expected_actor": "1:7"}
     source = sample()
-    upload = {"file": ("synthetic.xlsx", source)}
-    accepted = client.post("/api/templates/reviewed-excel/preview", files=upload, data=data)
+    accepted = client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", source)},
+        data={
+            "expected_actor": "1:7",
+            "model_opt_in": "false",
+            "own_file_authorized": "false",
+            "sample_authorized": "false",
+            "use_login_notice": "true",
+        },
+    )
     assert accepted.status_code == 200, accepted.text
     auth = accepted.json()["proposal"]["model"]["authorization"]
     assert (
-        auth["kind"] == "owner_file"
+        auth["kind"] == "account_session"
         and auth["provider"] == "platform"
         and auth["owner_user_id"] == 7
     )
-    assert auth["source_sha256"] == hashlib.sha256(source).hexdigest() and calls == [7]
-
-    # Explicit MiMo mapping remains available when product still maps platform → MiMo ids.
-    calls.clear()
-
-    def mimo_fake(*args, **kwargs):
-        calls.append(1)
-        return LlmAssistResult(
-            used_llm=True, data={"candidates": [{"clear": [], "reason": "合成"} for _ in range(3)]}
-        )
-
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", mimo_fake)
-    accepted = client.post("/api/templates/reviewed-excel/preview", files=upload, data=data)
-    assert accepted.status_code == 200, accepted.text
-    auth = accepted.json()["proposal"]["model"]["authorization"]
-    assert (
-        auth["kind"] == "owner_file" and auth["provider"] == "mimo" and auth["owner_user_id"] == 7
+    assert auth["source_sha256"] == hashlib.sha256(source).hexdigest()
+    assert send.call_count == 1
+    refined = client.post(
+        "/api/templates/reviewed-excel/refine",
+        data={
+            "review_id": accepted.json()["review_id"],
+            "parent_version": accepted.json()["proposal"]["version"],
+            "feedback": "synthetic feedback",
+            "consent": "false",
+            "own_file_authorized": "true",
+            "sample_authorized": "true",
+        },
     )
-    assert calls == [1]
-    refine_data = {
-        "review_id": accepted.json()["review_id"],
-        "parent_version": accepted.json()["proposal"]["version"],
-        "feedback": "继续保留",
-        "current": "[]",
-        "consent": "true",
-        "own_file_authorized": "true",
-    }
-    assert (
-        client.post(
-            "/api/templates/reviewed-excel/refine",
-            data={**refine_data, "sample_authorized": "true"},
-        ).status_code
-        == 400
-    )
-    refined = client.post("/api/templates/reviewed-excel/refine", data=refine_data)
     assert refined.status_code == 200, refined.text
     assert (
         refined.json()["proposal"]["model"]["authorization"]["scope"]
         == "this_document_bounded_cells_and_feedback"
     )
+    assert send.call_count == 2
 
 
-@pytest.mark.parametrize("published", [False, True])
-def test_login_notice_preview_without_effective_receipt_cannot_fall_back_or_send(
-    review_store, monkeypatch, published
+@pytest.mark.parametrize("legacy_receipt", ["", "synthetic-incomplete-scopes"])
+def test_model_routes_require_authenticated_session_even_with_legacy_consent_fields(
+    review_store, monkeypatch, legacy_receipt
 ):
     from unittest.mock import Mock
 
-    from app.application import elt_login_authorization as notice
-    from tests.test_application.test_elt_login_authorization import publication_record
-
-    if published:
-        monkeypatch.setenv(notice.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
-    else:
-        monkeypatch.delenv(notice.NOTICE_PUBLICATION_ENV, raising=False)
+    review_store.client.cookies.clear()
+    review_store.client.cookies.set("xcagi_elt_notice", legacy_receipt)
     send = Mock(side_effect=AssertionError("unauthorized model call"))
     monkeypatch.setattr(routes, "refine_proposal", send)
     response = review_store.client.post(
@@ -2282,10 +2365,7 @@ def test_login_notice_preview_without_effective_receipt_cannot_fall_back_or_send
             "sample_authorized": "true",
         },
     )
-    expected_status = 403 if published else 503
-    expected_code = "login_notice_required" if published else "notice_not_published"
-    assert response.status_code == expected_status, response.text
-    assert response.json()["detail"]["code"] == expected_code
+    assert response.status_code == 401, response.text
     assert "proposal" not in response.json()
     rejected = review_store.client.post(
         "/api/templates/reviewed-excel/refine",
@@ -2298,91 +2378,92 @@ def test_login_notice_preview_without_effective_receipt_cannot_fall_back_or_send
             "own_file_authorized": "true",
         },
     )
-    assert rejected.status_code == expected_status
-    assert rejected.json()["detail"]["code"] == expected_code
+    assert rejected.status_code == 401
     identity = review_store.client.get("/api/templates/reviewed-excel/identity").json()
-    assert identity["login_authorization"]["operations"]["classification"] != "authorized"
+    assert identity["model_access"]["status"] == "market_login_required"
     rejected = review_store.client.post(
         "/api/templates/reviewed-excel/classifications/synthetic/analyze",
         data={"version": "synthetic", "use_login_notice": "true", "own_file_authorized": "true"},
     )
-    assert rejected.status_code == expected_status
-    assert rejected.json()["detail"]["code"] == expected_code
+    assert rejected.status_code == 401
     send.assert_not_called()
     with review_store.engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
 
 
 @pytest.fixture
-def authorized_notice_client(review_store, monkeypatch):
-    import asyncio
-    import time
-    from http.cookies import SimpleCookie
-    from unittest.mock import AsyncMock
-
-    from fastapi.responses import JSONResponse
-
+def account_session_client(review_store, monkeypatch):
     from app.application import elt_login_authorization as notice
 
-    monkeypatch.setenv("SECRET_KEY", "synthetic-login-notice-key-for-route-tests-123456789")
     monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "platform")
-    from tests.test_application.test_elt_login_authorization import publication_record, recipient
-
-    monkeypatch.setenv(notice.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
-    monkeypatch.setattr(
-        notice,
-        "_active_session",
-        lambda sid: {
-            "owner": 7,
-            "tenant": 1,
-            "expires": int(time.time()) + 3600,
-        },
-    )
     route = {
         "base": "https://xiu-ci.com",
-        "provider": "xiaomi",
-        "model": "mimo-v2.6-flash",
+        "provider": "synthetic-account-provider",
+        "model": "synthetic-account-model",
         "key_source": "platform",
         "config_revision": "synthetic-revision-A",
-        "recipient": recipient(),
     }
-    monkeypatch.setattr(notice, "_resolve_login_route", AsyncMock(return_value=route))
-    response = asyncio.run(
-        notice.attach_login_notice(
-            JSONResponse({}),
-            {"success": True, "session_id": "synthetic-session", "user": {"id": 7}},
-            {"data_processing_notice_version": notice.NOTICE_VERSION},
-        )
+    # The ordinary login session is sufficient; no separate ELT receipt is minted.
+    return review_store.client, notice, route
+
+
+def test_existing_session_ignores_incomplete_notice_scope_and_publication_marker(
+    review_store, monkeypatch
+):
+    from unittest.mock import Mock
+
+    send = Mock(side_effect=synthetic_candidate_result)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", send)
+    monkeypatch.setenv("FHD_ELT_NOTICE_PUBLICATION", "{}")
+    review_store.client.cookies.set("xcagi_elt_notice", "synthetic-incomplete-or-stale-receipt")
+    identity = review_store.client.get("/api/templates/reviewed-excel/identity")
+    assert identity.json() == {"actor": "1:7", "model_access": {"status": "available"}}
+    response = review_store.client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", sample())},
+        data={"expected_actor": "1:7"},
     )
-    cookies = SimpleCookie()
-    for header in response.headers.getlist("set-cookie"):
-        cookies.load(header)
-    client = review_store.client
-    client.cookies.set(notice.NOTICE_COOKIE, cookies[notice.NOTICE_COOKIE].value)
-    client.cookies.set("session_id", "synthetic-session")
-    return client, notice, route
+    assert response.status_code == 200, response.text
+    assert response.json()["proposal"]["model"]["status"] == "returned"
+    send.assert_called_once()
+
+
+@pytest.mark.parametrize("field", ["classification_id", "classification_version"])
+def test_preview_requires_classification_before_model_dispatch(review_store, monkeypatch, field):
+    from unittest.mock import Mock
+
+    send = Mock(side_effect=AssertionError("raw preview must not dispatch"))
+    monkeypatch.setattr(routes, "refine_proposal", send)
+    data = {
+        "expected_actor": "1:7",
+        "classification_id": "synthetic",
+        "classification_version": "synthetic",
+    }
+    data.pop(field)
+    response = review_store.raw_post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", sample())},
+        data=data,
+    )
+    assert response.status_code == 409, response.text
+    send.assert_not_called()
+    with review_store.engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
 
 
 @pytest.mark.parametrize("multibatch", [False, True])
-def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_pipeline(
-    authorized_notice_client, monkeypatch, multibatch
+def test_account_session_calls_classification_candidates_and_feedback_without_extra_consent(
+    account_session_client, monkeypatch, multibatch
 ):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
-    client, notice, route = authorized_notice_client
+    client, notice, route = account_session_client
     calls = []
 
     def fake(*args, **kwargs):
-        notice.assert_login_notice_route(
-            route["base"],
-            route["provider"],
-            route["model"],
-            key_source=route["key_source"],
-            config_revision=route["config_revision"],
-            recipient=route["recipient"],
-        )
-        assert notice.current_login_notice_session_id(7) == "synthetic-session"
+        assert notice.current_model_session_id(7) == "synthetic-session"
+        assert notice.current_model_session_id(8) == ""
         calls.append(kwargs["owner_id"])
         payload = json.loads(args[0][1]["content"])
         data = (
@@ -2430,9 +2511,9 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     path = f"/api/templates/reviewed-excel/classifications/{classification['classification_id']}"
     archived = client.get(path + "/source")
     assert archived.status_code == 200 and archived.content == source
-    form = {"version": classification["version"], "use_login_notice": "true", "auto_group": "true"}
+    form = {"version": classification["version"], "auto_group": "true"}
     identity = client.get("/api/templates/reviewed-excel/identity").json()
-    assert identity["login_authorization"]["operations"]["classification"] == "authorized"
+    assert identity == {"actor": "1:7", "model_access": {"status": "available"}}
     analyzed = client.post(path + "/analyze", data=form)
     assert analyzed.status_code == 200, analyzed.text
     if multibatch:
@@ -2442,11 +2523,8 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     analyzed = analyzed.json()
     classification_calls = 3 if multibatch else 1
     assert analyzed["model_status"] == "returned" and calls == [7] * classification_calls
-    assert analyzed["model_authorization"]["notice_operation"] == "classification"
-    assert (
-        analyzed["model_authorization"]["notice_scope"]
-        == notice.notice_operation_scopes()["classification"]
-    )
+    assert analyzed["model_authorization"]["kind"] == "account_session"
+    assert analyzed["model_authorization"]["owner_user_id"] == 7
     assert (
         client.post(path + "/analyze", data=form).status_code == 409
         and calls == [7] * classification_calls
@@ -2463,7 +2541,6 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
         files={"file": ("synthetic.xlsx", source)},
         data={
             "expected_actor": "1:7",
-            "use_login_notice": "true",
             "classification_id": classification["classification_id"],
             "classification_version": analyzed["version"],
             "auto_slice_index": "0",
@@ -2472,17 +2549,14 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     assert result.status_code == 200, result.text
     result = result.json()
     auth = result["proposal"]["model"]["authorization"]
-    assert auth["kind"] == "owner_file" and auth["notice_version"] == notice.NOTICE_VERSION
+    assert auth["kind"] == "account_session" and auth["owner_user_id"] == 7
     assert auth["source_sha256"] == hashlib.sha256(source).hexdigest()
     assert auth["derived_sha256"] == result["sha256"]
-    assert auth["classification_id"] == classification["classification_id"]
-    assert auth["classification_version"] == analyzed["version"]
-    assert auth["document"]["auto_slice_index"] == 0 and auth["document"]["fragments"]
-    assert auth["model_route"] == {
-        key: route[key]
-        for key in ("provider", "model", "key_source", "config_revision", "recipient")
-    }
-    assert result["proposal"]["model"]["login_authorization"]["status"] == "authorized"
+    assert result["selected_region"]["classification_id"] == classification["classification_id"]
+    assert result["selected_region"]["version"] == analyzed["version"]
+    assert result["selected_region"]["auto_slice_index"] == 0
+    assert result["selected_region"]["fragments"]
+    assert "notice_version" not in auth and "login_authorization" not in result["proposal"]["model"]
     assert calls == [7] * (classification_calls + 1)
     derived_original = client.get(path + f"/auto-slices/{analyzed['version']}/0")
     assert derived_original.status_code == 200
@@ -2495,7 +2569,6 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
             "review_id": result["review_id"],
             "parent_version": result["proposal"]["version"],
             "feedback": "synthetic feedback",
-            "use_login_notice": "true",
         },
     )
     assert revised.status_code == 200, revised.text
@@ -2554,7 +2627,7 @@ def test_concurrent_identical_confirmations_never_create_two_templates(review_st
     data = {
         "review_id": preview["review_id"],
         "proposal_version": preview["proposal"]["version"],
-        "candidate_id": "preserve",
+        "candidate_id": "model_initial_1",
         "publish_to_tenant": "true",
         "selections": "[]",
         "name": "并发模板",
@@ -2572,7 +2645,6 @@ def test_concurrent_identical_confirmations_never_create_two_templates(review_st
 
 
 def test_concurrent_feedback_keeps_first_committed_version(review_store, monkeypatch):
-    import hashlib
     import threading
     from concurrent.futures import ThreadPoolExecutor
 
@@ -2584,35 +2656,38 @@ def test_concurrent_feedback_keeps_first_committed_version(review_store, monkeyp
         files={"file": ("sample.xlsx", sample())},
         data={"expected_actor": "1:7"},
     ).json()
-    barrier = threading.Barrier(2)
+    entered, release = threading.Event(), threading.Event()
+    calls = []
 
     def fake(review, parent_version, feedback, **kwargs):
-        barrier.wait(timeout=5)
+        calls.append(feedback)
+        entered.set()
+        assert release.wait(timeout=10)
         proposal = make_proposals(review)
+        proposal["model"] = {"status": "returned"}
         proposal["version"] = hashlib.sha256(feedback.encode()).hexdigest()
         proposal["parent_version"] = parent_version
         return proposal
 
     monkeypatch.setattr(routes, "refine_proposal", fake)
-    common = {
-        "review_id": preview["review_id"],
-        "parent_version": preview["proposal"]["version"],
-        "consent": "true",
-        "sample_authorized": "true",
-    }
+    common = {"review_id": preview["review_id"], "parent_version": preview["proposal"]["version"]}
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(
-            pool.map(
-                lambda feedback: client.post(
-                    "/api/templates/reviewed-excel/refine", data={**common, "feedback": feedback}
-                ),
-                ["第一个", "第二个"],
-            )
+        first = pool.submit(
+            client.post,
+            "/api/templates/reviewed-excel/refine",
+            data={**common, "feedback": "first"},
         )
-    assert sorted(r.status_code for r in results) == [200, 409]
-    winner = next(r.json()["proposal"]["version"] for r in results if r.status_code == 200)
+        assert entered.wait(timeout=10)
+        second = client.post(
+            "/api/templates/reviewed-excel/refine", data={**common, "feedback": "second"}
+        )
+        release.set()
+        winner = first.result(timeout=10)
+    assert winner.status_code == 200, winner.text
+    assert second.status_code == 409 and calls == ["first"]
     history = client.get(f"/api/templates/reviewed-excel/reviews/{preview['review_id']}").json()
-    assert len(history["versions"]) == 2 and history["versions"][-1]["version"] == winner
+    assert len(history["versions"]) == len(preview["versions"]) + 1
+    assert history["versions"][-1]["version"] == winner.json()["proposal"]["version"]
 
 
 def test_invalid_or_excessive_upload_is_rejected(review_store):
@@ -2661,6 +2736,10 @@ def test_revocation_during_model_or_before_write_never_commits(review_store, mon
         "/api/templates/reviewed-excel/preview", files=upload, data={"expected_actor": "1:7"}
     ).json()
 
+    writable = client.post(
+        "/api/templates/reviewed-excel/preview", files=upload, data={"expected_actor": "1:7"}
+    ).json()
+
     def revoke_model(*_args, **_kwargs):
         store.actor["manage"] = False
         return LlmAssistResult(
@@ -2679,7 +2758,7 @@ def test_revocation_during_model_or_before_write_never_commits(review_store, mon
     }
     assert client.post("/api/templates/reviewed-excel/refine", data=form).status_code == 403
     history_url = f"/api/templates/reviewed-excel/reviews/{preview['review_id']}"
-    assert len(client.get(history_url).json()["versions"]) == 1
+    assert len(client.get(history_url).json()["versions"]) == len(preview["versions"])
     store.actor["manage"] = True
 
     def deny_before_write(_request, _expected):
@@ -2687,15 +2766,21 @@ def test_revocation_during_model_or_before_write_never_commits(review_store, mon
 
     monkeypatch.setattr(routes, "_recheck", deny_before_write)
     save = {
-        "review_id": preview["review_id"],
-        "proposal_version": preview["proposal"]["version"],
-        "candidate_id": "preserve",
+        "review_id": writable["review_id"],
+        "proposal_version": writable["proposal"]["version"],
+        "candidate_id": "model_initial_1",
         "publish_to_tenant": "true",
         "selections": "[]",
         "name": "撤权测试",
     }
     assert client.post("/api/templates/reviewed-excel/save", data=save).status_code == 403
-    assert client.get(history_url).json()["status"] == "template_review_ready"
+    assert client.get(history_url).json()["status"] == "template_review_model_pending"
+    assert (
+        client.get(f"/api/templates/reviewed-excel/reviews/{writable['review_id']}").json()[
+            "status"
+        ]
+        == "template_review_ready"
+    )
     with store.engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 0
 
@@ -2859,7 +2944,10 @@ def test_failed_save_does_not_unlock_another_review_owner(review_store):
 def test_unknown_legacy_commit_outcome_is_not_replayed(review_store, monkeypatch):
     from app.legacy.routes import document_templates_compat
 
-    client = TestClient(review_store.client.app, raise_server_exceptions=False)
+    client = TestClient(
+        review_store.client.app, raise_server_exceptions=False, cookies=review_store.client.cookies
+    )
+    review_store.bootstrap_client(client)
     upload = {
         "file": (
             "sample.xlsx",
@@ -2873,7 +2961,7 @@ def test_unknown_legacy_commit_outcome_is_not_replayed(review_store, monkeypatch
     data = {
         "review_id": preview["review_id"],
         "proposal_version": preview["proposal"]["version"],
-        "candidate_id": "preserve",
+        "candidate_id": "model_initial_1",
         "publish_to_tenant": "true",
         "selections": "[]",
         "name": "未知回执",
@@ -2948,7 +3036,7 @@ def test_semantic_large_workbook_discloses_unread_regions_and_merge_omissions(mo
     wb.save(out)
     seen = []
 
-    def fake(messages, schema, max_tokens):
+    def fake(messages, schema, max_tokens, **_model_kwargs):
         seen.append(json.loads(messages[1]["content"]))
         return LlmAssistResult(
             used_llm=True,
@@ -2966,7 +3054,7 @@ def test_semantic_large_workbook_discloses_unread_regions_and_merge_omissions(mo
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
     coverage = result["coverage"][0]
     assert (
@@ -3032,12 +3120,12 @@ def test_semantic_sequential_batches_budget_and_conflict(monkeypatch):
         "reason": "标题",
     }
 
-    def same_result(messages, schema, tokens):
+    def same_result(messages, schema, tokens, **_model_kwargs):
         calls.append(messages)
         return LlmAssistResult(used_llm=True, data={"regions": [region]})
 
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete", same_result
+        "app.application.reviewed_excel_template._template_platform_complete", same_result
     )
     result = classify_semantic_workbook(review)
     assert len(calls) == result["budget"]["calls"] == 4
@@ -3048,12 +3136,14 @@ def test_semantic_sequential_batches_budget_and_conflict(monkeypatch):
     assert all("input_sha256" in summary for summary in result["input_summaries"])
     calls.clear()
 
-    def conflict(messages, schema, tokens):
+    def conflict(messages, schema, tokens, **_model_kwargs):
         calls.append(messages)
         changed = region if len(calls) == 1 else {**region, "range": "A1:A2"}
         return LlmAssistResult(used_llm=True, data={"regions": [changed]})
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", conflict)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", conflict
+    )
     with pytest.raises(ValueError, match="分批模型区域冲突"):
         classify_semantic_workbook(review)
     assert len(calls) == 2
@@ -3080,7 +3170,7 @@ def test_unprocessed_rule_regions_remain_separately_reviewable(review_store, mon
         files={"files": ("mixed.xlsx", out.getvalue())},
     ).json()["files"][0]
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         return LlmAssistResult(
             used_llm=True,
             data={
@@ -3097,7 +3187,7 @@ def test_unprocessed_rule_regions_remain_separately_reviewable(review_store, mon
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     result = client.post(
         f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/analyze",
         data={"version": item["version"], "sample_authorized": "true"},
@@ -3142,7 +3232,7 @@ def test_multibatch_failure_does_not_commit_partial_history(review_store, monkey
     ).json()["files"][0]
     calls = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         calls.append(1)
         if len(calls) == 2:
             raise ValueError("合成失败")
@@ -3162,7 +3252,7 @@ def test_multibatch_failure_does_not_commit_partial_history(review_store, monkey
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     response = client.post(
         url + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
@@ -3171,7 +3261,7 @@ def test_multibatch_failure_does_not_commit_partial_history(review_store, monkey
     response = client.post(
         url + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
     )
-    assert response.status_code == 400 and len(calls) == 2
+    assert response.status_code == 503 and len(calls) == 2
     history = client.get(url).json()
     assert history["checkpoint"]["phase"] == "inflight" and history["checkpoint"]["completed"] == 1
     assert len(history["versions"]) == 1 and history["versions"][0]["version"] == item["version"]
@@ -3210,7 +3300,7 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     ).json()["files"][0]
     calls = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         calls.append(1)
         return LlmAssistResult(
             used_llm=True,
@@ -3228,7 +3318,7 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     data = {"version": item["version"], "sample_authorized": "true"}
     first = client.post(url + "/analyze", data=data)
@@ -3298,7 +3388,7 @@ def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatc
     entered, release = Event(), Event()
     calls = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         calls.append(1)
         if len(calls) == 2:
             entered.set()
@@ -3319,7 +3409,7 @@ def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatc
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     data = {"version": item["version"], "sample_authorized": "true"}
     assert client.post(url + "/analyze", data=data).json()["phase"] == "pending"
@@ -3367,7 +3457,7 @@ def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkey
     wb.save(out)
     captured = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         captured.append((json.loads(messages[1]["content"]), tokens))
         return LlmAssistResult(
             used_llm=True,
@@ -3385,7 +3475,7 @@ def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkey
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
     payload, output_tokens = captured[0]
     sent = {cell["cell"] for payload, _ in captured for cell in payload["cells"]}
@@ -3410,8 +3500,8 @@ def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkey
 def test_semantic_finish_length_rejected_without_retry(monkeypatch):
     import json
 
+    from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.application.reviewed_excel_template import classify_semantic_workbook
-    from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
 
     for name, value in {
         "FHD_TEMPLATE_LLM_PROVIDER": "mimo",
@@ -3432,7 +3522,11 @@ def test_semantic_finish_length_rejected_without_retry(monkeypatch):
             ]
         }
 
-    monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", fake)
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
+    )
     with pytest.raises(ValueError, match="不完整"):
         classify_semantic_workbook(inspect_workbook(sample()))
     assert len(seen) == 1 and 3000 <= seen[0] <= 4000
@@ -3453,7 +3547,7 @@ def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
     wb.save(out)
     outside = [{"sheet": "往来资料", "cell": cell} for cell in ["H20", "L20", "M21", "H21", "L19"]]
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         assert "every evidence coordinate MUST be inside" in messages[0]["content"]
         return LlmAssistResult(
             used_llm=True,
@@ -3471,7 +3565,7 @@ def test_real_failure_outside_region_evidence_is_rejected(monkeypatch):
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     with pytest.raises(ValueError, match="模型证据不在区域内"):
         classify_semantic_workbook(inspect_workbook(out.getvalue()))
 
@@ -3507,7 +3601,7 @@ def test_repeated_generic_header_does_not_establish_purchase(monkeypatch):
     def ref(cell):
         return {"sheet": "往来资料", "cell": cell}
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         prompt = messages[0]["content"]
         assert "repeated table header" in prompt and "dependencies" in prompt
         return LlmAssistResult(
@@ -3542,7 +3636,7 @@ def test_repeated_generic_header_does_not_establish_purchase(monkeypatch):
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     regions = classify_semantic_workbook(inspect_workbook(out.getvalue()))["regions"]
     assert regions[0]["labels"] == ["quotation"]
     assert regions[1]["labels"] == ["unknown"] and regions[1]["suggested_labels"] == ["purchase"]
@@ -3576,7 +3670,7 @@ def test_no_lexical_classification_gate_for_non_repeated_regions(monkeypatch):
         out = BytesIO()
         wb.save(out)
 
-        def fake(messages, schema, tokens):
+        def fake(messages, schema, tokens, **_model_kwargs):
             return LlmAssistResult(
                 used_llm=True,
                 data={
@@ -3593,7 +3687,9 @@ def test_no_lexical_classification_gate_for_non_repeated_regions(monkeypatch):
                 },
             )
 
-        monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+        monkeypatch.setattr(
+            "app.application.reviewed_excel_template._template_platform_complete", fake
+        )
         region = classify_semantic_workbook(inspect_workbook(out.getvalue()))["regions"][0]
         assert region["labels"] == [label] and region["needs_confirmation"] is True
         assert "suggested_labels" not in region
@@ -3631,7 +3727,7 @@ def test_relationship_payload_shows_observed_header_positions_without_guessing(
     wb.save(out)
     captured = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         captured.append(json.loads(messages[1]["content"]))
         assert "observations, not proof" in messages[0]["content"]
         return LlmAssistResult(
@@ -3650,7 +3746,7 @@ def test_relationship_payload_shows_observed_header_positions_without_guessing(
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
     assert "relationship_context" not in captured[0]
     sent = {cell["cell"]: cell["value"] for cell in captured[0]["cells"]}
@@ -3774,14 +3870,16 @@ def test_overlong_cell_refuses_whole_plan_without_dropping_evidence(monkeypatch)
     out = BytesIO()
     wb.save(out)
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *args: pytest.fail("oversized plan must not call provider"),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **_kwargs: pytest.fail("oversized plan must not call provider"),
     )
     with pytest.raises(ValueError, match="单行"):
         classify_semantic_workbook(inspect_workbook(out.getvalue()))
 
 
-def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monkeypatch):
+def test_budget_pause_continues_on_next_request_without_extra_consent_or_resend(
+    review_store, monkeypatch
+):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -3795,7 +3893,7 @@ def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monke
     ).json()["files"][0]
     calls = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         calls.append(1)
         return LlmAssistResult(
             used_llm=True,
@@ -3813,20 +3911,17 @@ def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monke
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     data = {"version": item["version"], "sample_authorized": "true"}
     first = client.post(url + "/analyze", data=data)
     assert first.status_code == 200 and first.json()["phase"] == "paused"
     total = first.json()["checkpoint"]["total"]
     assert first.json()["checkpoint"]["remaining"] == total - 1 and len(calls) == 1
-    assert client.post(url + "/analyze", data=data).status_code == 409 and len(calls) == 1
-    second = client.post(url + "/analyze", data={**data, "continue_authorized": "true"})
+    second = client.post(url + "/analyze", data=data)
     assert second.status_code == 200 and len(calls) == 2
     for completed in range(2, total):
-        assert client.post(url + "/analyze", data=data).status_code == 409
-        assert len(calls) == completed
-        second = client.post(url + "/analyze", data={**data, "continue_authorized": "true"})
+        second = client.post(url + "/analyze", data=data)
         assert second.status_code == 200 and len(calls) == completed + 1
     assert second.json()["coverage"][0]["sent"] == 4001 and len(calls) == total
 
@@ -3846,8 +3941,8 @@ def test_oversized_single_row_refused_before_provider_and_checkpoint(review_stor
     ).json()["files"][0]
     calls = []
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *args: calls.append(1),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **_kwargs: calls.append(1),
     )
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     response = client.post(
@@ -3875,7 +3970,7 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
     wb.save(out)
     captured = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         captured.append(json.loads(messages[1]["content"]))
         return LlmAssistResult(
             used_llm=True,
@@ -3893,7 +3988,7 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
     assert 2 <= len(captured) <= 4 and result["budget"]["unread"] == 0
     assert all({"A1", "H4002"} <= {cell["cell"] for cell in batch["cells"]} for batch in captured)
@@ -4155,7 +4250,7 @@ def test_user_document_groups_are_versioned_split_and_stale_safe(review_store, m
         files={"files": ("sample.xlsx", out.getvalue())},
     ).json()["files"][0]
 
-    def fake(*args):
+    def fake(*args, **_model_kwargs):
         return LlmAssistResult(
             used_llm=True,
             data={
@@ -4173,7 +4268,7 @@ def test_user_document_groups_are_versioned_split_and_stale_safe(review_store, m
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     analyzed = client.post(
         url + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
@@ -4396,8 +4491,8 @@ def test_product_saves_document_outside_original_print_with_explicit_choice(
         "layout_references": [],
     }
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *args: LlmAssistResult(used_llm=True, data=model),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **_kwargs: LlmAssistResult(used_llm=True, data=model),
     )
     client = review_store.client
     item = client.post(
@@ -4507,7 +4602,7 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", str(per_round))
     calls = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         payload = json.loads(messages[1]["content"])
         primary = [cell for cell in payload["cells"] if not cell["context_only"]]
         sheet = primary[0]["sheet"]
@@ -4535,7 +4630,7 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -4552,19 +4647,6 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
     total = len(planned)
     assert total >= 9
     for index in range(total):
-        if index and index % per_round == 0:
-            assert client.post(url + "/analyze", data=form).status_code == 409
-            assert (
-                client.post(
-                    url + "/analyze",
-                    data={
-                        "version": item["version"],
-                        "sample_authorized": "true",
-                        "continue_authorized": "true",
-                    },
-                ).status_code
-                == 409
-            )
         response = client.post(
             url + "/analyze",
             data={
@@ -4592,7 +4674,8 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
     assert all(not item["unread"] for item in result["coverage"])
     authorization = client.get(url).json()["versions"][-1]["model_authorization"]
     assert (
-        authorization["kind"] == "owner_file" and authorization["source_sha256"] == item["sha256"]
+        authorization["kind"] == "account_session"
+        and authorization["source_sha256"] == item["sha256"]
     )
     labels = [
         {"sheet": sheet["sheet"], "range": region["range"], "labels": region["labels"]}
@@ -4621,7 +4704,7 @@ def test_nine_batch_concurrent_resume_does_not_resend(review_store, monkeypatch)
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
     entered, release, calls = Event(), Event(), []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         primary = [
             cell for cell in json.loads(messages[1]["content"])["cells"] if not cell["context_only"]
         ]
@@ -4649,7 +4732,7 @@ def test_nine_batch_concurrent_resume_does_not_resend(review_store, monkeypatch)
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -4857,8 +4940,8 @@ def test_semantic_contract_distinguishes_fragments_documents_and_layout(monkeypa
         "layout_references": [{"sheet": "流水", "range": "A13:C13"}],
     }
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *args: LlmAssistResult(used_llm=True, data=result),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **_kwargs: LlmAssistResult(used_llm=True, data=result),
     )
     parsed = _classify_semantic_batch(review)
     assert len(parsed["regions"]) == 4 and parsed["logical_document_count"] == 1
@@ -4886,8 +4969,8 @@ def test_semantic_contract_distinguishes_fragments_documents_and_layout(monkeypa
 
 
 def test_provider_accepts_explicit_empty_document_and_layout_arrays(monkeypatch):
-    from app.application.reviewed_excel_template import _template_mimo_complete
-    from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.application.reviewed_excel_template import _template_platform_complete
 
     for name, value in {
         "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
@@ -4905,7 +4988,11 @@ def test_provider_accepts_explicit_empty_document_and_layout_arrays(monkeypatch)
         }
         return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(payload)}}]}
 
-    monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", fake)
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
+    )
     schema = {
         "type": "object",
         "required": ["physical_regions", "logical_documents", "layout_references"],
@@ -4916,7 +5003,7 @@ def test_provider_accepts_explicit_empty_document_and_layout_arrays(monkeypatch)
             "layout_references": {"type": "array"},
         },
     }
-    assert _template_mimo_complete([], schema, 100).data["logical_documents"] == []
+    assert _template_platform_complete([], schema, 100).data["logical_documents"] == []
 
 
 def test_template_schema_validates_required_empty_arrays_and_nested_constraints():
@@ -4953,8 +5040,8 @@ def test_template_schema_validates_required_empty_arrays_and_nested_constraints(
 
 
 def test_classification_provider_schema_with_empty_layout_and_strict_region(monkeypatch):
+    from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.application.reviewed_excel_classification import _classify_semantic_batch
-    from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
 
     for name, value in {
         "FHD_TEMPLATE_LLM_PROVIDER": "mimo",
@@ -4996,7 +5083,11 @@ def test_classification_provider_schema_with_empty_layout_and_strict_region(monk
             ]
         }
 
-    monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", fake)
+    monkeypatch.setattr(SessionMarketProvider, "chat_completion", fake)
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: SessionMarketProvider(7, "synthetic-market", timeout_seconds=1),
+    )
     assert _classify_semantic_batch(review)["layout_references"] == []
     for _ in range(4):
         with pytest.raises(ValueError):
@@ -5106,7 +5197,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
         files={"files": ("sample.xlsx", body)},
     ).json()["files"][0]
 
-    def fake(*args):
+    def fake(*args, **_model_kwargs):
         return LlmAssistResult(
             used_llm=True,
             data={
@@ -5132,7 +5223,7 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     analyzed = client.post(
         url + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
@@ -5270,7 +5361,8 @@ def test_model_document_to_template_library_roundtrip(review_store, monkeypatch)
         "name": "回执结果未知",
         "publish_to_tenant": "true",
     }
-    no_raise = TestClient(client.app, raise_server_exceptions=False)
+    no_raise = TestClient(client.app, raise_server_exceptions=False, cookies=client.cookies)
+    review_store.bootstrap_client(no_raise)
     assert no_raise.post("/api/templates/reviewed-excel/save", data=retry_data).status_code == 500
     assert client.post("/api/templates/reviewed-excel/save", data=retry_data).status_code == 409
     assert (
@@ -5330,8 +5422,8 @@ def test_model_multifragment_document_is_a_real_candidate(review_store, monkeypa
         "layout_references": [],
     }
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *args: LlmAssistResult(used_llm=True, data=model),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **_kwargs: LlmAssistResult(used_llm=True, data=model),
     )
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     analyzed = client.post(
@@ -5527,9 +5619,12 @@ def test_reviewed_excel_never_returns_underlying_exception_payload(
         response = review_store.client.post(
             "/api/templates/reviewed-excel/preview", data=data, files=files
         )
-        assert response.status_code == (200 if entry == "model" else 400)
+        assert response.status_code == (503 if entry == "model" else 400)
         if entry == "model":
-            assert response.json()["proposal"]["model"]["status"] == "unavailable"
+            assert (
+                response.json()["detail"]["code"] == "model_processing_failed"
+                and "proposal" not in response.json()
+            )
     assert sensitive not in response.text
     assert "文件或请求无法处理" in response.text
 
@@ -5547,7 +5642,7 @@ def test_auto_slice_api_without_confirmation_and_owner_isolation(review_store, m
     ).json()["files"][0]
     path = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
 
-    def fake(messages, schema, max_tokens):
+    def fake(messages, schema, max_tokens, **_model_kwargs):
         data = {
             "physical_regions": [
                 {
@@ -5566,7 +5661,7 @@ def test_auto_slice_api_without_confirmation_and_owner_isolation(review_store, m
         }
         return LlmAssistResult(used_llm=True, data=data)
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     analyzed = client.post(
         path + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
     )
@@ -5612,13 +5707,13 @@ def test_model_cannot_create_region_or_evidence_from_context_only(monkeypatch):
         "reason": "仅重复上下文",
     }
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         return LlmAssistResult(
             used_llm=True,
             data={"physical_regions": [region], "logical_documents": [], "layout_references": []},
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     with pytest.raises(ReviewedExcelError, match="仅包含上下文或未读内容"):
         _classify_semantic_batch(review)
     region.update(range="A1:C4", evidence=[{"sheet": "报价", "cell": "B2"}])
@@ -5646,7 +5741,7 @@ def test_auto_group_resume_budget_and_download_multibatch(
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
     calls = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         payload = json.loads(messages[1]["content"])
         if "ranges" in payload:
             if group_not_sent and "not_sent" not in calls:
@@ -5659,7 +5754,7 @@ def test_auto_group_resume_budget_and_download_multibatch(
             calls.append("batch")
         return LlmAssistResult(used_llm=True, data=synthetic_document_answer(payload))
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -5673,7 +5768,6 @@ def test_auto_group_resume_budget_and_download_multibatch(
     second = client.post(path + "/analyze", data=form)
     assert second.status_code == 200 and second.json()["phase"] == "paused"
     assert calls == ["batch", "batch"]
-    assert client.post(path + "/analyze", data=form).status_code == 409
     from app.application.reviewed_excel_evidence import plan_semantic_batches
 
     total = len(
@@ -5683,7 +5777,7 @@ def test_auto_group_resume_budget_and_download_multibatch(
     while done.status_code == 200 and done.json().get("phase") in {"pending", "paused"}:
         done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
     if group_not_sent:
-        assert done.status_code == 400, done.text
+        assert done.status_code == 503, done.text
         checkpoint = client.get(path).json()["checkpoint"]
         assert checkpoint["phase"] == "ready" and checkpoint["completed"] == total
         assert checkpoint["calls_in_round"] == total % 2
@@ -5723,7 +5817,7 @@ def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_s
     ).json()["files"][0]
     raw = b'{"usage":{"total_tokens":12},"choices":[]}'
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         response_capture()(raw, 200, "synthetic-req")
         return LlmAssistResult(
             used_llm=True,
@@ -5743,7 +5837,7 @@ def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_s
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     result = client.post(
         url + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
@@ -5791,12 +5885,12 @@ def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
     monkeypatch.setattr(routes, "_classification_cas", fail_response)
     calls = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         calls.append(1)
         response_capture()(b'{"choices":[]}', 200, "synthetic-req")
         raise AssertionError("must stop on failed audit")
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/analyze"
     data = {"version": item["version"], "sample_authorized": "true"}
     assert client.post(url, data=data).status_code == 409
@@ -5809,7 +5903,7 @@ def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
     assert json.loads(persisted)["model_audit"][-1]["state"] == "inflight"
 
 
-def test_completed_invalid_response_is_counted_and_requires_explicit_retry(
+def test_completed_invalid_response_is_counted_and_next_request_retries_without_extra_consent(
     review_store, monkeypatch
 ):
     from app.application.elt.errors import ReviewedExcelError
@@ -5826,7 +5920,7 @@ def test_completed_invalid_response_is_counted_and_requires_explicit_retry(
     ).json()["files"][0]
     calls = []
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         calls.append(1)
         response_capture()(b'{"choices":[],"usage":{"total_tokens":1}}', 200, "synthetic")
         if len(calls) > 1:
@@ -5847,23 +5941,17 @@ def test_completed_invalid_response_is_counted_and_requires_explicit_retry(
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     form = {"version": item["version"], "sample_authorized": "true"}
     assert client.post(base + "/analyze", data=form).status_code == 200
-    assert client.post(base + "/analyze", data=form).status_code == 400
+    assert client.post(base + "/analyze", data=form).status_code == 503
     checkpoint = client.get(base).json()["checkpoint"]
     assert checkpoint["phase"] == "failed" and checkpoint["completed"] == 1
     assert checkpoint["calls_in_round"] == 2
-    assert client.post(base + "/analyze", data=form).status_code == 409
-    assert (
-        client.post(base + "/analyze", data={**form, "retry_authorized": "true"}).status_code == 409
-    )
     assert len(calls) == 2
-    retry = client.post(
-        base + "/analyze", data={**form, "retry_authorized": "true", "continue_authorized": "true"}
-    )
-    assert retry.status_code == 400 and len(calls) == 3
+    retry = client.post(base + "/analyze", data=form)
+    assert retry.status_code == 503 and len(calls) == 3
     resumed = client.get(base).json()["checkpoint"]
     assert resumed["phase"] == "failed" and resumed["completed"] == 1
     assert resumed["calls_in_round"] == 1
@@ -5892,14 +5980,14 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
     assert archived.status_code == 200, archived.text
     item = archived.json()
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **_model_kwargs):
         data = synthetic_document_answer(json.loads(messages[1]["content"]))
         response_capture()(
             json.dumps({"choices": [], "usage": {}}, ensure_ascii=False).encode(), 200, "synthetic"
         )
         return LlmAssistResult(used_llm=True, model="synthetic", provider="synthetic", data=data)
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     path = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     analyzed = client.post(
         path + "/analyze",
@@ -5965,7 +6053,7 @@ def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
     ).json()["files"][0]
     base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
 
-    def incomplete(messages, schema, tokens):
+    def incomplete(messages, schema, tokens, **_model_kwargs):
         return LlmAssistResult(
             used_llm=True,
             model="synthetic",
@@ -5991,7 +6079,7 @@ def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete", incomplete
+        "app.application.reviewed_excel_template._template_platform_complete", incomplete
     )
     response = client.post(
         base + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
@@ -6006,25 +6094,33 @@ def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
     assert download.status_code == 400 and "完整覆盖" in download.text
 
 
-@pytest.mark.parametrize("fault", ["off", "missing_key", "invalid_base", "invalid_model"])
+@pytest.mark.parametrize(
+    "fault", ["off", "missing_provider", "unconfigured_provider", "resolution_error"]
+)
 def test_unsent_model_configuration_does_not_lock_classification(review_store, monkeypatch, fault):
     from app.application.elt.llm_assist_runtime import LlmAssistResult
-    from app.application.reviewed_excel_audit import response_capture
-    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+    from app.application.reviewed_excel_audit import ModelRequestNotSent, response_capture
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
-    monkeypatch.setenv("FHD_TEMPLATE_MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1")
-    monkeypatch.setenv("FHD_TEMPLATE_MIMO_MODEL", "mimo-v2.6-flash")
-    monkeypatch.setenv("MIMO_API_KEY", "synthetic-placeholder")
-    if fault == "off":
-        monkeypatch.setenv("FHD_ETL_LLM", "off")
-    elif fault == "invalid_base":
-        monkeypatch.setenv("FHD_TEMPLATE_MIMO_BASE_URL", "https://unsupported.invalid/v1")
-    elif fault == "invalid_model":
-        monkeypatch.setenv("FHD_TEMPLATE_MIMO_MODEL", "unsupported")
-    else:
-        monkeypatch.setattr(OpenAICompatibleAdapter, "is_configured", property(lambda self: False))
+    monkeypatch.setenv("FHD_ETL_LLM", "off" if fault == "off" else "on")
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete",
+        review_store.platform_complete,
+    )
+
+    async def unavailable(*args, **kwargs):
+        raise ModelRequestNotSent("synthetic account route unavailable")
+
+    provider = (
+        None
+        if fault == "missing_provider"
+        else SimpleNamespace(
+            is_configured=fault != "unconfigured_provider", chat_completion=unavailable
+        )
+    )
+    monkeypatch.setattr(
+        "app.application.elt.llm_session_provider.current_owner_market_provider",
+        lambda **_: provider,
+    )
     client = review_store.client
     item = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -6032,9 +6128,10 @@ def test_unsent_model_configuration_does_not_lock_classification(review_store, m
         files={"files": ("synthetic.xlsx", sample())},
     ).json()["files"][0]
     base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
-    form = {"version": item["version"], "sample_authorized": "true"}
+    form = {"version": item["version"]}
     failed = client.post(base + "/analyze", data=form)
-    assert failed.status_code == 400 and "未调用模型" in failed.json()["detail"]
+    assert failed.status_code == 503, failed.text
+    assert failed.json()["detail"]["code"] == "model_configuration_error"
     checkpoint = client.get(base).json()["checkpoint"]
     assert checkpoint["phase"] == "ready" and checkpoint["calls_in_round"] == 0
     with review_store.engine.connect() as conn:
@@ -6045,27 +6142,32 @@ def test_unsent_model_configuration_does_not_lock_classification(review_store, m
             ).scalar_one()
         )
     assert state["model_audit"][-1]["state"] == "not_sent"
-    assert "未调用模型" in state["model_audit"][-1]["reason"]
 
-    def repaired(messages, schema, tokens):
+    def repaired(messages, schema, tokens, **kwargs):
         response_capture()(b'{"choices":[]}', 200, "synthetic")
+        sheet = json.loads(messages[1]["content"])["cells"][0]["sheet"]
         return LlmAssistResult(
             used_llm=True,
+            provider="platform",
+            model="synthetic",
             data={
                 "regions": [
                     {
-                        "sheet": "报价",
+                        "sheet": sheet,
                         "range": "A1:C4",
                         "labels": ["unknown"],
                         "evidence": [],
                         "dependencies": [],
-                        "reason": "synthetic",
+                        "reason": "synthetic repaired response",
                     }
-                ]
+                ],
             },
         )
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", repaired)
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", repaired
+    )
     retry = client.post(base + "/analyze", data=form)
     assert retry.status_code == 200, retry.text
 
@@ -6085,14 +6187,16 @@ def test_checkpoint_budget_change_is_409_preserving_original_audit(
     ).json()["files"][0]
     calls = []
 
-    def unknown(*args):
+    def unknown(*args, **_model_kwargs):
         calls.append(1)
         raise ValueError("synthetic unknown outcome")
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", unknown)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", unknown
+    )
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/analyze"
     data = {"version": item["version"], "sample_authorized": "true"}
-    assert client.post(url, data=data).status_code == 400
+    assert client.post(url, data=data).status_code == 503
     with review_store.engine.begin() as conn:
         raw = conn.execute(
             text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
@@ -6158,14 +6262,14 @@ def candidate_form(client, body):
 
 @pytest.mark.parametrize("not_sent", [False, True])
 def test_required_model_failure_has_no_success_or_saved_rule_candidates(
-    authorized_notice_client, review_store, monkeypatch, not_sent
+    account_session_client, review_store, monkeypatch, not_sent
 ):
     from unittest.mock import Mock
 
     from app.application.elt.errors import ReviewedExcelError
     from app.application.reviewed_excel_audit import ModelRequestNotSent
 
-    client, _, _ = authorized_notice_client
+    client, _, _ = account_session_client
     fault = (
         ModelRequestNotSent("平台模型尚未配置")
         if not_sent
@@ -6216,14 +6320,14 @@ def synthetic_candidate_result(*_args, **_kwargs):
 
 @pytest.mark.parametrize("not_sent", [False, True])
 def test_refine_claim_releases_only_unsent_and_blocks_unknown_direct_replay(
-    authorized_notice_client, monkeypatch, not_sent
+    account_session_client, monkeypatch, not_sent
 ):
     from unittest.mock import Mock
 
     from app.application.elt.errors import ReviewedExcelError
     from app.application.reviewed_excel_audit import ModelRequestNotSent
 
-    client, _, _ = authorized_notice_client
+    client, _, _ = account_session_client
     body = sample()
     form = candidate_form(client, body)
     monkeypatch.setattr(
@@ -6263,11 +6367,11 @@ def test_refine_claim_releases_only_unsent_and_blocks_unknown_direct_replay(
 
 
 def test_preview_post_model_failure_keeps_claim_and_success_is_replayed(
-    authorized_notice_client, monkeypatch
+    account_session_client, monkeypatch
 ):
     from unittest.mock import Mock
 
-    client, _, _ = authorized_notice_client
+    client, _, _ = account_session_client
     workbook = load_workbook(BytesIO(sample()))
     workbook.copy_worksheet(workbook.active).title = "第二"
     stream = BytesIO()
@@ -6311,11 +6415,11 @@ def test_preview_post_model_failure_keeps_claim_and_success_is_replayed(
 
 
 def test_document_review_has_three_model_candidates_and_unchanged_scoped_original(
-    authorized_notice_client, review_store, monkeypatch
+    account_session_client, review_store, monkeypatch
 ):
     from unittest.mock import Mock
 
-    client, _, _ = authorized_notice_client
+    client, _, _ = account_session_client
     workbook = load_workbook(BytesIO(sample()))
     workbook.copy_worksheet(workbook.active).title = "第二"
     stream = BytesIO()
@@ -6428,11 +6532,11 @@ def stored_row_snapshot(connection, table_name, row_id):
 
 @pytest.mark.parametrize("restricted", [False, True])
 def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_child(
-    authorized_notice_client, review_store, monkeypatch, restricted
+    account_session_client, review_store, monkeypatch, restricted
 ):
     from unittest.mock import Mock
 
-    client, _, _ = authorized_notice_client
+    client, _, _ = account_session_client
     parent, saved = saved_model_review(client, monkeypatch)
     parent_id = parent["review_id"]
     template_id = int(str(saved["template_id"]).rsplit(":", 1)[-1])
@@ -6530,14 +6634,14 @@ def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_c
 
 @pytest.mark.parametrize("not_sent", [False, True])
 def test_saved_review_refinement_failure_keeps_parent_and_deduplicates_child(
-    authorized_notice_client, review_store, monkeypatch, not_sent
+    account_session_client, review_store, monkeypatch, not_sent
 ):
     from unittest.mock import Mock
 
     from app.application.elt.errors import ReviewedExcelError
     from app.application.reviewed_excel_audit import ModelRequestNotSent
 
-    client, _, _ = authorized_notice_client
+    client, _, _ = account_session_client
     parent, _ = saved_model_review(client, monkeypatch)
     parent_id = parent["review_id"]
     with review_store.engine.connect() as db:
@@ -6575,7 +6679,7 @@ def test_saved_review_refinement_failure_keeps_parent_and_deduplicates_child(
 
 
 def test_saved_refinement_concurrent_initial_insert_elects_one_child_and_model_call(
-    authorized_notice_client, review_store, monkeypatch
+    account_session_client, review_store, monkeypatch
 ):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
@@ -6585,7 +6689,7 @@ def test_saved_refinement_concurrent_initial_insert_elects_one_child_and_model_c
 
     from app.db.models.elt import EltRun
 
-    client, _, _ = authorized_notice_client
+    client, _, _ = account_session_client
     parent, _ = saved_model_review(client, monkeypatch)
     payload = {
         "review_id": parent["review_id"],

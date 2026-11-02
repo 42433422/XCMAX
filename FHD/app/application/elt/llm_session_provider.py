@@ -32,33 +32,35 @@ class SessionMarketProvider:
     ) -> dict[str, Any] | None:
         import httpx
 
-        from app.application.elt_login_authorization import _platform_url, assert_login_notice_route
+        from app.application.elt_login_authorization import _platform_url
+        from app.application.reviewed_excel_audit import ModelRequestNotSent
         from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         platform_url = _platform_url()
         timeout = self._timeout_seconds
         headers = {"Authorization": f"Bearer {self._token}"}
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
-            headers=headers,
-        ) as client:
-            response = await client.get(
-                f"{platform_url}/api/llm/resolve-chat-default", params={"platform_only": "true"}
-            )
-            response.raise_for_status()
-            route = response.json()
-        provider_name = str(route.get("provider") or "").strip()
-        model_name = str(route.get("model") or "").strip()
-        if not route.get("ok") or not provider_name or not model_name:
-            raise ValueError("market default LLM route unavailable")
-        assert_login_notice_route(
-            platform_url,
-            provider_name,
-            model_name,
-            key_source=route.get("key_source"),
-            config_revision=route.get("config_revision"),
-            recipient=route.get("recipient"),
-        )
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
+                headers=headers,
+            ) as client:
+                response = await client.get(f"{platform_url}/api/llm/resolve-chat-default")
+                response.raise_for_status()
+                route = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise ModelRequestNotSent("账户模型路由不可用，未调用模型") from exc
+        if not isinstance(route, dict):
+            raise ModelRequestNotSent("账户模型路由无效，未调用模型")
+        provider_name, model_name = route.get("provider"), route.get("model")
+        if (
+            not route.get("ok")
+            or not isinstance(provider_name, str)
+            or not isinstance(model_name, str)
+            or not provider_name.strip()
+            or not model_name.strip()
+        ):
+            raise ModelRequestNotSent("账户尚未配置可用模型，未调用模型")
+        provider_name, model_name = provider_name.strip().lower(), model_name.strip()
         adapter = ModstorePlatformAdapter(
             platform_url=platform_url,
             auth_token=self._token,
@@ -103,10 +105,10 @@ def current_owner_market_provider(*, timeout_seconds: float) -> SessionMarketPro
     owner_user_id = current_etl_llm_owner()
     if owner_user_id is None:
         return None
-    from app.application.elt_login_authorization import current_login_notice_session_id
+    from app.application.elt_login_authorization import current_model_session_id
     from app.fastapi_routes.market_account import latest_session_market_token, session_market_token
 
-    session_id = current_login_notice_session_id(owner_user_id)
+    session_id = current_model_session_id(owner_user_id)
     if session_id is not None:
         token = session_market_token(session_id) if session_id else ""
     else:
