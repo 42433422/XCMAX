@@ -61,6 +61,10 @@ from app.application.reviewed_excel_evidence import (
     bounded_range,
     unresolved_fragments,
 )
+from app.application.reviewed_excel_review_projection import (
+    build_candidate_previews,
+    compose_usage_restrictions,
+)
 from app.application.reviewed_excel_template import (
     MAX_BYTES,
     classify_review_workbook,
@@ -136,21 +140,14 @@ def _recheck(request, expected):
 
 
 def _build_candidate_previews(body, review, proposal):
-    """Render from real cleaned workbook bytes, not by hiding original cells."""
-    previews = []
-    for candidate in proposal["candidates"]:
-        cleaned = clean_workbook(body, review["sha256"], candidate["clear"])
-        result = inspect_workbook(cleaned)
-        previews.append(
-            {
-                "candidate_id": candidate["id"],
-                "sha256": result["sha256"],
-                "layout": result["layout"],
-                "layout_truncated": result["layout_truncated"],
-            }
-        )
-    proposal["result_previews"] = previews
-
+    """Keep established route patch points while delegating the pure projection."""
+    build_candidate_previews(
+        body,
+        review,
+        proposal,
+        clean_workbook=clean_workbook,
+        inspect_workbook=inspect_workbook,
+    )
 
 def _run(db, review_id, tenant, owner):
     run = (
@@ -254,18 +251,14 @@ def _rebuild_archived_document(db, run, tenant, owner):
 
 
 def _usage_restrictions(db, run, tenant, owner):
-    """Server-side immutable source lineage, not just removable workbook metadata."""
+    """Recursively load source lineage; policy composition lives in application."""
     summary = load_json(run.summary_json, {})
-    restrictions = list(summary.get("usage_restrictions", []))
-    conversion = summary.get("conversion_receipt") or {}
-    if conversion.get("purpose") == "data_template_test_only":
-        restrictions.append("仅供数据/模板测试；打印版式未验证，不得发布到企业模板库")
+    inherited = []
     scope = summary.get("selected_region") or {}
     if scope.get("classification_id"):
         classification = _classification_run(db, scope["classification_id"], tenant, owner)
-        restrictions.extend(_usage_restrictions(db, classification, tenant, owner))
-    return list(dict.fromkeys(restrictions))
-
+        inherited = _usage_restrictions(db, classification, tenant, owner)
+    return compose_usage_restrictions(summary, inherited)
 
 def _review_source_version(db, run, tenant, owner):
     """Fail closed when a derived document's original classification has changed."""
