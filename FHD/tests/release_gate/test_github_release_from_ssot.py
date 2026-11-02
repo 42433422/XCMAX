@@ -21,13 +21,22 @@ def module():
 
 
 def pointer():
-    return {"schema": "xcagi.download_release.public/v1",
-            "release_ready": True, "version_lock": VERSION,
-            "download_version": VERSION, "git_sha": SHA,
-            "release_id": f"xcagi-{VERSION}-{SHA}",
-            "manifest_url": f"https://xiu-ci.com/xcagi-v{VERSION}/manifest.json",
-            "release_history": [{"version": VERSION, "title": "Release",
-                                 "notes": ["Fixed release pipeline", "Public readback"]}]}
+    return {
+        "schema": "xcagi.download_release.public/v1",
+        "release_ready": True,
+        "version_lock": VERSION,
+        "download_version": VERSION,
+        "git_sha": SHA,
+        "release_id": f"xcagi-{VERSION}-{SHA}",
+        "manifest_url": f"https://xiu-ci.com/xcagi-v{VERSION}/manifest.json",
+        "release_history": [
+            {
+                "version": VERSION,
+                "title": "Release",
+                "notes": ["Fixed release pipeline", "Public readback"],
+            }
+        ],
+    }
 
 
 def test_notes_are_read_from_published_pointer():
@@ -37,12 +46,16 @@ def test_notes_are_read_from_published_pointer():
     assert SHA in body and "manifest.json" in body
 
 
-@pytest.mark.parametrize("change", [
-    {"release_ready": False},
-    {"git_sha": "b" * 40},
-    {"release_history": []},
-    {"manifest_url": "https://evil.invalid/manifest.json"},
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"release_ready": False},
+        {"git_sha": "b" * 40},
+        {"release_history": []},
+        {"manifest_url": "https://evil.invalid/manifest.json"},
+    ],
+)
+
 def test_unverified_release_is_not_rendered(change):
     with pytest.raises(ValueError):
         module().render({**pointer(), **change}, VERSION, SHA)
