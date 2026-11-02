@@ -37,6 +37,30 @@ def recipient():
 
 
 @pytest.fixture
+def route_http(monkeypatch):
+    client_type = auth.httpx.AsyncClient
+
+    def install(payload, status_code=200):
+        seen = []
+
+        def respond(request):
+            seen.append(request)
+            assert request.method == "GET"
+            assert request.url.path == "/api/llm/resolve-chat-default"
+            assert dict(request.url.params) == {"platform_only": "true"}
+            return auth.httpx.Response(status_code, json=payload)
+
+        monkeypatch.setattr(
+            auth.httpx,
+            "AsyncClient",
+            lambda **kwargs: client_type(transport=auth.httpx.MockTransport(respond), **kwargs),
+        )
+        return seen
+
+    return install
+
+
+@pytest.fixture
 def login(monkeypatch, tmp_path):
     monkeypatch.setattr(auth, "_NOTICE_PUBLICATION_FILE", tmp_path / "elt_notice_publication.json")
     monkeypatch.setenv(auth.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
@@ -370,7 +394,12 @@ async def test_unpublished_draft_cannot_issue_or_reuse_model_authorization(login
 
 
 @pytest.mark.asyncio
-async def test_login_resolves_only_metadata_with_the_exact_new_session(monkeypatch):
+@pytest.mark.parametrize(
+    "failure", [None, "missing400", "missing503", "byok", "metadata", "other503"]
+)
+async def test_login_resolves_only_metadata_with_the_exact_new_session(
+    monkeypatch, route_http, failure
+):
     from app.fastapi_routes import market_account
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "platform")
@@ -380,31 +409,60 @@ async def test_login_resolves_only_metadata_with_the_exact_new_session(monkeypat
         "session_market_token",
         lambda sid: "synthetic-token" if sid == "new-session" else "",
     )
-    response = SimpleNamespace(
-        raise_for_status=lambda: None,
-        json=lambda: {
-            "ok": True,
-            "provider": "xiaomi",
-            "model": "mimo-v2.6-flash",
-            "key_source": "platform",
-            "config_revision": "synthetic-revision-A",
-            "recipient": recipient(),
-        },
-    )
-    client = SimpleNamespace(get=AsyncMock(return_value=response))
-    context = AsyncMock()
-    context.__aenter__.return_value = client
-    monkeypatch.setattr(auth.httpx, "AsyncClient", lambda **kwargs: context)
-    assert await auth._resolve_login_route("old-session") is None
-    assert await auth._resolve_login_route("new-session") == {
-        "base": "https://xiu-ci.com",
+    route = {
+        "ok": True,
         "provider": "xiaomi",
         "model": "mimo-v2.6-flash",
         "key_source": "platform",
         "config_revision": "synthetic-revision-A",
         "recipient": recipient(),
     }
-    client.get.assert_awaited_once_with("https://xiu-ci.com/api/llm/resolve-chat-default")
+    status_code = 200
+    if failure in {"missing400", "missing503", "other503"}:
+        route = {
+            "detail": {"code": "UNAVAILABLE" if failure == "other503" else "NO_PLATFORM_CHAT_MODEL"}
+        }
+        status_code = 400 if failure == "missing400" else 503
+    elif failure == "byok":
+        route["key_source"] = "user_override"
+    elif failure == "metadata":
+        route.pop("config_revision")
+    seen = route_http(route, status_code)
+    assert await auth._resolve_login_route("old-session") is None
+    if failure == "other503":
+        with pytest.raises(auth.httpx.HTTPStatusError):
+            await auth._resolve_login_route("new-session")
+    elif failure:
+        assert await auth._resolve_login_route("new-session") is None
+    else:
+        assert await auth._resolve_login_route("new-session") == {
+            "base": "https://xiu-ci.com",
+            "provider": "xiaomi",
+            "model": "mimo-v2.6-flash",
+            "key_source": "platform",
+            "config_revision": "synthetic-revision-A",
+            "recipient": recipient(),
+        }
+    assert len(seen) == 1 and seen[0].headers["Authorization"] == "Bearer synthetic-token"
+    if failure:
+        monkeypatch.setenv(auth.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
+        monkeypatch.setenv("SECRET_KEY", "synthetic-login-notice-signing-key-1234567890")
+        monkeypatch.setattr(
+            auth,
+            "_active_session",
+            lambda _: {"owner": 7, "tenant": 9, "expires": int(time.time()) + 3600},
+        )
+        receipt, _ = await receipt_for(
+            {"success": True, "session_id": "new-session", "user": {"id": 7}}
+        )
+        expected = (
+            "model_connection_error" if failure == "other503" else "model_configuration_error"
+        )
+        assert (
+            auth.login_notice_status(request(receipt, session="new-session"), 9, 7)["status"]
+            == expected
+        )
+        assert auth.login_notice_grant(request(receipt, session="new-session"), 9, 7) is None
 
 
 @pytest.mark.asyncio
@@ -558,7 +616,9 @@ async def test_route_scope_blocks_changed_supplier_or_model_before_dispatch_and_
         {"recipient": None},
     ],
 )
-async def test_final_resolved_route_change_cannot_reach_model_adapter(login, monkeypatch, change):
+async def test_final_resolved_route_change_cannot_reach_model_adapter(
+    login, monkeypatch, route_http, change
+):
     from unittest.mock import Mock
 
     from app.application.elt.llm_session_provider import SessionMarketProvider
@@ -567,24 +627,18 @@ async def test_final_resolved_route_change_cannot_reach_model_adapter(login, mon
     result, route = login
     token, _ = await receipt_for(result)
     grant = auth.login_notice_grant(request(token), 9, 7)
-    response = SimpleNamespace(
-        raise_for_status=lambda: None,
-        json=lambda: {"ok": True, **route, **change},
-    )
-    client = SimpleNamespace(get=AsyncMock(return_value=response))
-    context = AsyncMock()
-    context.__aenter__.return_value = client
-    monkeypatch.setattr(auth.httpx, "AsyncClient", lambda **kwargs: context)
+    seen = route_http({"ok": True, **route, **change})
     adapter = Mock()
     monkeypatch.setattr(modstore_adapter, "ModstorePlatformAdapter", adapter)
     with auth.bind_login_notice_grant(grant), pytest.raises(ModelRequestNotSent):
         await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).chat_completion([])
     adapter.assert_not_called()
+    assert len(seen) == 1 and seen[0].headers["Authorization"] == "Bearer synthetic-token"
 
 
 @pytest.mark.asyncio
 async def test_dispatch_uses_resolved_route_without_failover_despite_env_or_caller_overrides(
-    login, monkeypatch
+    login, monkeypatch, route_http
 ):
     from app.application.elt.llm_session_provider import SessionMarketProvider
     from app.domain.shared_services.conversation import modstore_adapter
@@ -592,14 +646,7 @@ async def test_dispatch_uses_resolved_route_without_failover_despite_env_or_call
     result, route = login
     receipt, _ = await receipt_for(result)
     grant = auth.login_notice_grant(request(receipt), 9, 7)
-    response = SimpleNamespace(
-        raise_for_status=lambda: None,
-        json=lambda: {"ok": True, **route, "route_token": "synthetic-opaque-snapshot"},
-    )
-    client = SimpleNamespace(get=AsyncMock(return_value=response))
-    context = AsyncMock()
-    context.__aenter__.return_value = client
-    monkeypatch.setattr(auth.httpx, "AsyncClient", lambda **kwargs: context)
+    seen = route_http({"ok": True, **route, "route_token": "synthetic-opaque-snapshot"})
     monkeypatch.setenv("LLM_PROVIDER", "environment-other")
     monkeypatch.setenv("LLM_MODEL", "environment-other-model")
     complete = AsyncMock(return_value={"model": route["model"]})
@@ -628,6 +675,7 @@ async def test_dispatch_uses_resolved_route_without_failover_despite_env_or_call
         "config_revision": route["config_revision"],
     }
     assert dispatched[0].auth_token == "synthetic-current-token"
+    assert len(seen) == 1 and seen[0].headers["Authorization"] == "Bearer synthetic-current-token"
 
 
 @pytest.mark.asyncio
@@ -660,7 +708,9 @@ async def test_legacy_unbound_provider_accepts_old_metadata_without_caller_snaps
     assert sent["provider"] == route["provider"] and sent["model"] == route["model"]
     assert sent["allow_failover"] is False and sent["_reviewed_excel_audit_response"] is audit
     assert not any(key in sent for key in ("route_token", "key_source", "config_revision"))
-    resolve.assert_awaited_once_with("https://xiu-ci.com/api/llm/resolve-chat-default")
+    resolve.assert_awaited_once_with(
+        "https://xiu-ci.com/api/llm/resolve-chat-default", params={"platform_only": "true"}
+    )
 
 
 @pytest.mark.asyncio

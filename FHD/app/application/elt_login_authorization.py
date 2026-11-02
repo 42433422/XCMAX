@@ -215,7 +215,17 @@ async def _resolve_login_route(session_id: str) -> dict | None:
     async with httpx.AsyncClient(
         timeout=3.0, headers={"Authorization": f"Bearer {token}"}
     ) as client:
-        response = await client.get(f"{base}/api/llm/resolve-chat-default")
+        response = await client.get(
+            f"{base}/api/llm/resolve-chat-default", params={"platform_only": "true"}
+        )
+        if response.status_code in {400, 503}:
+            try:
+                failure = response.json()
+            except ValueError:
+                failure = None
+            detail = failure.get("detail") if isinstance(failure, dict) else None
+            if isinstance(detail, dict) and detail.get("code") == "NO_PLATFORM_CHAT_MODEL":
+                return None
         response.raise_for_status()
         route = response.json()
     if not isinstance(route, dict) or not route.get("ok"):

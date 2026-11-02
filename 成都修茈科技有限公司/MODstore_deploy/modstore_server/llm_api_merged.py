@@ -21,7 +21,12 @@ def _facade():
 
 
 async def resolve_default_llm_route(
-    db: _facade().Session, user_id: int, *, provider: str = "", model: str = ""
+    db: _facade().Session,
+    user_id: int,
+    *,
+    provider: str = "",
+    model: str = "",
+    platform_only: bool = False,
 ) -> dict[str, _facade().Any]:
     """Resolve a chat-capable route and bind its credentials before any catalog await."""
     import asyncio
@@ -52,8 +57,13 @@ async def resolve_default_llm_route(
             },
         )
 
+    if platform_only and (provider or model):
+        invalid("平台模式不能同时指定个人供应商或模型", "PLATFORM_ROUTE_CONFLICT")
+
     def load():
         state = read_state()
+        if platform_only:
+            return {"mode": "platform"}, {}, state
         with get_session_factory()() as session:
             urow = session.query(UserModel).filter(UserModel.id == uid).first()
             try:
@@ -152,6 +162,8 @@ async def resolve_default_llm_route(
         selected = await select(p, "", "fallback", platform_only=True)
         if selected:
             return selected
+    if platform_only:
+        invalid("没有可用的平台聊天模型，请联系管理员配置平台模型", "NO_PLATFORM_CHAT_MODEL")
     invalid("没有可用的聊天模型，请联系管理员配置聊天模型或配置 BYOK", "NO_CHAT_MODEL")
 
 
@@ -246,11 +258,12 @@ async def resolve_chat_default(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
     provider: str = "",
     model: str = "",
+    platform_only: bool = False,
 ):
     """Resolve account selection (or an explicit route) with a short-lived tool-round snapshot."""
     response.headers["Cache-Control"] = "no-store"
     return await _facade().resolve_default_llm_route(
-        db, int(user.id), provider=provider, model=model
+        db, int(user.id), provider=provider, model=model, platform_only=platform_only
     )
 
 
