@@ -234,7 +234,7 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
 
 
 class FhdBigFileRatchetV2Tests(unittest.TestCase):
-    def test_warns_on_growth_even_when_file_count_is_unchanged(self) -> None:
+    def test_rejects_registered_growth_even_when_file_count_is_unchanged(self) -> None:
         baseline = {
             "big_files_over_800_lines": 1,
             "big_router_files_over_20_routes": 0,
@@ -252,7 +252,8 @@ class FhdBigFileRatchetV2Tests(unittest.TestCase):
             "big_router_files_over_cap": [],
         }
         errors, _ = count_big_files.evaluate(current, baseline)
-        self.assertEqual(errors, [])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("app/legacy.py", errors[0])
         self.assertTrue(count_big_files.size_warnings(current, 800))
 
 

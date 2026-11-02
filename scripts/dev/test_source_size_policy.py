@@ -69,19 +69,20 @@ def fhd_size_fixture(tmp_path):
     return tmp_path
 
 
-def test_fhd_size_json_keeps_warning_without_error(fhd_size_fixture, capsys):
-    assert count_big_files.main(["--repo-root", str(fhd_size_fixture), "--json"]) == 0
+def test_fhd_size_json_rejects_registered_growth(fhd_size_fixture, capsys):
+    assert count_big_files.main(["--repo-root", str(fhd_size_fixture), "--json"]) == 1
     report = json.loads(capsys.readouterr().out)
-    assert report["warnings"] and report["errors"] == [] and report["ok"]
+    assert report["warnings"] and report["errors"] and not report["ok"]
+    assert "app/large.py" in report["errors"][0]
 
 
-def test_fhd_baseline_accepts_size_growth_but_not_router_growth(fhd_size_fixture):
+def test_fhd_baseline_requires_explicit_force_for_size_growth(fhd_size_fixture):
     args = ["--repo-root", str(fhd_size_fixture), "--update-baseline"]
-    assert count_big_files.main(args) == 0
     baseline_path = fhd_size_fixture / count_big_files.BASELINE_REL
-    assert (
-        json.loads(baseline_path.read_text())["file_line_limits"]["app/large.py"] == 901
-    )
+    assert count_big_files.main(args) == 2
+    assert json.loads(baseline_path.read_text())["file_line_limits"]["app/large.py"] == 900
+    assert count_big_files.main([*args, "--force"]) == 0
+    assert json.loads(baseline_path.read_text())["file_line_limits"]["app/large.py"] == 901
     (fhd_size_fixture / "app/routes.py").write_text(
         "\n".join(f"@router.get('/{i}')\ndef route_{i}(): pass" for i in range(21))
     )
