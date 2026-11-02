@@ -150,6 +150,10 @@ def test_dispatch_correlates_exact_title_and_frozen_sha(tmp_path, scenario, expe
         encoding="utf-8",
     )
     fake.chmod(0o755)
+    # Make "no exact match" terminate immediately instead of polling for five minutes.
+    fast_sleep = bin_dir / "sleep"
+    fast_sleep.write_text("#!/bin/sh\nexit 3\n", encoding="utf-8")
+    fast_sleep.chmod(0o755)
     row = dict(databaseId=202, displayTitle=f"Release Desktop {sha}",
                createdAt="2099-01-01T00:00:00Z", headSha=sha)
     if scenario == "duplicate":
