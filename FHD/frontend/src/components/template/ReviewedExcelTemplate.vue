@@ -85,6 +85,20 @@ async function refreshPlatformModel() {
 }
 onMounted(() => { if (!props.archiveOnSelect) void refreshPlatformModel() })
 const cancelAnalysis = ref(false)
+const archiveRunPending = ref(false)
+function needsNewModelRound(item: Classification) {
+  return item.checkpoint?.phase === 'paused' || (item.checkpoint?.phase === 'failed' && (item.checkpoint.calls_in_round ?? 0) >= item.checkpoint.max_calls)
+}
+function modelRoundKey(item: Classification) {
+  return JSON.stringify([selectionEpoch, item.classification_id, item.version, item.checkpoint?.version, item.checkpoint?.max_calls, item.checkpoint?.calls_in_round])
+}
+const newRoundTarget = computed(() => props.archiveOnSelect ? classifications.value.find(item => item.status === 'classified' && needsNewModelRound(item)) : undefined)
+const newRoundKey = computed(() => newRoundTarget.value ? modelRoundKey(newRoundTarget.value) : '')
+const startProcessingLabel = computed(() => newRoundTarget.value ? `确认新一轮重试（${newRoundTarget.value.name}）` : '开始处理')
+function stopArchiveProcessing() {
+  if (!archiveRunPending.value || cancelAnalysis.value) return
+  cancelAnalysis.value = true; archiveProgress.value = '停止后续处理，等待当前请求结果。'
+}
 const analysisProgress = ref('')
 const classificationNotice = ref('')
 const analysisErrors = ref<Record<string, string>>({})
@@ -388,6 +402,7 @@ function resetReview() {
   feedback.value = ''; consent.value = false; publishToTenant.value = false
 }
 function resetSelectionState() {
+  archiveRunPending.value = false
   documentWorkspace.reset(); activeDocumentKey.value = ''; documentOriginalPreview.value = false
   closeCandidatePicker(); expandedCandidateIndex.value = null
   blockedCandidateKeys.value = []
@@ -425,13 +440,15 @@ function openFilePicker() {
   if (!alive || busy.value || documentWorkPending.value) return
   fileInputRef.value?.click()
 }
-function startProcessing() {
-  if (!alive || busy.value) return
+function startProcessing(approvedRoundKey = '') {
+  if (!alive || busy.value || archiveRunPending.value) return
   if (props.archiveOnSelect && documentWorkspace.documents.value.some(doc => !!doc.phase)) return
   const note = composerDraft.value.trim()
   if (props.archiveOnSelect) {
     const current = captureFileOperation()
-    void classify().then(() => { if (current() && note && composerDraft.value.trim() === note && documentWorkspace.documents.value.length) void submitDocumentRequirement(note) })
+    const approval = approvedRoundKey === newRoundKey.value ? approvedRoundKey : ''
+    cancelAnalysis.value = false; archiveRunPending.value = true
+    void classify(approval).then(() => { if (current() && !cancelAnalysis.value && note && composerDraft.value.trim() === note && documentWorkspace.documents.value.length) void submitDocumentRequirement(note) }).finally(() => { if (current()) archiveRunPending.value = false })
     return
   }
   if (note) {
@@ -531,7 +548,7 @@ async function authorizeLegacyFile(form: FormData, source: File, current: () => 
   const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
   return confirmLegacyScope(form, source.name, hash, current)
 }
-async function classify() {
+async function classify(approvedRoundKey = '') {
   const current = captureFileOperation()
   if (!current()) return
   if (busy.value || !files.value.length || files.value.length > 200) return
@@ -546,6 +563,7 @@ async function classify() {
     const batchFiles = [...files.value], requestKeys = [...archiveKeys.value]
     for (const [index, item] of batchFiles.entries()) {
       if (!current()) return
+      if (props.archiveOnSelect && cancelAnalysis.value) break
       const existing = props.archiveOnSelect ? classifications.value[index] : undefined
       if (existing?.status === 'classified') { results.push(existing); continue }
       archiveProgress.value = `归档及分类 ${index + 1}/${files.value.length}：${item.name}`
@@ -555,6 +573,7 @@ async function classify() {
           if (!current()) return
           results.push({ name: item.name, status: 'unsupported', sheets: [], message: props.archiveOnSelect ? '请先将旧 XLS 转换为 XLSX 后处理。' : '已取消旧 XLS 有限用途转换；未上传。' }); continue
         }
+        if (!current() || (props.archiveOnSelect && cancelAnalysis.value)) break
         const result = await templatePreviewApi.archiveClassifyExcel(form) as Classification
         if (!current()) return
         results.push(result)
@@ -577,12 +596,14 @@ async function classify() {
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类失败' }
   finally { if (current()) busy.value = false }
   if (!current() || !props.archiveOnSelect) return
+  if (cancelAnalysis.value) { archiveProgress.value = '已停止后续处理。'; return }
   const failed = classifications.value.filter((item) => item.status !== 'classified')
   if (failed.length) {
     error.value = failed.map((item) => item.message || `${item.name}未完成`).join('；')
   }
   const eligible = classifications.value.map((item, index) => ({ item, index })).filter(({ item }) => item.status === 'classified' && item.sheets.some(sheet => processableSheet(sheet) && sheet.regions.length))
   if (!eligible.length) {
+    if (failed.length) { archiveProgress.value = '文件处理未完成，可点击开始处理重试。'; return }
     error.value = currentClassification.value?.sheets.find(sheet => !processableSheet(sheet))?.processing_message || '当前文件没有可处理的可见工作表区域；原件保持不变。'
     archiveProgress.value = '当前文件无法生成独立候选，请选择可处理的可见区域。'
     return
@@ -608,10 +629,14 @@ async function classify() {
   if (!current()) return
   for (const { item, index } of eligible) {
     if (!current()) return
+    if (cancelAnalysis.value) { archiveProgress.value = '已停止后续处理。'; return }
     if (!item.classification_id || !loginModelFiles.value.includes(item.classification_id)) continue
     selectFile(index)
-    await runLoginModelPipeline()
+    const approveNewRound = !!approvedRoundKey && approvedRoundKey === modelRoundKey(item)
+    if (approveNewRound) approvedRoundKey = ''
+    await runLoginModelPipeline(approveNewRound)
   }
+  if (current() && cancelAnalysis.value) { archiveProgress.value = '已停止后续处理。'; return }
   if (current() && loginModelFiles.value.length) {
     const incomplete = eligible.some(({ item }) => item.model_status !== 'returned') || documentWorkspace.documents.value.some(doc => !doc.review || !!doc.error || doc.unknown)
     archiveProgress.value = incomplete || failed.length ? '部分模板未完成，请核对。' : documentWorkspace.documents.value.length ? '模板已生成。' : '未识别到可处理模板。'
@@ -851,7 +876,7 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
   if (!current() || busy.value) return
   if (!loginMode && classificationSampleAuthorized.value === classificationOwnFileAuthorized.value) return
   if (retryItem && (retryItem.checkpoint?.phase !== 'failed' || ((retryItem.checkpoint.calls_in_round ?? 0) >= retryItem.checkpoint.max_calls && !extendBudget))) return
-  busy.value = true; error.value = ''; cancelAnalysis.value = false
+  busy.value = true; error.value = ''; if (!loginMode) cancelAnalysis.value = false
   const selectedFile = classifications.value[files.value.indexOf(file.value as File)]
   const pending = classifications.value.filter((item) => (!(loginMode || classificationOwnFileAuthorized.value) || item === selectedFile) && item.status === 'classified' && item.model_status !== 'returned' && (loginMode || !item.confirmed) && item.checkpoint?.phase !== 'inflight' && (retryItem ? item === retryItem : item.checkpoint?.phase !== 'failed'))
   try {
@@ -860,16 +885,18 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
       analysisProgress.value = `模型分析 ${index + 1}/${pending.length}：${item.name}`
       try {
         if (!item.classification_id || !item.version) throw new Error('分类来源或版本缺失，请重新分类')
+        let approveNewRound = extendBudget
         while (!cancelAnalysis.value) {
           const form = new FormData(); form.append('version', item.version)
           form.append(loginMode ? 'use_login_notice' : classificationOwnFileAuthorized.value ? 'own_file_authorized' : 'sample_authorized', 'true')
           form.append('auto_group', 'true')
-          if (item.checkpoint?.phase === 'paused') form.append('continue_authorized', 'true')
+          if (item.checkpoint?.phase === 'paused' && (!loginMode || approveNewRound)) form.append('continue_authorized', 'true')
           if (retryItem && item.checkpoint?.phase === 'failed') {
             form.append('retry_authorized', 'true')
-            if (extendBudget) form.append('continue_authorized', 'true')
+            if (approveNewRound) form.append('continue_authorized', 'true')
             delete retryBudget.value[item.classification_id]
           }
+          approveNewRound = false
           const result = await templatePreviewApi.analyzeClassification(item.classification_id, form) as { phase?: string; checkpoint?: Checkpoint; version: string; sheets: ClassificationSheet[]; model_status: string; budget?: Classification['budget']; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; fragment_links?: FragmentLinks; coverage: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] }
           if (!current()) return
           if (result.phase === 'pending' || result.phase === 'paused') {
@@ -884,7 +911,7 @@ async function analyzeClassifications(retryItem?: Classification, extendBudget =
             const source = previousSheets.find(entry => entry.sheet === sheet.sheet)
             return { ...sheet, sheet_state: source?.sheet_state || sheet.sheet_state, processable: source?.processable === false ? false : sheet.processable, processing_message: sheet.processing_message || source?.processing_message }
           }); item.model_status = result.model_status; item.budget = result.budget; item.suggested_documents = result.suggested_documents; item.suggested_document_count = result.suggested_document_count; item.fragment_links = result.fragment_links; item.coverage = result.coverage; item.input_messages = result.input_messages; item.input_summaries = result.input_summaries; item.confirmed = false
-          await loadAutoSlices(item, current)
+          if (!cancelAnalysis.value) await loadAutoSlices(item, current)
           break
         }
       } catch (err) { if (!current()) return;
@@ -942,7 +969,7 @@ async function runLoginModelPipeline(extendBudget = false) {
   if (item.checkpoint?.phase === 'inflight') {
     error.value = '上次平台模型请求结果未知，不可重复发送；请核对服务端记录。'; return
   }
-  if (item.checkpoint?.phase === 'failed' && (item.checkpoint.calls_in_round ?? 0) >= item.checkpoint.max_calls && !extendBudget) {
+  if (needsNewModelRound(item) && !extendBudget) {
     error.value = '本轮模型预算已用完；请明确确认新一轮预算后重试。'; return
   }
   if (item.model_status !== 'returned') {
@@ -954,6 +981,7 @@ async function runLoginModelPipeline(extendBudget = false) {
     finally { if (current()) busy.value = false }
   }
   if (!current()) return
+  if (cancelAnalysis.value) { archiveProgress.value = '已停止后续处理。'; return }
   if (cancelAnalysis.value || item.model_status !== 'returned' || analysisErrors.value[item.classification_id]) {
     error.value = analysisErrors.value[item.classification_id] || item.checkpoint?.message || '平台模型分类未完成，请继续或核对后重试。'
     archiveProgress.value = '平台模型分类或切片未完成，尚未生成模板候选。'
@@ -967,7 +995,9 @@ async function runLoginModelPipeline(extendBudget = false) {
     if (!current() || cancelAnalysis.value) return
     archiveProgress.value = `正在生成：${doc.displayName}`
     await documentWorkspace.generate(doc)
+    if (current() && doc.review) emit('stage', 'template')
   }
+  if (current() && cancelAnalysis.value) { archiveProgress.value = '已停止后续处理。'; return }
   if (current()) archiveProgress.value = documents.some(doc => !doc.review || !!doc.error || doc.unknown) ? '部分模板未完成，请核对。' : documents.length ? '模板已生成。' : '未识别到可处理模板。'
 }
 async function downloadAutoSlice(item: Classification, slice: AutoSlice) {
@@ -1328,17 +1358,6 @@ async function downloadCandidate(index: number) {
       </div>
     </details>
 
-      <div v-if="archiveOnSelect && loginModelFlow && !review" aria-label="平台模型文档切片">
-        <button v-if="busy && analysisProgress" type="button" @click="cancelAnalysis = true">停止后续分析</button>
-        <button v-if="currentClassification?.checkpoint?.phase === 'failed'" type="button" :disabled="busy" @click="runLoginModelPipeline((currentClassification!.checkpoint!.calls_in_round ?? 0) >= currentClassification!.checkpoint!.max_calls)">{{ (currentClassification.checkpoint.calls_in_round ?? 0) >= currentClassification.checkpoint.max_calls ? '确认新一轮预算并重试模型分类' : '重试模型分类' }}</button>
-        <button v-if="currentClassification?.checkpoint?.phase === 'paused'" type="button" :disabled="busy" @click="runLoginModelPipeline()">继续模型分类</button>
-        <button v-if="currentClassification?.model_status === 'returned'" type="button" :disabled="busy" @click="runLoginModelPipeline()">重新加载切片（不调用模型分类）</button>
-        <p v-for="slice in currentLoginSlices" :key="slice.index">
-          {{ slice.fragments.map(part => `${part.sheet}!${part.range}`).join('、') }} · {{ slice.filename }}
-          <small v-if="!processableSlice(currentClassification!, slice)">包含隐藏或不可处理工作表，或模型未确定完整关系；不能生成候选，原件不变。</small>
-          <button type="button" :disabled="busy || !processableSlice(currentClassification!, slice) || candidateSliceBlocked(currentClassification, slice)" @click="previewAutoSlice(files.indexOf(file as File), slice)">用此单据生成模板</button><small v-if="candidateSliceBlocked(currentClassification, slice)">处理结果待核对，请先查看服务端记录，勿重复提交。</small>
-        </p>
-      </div>
       <div v-if="!archiveOnSelect">
 
     <div class="reviewed-template__step" data-elt-stage="classification">
@@ -1638,16 +1657,17 @@ async function downloadCandidate(index: number) {
       <button
         type="button"
         class="elt-composer__start"
-        :disabled="!files.length || files.length > 200 || busy || documentWorkPending"
-        @click="startProcessing"
-      >开始处理</button>
+        :disabled="!files.length || files.length > 200 || busy || documentWorkPending || archiveRunPending"
+        :data-round-approval="newRoundKey"
+        @click="startProcessing(newRoundKey)"
+      >{{ startProcessingLabel }}</button>
       <button
-        v-if="!archiveOnSelect && classifications.some((item) => item.status !== 'classified')"
+        v-if="archiveOnSelect ? archiveRunPending : classifications.some((item) => item.status !== 'classified')"
         type="button"
         class="elt-composer__retry"
-        :disabled="!files.length || files.length > 200 || busy"
-        @click="classify"
-      >重试未完成文件</button>
+        :disabled="archiveOnSelect ? cancelAnalysis : !files.length || files.length > 200 || busy"
+        @click="archiveOnSelect ? stopArchiveProcessing() : classify()"
+      >{{ archiveOnSelect ? cancelAnalysis ? '正在停止…' : '停止后续处理' : '重试未完成文件' }}</button>
       <p class="elt-composer__hint">每批最多 200 个 · 单文件 &lt; 20 MB · 整批 &lt; 50 MB</p>
     </div>
   </section>

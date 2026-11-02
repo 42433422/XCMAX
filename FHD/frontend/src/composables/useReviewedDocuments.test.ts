@@ -53,7 +53,7 @@ beforeEach(() => {
     return () => h('div')
   } }))
 })
-afterEach(() => { wrapper.unmount(); vi.useRealTimers() })
+afterEach(() => { if (wrapper.exists()) wrapper.unmount(); vi.useRealTimers() })
 
 describe('reviewed document ownership and receipts', () => {
   it('keys records by classification, version, slice index and hash while preserving each actual reactive record', () => {
@@ -217,6 +217,50 @@ describe('reviewed document ownership and receipts', () => {
     expect(a.intake?.run_id).toBe(currentA); expect(b.intake?.run_id).toBe(currentB)
     expect(a.intake?.business.preview_revision).toBe('ready-revision')
     expect(controller.canSave(a)).toBe(true); expect(controller.canSave(b)).toBe(true)
+  })
+
+  it.each([['reset', 'queued'], ['prune', 'previewing'], ['unmount', 'queued']] as const)('retires %s document polling after a %s preview without polling its stale run', async (retire, status) => {
+    vi.useFakeTimers()
+    api.previewReviewedIntake.mockImplementation(async (form: FormData) => {
+      const result = readyIntake(form)
+      result.intake.business.status = status; result.intake.business.preview_revision = ''
+      return result
+    })
+    const doc = await generated('A'); await selected(doc)
+    const staleRun = doc.intake!.run_id, baseBusiness = doc.intake!.business
+    expect(doc.intakePending).toBe(true); expect(vi.getTimerCount()).toBe(1)
+    let survivor: ReviewedDocument | undefined
+    if (retire === 'prune') { survivor = await generated('B', '采购合同'); await selected(survivor) }
+    elt.run.mockImplementation(async (id: string) => ({ ...baseBusiness, id, status: 'preview_ready', preview_revision: 'polled-ready' }))
+    if (retire === 'reset') controller.reset()
+    else if (retire === 'prune') controller.prune(doc.classificationId, 'classification-v2', [])
+    else wrapper.unmount()
+    expect(vi.getTimerCount()).toBe(survivor ? 1 : 0)
+    await vi.advanceTimersByTimeAsync(5000); await flushPromises()
+    expect(elt.run.mock.calls.map(call => call[0])).not.toContain(staleRun)
+    if (survivor) {
+      expect(elt.run).toHaveBeenCalledExactlyOnceWith(survivor.intake!.run_id)
+      expect(controller.canSave(survivor)).toBe(true)
+    } else expect(elt.run).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('does not schedule polling when an old queued preparation resolves after reset', async () => {
+    vi.useFakeTimers()
+    const doc = await generated('A'), response = deferred<ReturnType<typeof readyIntake>>()
+    api.previewReviewedIntake.mockReturnValueOnce(response.promise)
+    controller.choose(doc, 0); await flushPromises()
+    const stale = readyIntake(api.previewReviewedIntake.mock.calls[0][0] as FormData)
+    stale.intake.business.status = 'previewing'; stale.intake.business.preview_revision = ''
+    expect(doc.intakePending).toBe(true); expect(vi.getTimerCount()).toBe(0)
+    controller.reset()
+    const replacement = register('A')
+    response.resolve(stale); await flushPromises()
+    expect(controller.records.value[doc.key]).toBe(replacement)
+    expect(replacement.intake).toBeNull(); expect(replacement.intakePending).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(elt.run).not.toHaveBeenCalled(); expect(controller.canSave(replacement)).toBe(false)
   })
 
   it('drops a late save receipt after reset instead of marking a replacement or another document saved', async () => {
