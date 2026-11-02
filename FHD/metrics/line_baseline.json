@@ -1,5 +1,5 @@
 {
-  "lines": 2420257,
+  "lines": 2420368,
   "updated": "2026-11-02",
-  "note": "Personnel long-press sorting and isolation regressions plus numeric-edit state consistency while a search is unapplied; needed UI behavior and synthetic tests, no unrelated deletion."
+  "note": "Sync main 80151de6 and retain required personnel sorting plus freshness regression; personnel runtime and test blobs remain identical to fully verified c6a5f972. No unrelated deletion or gate changes."
 }
