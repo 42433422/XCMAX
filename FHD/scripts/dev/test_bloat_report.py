@@ -152,9 +152,16 @@ def cmd_check(seed: bool = False, record: bool = False) -> int:
     stub_lines = rec["stub_lines"]
     baseline = None if seed else _last_baseline()
     if baseline is None:
+        if not seed:
+            print(
+                "[test-bloat] ERROR: historical baseline is missing or invalid; "
+                "use --seed only for deliberate initialization",
+                file=sys.stderr,
+            )
+            return 2
         append_history(rec)
         print(f"[test-bloat] seed baseline: ratio={ratio} stub_lines={stub_lines}")
-        print("[test-bloat] OK - seeded ratchet baseline")
+        print("[test-bloat] OK - deliberately seeded ratchet baseline")
         return 0
     base_ratio = baseline.get("ratio", ratio)
     base_stub = baseline.get("stub_lines", stub_lines)

@@ -5,16 +5,16 @@
 ### Python 代码规范
 
 1. **格式化**
-   - 使用 `black` 格式化所有 Python 代码
-   - 使用 `isort` 排序 imports
+   - 使用 `Ruff` 格式化所有 Python 代码，使用 Ruff 的 `I` 规则排序 imports
+   - 检查命令：`uv run ruff check app/ tests/` 与 `uv run ruff format --check app/ tests/`
 
 2. **类型检查**
-   - 使用 `mypy` 进行类型检查
-   - 所有公共函数必须有类型注解
+   - 使用 `mypy` 进行类型检查：`uv run mypy app/ --no-error-summary`
+   - 所有新增公共函数应有类型注解，历史豁免需逐步清偿
 
 3. **代码风格**
    - 遵循 PEP 8
-   - 最大行长 120 字符
+   - Ruff `line-length = 100`；超过 100 字符由格式化器和 lint 规则共同管理
 
 4. **导入顺序**
    ```python
@@ -23,12 +23,11 @@
    import sys
 
    # 第三方库
-   import flask
-   import sqlalchemy
+   from fastapi import APIRouter
+   from sqlalchemy.orm import Session
 
    # 本地库
-   from app import models
-   from app.services import xxx
+   from app.application.auth_app_service import get_auth_app_service
    ```
 
 ### JavaScript 代码规范
@@ -40,6 +39,13 @@
 2. **代码风格**
    - 使用 ES6+ 语法
    - 使用 const/let 而不是 var
+
+### 后端验证
+
+- 使用 `uv run pytest tests/ -q` 执行完整后端回归测试。
+- PR 的架构检查、类型检查、行为测试和覆盖率棘轮以仓根 `/.github/workflows/fhd-ci-cd.yml` 为准。
+- 测试膨胀检测发现历史基线缺失时应失败；仅由维护者明确使用 `--seed` 初始化。
+- 超过 800 行的历史文件仍需逐步拆分；已登记的单文件行数限额不得调高，未经批准不得使用 `--force` 提高基线。
 
 ## Git 规范
 
