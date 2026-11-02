@@ -631,7 +631,8 @@ def test_session_provider_chat_completion_success(monkeypatch):
         async def __aexit__(self, *a):
             return False
 
-        async def get(self, url):
+        async def get(self, url, *, params):
+            assert params == {"platform_only": "true"}
             return FakeResp()
 
     class FakeAdapter:
@@ -676,7 +677,8 @@ def test_session_provider_chat_completion_route_failure(monkeypatch):
         async def __aexit__(self, *a):
             return False
 
-        async def get(self, url):
+        async def get(self, url, *, params):
+            assert params == {"platform_only": "true"}
             return FakeResp()
 
     monkeypatch.setattr("httpx.AsyncClient", FakeClient)

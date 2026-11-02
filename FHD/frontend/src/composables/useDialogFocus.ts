@@ -1,5 +1,24 @@
 import { nextTick, onBeforeUnmount, watch, type Ref } from 'vue'
 
+const scrollLocks = new Set<symbol>()
+let bodyOverflow: { property: string; value: string; priority: string }[] = []
+/** Keep stacked picker/preview dialogs from releasing each other's scroll lock. */
+export function useDialogScrollLock(visible: () => boolean) {
+  const token = Symbol('dialog-scroll')
+  function release() {
+    if (!scrollLocks.delete(token) || scrollLocks.size) return
+    bodyOverflow.forEach(({ property }) => document.body.style.removeProperty(property))
+    bodyOverflow.forEach(({ property, value, priority }) => { if (value) document.body.style.setProperty(property, value, priority) })
+  }
+  watch(visible, show => {
+    if (!show) { release(); return }
+    if (!scrollLocks.size) bodyOverflow = ['overflow', 'overflow-x', 'overflow-y'].map(property => ({ property, value: document.body.style.getPropertyValue(property), priority: document.body.style.getPropertyPriority(property) }))
+    scrollLocks.add(token)
+    document.body.style.setProperty('overflow', 'hidden')
+  }, { immediate: true, flush: 'sync' })
+  onBeforeUnmount(release)
+}
+
 const dialogs: HTMLElement[] = []
 const selector = 'button, [href], input, select, textarea, [tabindex], [contenteditable="true"]'
 

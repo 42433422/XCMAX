@@ -12,10 +12,14 @@ export function useTpGridTool() {
 
   function onGridToolFileSelected(event: Event) {
     const input = event?.target as HTMLInputElement | null
-    gridToolFile.value = input?.files?.[0] || null
+    const file = input?.files?.[0]
+    if (!input || !file) return
+    input.value = ''
+    if (!extractingGrid.value) gridToolFile.value = file
   }
 
   async function extractGridFromExcel() {
+    if (extractingGrid.value) return
     if (!gridToolFile.value) {
       await appAlert('请先选择 Excel 文件')
       return
