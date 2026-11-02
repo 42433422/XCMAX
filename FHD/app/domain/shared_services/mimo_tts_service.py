@@ -84,7 +84,8 @@ def synthesize_mimo_bytes(
             async with httpx.AsyncClient(timeout=timeout_s) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 resp.raise_for_status()
-                return resp.json()
+                data: dict[str, Any] = resp.json()
+                return data
 
     data = asyncio.run(request())
 
