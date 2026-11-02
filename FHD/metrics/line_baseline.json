@@ -1,5 +1,5 @@
 {
-  "lines": 2420671,
+  "lines": 2420741,
   "updated": "2026-11-02",
-  "note": "PR #2927 合入含 #2915 的最新 main：启动 workspace readiness；相对 main 基线实测净增登记。"
+  "note": "merge main into #2925"
 }

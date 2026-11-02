@@ -218,6 +218,7 @@ def test_pairing_and_queue_work_without_importing_the_service_facade(tmp_path):
             with sessions.begin() as db:
                 yield db
         pairing = RelayPairing(PairingPorts(
+            public_base_url="https://relay.synthetic.invalid",
             database=database,
             ensure_tables=repository.ensure_tables,
             fresh_pairing_code=repository.fresh_pairing_code,
