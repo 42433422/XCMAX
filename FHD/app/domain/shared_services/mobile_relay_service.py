@@ -7,6 +7,7 @@ import logging
 import secrets as secrets
 from typing import Any, cast
 
+from app.application.mobile_relay_configuration import get_relay_public_base_url
 from app.application.mobile_relay_ports import PairingPorts, TaskPorts
 from app.db.session import get_db
 from app.domain.shared_services.mobile_relay_pairing import RelayPairing
@@ -20,7 +21,6 @@ from app.domain.shared_services.mobile_relay_utils import _token_hash as _token_
 from app.domain.shared_services.mobile_relay_utils import _utc_after as _utc_after
 from app.domain.shared_services.mobile_relay_utils import _utc_now as _utc_now
 from app.infrastructure.mobile_relay import repository
-from app.infrastructure.topology import FHD_API_BASE_URL
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -28,13 +28,14 @@ logger = logging.getLogger(__name__)
 
 def _public_base_url(raw: str) -> str:
     """Preserve the legacy helper using the deployment-configured default."""
-    return _normalize_url(raw, default_base_url=FHD_API_BASE_URL)
+    return _normalize_url(raw, default_base_url=get_relay_public_base_url())
 
 
 class MobileRelayService:
     """Compose SQL storage, pairing and task execution through explicit capabilities."""
 
-    def __init__(self):
+    def __init__(self, *, default_public_base_url: str | None = None):
+        self._default_public_base_url = default_public_base_url or get_relay_public_base_url()
         self._pairing = RelayPairing(
             PairingPorts(
                 database=lambda: self._get_db(),
@@ -44,7 +45,7 @@ class MobileRelayService:
                     db, relay_id=relay_id, desktop_token=desktop_token
                 ),
                 public_desktop=lambda data: self._public_desktop(data),
-                public_base_url=FHD_API_BASE_URL,
+                public_base_url=self._default_public_base_url,
             )
         )
         self._tasks = RelayTaskQueue(
