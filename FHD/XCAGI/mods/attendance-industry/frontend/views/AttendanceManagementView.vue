@@ -177,7 +177,7 @@
               :class="{ 'roster-row-dragging': String(row.id) === draggingId, 'roster-row-placeholder': String(row.id) === draggingId }"
               @pointerdown="pointerDown">
               <td><input type="number" :value="row.order_position" min="1" :max="rosterTotal"
-                :disabled="saving" :aria-label="`${row.employee_name}的导出序号`" style="width:5em"
+                :disabled="saving || loading || editorOpen || loadedContext !== readContext" :aria-label="`${row.employee_name}的导出序号`" style="width:5em"
                 @change="moveEmployee(row, Number(($event.target as HTMLInputElement).value))" /></td>
               <td class="primary-cell">{{ row.employee_name || '—' }}</td>
               <td>{{ row.employee_no || '—' }}</td>

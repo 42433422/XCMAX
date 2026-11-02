@@ -1,5 +1,5 @@
 {
-  "lines": 2420242,
+  "lines": 2420257,
   "updated": "2026-11-02",
-  "note": "Sync main 165c38a4 while retaining required personnel long-press implementation and synthetic regressions; personnel runtime and test blobs are unchanged from 95d7c636. No unrelated code deleted."
+  "note": "Personnel long-press sorting and isolation regressions plus numeric-edit state consistency while a search is unapplied; needed UI behavior and synthetic tests, no unrelated deletion."
 }

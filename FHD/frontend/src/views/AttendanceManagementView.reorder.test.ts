@@ -242,6 +242,21 @@ describe('Attendance personnel long-press reorder', () => {
     expect(writes()[0]?.[1].body).toBe(JSON.stringify({ position: 4, revision: 'owner-roster-revision' }))
   })
 
+  it('disables numeric edits while a search draft is unapplied and enables saving after the new read', async () => {
+    await mountRoster()
+    expect(wrapper.get('tbody input[type="number"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.toolbar-card input').setValue('staff')
+    expect(wrapper.get('tbody input[type="number"]').attributes('disabled')).toBeDefined()
+    expect(writes()).toEqual([])
+    await wrapper.get('.toolbar-card input').trigger('keyup', { key: 'Enter' })
+    await settle()
+    expect(wrapper.get('tbody input[type="number"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('tbody input[type="number"]').setValue(4)
+    await settle()
+    expect(writes()[0]?.[1].body).toBe(JSON.stringify({ position: 4, revision: 'owner-roster-revision' }))
+    expect(writes()).toHaveLength(1)
+  })
+
   it.each(['search', 'section', 'account', 'editor'])('cancels or prevents dragging when %s context changes', async change => {
     await mountRoster()
     if (change === 'editor') {
