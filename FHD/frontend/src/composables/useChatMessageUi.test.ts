@@ -28,7 +28,9 @@ vi.mock('@/utils/pretext', () => ({
 }))
 
 import { useChatMessageUi } from './useChatMessageUi'
-import { speakText, stopSpeaking, cleanTextForSpeech } from '@/utils/tts'
+import { speakText, cleanTextForSpeech } from '@/utils/tts'
+import { clearVoiceQueue } from './useChatMessages'
+vi.mock('./useChatMessages', () => ({ clearVoiceQueue: vi.fn() }))
 
 describe('useChatMessageUi', () => {
   let messages: ReturnType<typeof ref<Array<{ content: string; role: string }>>>
@@ -140,7 +142,19 @@ describe('useChatMessageUi', () => {
     const ui = useChatMessageUi({ messages, chatMessagesRef })
     await ui.toggleMessageTts(1, 'Hello')
     await ui.toggleMessageTts(1, 'Hello')
-    expect(stopSpeaking).toHaveBeenCalled()
+    expect(clearVoiceQueue).toHaveBeenCalled()
+    expect(ui.playingMsgIdx.value).toBe(-1)
+  })
+
+  it('ignores old completion when the same message is stopped and replayed', async () => {
+    const ui = useChatMessageUi({ messages, chatMessagesRef })
+    await ui.toggleMessageTts(1, 'first')
+    const old = vi.mocked(speakText).mock.calls.at(-1)![1]!
+    await ui.toggleMessageTts(1, 'stop')
+    await ui.toggleMessageTts(1, 'replay')
+    old.onEnd?.()
+    expect(ui.playingMsgIdx.value).toBe(1)
+    vi.mocked(speakText).mock.calls.at(-1)![1]!.onEnd?.()
     expect(ui.playingMsgIdx.value).toBe(-1)
   })
 
@@ -148,7 +162,7 @@ describe('useChatMessageUi', () => {
     const ui = useChatMessageUi({ messages, chatMessagesRef })
     ui.playingMsgIdx.value = 2
     ui.stopMessageTts()
-    expect(stopSpeaking).toHaveBeenCalled()
+    expect(clearVoiceQueue).toHaveBeenCalled()
     expect(ui.playingMsgIdx.value).toBe(-1)
   })
 

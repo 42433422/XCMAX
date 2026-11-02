@@ -24,13 +24,21 @@ from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.path_io import path_utils
 from tests.test_application.test_etl_auto_ingest_service import rag_service as rag_service
 from tests.test_application.test_etl_preview_task_boundaries import ObservedExecutor
-from tests.test_application.test_reviewed_excel_template import review_store as review_store
+from tests.test_application.test_reviewed_excel_template import (
+    authorized_notice_client as authorized_notice_client,
+)
+from tests.test_application.test_reviewed_excel_template import (
+    candidate_form,
+)
+from tests.test_application.test_reviewed_excel_template import (
+    review_store as review_store,
+)
 
 BASE = "/api/templates/reviewed-excel"
 
 
 @pytest.fixture
-def intake_store(review_store, rag_service, monkeypatch):
+def intake_store(review_store, rag_service, monkeypatch, authorized_notice_client):
     store = review_store
     Base.metadata.create_all(store.engine)
     store.factory = sessionmaker(bind=store.engine)
@@ -39,6 +47,17 @@ def intake_store(review_store, rag_service, monkeypatch):
     store.rag = rag_service
     store.starts = []
     store.actor.update(execute=True, mod="erp-test")
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete",
+        lambda *_args, **_kwargs: LlmAssistResult(
+            used_llm=True,
+            provider="platform",
+            model="mimo-v2.6-flash",
+            data={"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]},
+        ),
+    )
     monkeypatch.setenv("FHD_ETL_LLM", "off")
     monkeypatch.setattr(ais, "get_app_data_dir", lambda: str(store.root))
     monkeypatch.setattr(path_utils, "get_app_data_dir", lambda **_: str(store.root))
@@ -93,14 +112,14 @@ def review(store):
     response = store.client.post(
         f"{BASE}/preview",
         files={"file": ("客户.xlsx", stream.getvalue())},
-        data={"expected_actor": "1:7"},
+        data=candidate_form(store.client, stream.getvalue()),
     )
     assert response.status_code == 200, response.text
     data = response.json()
     return {
         "review_id": data["review_id"],
         "proposal_version": data["proposal"]["version"],
-        "candidate_id": "preserve",
+        "candidate_id": data["proposal"]["candidates"][0]["id"],
         "selections": "[]",
         "name": "已确认客户",
         "composer_note": "核对客户数据",
@@ -346,13 +365,14 @@ def test_staged_run_tampering_is_rejected(intake_store, change):
 def test_intake_preparation_requires_execute_and_mod_permission(intake_store, field, value):
     store = intake_store
     data = review(store)
+    with store.factory() as db:
+        before = (db.query(EltRun).count(), db.query(EltUpload).count())
     store.actor[field] = value
     response = store.client.post(f"{BASE}/intake-preview", data=data)
     assert response.status_code == 403
     assert_no_writes(store)
     with store.factory() as db:
-        assert db.query(EltRun).count() == 1
-        assert db.query(EltUpload).count() == 1
+        assert (db.query(EltRun).count(), db.query(EltUpload).count()) == before
 
 
 def test_private_intake_requires_preview_and_unscoped_attendance_is_refused(intake_store):
@@ -379,6 +399,7 @@ def test_unknown_template_commit_receipt_cannot_replay_intake(intake_store, monk
 
     monkeypatch.setattr(document_templates_compat, "run_archive_template_create", lost_receipt)
     client = TestClient(store.client.app, raise_server_exceptions=False)
+    client.cookies.update(store.client.cookies)
     assert client.post(f"{BASE}/save", data=data).status_code == 500
     assert client.post(f"{BASE}/save", data=data).status_code == 409
     assert store.starts == []

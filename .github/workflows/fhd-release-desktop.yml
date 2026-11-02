@@ -49,6 +49,19 @@ on:
         description: "Immutable 40-character source SHA shared by Windows, macOS, feeds, and manifests"
         required: true
         type: string
+      notice_publication_json:
+        description: "Nonsecret three-field publication record from the official verifier; Windows new builds only"
+        required: false
+        type: string
+      notice_publication_origin:
+        description: "Verified FHD HTTPS origin serving the source login legal paths; required with notice_publication_json"
+        required: false
+        type: string
+      notice_publication_base_path:
+        description: "Explicit FHD mount prefix, e.g. /admin; empty preserves root paths"
+        required: false
+        default: ""
+        type: string
       security_scan_run_id:
         description: "Most recent zero-finding security scan run ID"
         required: false
@@ -74,7 +87,44 @@ env:
   XCAGI_BUILD_SHA: ${{ inputs.release_sha }}
 
 jobs:
+  notice-publication-policy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Validate notice material lane
+        env:
+          FHD_NOTICE_PUBLICATION_JSON: ${{ inputs.notice_publication_json }}
+          NOTICE_PUBLICATION_ORIGIN: ${{ inputs.notice_publication_origin }}
+          NOTICE_PUBLICATION_BASE_PATH: ${{ inputs.notice_publication_base_path }}
+          WINDOWS_ONLY: ${{ inputs.windows_installer_only }}
+          VERIFY_ONLY: ${{ inputs.verify_only }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+        run: |
+          if [ "$VERIFY_ONLY" = true ] && [ -n "$CANDIDATE_RUN" ]; then
+            echo '::error::verify_only validates the public release and cannot also select an immutable candidate.'
+            exit 1
+          fi
+          if [ "$WINDOWS_ONLY" = true ] && [ "$VERIFY_ONLY" != true ] && [ -z "$CANDIDATE_RUN" ] && { [ -z "$FHD_NOTICE_PUBLICATION_JSON" ] || [ -z "$NOTICE_PUBLICATION_ORIGIN" ]; }; then
+            echo '::error::A new Windows installer requires a verified publication record and its FHD origin before building.'
+            exit 1
+          fi
+          if [ -n "$FHD_NOTICE_PUBLICATION_JSON" ] && { [ "$WINDOWS_ONLY" != true ] || [ "$VERIFY_ONLY" = true ] || [ -n "$CANDIDATE_RUN" ]; }; then
+            echo '::error::Notice material is supported only for a new Windows installer build; immutable candidates and verify-only runs cannot accept appended material.'
+            exit 1
+          fi
+          if { [ -n "$FHD_NOTICE_PUBLICATION_JSON" ] && [ -z "$NOTICE_PUBLICATION_ORIGIN" ]; } || { [ -z "$FHD_NOTICE_PUBLICATION_JSON" ] && [ -n "$NOTICE_PUBLICATION_ORIGIN" ]; }; then
+            echo '::error::Notice publication JSON and its verified FHD origin must be supplied together.'
+            exit 1
+          fi
+          if [ -n "$NOTICE_PUBLICATION_BASE_PATH" ] && [ -z "$FHD_NOTICE_PUBLICATION_JSON" ]; then
+            echo '::error::A notice deployment prefix requires the publication JSON and origin.'
+            exit 1
+          fi
+
   windows-installer-delivery:
+    needs: [notice-publication-policy]
     if: ${{ inputs.windows_installer_only == true && inputs.verify_only != true && inputs.candidate_run_id == '' }}
     runs-on: windows-latest
     timeout-minutes: 90
@@ -123,6 +173,28 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
+      - name: Validate published notice material
+        if: ${{ inputs.notice_publication_json != '' }}
+        shell: pwsh
+        env:
+          FHD_NOTICE_PUBLICATION_JSON: ${{ inputs.notice_publication_json }}
+          NOTICE_PUBLICATION_ORIGIN: ${{ inputs.notice_publication_origin }}
+          NOTICE_PUBLICATION_BASE_PATH: ${{ inputs.notice_publication_base_path }}
+        run: |
+          python -m pip install 'python-dotenv>=1.2.2'
+          if ($LASTEXITCODE -ne 0) { throw 'Notice verifier dependency installation failed' }
+          npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Notice browser dependencies failed' }
+          $noticeDir = Join-Path $env:RUNNER_TEMP 'notice-publication'
+          New-Item -ItemType Directory -Path $noticeDir -Force | Out-Null
+          $noticeFile = Join-Path $noticeDir 'record.json'
+          python scripts/deploy/elt_notice_publication.py --record-env FHD_NOTICE_PUBLICATION_JSON --origin $env:NOTICE_PUBLICATION_ORIGIN "--base-path=$env:NOTICE_PUBLICATION_BASE_PATH" --browser-channel msedge --record-file $noticeFile
+          if ($LASTEXITCODE -ne 0) { throw 'Publication fact or deployed policy verification failed; no material staged' }
+          $digest = (Get-FileHash -LiteralPath $noticeFile -Algorithm SHA256).Hash.ToLowerInvariant()
+          "XCAGI_NOTICE_PUBLICATION_FILE=$noticeFile" >> $env:GITHUB_ENV
+          "XCAGI_NOTICE_PUBLICATION_SHA256=$digest" >> $env:GITHUB_ENV
+          "XCAGI_NOTICE_PUBLICATION_ORIGIN=$env:NOTICE_PUBLICATION_ORIGIN" >> $env:GITHUB_ENV
+          "XCAGI_NOTICE_PUBLICATION_BASE_PATH=$env:NOTICE_PUBLICATION_BASE_PATH" >> $env:GITHUB_ENV
       - name: Install SSL.com CodeSignTool when configured
         if: steps.signing.outputs.required == '1'
         uses: SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b
@@ -161,12 +233,20 @@ jobs:
           Copy-Item $installer "delivery/$filename"
           $hash = (Get-FileHash "delivery/$filename" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $filename" | Set-Content "delivery/$filename.sha256" -Encoding utf8
+          $buildInfo = Get-Content -Raw -Encoding UTF8 "release/xcagi-v$env:DELIVERY_VERSION/enterprise/win-unpacked/resources/build-info.json" | ConvertFrom-Json
+          $noticeMaterial = $buildInfo.notice_publication
+          if ($noticeMaterial) {
+            if ($noticeMaterial.sha256 -ne $env:XCAGI_NOTICE_PUBLICATION_SHA256 -or $noticeMaterial.source_sha -ne $env:XCAGI_BUILD_SHA) { throw 'Notice material provenance mismatch' }
+            Copy-Item -LiteralPath $env:XCAGI_NOTICE_PUBLICATION_FILE -Destination delivery/notice-publication.json
+          }
           @{
             version = $env:DELIVERY_VERSION; git_sha = $env:XCAGI_BUILD_SHA
             signature_status = $state; authenticode_status = [string]$signature.Status
             filename = $filename; sha256 = $hash; size = (Get-Item "delivery/$filename").Length
             delivery_mode = 'manual_installer'; stable_auto_update = $false
             runner_install_smoke = 'passed'; customer_machine_acceptance = 'not_verified'
+            notice_publication = $noticeMaterial
+            notice_publication_installed_probe = $(if ($noticeMaterial) { 'passed' } else { 'not_run' })
             warning = $(if ($state -eq 'unsigned') { '未签名安装包，Windows 可能显示未知发布者或安全提示；不进入稳定自动更新。' } else { '' })
           } | ConvertTo-Json | Set-Content delivery/delivery-receipt.json -Encoding utf8
           Get-Content delivery/delivery-receipt.json >> $env:GITHUB_STEP_SUMMARY
@@ -177,6 +257,7 @@ jobs:
             FHD/delivery/XCAGI-Enterprise-Setup-${{ inputs.version }}-x64-*.exe
             FHD/delivery/XCAGI-Enterprise-Setup-${{ inputs.version }}-x64-*.exe.sha256
             FHD/delivery/delivery-receipt.json
+            FHD/delivery/notice-publication.json
           if-no-files-found: error
           retention-days: 30
       - name: State that the stable release pointer was not advanced
@@ -189,9 +270,10 @@ jobs:
   publish-interim-windows-pointer:
     # 仅晋级已通过五模式验收的原候选；不重建、不写稳定更新元数据。
     # 未签名包须有业主风险接受；签名包须由前置 Windows 验收证明签名有效。
-    needs: [windows-installer-delivery]
+    needs: [windows-installer-delivery, notice-publication-policy]
     if: >-
       always() &&
+      needs.notice-publication-policy.result == 'success' &&
       inputs.windows_installer_only == true &&
       inputs.verify_only != true &&
       inputs.candidate_only != true &&
@@ -266,6 +348,14 @@ jobs:
               or (.signature_status == "unsigned" and .authenticode_status == "NotSigned"))
           ' "$receipt" >/dev/null
           echo "Truthful installer receipt verified; customer_machine_acceptance stays not_verified."
+      - name: Verify immutable candidate notice material
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          python3 FHD/scripts/package/notice_publication_material.py verify-candidate \
+            --receipt "${RUNNER_TEMP}/delivery/delivery-receipt.json" \
+            --record "${RUNNER_TEMP}/delivery/notice-publication.json" \
+            --source-sha "$RELEASE_SHA"
       - name: Generate bounded interim download pointer
         run: |
           set -euo pipefail
@@ -396,6 +486,7 @@ jobs:
           echo "Windows interim download is publicly available; the Windows stable update feed was not touched."
 
   release-preflight:
+    needs: [notice-publication-policy]
     if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true && inputs.candidate_only != true }}
     runs-on: ubuntu-latest
     # Security evidence lives at repository root; do not inherit FHD working directory.

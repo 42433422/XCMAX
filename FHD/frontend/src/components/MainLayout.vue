@@ -36,7 +36,6 @@
           </div>
         </div>
         <TopQuickNav @select="handleViewChange" />
-        <RouteLoadingFeedback :key="pendingSidebarView" :active="!!pendingSidebarView" class="route-nav-feedback" data-testid="route-nav-feedback" />
         <div class="top-bar-actions">
           <button
             type="button"
@@ -53,7 +52,10 @@
           <GlobalTaskCenter />
         </div>
       </div>
-      <slot></slot>
+      <div class="route-content">
+        <RouteLoadingFeedback :key="pendingSidebarView || failedSidebarView" :active="!!pendingSidebarView" :failed="!!failedSidebarView" :stage="pendingViewStage" class="route-nav-feedback" data-testid="route-nav-feedback" @retry="handleViewChange(failedSidebarView)" />
+        <slot></slot>
+      </div>
     </div>
     <DocumentPreviewPictureInPicture />
     <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" :male-avatar="adminConsoleSpa" />
@@ -227,6 +229,7 @@ const currentRouteName = computed(() => {
 
 /** Optimistic sidebar highlight: paint target immediately while router/chunk catches up. */
 const pendingSidebarView = ref('')
+const failedSidebarView = ref('')
 let routeNavGeneration = 0
 const displayedActiveView = computed(() => pendingSidebarView.value || currentRouteName.value)
 
@@ -238,6 +241,7 @@ function syncPendingSidebarWithRoute() {
 }
 
 watch([currentRouteName, routeChunkErrorPath], () => {
+  failedSidebarView.value = ''
   syncPendingSidebarWithRoute()
 })
 
@@ -290,19 +294,29 @@ const currentViewTitle = computed(() => {
   if (typeof metaTitle === 'string' && metaTitle.trim()) return metaTitle
   return '未知页面'
 })
+const pendingViewStage = computed(() => {
+  const key = pendingSidebarView.value
+  const title = resolveCoreNavLabel(key, industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID, modsForUi.value) || viewTitles.value[key]
+  return title ? `正在打开「${title}」` : '正在打开页面'
+})
 
 async function navigateToView(viewKey) {
   const normalized = String(viewKey || '').trim()
-  if (!normalized) return
+  if (!normalized || pendingSidebarView.value === normalized) return
   const generation = ++routeNavGeneration
   // Optimistic: highlight immediately so cold chunk / mod-route wait does not look like a dead click.
   pendingSidebarView.value = normalized
+  failedSidebarView.value = ''
   try {
-    await navigateFromSidebarKey(router, normalized, {
+    const applied = await navigateFromSidebarKey(router, normalized, {
       modMenuItems: modMenuItems.value,
       routeNameMap,
       getModRoutes: () => modsStore.modRoutes,
     })
+    if (!applied && generation === routeNavGeneration && !routeChunkErrorPath.value) failedSidebarView.value = normalized
+  } catch (error) {
+    if (generation === routeNavGeneration && !routeChunkErrorPath.value) failedSidebarView.value = normalized
+    console.warn('[MainLayout] 页面切换失败', error)
   } finally {
     if (generation === routeNavGeneration) {
       pendingSidebarView.value = ''
@@ -312,7 +326,7 @@ async function navigateToView(viewKey) {
 
 const handleViewChange = (viewKey) => {
   // Fire-and-forget: do not serialize UI behind a prior slow navigate promise.
-  void navigateToView(viewKey).catch((error) => console.warn('[MainLayout] 页面切换失败', error))
+  void navigateToView(viewKey)
 }
 
 function openSettings() {
@@ -478,8 +492,5 @@ onBeforeUnmount(() => {
 <style scoped src="./MainLayoutActions.css"></style>
 
 <style scoped>
-.route-nav-feedback {
-  top: calc(100% + 6px);
-  z-index: 8;
-}
+.route-content { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 </style>
