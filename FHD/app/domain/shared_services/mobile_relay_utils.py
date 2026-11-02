@@ -8,9 +8,6 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from app.infrastructure.topology import FHD_API_BASE_URL
-
-
 def _utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
@@ -56,10 +53,14 @@ def _row_dict(row: Any) -> dict[str, Any]:
     return data
 
 
-def _public_base_url(raw: str) -> str:
-    value = (raw or "").strip()
+def _public_base_url(raw: str, *, default_base_url: str) -> str:
+    """Normalize an explicit URL or one supplied by the composition root.
+
+    This domain helper does not read deployment topology or environment state.
+    """
+    value = (raw or "").strip() or (default_base_url or "").strip()
     if not value:
-        value = FHD_API_BASE_URL
+        raise ValueError("relay base URL is not configured")
     if not value.startswith(("http://", "https://")):
         value = f"https://{value}"
     return value.rstrip("/") + "/"

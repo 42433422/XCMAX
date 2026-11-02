@@ -39,7 +39,9 @@ class RelayPairing:
         desktop_token = secrets.token_urlsafe(32)
         now = _utc_now()
         expires_at = _utc_after(ttl_seconds)
-        normalized_base = _public_base_url(relay_base_url)
+        normalized_base = _public_base_url(
+            relay_base_url, default_base_url=self.ports.public_base_url
+        )
         with self.ports.database() as db:
             self.ports.ensure_tables(db)
             db.execute(

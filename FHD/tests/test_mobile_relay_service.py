@@ -100,6 +100,7 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
     )
 
     expired = service.register_desktop(label="过期设备码", device_id="expired-mac", ttl_seconds=60)
+    assert expired["relay_base_url"] == relay._public_base_url("")
     with monkeypatch.context() as future:
         future.setattr(
             "app.domain.shared_services.mobile_relay_pairing._utc_now",
