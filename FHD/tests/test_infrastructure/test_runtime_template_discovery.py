@@ -3,11 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 
 from openpyxl import load_workbook
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
 from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
 
 
 def test_attendance_template_is_discovered_from_desktop_data_dir(tmp_path, monkeypatch) -> None:
+    engine = create_engine("sqlite://")
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "CREATE TABLE templates (tenant_id INTEGER, is_active INTEGER, original_file_path TEXT)"
+            )
+        )
+    monkeypatch.setattr("app.db.session.get_db", sessionmaker(bind=engine))
     runtime_root = tmp_path / "runtime"
     tenant_templates = runtime_root / "tenants" / "424" / "templates"
     tenant_templates.mkdir(parents=True)
@@ -26,11 +36,14 @@ def test_attendance_template_is_discovered_from_desktop_data_dir(tmp_path, monke
     )
     store = FileSystemTemplateStore(str(code_root))
 
-    items = store._discover_excel_templates()
-    found = next(item for item in items if item["filename"] == template.name)
-    assert found["template_type"] == "考勤记录"
-    assert found["business_scope"] == "shipmentRecords"
-    assert store.resolve_template_file(found["id"]) == str(template)
+    try:
+        items = store._discover_excel_templates()
+        found = next(item for item in items if item["filename"] == template.name)
+        assert found["template_type"] == "考勤记录"
+        assert found["business_scope"] == "shipmentRecords"
+        assert store.resolve_template_file(found["id"]) == str(template)
+    finally:
+        engine.dispose()
 
 
 def test_bundled_delivery_template_is_empty_resolvable_order_form():

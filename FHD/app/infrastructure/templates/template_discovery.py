@@ -37,18 +37,7 @@ def discovery_directories(
     """Return built-in and current-tenant directories without shared-runtime leakage."""
     runtime_root = runtime_root or get_app_data_dir()
     candidates = [base_dir, template_dir, os.path.join(base_dir, "resources", "templates")]
-    # Resolve through the module at call time.  Desktop/bootstrap tests and
-    # tenant-scoped runtimes replace this public accessor dynamically; keeping
-    # a copied function reference here would silently pin the original tenant.
-    tenant_id = tenant_scope.current_tenant_id()
-    if tenant_id is not None:
-        tenant_root = os.path.join(runtime_root, "tenants", str(tenant_id))
-        candidates.extend(
-            [
-                os.path.join(tenant_root, "templates"),
-                os.path.join(tenant_root, "document_templates"),
-            ]
-        )
+    candidates.extend(tenant_template_directories(runtime_root=runtime_root))
     deduped: list[str] = []
     seen: set[str] = set()
     for folder in candidates:
@@ -59,4 +48,33 @@ def discovery_directories(
     return deduped
 
 
-__all__ = ["business_scope", "discovery_directories", "infer_template_type_from_filename"]
+def tenant_template_directories(*, runtime_root: str | None = None) -> list[str]:
+    """Directories owned by the current tenant; installation files are shared."""
+    tenant_id = tenant_scope.current_tenant_id()
+    if tenant_id is None:
+        return []
+    tenant_root = os.path.join(
+        os.path.realpath(runtime_root or get_app_data_dir()), "tenants", str(tenant_id)
+    )
+    return [os.path.join(tenant_root, folder) for folder in ("templates", "document_templates")]
+
+
+def template_path_key(path: str, *, runtime_root: str | None = None) -> str:
+    """Normalize the configured runtime alias, preserving child asset identity across path swaps."""
+    runtime = os.path.abspath(runtime_root or get_app_data_dir())
+    absolute = os.path.abspath(path)
+    try:
+        if os.path.commonpath([absolute, runtime]) == runtime:
+            absolute = os.path.join(os.path.realpath(runtime), os.path.relpath(absolute, runtime))
+    except ValueError:  # References may use another Windows drive.
+        pass
+    return os.path.normcase(absolute)
+
+
+__all__ = [
+    "business_scope",
+    "discovery_directories",
+    "infer_template_type_from_filename",
+    "tenant_template_directories",
+    "template_path_key",
+]
