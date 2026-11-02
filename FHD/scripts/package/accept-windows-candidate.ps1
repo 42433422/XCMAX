@@ -7,6 +7,7 @@ param(
   [string]$BaselineVersion = ''
 )
 $ErrorActionPreference = 'Stop'; . (Join-Path $PSScriptRoot 'product-version.ps1'); $productVersion = Resolve-ProductVersion
+$accountMode = if ($env:XCAGI_ACCEPTANCE_ACCOUNT_MODE) { $env:XCAGI_ACCEPTANCE_ACCOUNT_MODE } else { 'shared-serial' }
 $baselines = (Get-Content (Join-Path $PSScriptRoot '../../config/download_release.json') -Raw | ConvertFrom-Json).windows_acceptance_baselines
 if (-not $BaselineVersion) { $BaselineVersion = $baselines.default }
 $baselineProperty = $baselines.PSObject.Properties[$BaselineVersion]
@@ -64,7 +65,7 @@ function Login([string]$label) {
     $r = Invoke-WebRequest "$base/api/auth/login" -Method Post -Body $body -ContentType 'application/json' -WebSession $session -TimeoutSec 30; $http = [int]$r.StatusCode
     $j = $r.Content | ConvertFrom-Json
   } catch {
-    Check $false "$label.login" "http=$([int]$_.Exception.Response.StatusCode); error=$($_.Exception.GetType().Name): $($_.Exception.Message)"
+    Check $false "$label.login" "http=$([int]$_.Exception.Response.StatusCode); error=$($_.Exception.GetType().Name)"
   }
   Check ($http -eq 200 -and $j.success -eq $true) "$label.login" "http=$http; success=$($j.success)"; $me = Invoke-RestMethod "$base/api/auth/me" -WebSession $session -TimeoutSec 15
   $identity = $me.data; $kind = [string]$identity.account_kind
@@ -72,7 +73,12 @@ function Login([string]$label) {
   $tenant = [string]$identity.tenant_id
   if (-not $tenant) { $tenant = [string]$identity.tenant.id }
   if (-not $tenant) { $tenant = [string]$identity.user.tenant_id }
-  Check ($kind -eq 'enterprise' -and $tenant) "$label.enterprise" "kind=$kind; tenant_sha256=$(Digest $tenant)"; return @{ session=$session; tenant=$tenant }
+  Check ($kind -eq 'enterprise' -and $tenant) "$label.enterprise" "kind=$kind; tenant_sha256=$(Digest $tenant)"
+  if ($accountMode -eq 'isolated-parallel') {
+    Check ($identity.market_is_enterprise -is [bool] -and $identity.market_is_enterprise -eq $true -and $identity.market_is_admin -is [bool] -and $identity.market_is_admin -eq $false -and $null -eq $identity.impersonating_market_user_id -and [string]$identity.market_user_id -ceq $env:XCAGI_TEST_MARKET_USER_ID) "$label.business_identity" 'dedicated cloud business identity matches the configured mode'
+    $script:evidence.market_user_sha256 = Digest ([string]$identity.market_user_id)
+  }
+  return @{ session=$session; tenant=$tenant }
 }
 function Backup-And-Version {
   $infoPath = Join-Path $installRoot 'resources/build-info.json'; $info = Get-Content $infoPath -Raw | ConvertFrom-Json
@@ -221,6 +227,8 @@ function Invoke-FailedRollback([string]$tenant) {
 }
 
 try {
+  Check ($accountMode -in @('shared-serial','isolated-parallel') -and ($accountMode -ne 'isolated-parallel' -or $env:XCAGI_TEST_MARKET_USER_ID -cmatch '^[1-9]\d*$')) 'account_configuration' 'explicit serial compatibility or pinned parallel identity'
+  $evidence.account_mode = $accountMode; $evidence.account_sha256 = Digest $env:XCAGI_TEST_USER
   Check (-not (Test-Path $dataRoot) -and -not (Test-Path $installRoot)) 'isolated_runner' 'fresh user data and install path'; Check (-not (Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction SilentlyContinue)) 'isolated_tasks' 'no prior daily task'
   $candidateHash = (Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash.ToLowerInvariant(); $evidence.candidate_sha256 = $candidateHash
   if ($Mode -in @('Gui','Recovery')) {

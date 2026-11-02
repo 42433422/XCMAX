@@ -798,14 +798,15 @@ describe('main — desktop CSP defense-in-depth injection', () => {
     expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'")
     expect(csp).toContain("connect-src 'self' ws: wss: http: https:")
     expect(csp?.split('; ').find(rule => rule.startsWith('frame-src '))).toBe("frame-src 'self' blob:")
+    expect(csp?.split('; ').find(rule => rule.startsWith('media-src '))).toBe("media-src 'self' data:")
     expect(csp).toContain("object-src 'none'")
     expect(csp).toContain("frame-ancestors 'self'")
   })
 
-  it('does not override an existing CSP header (avoid intersection becoming stricter)', async () => {
+  it.each(['Content-Security-Policy', 'content-security-policy'])('preserves an existing %s header', async (header) => {
     const { resolveDesktopCspInjection } = await import('./main.js')
     const csp = resolveDesktopCspInjection({
-      responseHeaders: { 'Content-Security-Policy': ["default-src 'self'"] },
+      responseHeaders: { [header]: ["default-src 'self'; media-src 'self' data:"] },
       resourceType: 'mainFrame',
       url: 'http://127.0.0.1:17500/',
     })

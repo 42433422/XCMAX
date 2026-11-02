@@ -39,9 +39,7 @@ def build_candidate_previews(
     proposal["result_previews"] = previews
 
 
-def compose_usage_restrictions(
-    summary: dict[str, Any], inherited: Iterable[str] = ()
-) -> list[str]:
+def compose_usage_restrictions(summary: dict[str, Any], inherited: Iterable[str] = ()) -> list[str]:
     """Preserve immutable lineage restrictions and first-occurrence ordering."""
     restrictions = list(summary.get("usage_restrictions", []))
     conversion = summary.get("conversion_receipt") or {}

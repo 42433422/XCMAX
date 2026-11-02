@@ -149,6 +149,7 @@ def _build_candidate_previews(body, review, proposal):
         inspect_workbook=inspect_workbook,
     )
 
+
 def _run(db, review_id, tenant, owner):
     run = (
         db.query(EltRun)
@@ -259,6 +260,7 @@ def _usage_restrictions(db, run, tenant, owner):
         classification = _classification_run(db, scope["classification_id"], tenant, owner)
         inherited = _usage_restrictions(db, classification, tenant, owner)
     return compose_usage_restrictions(summary, inherited)
+
 
 def _review_source_version(db, run, tenant, owner):
     """Fail closed when a derived document's original classification has changed."""

@@ -1,8 +1,8 @@
 import { ref, computed, watch, type Ref } from 'vue'
 import { plainTextFromChatHtml, plainTextFromChatMarkdown } from '@/utils/sanitizeHtml'
-import { speakText, stopSpeaking, cleanTextForSpeech } from '@/utils/tts'
+import { speakText, cleanTextForSpeech } from '@/utils/tts'
 import { estimateMessageHeight } from '@/utils/pretext'
-import type { ChatMessage } from './useChatMessages'
+import { clearVoiceQueue, type ChatMessage } from './useChatMessages'
 
 export interface UseChatMessageUiDeps {
   messages: Ref<ChatMessage[]>
@@ -16,6 +16,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   const expandedMessageIndexes = ref<number[]>([])
   const messageHeights = ref<Map<number, number>>(new Map())
   const playingMsgIdx = ref(-1)
+  let speechGeneration = 0
   let speakable = new WeakMap<{ content?: string }, { content: string; text: string }>()
 
   function batchCalculateHeights() {
@@ -50,32 +51,17 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   }
 
   async function toggleMessageTts(idx: number, rawContent: string | undefined | null) {
-    if (playingMsgIdx.value === idx) {
-      stopSpeaking()
-      playingMsgIdx.value = -1
-      return
-    }
-    if (playingMsgIdx.value !== -1) stopSpeaking()
+    const wasPlaying = playingMsgIdx.value === idx
+    stopMessageTts()
+    if (wasPlaying) return
     const text = cleanTextForSpeech(extractSpeakableText(rawContent))
     if (!text) return
-    const myIdx = idx
-    playingMsgIdx.value = myIdx
-    try {
-      void Promise.resolve(
-        speakText(text, {
-          onEnd: () => {
-            if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-          },
-          onError: () => {
-            if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-          },
-        }),
-      ).catch(() => {
-        if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-      })
-    } catch {
-      if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
+    const generation = speechGeneration
+    playingMsgIdx.value = idx
+    const finish = () => {
+      if (speechGeneration === generation) playingMsgIdx.value = -1
     }
+    void speakText(text, { onEnd: finish }).catch(finish)
   }
 
   const latestAiMessageIndex = computed(() => {
@@ -127,11 +113,8 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   }, { flush: 'sync' })
 
   function stopMessageTts() {
-    try {
-      stopSpeaking()
-    } catch {
-      /* ignore */
-    }
+    speechGeneration++
+    clearVoiceQueue()
     playingMsgIdx.value = -1
   }
 

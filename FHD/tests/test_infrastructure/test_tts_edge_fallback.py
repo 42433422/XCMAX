@@ -17,9 +17,10 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -240,6 +241,62 @@ class TestSynthesizeCacheHit:
 
 
 class TestSynthesizeHappyPath:
+    def test_slow_mimo_is_cancelled_before_edge_fallback(self, monkeypatch):
+        from app.domain.shared_services import mimo_tts_service as mimo
+
+        monkeypatch.setenv("XIAOMI_API_KEY", "synthetic-key")
+        monkeypatch.setattr(mimo, "is_configured", lambda: True)
+        synthesize_mimo = mimo.synthesize_mimo_bytes
+        monkeypatch.setattr(
+            mimo,
+            "synthesize_mimo_bytes",
+            lambda text, **kw: synthesize_mimo(text, timeout_s=0.01, **kw),
+        )
+        cancelled = []
+
+        async def slow_post(*args, **kwargs):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.append(True)
+
+        async def edge_stream():
+            assert cancelled == [True]
+            yield {"type": "audio", "data": b"fallback"}
+
+        client = MagicMock()
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+        client.post = AsyncMock(side_effect=slow_post)
+        edge = MagicMock()
+        edge.Communicate.return_value.stream = edge_stream
+        with (
+            patch("httpx.AsyncClient", return_value=client),
+            patch.dict("sys.modules", {"edge_tts": edge}),
+        ):
+            result = synthesize_to_data_uri(text="测试回退")
+        assert result["provider"] == "edge"
+        assert base64.b64decode(result["audioBase64"].split(",", 1)[1]) == b"fallback"
+
+    def test_edge_deadline_cancels_even_a_partially_received_stream(self, monkeypatch):
+        monkeypatch.setattr(tts, "_EDGE_TIMEOUT_S", 0.01)
+        cancelled = []
+
+        async def slow_stream():
+            try:
+                yield {"type": "audio", "data": b"partial"}
+                await asyncio.Event().wait()
+            finally:
+                cancelled.append(True)
+
+        edge = MagicMock()
+        edge.Communicate.return_value.stream = slow_stream
+        with patch.dict("sys.modules", {"edge_tts": edge}):
+            with pytest.raises(TimeoutError):
+                synthesize_to_data_uri(text="测试超时")
+        assert cancelled == [True]
+        assert not tts._TTS_CACHE
+
     def test_edge_tts_returns_bytes(self, monkeypatch) -> None:
         """When edge_tts yields one audio chunk, we get a base64 payload back."""
 
@@ -287,7 +344,8 @@ class TestSynthesizeHappyPath:
         b64 = out["audioBase64"].split(",", 1)[1]
         assert base64.b64decode(b64) == b"only-real-bytes"
 
-    def test_optional_rate_and_pitch_passed(self, monkeypatch) -> None:
+    @pytest.mark.parametrize("rate", ["+10%", "-25%"])
+    def test_optional_rate_and_pitch_passed(self, monkeypatch, rate) -> None:
         async def _stream_iter():
             yield {"type": "audio", "data": b"X"}
 
@@ -296,9 +354,9 @@ class TestSynthesizeHappyPath:
         fake_mod.Communicate.return_value.stream = _stream_iter
 
         with patch.dict("sys.modules", {"edge_tts": fake_mod}):
-            synthesize_to_data_uri(text="hi", rate="+10%", pitch="+2Hz")
+            synthesize_to_data_uri(text="hi", rate=rate, pitch="+2Hz")
         kwargs = fake_mod.Communicate.call_args.kwargs
-        assert kwargs["rate"] == "+10%"
+        assert kwargs["rate"] == rate
         assert kwargs["pitch"] == "+2Hz"
 
     def test_omits_rate_and_pitch_when_none(self, monkeypatch) -> None:

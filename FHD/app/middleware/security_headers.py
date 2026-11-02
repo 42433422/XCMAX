@@ -30,7 +30,7 @@ class SecurityHeadersMiddleware:
                     security_headers = {
                         b"x-content-type-options": b"nosniff",
                         b"referrer-policy": b"strict-origin-when-cross-origin",
-                        b"content-security-policy": b"default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss: http: https:; frame-ancestors *;",
+                        b"content-security-policy": b"default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob:; media-src 'self' data:; font-src 'self' data:; connect-src 'self' ws: wss: http: https:; frame-ancestors *;",
                     }
                 elif is_dashboard_embed:
                     security_headers = {
@@ -53,6 +53,7 @@ class SecurityHeadersMiddleware:
                             )
                             + b"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                             + b"img-src 'self' data: blob:; "
+                            + b"media-src 'self' data:; "
                             + b"font-src 'self' data: https://fonts.gstatic.com; "
                             # Authenticated label downloads become local blob PDF previews.
                             + (b"frame-src 'self' blob:; " if is_desktop_mode else b"")

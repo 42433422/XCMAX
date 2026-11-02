@@ -2719,7 +2719,7 @@ def test_local_save_failure_releases_only_own_locks_and_can_retry(
         if failure == "mkdir":
 
             def fail_mkdir(path, *args, **kwargs):
-                if "templates/reviewed_excel" in str(path):
+                if "templates/reviewed_excel" in Path(path).as_posix():
                     raise OSError("synthetic mkdir failure")
                 return real_mkdir(path, *args, **kwargs)
 
@@ -2727,7 +2727,7 @@ def test_local_save_failure_releases_only_own_locks_and_can_retry(
         elif failure == "open":
 
             def fail_open(path, *args, **kwargs):
-                if "templates/reviewed_excel" in str(path):
+                if "templates/reviewed_excel" in Path(path).as_posix():
                     raise OSError("synthetic open failure")
                 return real_open(path, *args, **kwargs)
 
