@@ -8,6 +8,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+
 def _utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 

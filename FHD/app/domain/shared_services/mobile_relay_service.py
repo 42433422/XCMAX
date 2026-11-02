@@ -14,7 +14,7 @@ from app.domain.shared_services.mobile_relay_tasks import RelayTaskQueue
 from app.domain.shared_services.mobile_relay_utils import _epoch_from_iso as _epoch_from_iso
 from app.domain.shared_services.mobile_relay_utils import _json_dumps as _json_dumps
 from app.domain.shared_services.mobile_relay_utils import _json_loads as _json_loads
-from app.domain.shared_services.mobile_relay_utils import _public_base_url as _normalize_public_base_url
+from app.domain.shared_services.mobile_relay_utils import _public_base_url as _normalize_url
 from app.domain.shared_services.mobile_relay_utils import _row_dict as _row_dict
 from app.domain.shared_services.mobile_relay_utils import _token_hash as _token_hash
 from app.domain.shared_services.mobile_relay_utils import _utc_after as _utc_after
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 def _public_base_url(raw: str) -> str:
     """Preserve the legacy helper using the deployment-configured default."""
-    return _normalize_public_base_url(raw, default_base_url=FHD_API_BASE_URL)
+    return _normalize_url(raw, default_base_url=FHD_API_BASE_URL)
 
 
 class MobileRelayService:
