@@ -1,5 +1,5 @@
 {
-  "lines": 2421033,
+  "lines": 2421122,
   "updated": "2026-11-02",
-  "note": "Sync main 0649f667 template deletion safety changes while retaining the fully reviewed personnel sorting and freshness regression. Personnel runtime and test blobs are unchanged from 5ecdc216. Required scoped implementation and interaction regressions add 734 lines over main; no unrelated deletion or gate changes."
+  "note": "PR #2925 合入最新 main：考勤人员表长按拖动导出顺序；相对 main 基线实测净增登记，不抬高安全门槛。"
 }

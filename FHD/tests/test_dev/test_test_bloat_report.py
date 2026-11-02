@@ -52,7 +52,7 @@ def test_error_contracts_and_fixture_strings_are_allowed(source_tree: Path) -> N
         "assert response.success is True\n",
         encoding="utf-8",
     )
-    assert bloat.cmd_check() == 0
+    assert bloat.cmd_check(seed=True) == 0
     history = bloat.METRICS_FILE.read_bytes()
     assert bloat.cmd_check() == 0
     assert bloat.METRICS_FILE.read_bytes() == history
