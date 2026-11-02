@@ -1,5 +1,5 @@
 {
-  "lines": 2419313,
+  "lines": 2420033,
   "updated": "2026-11-02",
-  "note": "按AGENTS显式例外：数据对接强制平台模型及独立模板胶囊、真实政策发布记录进入同源Windows安装包与双SHA核验需要实现和行为回归；同步更新原发布门禁测试，核对真实步骤、独立验收及四个产物。净增为本次授权需求所必需，未降低门禁或删除无关源码。"
+  "note": "Personnel long-press row sorting requires pointer/touch cancellation, floating preview, edge scroll and account/concurrency regressions; no unrelated code was deleted."
 }
