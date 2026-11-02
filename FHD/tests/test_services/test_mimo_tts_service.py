@@ -6,7 +6,7 @@ Covers:
 * ``synthesize_mimo_bytes``:
   - empty text raises ValueError
   - missing api key raises RuntimeError
-  - happy path with mocked httpx.Client returns (bytes, meta)
+  - happy path with mocked httpx.AsyncClient returns (bytes, meta)
   - non-audio response raises RuntimeError
   - empty decoded audio raises RuntimeError
   - format/voice/model defaults
@@ -15,8 +15,8 @@ Covers:
 
 from __future__ import annotations
 
-import base64
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -133,7 +133,35 @@ def _make_response(*, audio_b64: str | None = "QUJD", status_code: int = 200) ->
     return resp
 
 
+def _make_client(response):
+    client = MagicMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    client.post = AsyncMock(return_value=response)
+    return client
+
+
 class TestSynthesizeMimoBytes:
+    @pytest.mark.parametrize("phase", ["connect", "response"])
+    def test_total_deadline_cancels_inflight_request(self, monkeypatch, phase):
+        monkeypatch.setenv("XIAOMI_API_KEY", "synthetic-key")
+        cancelled = []
+
+        async def stall(*args, **kwargs):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.append(True)
+
+        client = _make_client(_make_response())
+        (client.__aenter__ if phase == "connect" else client.post).side_effect = stall
+        with patch("httpx.AsyncClient", return_value=client):
+            with pytest.raises(TimeoutError):
+                mimo.synthesize_mimo_bytes("测试", timeout_s=0.01)
+        assert cancelled == [True]
+        if phase == "response":
+            client.__aexit__.assert_awaited_once()
+
     def test_empty_text_raises_value_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
         with pytest.raises(ValueError, match="text is empty"):
@@ -152,12 +180,9 @@ class TestSynthesizeMimoBytes:
 
     def test_happy_path_returns_bytes_and_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64="QUJD"))
+        fake_client = _make_client(_make_response(audio_b64="QUJD"))
 
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             raw, meta = mimo.synthesize_mimo_bytes("hello")
 
         assert raw == b"ABC"  # base64.b64decode("QUJD") == b"ABC"
@@ -169,12 +194,9 @@ class TestSynthesizeMimoBytes:
 
     def test_uses_mp3_format_when_requested(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64="QUJD"))
+        fake_client = _make_client(_make_response(audio_b64="QUJD"))
 
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             _, meta = mimo.synthesize_mimo_bytes("hi", audio_format="mp3")
 
         assert meta["format"] == "mp3"
@@ -182,12 +204,9 @@ class TestSynthesizeMimoBytes:
 
     def test_wave_format_treated_as_wav_mime(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64="QUJD"))
+        fake_client = _make_client(_make_response(audio_b64="QUJD"))
 
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             _, meta = mimo.synthesize_mimo_bytes("hi", audio_format="wave")
 
         assert meta["format"] == "wave"
@@ -195,34 +214,25 @@ class TestSynthesizeMimoBytes:
 
     def test_missing_audio_data_raises_runtime_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64=None))
+        fake_client = _make_client(_make_response(audio_b64=None))
 
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             with pytest.raises(RuntimeError, match="mimo-tts response missing audio.data"):
                 mimo.synthesize_mimo_bytes("hi")
 
     def test_empty_audio_data_raises_runtime_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64=""))
+        fake_client = _make_client(_make_response(audio_b64=""))
 
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             with pytest.raises(RuntimeError, match="mimo-tts response missing audio.data"):
                 mimo.synthesize_mimo_bytes("hi")
 
     def test_voice_defaults_when_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64="QUJD"))
+        fake_client = _make_client(_make_response(audio_b64="QUJD"))
 
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             _, meta = mimo.synthesize_mimo_bytes("hi", voice="")
 
         assert meta["voice"] == mimo.DEFAULT_VOICE
@@ -231,25 +241,19 @@ class TestSynthesizeMimoBytes:
 
     def test_raise_for_status_propagates_http_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
         resp = _make_response(audio_b64="QUJD")
         resp.raise_for_status.side_effect = RuntimeError("HTTP 500")
-        fake_client.post = MagicMock(return_value=resp)
+        fake_client = _make_client(resp)
 
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             with pytest.raises(RuntimeError, match="HTTP 500"):
                 mimo.synthesize_mimo_bytes("hi")
 
     def test_custom_model_passed_through(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64="QUJD"))
+        fake_client = _make_client(_make_response(audio_b64="QUJD"))
 
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             _, meta = mimo.synthesize_mimo_bytes("hi", model="custom-mimo-model")
 
         assert meta["model"] == "custom-mimo-model"
@@ -258,12 +262,9 @@ class TestSynthesizeMimoBytes:
 
     def test_headers_include_both_api_key_and_bearer(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "secret-key")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64="QUJD"))
+        fake_client = _make_client(_make_response(audio_b64="QUJD"))
 
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             mimo.synthesize_mimo_bytes("hi")
 
         _args, kwargs = fake_client.post.call_args
@@ -273,13 +274,10 @@ class TestSynthesizeMimoBytes:
 
     def test_text_truncated_to_4000_chars(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64="QUJD"))
+        fake_client = _make_client(_make_response(audio_b64="QUJD"))
 
         long_text = "x" * 5000
-        with patch("httpx.Client", return_value=fake_client):
+        with patch("httpx.AsyncClient", return_value=fake_client):
             mimo.synthesize_mimo_bytes(long_text)
 
         _args, kwargs = fake_client.post.call_args

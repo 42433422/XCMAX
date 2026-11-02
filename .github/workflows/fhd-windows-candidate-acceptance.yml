@@ -27,6 +27,19 @@ on:
         required: false
         default: ""
         type: string
+      account_mode:
+        description: "Shared credentials run serially; parallel requires five dedicated business identities"
+        required: true
+        default: shared-serial
+        type: choice
+        options:
+          - shared-serial
+          - isolated-parallel
+
+# Both modes reuse persistent business identities; never overlap acceptance runs.
+concurrency:
+  group: windows-candidate-acceptance-accounts
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -42,13 +55,35 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
+      parallel: ${{ steps.set.outputs.parallel }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - id: set
         working-directory: ${{ github.workspace }}
         env:
           ONLY: ${{ github.event.inputs.only }}
+          ACCOUNT_MODE: ${{ inputs.account_mode }}
+          XCAGI_TEST_USER: ${{ secrets.XCAGI_TEST_USER }}
+          XCAGI_TEST_PASS: ${{ secrets.XCAGI_TEST_PASS }}
+          XCAGI_TEST_CLEAN_USER: ${{ secrets.XCAGI_TEST_CLEAN_USER }}
+          XCAGI_TEST_CLEAN_PASS: ${{ secrets.XCAGI_TEST_CLEAN_PASS }}
+          XCAGI_TEST_CLEAN_MARKET_USER_ID: ${{ vars.XCAGI_TEST_CLEAN_MARKET_USER_ID }}
+          XCAGI_TEST_UPGRADE_USER: ${{ secrets.XCAGI_TEST_UPGRADE_USER }}
+          XCAGI_TEST_UPGRADE_PASS: ${{ secrets.XCAGI_TEST_UPGRADE_PASS }}
+          XCAGI_TEST_UPGRADE_MARKET_USER_ID: ${{ vars.XCAGI_TEST_UPGRADE_MARKET_USER_ID }}
+          XCAGI_TEST_GUI_USER: ${{ secrets.XCAGI_TEST_GUI_USER }}
+          XCAGI_TEST_GUI_PASS: ${{ secrets.XCAGI_TEST_GUI_PASS }}
+          XCAGI_TEST_GUI_MARKET_USER_ID: ${{ vars.XCAGI_TEST_GUI_MARKET_USER_ID }}
+          XCAGI_TEST_RECOVERY_USER: ${{ secrets.XCAGI_TEST_RECOVERY_USER }}
+          XCAGI_TEST_RECOVERY_PASS: ${{ secrets.XCAGI_TEST_RECOVERY_PASS }}
+          XCAGI_TEST_RECOVERY_MARKET_USER_ID: ${{ vars.XCAGI_TEST_RECOVERY_MARKET_USER_ID }}
+          XCAGI_TEST_ROLLBACK_USER: ${{ secrets.XCAGI_TEST_ROLLBACK_USER }}
+          XCAGI_TEST_ROLLBACK_PASS: ${{ secrets.XCAGI_TEST_ROLLBACK_PASS }}
+          XCAGI_TEST_ROLLBACK_MARKET_USER_ID: ${{ vars.XCAGI_TEST_ROLLBACK_MARKET_USER_ID }}
         run: |
-          if [ "$ONLY" = "Rollback" ]; then echo 'matrix=["Rollback"]' >> "$GITHUB_OUTPUT"; elif [ "$ONLY" = "Lifecycle" ]; then echo 'matrix=["Clean","Upgrade","Rollback"]' >> "$GITHUB_OUTPUT"; else echo 'matrix=["Clean","Upgrade","Gui","Recovery","Rollback"]' >> "$GITHUB_OUTPUT"; fi
+          node FHD/scripts/package/windows-acceptance-accounts.mjs
   isolated-install:
     needs: select-modes
     name: "${{ matrix.mode }} install on isolated Windows runner"
@@ -56,9 +91,9 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 1 # Same CI account: avoid cross-mode session interference.
+      max-parallel: ${{ fromJson(needs.select-modes.outputs.parallel) }}
       matrix:
-        mode: ${{ fromJson(needs.select-modes.outputs.matrix) }}
+        include: ${{ fromJson(needs.select-modes.outputs.matrix) }}
     defaults:
       run:
         working-directory: FHD
@@ -149,8 +184,10 @@ jobs:
       - name: Verify candidate and run customer installation path
         shell: pwsh
         env:
-          XCAGI_TEST_USER: ${{ secrets.XCAGI_TEST_USER }}
-          XCAGI_TEST_PASS: ${{ secrets.XCAGI_TEST_PASS }}
+          XCAGI_TEST_USER: ${{ secrets[matrix.user_secret] }}
+          XCAGI_TEST_PASS: ${{ secrets[matrix.pass_secret] }}
+          XCAGI_TEST_MARKET_USER_ID: ${{ matrix.market_user_id }}
+          XCAGI_ACCEPTANCE_ACCOUNT_MODE: ${{ inputs.account_mode }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           MODE: ${{ matrix.mode }}
           BASELINE_VERSION: ${{ inputs.baseline_version }}
