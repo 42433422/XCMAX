@@ -42,7 +42,7 @@ def render(pointer: dict, version: str, sha: str) -> str:
     return (
         f"# XCAGI {version} — {title.strip()}\n\n"
         f"{bullets}\n\n"
-        f"Source SHA: \`{sha}\`\n\n"
+        f"Source SHA: `{sha}`\n\n"
         f"Published artifact manifest: {manifest_url}\n"
     )
 
