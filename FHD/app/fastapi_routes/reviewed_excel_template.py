@@ -51,6 +51,7 @@ from app.application.reviewed_excel_evidence import (
     bounded_range,
     unresolved_fragments,
 )
+from app.application.reviewed_excel_review_projection import build_candidate_previews
 from app.application.reviewed_excel_review_store import _CLASS_SAVING as _CLASS_SAVING
 from app.application.reviewed_excel_review_store import (
     _MODEL_PENDING,
@@ -148,20 +149,14 @@ def _recheck(request, expected):
 
 
 def _build_candidate_previews(body, review, proposal):
-    """Render from real cleaned workbook bytes, not by hiding original cells."""
-    previews = []
-    for candidate in proposal["candidates"]:
-        cleaned = clean_workbook(body, review["sha256"], candidate["clear"])
-        result = inspect_workbook(cleaned)
-        previews.append(
-            {
-                "candidate_id": candidate["id"],
-                "sha256": result["sha256"],
-                "layout": result["layout"],
-                "layout_truncated": result["layout_truncated"],
-            }
-        )
-    proposal["result_previews"] = previews
+    """Keep established route patch points while delegating the pure projection."""
+    build_candidate_previews(
+        body,
+        review,
+        proposal,
+        clean_workbook=clean_workbook,
+        inspect_workbook=inspect_workbook,
+    )
 
 
 async def _body(file, *, allow_legacy=False):
