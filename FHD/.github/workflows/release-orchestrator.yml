@@ -311,3 +311,42 @@ jobs:
           "Release convergence ${{ inputs.release_sha }}"
           -f "release_sha=${{ inputs.release_sha }}"
           -f "product_version=${{ inputs.product_version }}"
+
+  publish-converged-github-release:
+    name: Publish exact-SHA draft only after device convergence
+    needs: [verify-full-convergence]
+    if: ${{ needs.verify-full-convergence.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote and read back the already-verified GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.product_version }}
+        run: |
+          set -euo pipefail
+          tag="FHD/v${PRODUCT_VERSION}"
+          printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          release="$(gh api "repos/${GH_REPO}/releases/tags/${tag}")"
+          jq -e --arg sha "$RELEASE_SHA" --arg tag "$tag" '
+            .draft == true and .target_commitish == $sha and .tag_name == $tag and
+            ([.assets[].name | select(endswith(".exe"))] | length > 0) and
+            ([.assets[].name | select(endswith(".dmg"))] | length > 0)
+          ' <<<"$release" >/dev/null
+          ref_sha="$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -n "$ref_sha" ]; then
+            test "$ref_sha" = "$RELEASE_SHA" || {
+              echo "::error::tag already identifies another source commit"
+              exit 1
+            }
+          else
+            gh api --method POST "repos/${GH_REPO}/git/refs" \
+              -f "ref=refs/tags/${tag}" -f "sha=${RELEASE_SHA}" >/dev/null
+          fi
+          gh release edit "$tag" --repo "$GH_REPO" --draft=false
+          published="$(gh api "repos/${GH_REPO}/releases/tags/${tag}")"
+          jq -e --arg sha "$RELEASE_SHA" --arg tag "$tag" '
+            .draft == false and .target_commitish == $sha and .tag_name == $tag and
+            (.published_at | type == "string" and length > 0)
+          ' <<<"$published" >/dev/null
