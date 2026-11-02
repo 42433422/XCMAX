@@ -1,5 +1,5 @@
 {
-  "lines": 2420878,
+  "lines": 2420948,
   "updated": "2026-11-02",
-  "note": "PR #2911 合入含 #2915 的最新 main：发布闭环整合；相对 main 基线实测净增登记。"
+  "note": "merge main into #2911"
 }

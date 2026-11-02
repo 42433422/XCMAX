@@ -34,6 +34,7 @@ class PairingPorts:
     fresh_pairing_code: Callable[[Session], str]
     desktop_for_token: DesktopAuthentication
     public_desktop: Projection
+    public_base_url: str = ""
 
 
 @dataclass(frozen=True)

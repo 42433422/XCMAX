@@ -100,6 +100,7 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
     )
 
     expired = service.register_desktop(label="过期设备码", device_id="expired-mac", ttl_seconds=60)
+    assert expired["relay_base_url"] == relay._public_base_url("")
     with monkeypatch.context() as future:
         future.setattr(
             "app.domain.shared_services.mobile_relay_pairing._utc_now",
@@ -124,6 +125,11 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
     )
     recycled = service.register_desktop(label="回收设备码", device_id="new-mac")
     assert recycled["pairing_code"] == expired["pairing_code"]
+
+
+def test_relay_service_can_accept_a_composition_root_url():
+    service = relay.MobileRelayService(default_public_base_url="https://relay-config.test/api")
+    assert service._pairing.ports.public_base_url == "https://relay-config.test/api"
 
 
 def test_completion_push_static_helper_covers_statuses_and_body_sources(monkeypatch):
