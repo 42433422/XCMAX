@@ -33,7 +33,7 @@ const reviewed = () => ({
   layout: syntheticLayout,
   proposal: { version: 'v1', parent_version: null, candidates: [0, 1, 2].map(i => ({
     id: `candidate-${i}`, label: `候选${i + 1}`, explanation: '合成测试', clear: [],
-  })), result_previews: [0, 1, 2].map(i => ({ candidate_id: `candidate-${i}`, sha256: `synthetic-${i}`, layout: syntheticLayout, layout_truncated: false })), evidence: [], model: { status: 'returned', login_authorization: { status: 'authorized' } } },
+  })), result_previews: [0, 1, 2].map(i => ({ candidate_id: `candidate-${i}`, sha256: `synthetic-${i}`, layout: syntheticLayout, layout_truncated: false })), evidence: [], model: { status: 'returned' } },
 })
 let wrapper: VueWrapper
 let sheets: SyntheticSheet[]
@@ -49,9 +49,7 @@ async function start() {
 }
 beforeEach(() => {
   vi.resetAllMocks()
-  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: { operations: {
-    classification: 'authorized', template_candidates: 'authorized',
-  } } })
+  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   api.archiveClassifyExcel.mockImplementation(async () => classified(sheets))
   api.confirmClassification.mockImplementation(async () => classified(sheets, true))
   api.analyzeClassification.mockImplementation(async () => ({ version: 'model-v2', model_status: 'returned', sheets }))
@@ -73,7 +71,7 @@ describe('hidden-sheet intake selection', () => {
     expect(form.get('classification_id')).toBe('synthetic-hidden')
     expect(form.get('classification_version')).toBe('model-v2')
     expect(form.get('auto_slice_index')).toBe('0')
-    expect(form.get('use_login_notice')).toBe('true')
+    expect(form.has('use_login_notice')).toBe(false)
     expect(api.autoSlices).toHaveBeenCalledTimes(1)
     expect(wrapper.findAll('button').filter(item => item.text() === 'Hidden / A1:B2')).toHaveLength(0)
     expect(documents()).toHaveLength(1)

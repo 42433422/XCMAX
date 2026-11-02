@@ -33,7 +33,6 @@ def merged_source(count=4):
 def classify_part(monkeypatch, review, cells):
     from app.application import reviewed_excel_template as template
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     rows = [int(cell["cell"][1:]) for cell in cells]
     raw = {
         "documents": [
@@ -53,8 +52,8 @@ def classify_part(monkeypatch, review, cells):
     }
     monkeypatch.setattr(
         template,
-        "_template_mimo_complete",
-        lambda *args: SimpleNamespace(data=deepcopy(raw), model="synthetic"),
+        "_template_platform_complete",
+        lambda *args, **kwargs: SimpleNamespace(data=deepcopy(raw), model="synthetic"),
     )
     return _classify_semantic_batch(
         {**review, "cells": cells, "full_cells": review["cells"]}, reference_ids=True
@@ -137,14 +136,13 @@ def test_complete_merge_metadata_over_request_budget_is_rejected_before_provider
         f"A{row}:B{row}" for row in range(1, merge_count + 1)
     ]
     assert len(review["cells"]) == 1
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     calls = []
 
     def forbidden_provider(*args, **kwargs):
         calls.append(args)
         pytest.fail("oversized metadata must never reach the provider")
 
-    monkeypatch.setattr(template, "_template_mimo_complete", forbidden_provider)
+    monkeypatch.setattr(template, "_template_platform_complete", forbidden_provider)
     monkeypatch.setattr(template, "_template_llm_complete", forbidden_provider)
     for prepare_only in (True, False):
         with pytest.raises(RequestBudgetExceeded, match="完整模型请求超过安全预算"):

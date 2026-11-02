@@ -79,7 +79,6 @@ const {
   selectEnterpriseLogin,
   selectAdminLogin,
   submitLogin,
-  submitBasicLogin,
   startOidcLogin,
 } = actions
 const { completeLoginSuccess } = session
@@ -288,7 +287,6 @@ onUnmounted(() => {
               />
             </svg>
           </button>
-          <button class="login-sso login-basic" type="button" :disabled="!canSubmit || loading" @click="submitBasicLogin">{{ $t('login.basicSubmit') }}</button>
         </form>
 
         <div v-else class="login-qr-panel">

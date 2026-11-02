@@ -6,7 +6,7 @@ import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 export type DocumentCell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 export type DocumentLayout = { sheet: string; widths: number[]; rows: { height: number; cells: DocumentCell[] }[]; truncated: boolean }
 export type DocumentCandidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
-export type DocumentProposal = { version: string; parent_version: string | null; candidates: DocumentCandidate[]; result_previews?: { candidate_id: string; sha256: string; layout: DocumentLayout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; login_authorization?: { status: string }; [key: string]: unknown } }
+export type DocumentProposal = { version: string; parent_version: string | null; candidates: DocumentCandidate[]; result_previews?: { candidate_id: string; sha256: string; layout: DocumentLayout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; [key: string]: unknown } }
 export type DocumentReview = { review_id: string; sha256: string; proposal: DocumentProposal; versions?: DocumentProposal[]; layout?: DocumentLayout[]; usage_restrictions?: string[]; [key: string]: unknown }
 export type DocumentSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; display_name?: string; fragments: { sheet: string; range: string }[] }
 type Intake = { run_id: string; mod_id: string; candidate_sha256: string; knowledge: { action: string; documents: number }; business: EltRun }
@@ -73,8 +73,7 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
         source = new File([blob], source.name.replace(/\.xls$/i, '.xlsx'), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       }
       form.append('file', source); form.append('classification_id', doc.classificationId); form.append('classification_version', doc.classificationVersion)
-      form.append('auto_slice_index', String(doc.slice.index)); form.append('use_login_notice', 'true')
-      form.append('model_opt_in', 'false'); form.append('sample_authorized', 'false'); form.append('own_file_authorized', 'false')
+      form.append('auto_slice_index', String(doc.slice.index))
       const result = await templatePreviewApi.reviewExcel(form) as DocumentReview
       if (!current(doc, session, generation)) return
       validate(result); doc.review = result; doc.proposals = result.versions?.length ? result.versions : [result.proposal]
@@ -162,8 +161,7 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
     doc.phase = 'refining'; doc.error = ''; doc.dirty = true; clearIntake(doc)
     try {
       const form = new FormData(); form.append('review_id', oldReviewId); form.append('parent_version', p.version); form.append('feedback', feedback.trim())
-      form.append('current', JSON.stringify(p.candidates[doc.candidateIndex]?.clear || [])); form.append('use_login_notice', 'true')
-      form.append('consent', 'false'); form.append('sample_authorized', 'false'); form.append('own_file_authorized', 'false')
+      form.append('current', JSON.stringify(p.candidates[doc.candidateIndex]?.clear || []))
       const result = await templatePreviewApi.refineReviewedExcel(form) as { review_id?: string; proposal: DocumentProposal }
       if (!current(doc, session, generation) || doc.review?.review_id !== oldReviewId || proposal(doc)?.version !== p.version) return false
       if (!result.review_id?.trim()) throw new Error('整理回执待核对，勿重复发送。')

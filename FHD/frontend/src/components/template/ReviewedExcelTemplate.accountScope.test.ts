@@ -68,7 +68,7 @@ function reviewPayload(id: string) {
       parent_version: null,
       candidates,
       evidence: [],
-      model: { status: 'returned', login_authorization: { status: 'authorized' } },
+      model: { status: 'returned' },
       result_previews: candidates.map(candidate => ({
         candidate_id: candidate.id,
         sha256: 'sha',
@@ -102,7 +102,7 @@ async function choose(names: string[]) {
 }
 beforeEach(() => {
   vi.clearAllMocks(); invalidateEnterpriseSessionCache(); account('A')
-  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: { status: 'authorized', operations: { classification: 'authorized', template_candidates: 'authorized' } } })
+  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   api.analyzeClassification.mockReset().mockImplementation(async (id: string) => ({ ...classified(id), version: 'model-v2', model_status: 'returned' }))
   api.autoSlices.mockReset().mockResolvedValue({ slices: [{ index: 0, basis: 'model_group', confirmed: false, sha256: 'synthetic-slice', filename: 'synthetic-slice.xlsx', fragments: [{ sheet: 'Sheet1', range: 'A1:D4' }] }] })
   api.recentClassifications.mockResolvedValue({ files: [] })

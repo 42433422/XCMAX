@@ -98,11 +98,11 @@ class ReviewedExcelRoute(APIRoute):
 
 
 _ELT_MODEL_MESSAGES = {
-    "model_required": "数据对接须先完成当前已授权平台模型处理，未写入任何数据；请重新开始处理。",
+    "model_required": "数据对接须先完成模型处理，未写入任何数据；请重新开始处理。",
     "notice_not_published": "登录数据处理条款尚未正式发布，未调用模型；请联系管理员发布后重新登录。",
     "login_notice_required": "当前登录会话缺少有效的模型处理授权，请阅读登录说明后重新登录。",
-    "model_configuration_error": "模型连接异常：平台模型配置或登录连接未就绪，或接收方不在已披露范围；未调用模型，请联系管理员。",
-    "model_connection_error": "模型连接异常，未能建立模型处理授权；请检查平台模型连接后重新登录。",
+    "model_configuration_error": "当前账户的模型连接或配置不可用，未调用模型；请检查智能对话的模型设置。",
+    "model_connection_error": "当前账户的模型连接不可用，未调用模型；请检查智能对话的模型连接。",
     "model_processing_failed": "模型处理未完成，结果可能已产生费用；请先核对处理状态，勿重复提交。",
 }
 
