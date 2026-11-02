@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { materializeMediaAssets, verifyMediaAssets } from './materialize_media_assets.mjs'
 
 function fixture(t) {
@@ -24,6 +26,31 @@ function fixture(t) {
 
 test('the real product registry pins every canonical asset', () => {
   assert.equal(verifyMediaAssets().length, 19)
+})
+
+test('a clean release restores every public marketing URL from canonical media', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'marketing-release-test-'))
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+  const registry = JSON.parse(fs.readFileSync(path.join(repo, 'config/media-aliases.json'), 'utf8'))
+  const aliases = Object.entries(registry.aliases).filter(([, entry]) => entry.scope === 'marketing')
+  const tool = 'scripts/dev/materialize_media_assets.mjs'
+  for (const file of ['config/media-aliases.json', tool, ...new Set(aliases.map(([, entry]) => entry.source))]) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true })
+    fs.copyFileSync(path.join(repo, file), path.join(root, file))
+  }
+  assert(aliases.some(([target]) => target.endsWith('/corp-butler/ai-butler-female-avatar-v1.png')))
+  for (const [target] of aliases) assert.equal(fs.existsSync(path.join(root, target)), false)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = spawnSync(process.execPath, [path.join(root, tool), 'marketing'], { encoding: 'utf8' })
+    assert.equal(result.status, 0, result.stderr)
+    for (const [target, entry] of aliases) {
+      const bytes = fs.readFileSync(path.join(root, target))
+      assert.equal(bytes.length, entry.size)
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.sha256)
+      assert.equal(fs.lstatSync(path.join(root, target)).isSymbolicLink(), false)
+    }
+  }
 })
 
 test('a clean checkout restores exact legacy URLs as normal files and is idempotent', (t) => {

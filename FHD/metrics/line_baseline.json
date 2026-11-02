@@ -1,5 +1,5 @@
 {
-  "lines": 2420202,
+  "lines": 2420244,
   "updated": "2026-11-02",
-  "note": "PR #2913 合入含 #2915 的最新 main：relay pairing port；相对 main 基线实测净增登记。"
+  "note": "post-merge #2928"
 }
