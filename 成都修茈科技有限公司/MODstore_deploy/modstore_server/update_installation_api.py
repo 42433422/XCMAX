@@ -145,7 +145,11 @@ def get_release_acceptance(
             UpdateInstallationReceipt.target_build_sha == build_sha.strip().lower()
         )
     rows = query.order_by(UpdateInstallationReceipt.reported_at.desc()).limit(2000).all()
-    return judge_release_acceptance(rows, version=version.strip())
+    verdict = judge_release_acceptance(rows, version=version.strip())
+    # The judge accepts version-only receipts; bind the API response to the
+    # exact build used in the database filter before the closeout may act.
+    verdict["build_sha"] = build_sha.strip().lower()
+    return verdict
 
 
 @router.get("/receipts")
