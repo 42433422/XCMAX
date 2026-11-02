@@ -1,5 +1,5 @@
 {
-  "lines": 2420368,
+  "lines": 2421033,
   "updated": "2026-11-02",
-  "note": "Sync main 80151de6 and retain required personnel sorting plus freshness regression; personnel runtime and test blobs remain identical to fully verified c6a5f972. No unrelated deletion or gate changes."
+  "note": "Sync main 0649f667 template deletion safety changes while retaining the fully reviewed personnel sorting and freshness regression. Personnel runtime and test blobs are unchanged from 5ecdc216. Required scoped implementation and interaction regressions add 734 lines over main; no unrelated deletion or gate changes."
 }
