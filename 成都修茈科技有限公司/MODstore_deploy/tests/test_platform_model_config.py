@@ -2,70 +2,38 @@
 
 from __future__ import annotations
 
-import gzip
 import json
 import os
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
 from cryptography.fernet import Fernet
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from pydantic import SecretStr
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from modstore_server import llm_key_resolver as keys
 from modstore_server import platform_model_config as config
 from modstore_server import platform_model_config_api as api
 from modstore_server.api.deps import get_current_user
 from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
+from tests.platform_model_support import (
+    BASE,
+    KEY,
+    NEXT_KEY,
+)
+from tests.platform_model_support import database as database
+from tests.platform_model_support import isolated as isolated
+from tests.platform_model_support import (
+    payload,
+    save,
+)
+from tests.platform_model_support import upstream as upstream
 
-KEY = "opaque-platform-test-key-alpha"
-NEXT_KEY = "opaque-platform-test-key-beta"
-BASE = "https://gateway.example.com/compatible/v1"
 PATH = "/api/llm/admin/platform-model-config"
-
-
-@pytest.fixture(autouse=True)
-def isolated(tmp_path, monkeypatch):
-    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path))
-    monkeypatch.delenv("MODSTORE_DATA_DIR", raising=False)
-    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode())
-    monkeypatch.setenv("MODSTORE_LLM_RUNTIME_ROUTE_PATH", str(tmp_path / "runtime-route.json"))
-    monkeypatch.setenv("MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_ENABLED", "0")
-    monkeypatch.delenv("MODSTORE_EMPLOYEE_BENCH_PROVIDER", raising=False)
-    monkeypatch.delenv("MODSTORE_EMPLOYEE_BENCH_MODEL", raising=False)
-    for name in list(os.environ):
-        if name.endswith(("_API_KEY", "_BASE_URL")) or name in {
-            "XIAOMI_MIMO_API_KEY",
-            "MINIMAX_CODING_PLAN_API_KEY",
-        }:
-            monkeypatch.delenv(name, raising=False)
-
-
-def payload(**changes):
-    return {
-        "base_url": BASE,
-        "model": "custom-model",
-        "display_name": "平台对话模型",
-        "api_key": KEY,
-        "expected_revision": None,
-        **changes,
-    }
-
-
-def save(provider="openai", **changes):
-    body = payload(**changes)
-    if body.get("api_key") is not None:
-        body["api_key"] = SecretStr(body["api_key"])
-    return config.save_config(provider, body, actor="admin:7")
 
 
 @pytest.fixture
@@ -275,26 +243,6 @@ def test_concurrent_edits_allow_only_one_revision_and_failed_write_preserves_fil
     assert not list(config.config_path().parent.glob("*.tmp"))
 
 
-@pytest.fixture
-def database(tmp_path, monkeypatch):
-    from modstore_server import models
-
-    engine = create_engine(
-        f"sqlite:///{tmp_path / 'users.db'}", connect_args={"check_same_thread": False}
-    )
-    models.User.__table__.create(engine)
-    models.UserLlmCredential.__table__.create(engine)
-    factory = sessionmaker(bind=engine)
-    monkeypatch.setattr(models, "get_session_factory", lambda: factory)
-    with factory() as db:
-        db.add_all(
-            [models.User(id=i, username=f"user-{i}", password_hash="test-only") for i in (1, 2)]
-        )
-        db.commit()
-        yield db
-    engine.dispose()
-
-
 def test_byok_ownership_and_endpoint_never_mix(database):
     from modstore_server.models import UserLlmCredential
 
@@ -320,161 +268,6 @@ def test_byok_ownership_and_endpoint_never_mix(database):
     byok.base_url_encrypted = encrypt_secret("https://untrusted.example.com/v1")
     database.commit()
     assert keys.resolve_credentials(database, 1, "openai") == (None, None, "user_override")
-
-
-@pytest.fixture
-def chat_client(database):
-    from modstore_server import llm_api
-
-    app = FastAPI()
-    app.include_router(llm_api.router)
-    app.dependency_overrides[llm_api.get_db] = lambda: database
-    app.dependency_overrides[llm_api._get_current_user] = lambda: SimpleNamespace(id=1)
-    with TestClient(app) as client:
-        yield client
-
-
-@pytest.mark.parametrize("mode", ["explicit", "byok"])
-def test_platform_only_http_route_dispatches_bound_platform_key_without_changing_account(
-    database, chat_client, upstream, monkeypatch, mode
-):
-    from modstore_server import llm_billed_chat, llm_billed_once
-    from modstore_server.llm_billing_values import WalletHold
-    from modstore_server.models import User, UserLlmCredential
-
-    base = "https://token-plan-cn.xiaomimimo.com/v1"
-    save("xiaomi", base_url=base, model="mimo-v2.6-flash")
-    user = database.get(User, 1)
-    user.default_llm_json = json.dumps(
-        {"mode": mode, "provider": "xiaomi", "model": "mimo-v2.6-pro"}
-    )
-    credential = UserLlmCredential(
-        user_id=1,
-        provider="xiaomi",
-        api_key_encrypted=encrypt_secret("synthetic-personal-key"),
-        base_url_encrypted=encrypt_secret("https://personal.example.invalid/v1"),
-    )
-    database.add(credential)
-    database.commit()
-    before = (
-        user.default_llm_json,
-        credential.api_key_encrypted,
-        credential.base_url_encrypted,
-    )
-    personal = chat_client.get("/api/llm/resolve-chat-default").json()
-    assert personal["key_source"] == "user_override" and personal["model"] == "mimo-v2.6-pro"
-    monkeypatch.setattr(keys, "resolve_credentials", Mock(side_effect=AssertionError("BYOK read")))
-    response = chat_client.get("/api/llm/resolve-chat-default", params={"platform_only": "true"})
-    assert response.status_code == 200
-    assert response.headers["cache-control"] == "no-store"
-    route = response.json()
-    assert route["key_source"] == "platform" and route["model"] == "mimo-v2.6-flash"
-    assert route["recipient"]["id"] == "xiaomi-mimo-cn"
-    assert route["route_token"] and route["config_revision"]
-    save(
-        "xiaomi",
-        base_url=BASE,
-        model="mimo-v2.6-pro",
-        api_key=NEXT_KEY,
-        expected_revision=route["config_revision"],
-    )
-    wallet = SimpleNamespace(
-        preauthorize=AsyncMock(return_value=WalletHold("synthetic-hold", Decimal(".01"), True)),
-        settle=AsyncMock(),
-        release=AsyncMock(),
-    )
-    monkeypatch.setattr(llm_billed_once, "JavaWalletClient", lambda **kwargs: wallet)
-    monkeypatch.setattr(llm_billed_once, "enforce_risk_limits", Mock())
-    monkeypatch.setattr(llm_billed_once, "estimate_preauthorization", lambda *args: Decimal(".01"))
-    monkeypatch.setattr(llm_billed_once, "calculate_charge", lambda *args: Decimal(".01"))
-    monkeypatch.setattr(
-        llm_billed_once,
-        "usage_from_response",
-        lambda *args: SimpleNamespace(total_tokens=2),
-    )
-    monkeypatch.setattr(llm_billed_once, "save_success_log", lambda *args, **kwargs: 11)
-    for module in (llm_billed_chat, llm_billed_once):
-        monkeypatch.setattr(
-            module,
-            "resolve_chat_route_snapshot",
-            Mock(side_effect=AssertionError("route re-read")),
-        )
-    result = chat_client.post(
-        "/api/llm/chat",
-        json={**route, "messages": [{"role": "user", "content": "synthetic"}]},
-    )
-    assert result.status_code == 200
-    receipt = result.json()
-    assert receipt["key_source"] == "platform" and receipt["billed"] is True
-    assert receipt["config_revision"] == route["config_revision"]
-    wallet.preauthorize.assert_awaited_once()
-    wallet.settle.assert_awaited_once()
-    assert len(upstream["requests"]) == 1
-    request = upstream["requests"][0]
-    assert request.headers["api-key"] == KEY
-    assert request.headers["host"] == "token-plan-cn.xiaomimimo.com"
-    assert json.loads(request.content)["model"] == route["model"]
-    assert KEY not in response.text + result.text
-    database.refresh(user)
-    database.refresh(credential)
-    assert (
-        user.default_llm_json,
-        credential.api_key_encrypted,
-        credential.base_url_encrypted,
-    ) == before
-
-
-@pytest.mark.parametrize(
-    "selection",
-    [
-        {"provider": "xiaomi"},
-        {"model": "mimo-v2.6-flash"},
-        {"provider": "xiaomi", "model": "mimo-v2.6-flash"},
-    ],
-)
-def test_platform_only_rejects_explicit_selection(chat_client, selection):
-    response = chat_client.get(
-        "/api/llm/resolve-chat-default", params={"platform_only": "true", **selection}
-    )
-    assert response.status_code == 400
-    assert response.json()["detail"]["code"] == "PLATFORM_ROUTE_CONFLICT"
-
-
-def test_chat_default_openapi_exposes_optional_platform_only(chat_client):
-    operation = chat_client.app.openapi()["paths"]["/api/llm/resolve-chat-default"]["get"]
-    query = {p["name"]: p for p in operation["parameters"] if p["in"] == "query"}
-    assert set(query) == {"provider", "model", "platform_only"}
-    assert query["platform_only"]["required"] is False
-    assert query["platform_only"]["schema"] == {
-        "type": "boolean",
-        "default": False,
-        "title": "Platform Only",
-    }
-
-
-@pytest.mark.asyncio
-async def test_platform_only_without_platform_never_falls_back_to_owned_key(database):
-    from modstore_server import llm_api
-    from modstore_server.models import User, UserLlmCredential
-
-    user = database.get(User, 1)
-    before = json.dumps({"mode": "byok", "provider": "xiaomi", "model": "mimo-v2.6-flash"})
-    user.default_llm_json = before
-    database.add(
-        UserLlmCredential(
-            user_id=1,
-            provider="xiaomi",
-            api_key_encrypted=encrypt_secret("synthetic-personal-key"),
-        )
-    )
-    database.commit()
-    assert (await llm_api.resolve_default_llm_route(database, 1))["key_source"] == "user_override"
-    with pytest.raises(HTTPException) as error:
-        await llm_api.resolve_default_llm_route(database, 1, platform_only=True)
-    assert error.value.status_code == 400
-    assert error.value.detail["code"] == "NO_PLATFORM_CHAT_MODEL"
-    database.refresh(user)
-    assert user.default_llm_json == before
 
 
 @pytest.mark.asyncio
@@ -771,74 +564,6 @@ def test_revision_guard_without_master_key_rejects_rotation(database, monkeypatc
     with pytest.raises(HTTPException) as error:
         _requested_chat_snapshot(database, SimpleNamespace(id=1), body)
     assert error.value.detail["code"] == "CHAT_ROUTE_CHANGED"
-
-
-@pytest.fixture
-def upstream(monkeypatch):
-    from modstore_server import openapi_connector_runtime as outbound
-    from modstore_server import platform_model_transport as transport
-
-    real_client = httpx.AsyncClient
-    observed = {
-        "requests": [],
-        "pinned": [],
-        "options": [],
-        "status": 200,
-        "stream": False,
-        "gzip": False,
-    }
-
-    def pin(url):
-        observed["pinned"].append(url)
-        parsed = httpx.URL(url)
-        return outbound.PinnedOutboundTarget(
-            str(parsed.copy_with(host="93.184.216.34")), parsed.host, parsed.host
-        )
-
-    def respond(request):
-        observed["requests"].append(request)
-        if observed["status"] != 200:
-            return httpx.Response(observed["status"], text=f"header echoed: {KEY}")
-        if observed["stream"]:
-            return httpx.Response(
-                200,
-                text='data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n',
-            )
-        if request.url.path.endswith("/messages"):
-            return httpx.Response(200, json={"content": [{"type": "text", "text": "OK"}]})
-        if request.url.path.endswith("/embeddings"):
-            return httpx.Response(200, json={"data": [{"index": 0, "embedding": [0.1, 0.2, 0.3]}]})
-        if request.url.path.endswith("/token_plan/remains"):
-            return httpx.Response(
-                200,
-                json={
-                    "model_remains": [
-                        {
-                            "model_name": "general",
-                            "current_interval_remaining_percent": 80,
-                        }
-                    ]
-                },
-            )
-        if observed["gzip"]:
-            return httpx.Response(
-                200,
-                content=gzip.compress(
-                    json.dumps({"choices": [{"message": {"content": "OK"}}]}).encode()
-                ),
-                headers={"Content-Encoding": "gzip"},
-            )
-        return httpx.Response(
-            200, json={"choices": [{"message": {"content": "OK"}}], "debug": {KEY: KEY}}
-        )
-
-    def client(**kwargs):
-        observed["options"].append(kwargs)
-        return real_client(transport=httpx.MockTransport(respond), **kwargs)
-
-    monkeypatch.setattr(outbound, "pin_url_outbound_safe", pin)
-    monkeypatch.setattr(transport.httpx, "AsyncClient", client)
-    return observed
 
 
 @pytest.mark.asyncio
