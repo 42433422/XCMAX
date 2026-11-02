@@ -1,24 +1,19 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, type CSSProperties } from 'vue'
-import { useDialogFocus } from '@/composables/useDialogFocus'
+import { computed, ref, type CSSProperties } from 'vue'
+import { useDialogFocus, useDialogScrollLock } from '@/composables/useDialogFocus'
 
 type Cell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 type Layout = { sheet: string; widths: number[]; rows: { height: number; cells: Cell[] }[]; truncated: boolean }
 const props = defineProps<{
   title: string; explanation: string; layouts: Layout[]; initialSheet: number
-  selected: boolean; canSelect: boolean; cellStyle: (cell: Cell) => CSSProperties
+  selected: boolean; canSelect: boolean; readOnly?: boolean; cellStyle: (cell: Cell) => CSSProperties
 }>()
 const emit = defineEmits<{ close: []; select: [] }>()
 const panel = ref<HTMLElement | null>(null)
 const sheetIndex = ref(props.layouts[props.initialSheet] ? props.initialSheet : 0)
 const layout = computed(() => props.layouts[sheetIndex.value])
 useDialogFocus(panel, () => true, () => emit('close'))
-const overflow = ['overflow', 'overflow-x', 'overflow-y'].map(property => ({ property, value: document.body.style.getPropertyValue(property), priority: document.body.style.getPropertyPriority(property) }))
-onMounted(() => document.body.style.setProperty('overflow', 'hidden'))
-onBeforeUnmount(() => {
-  overflow.forEach(({ property }) => document.body.style.removeProperty(property))
-  overflow.forEach(({ property, value, priority }) => { if (value) document.body.style.setProperty(property, value, priority) })
-})
+useDialogScrollLock(() => true)
 </script>
 
 <template>
@@ -44,7 +39,7 @@ onBeforeUnmount(() => {
           </div>
           <p v-else>此版本无成品布局预览，请重新生成后核对。</p>
         </div>
-        <footer>
+        <footer v-if="!readOnly">
           <span v-if="selected">当前已选模板</span>
           <button type="button" :disabled="!canSelect || selected" @click="emit('select')">选择此模板</button>
         </footer>

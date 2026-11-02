@@ -1,5 +1,5 @@
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const api = vi.hoisted(() => ({ reviewedExcelIdentity: vi.fn().mockResolvedValue({ actor: "1:7" }), classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), downloadClassificationSource: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
 const etl = vi.hoisted(() => ({ run: vi.fn(), autoIngestProgress: vi.fn(), autoIngestBatches: vi.fn(), withdrawAutoIngestBatch: vi.fn() }))
@@ -11,6 +11,7 @@ vi.mock('@/api/xcmaxMarketProxy', () => ({
   },
 }))
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
+import { useReviewedDocuments } from '@/composables/useReviewedDocuments'
 const layout = (value: string) => [{ sheet: '报价', widths: [20], rows: [{ height: 20, cells: [{ cell: 'B2', value, formula: false, rowspan: 1, colspan: 1, bold: false, italic: false, font_size: 11, font_color: '', fill: '', align: 'left' }] }], truncated: false }]
 const candidates = [
   { id: 'preserve', label: '保留', explanation: '保留待确认', clear: [] },
@@ -23,6 +24,26 @@ const intakeResult = (summary = { new: 2, update: 1, skip: 3, error: 0, executed
   run_id: 'intake-run', mod_id: '', candidate_sha256: 'candidate-sha', knowledge: { action: 'new', documents: 1 },
   business: { id: 'intake-run', target_type: 'customer_products', status: 'preview_ready', preview_revision: 'revision-1', summary },
 } })
+async function openPicker(wrapper: VueWrapper) {
+  const capsule = wrapper.find('.reviewed-template__candidate-capsule')
+  if (!capsule.exists()) return
+  if (capsule.attributes('aria-expanded') !== 'true') await capsule.trigger('click')
+  await flushPromises()
+}
+async function selectCandidate(wrapper: VueWrapper, index = 0) {
+  await openPicker(wrapper)
+  await wrapper.findAll('.reviewed-template__select-candidate')[index].trigger('click')
+  await flushPromises()
+}
+function seedDocument(wrapper: VueWrapper, file: File, reviewId = 'review-intake', name = '合成模板', warnings: string[] = []) {
+  const state = wrapper.vm.$.setupState as Record<string, unknown>
+  const workspace = state.documentWorkspace as ReturnType<typeof useReviewedDocuments>
+  const doc = workspace.register(`classification-${reviewId}`, 'classification-v1', { index: 0, basis: 'model_group', confirmed: false, sha256: `sha-${reviewId}`, filename: `${name}.xlsx`, display_name: name, fragments: [{ sheet: '报价', range: 'A1:B2' }] }, file)
+  const generated = modelProposal('v1')
+  doc.review = { review_id: reviewId, sha256: 'synthetic-sha', layout: layout('合成原件'), proposal: generated, usage_restrictions: warnings }
+  doc.proposals = [generated]
+  return { doc, workspace }
+}
 async function mountIntakeCandidate() {
   const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
   const file = new File(['synthetic'], 'intake.xlsx')
@@ -30,13 +51,11 @@ async function mountIntakeCandidate() {
   Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
   await input.trigger('change')
   const state = wrapper.vm.$.setupState as Record<string, unknown>
-  state.classifications = [{ name: file.name, confirmed: true, sheets: [] }]
-  state.file = file; state.name = '合成模板'
-  state.review = { review_id: 'review-intake', sheets: [], cells: [], proposal: modelProposal('v1'), selected_region: { selection_basis: 'model_group' } }
-  state.proposals = [modelProposal('v1')]
+  const { doc, workspace } = seedDocument(wrapper, file)
   await flushPromises()
-  const save = () => wrapper.findAll('button').find(button => button.text() === '使用此模板并入库')!
-  return { wrapper, state, save }
+  await selectCandidate(wrapper)
+  const save = () => wrapper.findAll('button').find(button => button.text() === '保存模板')!
+  return { wrapper, state, doc, workspace, save }
 }
 describe('reviewed Excel template', () => {
   beforeEach(() => {
@@ -71,7 +90,7 @@ describe('reviewed Excel template', () => {
     const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(accepted)
     vi.stubGlobal('crypto', { randomUUID: () => 'legacy-test-key', subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).fill(7).buffer) } })
     api.archiveClassifyExcel.mockReset().mockResolvedValue({ name: 'sample.xlsx', status: 'classified', classification_id: 'legacy-c', version: 'v1', sheets: [], usage_restrictions: ['打印版式未验证'] })
-    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    const wrapper = mount(ReviewedExcelTemplate)
     try {
       const file = new File(['source'], 'sample.xls')
       Object.defineProperty(file, 'arrayBuffer', { value: async () => new Uint8Array([1, 2, 3]).buffer })
@@ -93,7 +112,7 @@ describe('reviewed Excel template', () => {
     const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.stubGlobal('crypto', { randomUUID: () => 'stale-key', subtle: { digest: () => new Promise<ArrayBuffer>(resolve => { finish = resolve }) } })
     api.archiveClassifyExcel.mockReset()
-    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    const wrapper = mount(ReviewedExcelTemplate)
     try {
       const file = new File(['source'], 'stale.xls')
       Object.defineProperty(file, 'arrayBuffer', { value: async () => new ArrayBuffer(1) })
@@ -186,15 +205,17 @@ describe('reviewed Excel template', () => {
     expect(mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } }).find('.elt-admin-panel').exists()).toBe(false)
     expect(mount(ReviewedExcelTemplate).find('.elt-admin-panel').exists()).toBe(true)
   })
-  it('records composer requirement text on user intake', async () => {
+  it('retains a requirement draft until a source document exists', async () => {
     const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     await wrapper.get('.elt-composer__input').setValue('保留客户栏，清理空白行')
     await wrapper.get('.elt-composer__send').trigger('click')
-    expect(wrapper.text()).toContain('整理要求：保留客户栏，清理空白行')
+    expect(wrapper.get('[role=alert]').text()).toContain('请先添加文件')
+    expect((wrapper.get('.elt-composer__input').element as HTMLTextAreaElement).value).toBe('保留客户栏，清理空白行')
+    expect(api.refineReviewedExcel).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-      it('passes composer requirement notes into saveReviewedExcel FormData', async () => {
+  it('saves the selected document requirements while keeping an unsent draft separate', async () => {
     api.saveReviewedExcel.mockResolvedValue({ template_id: 'db:note', auto_ingest: { batch_id: 'batch-note', status: 'running' } })
     const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     try {
@@ -203,20 +224,17 @@ describe('reviewed Excel template', () => {
       Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
       await input.trigger('change'); await flushPromises()
       const state = wrapper.vm.$.setupState as Record<string, unknown>
-      state.requirementNotes = ['第一条整理要求']
       state.composerDraft = '未发送草稿'
-      state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [] }]
-      state.file = file
-      state.name = 'note-tpl'
-      state.review = { review_id: 'r-note', sheets: [], cells: [], proposal: modelProposal('v1'), selected_region: { selection_basis: 'model_group' } }
-      state.proposals = [modelProposal('v1')]
-      state.templatePickerOpen = true
+      const { doc } = seedDocument(wrapper, file, 'r-note', 'note-tpl')
+      doc.requirements = ['第一条整理要求']
       await flushPromises()
-      await wrapper.findAll('button').find(b => b.text() === '使用此模板并入库')!.trigger('click')
+      await selectCandidate(wrapper)
+      await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
       expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
-      expect(form.get('composer_note')).toBe('第一条整理要求\n未发送草稿')
+      expect(form.get('composer_note')).toBe('第一条整理要求')
+      expect((wrapper.get('.elt-composer__input').element as HTMLTextAreaElement).value).toBe('未发送草稿')
       expect(form.get('private_intake')).toBe('true')
     } finally { wrapper.unmount() }
   })
@@ -713,6 +731,7 @@ describe('reviewed Excel template', () => {
     await wrapper.findAll('button').find((b) => b.text().includes('预览清理'))!.trigger('click'); await flushPromises()
     expect((api.reviewExcel.mock.calls.at(-1)![0] as FormData).get('print_area_mode')).toBe('selected')
     expect(wrapper.text()).toContain('原范围 报价!$1:$19 → 派生范围')
+    await openPicker(wrapper)
     const cards = wrapper.findAll('.reviewed-template__preview')
     expect(cards).toHaveLength(4); expect(cards[0].text()).toContain('客户甲'); expect(cards[2].find('td').text()).toBe('')
     expect(cards[3].text()).toContain('与模板 2 清理结果相同')
@@ -786,7 +805,7 @@ describe('reviewed Excel template', () => {
       .mockResolvedValueOnce({ status: 'running', kb_progress: { pct: 40, stage: 'write', message: '写入中' }, business_progress: { pct: 10, stage: 'queued', message: '排队' } })
       .mockResolvedValueOnce({ status: 'applied', kb_progress: { pct: 100, stage: 'done', message: '完成' }, business_progress: { pct: 100, stage: 'done', message: '完成' } })
       .mockRejectedValueOnce(new Error('进度读取失败'))
-    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    const wrapper = mount(ReviewedExcelTemplate)
     try {
       const state = wrapper.vm.$.setupState as Record<string, unknown>
       state.savedId = 'tpl-ingest'
@@ -822,25 +841,24 @@ describe('reviewed Excel template', () => {
       Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
       await input.trigger('change'); await flushPromises()
       const state = wrapper.vm.$.setupState as Record<string, unknown>
-      state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [] }]
-      state.file = file
-      state.name = 'pick-tpl'
-      state.review = { review_id: 'r-pick', sheets: [], cells: [], proposal: modelProposal('v1'), selected_region: { selection_basis: 'model_group' } }
-      state.proposals = [modelProposal('v1')]
-      state.requirementNotes = ['保留客户栏，清理空白行']
-      state.templatePickerOpen = true
+      const { doc, workspace } = seedDocument(wrapper, file, 'r-pick', 'pick-tpl')
+      doc.requirements = ['保留客户栏，清理空白行']
       await flushPromises()
-      expect(wrapper.text()).toContain('点击卡片边框或预览区放大核对')
+      expect(wrapper.get('.reviewed-template__candidate-capsule').text()).toContain('pick-tpl')
+      expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
+      expect(api.previewReviewedIntake).not.toHaveBeenCalled()
       expect(wrapper.findAll('button').some(b => b.text() === '保存所选模板')).toBe(false)
-      expect(wrapper.findAll('button').some(b => b.text() === '使用此模板并入库')).toBe(true)
+      expect(wrapper.findAll('button').some(b => b.text() === '保存模板')).toBe(false)
       expect(wrapper.findAll('input[type=checkbox]').some(el => el.element.closest('label')?.textContent?.includes('确认发布'))).toBe(false)
-      await wrapper.findAll('.reviewed-template__select-candidate')[1].trigger('click')
-      await flushPromises()
+      await selectCandidate(wrapper, 1)
+      expect(wrapper.find('.reviewed-document-picker').exists()).toBe(true)
+      expect(workspace.saved(doc)).toBe(false)
+      expect(wrapper.find('.reviewed-template__candidate-capsule--saved').exists()).toBe(false)
+      expect(wrapper.findAll('button').some(b => b.text() === '保存模板')).toBe(true)
       expect(api.saveReviewedExcel).not.toHaveBeenCalled()
-      expect(wrapper.text()).toContain('本次处理 1 份所选文档（pick.xlsx）')
-      expect(wrapper.text()).toContain('预计新增 2 行、更新 1 行、跳过 3 行、错误 0 行')
-      expect(wrapper.text()).toContain('知识库：新增 1 份文档')
-      await wrapper.findAll('button').find(b => b.text() === '使用此模板并入库')!.trigger('click')
+      expect(wrapper.text()).toContain('新增 2，更新 1，跳过 3')
+      expect(wrapper.text()).toContain('知识库 1 份')
+      await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
       expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
@@ -852,7 +870,9 @@ describe('reviewed Excel template', () => {
       expect(form.get('valid_rows_only')).toBe('false')
       expect(form.get('composer_note')).toBe('保留客户栏，清理空白行')
       expect(wrapper.emitted('saved')).toHaveLength(1)
-      expect(etl.autoIngestProgress).toHaveBeenCalledWith('batch-pick')
+      expect(workspace.saved(doc)).toBe(true)
+      expect(wrapper.find('.reviewed-template__candidate-capsule--saved').exists()).toBe(true)
+      expect(wrapper.find('.reviewed-document-picker').exists()).toBe(false)
     } finally { wrapper.unmount() }
   })
 
@@ -865,21 +885,18 @@ describe('reviewed Excel template', () => {
       Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
       await input.trigger('change'); await flushPromises()
       const state = wrapper.vm.$.setupState as Record<string, unknown>
-      state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [], usage_restrictions: ['打印版式未验证'] }]
-      state.file = file
-      state.name = 'limited-tpl'
-      state.review = { review_id: 'r-lim', sheets: [], cells: [], proposal: modelProposal('v1'), selected_region: { selection_basis: 'model_group' }, usage_restrictions: ['打印版式未验证'] }
-      state.proposals = [modelProposal('v1')]
-      state.templatePickerOpen = true
+      const { doc, workspace } = seedDocument(wrapper, file, 'r-lim', 'limited-tpl', ['打印版式未验证'])
       await flushPromises()
-      expect(state.publicationRestricted).toBe(true)
-      await wrapper.findAll('button').find(b => b.text() === '使用此模板并入库')!.trigger('click')
+      await selectCandidate(wrapper)
+      expect(wrapper.get('[role=alert]').text()).toContain('打印版式未验证')
+      await wrapper.findAll('button').find(b => b.text() === '保存模板')!.trigger('click')
       await flushPromises()
       expect(api.saveReviewedExcel).toHaveBeenCalledTimes(1)
       const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
       expect(form.get('private_intake')).toBe('true')
       expect(form.get('publish_to_tenant')).toBe('false')
-      if (!ingestStarted) expect(wrapper.text()).toContain('模板已保存，但自动入库未能启动')
+      expect(workspace.saved(doc)).toBe(true)
+      if (!ingestStarted) expect(doc.error).toContain('模板已保存，入库状态请核对')
     } finally { wrapper.unmount() }
   })
 
@@ -914,7 +931,7 @@ describe('reviewed Excel template', () => {
     let resolveProgress!: (value: unknown) => void
     etl.autoIngestProgress.mockImplementationOnce(() => new Promise(resolve => { resolveProgress = resolve }))
       .mockResolvedValue({ status: 'running', kb_progress: { pct: 0 }, business_progress: { pct: 0 } })
-    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    const wrapper = mount(ReviewedExcelTemplate)
     const state = wrapper.vm.$.setupState as Record<string, unknown>
     ;(state.startIngestPoll as (id: string) => void)('old-batch')
     if (change === 'account') productReadAccountEpoch.value++
@@ -927,21 +944,20 @@ describe('reviewed Excel template', () => {
     if (change !== 'unmount') wrapper.unmount()
   })
 
-  it('shows pending preview and requires explicit valid-row consent before writing', async () => {
+  it('shows pending document preview and blocks saving when its preview contains error rows', async () => {
     let finish!: (value: unknown) => void
     api.previewReviewedIntake.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
     const { wrapper, save } = await mountIntakeCandidate()
-    expect(wrapper.get('[aria-label="本次入库范围"]').text()).toContain('尚未写入模板、知识库或业务数据')
+    expect(wrapper.get('.reviewed-document-picker').text()).toContain('正在核对入库范围')
     expect(save().attributes('disabled')).toBeDefined()
     expect(api.saveReviewedExcel).not.toHaveBeenCalled()
     finish(intakeResult({ new: 2, update: 1, skip: 3, error: 1, executed: 0 }))
     await flushPromises()
     expect(save().attributes('disabled')).toBeDefined()
-    await wrapper.get('[aria-label="本次入库范围"] input').setValue(true)
-    expect(save().attributes('disabled')).toBeUndefined()
-    api.saveReviewedExcel.mockResolvedValue({ template_id: 'confirmed', auto_ingest: { success: false, error: 'confirmation_required' } })
+    expect(wrapper.get('.reviewed-document-picker').text()).toContain('1 行错误，尚不能保存')
+    expect(wrapper.findAll('input[type=checkbox]')).toHaveLength(0)
     await save().trigger('click'); await flushPromises()
-    expect((api.saveReviewedExcel.mock.calls[0][0] as FormData).get('valid_rows_only')).toBe('true')
+    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -953,19 +969,19 @@ describe('reviewed Excel template', () => {
     api.previewReviewedIntake.mockResolvedValue(result)
     const { wrapper, save } = await mountIntakeCandidate()
     expect(save().attributes('disabled')).toBeDefined()
-    expect(wrapper.get('[aria-label="本次入库范围"] [role=alert]').text()).toContain('未开始写入')
+    expect(wrapper.get('.reviewed-document-picker [role=alert]').text()).toContain(failure === 'wrong-mod' ? '范围无法核实' : '预演未完成')
     expect(api.saveReviewedExcel).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
   it('invalidates edited intake metadata without parsing on every keystroke', async () => {
-    const { wrapper, state, save } = await mountIntakeCandidate()
+    const { wrapper, doc, workspace, save } = await mountIntakeCandidate()
     expect(save().attributes('disabled')).toBeUndefined()
     const initialCalls = api.previewReviewedIntake.mock.calls.length
-    state.name = '新名称'; await flushPromises()
+    doc.displayName = '新名称'; await flushPromises()
     expect(save().attributes('disabled')).toBeDefined()
     expect(api.previewReviewedIntake).toHaveBeenCalledTimes(initialCalls)
-    await wrapper.findAll('button').find(button => button.text() === '重新预演入库范围')!.trigger('click')
+    await workspace.prepare(doc)
     await flushPromises()
     expect(save().attributes('disabled')).toBeUndefined()
     expect((api.previewReviewedIntake.mock.calls.at(-1)![0] as FormData).get('name')).toBe('新名称')
@@ -980,10 +996,10 @@ describe('reviewed Excel template', () => {
     latest.intake.run_id = latest.intake.business.id = 'latest-run'
     latest.intake.business.preview_revision = 'latest-revision'
     api.previewReviewedIntake.mockResolvedValueOnce(latest)
-    await wrapper.findAll('.reviewed-template__select-candidate')[1].trigger('click'); await flushPromises()
+    await selectCandidate(wrapper, 1)
     finishOld(intakeResult({ new: 999, update: 0, skip: 0, error: 0, executed: 0 }))
     await flushPromises()
-    expect(wrapper.get('[aria-label="本次入库范围"]').text()).not.toContain('999')
+    expect(wrapper.get('.reviewed-document-picker').text()).not.toContain('999')
     api.saveReviewedExcel.mockResolvedValue({ template_id: 'bound' })
     await save().trigger('click'); await flushPromises()
     const form = api.saveReviewedExcel.mock.calls[0][0] as FormData

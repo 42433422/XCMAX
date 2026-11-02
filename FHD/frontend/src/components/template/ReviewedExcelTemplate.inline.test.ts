@@ -21,14 +21,15 @@ const classified = (name = 'synthetic.xlsx') => ({
 const authorization = { status: 'authorized', operations: { classification: 'authorized', template_candidates: 'authorized' } }
 const reviewed = (id = 'model-review') => ({
   review_id: id, sha256: 'synthetic-sha', cells: [], sheets: ['Sheet1'],
+  layout: [{ sheet: 'Sheet1', widths: [], rows: [], truncated: false }],
   selected_region: { selection_basis: 'model_group' },
   proposal: { version: 'v1', parent_version: null, candidates: [0, 1, 2].map(i => ({
     id: `candidate-${i}`, label: `候选${i + 1}`, explanation: '合成模型建议', clear: [],
-  })), evidence: [], model: { status: 'returned', login_authorization: authorization } },
+  })), result_previews: [0, 1, 2].map(i => ({ candidate_id: `candidate-${i}`, sha256: `candidate-sha-${i}`, layout: [], layout_truncated: false })), evidence: [], model: { status: 'returned', login_authorization: authorization } },
 })
 const modelSlice = (index = 0, sheet = 'Sheet1') => ({
   index, basis: 'model_group', confirmed: false, sha256: `slice-${index}`,
-  filename: `synthetic-${index}.xlsx`, fragments: [{ sheet, range: 'A1:B2' }],
+  filename: `synthetic-${index}.xlsx`, display_name: index ? '采购合同' : '报价单', fragments: [{ sheet, range: 'A1:B2' }],
 })
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -45,11 +46,13 @@ async function stageFile(name = 'synthetic.xlsx') {
   return source
 }
 async function start() { await button('开始处理').trigger('click'); await flushPromises() }
+async function openDocument(index = 0) { await wrapper.findAll('[data-document-key]')[index].trigger('click'); await flushPromises() }
 function enableModelPipeline(slices = [modelSlice()]) {
   api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: authorization })
   api.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: classified().sheets })
   api.autoSlices.mockResolvedValue({ slices })
   api.reviewExcel.mockResolvedValue(reviewed())
+  api.refineReviewedExcel.mockResolvedValue({ review_id: 'model-review', proposal: { ...reviewed().proposal, version: 'refined-v2', parent_version: 'v1' } })
 }
 beforeEach(() => {
   vi.resetAllMocks()
@@ -82,13 +85,19 @@ describe('model-required inline ELT processing', () => {
     expect(form.get('file')).toBe(source)
     expect([form.get('auto_slice_index'), form.get('use_login_notice'), form.get('sample_authorized'), form.get('own_file_authorized')]).toEqual(['0', 'true', 'false', 'false'])
     expect(api.reviewExcel.mock.invocationCallOrder[0]).toBeGreaterThan(api.autoSlices.mock.invocationCallOrder[0])
-    expect(wrapper.get('[role=status]').text()).toBe('平台模型候选已生成，请核对。')
-    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(3)
+    expect(wrapper.get('[role=status]').text()).toBe('模板已生成。')
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
+    expect(wrapper.get('.reviewed-template__candidate-capsule').text()).toContain('报价单')
+    expect(api.previewReviewedIntake).not.toHaveBeenCalled()
     expect(wrapper.find('[role=dialog]').exists()).toBe(false)
     expect(wrapper.findAll('input[type=checkbox]')).toHaveLength(0)
     expect(confirm).not.toHaveBeenCalled()
     await start()
     expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+    await wrapper.get('.reviewed-template__candidate-capsule').trigger('click')
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(4)
+    expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+    expect(api.previewReviewedIntake).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -125,9 +134,10 @@ describe('model-required inline ELT processing', () => {
     const result = reviewed()
     api.reviewExcel.mockResolvedValue({ ...result, proposal: { ...result.proposal, model: { status } } })
     await stageFile(); await start()
-    expect(wrapper.get('[role=alert]').text()).toContain('模型连接异常')
+    await openDocument()
+    expect(wrapper.get('[role=alert]').text()).toContain('模型候选或原件预览不完整')
     expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
-    expect(wrapper.get('[role=status]').text()).not.toContain('候选已生成')
+    expect(wrapper.find('.reviewed-template__candidate-capsule--saved').exists()).toBe(false)
   })
 
   it('retries a known not-sent candidate failure without rearchiving or repeating classification', async () => {
@@ -135,6 +145,7 @@ describe('model-required inline ELT processing', () => {
       data: { detail: { retryable: true, outcome_unknown: false } },
     }))
     await stageFile(); await start()
+    await openDocument()
     expect(wrapper.get('[role=alert]').text()).toContain('未发送')
     await start()
     expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(1)
@@ -148,9 +159,12 @@ describe('model-required inline ELT processing', () => {
       data: envelope === 'nested' ? { detail: state } : envelope === 'production' ? state : null,
     }))
     await stageFile(); await start(); await start()
-    await button('用此单据生成模板').trigger('click'); await flushPromises()
+    await openDocument()
+    const workspace = (wrapper.vm.$.setupState as Record<string, unknown>).documentWorkspace as { documents: { value: { unknown: boolean }[] }; generate: (doc: unknown) => Promise<void> }
+    expect(workspace.documents.value[0].unknown).toBe(true)
+    await workspace.generate(workspace.documents.value[0]); await flushPromises()
     expect(api.reviewExcel).toHaveBeenCalledTimes(1)
-    expect(wrapper.get('[role=alert]').text()).toContain('结果未知')
+    expect(wrapper.get('[role=alert]').text()).toContain('未知')
   })
 
   it('stops visibly when identity verification fails', async () => {
@@ -166,18 +180,21 @@ describe('model-required inline ELT processing', () => {
     expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
     expect(api.autoSlices).not.toHaveBeenCalled()
     expect(api.reviewExcel).not.toHaveBeenCalled()
-    expect(wrapper.get('[role=alert]').text()).toContain('结果未知')
+    expect(wrapper.get('[role=alert]').text()).toContain('请求结果可能未知')
   })
 
-  it('offers multiple model documents inline and previews only the selected document', async () => {
+  it('generates each named model document and opens only its own candidates without another request', async () => {
     enableModelPipeline([modelSlice(0), modelSlice(1)])
     await stageFile(); await start()
-    expect(api.reviewExcel).not.toHaveBeenCalled()
-    const choices = wrapper.findAll('button').filter(el => el.text() === '用此单据生成模板')
+    expect(api.reviewExcel).toHaveBeenCalledTimes(2)
+    expect(api.reviewExcel.mock.calls.map(call => (call[0] as FormData).get('auto_slice_index'))).toEqual(['0', '1'])
+    const choices = wrapper.findAll('[data-document-key]')
     expect(choices).toHaveLength(2)
+    expect(choices.map(choice => choice.text())).toEqual(['报价单', '采购合同'])
     await choices[1].trigger('click'); await flushPromises()
-    expect((api.reviewExcel.mock.calls[0][0] as FormData).get('auto_slice_index')).toBe('1')
-    expect(wrapper.find('[role=dialog]').exists()).toBe(false)
+    expect(wrapper.get('[role=dialog]').attributes('aria-label')).toBe('采购合同')
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(4)
+    expect(api.reviewExcel).toHaveBeenCalledTimes(2)
   })
 
   it('blocks hidden model slices and retains their visibility metadata', async () => {
@@ -187,18 +204,18 @@ describe('model-required inline ELT processing', () => {
     api.analyzeClassification.mockResolvedValueOnce({ version: 'model-v2', model_status: 'returned', sheets: [{ ...visible, sheet: 'Hidden' }, visible] })
     await stageFile(); await start()
     expect(api.reviewExcel).not.toHaveBeenCalled()
-    expect(button('用此单据生成模板').attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('没有可处理的模型文档切片')
+    expect(wrapper.findAll('[data-document-key]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('未识别到可处理模板')
   })
 
-  it('only analyzes the selected source from a multi-file archive', async () => {
+  it('analyzes every eligible source and binds each candidate request to its own file', async () => {
     const input = wrapper.get('input[type=file]')
     Object.defineProperty(input.element, 'files', { configurable: true, value: ['first.xlsx', 'second.xlsx'].map(name => new File(['synthetic'], name)) })
     await input.trigger('change'); await start()
     expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(2)
-    expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
-    expect(api.analyzeClassification.mock.calls[0][0]).toBe('first.xlsx')
-    expect((api.reviewExcel.mock.calls[0][0] as FormData).get('file')).toHaveProperty('name', 'first.xlsx')
+    expect(api.analyzeClassification.mock.calls.map(call => call[0])).toEqual(['first.xlsx', 'second.xlsx'])
+    expect(api.reviewExcel.mock.calls.map(call => ((call[0] as FormData).get('file') as File).name)).toEqual(['first.xlsx', 'second.xlsx'])
+    expect(wrapper.findAll('[data-document-key]')).toHaveLength(2)
   })
 
   it('drops a late model classification when the account changes', async () => {
@@ -216,7 +233,7 @@ describe('model-required inline ELT processing', () => {
 
   it('uses the signed grant for feedback and leaves explicit per-file consents false', async () => {
     const proposal = reviewed().proposal
-    api.refineReviewedExcel.mockResolvedValue({ proposal: { ...proposal, version: 'v2', parent_version: 'v1' } })
+    api.refineReviewedExcel.mockResolvedValue({ review_id: 'model-review', proposal: { ...proposal, version: 'v2', parent_version: 'v1' } })
     await stageFile(); await start()
     await wrapper.get('.elt-composer__input').setValue('保留备注')
     await button('发送').trigger('click'); await flushPromises()
@@ -233,7 +250,7 @@ describe('model-required inline ELT processing', () => {
     await button('发送').trigger('click'); await flushPromises()
     await button('发送').trigger('click'); await flushPromises()
     expect(api.refineReviewedExcel).toHaveBeenCalledTimes(1)
-    expect(wrapper.get('[role=alert]').text()).toContain('结果未知')
+    expect(wrapper.get('[role=alert]').text()).toContain('待核对')
     expect((wrapper.get('.elt-composer__input').element as HTMLTextAreaElement).value).toBe('保留备注')
   })
 })
