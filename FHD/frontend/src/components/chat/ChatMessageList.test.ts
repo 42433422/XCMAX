@@ -79,17 +79,17 @@ describe('ChatMessageList', () => {
     expect(wrapper.text()).toContain('正在保存')
     expect(wrapper.text()).not.toContain('仅重试保存')
     await wrapper.setProps({ messages: [{ ...message, persistence: { id: 'message-a', status: 'saved', localSaved: true } }] })
-    expect(wrapper.text()).toContain('已保存到服务端')
+    expect(wrapper.find('.message-save-status').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('保存失败')
   })
 
-  it('keeps ordinary persistence diagnostics collapsed and preserves true failures inline', () => {
+  it('omits ordinary persistence diagnostics and preserves true failures inline', () => {
     const messages = ['local', 'saved'].map((status, i) => ({ role: 'user' as const, content: '记录', time: '12:00', persistence: { id: String(i), status: status as 'local' | 'saved' } }))
     const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages } })
     expect(wrapper.find('.message-save-status').exists()).toBe(false)
-    expect(wrapper.get('.message-storage-details summary').text()).toBe('保存详情')
-    expect((wrapper.get('.message-storage-details').element as HTMLDetailsElement).open).toBe(false)
-    expect(wrapper.get('.message-storage-details').text()).toContain('服务端未核实：1 条')
+    expect(wrapper.find('.message-storage-details').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('保存详情')
+    expect(wrapper.text()).not.toContain('服务端未核实')
   })
 
   it('renders restored quote entities as normal punctuation', () => {
@@ -331,8 +331,7 @@ it('offers failure recovery with visible original text without sending a request
   expect(wrapper.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
   await wrapper.findAll('button').find(button => button.text().includes('填入原文'))!.trigger('click')
   expect(wrapper.emitted('fill-example')).toEqual([['仅回答测试']])
-  await wrapper.findAll('button').find(button => button.text() === '查看模型状态')!.trigger('click')
-  expect(wrapper.emitted('model-settings')).toHaveLength(1)
+  expect(wrapper.text()).not.toContain('查看模型状态')
 })
 
 it('shows an empty conversation example that only fills the composer', async () => {

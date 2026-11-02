@@ -369,6 +369,45 @@ def _run_frozen_critical_probe(data_dir: str | None) -> None:
                     os.environ[name] = value
 
 
+def _run_notice_publication_probe(expected_sha256: str, data_dir: str | None) -> None:
+    """Read the installed bundle through the real loader without normal app startup."""
+    import hashlib
+    import re
+
+    try:
+        _force_stdio_utf8(data_dir)
+        if not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha256):
+            raise ValueError("invalid expected publication digest")
+        _ensure_sys_path()
+        from app.application import elt_login_authorization as authorization
+
+        if authorization.NOTICE_PUBLICATION_ENV in os.environ:
+            raise RuntimeError("environment override prevents bundled publication verification")
+        path = authorization._NOTICE_PUBLICATION_FILE
+        if path.is_symlink() or path.parent.is_symlink():
+            raise RuntimeError("bundled publication must not be a symlink")
+        body = path.read_bytes()
+        if hashlib.sha256(body).hexdigest() != expected_sha256.lower():
+            raise RuntimeError("bundled publication digest mismatch")
+        publication = authorization.notice_publication()
+        if publication is None:
+            raise RuntimeError("bundled publication record is invalid")
+        if path.read_bytes() != body:
+            raise RuntimeError("bundled publication changed during verification")
+        print(
+            f"[notice-publication-probe] OK sha256={expected_sha256.lower()} "
+            f"runtime_record_sha256={publication['record_sha256']}",
+            flush=True,
+        )
+    except BOUNDARY_ERRORS as exc:
+        # Explicit failed exit avoids the windowed PyInstaller unhandled-error dialog.
+        try:
+            print(f"[notice-publication-probe] failed: {type(exc).__name__}", file=sys.stderr)
+        except (OSError, ValueError):
+            pass
+        raise SystemExit(1) from None
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="XCAGI FastAPI server")
     parser.add_argument(
@@ -392,6 +431,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--verify-frozen-critical-runtime",
         action="store_true",
         help="验证冻结包内办公与语音关键依赖后退出",
+    )
+    parser.add_argument(
+        "--verify-notice-publication-sha256",
+        default=None,
+        help="只读校验冻结包内条款发布记录与预期 SHA256 后退出",
     )
     return parser.parse_args(argv)
 
@@ -431,6 +475,9 @@ def _resolve_reload(desktop: bool) -> bool:
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
+    if args.verify_notice_publication_sha256 is not None:
+        _run_notice_publication_probe(args.verify_notice_publication_sha256, args.data_dir)
+        return
     if args.verify_frozen_critical_runtime:
         _run_frozen_critical_probe(args.data_dir)
         return

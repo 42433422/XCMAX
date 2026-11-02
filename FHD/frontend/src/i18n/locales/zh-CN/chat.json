@@ -80,7 +80,6 @@
     "starAutoRefreshTitle": "（已弃用绑定）星标微信感知请在工作流设置中单独开启，避免与对话主动意识混淆",
     "proactiveSuggestions": "主动意识启用",
     "proactiveSuggestionsTitle": "开启后，根据当前对话给出三条可能的下一步回复或想做的事；点选填入输入框，不会自动发送或执行",
-    "proactiveSuggestionsHint": "选择一条建议填入输入框（不会自动发送）",
     "proactiveSuggestionsLoading": "正在生成下一步建议…",
     "composerDropHint": "松开以上传附件",
     "composerDropReject": "不支持的文件类型，请拖入 Excel、图片或 PDF",

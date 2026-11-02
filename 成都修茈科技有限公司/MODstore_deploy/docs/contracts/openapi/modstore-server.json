@@ -13793,9 +13793,39 @@
     },
     "/api/llm/resolve-chat-default": {
       "get": {
-        "description": "供工作台「自动」模式与需求规划使用：用与 /chat 相同的 resolve_api_key 选出\nprovider + model，避免仅依赖前端 /status 与目录推断导致与后端不一致。\n\n顺序：①账户默认且该厂商有密钥且已填 model；②默认厂商有密钥则取其目录首模；\n③按 KNOWN_PROVIDERS 顺序第一个「有密钥且能拉到模型 id」的厂商。\n\nNOTE (async-engine migration): This handler mixes sync ORM calls\n(resolve_api_key) with async calls (get_models_for_provider).  The sync\nparts are tolerable because this endpoint is rarely on the hot path.\nWhen the full AsyncEngine migration (asyncpg) lands, convert\nresolve_api_key to async and remove the sync Session dependency here.",
+        "description": "Resolve account selection (or an explicit route) with a short-lived tool-round snapshot.",
         "operationId": "resolve_chat_default_api_llm_resolve_chat_default_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Model",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Platform Only",
+              "type": "boolean"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -13834,7 +13864,9 @@
           }
         },
         "summary": "Resolve Chat Default",
-        "tags": ["llm"]
+        "tags": [
+          "llm"
+        ]
       }
     },
     "/api/llm/status": {
