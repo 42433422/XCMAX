@@ -21,6 +21,7 @@ from app.application.reviewed_excel_classification_store import (
     _classification_cas,
     _classification_run,
 )
+from app.application.reviewed_excel_review_projection import compose_usage_restrictions
 from app.application.reviewed_excel_template import (
     MAX_BYTES,
     derive_document_workbook,
@@ -152,17 +153,14 @@ def _rebuild_archived_document(db, run, tenant, owner):
 
 
 def _usage_restrictions(db, run, tenant, owner):
-    """Server-side immutable source lineage, not just removable workbook metadata."""
+    """Load scoped source lineage and compose its immutable usage restrictions."""
     summary = load_json(run.summary_json, {})
-    restrictions = list(summary.get("usage_restrictions", []))
-    conversion = summary.get("conversion_receipt") or {}
-    if conversion.get("purpose") == "data_template_test_only":
-        restrictions.append("仅供数据/模板测试；打印版式未验证，不得发布到企业模板库")
+    inherited = []
     scope = summary.get("selected_region") or {}
     if scope.get("classification_id"):
         classification = _classification_run(db, scope["classification_id"], tenant, owner)
-        restrictions.extend(_usage_restrictions(db, classification, tenant, owner))
-    return list(dict.fromkeys(restrictions))
+        inherited = _usage_restrictions(db, classification, tenant, owner)
+    return compose_usage_restrictions(summary, inherited)
 
 
 def _review_source_version(db, run, tenant, owner):
