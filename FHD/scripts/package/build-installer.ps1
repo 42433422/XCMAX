@@ -129,6 +129,11 @@ $buildInfo = @{
 }
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($buildInfoPath, (($buildInfo | ConvertTo-Json -Compress) + "`n"), $utf8NoBom)
+# A public notice record is a separate verified build material, added after the
+# backend build; its digest never replaces the backend/source identity.
+& python (Join-Path $PSScriptRoot 'notice_publication_material.py') stage `
+  --backend-root (Join-Path $Root 'dist\xcagi-backend') --build-info $buildInfoPath --source-sha $buildSha
+if ($LASTEXITCODE -ne 0) { throw 'Notice publication material staging failed' }
 $backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
 $backendSkuDir = Split-Path $backendSku -Parent
 if (Test-Path $backendSkuDir) {
@@ -242,6 +247,9 @@ Pop-Location
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\app.asar") "Electron app.asar"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\backend\xcagi-backend.exe") "Packaged backend executable"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\product-sku.json") "Packaged product-sku.json"
+& python (Join-Path $PSScriptRoot 'notice_publication_material.py') verify `
+  --resources-root (Join-Path $outDir 'win-unpacked\resources') --source-sha $buildSha
+if ($LASTEXITCODE -ne 0) { throw 'Packaged notice publication material verification failed' }
 
 $nsisExe = Get-Item -LiteralPath (Join-Path $outDir "XCAGI-$label-Setup-$Version-x64.exe")
 

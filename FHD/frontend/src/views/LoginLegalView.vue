@@ -5,7 +5,8 @@ import { LEGAL_DOCUMENTS } from '@/constants/legalDocuments'
 
 const props = defineProps<{ document: keyof typeof LEGAL_DOCUMENTS }>()
 const route = useRoute()
-const documentContent = computed(() => LEGAL_DOCUMENTS[props.document])
+const documentKind = computed(() => props.document === 'model-recipients' ? 'privacy-policy' : props.document)
+const documentContent = computed(() => LEGAL_DOCUMENTS[documentKind.value])
 watchEffect(() => { document.title = `${documentContent.value.title} · XCAGI` })
 const LegalText = defineComponent({
   props: { value: { type: String, required: true } },
@@ -27,11 +28,11 @@ const LegalText = defineComponent({
   <main class="login-legal" :aria-label="documentContent.title">
     <article>
       <RouterLink :to="{ name: 'login', query: route.query }">返回登录</RouterLink>
-      <nav aria-label="协议与接收方说明">
-        <RouterLink v-for="(item, key) in LEGAL_DOCUMENTS" :key="key" :to="{ name: 'login-legal', params: { document: key }, query: route.query }" :aria-current="key === document ? 'page' : undefined">{{ item.title }}</RouterLink>
+      <nav aria-label="协议与隐私政策">
+        <RouterLink v-for="key in (['service-agreement', 'privacy-policy'] as const)" :key="key" :to="{ name: 'login-legal', params: { document: key }, query: route.query }" :aria-current="key === documentKind ? 'page' : undefined">{{ LEGAL_DOCUMENTS[key].title }}</RouterLink>
       </nav>
       <h1>{{ documentContent.title }}</h1>
-      <p>版本 {{ documentContent.version }} · {{ document === 'model-recipients' ? '核对日期' : '修订日期' }} {{ documentContent.updatedAt }}</p>
+      <p>版本 {{ documentContent.version }} · 修订日期 {{ documentContent.updatedAt }}</p>
       <section v-for="section in documentContent.sections" :key="section.title">
         <h2 v-if="section.title">{{ section.title }}</h2>
         <template v-for="(block, index) in section.blocks" :key="index">
@@ -53,15 +54,16 @@ const LegalText = defineComponent({
 </template>
 
 <style scoped>
-.login-legal { min-height: 100vh; overflow-y: auto; padding: 2rem 1rem; background: #f3f4f7; color: #1f2937; line-height: 1.8; }
-article { max-width: 48rem; margin: auto; padding: 2rem; background: #fff; border-radius: 12px; overflow-wrap: anywhere; }
+.login-legal { min-height: 100vh; overflow-y: auto; padding: 2rem 1rem; background: var(--xc-color-page-bg); color: var(--xc-color-text); line-height: 1.8; }
+article { max-width: 48rem; margin: auto; padding: 2rem; background: var(--xc-color-surface); border-radius: var(--xc-radius-lg, 12px); overflow-wrap: anywhere; }
 h1 { font-size: 1.6rem; }
 h2 { margin-top: 1.5rem; font-size: 1.1rem; }
-a { color: #0052d9; }
+a { color: var(--xc-color-primary); text-underline-offset: 2px; }
+a:focus-visible { outline: 2px solid var(--xc-color-primary); outline-offset: 3px; }
 nav { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-top: 1rem; }
 .legal-table { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
-th, td { border: 1px solid #d1d5db; padding: .5rem; text-align: left; vertical-align: top; }
+th, td { border: 1px solid var(--xc-color-border); padding: .5rem; text-align: left; vertical-align: top; }
 tbody th { min-width: 7rem; }
 @media (max-width: 520px) { article { padding: 1rem; } }
 </style>

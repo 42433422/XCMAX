@@ -170,12 +170,24 @@
   letter-spacing: -0.3px;
 }
 
-/* 交付说明：标题下介绍文案保留，UI 迭代时勿整段删除 */
 .login-subheading {
   margin: 0 0 28px;
   font-size: var(--xc-font-sm);
   color: var(--xc-color-muted);
   line-height: 1.65;
+}
+
+.login-data-processing-notice {
+  margin: 0 0 var(--xc-space-4, 16px);
+  font-size: var(--xc-font-sm);
+  color: var(--xc-color-muted);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.login-data-processing-notice a {
+  color: var(--xc-color-primary);
+  text-underline-offset: 2px;
 }
 
 /* ─── 表单字段 ─────────────────────────────────────────── */

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const { apiMock, ApiError } = vi.hoisted(() => {
   class ApiError extends Error {
@@ -57,5 +57,47 @@ describe('templatePreviewApi', () => {
   it('rethrows non-availability errors untouched', async () => {
     apiMock.post.mockRejectedValueOnce(new ApiError('boom', 500))
     await expect(templatePreviewApi.updateTemplate({ a: 1 })).rejects.toThrow('boom')
+  })
+})
+
+
+afterEach(() => { vi.unstubAllEnvs() })
+
+describe('template transport and configured service availability', () => {
+  it('uploads the original multipart file and returns the server analysis receipt', async () => {
+    const form = new FormData(), source = new File(['synthetic workbook'], 'template.xlsx'); form.set('file', source)
+    const receipt = { success: true, task_id: 'analysis-7', template_saved: false }; apiMock.post.mockResolvedValueOnce(receipt)
+    expect(await templatePreviewApi.uploadTemplate(form)).toBe(receipt)
+    expect(apiMock.post).toHaveBeenCalledExactlyOnceWith(templatePreviewApi.endpoints.upload, form); expect(form.get('file')).toBe(source)
+  })
+
+  it.each([['createTemplateFromGrid', '创建', 'create', 405], ['replaceTemplateById', '替换', 'update', 501]] as const)('reports unavailable %s without claiming the grid was written', async (method, action, endpoint, status) => {
+    const payload = { id: 7, cells: [{ cell: 'A1', value: 'synthetic header' }] }, data = { error_code: 'service_unavailable' }
+    apiMock.post.mockRejectedValueOnce(new ApiError('unavailable', status, data))
+    await expect(templatePreviewApi[method](payload)).rejects.toMatchObject({ message: `模板${action}服务未开放，请检查接口配置：${templatePreviewApi.endpoints[endpoint]}`, status, data })
+    expect(apiMock.post).toHaveBeenCalledExactlyOnceWith(templatePreviewApi.endpoints[endpoint], payload)
+  })
+
+  it('keeps development loopback requests on the current origin with their query intact', async () => {
+    vi.stubEnv('VITE_TEMPLATE_LIST_ENDPOINT', '  http://localhost:5000/api/library/templates?tenant=7  '); vi.resetModules()
+    const configured = (await import('./templatePreview')).default
+    await configured.listTemplates()
+    expect(configured.endpoints.list).toBe('/api/library/templates?tenant=7')
+    expect(apiMock.get).toHaveBeenLastCalledWith('/api/library/templates?tenant=7', {}, {})
+  })
+
+  it('preserves an explicit remote template service endpoint', async () => {
+    vi.stubEnv('VITE_TEMPLATE_LIST_ENDPOINT', 'https://template.example.test/api/templates'); vi.resetModules()
+    const configured = (await import('./templatePreview')).default
+    await configured.listTemplates()
+    expect(apiMock.get).toHaveBeenLastCalledWith('https://template.example.test/api/templates', {}, {})
+  })
+
+  it('does not silently replace a malformed configured endpoint with another service', async () => {
+    const endpoint = 'http://127.0.0.1:99999/api/templates', failure = new TypeError('invalid configured URL')
+    vi.stubEnv('VITE_TEMPLATE_LIST_ENDPOINT', endpoint); vi.resetModules()
+    const configured = (await import('./templatePreview')).default; apiMock.get.mockRejectedValueOnce(failure)
+    await expect(configured.listTemplates()).rejects.toBe(failure)
+    expect(configured.endpoints.list).toBe(endpoint); expect(apiMock.get).toHaveBeenCalledExactlyOnceWith(endpoint, {}, {})
   })
 })

@@ -35,7 +35,9 @@
       <div class="grid-tool-card">
         <div class="grid-tool-title">Excel 网格映射工具</div>
         <div class="grid-tool-actions">
-          <input ref="gridToolFileInput" type="file" accept=".xlsx,.xls" @change="onGridToolFileSelected">
+          <input ref="gridToolFileInput" class="grid-tool-file-input" type="file" accept=".xlsx,.xls" aria-label="选择 Excel 文件" tabindex="-1" :disabled="extractingGrid" @change="onGridToolFileSelected">
+          <button type="button" class="btn btn-sm btn-secondary" aria-describedby="grid-tool-file-name" :disabled="extractingGrid" @click="gridToolFileInput?.click()">选择文件</button>
+          <span id="grid-tool-file-name" class="grid-tool-file-name muted" role="status" :title="gridToolFile?.name">{{ gridToolFile?.name || '未选择文件' }}</span>
           <button type="button" class="btn btn-sm btn-primary" :disabled="!gridToolFile || extractingGrid" @click="extractGridFromExcel">
             {{ extractingGrid ? '提取中...' : '上传提取模板网格' }}
           </button>
@@ -73,8 +75,7 @@
 </template>
 
 <script setup lang="ts">
-// 原超大 SFC 已拆分至 ./template-preview/（子组件 + composables + 独立 CSS）；
-// 入口保持对外路径/默认导出不变，仅做组装。
+import { ref } from 'vue'
 import TpTemplateCard from './template-preview/TpTemplateCard.vue'
 import TpCreateModal from './template-preview/TpCreateModal.vue'
 import TpPreviewModal from './template-preview/TpPreviewModal.vue'
@@ -86,6 +87,7 @@ import { assembleTemplatePreview } from './template-preview/assemble'
 defineOptions({ name: 'TemplatePreviewView' })
 
 const tp = assembleTemplatePreview()
+const gridToolFileInput = ref<HTMLInputElement | null>(null)
 
 const {
   scopeTabs, activeScopeTab, refreshTemplates, openCreateModal,

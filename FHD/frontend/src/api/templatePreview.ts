@@ -39,6 +39,8 @@ async function reviewedExcelPost(path: string, form: FormData) {
     requireCurrentSession()
     if (error instanceof ApiError && error.data && typeof error.data === 'object') {
       const data = error.data as Record<string, unknown>
+      const detail = data.detail && typeof data.detail === 'object' ? data.detail as Record<string, unknown> : null
+      if (typeof detail?.message === 'string') error.message = detail.message
       const stages: Record<string, string> = { 'archive-classify': '归档分类', classify: '分类', analyze: '模型分析', confirm: '分类核对', preview: '候选预览', refine: '模型优化', save: '保存', 'intake-preview': '入库预演', read_workbook: '读取文件', extract_document: '提取片段', generate_candidates: '生成候选', model_candidates: '模型候选', render_candidates: '渲染候选', save_preview: '保存预览' }
       if (typeof data.request_id === 'string' && /^[A-Za-z0-9_.-]{1,80}$/.test(data.request_id)) {
         const stage = typeof data.stage === 'string' ? stages[data.stage] : ''

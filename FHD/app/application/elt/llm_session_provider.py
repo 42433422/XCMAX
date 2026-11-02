@@ -42,7 +42,9 @@ class SessionMarketProvider:
             timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
             headers=headers,
         ) as client:
-            response = await client.get(f"{platform_url}/api/llm/resolve-chat-default")
+            response = await client.get(
+                f"{platform_url}/api/llm/resolve-chat-default", params={"platform_only": "true"}
+            )
             response.raise_for_status()
             route = response.json()
         provider_name = str(route.get("provider") or "").strip()
