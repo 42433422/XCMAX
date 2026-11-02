@@ -484,6 +484,9 @@ else
     [[ -f "$DEPLOY_DIR/market/dist/index.html" ]] || fail "market build produced no index.html"
   fi
 
+  "$RUNTIME_NODE_BIN" "$BUILD_ROOT/scripts/dev/materialize_media_assets.mjs" marketing \
+    || fail "cannot reconstruct checksum-pinned public site media"
+
   if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
     command -v mvn >/dev/null 2>&1 || fail "mvn is required by the active payment service"
     log "packaging the CI-tested Java payment service"
