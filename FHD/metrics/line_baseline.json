@@ -1,5 +1,5 @@
 {
-  "lines": 2420458,
+  "lines": 2420050,
   "updated": "2026-11-02",
-  "note": "PR #2913 合入最新 main：pairing port 注入 public relay URL，去掉 domain 对 topology 直依赖；相对 main 基线实测净增登记，不抬高安全门槛。"
+  "note": "PR #2913 合入最新 main：pairing port 注入 relay URL；相对 main 基线实测净增登记。"
 }

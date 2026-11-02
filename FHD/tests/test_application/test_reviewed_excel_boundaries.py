@@ -29,10 +29,9 @@ def answer(*ranges):
 
 def execute(monkeypatch, review, raw):
     original = deepcopy(raw)
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *args: SimpleNamespace(data=raw, model="synthetic-no-network"),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **kwargs: SimpleNamespace(data=raw, model="synthetic-no-network"),
     )
     try:
         return _classify_semantic_batch(review, reference_ids=True)
@@ -205,10 +204,9 @@ def test_final_grouping_exact_unique_complete(monkeypatch, mutation):
     else:
         raw["documents"][0]["ranges"][0]["row_start"] = True
     original = deepcopy(raw)
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *args: SimpleNamespace(data=raw, model="synthetic-no-network"),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **kwargs: SimpleNamespace(data=raw, model="synthetic-no-network"),
     )
     with pytest.raises(ReviewedExcelError):
         group_semantic_fragments(review, classification)

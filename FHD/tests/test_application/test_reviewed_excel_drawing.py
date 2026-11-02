@@ -138,7 +138,7 @@ def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference
     current_id = ["17"]
     region_range = ["A1:C4"]
 
-    def fake(messages, schema, max_tokens):
+    def fake(messages, schema, max_tokens, **kwargs):
         request = json.loads(messages[1]["content"])
         assert request["drawing_evidence"] == [drawing]
         assert "drawing_evidence" in schema["properties"]["physical_regions"]["items"]["required"]
@@ -159,8 +159,7 @@ def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference
             data={"physical_regions": [region], "logical_documents": [], "layout_references": []},
         )
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_platform_complete", fake)
     batch_review = {**review, "cells": batches[0], "full_cells": review["cells"]}
     result = _classify_semantic_batch(batch_review)
     assert result["input_summary"]["sent_drawing_objects"][0]["object_id"] == "17"
@@ -239,7 +238,7 @@ def test_synthetic_shape_real_api_upload_analyze_download(tmp_path, monkeypatch)
     store = next(fixture)
     source = synthetic_workbook_with_shape()
 
-    def model(messages, schema, max_tokens):
+    def model(messages, schema, max_tokens, **kwargs):
         import json
 
         data = json.loads(messages[1]["content"])
@@ -267,9 +266,8 @@ def test_synthetic_shape_real_api_upload_analyze_download(tmp_path, monkeypatch)
         )
 
     try:
-        monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
         monkeypatch.setattr(
-            "app.application.reviewed_excel_template._template_mimo_complete", model
+            "app.application.reviewed_excel_template._template_platform_complete", model
         )
         assert len(inspect_workbook(source, allow_drawings=True)["drawing_evidence"]) == 1
         upload = store.client.post(
@@ -561,9 +559,8 @@ def test_archive_accepts_unsupported_geometry_without_allowing_model_or_derivati
 
     fixture = review_store.__wrapped__(tmp_path, monkeypatch)
     store = next(fixture)
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
+        "app.application.reviewed_excel_template._template_platform_complete",
         lambda *_: pytest.fail("unexpected model call"),
     )
     monkeypatch.setattr(
@@ -699,7 +696,6 @@ def test_independent_drawing_ids_and_contract_reject_forged_duplicate_or_outside
     from app.application.reviewed_excel_reference_ids import DRAWING_IDENTIFY_PROMPT
     from app.application.reviewed_excel_template import inspect_workbook
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     review = inspect_workbook(synthetic_workbook_with_shape())
     review = {**review, "full_cells": review["cells"], "cells": plan_drawing_batches(review)[0]}
     request = _classify_semantic_batch(review, reference_ids=True, prepare_only=True)
@@ -712,7 +708,7 @@ def test_independent_drawing_ids_and_contract_reject_forged_duplicate_or_outside
     assert all(key.startswith("S1:") for key in properties["primary_id"]["enum"])
     ids, area, primary = ["D0001"], "A1:B2", "S1:A1"
 
-    def model(messages, schema, max_tokens):
+    def model(messages, schema, max_tokens, **kwargs):
         return LlmAssistResult(
             used_llm=True,
             model="test",
@@ -733,8 +729,9 @@ def test_independent_drawing_ids_and_contract_reject_forged_duplicate_or_outside
             },
         )
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", model)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", model
+    )
     accepted = _classify_semantic_batch(review, reference_ids=True)
     assert accepted["regions"][0]["drawing_evidence"][0]["object_id"] == "1"
     ids = ["D9999"]
@@ -829,7 +826,7 @@ def test_grouping_drawing_id_contract_and_duplicate_rejection(monkeypatch):
     ] == ["D0001"]
     ids = ["D0001"]
 
-    def model(*args):
+    def model(*args, **kwargs):
         return LlmAssistResult(
             used_llm=True,
             model="test",
@@ -846,8 +843,9 @@ def test_grouping_drawing_id_contract_and_duplicate_rejection(monkeypatch):
             },
         )
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", model)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", model
+    )
     groups = group_semantic_fragments(review, classification)
     assert groups[0]["drawing_evidence"][0]["object_id"] == "1"
     ids = ["D0001", "D0001"]
