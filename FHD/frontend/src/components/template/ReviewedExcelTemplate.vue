@@ -43,6 +43,7 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 type ArchiveAsset = { id: string; name: string; state: string; versions: { id: string; version: number; status: string; sha256: string; classification_id: string | null }[] }
 const archiveAssets = ref<ArchiveAsset[]>([])
 const versionUploads = ref<Record<string, { file: File; requestKey: string }>>({})
+const versionFileInputs: Record<string, HTMLInputElement | null> = {}
 const classifications = ref<Classification[]>([])
 const loginModelFiles = ref<string[]>([])
 const loginAuthorizationStatus = ref<LoginAuthorization | null>(null)
@@ -699,8 +700,11 @@ async function recoverArchive(versionId: string) {
 }
 function chooseArchiveVersion(assetId: string, event: Event) {
   if (!alive || busy.value) return
-  const chosen = (event.target as HTMLInputElement).files?.[0]
-  if (chosen) versionUploads.value[assetId] = { file: chosen, requestKey: crypto.randomUUID() }
+  const input = event.target as HTMLInputElement
+  const chosen = input.files?.[0]
+  if (!chosen) return
+  input.value = ''
+  versionUploads.value[assetId] = { file: chosen, requestKey: crypto.randomUUID() }
 }
 async function appendArchiveVersion(asset: ArchiveAsset) {
   const current = captureOperation()
@@ -1351,7 +1355,11 @@ async function downloadCandidate(index: number) {
           <button v-if="entry.status === 'ready' && asset.state === 'active'" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name)">分类此版本</button>
           <button v-if="entry.status === 'ready' && asset.state === 'active' && entry.classification_id" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name, entry.classification_id)">重新分类（保留历史）</button>
         </p>
-        <label v-if="asset.state === 'active'">为此档案新增版本：<input type="file" accept=".xlsx,.xls" :disabled="busy" @change="chooseArchiveVersion(asset.id, $event)"></label>
+        <div v-if="asset.state === 'active'" class="reviewed-template__version-picker">
+          <input :ref="el => { versionFileInputs[asset.id] = el as HTMLInputElement | null }" class="reviewed-template__version-input" type="file" accept=".xlsx,.xls" :aria-label="`为 ${asset.name} 选择新版本`" tabindex="-1" :disabled="busy" @change="chooseArchiveVersion(asset.id, $event)">
+          <button type="button" class="btn btn-sm btn-secondary" :aria-label="`为 ${asset.name} 选择新版本`" :disabled="busy" @click="versionFileInputs[asset.id]?.click()">选择文件</button>
+          <span role="status" :title="versionUploads[asset.id]?.file.name">{{ versionUploads[asset.id]?.file.name || '未选择文件' }}</span>
+        </div>
         <button v-if="asset.state === 'active'" type="button" :disabled="busy || !versionUploads[asset.id]" @click="appendArchiveVersion(asset)">保存新版本</button>
         <button v-if="asset.state === 'active'" type="button" :disabled="busy" @click="changeArchiveState(asset, 'trashed')">撤回</button>
         <button v-else type="button" :disabled="busy" @click="changeArchiveState(asset, 'active')">恢复</button>
@@ -1940,6 +1948,9 @@ async function downloadCandidate(index: number) {
   margin-top: 0.25rem;
   box-sizing: border-box;
 }
+.reviewed-template input.reviewed-template__version-input[type="file"] { display: none; }
+.reviewed-template__version-picker { display: flex; flex-wrap: wrap; align-items: center; gap: var(--xc-space-2); }
+.reviewed-template__version-picker span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .reviewed-template__step > button,
 .reviewed-template__step .classification-results > button {
   align-self: flex-start;
