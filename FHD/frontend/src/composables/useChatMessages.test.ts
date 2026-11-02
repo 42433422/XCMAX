@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { speakText, stopSpeaking } from '@/utils/tts'
+import { useChatMessageUi } from './useChatMessageUi'
 import { ref, nextTick } from 'vue'
 import { lastChatModelRoute, recordChatModelRoute, type ChatModelRoute } from '@/utils/chatModelRoute'
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
@@ -509,26 +511,57 @@ describe('message persistence failure UX', () => {
 })
 
 describe('queueVoice and clearVoiceQueue', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
+  beforeEach(() => { vi.useFakeTimers(); clearVoiceQueue(); vi.clearAllMocks() })
+  afterEach(() => { clearVoiceQueue(); vi.useRealTimers() })
+
+  it('serializes complete playback even when a message exceeds 30 seconds', async () => {
+    let finish!: () => void
+    vi.mocked(speakText).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    queueVoice('<b>第一句</b>'); queueVoice('第二句')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(speakText).toHaveBeenCalledTimes(1)
+    expect(speakText).toHaveBeenLastCalledWith('第一句')
+    expect(stopSpeaking).not.toHaveBeenCalled()
+    finish(); await vi.advanceTimersByTimeAsync(349)
+    expect(speakText).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(speakText).toHaveBeenLastCalledWith('第二句')
+  })
+
+  it('ignores empty text and stops queued playback', async () => {
+    queueVoice(''); queueVoice('   ')
+    expect(speakText).not.toHaveBeenCalled()
+    queueVoice('first'); queueVoice('discarded')
+    await Promise.resolve()
     clearVoiceQueue()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(speakText).toHaveBeenCalledTimes(1)
+    expect(stopSpeaking).toHaveBeenCalledOnce()
   })
 
-  it('queueVoice adds text to queue', () => {
-    queueVoice('Hello world')
-    // Voice queue is internal; just ensure no error
+  it('manual playback clears automatic speech so queued messages cannot interrupt it', async () => {
+    let finish!: () => void
+    vi.mocked(speakText).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    queueVoice('automatic'); queueVoice('discarded')
+    const ui = useChatMessageUi({ messages: ref([]), chatMessagesRef: ref(null) })
+    await ui.toggleMessageTts(0, 'manual')
+    finish(); await vi.advanceTimersByTimeAsync(1000)
+    expect(speakText).toHaveBeenCalledTimes(2)
+    expect(speakText).toHaveBeenLastCalledWith('manual', expect.any(Object))
   })
 
-  it('queueVoice ignores empty text', () => {
-    queueVoice('')
-    queueVoice('   ')
-    // No error
-  })
-
-  it('clearVoiceQueue stops speaking', () => {
-    queueVoice('test')
-    clearVoiceQueue()
-    // No error
+  it('fences late completion after clear so it cannot consume a new queue', async () => {
+    const finish: Array<() => void> = []
+    vi.mocked(speakText).mockImplementation(() => new Promise(resolve => { finish.push(resolve) }))
+    queueVoice('old'); queueVoice('discarded')
+    clearVoiceQueue(); queueVoice('new'); queueVoice('next')
+    finish[0]!(); await vi.advanceTimersByTimeAsync(1000)
+    expect(speakText).toHaveBeenCalledTimes(2)
+    finish[1]!(); await vi.advanceTimersByTimeAsync(350)
+    expect(speakText).toHaveBeenLastCalledWith('next')
+    expect(speakText).toHaveBeenCalledTimes(3)
+    finish[2]!()
+    vi.mocked(speakText).mockResolvedValue(undefined)
   })
 })
 

@@ -100,6 +100,7 @@ def test_generated_label_preview_has_a_desktop_only_frame_source(monkeypatch, de
     }
     frame_sources = directives.get("frame-src", directives["default-src"])
     assert frame_sources == (["'self'", "blob:"] if desktop else ["'self'"])
+    assert directives["media-src"] == ["'self'", "data:"]
     assert directives["default-src"] == ["'self'"]
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["x-content-type-options"] == "nosniff"
@@ -119,6 +120,7 @@ def test_sandbox_query_param_relaxes_csp():
     # sandbox CSP 没有 frame-ancestors 'self' 限制（但其实仍然保留），关键是 'unsafe-inline' / 'unsafe-eval'
     assert "unsafe-inline" in csp
     assert "unsafe-eval" in csp
+    assert "media-src 'self' data:" in csp
     assert r.headers.get("x-frame-options") is None  # sandbox 不加 DENY
 
 
@@ -137,6 +139,7 @@ def test_xcmax_dashboard_path_relaxes_csp():
     # dashboard embed CSP 允许 Google Fonts（不再依赖 cdn.jsdelivr.net）
     assert "fonts.googleapis.com" in csp
     assert "frame-ancestors 'self'" in csp
+    assert "data:" in csp.split(";")[0]  # existing default permits TTS data audio
 
 
 def test_https_scheme_adds_hsts():
