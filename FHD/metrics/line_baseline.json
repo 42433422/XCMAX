@@ -1,5 +1,5 @@
 {
-  "lines": 2420174,
+  "lines": 2420244,
   "updated": "2026-11-02",
-  "note": "PR #2928 合入含 #2915 的最新 main：官网小C头像；相对 main 基线实测净增登记。"
+  "note": "merge main into #2928"
 }
