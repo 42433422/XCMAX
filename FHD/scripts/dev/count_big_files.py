@@ -4,7 +4,7 @@
 
 守护两条大文件基线：
 
-1. ``app/**/*.py`` 行数 > ``file_lines_soft_cap``（默认 800）的文件 —— 只给出规模警告，不阻断构建或基线更新。
+1. ``app/**/*.py`` 行数 > ``file_lines_soft_cap``（默认 800）的文件 —— 对未登记存量给出警告；已在 ``file_line_limits`` 中登记的巨型文件禁止增长。
    新代码应按职责拆分（router 拆 domain、app_service 拆 helper、巨型 schema 拆子模块）。
 2. 单文件 ``@router.`` 装饰器数 > ``routes_per_file_soft_cap``（默认 20）的文件 ——
    路由数**不得增长**，并应聚合到 domain 子模块（绞杀者式收口）。
@@ -137,6 +137,10 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     removed = sorted(set(file_limits) - set(current_files))
     if removed:
         progress.append(f"app/ 不再超过规模提示阈值的文件：{len(removed)} 个")
+    for rel, lines in current_files.items():
+        previous = file_limits.get(rel)
+        if previous is not None and lines > previous:
+            errors.append(f"巨型文件继续增长：{rel}（{previous} → {lines} 行）")
 
     route_limits = baseline.get("router_route_limits", {})
     current_routers = {
@@ -214,6 +218,10 @@ def main(argv: list[str] | None = None) -> int:
                     raising.append(f"new oversized router {item['file']}")
                 elif old is not None and item["routes"] > old:
                     raising.append(f"{item['file']} routes")
+            for item in current["big_files_over_cap"]:
+                previous = baseline.get("file_line_limits", {}).get(item["file"])
+                if previous is not None and item["lines"] > previous:
+                    raising.append(f"{item['file']} file lines")
             if raising:
                 print(
                     "拒绝调高基线（棘轮只减不增）："
