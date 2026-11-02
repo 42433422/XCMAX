@@ -14,7 +14,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 
@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, Response
 from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from app.application.elt.archive_policy import ArchivePolicyError
@@ -704,6 +705,7 @@ def reviewed_excel_auto_slices(classification_id: str, version: str, user=Depend
                 {
                     **{key: value for key, value in item.items() if key != "workbook"},
                     "index": index,
+                    "display_name": Path(item["filename"]).stem,
                     "sha256": hashlib.sha256(item["workbook"]).hexdigest(),
                 }
                 for index, item in enumerate(slices)
@@ -1659,11 +1661,13 @@ def reviewed_excel_history(review_id: str, user=Depends(_read)):
             "success": True,
             "review_id": run.id,
             "source_sha256": run.file_sha256,
+            "selected_region": load_json(run.summary_json, {}).get("selected_region"),
             "usage_restrictions": _usage_restrictions(db, run, tenant, owner),
             "status": run.status,
             "versions": versions,
             "confirmation": state.get("confirmation"),
             "receipt": load_json(run.receipt_json, {}),
+            "revision_parent": load_json(run.summary_json, {}).get("revision_parent"),
         }
 
 
@@ -1701,6 +1705,75 @@ def reviewed_excel_candidate_download(
     )
 
 
+def _refinement_response(run, proposal, *, replayed=False):
+    parent = load_json(run.summary_json, {}).get("revision_parent", {})
+    return {
+        "success": True,
+        "review_id": run.id,
+        "proposal": proposal,
+        **(
+            {"parent_review_id": parent["review_id"], "parent_version": parent["proposal_version"]}
+            if parent
+            else {}
+        ),
+        **({"replayed": True} if replayed else {}),
+    }
+
+
+def _fork_saved_review(db, parent, proposal, feedback, current_cells, grant, tenant, owner):
+    summary = load_json(parent.summary_json, {})
+    request_digest = hashlib.sha256(
+        dump_json(
+            {
+                "tenant": tenant,
+                "owner": owner,
+                "parent": parent.id,
+                "version": proposal["version"],
+                "source": parent.file_sha256,
+                "scope": summary.get("selected_region"),
+                "feedback": feedback,
+                "current": sorted(current_cells, key=lambda item: (item["sheet"], item["cell"])),
+                "publication": grant["publication"],
+                "route": grant["route"],
+            }
+        ).encode()
+    ).hexdigest()
+    child_id = str(uuid5(NAMESPACE_URL, f"xcmax-review-refinement:{request_digest}"))
+    child = db.get(EltRun, child_id)
+    if child is None:
+        summary["revision_parent"] = {
+            "review_id": parent.id,
+            "proposal_version": proposal["version"],
+            "template_id": load_json(parent.receipt_json, {}).get("template_id"),
+        }
+        child = EltRun(
+            id=child_id,
+            tenant_id=tenant,
+            owner_user_id=owner,
+            upload_id=parent.upload_id,
+            target_type="template_review",
+            status=_READY,
+            stage=_READY,
+            file_sha256=parent.file_sha256,
+            draft_json=dump_json({"versions": [proposal]}),
+            summary_json=dump_json(summary),
+        )
+        db.add(child)
+        try:
+            db.commit()
+        except IntegrityError:
+            # The deterministic primary key elects one canonical draft across concurrent retries.
+            db.rollback()
+            child = _run(db, child_id, tenant, owner)
+    if (
+        child.tenant_id != tenant
+        or child.owner_user_id != owner
+        or child.target_type != "template_review"
+    ):
+        raise HTTPException(status_code=409, detail="模板修订身份不一致，未调用模型")
+    return child
+
+
 @router.post("/api/templates/reviewed-excel/refine")
 async def reviewed_excel_refine(
     request: Request,
@@ -1736,6 +1809,16 @@ async def reviewed_excel_refine(
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
             state, versions = _proposals(run)
+            if run.status == _SAVED and notice_grant and versions[-1]["version"] == parent_version:
+                body = _source(db, run, tenant, owner)
+                clean_workbook(body, run.file_sha256, current_cells)
+                _recheck(request, (tenant, owner))
+                run = _fork_saved_review(
+                    db, run, versions[-1], feedback, current_cells, notice_grant, tenant, owner
+                )
+                state, versions = _proposals(run)
+                if run.status in {_READY, _SAVED} and versions[-1]["version"] != parent_version:
+                    return _refinement_response(run, versions[-1], replayed=True)
             if run.status == _MODEL_PENDING:
                 error = _model_processing_failure(
                     ReviewedExcelError("上次模型处理仍在进行或结果未知，请先核对状态；不会重复发送")
@@ -1804,7 +1887,8 @@ async def reviewed_excel_refine(
                 stage=_READY,
                 draft_json=dump_json(state),
             )
-        return {"success": True, "proposal": proposal}
+            response = _refinement_response(run, proposal)
+        return response
     except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
@@ -2206,6 +2290,15 @@ async def reviewed_excel_save(
                                 "selected_region"
                             ),
                             "review_id": review_id,
+                            **(
+                                {
+                                    "revision_parent": load_json(run.summary_json, {})[
+                                        "revision_parent"
+                                    ]
+                                }
+                                if load_json(run.summary_json, {}).get("revision_parent")
+                                else {}
+                            ),
                         },
                     }
                 )
@@ -2227,7 +2320,19 @@ async def reviewed_excel_save(
                         status=_SAVED,
                         stage=_SAVED,
                         receipt_json=dump_json(
-                            {"request_key": request_key, "template_id": template_id}
+                            {
+                                "request_key": request_key,
+                                "template_id": template_id,
+                                **(
+                                    {
+                                        "revision_parent": load_json(run.summary_json, {})[
+                                            "revision_parent"
+                                        ]
+                                    }
+                                    if load_json(run.summary_json, {}).get("revision_parent")
+                                    else {}
+                                ),
+                            }
                         ),
                     )
                 )

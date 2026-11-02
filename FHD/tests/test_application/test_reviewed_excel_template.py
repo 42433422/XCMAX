@@ -2423,6 +2423,8 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
         data={"expected_actor": "1:7", "request_key": "synthetic-notice-pipeline"},
     ).json()
     path = f"/api/templates/reviewed-excel/classifications/{classification['classification_id']}"
+    archived = client.get(path + "/source")
+    assert archived.status_code == 200 and archived.content == source
     form = {"version": classification["version"], "use_login_notice": "true", "auto_group": "true"}
     identity = client.get("/api/templates/reviewed-excel/identity").json()
     assert identity["login_authorization"]["operations"]["classification"] == "authorized"
@@ -2447,6 +2449,10 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     slices = client.get(path + f"/auto-slices/{analyzed['version']}")
     assert slices.status_code == 200, slices.text
     assert slices.json()["slices"][0]["basis"] == "model_group"
+    assert (
+        slices.json()["slices"][0]["display_name"]
+        == Path(slices.json()["slices"][0]["filename"]).stem
+    )
     result = client.post(
         "/api/templates/reviewed-excel/preview",
         files={"file": ("synthetic.xlsx", source)},
@@ -2473,6 +2479,11 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     }
     assert result["proposal"]["model"]["login_authorization"]["status"] == "authorized"
     assert calls == [7] * (classification_calls + 1)
+    derived_original = client.get(path + f"/auto-slices/{analyzed['version']}/0")
+    assert derived_original.status_code == 200
+    assert hashlib.sha256(derived_original.content).hexdigest() == result["sha256"]
+    assert result["selected_region"]["source_sha256"] == hashlib.sha256(source).hexdigest()
+    assert client.get(path + "/source").content == source
     revised = client.post(
         "/api/templates/reviewed-excel/refine",
         data={
@@ -6292,3 +6303,338 @@ def test_preview_post_model_failure_keeps_claim_and_success_is_replayed(
     )
     assert replay.status_code == 200, replay.text
     assert replay.json()["review_id"] == saved.json()["review_id"] and model.call_count == 2
+
+
+def test_document_review_has_three_model_candidates_and_unchanged_scoped_original(
+    authorized_notice_client, review_store, monkeypatch
+):
+    from unittest.mock import Mock
+
+    client, _, _ = authorized_notice_client
+    workbook = load_workbook(BytesIO(sample()))
+    workbook.copy_worksheet(workbook.active).title = "第二"
+    stream = BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    body = stream.getvalue()
+    form = candidate_form(client, body)
+    model = Mock(side_effect=synthetic_candidate_result)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+    first = client.post(
+        "/api/templates/reviewed-excel/preview", files={"file": ("synthetic.xlsx", body)}, data=form
+    ).json()
+    second = client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", body)},
+        data={**form, "region_sheet": "第二"},
+    ).json()
+    assert first["review_id"] != second["review_id"] and model.call_count == 2
+    for response, sheet in [(first, form["region_sheet"]), (second, "第二")]:
+        proposal = response["proposal"]
+        assert proposal["model"]["status"] == "returned"
+        assert len(proposal["candidates"]) == len(proposal["result_previews"]) == 3
+        assert [preview["candidate_id"] for preview in proposal["result_previews"]] == [
+            candidate["id"] for candidate in proposal["candidates"]
+        ]
+        path = f"/api/templates/reviewed-excel/reviews/{response['review_id']}"
+        with review_store.engine.connect() as db:
+            source_path = db.execute(
+                text(
+                    "SELECT storage_path FROM etl_uploads JOIN etl_runs ON etl_runs.upload_id=etl_uploads.id WHERE etl_runs.id=:id"
+                ),
+                {"id": response["review_id"]},
+            ).scalar_one()
+        original = Path(source_path).read_bytes()
+        assert hashlib.sha256(original).hexdigest() == response["sha256"]
+        source = load_workbook(BytesIO(original), data_only=False)
+        try:
+            assert source.sheetnames == [sheet]
+            assert source[sheet]["B2"].value == "示例客户" and source[sheet]["C3"].value == "=B3*2"
+        finally:
+            source.close()
+        assert client.get(path).json()["selected_region"] == response["selected_region"]
+    first_path = f"/api/templates/reviewed-excel/reviews/{first['review_id']}"
+    second_path = f"/api/templates/reviewed-excel/reviews/{second['review_id']}"
+    feedback = client.post(
+        "/api/templates/reviewed-excel/refine",
+        data={
+            "review_id": first["review_id"],
+            "parent_version": first["proposal"]["version"],
+            "feedback": "只调整第一份模板",
+            "current": "[]",
+            "use_login_notice": "true",
+        },
+    )
+    assert feedback.status_code == 200, feedback.text
+    assert len(client.get(first_path).json()["versions"]) == len(first["versions"]) + 1
+    assert client.get(second_path).json()["versions"] == second["versions"]
+    revised = feedback.json()["proposal"]
+    save = {
+        "review_id": first["review_id"],
+        "proposal_version": revised["version"],
+        "candidate_id": "original",
+        "selections": "[]",
+        "name": "第一份模板",
+        "publish_to_tenant": "true",
+    }
+    assert client.post("/api/templates/reviewed-excel/save", data=save).status_code == 409
+    saved = client.post(
+        "/api/templates/reviewed-excel/save",
+        data={**save, "candidate_id": revised["candidates"][0]["id"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert client.get(first_path).json()["status"] == "template_review_saved"
+    assert client.get(second_path).json()["status"] == "template_review_ready"
+    review_store.actor["id"] = 8
+    assert client.get(first_path).status_code == 404
+
+
+def saved_model_review(client, monkeypatch):
+    body = sample()
+    form = candidate_form(client, body)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete", synthetic_candidate_result
+    )
+    result = client.post(
+        "/api/templates/reviewed-excel/preview", files={"file": ("synthetic.xlsx", body)}, data=form
+    ).json()
+    saved = client.post(
+        "/api/templates/reviewed-excel/save",
+        data={
+            "review_id": result["review_id"],
+            "proposal_version": result["proposal"]["version"],
+            "candidate_id": result["proposal"]["candidates"][0]["id"],
+            "selections": "[]",
+            "name": "已存模板",
+            "publish_to_tenant": "true",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    return result, saved.json()
+
+
+@pytest.mark.parametrize("restricted", [False, True])
+def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_child(
+    authorized_notice_client, review_store, monkeypatch, restricted
+):
+    from unittest.mock import Mock
+
+    client, _, _ = authorized_notice_client
+    parent, saved = saved_model_review(client, monkeypatch)
+    parent_id = parent["review_id"]
+    with review_store.engine.begin() as db:
+        if restricted:
+            summary = json.loads(
+                db.execute(
+                    text("SELECT summary_json FROM etl_runs WHERE id=:id"), {"id": parent_id}
+                ).scalar_one()
+            )
+            summary["usage_restrictions"] = [
+                "仅供数据/模板测试；打印版式未验证，不得发布到企业模板库"
+            ]
+            db.execute(
+                text("UPDATE etl_runs SET summary_json=:summary WHERE id=:id"),
+                {"summary": json.dumps(summary), "id": parent_id},
+            )
+        before = tuple(
+            db.execute(text("SELECT * FROM etl_runs WHERE id=:id"), {"id": parent_id}).one()
+        )
+        template_before = tuple(db.execute(text("SELECT * FROM templates")).one())
+        template_bytes = Path(
+            db.execute(text("SELECT original_file_path FROM templates")).scalar_one()
+        ).read_bytes()
+    payload = {
+        "review_id": parent_id,
+        "parent_version": parent["proposal"]["version"],
+        "current": "[]",
+        "feedback": "只调整这份已保存模板",
+        "use_login_notice": "true",
+    }
+    concurrent = []
+
+    def model_reply(*args, **kwargs):
+        concurrent.append(client.post("/api/templates/reviewed-excel/refine", data=payload))
+        return synthetic_candidate_result(*args, **kwargs)
+
+    model = Mock(side_effect=model_reply)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+    response = client.post("/api/templates/reviewed-excel/refine", data=payload)
+    assert response.status_code == 200, response.text
+    child = response.json()
+    assert child["review_id"] != parent_id and child["parent_review_id"] == parent_id
+    assert child["parent_version"] == parent["proposal"]["version"]
+    assert concurrent[0].status_code == 409 and model.call_count == 1
+    replay = client.post("/api/templates/reviewed-excel/refine", data=payload)
+    assert replay.status_code == 200, replay.text
+    assert (
+        replay.json()["review_id"] == child["review_id"]
+        and replay.json()["proposal"] == child["proposal"]
+    )
+    assert replay.json()["replayed"] and model.call_count == 1
+    child_history = client.get(f"/api/templates/reviewed-excel/reviews/{child['review_id']}").json()
+    assert child_history["status"] == "template_review_ready" and not child_history["receipt"]
+    assert child_history["selected_region"] == parent["selected_region"]
+    assert child_history["revision_parent"] == {
+        "review_id": parent_id,
+        "proposal_version": parent["proposal"]["version"],
+        "template_id": saved["template_id"],
+    }
+    assert bool(child_history["usage_restrictions"]) is restricted
+    save = {
+        "review_id": child["review_id"],
+        "proposal_version": child["proposal"]["version"],
+        "candidate_id": child["proposal"]["candidates"][0]["id"],
+        "selections": "[]",
+        "name": "模板新修订",
+        "private_intake": "true",
+    }
+    assert (
+        client.post("/api/templates/reviewed-excel/save", data=save).status_code == 409
+    )  # New revision requires its own explicit intake preview.
+    saved_child = client.post(
+        "/api/templates/reviewed-excel/save",
+        data={**save, "private_intake": "false", "publish_to_tenant": "true"},
+    )
+    assert saved_child.status_code == (409 if restricted else 200), saved_child.text
+    with review_store.engine.connect() as db:
+        assert (
+            tuple(db.execute(text("SELECT * FROM etl_runs WHERE id=:id"), {"id": parent_id}).one())
+            == before
+        )
+        assert (
+            tuple(db.execute(text("SELECT * FROM templates ORDER BY id LIMIT 1")).one())
+            == template_before
+        )
+        assert (
+            Path(
+                db.execute(
+                    text("SELECT original_file_path FROM templates ORDER BY id LIMIT 1")
+                ).scalar_one()
+            ).read_bytes()
+            == template_bytes
+        )
+        assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == (
+            1 if restricted else 2
+        )
+    assert (
+        client.post(
+            "/api/templates/reviewed-excel/refine", data={**payload, "parent_version": "stale"}
+        ).status_code
+        == 409
+    )
+    review_store.actor["id"] = 8
+    assert client.post("/api/templates/reviewed-excel/refine", data=payload).status_code in {
+        403,
+        404,
+    }
+    assert model.call_count == 1
+
+
+@pytest.mark.parametrize("not_sent", [False, True])
+def test_saved_review_refinement_failure_keeps_parent_and_deduplicates_child(
+    authorized_notice_client, review_store, monkeypatch, not_sent
+):
+    from unittest.mock import Mock
+
+    from app.application.elt.errors import ReviewedExcelError
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+    client, _, _ = authorized_notice_client
+    parent, _ = saved_model_review(client, monkeypatch)
+    parent_id = parent["review_id"]
+    with review_store.engine.connect() as db:
+        before = tuple(
+            db.execute(text("SELECT * FROM etl_runs WHERE id=:id"), {"id": parent_id}).one()
+        )
+    model = Mock(
+        side_effect=ModelRequestNotSent("synthetic unsent")
+        if not_sent
+        else ReviewedExcelError("synthetic incomplete model output")
+    )
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+    payload = {
+        "review_id": parent_id,
+        "parent_version": parent["proposal"]["version"],
+        "current": "[]",
+        "feedback": "修改本模板",
+        "use_login_notice": "true",
+    }
+    first = client.post("/api/templates/reviewed-excel/refine", data=payload)
+    assert first.status_code == 503, first.text
+    replay = client.post("/api/templates/reviewed-excel/refine", data=payload)
+    assert replay.status_code == (503 if not_sent else 409), replay.text
+    assert model.call_count == (2 if not_sent else 1)
+    with review_store.engine.connect() as db:
+        assert (
+            tuple(db.execute(text("SELECT * FROM etl_runs WHERE id=:id"), {"id": parent_id}).one())
+            == before
+        )
+        children = db.execute(
+            text(
+                "SELECT status, summary_json FROM etl_runs WHERE target_type='template_review' AND id<>:id"
+            ),
+            {"id": parent_id},
+        ).all()
+    assert len(children) == 1 and children[0][0] == (
+        "template_review_ready" if not_sent else "template_review_model_pending"
+    )
+    assert json.loads(children[0][1])["revision_parent"]["review_id"] == parent_id
+
+
+def test_saved_refinement_concurrent_initial_insert_elects_one_child_and_model_call(
+    authorized_notice_client, review_store, monkeypatch
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from unittest.mock import Mock
+
+    from sqlalchemy.orm import Session
+
+    from app.db.models.elt import EltRun
+
+    client, _, _ = authorized_notice_client
+    parent, _ = saved_model_review(client, monkeypatch)
+    payload = {
+        "review_id": parent["review_id"],
+        "parent_version": parent["proposal"]["version"],
+        "current": "[]",
+        "feedback": "并发的同一模板修改",
+        "use_login_notice": "true",
+    }
+    barrier = Barrier(2)
+    original_get = Session.get
+
+    def concurrent_missing_child(session, entity, ident, *args, **kwargs):
+        result = original_get(session, entity, ident, *args, **kwargs)
+        if entity is EltRun and ident != parent["review_id"] and result is None:
+            barrier.wait(timeout=10)
+        return result
+
+    model = Mock(side_effect=synthetic_candidate_result)
+    monkeypatch.setattr(Session, "get", concurrent_missing_child)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+    with TestClient(client.app) as left, TestClient(client.app) as right:
+        left.cookies.update(client.cookies)
+        right.cookies.update(client.cookies)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            replies = list(
+                executor.map(
+                    lambda target: target.post(
+                        "/api/templates/reviewed-excel/refine", data=payload
+                    ),
+                    [left, right],
+                )
+            )
+    assert all(reply.status_code in {200, 409} for reply in replies), [
+        reply.text for reply in replies
+    ]
+    successful = [reply.json() for reply in replies if reply.status_code == 200]
+    assert successful and len({reply["review_id"] for reply in successful}) == 1
+    assert model.call_count == 1
+    with review_store.engine.connect() as db:
+        assert (
+            db.execute(
+                text("SELECT count(*) FROM etl_runs WHERE target_type='template_review'")
+            ).scalar_one()
+            == 2
+        )
