@@ -10,6 +10,10 @@ from __future__ import annotations
 import importlib
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.employee_executor_policies import (
+    _flag_enabled as _flag_enabled,
+    _is_transient_llm_error as _is_transient_llm_error,
+)
 
 # --- from employee_executor_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -99,10 +103,7 @@ def _metric_task_preview(task: object) -> str:
     return t[: _facade()._METRIC_TASK_MAX_LEN - 1] + "…"
 
 
-def _flag_enabled(value: object) -> bool:
-    if isinstance(value, bool):
-        return value
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+# _flag_enabled moved to a pure policy module (re-exported above).
 
 
 def _resolve_metric_user_id(session: _facade().Any, user_id: object) -> int:
@@ -166,32 +167,7 @@ def _executor_detail_log_enabled() -> bool:
     )
 
 
-def _is_transient_llm_error(msg: str) -> bool:
-    s = (msg or "").lower()
-    if not s.strip():
-        return False
-    needles = (
-        "timeout",
-        "timed out",
-        "connection reset",
-        "connection aborted",
-        "temporarily unavailable",
-        "rate limit",
-        "429",
-        "503",
-        "502",
-        "bad gateway",
-        "service unavailable",
-        "eof occurred",
-        "broken pipe",
-        "connection refused",
-        "connecterror",
-        "readtimeout",
-        "remotedisconnected",
-        "try again",
-        "overloaded",
-    )
-    return any((n in s for n in needles))
+# _is_transient_llm_error moved to a pure policy module (re-exported above).
 
 
 def _run_cognition_with_transient_retries(
