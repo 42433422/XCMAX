@@ -114,3 +114,59 @@ def test_missing_or_malformed_evidence_stops_before_dispatch(tmp_path, current, 
     result, calls = _run_dispatch(tmp_path, _dispatch_step(SOURCE), current, previous)
     assert result.returncode != 0
     assert calls == []
+
+@pytest.mark.parametrize("workflow_path", [SOURCE, MIRROR], ids=["source", "published"])
+def test_desktop_production_dispatch_is_not_the_default_candidate_lane(workflow_path):
+    jobs = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))["jobs"]
+    check = str(jobs["verify-version-anchors"])
+    assert "Test-only candidate cannot trigger production deployments" in check
+    assert "windows_interim_release" in check
+    assert jobs["deploy-servers-in-order"]["needs"] == "verify-version-anchors"
+    step = next(s for s in jobs["dispatch-client-releases"]["steps"] if "run" in s)
+    run = step["run"]
+    for flag in ("windows_installer_only=false", "candidate_only=false", "verify_only=false"):
+        assert f"-f {flag}" in run
+    assert '"Release Desktop ${XCAGI_RELEASE_SHA}"' in run
+
+
+@pytest.mark.parametrize("scenario,expected_ok", [
+    ("exact", True), ("duplicate", False), ("wrong_sha", False), ("candidate_suffix", False)
+])
+def test_dispatch_correlates_exact_title_and_frozen_sha(tmp_path, scenario, expected_ok):
+    sha = "a" * 40
+    helper = REPO_ROOT / "FHD/scripts/release/dispatch_workflow_and_wait.sh"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "gh"
+    fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "args = sys.argv[1:]\n"
+        "if args[:2] == ['workflow', 'run']: sys.exit(0)\n"
+        "if args[:2] == ['run', 'list']:\n"
+        "    print(os.environ['FAKE_WORKFLOW_RUNS']); sys.exit(0)\n"
+        "if args[:2] == ['run', 'watch']: sys.exit(0)\n"
+        "sys.exit(2)\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    row = dict(databaseId=202, displayTitle=f"Release Desktop {sha}",
+               createdAt="2099-01-01T00:00:00Z", headSha=sha)
+    if scenario == "duplicate":
+        rows = [row, {**row, "databaseId": 203}]
+    elif scenario == "wrong_sha":
+        rows = [{**row, "headSha": "b" * 40}]
+    elif scenario == "candidate_suffix":
+        rows = [{**row, "displayTitle": row["displayTitle"] + " · Windows candidate"}]
+    else:
+        rows = [row]
+    result = subprocess.run(
+        ["bash", str(helper), "fhd-release-desktop.yml", row["displayTitle"]],
+        env={**os.environ, "GH_TOKEN": "inert", "GH_REPO": "test/repo",
+             "RELEASE_SHA": sha, "FAKE_WORKFLOW_RUNS": json.dumps(rows),
+             "PATH": f"{bin_dir}:{os.environ['PATH']}"},
+        capture_output=True, text=True, timeout=12, check=False,
+    )
+    assert (result.returncode == 0) == expected_ok, result.stderr
+    if scenario == "duplicate":
+        assert "Ambiguous dispatched run identity" in result.stderr
