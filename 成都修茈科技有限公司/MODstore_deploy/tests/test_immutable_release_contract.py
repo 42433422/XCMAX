@@ -219,6 +219,11 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
     assert "node scripts/install-native-bindings.mjs" in script
     assert script.index("--ignore-scripts") < script.index("npm run build")
+    media = script.index(
+        '"$RUNTIME_NODE_BIN" "$BUILD_ROOT/scripts/dev/materialize_media_assets.mjs" marketing'
+    )
+    assert script.index("npm run build") < media < script.index('chmod -R a-w "$BUILD_ROOT"')
+    assert '|| fail "cannot reconstruct checksum-pinned public site media"' in script
     assert (
         'MODSTORE_DATABASE_URL="$BUILD_DATABASE_URL" .venv/bin/python scripts/upgrade_database.py'
         in script
