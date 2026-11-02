@@ -645,7 +645,7 @@ class TestTemplatesDelete:
             )
             assert r.status_code == 404
 
-    def test_fs_template_success(self, client: TestClient, tmp_path):
+    def test_builtin_fs_template_is_refused_and_preserved(self, client: TestClient, tmp_path):
         test_file = tmp_path / "test.docx"
         test_file.write_text("content")
         with patch(
@@ -658,7 +658,9 @@ class TestTemplatesDelete:
                 content=json.dumps({"id": "fs:test.docx"}),
                 headers={"Content-Type": "application/json"},
             )
-            assert r.json()["success"] is True
+            assert r.status_code == 403, r.text
+            assert r.json()["success"] is False
+            assert test_file.read_text() == "content"
 
     def test_db_template_not_found(self, client: TestClient, local_tools):
         mock_db = MagicMock()
