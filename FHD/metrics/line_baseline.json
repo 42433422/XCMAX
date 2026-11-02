@@ -1,5 +1,5 @@
 {
-  "lines": 2419605,
+  "lines": 2419609,
   "updated": "2026-11-02",
-  "note": "启动就绪PR同步最新main 80151de（已合入PR2914），完整保留主干MODstore策略提取与回归；唯一共享行数基线冲突按合并工作树实测重算。启动修复相对最新main 2419633仍净删除28行，当前总量2419605；前端源码和配置与已验证f3a完全一致，复用750项单测及真实页面P0证据。"
+  "note": "启动就绪PR处理本轮CI实际失败：ProductOnboardingView测试改partial importOriginal保留真实captureAuthSession等导出，保留既有断言与生产guard；测试mock净增4行，相对最新main维护总量2419633仍净删除24行（当前2419609）。现状报告按原生成器同步新增E2E spec，生产源码和配置未改。"
 }
