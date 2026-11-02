@@ -115,6 +115,7 @@ def test_missing_or_malformed_evidence_stops_before_dispatch(tmp_path, current, 
     assert result.returncode != 0
     assert calls == []
 
+
 @pytest.mark.parametrize("workflow_path", [SOURCE, MIRROR], ids=["source", "published"])
 def test_desktop_production_dispatch_is_not_the_default_candidate_lane(workflow_path):
     jobs = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))["jobs"]
@@ -129,9 +130,15 @@ def test_desktop_production_dispatch_is_not_the_default_candidate_lane(workflow_
     assert '"Release Desktop ${XCAGI_RELEASE_SHA}"' in run
 
 
-@pytest.mark.parametrize("scenario,expected_ok", [
-    ("exact", True), ("duplicate", False), ("wrong_sha", False), ("candidate_suffix", False)
-])
+@pytest.mark.parametrize(
+    "scenario,expected_ok",
+    [
+        ("exact", True),
+        ("duplicate", False),
+        ("wrong_sha", False),
+        ("candidate_suffix", False),
+    ],
+)
 def test_dispatch_correlates_exact_title_and_frozen_sha(tmp_path, scenario, expected_ok):
     sha = "a" * 40
     helper = REPO_ROOT / "FHD/scripts/release/dispatch_workflow_and_wait.sh"
@@ -150,7 +157,6 @@ def test_dispatch_correlates_exact_title_and_frozen_sha(tmp_path, scenario, expe
         encoding="utf-8",
     )
     fake.chmod(0o755)
-    # Make "no exact match" terminate immediately instead of polling for five minutes.
     fast_sleep = bin_dir / "sleep"
     fast_sleep.write_text("#!/bin/sh\nexit 3\n", encoding="utf-8")
     fast_sleep.chmod(0o755)
@@ -170,10 +176,18 @@ def test_dispatch_correlates_exact_title_and_frozen_sha(tmp_path, scenario, expe
         rows = [row]
     result = subprocess.run(
         ["bash", str(helper), "fhd-release-desktop.yml", row["displayTitle"]],
-        env={**os.environ, "GH_TOKEN": "inert", "GH_REPO": "test/repo",
-             "RELEASE_SHA": sha, "FAKE_WORKFLOW_RUNS": json.dumps(rows),
-             "PATH": f"{bin_dir}:{os.environ['PATH']}"},
-        capture_output=True, text=True, timeout=12, check=False,
+        env={
+            **os.environ,
+            "GH_TOKEN": "inert",
+            "GH_REPO": "test/repo",
+            "RELEASE_SHA": sha,
+            "FAKE_WORKFLOW_RUNS": json.dumps(rows),
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        timeout=12,
+        check=False,
     )
     assert (result.returncode == 0) == expected_ok, result.stderr
     if scenario == "duplicate":
