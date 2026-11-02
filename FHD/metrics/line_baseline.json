@@ -1,5 +1,5 @@
 {
-  "lines": 2420519,
+  "lines": 2420671,
   "updated": "2026-11-02",
-  "note": "PR #2927 合入最新 main：启动时等待关键壳与当前页数据；相对 main 基线实测净增登记。"
+  "note": "PR #2927 合入含 #2915 的最新 main：启动 workspace readiness；相对 main 基线实测净增登记。"
 }
