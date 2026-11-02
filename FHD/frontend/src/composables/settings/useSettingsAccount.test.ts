@@ -6,18 +6,19 @@ import { appConfirm } from '@/utils/appDialog'
 import { useSettingsAccount } from './useSettingsAccount'
 const api = vi.hoisted(() => ({ getCurrentUser: vi.fn(), validateSession: vi.fn(), logout: vi.fn() }))
 const replace = vi.hoisted(() => vi.fn())
+const profile = vi.hoisted(() => ({ applyFromMeData: vi.fn(), clear: vi.fn(), workspaceReady: true }))
 vi.mock('@/api/auth', () => ({ authApi: api }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ fullPath: '/' }), useRouter: () => ({ replace }) }))
 vi.mock('@/api/core', () => ({ buildFullApiUrl: (p: string) => p }))
 vi.mock('@/api/marketAccount', () => ({ LS_MARKET_USER_JSON: 'market' }))
 vi.mock('@/api/adminAudit', () => ({ default: {} }))
-vi.mock('@/stores/accountProfile', () => ({ useAccountProfileStore: () => ({ applyFromMeData: vi.fn().mockResolvedValue(undefined), clear: vi.fn() }) }))
+vi.mock('@/stores/accountProfile', () => ({ useAccountProfileStore: () => profile }))
 vi.mock('@/utils/appDialog', () => ({ appConfirm: vi.fn().mockResolvedValue(true), appAlert: vi.fn() }))
 const user = { username: 'test', id: 1 }
 const me = { success: true, data: { user } }
 function pending() { let resolve!: (v: any) => void; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
-beforeEach(() => { vi.resetAllMocks(); vi.mocked(appConfirm).mockResolvedValue(true); localStorage.clear(); api.getCurrentUser.mockResolvedValue(me); api.logout.mockResolvedValue({ success: true }) })
+beforeEach(() => { vi.resetAllMocks(); profile.applyFromMeData.mockResolvedValue(undefined); profile.workspaceReady = true; vi.mocked(appConfirm).mockResolvedValue(true); localStorage.clear(); api.getCurrentUser.mockResolvedValue(me); api.logout.mockResolvedValue({ success: true }) })
 afterEach(() => vi.useRealTimers())
 it('coalesces mount and activation and shows checking instead of signed out', async () => {
  const p = pending(); api.getCurrentUser.mockReturnValue(p.promise)
@@ -196,4 +197,40 @@ it('propagates required transport failure and permits a fresh retry', async () =
  expect(s.accountError.value).toBe(true)
  api.getCurrentUser.mockResolvedValue(me); await s.loadLocalUser({ required: true })
  expect(s.localUser.value).toEqual(user); expect(s.accountError.value).toBe(false)
+})
+
+it('awaits the required profile application even while cached workspaceReady is already true', async () => {
+ const hydration = pending(); profile.applyFromMeData.mockReturnValue(hydration.promise)
+ const s = useSettingsAccount(); let ready = false
+ const loading = s.loadLocalUser({ required: true }).then(() => { ready = true })
+ await Promise.resolve(); await Promise.resolve()
+ expect(profile.workspaceReady).toBe(true); expect(profile.applyFromMeData).toHaveBeenCalled()
+ expect(ready).toBe(false); expect(s.accountLoading.value).toBe(true)
+ hydration.resolve(undefined); await loading
+ expect(ready).toBe(true); expect(s.accountLoading.value).toBe(false)
+})
+
+it('surfaces this required profile hydration failure rather than using previous workspace success', async () => {
+ profile.applyFromMeData.mockRejectedValue(new Error('synthetic workspace hydration failure'))
+ const s = useSettingsAccount()
+ await expect(s.loadLocalUser({ required: true })).rejects.toThrow('synthetic workspace hydration failure')
+ expect(s.accountError.value).toBe(true)
+})
+
+it('retains non-required background profile hydration degradation', async () => {
+ profile.applyFromMeData.mockRejectedValue(new Error('optional profile hydration failure'))
+ const s = useSettingsAccount()
+ await expect(s.loadLocalUser()).resolves.toBeUndefined()
+ expect(s.localUser.value).toEqual(user); expect(s.accountError.value).toBe(false)
+})
+
+it('includes required hydration in the same bounded account request budget', async () => {
+ vi.useFakeTimers()
+ profile.applyFromMeData.mockReturnValue(new Promise(() => {}))
+ const s = useSettingsAccount()
+ const loading = s.loadLocalUser({ required: true })
+ const failure = expect(loading).rejects.toThrow('账号状态核实超时')
+ await vi.advanceTimersByTimeAsync(8_000)
+ await failure
+ expect(s.accountError.value).toBe(true); expect(s.accountLoading.value).toBe(false)
 })

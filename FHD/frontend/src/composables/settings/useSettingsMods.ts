@@ -232,6 +232,11 @@ export function useSettingsMods() {
   const industries = ref<ApiIndustry[]>([])
   const currentIndustry = ref(DEFAULT_INDUSTRY_ID)
   const currentIndustryUnit = ref('天')
+  let serverIndustryUnit = '天'
+  function syncCurrentIndustryUnit() {
+    const fromMod = activeModIndustry.value?.units?.primary
+    currentIndustryUnit.value = (typeof fromMod === 'string' && fromMod.trim()) || serverIndustryUnit
+  }
 
   const currentIndustryLabel = computed(() => {
     const fromMod = String(activeModIndustry.value?.name || '').trim()
@@ -352,9 +357,9 @@ export function useSettingsMods() {
       if (response.success) {
         if (detail.id !== undefined) currentIndustry.value = String(detail.id).trim()
         // The active Mod's manifest remains the display-unit preference.
-        const fromMod = activeModIndustry.value?.units?.primary
         const units = detail.units as Record<string, unknown> | undefined
-        currentIndustryUnit.value = (typeof fromMod === 'string' && fromMod.trim()) || asString(units?.primary) || '天'
+        serverIndustryUnit = asString(units?.primary) || '天'
+        syncCurrentIndustryUnit()
         updateIndustryKeywords()
       }
     } catch (e) {
@@ -410,6 +415,7 @@ export function useSettingsMods() {
   watch(
     activeModIndustry,
     () => {
+      syncCurrentIndustryUnit()
       updateIndustryKeywords()
     },
     { deep: true },

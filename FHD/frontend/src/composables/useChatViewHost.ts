@@ -46,7 +46,15 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
   let taskPaneViewportMedia: MediaQueryList | null = null
   let returningToChat = false
   let chatViewActive = true
-  const preparePage = useStartupPageReady(current => syncSessionMessages({ required: true, isCurrent: current }), deps.pageScopeKey)
+  const preparePage = useStartupPageReady(async current => {
+    await syncSessionMessages({ required: true, isCurrent: current })
+    if (!current()) return
+    const firstTaskPrompt = consumeFirstAiTaskPrompt()
+    if (firstTaskPrompt) {
+      messageInput.value = firstTaskPrompt
+      void sendMessage()
+    }
+  }, deps.pageScopeKey)
   const emitChatViewActive = (active: boolean) => {
     chatViewActive = active
     try {
@@ -123,14 +131,6 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
       const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null
       if (domInput) domInput.value = text
       return true
-    }
-    const firstTaskPrompt = consumeFirstAiTaskPrompt()
-    if (firstTaskPrompt) {
-      void initialPage.then(() => {
-        if (!chatViewActive) return
-        messageInput.value = firstTaskPrompt
-        return sendMessage()
-      }).catch(() => {})
     }
     ;(window as unknown as { __VUE_HANDLE_AUTO_ACTION__?: boolean }).__VUE_HANDLE_AUTO_ACTION__ = true
     ;(window as Window & { handleAutoAction: (a: unknown, m?: string) => void }).handleAutoAction = (

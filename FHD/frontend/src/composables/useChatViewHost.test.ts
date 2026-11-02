@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { mount, type VueWrapper } from '@vue/test-utils'
 import { useChatViewHost, type UseChatViewHostDeps } from './useChatViewHost'
 
 const startup = vi.hoisted(() => ({ register: vi.fn(), preparePage: vi.fn(), consumePrompt: vi.fn() }))
@@ -37,7 +37,7 @@ describe('useChatViewHost', () => {
     localStorage.clear()
     startup.register.mockReturnValue(startup.preparePage)
     startup.preparePage.mockResolvedValue(undefined)
-    startup.consumePrompt.mockReturnValue('')
+    startup.consumePrompt.mockReset().mockReturnValue(null)
   })
   afterEach(() => {
     wrapper?.unmount(); wrapper = undefined
@@ -91,26 +91,40 @@ describe('useChatViewHost', () => {
     expect(startup.preparePage).toHaveBeenCalledOnce()
   })
 
-  it('waits for initial page preparation before sending the one-time onboarding prompt', async () => {
+  it('retains the onboarding prompt after a failed read and sends it once after a successful retry', async () => {
     const deps = makeDeps()
-    let finish!: () => void
-    startup.preparePage.mockReturnValue(new Promise<void>(resolve => { finish = resolve }))
-    startup.consumePrompt.mockReturnValue('合成首任务')
+    const failure = new Error('initial data unavailable')
+    vi.mocked(deps.syncSessionMessages).mockRejectedValueOnce(failure).mockResolvedValue(undefined)
+    startup.consumePrompt.mockReturnValueOnce('合成首任务')
     mountHost(deps)
+    const load = startup.register.mock.calls[0][0]
+    const current = () => true
+    await expect(load(current)).rejects.toBe(failure)
+    expect(startup.consumePrompt).not.toHaveBeenCalled()
     expect(deps.sendMessage).not.toHaveBeenCalled()
     expect(deps.messageInput.value).toBe('')
-    finish()
-    await flushPromises()
+    await load(current)
+    expect(startup.consumePrompt).toHaveBeenCalledOnce()
     expect(deps.messageInput.value).toBe('合成首任务')
+    expect(deps.sendMessage).toHaveBeenCalledOnce()
+    await load(current)
+    expect(startup.consumePrompt).toHaveBeenCalledTimes(2)
     expect(deps.sendMessage).toHaveBeenCalledOnce()
   })
 
-  it('does not send the onboarding prompt after initial page preparation fails', async () => {
+  it('does not consume or send the onboarding prompt after the page attempt retires', async () => {
     const deps = makeDeps()
-    startup.preparePage.mockRejectedValue(new Error('initial data failed'))
-    startup.consumePrompt.mockReturnValue('合成首任务')
+    let finish!: () => void
+    let active = true
+    vi.mocked(deps.syncSessionMessages).mockReturnValue(new Promise<void>(resolve => { finish = resolve }))
+    startup.consumePrompt.mockReturnValueOnce('合成首任务')
     mountHost(deps)
-    await flushPromises()
+    const load = startup.register.mock.calls[0][0](() => active)
+    expect(startup.consumePrompt).not.toHaveBeenCalled()
+    active = false
+    finish()
+    await load
+    expect(startup.consumePrompt).not.toHaveBeenCalled()
     expect(deps.sendMessage).not.toHaveBeenCalled()
     expect(deps.messageInput.value).toBe('')
   })

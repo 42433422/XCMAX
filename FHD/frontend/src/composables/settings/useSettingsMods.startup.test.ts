@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { effectScope, type EffectScope } from 'vue'
+import { effectScope, nextTick, type EffectScope } from 'vue'
 
 const state = await vi.hoisted(async () => {
   const { reactive, ref } = await import('vue')
@@ -131,6 +131,37 @@ describe('required settings industry readiness', () => {
     response.resolve({ success: true, data: { ...industry, units: { primary: 'old-unit' } } })
     await loading
     expect(settings.currentIndustryUnit.value).toBe('new-unit')
+  })
+
+  it('applies a late Mod unit after verified server details have already rendered', async () => {
+    await settings.loadCurrentIndustryDetail({ required: true, current: () => true })
+    expect(settings.currentIndustryUnit.value).toBe('小时')
+    state.mods.mods.value = [{ id: 'late-mod', industry: { units: { primary: '班次' } } }]
+    state.mods.activeModId.value = 'late-mod'
+    await nextTick()
+    expect(settings.currentIndustryUnit.value).toBe('班次')
+  })
+
+  it('retains active Mod priority during server refresh and restores the latest server unit when removed', async () => {
+    state.mods.mods.value = [{ id: 'active-mod', industry: { units: { primary: '班次' } } }]
+    state.mods.activeModId.value = 'active-mod'
+    await settings.loadCurrentIndustryDetail({ required: true, current: () => true })
+    state.api.getCurrentIndustry.mockResolvedValue({ success: true, data: { ...industry, units: { primary: '分钟' } } })
+    await settings.loadCurrentIndustryDetail({ required: true, current: () => true })
+    expect(settings.currentIndustryUnit.value).toBe('班次')
+    state.mods.mods.value = []
+    await nextTick()
+    expect(settings.currentIndustryUnit.value).toBe('分钟')
+  })
+
+  it('restores the server fallback when the active Mod no longer declares a nonempty unit', async () => {
+    state.mods.mods.value = [{ id: 'active-mod', industry: { units: { primary: '班次' } } }]
+    state.mods.activeModId.value = 'active-mod'
+    await settings.loadCurrentIndustryDetail({ required: true, current: () => true })
+    expect(settings.currentIndustryUnit.value).toBe('班次')
+    state.mods.mods.value = [{ id: 'active-mod', industry: { units: { primary: '  ' } } }]
+    await nextTick()
+    expect(settings.currentIndustryUnit.value).toBe('小时')
   })
 
   it('retains ordinary detail fallback when startup strictness is not requested', async () => {

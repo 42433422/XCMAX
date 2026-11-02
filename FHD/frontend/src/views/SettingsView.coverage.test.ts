@@ -807,8 +807,7 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.profileFormDirty).toBe(false)
     wrapper.unmount()
@@ -830,8 +829,7 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     vm.profileDisplayNameDraft = 'Alice New'
     await nextTick()
@@ -864,8 +862,7 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.profileHomeSummary).toContain('Alice')
     wrapper.unmount()
@@ -903,8 +900,7 @@ describe('SettingsView – companyBrandDirty', () => {
   it('草稿与当前 brand 不同时 dirty 为 true', async () => {
     mockAccountProfileStore.companyBrand = '公司A'
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     vm.companyBrandDraft = '公司B'
     await nextTick()
@@ -937,8 +933,7 @@ describe('SettingsView – saveCompanyBrand', () => {
     mockAuthApiUpdateCompanyBrand.mockResolvedValueOnce({ success: true })
     mockAccountProfileStore.refreshFromServer.mockResolvedValueOnce(undefined)
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     await wrapper.get('#settings-company-brand').setValue('新品牌')
     await wrapper.get('.settings-item__save-btn').trigger('click')
     await flushPromises()
@@ -1006,8 +1001,7 @@ describe('SettingsView – saveProfile', () => {
 
   it('表单未修改时不调用 API', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     await vm.saveProfile()
     expect(mockAuthApiUpdateProfile).not.toHaveBeenCalled()
@@ -1045,8 +1039,7 @@ describe('SettingsView – saveProfile', () => {
   it('保存抛异常时提示错误', async () => {
     mockAuthApiUpdateProfile.mockRejectedValueOnce(new Error('保存失败'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     vm.profileDisplayNameDraft = 'Alice New'
     await nextTick()
@@ -1086,8 +1079,7 @@ describe('SettingsView – 头像交互', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const clickSpy = vi.spyOn(wrapper.get('.settings-profile__avatar-input').element as HTMLInputElement, 'click')
     await wrapper.get('.settings-profile__avatar').trigger('click')
     expect(clickSpy).toHaveBeenCalled()

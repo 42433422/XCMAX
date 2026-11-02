@@ -72,11 +72,11 @@ export function useSettingsAccount() {
     }
   }
 
-  function applyAccountMetaFromAuthPayload(res: unknown) {
-    if (!res || typeof res !== 'object') return
+  function applyAccountMetaFromAuthPayload(res: unknown): Promise<void> {
+    if (!res || typeof res !== 'object') return Promise.resolve()
     const o = res as Record<string, unknown>
     const base = o.data && typeof o.data === 'object' && !Array.isArray(o.data) ? (o.data as Record<string, unknown>) : {}
-    void accountProfileStore.applyFromMeData({
+    return accountProfileStore.applyFromMeData({
       ...base,
       account_kind: o.account_kind ?? base.account_kind,
       company_brand: o.company_brand ?? base.company_brand,
@@ -85,7 +85,7 @@ export function useSettingsAccount() {
       ...Object.fromEntries(['tenant_id', 'tenant_name', 'market_user_id', 'local_user_id'].filter(key => key in o).map(key => [key, o[key]])),
       impersonating_market_user_id: o.impersonating_market_user_id ?? base.impersonating_market_user_id,
       impersonating_username: o.impersonating_username ?? base.impersonating_username,
-    }).catch(() => undefined)
+    })
   }
 
   const isLoggedIn = computed(() => Boolean(localUser.value) || sessionValid.value)
@@ -177,7 +177,9 @@ export function useSettingsAccount() {
         }
         localUser.value = user
         if (sessionValid.value) {
-          applyAccountMetaFromAuthPayload(payload)
+          const hydration = applyAccountMetaFromAuthPayload(payload)
+          if (required) await Promise.race([hydration, aborted])
+          else void hydration.catch(() => undefined)
           if (!isCurrent()) return
           companyBrandDraft.value = accountProfileStore.companyBrand || ''
         }
