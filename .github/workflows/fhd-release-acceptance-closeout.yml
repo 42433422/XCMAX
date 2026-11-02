@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '指定验收版本（缺省读 config/download_release.json 的 version_lock）'
+        description: '可选：限定已发布公网指针的版本；不匹配时拒绝回写'
         required: false
         type: string
       channel:
@@ -36,11 +36,6 @@ concurrency:
 permissions:
   contents: read
   issues: write
-
-
-defaults:
-  run:
-    working-directory: FHD
 
 jobs:
   closeout:
@@ -67,7 +62,8 @@ jobs:
           if [ -n "${{ inputs.version }}" ]; then
             args+=(--version "${{ inputs.version }}")
           fi
-          # 定时触发自动回写（闭环主体）；手动派发默认 dry-run，显式 dry_run=false 才回写
+          # 从线上 /download-release.json 获取发布 SHA 与 linked_issues，不使用工作树候选配置。
+          # 定时触发自动回写；手动默认 dry-run，显式 dry_run=false 才回写
           if [ "${{ github.event_name }}" = "schedule" ]; then
             args+=(--apply)
           elif [ "${{ inputs.dry_run }}" = "true" ]; then

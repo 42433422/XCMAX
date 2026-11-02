@@ -191,7 +191,7 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, judge: Any):
         _base: str, _token: str, version: str, channel: str, build_sha: str = ""
     ) -> dict[str, Any]:
         assert channel in ("stable", "staging")
-        return store.acceptance(judge, version, build_sha)
+        return {**store.acceptance(judge, version, build_sha), "build_sha": build_sha}
 
     monkeypatch.setattr(closeout, "_fetch_acceptance", fake_fetch)
     monkeypatch.setattr(closeout, "_http", gh.http)
@@ -235,8 +235,12 @@ def _config(tmp_path: Path, version: str, build_sha: str, issue_numbers: list[in
     cfg.write_text(
         json.dumps(
             {
+                "schema": "xcagi.download_release.public/v1",
+                "release_ready": True,
                 "version_lock": version,
+                "download_version": version,
                 "git_sha": build_sha,
+                "release_id": f"xcagi-{version}-{build_sha}",
                 "linked_issues": issue_numbers,
             }
         ),
@@ -299,11 +303,12 @@ class TestDeliveryCloseout:
             "customer-accepted"
         ]
         assert pipeline.gh.comment_count == 1
+        assert pipeline.gh.issues[number]["state"] == "closed"
 
     def test_market_unreachable_falls_back_to_local(
         self, isolates: Path, pipeline: SimpleNamespace
     ) -> None:
-        """共享宿主不可达 → closeout 降级本地事件流，仍能关闭原工单。"""
+        """共享宿主不可达时不得用 CI 临时磁盘伪造已验收状态。"""
         version = "1.0.0.9"
         sha = "9" * 40
         number = 910
@@ -326,10 +331,11 @@ class TestDeliveryCloseout:
         )
 
         rc = closeout.run(_args(_config(isolates, version, sha, [number])))
-        assert rc == 0
+        assert rc == 1
         view = wo.get_work_order(wo_id)
-        assert view is not None and view["status"] == "closed"
-        assert view["release_version"] == version
+        assert view is not None and view["status"] != "closed"
+        assert pipeline.gh.issues[number]["state"] == "open"
+        assert pipeline.gh.comment_count == 0
 
     def test_fail_reopen_fix_reaccept_updates_same_order(
         self, isolates: Path, pipeline: SimpleNamespace
@@ -481,8 +487,8 @@ class TestDeliveryCloseout:
         self, isolates: Path, pipeline: SimpleNamespace
     ) -> None:
         version = "1.0.0.6"
-        released_sha = "g" * 40
-        other_sha = "h" * 40
+        released_sha = "a" * 40
+        other_sha = "b" * 40
         number = 906
         wo_id = _make_work_order(isolates, number)
         pipeline.gh.new_issue(number)

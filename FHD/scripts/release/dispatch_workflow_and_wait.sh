@@ -13,6 +13,11 @@ fi
 : "${GH_TOKEN:?GH_TOKEN is required}"
 : "${GH_REPO:?GH_REPO is required}"
 
+expected_sha="${RELEASE_SHA:-${XCAGI_RELEASE_SHA:-}}"
+if [[ -n "$expected_sha" && ! "$expected_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Expected release SHA must be a full lowercase commit identity." >&2
+  exit 2
+fi
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 gh workflow run "$workflow" --repo "$GH_REPO" --ref main "$@"
 
@@ -23,15 +28,24 @@ for _attempt in $(seq 1 60); do
     --workflow "$workflow" \
     --event workflow_dispatch \
     --branch main \
-    --limit 30 \
-    --json databaseId,displayTitle,createdAt)"
-  run_id="$(jq -r \
+    --limit 100 \
+    --json databaseId,displayTitle,createdAt,headSha)"
+  # Fail closed on duplicate titles or a child built from another main commit.
+  # A matching SHA is mandatory for the frozen release orchestrator.
+  candidates="$(jq -c \
     --arg title "$expected_title" \
     --arg started "$started_at" \
-    '[.[] | select(.displayTitle == $title and .createdAt >= $started)]
-     | sort_by(.createdAt) | last | .databaseId // empty' <<<"$runs")"
-  if [[ "$run_id" =~ ^[0-9]+$ ]]; then
-    break
+    --arg sha "$expected_sha" \
+    '[.[] | select(.displayTitle == $title and .createdAt >= $started)
+      | select($sha == "" or .headSha == $sha)]' <<<"$runs")"
+  count="$(jq 'length' <<<"$candidates")"
+  if (( count > 1 )); then
+    echo "Ambiguous dispatched run identity for $workflow ($expected_title)" >&2
+    exit 1
+  fi
+  if (( count == 1 )); then
+    run_id="$(jq -r '.[0].databaseId // empty' <<<"$candidates")"
+    [[ "$run_id" =~ ^[1-9][0-9]*$ ]] && break
   fi
   sleep 5
 done

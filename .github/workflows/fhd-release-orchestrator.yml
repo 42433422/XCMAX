@@ -38,11 +38,6 @@ env:
   XCAGI_RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
   XCAGI_PRODUCT_VERSION: ${{ inputs.product_version || github.ref_name }}
 
-
-defaults:
-  run:
-    working-directory: FHD
-
 jobs:
   security-preflight:
     name: Verify exact-SHA all-source security evidence
@@ -140,6 +135,23 @@ jobs:
           test "$(git rev-parse HEAD)" = "${XCAGI_RELEASE_SHA}"
           printf '%s' "${XCAGI_RELEASE_SHA}" | grep -Eq '^[0-9a-fA-F]{40}$'
           python scripts/dev/verify_version_anchors.py
+      - name: Reject test-only versions before server deployment
+        env:
+          REQUESTED_VERSION: ${{ inputs.product_version }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = os.environ["REQUESTED_VERSION"]
+          release = json.loads(Path("config/download_release.json").read_text(encoding="utf-8"))
+          if release.get("version_lock") != version or release.get("download_version") != version:
+              raise SystemExit("Product version must match both frozen catalog anchors")
+          interim = release.get("windows_interim_release") or {}
+          if interim.get("test_only") is True and interim.get("version") == version:
+              raise SystemExit("Test-only candidate cannot trigger production deployments")
+          PY
 
   # 前端唯一构建：产出共享 templates/vue-dist，作为 Web 与桌面端「单次构建、双端共用」的 SSOT 产物。
   # 桌面/网页流水线各自下载该 artifact 并复用，不再各自重建（避免网页≠桌面、每次打包漂移/回退）。
@@ -284,7 +296,10 @@ jobs:
                 -f "version=${version}" -f "release_sha=${XCAGI_RELEASE_SHA}" \
                 -f "security_scan_run_id=${{ inputs.security_scan_run_id }}" \
                 -f "previous_security_scan_run_id=${{ inputs.previous_security_scan_run_id }}" \
-                -f "frontend_run_id=${{ github.run_id }}"
+                -f "frontend_run_id=${{ github.run_id }}" \
+                -f windows_installer_only=false \
+                -f candidate_only=false \
+                -f verify_only=false
               ;;
             fhd-release-web.yml)
               FHD/scripts/release/dispatch_workflow_and_wait.sh \
@@ -318,3 +333,42 @@ jobs:
           "Release convergence ${{ inputs.release_sha }}"
           -f "release_sha=${{ inputs.release_sha }}"
           -f "product_version=${{ inputs.product_version }}"
+
+  publish-converged-github-release:
+    name: Publish exact-SHA draft only after device convergence
+    needs: [verify-full-convergence]
+    if: ${{ needs.verify-full-convergence.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote and read back the already-verified GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.product_version }}
+        run: |
+          set -euo pipefail
+          tag="FHD/v${PRODUCT_VERSION}"
+          printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          release="$(gh api "repos/${GH_REPO}/releases/tags/${tag}")"
+          jq -e --arg sha "$RELEASE_SHA" --arg tag "$tag" '
+            .draft == true and .target_commitish == $sha and .tag_name == $tag and
+            ([.assets[].name | select(endswith(".exe"))] | length > 0) and
+            ([.assets[].name | select(endswith(".dmg"))] | length > 0)
+          ' <<<"$release" >/dev/null
+          ref_sha="$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -n "$ref_sha" ]; then
+            test "$ref_sha" = "$RELEASE_SHA" || {
+              echo "::error::tag already identifies another source commit"
+              exit 1
+            }
+          else
+            gh api --method POST "repos/${GH_REPO}/git/refs" \
+              -f "ref=refs/tags/${tag}" -f "sha=${RELEASE_SHA}" >/dev/null
+          fi
+          gh release edit "$tag" --repo "$GH_REPO" --draft=false
+          published="$(gh api "repos/${GH_REPO}/releases/tags/${tag}")"
+          jq -e --arg sha "$RELEASE_SHA" --arg tag "$tag" '
+            .draft == false and .target_commitish == $sha and .tag_name == $tag and
+            (.published_at | type == "string" and length > 0)
+          ' <<<"$published" >/dev/null
