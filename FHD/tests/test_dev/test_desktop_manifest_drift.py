@@ -68,8 +68,10 @@ def _stop(server: http.server.ThreadingHTTPServer) -> None:
 def _manifest(artifact_size: int, artifact_sha: str) -> bytes:
     return json.dumps(
         {
+            "schema": "xcagi.download_manifest/v1",
             "version": "9.9.9.9",
             "git_sha": "a" * 40,
+            "release_id": "xcagi-9.9.9.9-" + "a" * 40,
             "channels": {
                 "official_download": {
                     "enterprise": {
