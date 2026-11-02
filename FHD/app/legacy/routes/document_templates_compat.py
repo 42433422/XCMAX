@@ -146,41 +146,54 @@ def run_archive_template_delete(
             init_template_tables()
             ensure_templates_tenant_column()
             with get_db() as db:
-                rows = db.execute(
-                    text(
-                        "SELECT id, tenant_id, template_key, original_file_path, is_active FROM templates "
-                        "WHERE original_file_path IS NOT NULL"
-                    )
-                ).fetchall()
 
                 def file_key(path):
                     return os.path.normcase(os.path.realpath(path))
 
-                def removal_key(path):
+                states: list[dict[str, Any]] = []
+                for path in candidates:
                     identity = template_path_key(path, runtime_root=runtime_root)
-                    return f"removed_fs_{tenant_id}_{sha256(identity.encode('utf-8')).hexdigest()}"
-
-                inactive_paths = {
-                    template_path_key(r.original_file_path, runtime_root=runtime_root)
-                    for r in rows
-                    if r.tenant_id == tenant_id and r.is_active == 0
-                }
-                visible = [
-                    path
-                    for path in candidates
-                    if template_path_key(path, runtime_root=runtime_root) not in inactive_paths
-                ]
-                if not visible and len(candidates) > 1:
-                    matching = [
-                        r
-                        for r in rows
-                        if file_key(r.original_file_path) in {file_key(p) for p in candidates}
-                    ]
-                    if matching and all(
-                        r.tenant_id == tenant_id
-                        and r.is_active == 0
-                        and r.template_key == removal_key(r.original_file_path)
-                        for r in matching
+                    states.append(
+                        {
+                            "path": path,
+                            "identity": identity,
+                            "physical": file_key(path),
+                            "key": f"removed_fs_{tenant_id}_{sha256(identity.encode('utf-8')).hexdigest()}",
+                            "inactive": False,
+                            "marker_id": None,
+                            "referenced": False,
+                        }
+                    )
+                # Historical references may use path aliases. Stream all of them
+                # but retain only the two possible assets' aggregate state.
+                with db.execute(
+                    text(
+                        "SELECT id, tenant_id, template_key, original_file_path, is_active FROM templates "
+                        "WHERE original_file_path IS NOT NULL"
+                    ),
+                    execution_options={"stream_results": True},
+                ).yield_per(128) as rows:
+                    for row in rows:
+                        if not row.original_file_path or "\0" in row.original_file_path:
+                            continue  # Unrepresentable paths cannot reference a filesystem asset.
+                        identity = template_path_key(
+                            row.original_file_path, runtime_root=runtime_root
+                        )
+                        physical = file_key(row.original_file_path)
+                        owned_inactive = row.tenant_id == tenant_id and row.is_active == 0
+                        for state in states:
+                            if identity == state["identity"] and owned_inactive:
+                                state["inactive"] = True
+                            if identity == state["identity"] or physical == state["physical"]:
+                                if owned_inactive and row.template_key == state["key"]:
+                                    state["marker_id"] = row.id
+                                else:
+                                    state["referenced"] = True
+                visible = [state for state in states if not state["inactive"]]
+                if not visible and len(states) > 1:
+                    if all(
+                        state["marker_id"] is not None and not state["referenced"]
+                        for state in states
                     ):
                         return {
                             "success": True,
@@ -191,27 +204,16 @@ def run_archive_template_delete(
                                 "already_removed": True,
                             },
                         }, 200
-                targets = visible or candidates
+                targets = visible or states
                 if len(targets) != 1:
                     return {"success": False, "message": "存在同名模板，无法确定删除目标"}, 409
-                target_path = targets[0]
-                path_key = file_key(target_path)
-                marker_key = removal_key(target_path)
-                marker_id = None
-                for row in rows:
-                    if file_key(row.original_file_path) != path_key:
-                        continue
-                    if (
-                        row.tenant_id == tenant_id
-                        and row.template_key == marker_key
-                        and row.is_active == 0
-                    ):
-                        marker_id = row.id
-                    else:
-                        return {
-                            "success": False,
-                            "message": "模板文件仍被引用，请通过已保存模板移除",
-                        }, 409
+                state = targets[0]
+                target_path, marker_key, marker_id = state["path"], state["key"], state["marker_id"]
+                if state["referenced"]:
+                    return {
+                        "success": False,
+                        "message": "模板文件仍被引用，请通过已保存模板移除",
+                    }, 409
                 if marker_id is None:
                     result = db.execute(
                         text(

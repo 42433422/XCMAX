@@ -196,14 +196,17 @@ class FileSystemTemplateStore(TemplateStorePort):
             return templates
         try:
             with db_session.get_db() as db:
-                inactive = db.execute(
+                with db.execute(
                     text(
                         "SELECT original_file_path FROM templates "
                         "WHERE tenant_id = :tenant_id AND is_active = 0 AND original_file_path IS NOT NULL"
                     ),
                     {"tenant_id": current_tenant_id()},
-                ).scalars()
-                hidden = {key(path) for path in inactive if path}
+                    execution_options={"stream_results": True},
+                ).yield_per(128) as inactive:
+                    hidden = {
+                        key(row[0]) for row in inactive if row[0] and key(row[0]) in private_paths
+                    }
         except RECOVERABLE_ERRORS as exc:
             logger.warning("Template removal state unavailable: %s", exc)
             hidden = private_paths  # Fail closed rather than resurrecting removed private files.
@@ -350,12 +353,13 @@ class FileSystemTemplateStore(TemplateStorePort):
 
         # 1.5) 支持 "fs:<filename>" 形式（文件扫描来源）
         if template_id.startswith("fs:"):
-            filename = template_id.split(":", 1)[1]
+            raw_filename = template_id.split(":", 1)[1]
+            filename = os.path.basename(raw_filename)
             if (
                 not filename
-                or filename != os.path.basename(filename)
-                or "/" in filename
-                or "\\" in filename
+                or filename != raw_filename
+                or "/" in raw_filename
+                or "\\" in raw_filename
             ):
                 return None
             for folder in self._discovery_directories():

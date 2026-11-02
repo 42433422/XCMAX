@@ -193,6 +193,36 @@ def test_referenced_file_retained_including_inactive_or_other_tenant_record(file
     assert target.read_bytes() == b"synthetic template"
 
 
+def test_reference_beyond_first_stream_batch_is_still_protected(files):
+    base, runtime, engine = files
+    target = _file(runtime / "tenants/11/templates/sample.xlsx")
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "INSERT INTO templates (tenant_id, original_file_path, is_active) VALUES (22, :path, 1)"
+            ),
+            [{"path": str(runtime / "other" / f"{i}.xlsx")} for i in range(1024)]
+            + [{"path": str(target)}],
+        )
+    _delete(base, expected=409)
+    assert target.read_bytes() == b"synthetic template"
+
+
+def test_invalid_other_tenant_metadata_cannot_block_owned_removal(files):
+    base, runtime, engine = files
+    target = _file(runtime / "tenants/11/templates/sample.xlsx")
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "INSERT INTO templates (tenant_id, original_file_path, is_active) VALUES (22, :path, 1)"
+            ),
+            {"path": "invalid\0.xlsx"},
+        )
+    _delete(base, expected=200)
+    _assert_hidden(base, target)
+    assert target.read_bytes() == b"synthetic template"
+
+
 def test_missing_tenant_cannot_delete(files):
     base, runtime, _engine = files
     target = _file(runtime / "tenants/11/templates/sample.xlsx")
@@ -387,6 +417,7 @@ def test_path_traversal_is_rejected_without_changes(files, name):
     base, runtime, _engine = files
     target = _file(runtime / "tenants/11/templates/sample.xlsx")
     _delete(base, f"fs:{name}", expected=400)
+    assert FileSystemTemplateStore(str(base)).resolve_template_file(f"fs:{name}") is None
     assert target.read_bytes() == b"synthetic template"
 
 
