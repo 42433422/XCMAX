@@ -10,6 +10,7 @@ import { apiFetch } from './apiBase'
 import { readCsrfTokenFromCookie } from './csrfCookie'
 import { playOfflinePcm, synthesizeOffline, ensureOfflineReady, isOfflineReady, isOfflineLoading, getOfflineProgress, stopOffline } from './offlineTts'
 import { asRecord, asString } from '@/utils/typeGuards'
+import { showAppToast } from '@/composables/useAppToast'
 
 const VOICE_PREF_KEY = 'xcagi_tts_voice'
 const ENGINE_PREF_KEY = 'xcagi_tts_engine' // 'auto' | 'system' | 'offline' | 'online'
@@ -24,6 +25,7 @@ const AUTO_PRELOAD_OFFLINE_TTS = String(import.meta.env.VITE_PRELOAD_OFFLINE_TTS
 export type TtsEngineMode = 'auto' | 'system' | 'offline' | 'online'
 
 let onlineAudioEl: HTMLAudioElement | null = null
+let speechController: AbortController | null = null
 let offlineWarmupStarted = false
 
 function stopOnlinePlayback(): void {
@@ -325,18 +327,19 @@ export function createChineseUtterance(text: string): SpeechSynthesisUtterance {
   return configureUtterance(u)
 }
 
-async function fetchOnlineTtsDataUri(text: string): Promise<string> {
+async function fetchOnlineTtsDataUri(text: string, signal: AbortSignal): Promise<string> {
   const voice = getOnlineVoiceId()
   const rate = getSpeechRate()
-  const ratePercent = Math.round(rate * 100)
+  const ratePercent = Math.round(rate * 100) - 100
 
-  await ensureTtsCsrfCookie()
+  await ensureTtsCsrfCookie(signal)
+  signal.throwIfAborted()
 
   const res = await apiFetch('/api/tts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    timeoutMs: 30_000,
-    body: JSON.stringify({ text, lang: 'zh', voice, rate: `+${ratePercent - 100}%` }),
+    signal,
+    body: JSON.stringify({ text, lang: 'zh', voice, rate: `${ratePercent >= 0 ? '+' : ''}${ratePercent}%` }),
   })
   let json: Record<string, unknown> = {}
   try {
@@ -344,6 +347,7 @@ async function fetchOnlineTtsDataUri(text: string): Promise<string> {
   } catch {
     json = {}
   }
+  signal.throwIfAborted()
   if (!res.ok || !json.success) {
     throw new Error(asString(json.message) || `在线 TTS 失败（HTTP ${res.status}）`)
   }
@@ -355,74 +359,88 @@ async function fetchOnlineTtsDataUri(text: string): Promise<string> {
   return uri
 }
 
-async function ensureTtsCsrfCookie(): Promise<void> {
+async function ensureTtsCsrfCookie(signal: AbortSignal): Promise<void> {
   if (typeof window === 'undefined') return
   if (readCsrfTokenFromCookie()) return
   try {
-    await apiFetch('/api/health', { method: 'GET', timeoutMs: 5_000 })
+    await apiFetch('/api/health', { method: 'GET', timeoutMs: 5_000, signal })
   } catch {
     /* best-effort: the following POST will surface the actual TTS error */
   }
 }
 
-async function playOnlineTts(text: string): Promise<void> {
-  stopOnlinePlayback()
-  const uri = await fetchOnlineTtsDataUri(text)
+async function playOnlineTts(text: string, controller: AbortController): Promise<void> {
+  const { signal } = controller
+  // Include CSRF and response-body reads in the synthesis budget (MiMo 8s + Edge 15s).
+  const synthesisTimer = setTimeout(() => controller.abort(new DOMException('TTS synthesis timeout', 'TimeoutError')), 30_000)
+  let uri: string
+  try {
+    uri = await fetchOnlineTtsDataUri(text, signal)
+  } finally {
+    clearTimeout(synthesisTimer)
+  }
+  signal.throwIfAborted()
   await new Promise<void>((resolve, reject) => {
     const a = new Audio(uri)
     onlineAudioEl = a
-    const cleanup = () => {
+    // Limit loading only; a long, playing message must be allowed to finish.
+    const loadTimer = setTimeout(() => controller.abort(new DOMException('TTS audio load timeout', 'TimeoutError')), 15_000)
+    let settled = false
+    const finish = (error?: unknown) => {
+      if (settled) return
+      settled = true
+      clearTimeout(loadTimer)
+      signal.removeEventListener('abort', onAbort)
+      a.onended = a.onerror = a.onplaying = null
       if (onlineAudioEl === a) onlineAudioEl = null
+      if (error) {
+        a.pause()
+        a.src = ''
+        reject(error)
+      } else resolve()
     }
-    a.onended = () => {
-      cleanup()
-      resolve()
-    }
-    a.onerror = () => {
-      cleanup()
-      reject(new Error('音频播放失败'))
-    }
-    void a.play().catch((err) => {
-      cleanup()
-      reject(err)
-    })
+    const onAbort = () => finish(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    a.onplaying = () => clearTimeout(loadTimer)
+    a.onended = () => finish()
+    a.onerror = () => finish(new Error('音频播放失败'))
+    void a.play().catch(finish)
   })
 }
 
-/**
- * 高层 API：朗读一段文本，自动按引擎模式分发。
- * 返回 Promise 在播完/出错时 resolve。
- * 注：双语字幕仅官网 corp-butler 使用，桌面软件不挂字幕。
- */
+/** 朗读完成、失败或主动停止后结束；失败统一提示，取消静默。 */
 export async function speakText(text: string, options?: { onEnd?: () => void; onError?: (e: unknown) => void }): Promise<void> {
   const plain = String(text || '').trim()
   if (!plain) { options?.onEnd?.(); return }
-
-  const status = getTtsStatus()
-  // 显式 offline：仅离线包，失败不回退系统 TTS
-  if (status.engineMode === 'offline') {
-    try {
-      const { audio, samplingRate } = await synthesizeOffline(plain)
-      await playOfflinePcm(audio, samplingRate)
-      options?.onEnd?.()
-    } catch (e) {
-      options?.onError?.(e)
-      options?.onEnd?.()
-    }
-    return
-  }
-
-  // auto / online / 历史 system 偏好：统一走后端 MiMo → Edge，禁止 speechSynthesis
+  stopSpeaking()
+  const controller = new AbortController()
+  speechController = controller
   try {
-    await playOnlineTts(plain)
-    options?.onEnd?.()
+    if (getEngineMode() === 'offline') {
+      const { audio, samplingRate } = await synthesizeOffline(plain)
+      controller.signal.throwIfAborted()
+      await playOfflinePcm(audio, samplingRate)
+    } else {
+      await playOnlineTts(plain, controller)
+    }
   } catch (e) {
-    options?.onError?.(e)
+    const error = controller.signal.aborted ? controller.signal.reason : e
+    if (!controller.signal.aborted || error?.name === 'TimeoutError') {
+      showAppToast(error?.name === 'NotAllowedError'
+        ? '语音播放被浏览器阻止，请点击朗读按钮重试。'
+        : error?.name === 'TimeoutError' ? '语音服务响应超时，请稍后重试。' : '语音播放失败，请稍后重试。')
+      options?.onError?.(error)
+    }
+  } finally {
+    if (speechController === controller) speechController = null
     options?.onEnd?.()
   }
 }
 
 export function stopSpeaking(): void {
+  const controller = speechController
+  speechController = null
+  controller?.abort()
   stopOnlinePlayback()
   // Only cancel speechSynthesis when it is actually active; unconditional cancel
   // releases the Windows "communications" audio session even when idle, which

@@ -79,9 +79,8 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     runs = "\n".join(step.get("run", "") for step in publish["steps"])
     assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in runs
     acceptance = (ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
-    assert '["Clean","Upgrade","Gui","Recovery","Rollback"]' in acceptance
-    assert '["Clean","Upgrade","Rollback"]' in acceptance
-    assert "max-parallel: 1" in acceptance
+    assert "windows-acceptance-accounts.mjs" in acceptance
+    assert "max-parallel: ${{ fromJson(needs.select-modes.outputs.parallel) }}" in acceptance
     assert "run-id: 36661745977" in acceptance
     assert "https://xiu-ci.com/xcagi-v1.0.0.5" not in acceptance
     assert "matrix.mode != 'Clean' && matrix.mode != 'Rollback'" not in acceptance
@@ -259,7 +258,7 @@ for (const legacyRollback of [true, false]) {
 async function run(address, screenshotFails = false) {
   const calls = [], row = {}, dialog = { locator: () => 'heading' };
   const context = {
-    row, kind: 'customer', dir: '/evidence', path: require('node:path'),
+    row, kind: 'customer', dir: '/evidence', path: require('node:path'), process: { env: { XCAGI_TEST_USER: 'synthetic-user' } },
     seed: { cases: [{ id: 'customer', actual: { original_fields: { contact_address: 'original' } } }] },
     click: async (name, scope) => { calls.push(name); assert.equal(scope, name === '编辑' ? row : dialog); },
     modal: () => dialog,
@@ -269,8 +268,9 @@ async function run(address, screenshotFails = false) {
       toHaveValue: async wanted => assert.equal(actual, wanted),
       toHaveCount: async wanted => { assert.equal(wanted, 0); assert.equal(calls.at(-1), '取消'); },
     }),
-    page: { screenshot: async options => {
+    page: { locator: () => 'credential-fields', getByText: () => 'account-text', screenshot: async options => {
       calls.push('screenshot'); assert.equal(options.timeout, 60000);
+      assert.deepEqual(Array.from(options.mask), ['credential-fields', 'account-text']);
       if (screenshotFails) throw new Error('capture failed');
     } },
   };
