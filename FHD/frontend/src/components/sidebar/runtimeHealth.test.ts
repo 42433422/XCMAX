@@ -16,14 +16,32 @@ describe('service health presented to the user', () => {
     expect(runtimeHealthPresentation({ status: 'unexpected' }).text).toBe('服务状态待确认')
   })
 
-  it('distinguishes local AI readiness from a failed business service', () => {
+  it('does not describe an unscoped provider check as local AI or cloud availability', () => {
     const state = runtimeHealthPresentation({
       status: 'degraded', runtime: { status: 'healthy' }, degradedReasons: ['LLM_RUNTIME_UNAVAILABLE'],
     })
     expect(state.text).toBe('部分 AI 能力未就绪')
     expect(state.detail).toContain('业务服务可连接')
-    expect(state.detail).toContain('云端模型是否可用')
+    expect(state.detail).toContain('尚未确认可用的模型配置')
     expect(state.tone).toBe('warning')
+  })
+
+  it.each([
+    ['login_required', 'AI 账号连接异常'],
+    ['auth_error', 'AI 账号连接异常'],
+    ['configuration_error', '默认 AI 配置不可用'],
+    ['connection_error', 'AI 服务连接未完成'],
+  ])('shows the current session %s model failure', (status, text) => {
+    const state = runtimeHealthPresentation({ status: 'degraded', sessionModel: { status } })
+    expect(state.text).toBe(text)
+    expect(state.tone).toBe('warning')
+    expect(runtimeHealthPresentation({ status: 'unhealthy', sessionModel: { status } }).text).toBe('业务服务异常')
+  })
+
+  it('does not call a resolved model configuration a successful completion', () => {
+    const state = runtimeHealthPresentation({ status: 'healthy', sessionModel: { status: 'configured', completion: 'not_tested' } })
+    expect(state.tone).toBe('online')
+    expect(state.detail).toContain('实际模型响应以具体任务为准')
   })
 
   it('prioritizes business blockers over optional AI degradation', () => {

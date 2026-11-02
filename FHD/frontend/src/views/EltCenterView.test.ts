@@ -30,7 +30,6 @@ function region(range: string, label = 'unknown') {
     header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }
 }
 const parts = () => [region('A1:D4', 'process'), region('A5:D8', 'material'), region('A9:D12', 'inspection')]
-const authorization = { status: 'authorized', operations: { classification: 'authorized', template_candidates: 'authorized' } }
 const classification = (regions = parts()) => ({ name: '生产单.xlsx', classification_id: 'production', version: 'v1', status: 'classified', confirmed: false,
   model_status: 'not_called', sheets: [{ sheet: '生产单', labels: ['production'], checked_cells: 12, evidence: [], regions }] })
 const layout = (value: string) => [{ sheet: '生产单', widths: [20], rows: [{ height: 20, cells: [{ cell: 'A1', value, formula: false,
@@ -39,7 +38,7 @@ function review(id: string) {
   const candidates = [0, 1, 2].map(index => ({ id: `candidate-${index}`, label: `候选${index + 1}`, explanation: '保留未确认内容', clear: [] }))
   return { review_id: id, sha256: 'original-sha', cells: [], sheets: ['生产单'], model: 'returned', layout: layout('生产单原件'),
     selected_region: { selection_basis: 'model_group' }, proposal: { version: `${id}-v1`, parent_version: null,
-      candidates, evidence: [], model: { status: 'returned', login_authorization: authorization },
+      candidates, evidence: [], model: { status: 'returned' },
       result_previews: candidates.map(candidate => ({ candidate_id: candidate.id, sha256: `sha-${candidate.id}`, layout: layout(candidate.label), layout_truncated: false })) } }
 }
 async function setup(runId = '') {
@@ -64,7 +63,7 @@ async function setup(runId = '') {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  archive.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: authorization })
+  archive.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   archive.archiveClassifyExcel.mockResolvedValue(classification())
   archive.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: classification().sheets })
   archive.autoSlices.mockResolvedValue({ slices: [{ index: 0, basis: 'model_group', confirmed: false, sha256: 'production-slice',
@@ -94,7 +93,11 @@ describe('data docking user-only intake', () => {
     expect(archive.reviewExcel).toHaveBeenCalledTimes(1)
     const form = archive.reviewExcel.mock.calls[0][0] as FormData
     expect(form.get('file')).toBe(source)
-    expect([form.get('classification_id'), form.get('classification_version'), form.get('auto_slice_index'), form.get('use_login_notice')]).toEqual(['production', 'model-v2', '0', 'true'])
+    expect([form.get('classification_id'), form.get('classification_version'), form.get('auto_slice_index')]).toEqual(['production', 'model-v2', '0'])
+    const analysis = archive.analyzeClassification.mock.calls[0][1] as FormData
+    expect(analysis.get('version')).toBe('v1')
+    for (const request of [analysis, form]) for (const key of ['use_login_notice', 'model_opt_in', 'consent', 'sample_authorized', 'own_file_authorized', 'continue_authorized', 'retry_authorized']) expect(request.has(key)).toBe(false)
+    expect(archive.reviewedExcelIdentity).not.toHaveBeenCalled()
     expect(wrapper.findAll('.classification-region')).toHaveLength(0)
     expect(wrapper.text()).not.toContain('管理员与档案')
     expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
@@ -152,8 +155,8 @@ describe('data docking user-only intake', () => {
     expect(archive.reviewExcel).toHaveBeenCalledTimes(1)
     expect(archive.refineReviewedExcel).toHaveBeenCalledTimes(1)
     const form = archive.refineReviewedExcel.mock.calls[0][0] as FormData
-    expect([form.get('review_id'), form.get('feedback'), form.get('use_login_notice')]).toEqual(['review-production-0', '保留工艺表头', 'true'])
-    expect([form.get('consent'), form.get('sample_authorized'), form.get('own_file_authorized')]).toEqual(['false', 'false', 'false'])
+    expect([form.get('review_id'), form.get('parent_version'), form.get('feedback')]).toEqual(['review-production-0', 'review-production-0-v1', '保留工艺表头'])
+    for (const key of ['use_login_notice', 'consent', 'sample_authorized', 'own_file_authorized']) expect(form.has(key)).toBe(false)
     expect(wrapper.text()).toContain('整理要求：保留工艺表头')
     expect((wrapper.get('.elt-composer__input').element as HTMLTextAreaElement).value).toBe('')
     await openDocument()

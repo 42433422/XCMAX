@@ -614,6 +614,8 @@ def test_current_owner_market_provider(monkeypatch):
 def test_session_provider_chat_completion_success(monkeypatch):
     from app.application.elt.llm_session_provider import SessionMarketProvider
 
+    adapters = []
+
     class FakeResp:
         def raise_for_status(self):
             pass
@@ -631,15 +633,25 @@ def test_session_provider_chat_completion_success(monkeypatch):
         async def __aexit__(self, *a):
             return False
 
-        async def get(self, url, *, params):
-            assert params == {"platform_only": "true"}
+        async def get(self, url):
+            assert url.endswith("/api/llm/resolve-chat-default")
             return FakeResp()
 
     class FakeAdapter:
         def __init__(self, **k):
             self.closed = False
+            self.options = k
+            adapters.append(self)
 
         async def chat_completion(self, messages, **k):
+            assert messages == [{"role": "user", "content": "hi"}]
+            assert k == {
+                "temperature": 0,
+                "max_tokens": 5,
+                "provider": "p1",
+                "model": "m1",
+                "allow_failover": False,
+            }
             return {"ok": True}
 
         async def close(self):
@@ -655,10 +667,14 @@ def test_session_provider_chat_completion_success(monkeypatch):
         prov.chat_completion([{"role": "user", "content": "hi"}], temperature=0, max_tokens=5)
     )
     assert out == {"ok": True}
+    assert len(adapters) == 1 and adapters[0].closed
+    assert adapters[0].options["auth_token"] == "tok"
+    assert adapters[0].options["user_id"] == 1
 
 
 def test_session_provider_chat_completion_route_failure(monkeypatch):
     from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
 
     class FakeResp:
         def raise_for_status(self):
@@ -677,14 +693,19 @@ def test_session_provider_chat_completion_route_failure(monkeypatch):
         async def __aexit__(self, *a):
             return False
 
-        async def get(self, url, *, params):
-            assert params == {"platform_only": "true"}
+        async def get(self, url):
+            assert url.endswith("/api/llm/resolve-chat-default")
             return FakeResp()
 
+    adapter = MagicMock(side_effect=AssertionError("route failure must not dispatch a model"))
     monkeypatch.setattr("httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr(
+        "app.domain.shared_services.conversation.modstore_adapter.ModstorePlatformAdapter", adapter
+    )
     prov = SessionMarketProvider(1, "tok", timeout_seconds=4.0)
-    with pytest.raises(ValueError):
+    with pytest.raises(ModelRequestNotSent):
         asyncio.run(prov.chat_completion([]))
+    adapter.assert_not_called()
 
 
 # --------------------------------------------------------------------------- adviser.py

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.application.elt.errors import ReviewedExcelError
@@ -249,35 +251,49 @@ def test_template_timeout_cannot_override_other_providers(monkeypatch, provider)
 def test_template_call_passes_configured_timeout_to_http(monkeypatch, setting, expected):
     import httpx
 
-    from app.application.reviewed_excel_template import _template_mimo_complete
-    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+    from app.application.elt import llm_session_provider
+    from app.application.reviewed_excel_template import _template_platform_complete
 
-    for name, value in {
-        "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
-        "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
-        "MIMO_API_KEY": "synthetic-placeholder",
-        "FHD_ETL_LLM": "on",
-    }.items():
-        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic.invalid")
     monkeypatch.delenv("FHD_TEMPLATE_LLM_TIMEOUT_SECONDS", raising=False)
     if setting is not None:
         monkeypatch.setenv("FHD_TEMPLATE_LLM_TIMEOUT_SECONDS", setting)
     seen = []
 
-    class Client:
-        async def post(self, url, *, headers, json, timeout):
-            assert timeout.read == expected
-            assert "_reviewed_excel_transport_timeout" not in json
-            seen.append(url)
+    def respond(request):
+        assert request.extensions["timeout"]["read"] == expected
+        assert request.headers["Authorization"] == "Bearer synthetic-session-token"
+        seen.append((request.method, request.url.path))
+        if request.method == "GET":
+            assert request.url.path == "/api/llm/resolve-chat-default"
+            assert not request.url.params
             return httpx.Response(
                 200,
-                json={"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]},
-                request=httpx.Request("POST", url),
+                json={"ok": True, "provider": "deepseek", "model": "synthetic-model"},
             )
+        assert request.url.path == "/api/llm/chat"
+        body = json.loads(request.content)
+        assert body["provider"] == "deepseek" and body["model"] == "synthetic-model"
+        assert "_reviewed_excel_transport_timeout" not in body
+        return httpx.Response(
+            200,
+            json={"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]},
+        )
 
-    async def fake_client(self):
-        return Client()
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
 
-    monkeypatch.setattr(OpenAICompatibleAdapter, "_get_client", fake_client)
-    assert _template_mimo_complete([], {"type": "object"}, 100).data == {}
-    assert len(seen) == 1
+    def session_provider(*, timeout_seconds):
+        assert timeout_seconds == expected
+        return llm_session_provider.SessionMarketProvider(
+            7, "synthetic-session-token", timeout_seconds=timeout_seconds
+        )
+
+    monkeypatch.setattr(llm_session_provider, "current_owner_market_provider", session_provider)
+    assert _template_platform_complete([], {"type": "object"}, 100, owner_id=7).data == {}
+    assert seen == [("GET", "/api/llm/resolve-chat-default"), ("POST", "/api/llm/chat")]

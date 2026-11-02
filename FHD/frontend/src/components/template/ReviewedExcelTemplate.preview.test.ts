@@ -12,7 +12,7 @@ const sheet = { sheet: 'Sheet1', sheet_state: 'visible', processable: true, labe
 const layout = (value: string) => [{ sheet: 'Sheet1', widths: [20], rows: [{ height: 20, cells: [{ cell: 'A1', value, formula: false, rowspan: 1, colspan: 1, bold: false, italic: false, font_size: 11, font_color: '', fill: '', align: 'left' }] }], truncated: false }]
 function reviewed(name: string, id = `review-${name}`, version = 'v1') {
   const candidates = [0, 1, 2].map(i => ({ id: `${name}-${i}`, label: `方案${i + 1}`, explanation: `${name}候选${i + 1}`, clear: [{ sheet: 'Sheet1', cell: 'A2' }] }))
-  return { review_id: id, sha256: `sha-${name}`, layout: layout(`${name}原件`), cells: [], sheets: ['Sheet1'], proposal: { version, parent_version: null, candidates, evidence: [], model: { status: 'returned', login_authorization: { status: 'authorized' } }, result_previews: candidates.map(candidate => ({ candidate_id: candidate.id, sha256: candidate.id, layout: layout(`${name}${candidate.label}`), layout_truncated: false })) } }
+  return { review_id: id, sha256: `sha-${name}`, layout: layout(`${name}原件`), cells: [], sheets: ['Sheet1'], proposal: { version, parent_version: null, candidates, evidence: [], model: { status: 'returned' }, result_previews: candidates.map(candidate => ({ candidate_id: candidate.id, sha256: candidate.id, layout: layout(`${name}${candidate.label}`), layout_truncated: false })) } }
 }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
 let wrapper: VueWrapper, host: HTMLElement
@@ -28,7 +28,7 @@ async function start() { await button('开始处理').trigger('click'); await fl
 beforeEach(() => {
   vi.resetAllMocks(); updateProductReadAccountScope({ tenantId: 1, localUserId: 'multi-A', accountKind: 'local' })
   api.archiveClassifyExcel.mockImplementation(async (form: FormData) => ({ name: (form.get('file') as File).name, status: 'classified', classification_id: `class-${(form.get('file') as File).name}`, version: 'archive-v1', sheets: [sheet] }))
-  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: { status: 'authorized', operations: { classification: 'authorized', template_candidates: 'authorized' } } })
+  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   api.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: [sheet] })
   api.autoSlices.mockImplementation(async (id: string) => ({ slices: titles[id].map((title, index) => ({ index, basis: 'model_group', confirmed: false, sha256: `${id}-${index}`, filename: `${title}.xlsx`, display_name: title, fragments: [{ sheet: 'Sheet1', range: 'A1:B2' }] })) }))
   api.reviewExcel.mockImplementation(async (form: FormData) => reviewed(titles[String(form.get('classification_id'))][Number(form.get('auto_slice_index'))]))
