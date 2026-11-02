@@ -1,5 +1,5 @@
 {
   "lines": 2421134,
   "updated": "2026-11-02",
-  "note": "PR #2911 合入最新 main：发布闭环整合（编排门禁/验收关单/制品漂移/GitHub Release）；相对 main 基线实测净增登记，不解禁 test_only 生产。"
+  "note": "PR #2911：同步根 .github/workflows 与 FHD 源（release-desktop 路径与 drift/acceptance/orchestrator 头），修复 Release gate 官方渲染断言；相对当前分支基线实测净增登记。"
 }

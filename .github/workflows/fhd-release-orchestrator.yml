@@ -38,6 +38,11 @@ env:
   XCAGI_RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
   XCAGI_PRODUCT_VERSION: ${{ inputs.product_version || github.ref_name }}
 
+
+defaults:
+  run:
+    working-directory: FHD
+
 jobs:
   security-preflight:
     name: Verify exact-SHA all-source security evidence

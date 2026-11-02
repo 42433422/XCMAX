@@ -37,6 +37,11 @@ permissions:
   contents: read
   issues: write
 
+
+defaults:
+  run:
+    working-directory: FHD
+
 jobs:
   closeout:
     name: Acceptance closeout
