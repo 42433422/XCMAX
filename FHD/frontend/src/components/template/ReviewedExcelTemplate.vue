@@ -94,7 +94,7 @@ function modelRoundKey(item: Classification) {
 }
 const newRoundTarget = computed(() => props.archiveOnSelect ? classifications.value.find(item => item.status === 'classified' && needsNewModelRound(item)) : undefined)
 const newRoundKey = computed(() => newRoundTarget.value ? modelRoundKey(newRoundTarget.value) : '')
-const startProcessingLabel = computed(() => newRoundTarget.value ? `确认新一轮重试（${newRoundTarget.value.name}）` : '开始处理')
+const startProcessingLabel = computed(() => newRoundTarget.value ? '确认新一轮并重试' : '开始处理')
 function stopArchiveProcessing() {
   if (!archiveRunPending.value || cancelAnalysis.value) return
   cancelAnalysis.value = true; archiveProgress.value = '停止后续处理，等待当前请求结果。'
@@ -1659,6 +1659,8 @@ async function downloadCandidate(index: number) {
         class="elt-composer__start"
         :disabled="!files.length || files.length > 200 || busy || documentWorkPending || archiveRunPending"
         :data-round-approval="newRoundKey"
+        :aria-label="newRoundTarget ? `${startProcessingLabel}（${newRoundTarget.name}）` : startProcessingLabel"
+        :title="newRoundTarget?.name"
         @click="startProcessing(newRoundKey)"
       >{{ startProcessingLabel }}</button>
       <button
