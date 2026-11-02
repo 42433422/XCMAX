@@ -11,7 +11,7 @@ import logging
 import time
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.template_create import router as template_create_router
@@ -174,6 +174,29 @@ def _tenant_scope_or_403(user: Any):
     if tenant_id is None:
         raise HTTPException(status_code=403, detail="缺少租户上下文，无法操作模板")
     return tenant_scope(int(tenant_id))
+
+
+@router.post("/api/templates/delete", summary="删除当前租户的模板")
+@router.delete("/api/templates/delete", include_in_schema=False)
+def templates_delete(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: Any = Depends(get_logged_in_user),
+) -> JSONResponse:
+    from app.fastapi_routes.domains.system.agent_handlers import run_document_template_agent
+
+    data = dict(body or {})
+    if not data.get("id") and request.query_params.get("id"):
+        data["id"] = request.query_params["id"]
+    with _tenant_scope_or_403(user):
+        payload, code = run_document_template_agent(
+            request=request,
+            body=data,
+            action="delete",
+            route_path="/api/templates/delete",
+            authenticated_actor_id=str(user.id),
+        )
+    return JSONResponse(payload, status_code=code)
 
 
 @router.post("/api/templates/upload", summary="上传办公文件解析并入库模板库（analyze → create）")
