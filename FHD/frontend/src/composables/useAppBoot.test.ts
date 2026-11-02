@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h, nextTick, ref, type Ref } from 'vue'
+import { defineComponent, h, inject, nextTick, ref, type Ref } from 'vue'
 import { mount, type VueWrapper } from '@vue/test-utils'
 
 const state = await vi.hoisted(async () => {
@@ -39,12 +39,13 @@ vi.mock('@/composables/useXcmaxSync', () => ({ useXcmaxSync: () => state.sync })
 vi.mock('@/utils/adminConsoleUrl', () => ({ isAdminConsoleSpa: () => false }))
 
 import { useAppBoot } from './useAppBoot'
-import { STARTUP_READY_TIMEOUT_MS } from './useStartupSplash'
+import { STARTUP_READY_TIMEOUT_MS, startupPageReadyKey } from './useStartupSplash'
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void
-  const promise = new Promise<T>((done) => { resolve = done })
-  return { promise, resolve }
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail })
+  return { promise, resolve, reject }
 }
 async function settle() {
   for (let i = 0; i < 25; i++) { await Promise.resolve(); await nextTick() }
@@ -54,6 +55,20 @@ function mountBoot(viewPending?: Ref<boolean>) {
   let boot!: ReturnType<typeof useAppBoot>
   wrapper = mount(defineComponent({ setup() { boot = useAppBoot(viewPending); return () => h('div') } }))
   return boot
+}
+function mountBootWithPage(prepare: (signal: AbortSignal) => Promise<void>) {
+  let boot!: ReturnType<typeof useAppBoot>
+  let registerPage!: (prepare: (signal: AbortSignal) => Promise<void>) => () => void
+  let unregisterPage!: () => void
+  const Page = defineComponent({ setup() {
+    const register = inject(startupPageReadyKey)
+    if (!register) throw new Error('missing startup page provider')
+    registerPage = register
+    unregisterPage = register(prepare)
+    return () => h('section')
+  } })
+  wrapper = mount(defineComponent({ setup() { boot = useAppBoot(); return () => h(Page) } }))
+  return { boot, registerPage, unregisterPage }
 }
 const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts')
 
@@ -119,6 +134,59 @@ describe('workspace startup readiness', () => {
     state.account.workspaceReady = true
     await settle()
     expect(boot.appReady.value).toBe(true)
+  })
+
+  it.each(['ready', 'unavailable'] as const)('rechecks the latest workspace after page data finishes: %s', async outcome => {
+    const page = deferred()
+    const prepare = vi.fn(() => page.promise)
+    const { boot } = mountBootWithPage(prepare)
+    await settle()
+    expect(prepare).toHaveBeenCalledOnce()
+    state.account.workspaceReady = false
+    page.resolve()
+    await settle()
+    expect(boot.appReady.value).toBe(false)
+    expect(boot.startupVisible.value).toBe(true)
+    expect(boot.startupError.value).toBe('')
+    if (outcome === 'ready') state.account.workspaceReady = true
+    else state.account.sessionCheckUnavailable = true
+    await settle()
+    expect(boot.appReady.value).toBe(outcome === 'ready')
+    if (outcome === 'unavailable') expect(boot.startupError.value).toContain('工作空间资料未就绪')
+    else expect(boot.startupError.value).toBe('')
+  })
+
+  it('ignores a removed page rejection and waits for its newly registered replacement', async () => {
+    const oldPage = deferred(), newPage = deferred()
+    const prepareOld = vi.fn(() => oldPage.promise)
+    const prepareNew = vi.fn(() => newPage.promise)
+    const { boot, registerPage, unregisterPage } = mountBootWithPage(prepareOld)
+    await settle()
+    expect(prepareOld).toHaveBeenCalledOnce()
+    unregisterPage()
+    registerPage(prepareNew)
+    oldPage.reject(new Error('retired page data failed'))
+    await settle()
+    expect(prepareNew).toHaveBeenCalledOnce()
+    expect(boot.appReady.value).toBe(false)
+    expect(boot.startupError.value).toBe('')
+    newPage.resolve()
+    await settle()
+    expect(boot.appReady.value).toBe(true)
+    expect(boot.startupVisible.value).toBe(false)
+  })
+
+  it('keeps an error from a still-registered page actionable', async () => {
+    const page = deferred()
+    const prepare = vi.fn(() => page.promise)
+    const { boot } = mountBootWithPage(prepare)
+    await settle()
+    expect(prepare).toHaveBeenCalledOnce()
+    page.reject(new Error('current page data failed'))
+    await settle()
+    expect(boot.appReady.value).toBe(false)
+    expect(boot.startupVisible.value).toBe(true)
+    expect(boot.startupError.value).toContain('current page data failed')
   })
 
   it('reports a swallowed session check failure while waiting for hydration', async () => {

@@ -47,6 +47,15 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     })
   }
 
+  async function waitForWorkspace(current: () => boolean, signal: AbortSignal) {
+    await waitUntil(() => account.workspaceReady || account.sessionCheckUnavailable, signal)
+    if (!current()) return false
+    if (!account.workspaceReady || account.sessionCheckUnavailable) {
+      throw new Error('工作空间资料未就绪，请重试')
+    }
+    return true
+  }
+
   function retryStartup() {
     if (publicEntry.value) { splash.dismissStartupSplashImmediate(); return }
     void splash.runStartup(async (current, stage, signal) => {
@@ -56,11 +65,7 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
       if (!auth.ok) throw new Error('登录未确认，请返回登录后重试')
       // Another mount-time profile refresh can supersede the helper's request.
       // Its early return does not mean the current workspace has finished hydrating.
-      await waitUntil(() => account.workspaceReady || account.sessionCheckUnavailable, signal)
-      if (!current()) return
-      if (!account.workspaceReady || account.sessionCheckUnavailable) {
-        throw new Error('工作空间资料未就绪，请重试')
-      }
+      if (!await waitForWorkspace(current, signal)) return
       stage('正在准备侧栏…')
       // Drain any mount-time initialization before requesting this account's own result.
       // A shared request from an earlier account must not satisfy a new startup attempt.
@@ -81,8 +86,10 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
       stage('正在读取当前页面…')
       for (const prepare of pagePreparations) {
         if (!current()) return
-        await prepare(signal)
+        try { await prepare(signal) }
+        catch (error) { if (pagePreparations.has(prepare)) throw error }
       }
+      if (!await waitForWorkspace(current, signal)) return
       await nextTick()
     })
   }

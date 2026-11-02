@@ -1,5 +1,5 @@
 {
-  "lines": 2419609,
+  "lines": 2420098,
   "updated": "2026-11-02",
-  "note": "启动就绪PR处理本轮CI实际失败：ProductOnboardingView测试改partial importOriginal保留真实captureAuthSession等导出，保留既有断言与生产guard；测试mock净增4行，相对最新main维护总量2419633仍净删除24行（当前2419609）。现状报告按原生成器同步新增E2E spec，生产源码和配置未改。"
+  "note": "用户明确授权启动真实就绪修复及全部PR收口。本轮CI实证同账号并发hydration被误报换账号，必须修profile最新promise收敛、refresh等待与最终放行复核，并补17类确定性scope/错误回归和真实200交错E2E；本批生产净增67行、回归净增422行（合计489），抵消此前相对main净删24后总净增465（最新main2419633→当前2420098）。保留原认证/账号/clear退役与网络/401分类，不靠删无关代码、放宽断言、降低覆盖率或跳过门禁；按预推送显式例外登记实际增量，PR同步说明。"
 }

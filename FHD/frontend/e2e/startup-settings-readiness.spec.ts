@@ -6,12 +6,13 @@ const overlay = (page: Page) => page.getByTestId('startup-readiness')
 const workspace = (page: Page) => page.getByTestId('startup-workspace')
 
 type Stack = { callFrames: { url: string }[]; parent?: Stack }
-function fromSettings(stack?: Stack): boolean {
-  return !!stack && (stack.callFrames.some(frame => frame.url.includes('/composables/settings/useSettingsMods.ts')) || fromSettings(stack.parent))
+function fromSource(stack: Stack | undefined, file: string): boolean {
+  return !!stack && (stack.callFrames.some(frame => frame.url.includes(file)) || fromSource(stack.parent, file))
 }
 
 /** CDP observes actual fetch initiators so shared account hydration is never fault-injected by mistake. */
-async function interceptSettingsRead(page: Page, path: string, handler: (route: Route) => Promise<void>) {
+async function interceptSettingsRead(page: Page, path: string, handler: (route: Route) => Promise<void>,
+  file = '/composables/settings/useSettingsMods.ts', observe?: (path: string, stack?: Stack) => void) {
   const client = await page.context().newCDPSession(page)
   await client.send('Network.enable')
   await client.send('Debugger.enable')
@@ -19,8 +20,11 @@ async function interceptSettingsRead(page: Page, path: string, handler: (route: 
   const sources: boolean[] = []
   const waiting: ((value: boolean) => void)[] = []
   client.on('Network.requestWillBeSent', event => {
-    if (new URL(event.request.url).pathname !== path) return
-    const source = fromSettings(event.initiator.stack as Stack | undefined)
+    const requestedPath = new URL(event.request.url).pathname
+    const stack = event.initiator.stack as Stack | undefined
+    observe?.(requestedPath, stack)
+    if (requestedPath !== path) return
+    const source = fromSource(stack, file)
     const next = waiting.shift()
     if (next) next(source)
     else sources.push(source)
@@ -79,7 +83,7 @@ test.describe('Real SettingsView deep-link readiness', () => {
       await expect(overlay(page)).toHaveAttribute('data-state', 'error', { timeout: 25_000 })
       await expect(workspace(page)).toHaveAttribute('inert')
       const failedReads = reads
-      expect(failedReads).toBeGreaterThan(0)
+      expect(failedReads, `Expected the Settings read to fail; observed overlay: ${await overlay(page).innerText()}`).toBeGreaterThan(0)
       failing = false
       await overlay(page).getByRole('button', { name: '重试', exact: true }).click()
       await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
@@ -87,6 +91,43 @@ test.describe('Real SettingsView deep-link readiness', () => {
       await expect(overlay(page)).toHaveCount(0)
     })
   }
+
+  test('two successful hydrations for the same account reach the real Settings read without a false account-change error', async ({ page }) => {
+    const mock = await installStartupReadinessMocks(page)
+    const allowHost = deferred(), releaseFirstHydration = deferred()
+    let settingsHydration = false, hostHydration = false, settingsReads = 0
+    // The renderer has mounted with verified account 1. Start Settings hydration A
+    // before allowing AppBoot's same-account verification to produce hydration B.
+    mock.handlers.set('/api/auth/session/validate', async route => {
+      await allowHost.promise
+      await respond(route, { success: true, valid: true, data: { valid: true, username: 'startup-test-1' } })
+    })
+    await interceptSettingsRead(page, '/api/system/industry', async route => {
+      settingsHydration = true
+      allowHost.release()
+      await releaseFirstHydration.promise
+      await respond(route, industry())
+    }, '/composables/settings/useSettingsAccount.ts', (path, stack) => {
+      if (path === '/api/system/industry' && fromSource(stack, '/composables/useStartupAuth.ts')) {
+        hostHydration = true
+        releaseFirstHydration.release()
+      }
+      if (path === '/api/system/industries' && fromSource(stack, '/composables/settings/useSettingsMods.ts')) settingsReads++
+    })
+    try {
+      await page.goto('/settings', { waitUntil: 'domcontentloaded' })
+      await expect.poll(() => settingsHydration && hostHydration, { timeout: 20_000 }).toBe(true)
+      // Every response is 200 for the same authenticated identity. Supersession
+      // must await the latest verified hydration instead of rejecting this page.
+      await expect.poll(() => settingsReads, {
+        timeout: 20_000,
+        message: 'Settings must perform its own list read after the two successful account hydrations',
+      }).toBeGreaterThan(0)
+      await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
+      await expect(overlay(page)).toHaveCount(0)
+      await expect(page.locator('.settings-profile__name')).toContainText('startup-test-1')
+    } finally { allowHost.release(); releaseFirstHydration.release() }
+  })
 
   test('a new account keeps its Settings detail masked when the old account detail arrives late', async ({ page }) => {
     const mock = await installStartupReadinessMocks(page)
