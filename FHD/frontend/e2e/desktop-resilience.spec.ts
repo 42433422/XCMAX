@@ -8,6 +8,9 @@ test.describe('desktop resilience', () => {
   })
 
   test('supported viewport matrix keeps the shell usable and labeled', async ({ page }) => {
+    // Startup readiness now waits on required shell/page resources (no failsafe),
+    // so full-stack remounts under CI need a wider budget than the old 25s shell paint.
+    test.setTimeout(120_000)
     for (const viewport of [
       { width: 1180, height: 760 },
       { width: 1440, height: 920 },
@@ -15,7 +18,8 @@ test.describe('desktop resilience', () => {
     ]) {
       await page.setViewportSize(viewport)
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
-      await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
+      await expect(page.getByTestId('startup-readiness')).toHaveCount(0, { timeout: 45_000 })
+      await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 45_000 })
       const overflow = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth))
       expect(overflow, `horizontal overflow at ${viewport.width}x${viewport.height}`).toBeLessThanOrEqual(2)
     }
@@ -35,7 +39,8 @@ test.describe('desktop resilience', () => {
   test('temporary offline state does not crash the shell and reconnects', async ({ page, context }) => {
     test.skip(!isFullStack(), 'requires the mandatory live desktop backend')
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
-    await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
+    await expect(page.getByTestId('startup-readiness')).toHaveCount(0, { timeout: 45_000 })
+    await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 45_000 })
 
     await context.setOffline(true)
     const offlineResult = await page.evaluate(async () => {
