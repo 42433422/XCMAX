@@ -1,5 +1,5 @@
 {
-  "lines": 2420033,
+  "lines": 2420242,
   "updated": "2026-11-02",
-  "note": "Personnel long-press row sorting requires pointer/touch cancellation, floating preview, edge scroll and account/concurrency regressions; no unrelated code was deleted."
+  "note": "Sync main 165c38a4 while retaining required personnel long-press implementation and synthetic regressions; personnel runtime and test blobs are unchanged from 95d7c636. No unrelated code deleted."
 }
