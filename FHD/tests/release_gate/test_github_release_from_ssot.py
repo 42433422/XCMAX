@@ -1,4 +1,5 @@
 """GitHub Release notes and publication depend on exact approved release identity."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -55,7 +56,6 @@ def test_notes_are_read_from_published_pointer():
         {"manifest_url": "https://evil.invalid/manifest.json"},
     ],
 )
-
 def test_unverified_release_is_not_rendered(change):
     with pytest.raises(ValueError):
         module().render({**pointer(), **change}, VERSION, SHA)
