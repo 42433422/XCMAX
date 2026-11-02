@@ -18,7 +18,6 @@ vi.mock('@/api/xcmaxMarketProxy', () => ({
   default: { llmResolveChatDefault: vi.fn().mockResolvedValue({ ok: true, provider: 'platform', model: 'default-chat' }) },
 }))
 
-const authorization = { status: 'authorized', operations: { classification: 'authorized', template_candidates: 'authorized' } }
 function classified(name: string) {
   return {
     name,
@@ -68,7 +67,7 @@ function reviewPayload(id: string) {
       parent_version: null,
       candidates,
       evidence: [],
-      model: { status: 'returned', login_authorization: authorization },
+      model: { status: 'returned' },
       result_previews: candidates.map(candidate => ({
         candidate_id: candidate.id,
         sha256: `${id}-${candidate.id}`,
@@ -83,7 +82,7 @@ const Shell = defineComponent({ template: '<RouterView v-slot="{ Component, rout
 let wrapper: VueWrapper | undefined
 beforeEach(() => {
   vi.clearAllMocks()
-  archive.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: authorization })
+  archive.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   archive.archiveClassifyExcel.mockImplementation(async (form: FormData) => classified((form.get('file') as File).name))
   archive.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: classified('synthetic.xlsx').sheets })
   archive.autoSlices.mockImplementation(async (id: string) => ({ slices: [{ index: 0, basis: 'model_group', confirmed: false,
@@ -143,8 +142,13 @@ describe('archive selection through the actual kept-alive docking route', () => 
       const reviewForm = archive.reviewExcel.mock.calls[index + 1][0] as FormData
       expect(archiveForm.get('file')).toBe(source)
       expect(reviewForm.get('file')).toBe(source)
-      expect([reviewForm.get('classification_id'), reviewForm.get('classification_version'), reviewForm.get('auto_slice_index'), reviewForm.get('use_login_notice')]).toEqual([`classification:${source.name}`, 'model-v2', '0', 'true'])
+      expect([reviewForm.get('classification_id'), reviewForm.get('classification_version'), reviewForm.get('auto_slice_index')]).toEqual([`classification:${source.name}`, 'model-v2', '0'])
+      const analysisForm = archive.analyzeClassification.mock.calls[index + 1][1] as FormData
+      expect(archive.analyzeClassification.mock.calls[index + 1][0]).toBe(`classification:${source.name}`)
+      expect(analysisForm.get('version')).toBe('v1')
+      for (const request of [analysisForm, reviewForm]) for (const key of ['use_login_notice', 'model_opt_in', 'consent', 'sample_authorized', 'own_file_authorized', 'continue_authorized', 'retry_authorized']) expect(request.has(key)).toBe(false)
     }
+    expect(archive.reviewedExcelIdentity).not.toHaveBeenCalled()
     const firstArchive = archive.archiveClassifyExcel.mock.calls[0][0] as FormData
     expect((archive.archiveClassifyExcel.mock.calls[1][0] as FormData).get('request_key')).not.toBe(firstArchive.get('request_key'))
     // Each named model document opens its own three candidates and read-only source.

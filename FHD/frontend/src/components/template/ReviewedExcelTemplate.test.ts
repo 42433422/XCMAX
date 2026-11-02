@@ -19,7 +19,7 @@ const candidates = [
   { id: 'identity', label: '模板三', explanation: '清理更多', clear: [{ sheet: '报价', cell: 'B2' }] },
 ]
 const proposal = (version: string) => ({ version, parent_version: null, candidates, evidence: [], model: { status: 'not_called' }, result_previews: candidates.map((c, i) => ({ candidate_id: c.id, sha256: String(i), layout: layout(i ? '' : '客户甲'), layout_truncated: false })) })
-const modelProposal = (version: string) => ({ ...proposal(version), model: { status: 'returned', login_authorization: { status: 'authorized' } } })
+const modelProposal = (version: string) => ({ ...proposal(version), model: { status: 'returned' } })
 const intakeResult = (summary = { new: 2, update: 1, skip: 3, error: 0, executed: 0 }) => ({ intake: {
   run_id: 'intake-run', mod_id: '', candidate_sha256: 'candidate-sha', knowledge: { action: 'new', documents: 1 },
   business: { id: 'intake-run', target_type: 'customer_products', status: 'preview_ready', preview_revision: 'revision-1', summary },
@@ -278,7 +278,6 @@ describe('reviewed Excel template', () => {
     const state = wrapper.vm.$.setupState as Record<string, unknown>
     expect((state.file as File).name).toBe('legacy.xlsx')
     expect((state.file as File).size).toBe(new Blob(['persistent-derived-bytes']).size)
-    state.initialModel = false
     await flushPromises()
     await wrapper.findAll('button').find(b => b.text().includes('预览清理'))!.trigger('click'); await flushPromises()
     expect(api.reviewExcel).toHaveBeenCalledTimes(1)
@@ -290,7 +289,7 @@ describe('reviewed Excel template', () => {
     expect(api.classifyArchiveVersion.mock.calls.at(-1)![1].get('legacy_source_sha256')).toBe('a'.repeat(64))
     confirmation.mockRestore()
   })
-  it('only reclassifies after explicit confirmation and clears every old authorization and preview', async () => {
+  it('only reclassifies after explicit confirmation and clears old sharing and preview state', async () => {
     const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
     api.archiveAssets.mockResolvedValue({ assets: [{ id: 'asset-1', name: '报价.xlsx', state: 'active', versions: [{ id: 'v1', version: 1, status: 'ready', sha256: 'abc', classification_id: 'old' }] }] })
     api.classifyArchiveVersion.mockReset().mockResolvedValue({ name: '报价.xlsx', status: 'classified', classification_id: 'new', version: 'v-new', sheets: [sheet], model_status: 'not_called', confirmed: false })
@@ -304,16 +303,16 @@ describe('reviewed Excel template', () => {
     await button.trigger('click'); await flushPromises()
     expect(api.classifyArchiveVersion).not.toHaveBeenCalled()
     const state = wrapper.vm.$.setupState as Record<string, unknown>
-    for (const key of ['classificationSampleAuthorized', 'classificationOwnFileAuthorized', 'sampleAuthorized', 'templateOwnFileAuthorized', 'initialModel', 'consent', 'publishToTenant']) state[key] = true
-    state.retryBudget = { old: true }; state.autoSlices = { old: { version: 'v-old', slices: [] } }
+    state.publishToTenant = true
+    state.autoSlices = { old: { version: 'v-old', slices: [] } }
     state.selectedSliceKey = 'old-slice'; state.proposals = [proposal('old-preview')]; state.savedId = 'old-template'
     confirm.mockReturnValue(true)
     await button.trigger('click'); await flushPromises()
     expect(api.classifyArchiveVersion).toHaveBeenCalledTimes(1)
     const [id, form] = api.classifyArchiveVersion.mock.calls[0] as [string, FormData]
     expect(id).toBe('v1'); expect(form.get('reclassify')).toBe('true'); expect(form.get('expected_classification_id')).toBe('old')
-    for (const key of ['classificationSampleAuthorized', 'classificationOwnFileAuthorized', 'sampleAuthorized', 'templateOwnFileAuthorized', 'initialModel', 'consent', 'publishToTenant']) expect(state[key]).toBe(false)
-    expect(state.retryBudget).toEqual({}); expect(state.autoSlices).toEqual({}); expect(state.proposals).toEqual([]); expect(state.savedId).toBe(''); expect(state.selectedSliceKey).toBe('')
+    expect(state.publishToTenant).toBe(false)
+    expect(state.autoSlices).toEqual({}); expect(state.proposals).toEqual([]); expect(state.savedId).toBe(''); expect(state.selectedSliceKey).toBe('')
     expect(api.analyzeClassification).not.toHaveBeenCalled(); expect(api.reviewExcel).not.toHaveBeenCalled()
     confirm.mockRestore()
   })
@@ -325,7 +324,6 @@ describe('reviewed Excel template', () => {
     const wrapper = mount(ReviewedExcelTemplate); const input = wrapper.find('input[type=file]')
     Object.defineProperty(input.element, 'files', { value: [1, 2].map((n) => new File(['x'], `${n}.xlsx`)) }); await input.trigger('change')
     await wrapper.findAll('button').find((b) => b.text() === '开始处理')!.trigger('click'); await flushPromises()
-    await wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('所有待分析文件'))!.setValue(true)
     const analyze = wrapper.findAll('button').find((b) => b.text().includes('模型分析已分类'))!
     await analyze.trigger('click'); await wrapper.vm.$nextTick()
     await wrapper.findAll('button').find((b) => b.text().includes('停止后续分析'))!.trigger('click')
@@ -336,7 +334,7 @@ describe('reviewed Excel template', () => {
     expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
     expect(api.analyzeClassification.mock.calls.at(-1)![0]).toBe('cancel2')
   })
-  it('shows platform model authorization copy instead of MiMo/Luna/Terra aliases', async () => {
+  it('shows the normal account model route without requiring file authorization', async () => {
     const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
     api.classifyExcel.mockResolvedValue({ files: [{ name: '1.xlsx', status: 'classified', classification_id: 'p1', version: 'v1', sheets: [sheet] }] })
     const wrapper = mount(ReviewedExcelTemplate)
@@ -344,28 +342,24 @@ describe('reviewed Excel template', () => {
     Object.defineProperty(input.element, 'files', { value: [new File(['x'], '1.xlsx')] })
     await input.trigger('change')
     await wrapper.findAll('button').find((b) => b.text() === '开始处理')!.trigger('click'); await flushPromises()
-    expect(wrapper.text()).toContain('模型调用走软件当前平台默认模型')
-    expect(wrapper.text()).toContain('发送至平台模型')
+    expect(wrapper.text()).toContain('使用当前账号的模型配置')
+    expect(wrapper.text()).not.toContain('我有权授权当前文件')
     expect(wrapper.text()).toContain('platform/default-chat')
-    expect(wrapper.text()).not.toContain('发送至 MiMo')
-    expect(wrapper.text()).toContain('Luna/Terra 私有别名不作为本页默认')
     wrapper.unmount()
   })
-  it('authorizes only the selected owner file for platform-model classification', async () => {
+  it('analyzes every selected file through the normal session without per-file authorization', async () => {
     const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
     api.classifyExcel.mockResolvedValue({ files: [1, 2].map((n) => ({ name: `${n}.xlsx`, status: 'classified', classification_id: `own${n}`, version: 'v1', sheets: [sheet] })) })
     api.analyzeClassification.mockReset().mockResolvedValue({ version: 'v2', model_status: 'returned', sheets: [sheet] })
     const wrapper = mount(ReviewedExcelTemplate); const input = wrapper.find('input[type=file]')
     Object.defineProperty(input.element, 'files', { value: [1, 2].map((n) => new File(['x'], `${n}.xlsx`)) }); await input.trigger('change')
     await wrapper.findAll('button').find((b) => b.text() === '开始处理')!.trigger('click'); await flushPromises()
-    const owner = wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('仅发送当前文件'))!
-    await owner.setValue(true)
     await wrapper.findAll('button').find((b) => b.text().includes('模型分析已分类'))!.trigger('click'); await flushPromises()
-    expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
-    expect(api.analyzeClassification.mock.calls[0][0]).toBe('own1')
-    const form = api.analyzeClassification.mock.calls[0][1] as FormData
-    expect(form.get('own_file_authorized')).toBe('true')
-    expect(form.get('sample_authorized')).toBeNull()
+    expect(api.analyzeClassification.mock.calls.map(call => call[0])).toEqual(['own1', 'own2'])
+    for (const call of api.analyzeClassification.mock.calls) {
+      const form = call[1] as FormData
+      for (const key of ['use_login_notice', 'own_file_authorized', 'sample_authorized']) expect(form.has(key)).toBe(false)
+    }
   })
   it('stops at a pending batch boundary and resumes the remaining batch', async () => {
     const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
@@ -375,7 +369,6 @@ describe('reviewed Excel template', () => {
     const wrapper = mount(ReviewedExcelTemplate); const input = wrapper.find('input[type=file]')
     Object.defineProperty(input.element, 'files', { value: [new File(['x'], '甲.xlsx')] }); await input.trigger('change')
     await wrapper.findAll('button').find((b) => b.text() === '开始处理')!.trigger('click'); await flushPromises()
-    await wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('所有待分析文件'))!.setValue(true)
     const analyze = wrapper.findAll('button').find((b) => b.text().includes('模型分析已分类'))!
     await analyze.trigger('click'); await wrapper.vm.$nextTick()
     await wrapper.findAll('button').find((b) => b.text().includes('停止后续分析'))!.trigger('click')
@@ -392,14 +385,13 @@ describe('reviewed Excel template', () => {
     const wrapper = mount(ReviewedExcelTemplate); const input = wrapper.find('input[type=file]')
     Object.defineProperty(input.element, 'files', { value: [new File(['x'], '甲.xlsx')] }); await input.trigger('change')
     await wrapper.findAll('button').find((b) => b.text() === '开始处理')!.trigger('click'); await flushPromises()
-    await wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('所有待分析文件'))!.setValue(true)
     const analyze = wrapper.findAll('button').find((b) => b.text().includes('模型分析已分类'))!
     await analyze.trigger('click'); await flushPromises()
     expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('本轮预算已用完')
     await analyze.trigger('click'); await flushPromises()
     expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
-    expect((api.analyzeClassification.mock.calls.at(-1)![1] as FormData).get('continue_authorized')).toBe('true')
+    expect((api.analyzeClassification.mock.calls.at(-1)![1] as FormData).has('continue_authorized')).toBe(false)
   })
   it('isolates model failures and never retries unknown outcomes automatically', async () => {
     const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
@@ -408,7 +400,6 @@ describe('reviewed Excel template', () => {
     const wrapper = mount(ReviewedExcelTemplate); const input = wrapper.find('input[type=file]')
     Object.defineProperty(input.element, 'files', { value: [1, 2, 3].map((n) => new File(['x'], `${n}.xlsx`)) }); await input.trigger('change')
     await wrapper.findAll('button').find((b) => b.text() === '开始处理')!.trigger('click'); await flushPromises()
-    await wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('所有待分析文件'))!.setValue(true)
     const analyze = wrapper.findAll('button').find((b) => b.text().includes('模型分析已分类'))!
     await analyze.trigger('click'); await flushPromises()
     expect(api.analyzeClassification).toHaveBeenCalledTimes(3)
@@ -500,7 +491,7 @@ describe('reviewed Excel template', () => {
     await wrapper.findAll('input[name="template-file"]')[1].setValue()
     expect(wrapper.findAll('button').find((b) => b.text().includes('预览清理'))!.attributes('disabled')).toBeDefined()
   })
-  it('runs explicitly authorized semantic analysis and persists confirmed labels', async () => {
+  it('runs semantic analysis through a normal session and persists confirmed labels', async () => {
     const region = { range: 'A1:B2', labels: ['unknown'], checked_cells: 1, evidence: [], parent_heading: '', dependency_status: '未分析', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [] }
     const sheet = { sheet: '报价', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [region] }
     api.classifyExcel.mockResolvedValue({ files: [{ name: '报价.xlsx', status: 'classified', classification_id: 'class-semantic', version: 'v1', sheets: [sheet] }] })
@@ -509,8 +500,7 @@ describe('reviewed Excel template', () => {
     const wrapper = mount(ReviewedExcelTemplate); const input = wrapper.find('input[type=file]'); Object.defineProperty(input.element, 'files', { value: [new File(['x'], '报价.xlsx')] }); await input.trigger('change')
     await wrapper.findAll('button').find((b) => b.text() === '开始处理')!.trigger('click'); await flushPromises()
     const analyze = wrapper.findAll('button').find((b) => b.text().includes('模型分析已分类'))!
-    expect(analyze.attributes('disabled')).toBeDefined()
-    await wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('所有待分析文件'))!.setValue(true)
+    expect(analyze.attributes('disabled')).toBeUndefined()
     await analyze.trigger('click'); await flushPromises()
     expect(api.analyzeClassification).toHaveBeenCalledWith('class-semantic', expect.any(FormData))
     expect(wrapper.text()).toContain('未发送 1 格，未归入区域 1 格')
@@ -544,10 +534,8 @@ describe('reviewed Excel template', () => {
     await wrapper.findAll('button').find((b) => b.text().includes('确认分类并继续'))!.trigger('click'); await flushPromises()
     expect(wrapper.text()).toContain('未知/待理解，用户已确认继续')
     expect(wrapper.findAll('button').find((b) => b.text().includes('预览清理'))!.attributes('disabled')).toBeUndefined()
-    const authorization = wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('确认此文件'))!
-    await authorization.setValue(true)
     await wrapper.findAll('input[name="template-file"]')[1].setValue()
-    expect((authorization.element as HTMLInputElement).checked).toBe(false)
+    expect(wrapper.text()).not.toContain('确认此文件是获准发送')
   })
   const sliceResults = [0, 1].map(index => ({ index, filename: `${index ? '乙' : '甲'}单.xlsx`, sha256: `slice-${index}`, basis: 'model_group', confirmed: false, fragments: [{ sheet: '报价', range: 'A1:B2' }] }))
   const sliceReview = (id: string) => ({ review_id: id, sha256: 'source', sheets: ['报价'], cells: [], layout: layout(id), proposal: proposal(id), selected_region: { selection_basis: 'model_group' } })
@@ -568,32 +556,28 @@ describe('reviewed Excel template', () => {
     Object.defineProperty(input.element, 'files', { value: [new File(['x'], '报价.xlsx')] })
     await input.trigger('change')
     await wrapper.findAll('button').find(b => b.text() === '开始处理')!.trigger('click'); await flushPromises()
-    await wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('所有待分析文件'))!.setValue(true)
     await wrapper.findAll('button').find(b => b.text().includes('模型分析已分类'))!.trigger('click'); await flushPromises()
     return wrapper
   }
-  it.each([0, 1])('retries a persisted failed response only with explicit consent and budget (used=%s)', async used => {
+  it.each([0, 1])('retries a persisted failed response once on the retry action (used=%s)', async used => {
     const wrapper = await classifiedSlices({ phase: 'failed', calls_in_round: used, max_calls: 1 })
     expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
     await wrapper.findAll('button').find(b => b.text() === '模型分析已分类文件')!.trigger('click'); await flushPromises()
     expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
-    const retry = wrapper.findAll('button').find(b => b.text().includes('确认再次调用模型重试'))!
-    if (used) {
-      expect(retry.attributes('disabled')).toBeDefined()
-      await wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('确认开启新一轮预算'))!.setValue(true)
-    }
+    const retry = wrapper.findAll('button').find(b => b.text() === '重试模型分析')!
+    expect(retry.attributes('disabled')).toBeUndefined()
     api.analyzeClassification.mockResolvedValueOnce({ phase: 'pending', version: 'v1', checkpoint: { phase: 'ready', version: 'v1', completed: 1, total: 2, max_calls: 1, calls_in_round: 1, message: '下一批待处理' } })
     await retry.trigger('click'); await flushPromises()
     expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
     const form = api.analyzeClassification.mock.calls[1][1] as FormData
-    expect(form.get('retry_authorized')).toBe('true')
-    expect(form.get('continue_authorized')).toBe(used ? 'true' : null)
-    expect(wrapper.findAll('button').some(b => b.text().includes('确认再次调用模型重试'))).toBe(false)
+    expect(form.has('retry_authorized')).toBe(false)
+    expect(form.has('continue_authorized')).toBe(false)
+    expect(wrapper.findAll('button').some(b => b.text() === '重试模型分析')).toBe(false)
     wrapper.unmount()
   })
   it.each(['inflight', 'stale-failed', 'hash-mismatch', 'ready'])('uses persisted matching checkpoint evidence and preserves %s behavior', async phase => {
     const wrapper = await classifiedSlices({ phase: ['stale-failed', 'hash-mismatch'].includes(phase) ? 'failed' : phase, version: phase === 'stale-failed' ? 'old-version' : 'v1', source_sha256: phase === 'hash-mismatch' ? 'wrong-source' : 'source-hash', calls_in_round: 0, max_calls: 1 })
-    expect(wrapper.findAll('button').some(b => b.text().includes('确认再次调用模型重试'))).toBe(false)
+    expect(wrapper.findAll('button').some(b => b.text() === '重试模型分析')).toBe(false)
     await wrapper.findAll('button').find(b => b.text() === '模型分析已分类文件')!.trigger('click'); await flushPromises()
     expect(api.analyzeClassification).toHaveBeenCalledTimes(phase === 'ready' ? 2 : 1)
     if (phase === 'ready') expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('retry_authorized')).toBeNull()
@@ -647,33 +631,21 @@ describe('reviewed Excel template', () => {
     expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
-  it('binds model opt-in to the selected slice and requires fresh authorization for another slice', async () => {
+  it('binds each model request to the selected slice without a repeated consent step', async () => {
     const wrapper = await classifiedSlices()
     const slices = () => wrapper.findAll('button').filter(b => b.text() === '用此单据生成模板')
-    const checkbox = (label: string) => wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes(label))!
     await slices()[0].trigger('click'); await flushPromises()
-    await checkbox('首轮使用模型').setValue(true)
-    await checkbox('的所选文档发送至平台模型').setValue(true)
-    await slices()[0].trigger('click'); await flushPromises()
-    let form = api.reviewExcel.mock.calls.at(-1)![0] as FormData
-    expect(form.get('model_opt_in')).toBe('true'); expect(form.get('own_file_authorized')).toBe('true')
+    const first = api.reviewExcel.mock.calls.at(-1)![0] as FormData
+    expect(first.get('auto_slice_index')).toBe('0')
     await slices()[1].trigger('click'); await flushPromises()
-    form = api.reviewExcel.mock.calls.at(-1)![0] as FormData
-    expect(form.get('model_opt_in')).toBe('false')
-    expect(form.get('own_file_authorized')).toBe('false'); expect(form.get('sample_authorized')).toBe('false')
-    expect((checkbox('首轮使用模型').element as HTMLInputElement).checked).toBe(false)
-    await checkbox('首轮使用模型').setValue(true)
-    await checkbox('的所选文档发送至平台模型').setValue(true)
-    await slices()[1].trigger('click'); await flushPromises()
-    form = api.reviewExcel.mock.calls.at(-1)![0] as FormData
-    expect(form.get('auto_slice_index')).toBe('1')
-    expect(form.get('model_opt_in')).toBe('true'); expect(form.get('own_file_authorized')).toBe('true')
+    const second = api.reviewExcel.mock.calls.at(-1)![0] as FormData
+    expect(second.get('auto_slice_index')).toBe('1')
+    for (const form of [first, second]) for (const key of ['use_login_notice', 'model_opt_in', 'own_file_authorized', 'sample_authorized']) expect(form.has(key)).toBe(false)
+    expect(wrapper.text()).not.toContain('我有权授权当前文件')
     wrapper.unmount()
   })
-  it('does not reuse budget consent when restoring the same classification at a new version', async () => {
+  it('uses the restored version checkpoint for an explicit retry instead of reusing old request state', async () => {
     const wrapper = await classifiedSlices({ phase: 'failed', calls_in_round: 1, max_calls: 1 })
-    const budget = () => wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('确认开启新一轮预算'))!
-    await budget().setValue(true)
     api.recentClassifications.mockResolvedValue({ files: [{ classification_id: 'slices', name: '报价.xlsx', sha256: '01', latest: { version: 'new-version', confirmed: false, model_status: 'not_called', sheets: [] }, checkpoint: { phase: 'failed', version: 'new-version', completed: 0, total: 2, max_calls: 1, calls_in_round: 1, message: '失败待确认' } }] })
     vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid', subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array([1]).buffer) } })
     try {
@@ -682,16 +654,15 @@ describe('reviewed Excel template', () => {
       Object.defineProperty(file, 'arrayBuffer', { value: async () => new Uint8Array([1]).buffer })
       await wrapper.findAll('button').find(b => b.text() === '查看已保存分类')!.trigger('click'); await flushPromises()
       await wrapper.findAll('button').find(b => b.text() === '恢复此分类并继续')!.trigger('click'); await flushPromises()
-      expect((budget().element as HTMLInputElement).checked).toBe(false)
-      const retry = wrapper.findAll('button').find(b => b.text().includes('确认再次调用模型重试'))!
-      expect(retry.attributes('disabled')).toBeDefined()
+      expect(wrapper.text()).not.toContain('确认开启新一轮预算')
+      const retry = wrapper.findAll('button').find(b => b.text() === '重试模型分析')!
+      expect(retry.attributes('disabled')).toBeUndefined()
       expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
-      await budget().setValue(true)
       await retry.trigger('click'); await flushPromises()
       expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
       const form = api.analyzeClassification.mock.calls[1][1] as FormData
       expect(form.get('version')).toBe('new-version')
-      expect(form.get('continue_authorized')).toBe('true')
+      expect(form.has('continue_authorized')).toBe(false)
     } finally { wrapper.unmount(); vi.unstubAllGlobals() }
   })
   it.each([true, false])('restores automatic slices without another model call, load fails=%s', async fails => {
@@ -752,11 +723,9 @@ describe('reviewed Excel template', () => {
     await wrapper.findAll('button').find((b) => b.text().includes('确认分类并继续'))!.trigger('click'); await flushPromises()
     await wrapper.findAll('button').find((b) => b.text().includes('预览清理'))!.trigger('click'); await flushPromises()
     await wrapper.find('input[placeholder]').setValue('保留备注')
-    await wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('确认此文件'))!.setValue(true)
-    await wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('同意向'))!.setValue(true)
     const next = wrapper.findAll('button').find((b) => b.text().includes('生成新一轮'))!; await next.trigger('click'); await flushPromises(); expect(wrapper.text()).toContain('模型不可用'); expect(wrapper.findAll('.reviewed-template__preview')).toHaveLength(4)
     await next.trigger('click'); await flushPromises(); expect(wrapper.text()).toContain('模型已返回建议'); expect(wrapper.findAll('.reviewed-template__preview')).toHaveLength(4)
-    await wrapper.findAll('button').find((b) => b.text().includes('查看版本 1'))!.trigger('click'); expect(wrapper.text()).toContain('确定性规则建议')
+    await wrapper.findAll('button').find((b) => b.text().includes('查看版本 1'))!.trigger('click'); expect(wrapper.text()).toContain('模型未返回，请查看处理诊断')
   })
 
   it('composer drag-drop stages files without archiving until start', async () => {
