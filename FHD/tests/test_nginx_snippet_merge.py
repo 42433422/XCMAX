@@ -165,6 +165,9 @@ server {
     location = /site/main.js {
         alias /legacy/main.js;
     }
+    location = /corp-butler/ai-butler-female-avatar-v1.png {
+        alias /legacy/avatar.png;
+    }
     location ~ ^/(styles\\.css|main\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {
         root /legacy/site;
     }
@@ -175,6 +178,7 @@ server {
     assert "location = /market" not in merged
     assert "location /market/" not in merged
     assert "location = /site/main.js" not in merged
+    assert "location = /corp-butler/ai-butler-female-avatar-v1.png" not in merged
     assert "location ~ ^/(styles\\.css" not in merged
     assert merged.count("market-static.inc.conf") == 1
     assert merged.count("marketing-site-static.inc.conf") == 1

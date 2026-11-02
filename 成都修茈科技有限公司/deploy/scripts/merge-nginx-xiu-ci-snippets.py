@@ -43,6 +43,7 @@ MANAGED_LOCATION_HEADERS = (
     "location /market/ {",
     "location = /site/main.js {",
     "location = /site/styles.css {",
+    "location = /corp-butler/ai-butler-female-avatar-v1.png {",
     "location ~ ^/(?:data/)?capabilities(?:/|$) {",
     "location = /download-release.json {",
     "location = /download-windows-hotfix.json {",
