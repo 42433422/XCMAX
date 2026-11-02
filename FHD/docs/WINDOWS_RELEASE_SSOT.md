@@ -41,6 +41,10 @@ Windows 对外交付唯一安装器为 `tools/XcagiInstaller` 新版 WPF 单文�
 
 五个用户名与五个正整数市场用户 ID 必须分别唯一；用已核实的 `/api/auth/me` 的 `data.market_user_id` 配置 ID。每项在业务操作前核验实际云端身份、企业资格、非管理员及无代操作身份，证据只增加身份哈希。桌面 tenant_id 是各 VM 本地编号，可以都为 1；同一模式升级、重装、恢复、回滚仍保留原账号及本地 tenant/workspace 断言。
 
-账号只用于合成数据，不能加入客户企业或使用客户数据；需现有企业套餐及当前 ERP、审批、平台 AI 功能权益，禁止授予平台管理员、生产运维或发布权限。Gui 有一次 AI 业务创建，Recovery 另有一次取消授权流程；账号管理员须确认这些测试调用的独立额度、设备/席位上限和到期时间，再授权创建账号、写入这十个 Secrets 与五个 Variables。不得复制发布签名私钥或创建额外 GitHub 账号。
+五项都核对现有企业桌面访问资格，兼容企业授权也可满足，不要求新购套餐。只有 Gui/Recovery 需要可写 ERP Mods 与现有普通 `user`/`operator` 角色；申请人可处理自己的审批请求，不新增平台管理员、审批管理员、生产运维或发布权限。不要以猜测的 purchase/inventory 权限或自建租户角色替换现有业务角色。
+
+Gui/Recovery 保留聊天入口的 `ai_business` 用例，Recovery 另测取消自己的授权；当前客户写入可走确定性规划，这不构成付费模型调用、充值或无限额度的要求。Clean/Upgrade/Rollback 不因账号池含五项而增配 ERP/AI 权益。
+
+复用前须取得管理员确认的五行非秘密清单：模式、市场用户 ID、用户名、专用合成测试用途、未删除及桌面访问资格、现有角色/Mod 权益、凭据库引用。仓库演示配置和历史验收不能证明当前账号库存。现有 `/api/admin/users?is_enterprise=true&limit=50&offset=0` 与 `/api/admin/users/{id}/mods` 需要既有管理员会话，且不能单凭企业标记判定可复用；不读取密码、密码哈希或模型凭据。名单核验后只申请把指定凭据库中的现有凭据写入上述十个 Secrets，并写入五个 ID Variables；新建账号、扩权、购买或充值须另有具体证据与授权。不得使用客户数据、复制发布签名私钥或创建额外 GitHub 账号。
 
 每项使用新的 GitHub 托管 Windows VM，安装目录、APPDATA、端口、注册表、备份任务及 SQLite 均在 VM 内；GUI 标记包含 run、attempt、mode、phase。现有 fixtures 只改本地合成数据，没有远端批量清理。账号池由固定 concurrency group 排队复用，禁止同时手动运行未使用该锁的历史工作流。每项仍校验同一原包来源和 SHA-256，发布仍要求五项全部通过；单项/Lifecycle 结果不能充当完整发布验收。账号配置与真实五账号验收未完成时，不得宣称并发已上线。

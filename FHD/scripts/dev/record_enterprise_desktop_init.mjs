@@ -5,6 +5,7 @@ import crypto from 'node:crypto'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { assertIdentity } from '../package/windows-acceptance-accounts.mjs'
+import { createEvidenceStep, redactCredentials as redact, visibleVersion, writeEvidence } from './desktop-acceptance-evidence.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const require = createRequire(path.join(root, 'frontend/package.json'))
 const { chromium, expect } = require('@playwright/test')
@@ -24,25 +25,7 @@ const observedRows = new Map(), workspaceOwners = []
 const evidence = { run, phase, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
 const digest = value => crypto.createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value)).digest('hex')
-const redact = value => [process.env.XCAGI_TEST_PASS, process.env.XCAGI_TEST_USER].filter(Boolean).reduce((text, secret) => text.replaceAll(secret, '[REDACTED]'), String(value))
-async function step(id, action) {
-  const record = { id, started_at: new Date().toISOString(), input: names, status: 'running' }
-  evidence.cases.push(record)
-  try {
-    record.actual = await action()
-    await page.screenshot({ path: path.join(dir, `${id}.png`), fullPage: true, timeout: 60000, mask: [page.locator('#lv-username,#lv-password'), page.getByText(process.env.XCAGI_TEST_USER || '\0', { exact: true })] })
-    return record.actual
-  } catch (error) {
-    record.failure_stage = Object.hasOwn(record, 'actual') ? 'screenshot' : 'business'
-    record.error = redact(error.stack || error.message)
-    if (page) {
-      await page.screenshot({ path: path.join(dir, `${id}-failed.png`), fullPage: true, timeout: 60000, mask: [page.locator('#lv-username,#lv-password'), page.getByText(process.env.XCAGI_TEST_USER || '\0', { exact: true })] }).catch(() => {})
-      record.visible_buttons = await page.locator('button:visible').evaluateAll(buttons => buttons.map(b => ({ text: b.textContent, label: b.getAttribute('aria-label'), class: b.className, disabled: b.disabled }))).catch(() => []); const text = await page.locator('body').innerText().catch(() => '')
-      fs.writeFileSync(path.join(dir, `${id}-ui.txt`), redact(text))
-    }
-    throw error
-  } finally { record.status = record.error ? 'failed' : 'passed'; record.finished_at = new Date().toISOString() }
-}
+const step = createEvidenceStep({ getPage: () => page, evidence, names, dir })
 async function click(name, scope = page) { await scope.getByRole('button', { name, exact: typeof name === 'string' }).first().click() }
 async function nav(key, rootId) {
   const entry = page.locator(`[data-tour="sidebar-${key}"]:visible,[data-tour="sidebar-mod-erp-${key}"]:visible`).first()
@@ -111,18 +94,6 @@ async function hasRetainedSession() {
   if (body.success === false && body.valid === false && body.error?.code === 'UNAUTHORIZED') return false
   if (body.success !== true || !body.data?.user?.id) throw new Error('Session probe returned no authenticated identity')
   return true
-}
-async function visibleVersion(expected) {
-  let visible
-  await expect(async () => {
-    // Settings may replace this node while its version request finishes.
-    const label = page.locator('.settings-card--about summary .settings-row__meta')
-    await label.scrollIntoViewIfNeeded({ timeout: 3000 })
-    await expect(label).toHaveText(expected, { timeout: 3000 })
-    visible = (await label.innerText({ timeout: 3000 })).trim()
-    expect(visible).toBe(expected)
-  }).toPass({ timeout: 20000, intervals: [200, 500, 1000] })
-  return { expected_version: expected, visible_version: visible }
 }
 async function main() {
   if (phase === 'readback' && !seed) throw new Error('GUI recovery readback requires original business evidence')
@@ -199,7 +170,7 @@ async function main() {
     return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, workspace_owner_id: workspaceOwners.at(-1), records }
   })
   if (phase === 'readback') { evidence.result = 'gui_readback_passed'; return }
-  if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); return visibleVersion(JSON.parse(fs.readFileSync(path.join(root, 'config/release_train.json'), 'utf8')).product_version) })
+  if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); return visibleVersion(page, expect, JSON.parse(fs.readFileSync(path.join(root, 'config/release_train.json'), 'utf8')).product_version) })
   await step('customer', async () => {
     await nav('customers', '#view-customers')
     await click('+ 新建客户')
@@ -401,6 +372,6 @@ finally {
   evidence.finished_at = new Date().toISOString()
   evidence.unfinished = required.filter(id => !evidence.cases.some(c => c.id === id && c.status === 'passed'))
   evidence.full_customer_acceptance = 'not_verified' // Independent A/B/C, binding, restart and recovery are separate obligations.
-  fs.writeFileSync(path.join(dir, 'gui-business.json'), JSON.stringify(evidence, (_key, value) => typeof value === 'string' ? redact(value) : value, 2))
+  writeEvidence(path.join(dir, 'gui-business.json'), evidence)
   if (browser) await browser.close().catch(() => {})
 }

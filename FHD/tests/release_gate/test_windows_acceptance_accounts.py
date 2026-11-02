@@ -13,6 +13,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = ROOT / "scripts/package/windows-acceptance-accounts.mjs"
+EVIDENCE_MODULE = ROOT / "scripts/dev/desktop-acceptance-evidence.mjs"
 MODES = ("Clean", "Upgrade", "Gui", "Recovery", "Rollback")
 HARNESS = """
 import fs from 'node:fs';
@@ -349,50 +350,55 @@ ConvertTo-Json -InputObject $results -Depth 8 -Compress
         {"XCAGI_TEST_USER": 'synthetic-"user', "XCAGI_TEST_PASS": 'synthetic-"password\\value'},
     ],
 )
-def test_gui_failure_evidence_redacts_credentials_before_text_and_json_encoding(credentials):
-    source = ROOT / "scripts/dev/record_enterprise_desktop_init.mjs"
+def test_gui_failure_evidence_redacts_credentials_before_text_and_json_encoding(
+    credentials, tmp_path
+):
     harness = r"""
 import fs from 'node:fs'; import path from 'node:path';
-const source = fs.readFileSync(process.argv[1], 'utf8');
-const env = JSON.parse(fs.readFileSync(0, 'utf8'));
-const fragment = source.slice(source.indexOf('const redact ='), source.indexOf('async function click'));
-const writer = source.split('\n').find(line => line.includes("fs.writeFileSync(path.join(dir, 'gui-business.json')"));
-const files = {}, screenshots = [], evidence = {cases: []};
+const {createEvidenceStep, redactCredentials, writeEvidence} = await import(process.argv[1]);
+const {env, dir} = JSON.parse(fs.readFileSync(0, 'utf8'));
+const screenshots = [], evidence = {cases: []};
 const secrets = Object.values(env).join(' / ');
-const page = {screenshot: async options => screenshots.push(options),
+let page;
+const step = createEvidenceStep({getPage: () => page, evidence, names: {}, dir, env});
+const mockPage = number => ({screenshot: async options => screenshots.push({...options, number}),
   getByText: (value, options) => {
     if (value !== env.XCAGI_TEST_USER || options.exact !== true) throw new Error('Account screenshot mask is not exact');
     return {selector: 'exact-username'};
   }, locator: selector => ({
   selector, innerText: async () => secrets,
   evaluateAll: async action => action([{textContent: secrets, getAttribute: () => null, disabled: false}]),
-})};
-await new Function('process', 'fs', 'path', 'page', 'evidence', 'names', 'dir', 'secrets',
-  `return (async () => {${fragment}
-    await step('good', async () => ({value: secrets}));
-    try { await step('bad', async () => {throw new Error(secrets)}) } catch {}
-    ${writer}
-  })()`
-)({env}, {writeFileSync: (name, value) => {files[path.basename(name)] = value}}, path,
-  page, evidence, {}, 'unused', secrets);
-console.log(JSON.stringify({files, masks: screenshots.map(shot => shot.mask.map(mask => mask.selector))}));
+})});
+page = mockPage(1);
+await step('good', async () => ({value: secrets}));
+page = mockPage(2);
+const failure = new Error(secrets);
+let propagated = false;
+try { await step('bad', async () => {throw failure}) } catch (error) {propagated = error === failure}
+writeEvidence(path.join(dir, 'gui-business.json'), evidence, env);
+console.log(JSON.stringify({propagated, redacted: redactCredentials(secrets, env), pages: screenshots.map(shot => shot.number),
+  masks: screenshots.map(shot => shot.mask.map(mask => mask.selector))}));
 """
     process = subprocess.run(
-        ["node", "--input-type=module", "-e", harness, str(source)],
-        input=json.dumps(credentials),
+        ["node", "--input-type=module", "-e", harness, EVIDENCE_MODULE.as_uri()],
+        input=json.dumps({"env": credentials, "dir": str(tmp_path)}),
         text=True,
         capture_output=True,
         check=True,
         timeout=15,
     )
     result = json.loads(process.stdout)
-    business = json.loads(result["files"]["gui-business.json"])
-    decoded = json.dumps(business) + result["files"]["bad-ui.txt"]
+    business = json.loads((tmp_path / "gui-business.json").read_text("utf-8"))
+    ui = (tmp_path / "bad-ui.txt").read_text("utf-8")
+    decoded = json.dumps(business) + ui
     for secret in credentials.values():
-        assert secret not in result["files"]["bad-ui.txt"]
+        assert secret not in ui
         assert secret not in json.dumps(business, ensure_ascii=False)
         assert secret not in business["cases"][0]["actual"]["value"]
     assert "[REDACTED]" in decoded
+    assert result["propagated"] is True
+    assert result["redacted"] == "[REDACTED] / [REDACTED]"
+    assert result["pages"] == [1, 2]  # The factory reads the current page when each step starts.
     assert business["cases"][1]["status"] == "failed"
     assert result["masks"] == [["#lv-username,#lv-password", "exact-username"]] * 2
 
@@ -401,12 +407,10 @@ console.log(JSON.stringify({files, masks: screenshots.map(shot => shot.mask.map(
     "scenario", ["redraw", "wrong-version", "changed-readback", "detached", "missing"]
 )
 def test_visible_version_retries_entire_dom_read_and_rejects_persistent_failures(scenario):
-    source = ROOT / "scripts/dev/record_enterprise_desktop_init.mjs"
     harness = r"""
 import fs from 'node:fs';
-const source = fs.readFileSync(process.argv[1], 'utf8');
+const {visibleVersion} = await import(process.argv[1]);
 const {scenario} = JSON.parse(fs.readFileSync(0, 'utf8'));
-const helper = source.slice(source.indexOf('async function visibleVersion('), source.indexOf('async function main('));
 const expected = '1.0.0.7', events = [];
 let attempts = 0, clock = 0, outerOptions;
 function bounded(options) {
@@ -448,13 +452,13 @@ function expect(value) {
 }
 let result;
 try {
-  const value = await new Function('page', 'expect', `${helper}; return visibleVersion('${expected}')`)(page, expect);
+  const value = await visibleVersion(page, expect, expected);
   result = {ok: true, value};
 } catch (error) {result = {ok: false, error: error.message}}
 console.log(JSON.stringify({...result, attempts, clock, outerOptions, events}));
 """
     process = subprocess.run(
-        ["node", "--input-type=module", "-e", harness, str(source)],
+        ["node", "--input-type=module", "-e", harness, EVIDENCE_MODULE.as_uri()],
         input=json.dumps({"scenario": scenario}),
         text=True,
         capture_output=True,
