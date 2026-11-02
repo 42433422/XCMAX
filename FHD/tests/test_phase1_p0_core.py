@@ -725,3 +725,42 @@ def test_aibiz_png_transform_with_pil() -> None:
     assert len(cropped) <= len(raw)
     thumb = aibiz_mod._resize_png_thumb(raw, max_width=50)
     assert len(thumb) <= len(raw)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "notice_not_published",
+        "login_notice_required",
+        "model_connection_error",
+        "model_configuration_error",
+        "model_processing_failed",
+    ],
+)
+@pytest.mark.parametrize("extra", [False, True])
+def test_reviewed_excel_model_errors_keep_contract_without_provider_details(caplog, code, extra):
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.add_middleware(RequestIdMiddleware)
+
+    @app.post("/api/templates/reviewed-excel/preview")
+    def failed_preview():
+        detail = {"code": code, "message": "synthetic-private-provider-key", "retryable": True}
+        if extra:
+            detail["provider_response"] = "synthetic-private-cell"
+        raise StarletteHTTPException(status_code=503, detail=detail)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/templates/reviewed-excel/preview",
+            headers={"X-Request-ID": "synthetic-model-failure"},
+        )
+    data = response.json()
+    assert response.status_code == 503 and data["error_code"] == code
+    assert data["request_id"] == response.headers["X-Request-ID"] == "synthetic-model-failure"
+    assert data["stage"] == "preview"
+    assert data["outcome_unknown"] is (code == "model_processing_failed")
+    assert data["retryable"] is (
+        not extra and code in {"model_connection_error", "model_configuration_error"}
+    )
+    assert "synthetic-private" not in response.text + caplog.text

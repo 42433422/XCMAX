@@ -78,6 +78,13 @@ describe('reviewed Excel CSRF handling', () => {
     expect(seen).toEqual(['csrf_token=first', 'csrf_token=second'])
   })
 
+  it('preserves structured model failure state without retrying the request', async () => {
+    const data = { detail: { code: 'model_processing_failed', message: '模型连接异常，结果未知，请核对', retryable: false, outcome_unknown: true } }
+    mock.post.mockRejectedValueOnce(new ApiError('Service Unavailable', 503, data))
+    await expect(templatePreviewApi.reviewExcel(new FormData())).rejects.toMatchObject({ message: data.detail.message, status: 503, data })
+    expect(mock.post).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps safe failure diagnostics visible without retrying or exposing arbitrary stage data', async () => {
     const data = { request_id: 'elt-request-7', stage: 'render_candidates' }
     mock.post.mockRejectedValueOnce(new ApiError('文件处理失败', 500, data))

@@ -154,7 +154,6 @@
           <p>请先检查模型状态。重试会发起新请求，已执行的业务操作不会撤销。</p>
           <details v-if="originalRequest(idx)"><summary>查看本次原始输入</summary><p>{{ originalRequest(idx) }}</p></details>
           <button v-if="originalRequest(idx)" type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" @click="$emit('fill-example', originalRequest(idx))">重试本次请求（填入原文）</button>
-          <button type="button" class="btn btn-secondary btn-sm" @click="$emit('model-settings')">查看模型状态</button>
         </div>
         <div
           v-else-if="!isMessageCollapsed(msg, idx) && suggestionsFor(msg).length"
@@ -163,7 +162,6 @@
           :data-reply-id="proactiveReplyMessageId(msg)"
           aria-label="这条回复的下一步建议"
         >
-          <div class="proactive-suggestions__hint">选择一条建议填入输入框（不会自动发送）</div>
           <div class="proactive-suggestions__chips">
             <button v-for="item in suggestionsFor(msg)" :key="item.id" type="button"
               class="proactive-suggestions__chip" @click="$emit('pick-proactive-suggestion', item)">
@@ -172,10 +170,6 @@
           </div>
         </div>
       </div>
-      <details v-if="messages.some(message => message.persistence)" class="message-storage-details">
-        <summary>保存详情</summary>
-        <p v-for="state in ['local', 'saving', 'saved', 'failed'] as const" :key="state">{{ saveLabels[state] }}：{{ messages.filter(message => message.persistence?.status === state).length }} 条</p>
-      </details>
       <div v-if="windowEnd === messages.length && isLoading && !isStreamingReply" class="message ai">
         <div class="chat-loading-row">
           <i class="fa fa-spinner fa-spin chat-loading-spinner" aria-hidden="true"></i>
@@ -238,7 +232,6 @@ const emit = defineEmits<{
   'approve-run': [runId: string]
   'pick-proactive-suggestion': [item: ProactiveReplySuggestion]
   'fill-example': [text: string]
-  'model-settings': []
 }>()
 
 function originalRequest(index: number): string {
@@ -413,14 +406,8 @@ watch(
 </script>
 
 <style scoped>
-.message-storage-details { margin: 4px 0; font-size: 12px; color: var(--app-text-muted, #667085); }
 .proactive-suggestions {
   padding-top: 8px;
-}
-.proactive-suggestions__hint {
-  color: var(--app-text-muted, #667085);
-  font-size: var(--app-font-size-caption, 12px);
-  margin-bottom: 6px;
 }
 .proactive-suggestions__chips {
   display: flex;

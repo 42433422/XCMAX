@@ -10,6 +10,7 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal, cast
 
 import httpx
@@ -21,6 +22,9 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 NOTICE_VERSION = "2026-11-01"
 RECIPIENT_DISCLOSURE_VERSION = "2026-11-01"
 NOTICE_PUBLICATION_ENV = "FHD_ELT_NOTICE_PUBLICATION"
+_NOTICE_PUBLICATION_FILE = (
+    Path(__file__).resolve().parents[2] / "config/elt_notice_publication.json"
+)
 _COVERED_RELAY = "https://xiu-ci.com"
 _DISCLOSED_RECIPIENT = {
     "id": "xiaomi-mimo-cn",
@@ -41,6 +45,8 @@ _DATA_CATEGORIES = (
 NOTICE_COOKIE = "xcagi_elt_notice"
 NOTICE_PURPOSE = "elt_file_processing"
 _AUDIENCE = "xcagi-elt-login-notice"
+_STATUS_AUDIENCE = f"{_AUDIENCE}-status"
+_MODEL_FAILURES = {"model_connection_error", "model_configuration_error"}
 _route_scope: ContextVar[dict | None] = ContextVar("elt_login_model_route", default=None)
 _session_scope: ContextVar[tuple[str, int] | None] = ContextVar("elt_login_session", default=None)
 logger = logging.getLogger(__name__)
@@ -135,7 +141,16 @@ def _public_model_route(route: dict) -> dict:
 def notice_publication() -> dict | None:
     """Only a publisher-supplied, version-matching actual release can enable new grants."""
     try:
-        record = json.loads(os.environ.get(NOTICE_PUBLICATION_ENV, ""))
+        if NOTICE_PUBLICATION_ENV in os.environ:
+            raw_record = os.environ[NOTICE_PUBLICATION_ENV]
+        else:
+            if (
+                _NOTICE_PUBLICATION_FILE.is_symlink()
+                or _NOTICE_PUBLICATION_FILE.stat().st_size > 4096
+            ):
+                return None
+            raw_record = _NOTICE_PUBLICATION_FILE.read_text(encoding="utf-8")
+        record = json.loads(raw_record)
         if not isinstance(record, dict) or set(record) != {
             "notice_version",
             "recipient_disclosure_version",
@@ -158,7 +173,7 @@ def notice_publication() -> dict | None:
                 json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
             ).hexdigest(),
         }
-    except (ValueError, TypeError):
+    except (OSError, ValueError, TypeError):
         return None
 
 
@@ -232,31 +247,42 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
         identity = _active_session(session_id)
         if not identity or identity["owner"] != (result.get("user") or {}).get("id"):
             return response
-        route = await _resolve_login_route(session_id)
-        if (
-            not route
-            or route.get("base") != _platform_url()
-            or not _valid_model_snapshot(route)
-            or not _covered_recipient(route)
-        ):
-            return response
+        failure = "model_configuration_error"
+        try:
+            route = await _resolve_login_route(session_id)
+        except _LOGIN_NOTICE_ERRORS as exc:
+            logger.info("ELT login model unavailable error_type=%s", type(exc).__name__)
+            route = None
+            failure = "model_connection_error"
+        route_valid = bool(
+            route
+            and route.get("base") == _platform_url()
+            and _valid_model_snapshot(route)
+            and _covered_recipient(route)
+        )
         now = int(time.time())
-        expires = min(identity["expires"], now + 12 * 3600)
+        expires = min(identity["expires"], now + (12 * 3600 if route_valid else 300))
         receipt = {
-            "aud": _AUDIENCE,
+            "aud": _AUDIENCE if route_valid else _STATUS_AUDIENCE,
             "iat": now,
             "exp": expires,
             "version": NOTICE_VERSION,
-            "purpose": NOTICE_PURPOSE,
+            "purpose": NOTICE_PURPOSE if route_valid else f"{NOTICE_PURPOSE}_status",
             "publication": publication,
             "recipient_disclosure_version": RECIPIENT_DISCLOSURE_VERSION,
             "data_categories": list(_DATA_CATEGORIES),
             "session": _session_digest(session_id),
             "owner": identity["owner"],
             "tenant": identity["tenant"],
-            "route": {"base": route["base"], **_public_model_route(route)},
-            "scopes": notice_operation_scopes(),
         }
+        if route_valid and route is not None:
+            receipt.update(
+                route={"base": route["base"], **_public_model_route(route)},
+                scopes=notice_operation_scopes(),
+            )
+        else:
+            # Diagnostic only: a separate audience, no route or scopes, and no model grant.
+            receipt["status"] = failure
         raw_samesite = os.environ.get("SESSION_COOKIE_SAMESITE", "Lax").strip().lower()
         samesite = cast(
             "Literal['lax', 'strict', 'none']",
@@ -276,25 +302,23 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
     return response
 
 
-def login_notice_grant(
-    request: Request, tenant_id: int, owner_id: int, operation: str = "template_candidates"
+def _verified_notice_receipt(
+    request: Request, tenant_id: int, owner_id: int, audience: str
 ) -> dict | None:
-    """The caller must already have authenticated and checked the current account."""
-    from app.application.reviewed_excel_template import configured_template_llm_provider
     from app.infrastructure.auth.dependencies import session_id_from_request
 
     publication = notice_publication()
-    if not publication or operation not in notice_operation_scopes():
+    if not publication:
         return None
     try:
         raw = request.cookies.get(NOTICE_COOKIE, "")
-        if not raw or len(raw) > 4096 or configured_template_llm_provider() != "platform":
+        if not raw or len(raw) > 4096:
             return None
         receipt = jwt.decode(
             raw,
             _secret(),
             algorithms=["HS256"],
-            audience=_AUDIENCE,
+            audience=audience,
             options={
                 "require": [
                     "exp",
@@ -304,29 +328,21 @@ def login_notice_grant(
                     "session",
                     "owner",
                     "tenant",
-                    "route",
                 ]
             },
         )
         session_id = session_id_from_request(request)
-        route = receipt.get("route")
         if (
             not session_id
             or receipt["session"] != _session_digest(session_id)
             or receipt["version"] != NOTICE_VERSION
-            or receipt["purpose"] != NOTICE_PURPOSE
+            or receipt["purpose"]
+            != (NOTICE_PURPOSE if audience == _AUDIENCE else f"{NOTICE_PURPOSE}_status")
             or receipt.get("publication") != publication
             or receipt.get("recipient_disclosure_version") != RECIPIENT_DISCLOSURE_VERSION
             or receipt.get("data_categories") != list(_DATA_CATEGORIES)
             or receipt["owner"] != owner_id
             or receipt["tenant"] != tenant_id
-            or not isinstance(receipt.get("scopes"), dict)
-            or receipt["scopes"].get(operation) != notice_operation_scopes()[operation]
-            or not isinstance(route, dict)
-            or route.get("base") != _platform_url()
-            or set(route) != {"base", "recipient", *_PUBLIC_ROUTE_FIELDS}
-            or not _valid_model_snapshot(route)
-            or not _covered_recipient(route)
         ):
             return None
         return _LoginNoticeGrant(receipt, session_id)
@@ -334,13 +350,48 @@ def login_notice_grant(
         return None
 
 
+def login_notice_grant(
+    request: Request, tenant_id: int, owner_id: int, operation: str = "template_candidates"
+) -> dict | None:
+    """The caller must already have authenticated and checked the current account."""
+    from app.application.reviewed_excel_template import configured_template_llm_provider
+
+    if (
+        operation not in notice_operation_scopes()
+        or configured_template_llm_provider() != "platform"
+    ):
+        return None
+    receipt = _verified_notice_receipt(request, tenant_id, owner_id, _AUDIENCE)
+    route = receipt.get("route") if receipt else None
+    if (
+        not receipt
+        or not isinstance(receipt.get("scopes"), dict)
+        or receipt["scopes"].get(operation) != notice_operation_scopes()[operation]
+        or not isinstance(route, dict)
+        or route.get("base") != _platform_url()
+        or set(route) != {"base", "recipient", *_PUBLIC_ROUTE_FIELDS}
+        or not _valid_model_snapshot(route)
+        or not _covered_recipient(route)
+    ):
+        return None
+    return receipt
+
+
 def login_notice_status(
     request: Request, tenant_id: int, owner_id: int, operation: str = "template_candidates"
 ) -> dict:
     grant = login_notice_grant(request, tenant_id, owner_id, operation)
+    diagnostic = (
+        _verified_notice_receipt(request, tenant_id, owner_id, _STATUS_AUDIENCE)
+        if not grant
+        else None
+    )
+    failure = diagnostic.get("status") if diagnostic else None
     return {
         "status": "authorized"
         if grant
+        else failure
+        if failure in _MODEL_FAILURES
         else "login_notice_required"
         if notice_publication()
         else "notice_not_published",
@@ -378,12 +429,17 @@ def require_login_notice_grant(
 ) -> dict:
     grant = login_notice_grant(request, tenant_id, owner_id, operation)
     if not grant:
-        message = (
-            "缺少有效的本次文件分类授权，请核对登录状态。"
-            if operation == "classification"
-            else "缺少有效的本次模型处理授权，请核对登录状态。"
+        status = login_notice_status(request, tenant_id, owner_id, operation)["status"]
+        messages = {
+            "notice_not_published": "登录数据处理条款尚未正式发布，未调用模型；请联系管理员发布后重新登录。",
+            "login_notice_required": "当前登录会话缺少有效的模型处理授权，请阅读登录说明后重新登录。",
+            "model_connection_error": "模型连接异常，未能建立模型处理授权；请检查平台模型连接后重新登录。",
+            "model_configuration_error": "模型连接异常：平台模型尚未配置或接收方不在已披露范围，未调用模型；请联系管理员。",
+        }
+        raise HTTPException(
+            status_code=403 if status == "login_notice_required" else 503,
+            detail={"code": status, "message": messages[status], "retryable": False},
         )
-        raise HTTPException(status_code=403, detail=message)
     return grant
 
 

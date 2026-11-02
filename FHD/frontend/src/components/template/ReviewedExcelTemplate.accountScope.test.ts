@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   downloadArchiveVersion: vi.fn(),
   confirmClassification: vi.fn(),
   reviewExcel: vi.fn(),
+  analyzeClassification: vi.fn(), autoSlices: vi.fn(), recentClassifications: vi.fn(),
 }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/auth', () => ({ authApi: { validateSession: vi.fn() } }))
@@ -46,6 +47,7 @@ function classified(name: string) {
   }
 }
 
+const syntheticLayout = (value: string) => [{ sheet: 'Sheet1', widths: [20], rows: [{ height: 20, cells: [{ cell: 'A1', value, formula: false, rowspan: 1, colspan: 1, bold: false, italic: false, font_size: 11, font_color: '', fill: '', align: 'left' }] }], truncated: false }]
 function reviewPayload(id: string) {
   const candidates = [0, 1, 2].map(index => ({
     id: `candidate-${index}`,
@@ -58,17 +60,19 @@ function reviewPayload(id: string) {
     sha256: 'sha',
     cells: [],
     sheets: ['Sheet1'],
-    model: 'not_called',
+    layout: syntheticLayout(`原件 ${id}`),
+    model: 'synthetic-model',
+    selected_region: { selection_basis: 'model_group' },
     proposal: {
       version: `${id}-v1`,
       parent_version: null,
       candidates,
       evidence: [],
-      model: { status: 'not_called' },
+      model: { status: 'returned', login_authorization: { status: 'authorized' } },
       result_previews: candidates.map(candidate => ({
         candidate_id: candidate.id,
         sha256: 'sha',
-        layout: [],
+        layout: syntheticLayout(candidate.id),
         layout_truncated: false,
       })),
     },
@@ -98,13 +102,17 @@ async function choose(names: string[]) {
 }
 beforeEach(() => {
   vi.clearAllMocks(); invalidateEnterpriseSessionCache(); account('A')
+  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: { status: 'authorized', operations: { classification: 'authorized', template_candidates: 'authorized' } } })
+  api.analyzeClassification.mockReset().mockImplementation(async (id: string) => ({ ...classified(id), version: 'model-v2', model_status: 'returned' }))
+  api.autoSlices.mockReset().mockResolvedValue({ slices: [{ index: 0, basis: 'model_group', confirmed: false, sha256: 'synthetic-slice', filename: 'synthetic-slice.xlsx', fragments: [{ sheet: 'Sheet1', range: 'A1:D4' }] }] })
+  api.recentClassifications.mockResolvedValue({ files: [] })
   api.archiveClassifyExcel.mockReset().mockImplementation(async (form: FormData) => classified((form.get('file') as File).name))
   api.confirmClassification.mockReset().mockImplementation(async (_id: string, _form: FormData) => ({
     ...classified('confirmed.xlsx'),
     version: 'confirmed-version',
     confirmed: true,
   }))
-  api.reviewExcel.mockReset().mockImplementation(async (form: FormData) => reviewPayload(String(form.get('region_range') || 'A1:D4')))
+  api.reviewExcel.mockReset().mockImplementation(async (form: FormData) => reviewPayload(String(form.get('classification_id') || form.get('region_range') || 'A1:D4')))
 })
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.restoreAllMocks() })
 
@@ -128,6 +136,7 @@ describe('reviewed workbook account and component ownership', () => {
     // User path never mounts classification DOM; retired batch must also leave no template picker cards.
     expect(wrapper.findAll('.classification-region')).toHaveLength(0)
     expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
+    expect(wrapper.findAll('[data-document-key]')).toHaveLength(0)
     expect(wrapper.text()).not.toContain('A-first.xlsx')
     expect(wrapper.text()).not.toContain('old A error')
     expect(wrapper.emitted('stage')?.length).toBe(stages)
@@ -144,6 +153,7 @@ describe('reviewed workbook account and component ownership', () => {
     expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(1)
     expect(wrapper.findAll('.classification-region')).toHaveLength(0)
     expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
+    expect(wrapper.findAll('[data-document-key]')).toHaveLength(0)
   })
 
   it('does not continue or emit when the component is unmounted during the first file', async () => {
@@ -178,9 +188,14 @@ describe('reviewed workbook account and component ownership', () => {
     expect(wrapper.emitted('stage')?.length).toBe(stages)
     currentB.resolve(classified('B-first.xlsx')); await flushPromises()
     expect(trace).toEqual(['A:A-first.xlsx', 'B:B-first.xlsx', 'B:B-second.xlsx'])
-    // User path hides classification form; success shows A4 template cards for the current B batch only.
+    // Only the current B batch may open its candidates; generated results stay collapsed by default.
     expect(wrapper.findAll('.classification-region')).toHaveLength(0)
-    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(3)
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
+    expect(wrapper.findAll('[data-document-key]').map(capsule => JSON.parse(capsule.attributes('data-document-key'))[0])).toEqual(['B-first.xlsx', 'B-second.xlsx'])
+    expect(api.reviewExcel.mock.calls.map(([form]) => (form as FormData).get('classification_id'))).toEqual(['B-first.xlsx', 'B-second.xlsx'])
+    await wrapper.get('.reviewed-template__candidate-capsule').trigger('click')
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(4)
+    expect(wrapper.get('.reviewed-document-picker__original').find('.reviewed-template__select-candidate').exists()).toBe(false)
     expect(wrapper.text()).toContain('B-first.xlsx')
     expect(wrapper.text()).toContain('B-second.xlsx')
     expect(wrapper.text()).not.toContain('A-first.xlsx')
@@ -194,10 +209,16 @@ describe('reviewed workbook account and component ownership', () => {
     wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     await choose(['A-first.xlsx', 'A-second.xlsx'])
     expect(trace).toEqual(['A:A-first.xlsx', 'A:A-second.xlsx'])
-    expect(api.confirmClassification).toHaveBeenCalled()
+    expect(api.confirmClassification).not.toHaveBeenCalled()
+    expect(api.analyzeClassification).toHaveBeenCalled()
     expect(api.reviewExcel).toHaveBeenCalled()
     expect(wrapper.findAll('.classification-region')).toHaveLength(0)
-    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(3)
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
+    expect(wrapper.findAll('[data-document-key]').map(capsule => JSON.parse(capsule.attributes('data-document-key'))[0])).toEqual(['A-first.xlsx', 'A-second.xlsx'])
+    expect(api.reviewExcel.mock.calls.map(([form]) => (form as FormData).get('classification_id'))).toEqual(['A-first.xlsx', 'A-second.xlsx'])
+    await wrapper.get('.reviewed-template__candidate-capsule').trigger('click')
+    expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(4)
+    expect(wrapper.get('.reviewed-document-picker__original').find('.reviewed-template__select-candidate').exists()).toBe(false)
     expect(wrapper.text()).toContain('A-first.xlsx')
     expect(wrapper.text()).toContain('A-second.xlsx')
     expect(wrapper.get('input[type="file"][multiple]').attributes('disabled')).toBeUndefined()

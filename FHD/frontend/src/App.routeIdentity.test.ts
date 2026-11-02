@@ -94,7 +94,8 @@ it.each([80, 450])('shows async page content immediately after its %sms setup, w
     expect(wrapper.find('[role="status"]').exists()).toBe(false)
     if (delay > 280) {
       await vi.advanceTimersByTimeAsync(280)
-      expect(wrapper.get('[role="status"]').text()).toBe('页面加载中…')
+      expect(wrapper.get('[role="status"]').text()).toContain('页面加载中…')
+      expect(wrapper.get('[role="status"]').text()).toContain('正在准备页面内容')
     }
     await vi.advanceTimersByTimeAsync(delay > 280 ? delay - 280 : delay)
     await flushPromises()

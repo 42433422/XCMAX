@@ -37,7 +37,8 @@ def recipient():
 
 
 @pytest.fixture
-def login(monkeypatch):
+def login(monkeypatch, tmp_path):
+    monkeypatch.setattr(auth, "_NOTICE_PUBLICATION_FILE", tmp_path / "elt_notice_publication.json")
     monkeypatch.setenv(auth.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
     monkeypatch.setenv("SECRET_KEY", "synthetic-login-notice-signing-key-1234567890")
     monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
@@ -56,6 +57,72 @@ def login(monkeypatch):
     )
     monkeypatch.setattr(auth, "_resolve_login_route", AsyncMock(return_value=route))
     return {"success": True, "session_id": "synthetic-session", "user": {"id": 7}}, route
+
+
+def test_bundled_publication_uses_same_strict_validation_when_env_absent(monkeypatch, tmp_path):
+    record = publication_record()
+    monkeypatch.setenv(auth.NOTICE_PUBLICATION_ENV, json.dumps(record))
+    expected = auth.notice_publication()
+    target = tmp_path / "elt_notice_publication.json"
+    target.write_text(json.dumps(record), encoding="utf-8")
+    monkeypatch.setattr(auth, "_NOTICE_PUBLICATION_FILE", target)
+    monkeypatch.delenv(auth.NOTICE_PUBLICATION_ENV)
+    assert auth.notice_publication() == expected
+
+
+@pytest.mark.parametrize("raw", ["", "not-json", "{}"])
+def test_invalid_explicit_env_cannot_fall_back_to_bundled_publication(monkeypatch, tmp_path, raw):
+    target = tmp_path / "elt_notice_publication.json"
+    target.write_text(json.dumps(publication_record()), encoding="utf-8")
+    monkeypatch.setattr(auth, "_NOTICE_PUBLICATION_FILE", target)
+    monkeypatch.setenv(auth.NOTICE_PUBLICATION_ENV, raw)
+    assert auth.notice_publication() is None
+
+
+def test_explicit_env_takes_precedence_over_bundled_publication(monkeypatch, tmp_path):
+    target = tmp_path / "elt_notice_publication.json"
+    target.write_text(
+        json.dumps({**publication_record(), "published_at": "2026-01-01T00:00:00+00:00"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(auth, "_NOTICE_PUBLICATION_FILE", target)
+    record = publication_record()
+    monkeypatch.setenv(auth.NOTICE_PUBLICATION_ENV, json.dumps(record))
+    assert auth.notice_publication()["published_at"] == record["published_at"]
+
+
+@pytest.mark.parametrize("mutation", ["missing", "json", "extra", "version", "future", "oversized"])
+def test_invalid_bundled_publication_fails_closed(monkeypatch, tmp_path, mutation):
+    target = tmp_path / "elt_notice_publication.json"
+    record = publication_record()
+    if mutation == "extra":
+        record["enabled"] = True
+    elif mutation == "version":
+        record["notice_version"] = "old"
+    elif mutation == "future":
+        record["published_at"] = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    if mutation != "missing":
+        target.write_text(
+            "not-json"
+            if mutation == "json"
+            else " " * 4097
+            if mutation == "oversized"
+            else json.dumps(record),
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(auth, "_NOTICE_PUBLICATION_FILE", target)
+    monkeypatch.delenv(auth.NOTICE_PUBLICATION_ENV, raising=False)
+    assert auth.notice_publication() is None
+
+
+@pytest.mark.asyncio
+async def test_bundled_publication_still_requires_explicit_new_login(login, monkeypatch):
+    result, _ = login
+    auth._NOTICE_PUBLICATION_FILE.write_text(json.dumps(publication_record()), encoding="utf-8")
+    monkeypatch.delenv(auth.NOTICE_PUBLICATION_ENV)
+    assert auth.login_notice_status(request(), 9, 7)["status"] == "login_notice_required"
+    receipt, _ = await receipt_for(result)
+    assert auth.login_notice_grant(request(receipt), 9, 7)
 
 
 def request(receipt="", session="synthetic-session"):
@@ -176,7 +243,9 @@ async def test_only_disclosed_platform_mimo_flash_recipient_can_receive_new_gran
 ):
     result, route = login
     monkeypatch.setattr(auth, "_resolve_login_route", AsyncMock(return_value={**route, **changes}))
-    assert (await receipt_for(result))[0] == ""
+    receipt, _ = await receipt_for(result)
+    assert auth.login_notice_grant(request(receipt), 9, 7) is None
+    assert auth.login_notice_status(request(receipt), 9, 7)["status"] == "model_configuration_error"
 
 
 @pytest.mark.asyncio
@@ -193,7 +262,8 @@ async def test_authorization_uses_existing_api_origin_normalizer_and_disclosed_r
 ):
     result, route = login
     monkeypatch.setenv("XCAGI_MARKET_BASE_URL", relay)
-    assert bool((await receipt_for(result))[0]) is authorized
+    receipt, _ = await receipt_for(result)
+    assert bool(auth.login_notice_grant(request(receipt), 9, 7)) is authorized
 
 
 @pytest.mark.asyncio
@@ -215,7 +285,8 @@ async def test_receipt_excludes_ephemeral_snapshot_and_requires_public_revision(
             "_resolve_login_route",
             AsyncMock(return_value={key: value for key, value in route.items() if key != field}),
         )
-        assert (await receipt_for(result))[0] == ""
+        receipt, _ = await receipt_for(result)
+        assert auth.login_notice_grant(request(receipt), 9, 7) is None
 
 
 @pytest.mark.asyncio
@@ -283,7 +354,9 @@ async def test_invalid_optional_model_url_keeps_successful_login_response(login,
     cookies = SimpleCookie()
     for header in actual.headers.getlist("set-cookie"):
         cookies.load(header)
-    assert cookies[auth.NOTICE_COOKIE].value == ""
+    receipt = cookies[auth.NOTICE_COOKIE].value
+    assert auth.login_notice_grant(request(receipt), 9, 7) is None
+    assert auth.login_notice_status(request(receipt), 9, 7)["status"] == "model_connection_error"
 
 
 @pytest.mark.asyncio
@@ -353,10 +426,51 @@ async def test_missing_old_version_failed_login_unknown_session_and_unavailable_
             f"{auth.NOTICE_COOKIE}=ey" in value for value in response.headers.getlist("set-cookie")
         )
     monkeypatch.setattr(auth, "_resolve_login_route", AsyncMock(return_value=None))
-    assert (await receipt_for(result))[0] == ""
+    receipt, _ = await receipt_for(result)
+    assert auth.login_notice_grant(request(receipt), 9, 7) is None
+    assert auth.login_notice_status(request(receipt), 9, 7)["status"] == "model_configuration_error"
     monkeypatch.delenv("SECRET_KEY")
     assert (await receipt_for(result))[0] == ""
     assert auth.login_notice_status(request(), 9, 7)["status"] == "login_notice_required"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("connection_failed", [False, True])
+async def test_model_diagnosis_never_grants_and_is_short_lived_and_session_bound(
+    login, monkeypatch, connection_failed
+):
+    result, _ = login
+    route = AsyncMock(return_value=None)
+    if connection_failed:
+        route.side_effect = auth.httpx.ConnectError("synthetic-private-transport-detail")
+    monkeypatch.setattr(auth, "_resolve_login_route", route)
+    receipt, _ = await receipt_for(result)
+    claims = jwt.decode(
+        receipt, auth._secret(), algorithms=["HS256"], audience=auth._STATUS_AUDIENCE
+    )
+    assert "route" not in claims and "scopes" not in claims
+    assert claims["exp"] - claims["iat"] <= 300
+    assert "synthetic-private-transport-detail" not in json.dumps(claims)
+    expected = "model_connection_error" if connection_failed else "model_configuration_error"
+    for operation in auth.notice_operation_scopes():
+        assert auth.login_notice_grant(request(receipt), 9, 7, operation) is None
+        assert auth.login_notice_status(request(receipt), 9, 7, operation)["status"] == expected
+        with pytest.raises(HTTPException) as error:
+            auth.require_login_notice_grant(request(receipt), 9, 7, operation)
+        assert error.value.status_code == 503 and error.value.detail["code"] == expected
+    for candidate, tenant, owner in [
+        (request(receipt, "other"), 9, 7),
+        (request(receipt), 9, 8),
+        (request(receipt), 8, 7),
+    ]:
+        assert (
+            auth.login_notice_status(candidate, tenant, owner)["status"] == "login_notice_required"
+        )
+    claims["exp"] = int(time.time()) - 1
+    expired = jwt.encode(claims, auth._secret(), algorithm="HS256")
+    assert auth.login_notice_status(request(expired), 9, 7)["status"] == "login_notice_required"
+    monkeypatch.setenv(auth.NOTICE_PUBLICATION_ENV, json.dumps(publication_record()))
+    assert auth.login_notice_status(request(receipt), 9, 7)["status"] == "login_notice_required"
 
 
 @pytest.mark.asyncio

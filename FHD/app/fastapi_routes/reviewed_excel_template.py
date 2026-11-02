@@ -24,11 +24,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
-from app.application.elt.archive_policy import ArchivePolicyError
-from app.application.elt.archive_store import (
-    default_archive_root,
-    read_original,
-)
+from app.application.elt.archive_store import default_archive_root as default_archive_root
 from app.application.elt.errors import EltError, ReviewedExcelError, public_excel_error
 from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
 from app.application.elt.service_uploads import UploadServiceMixin
@@ -36,7 +32,6 @@ from app.application.elt_login_authorization import (
     bind_login_notice_grant,
     classification_login_status,
     classification_notice_scope,
-    login_notice_grant,
     login_notice_identity,
     login_notice_status,
     require_login_notice_grant,
@@ -60,6 +55,32 @@ from app.application.reviewed_excel_classification_store import (
 from app.application.reviewed_excel_evidence import (
     bounded_range,
     unresolved_fragments,
+)
+from app.application.reviewed_excel_review_store import _CLASS_SAVING as _CLASS_SAVING
+from app.application.reviewed_excel_review_store import (
+    _MODEL_PENDING,
+    _READY,
+    _SAVED,
+    _SAVING,
+    _cas,
+    _fork_saved_review,
+    _intake_selection_key,
+    _lock_review_classification,
+    _model_processing_failure,
+    _proposals,
+    _refinement_response,
+    _release_failed_review,
+    _require_private_model,
+    _review_source_version,
+    _run,
+    _source,
+    _stored_candidate_response,
+    _unlock_review_classification,
+    _update_candidate_claim,
+    _usage_restrictions,
+)
+from app.application.reviewed_excel_review_store import (
+    _rebuild_archived_document as _rebuild_archived_document,
 )
 from app.application.reviewed_excel_template import (
     MAX_BYTES,
@@ -106,10 +127,6 @@ _manage = require_permission("etl.template.manage")
 _execute = require_permission("etl.execute")
 _read = require_permission("etl.read")
 _archive_admin = require_permission("admin.manage_users")
-_READY = "template_review_ready"
-_SAVING = "template_review_saving"
-_SAVED = "template_review_saved"
-_CLASS_SAVING = "classification_template_saving"
 
 
 def _identity(user):
@@ -150,234 +167,6 @@ def _build_candidate_previews(body, review, proposal):
             }
         )
     proposal["result_previews"] = previews
-
-
-def _run(db, review_id, tenant, owner):
-    run = (
-        db.query(EltRun)
-        .filter(
-            EltRun.id == review_id,
-            EltRun.tenant_id == tenant,
-            EltRun.owner_user_id == owner,
-            EltRun.target_type == "template_review",
-        )
-        .first()
-    )
-    if run is None:
-        raise HTTPException(status_code=404, detail="审阅记录不存在")
-    return run
-
-
-def _source(db, run, tenant, owner):
-    summary = load_json(run.summary_json, {})
-    archive_version_id = summary.get("archive_version_id")
-    conversion = summary.get("conversion_receipt")
-    if archive_version_id:
-        try:
-            content = read_original(
-                db,
-                owner=owner,
-                version_id=archive_version_id,
-                root=default_archive_root(),
-            )
-        except ArchivePolicyError as exc:
-            raise HTTPException(status_code=409, detail=public_excel_error(exc)) from None
-        source_sha = conversion.get("source_sha256") if conversion else run.file_sha256
-        if hashlib.sha256(content).hexdigest() != source_sha:
-            raise HTTPException(status_code=409, detail="归档来源版本已改变")
-        if not conversion:
-            return content
-        if conversion.get("derived_sha256") != run.file_sha256:
-            raise HTTPException(status_code=409, detail="转换副本与归档收据不一致")
-    upload = (
-        db.query(EltUpload)
-        .filter(
-            EltUpload.id == run.upload_id,
-            EltUpload.tenant_id == tenant,
-            EltUpload.owner_user_id == owner,
-        )
-        .first()
-    )
-    if not upload:
-        raise HTTPException(status_code=404, detail="来源不存在")
-    from datetime import UTC
-
-    expires = upload.expires_at
-    if expires and (expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires) < utcnow():
-        rebuilt = _rebuild_archived_document(db, run, tenant, owner)
-        if rebuilt is not None:
-            return rebuilt
-        raise HTTPException(status_code=410, detail="来源已过期，请重新上传")
-    root = (
-        Path(get_app_data_dir()).resolve() / "etl" / "uploads" / str(tenant) / str(owner)
-    ).resolve()
-    raw = Path(upload.storage_path or "")
-    path = raw.resolve()
-    if raw.is_symlink() or root not in path.parents or not path.is_file():
-        rebuilt = _rebuild_archived_document(db, run, tenant, owner)
-        if rebuilt is not None:
-            return rebuilt
-        raise HTTPException(status_code=410, detail="来源已删除或不可用")
-    if path.stat().st_size > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="来源超过大小限制")
-    content = path.read_bytes()
-    if hashlib.sha256(content).hexdigest() != run.file_sha256 or upload.sha256 != run.file_sha256:
-        raise HTTPException(status_code=409, detail="来源已改变，请重新上传")
-    return content
-
-
-def _rebuild_archived_document(db, run, tenant, owner):
-    scope = load_json(run.summary_json, {}).get("selected_region") or {}
-    if not scope.get("archive_version_id") or not scope.get("derived_sha256"):
-        return None
-    _review_source_version(db, run, tenant, owner)
-    try:
-        original = read_original(
-            db,
-            owner=owner,
-            version_id=scope["archive_version_id"],
-            root=default_archive_root(),
-        )
-        classification = _classification_run(db, scope["classification_id"], tenant, owner)
-        if load_json(classification.summary_json, {}).get("conversion_receipt"):
-            original = _source(db, classification, tenant, owner)
-        derived = derive_document_workbook(
-            original, scope["fragments"], print_area_mode=scope["print_area_mode"]
-        )
-    except (ArchivePolicyError, ValueError, KeyError):
-        raise HTTPException(
-            status_code=409, detail="归档派生副本无法保真重建，请重新预览"
-        ) from None
-    if hashlib.sha256(derived).hexdigest() != run.file_sha256:
-        raise HTTPException(status_code=409, detail="重建结果与原预览不一致，请重新预览")
-    return derived
-
-
-def _usage_restrictions(db, run, tenant, owner):
-    """Server-side immutable source lineage, not just removable workbook metadata."""
-    summary = load_json(run.summary_json, {})
-    restrictions = list(summary.get("usage_restrictions", []))
-    conversion = summary.get("conversion_receipt") or {}
-    if conversion.get("purpose") == "data_template_test_only":
-        restrictions.append("仅供数据/模板测试；打印版式未验证，不得发布到企业模板库")
-    scope = summary.get("selected_region") or {}
-    if scope.get("classification_id"):
-        classification = _classification_run(db, scope["classification_id"], tenant, owner)
-        restrictions.extend(_usage_restrictions(db, classification, tenant, owner))
-    return list(dict.fromkeys(restrictions))
-
-
-def _review_source_version(db, run, tenant, owner):
-    """Fail closed when a derived document's original classification has changed."""
-    scope = load_json(run.summary_json, {}).get("selected_region") or {}
-    if not scope.get("derived_sha256"):
-        return
-    classification = _classification_run(db, scope["classification_id"], tenant, owner)
-    _source(db, classification, tenant, owner)
-    versions = load_json(classification.draft_json, {}).get("versions", [])
-    latest = versions[-1] if versions else {}
-    if (
-        classification.file_sha256 != scope["source_sha256"]
-        or latest.get("version") != scope["version"]
-        or (
-            latest.get("model_status") != "returned"
-            if scope.get("selection_basis") == "model_group"
-            else not latest.get("confirmed")
-        )
-        or run.file_sha256 != scope["derived_sha256"]
-    ):
-        raise HTTPException(status_code=409, detail="文档分类或原件已变化，请重新生成候选")
-
-
-def _lock_review_classification(db, run, tenant, owner):
-    """Serialize classification changes with a derived-template library write."""
-    scope = load_json(run.summary_json, {}).get("selected_region") or {}
-    if not scope.get("derived_sha256"):
-        return None
-    classification = _classification_run(db, scope["classification_id"], tenant, owner)
-    versions = load_json(classification.draft_json, {}).get("versions", [])
-    if not versions or versions[-1].get("version") != scope["version"]:
-        raise HTTPException(status_code=409, detail="文档分类已变化，请重新生成候选")
-    locked = db.execute(
-        update(EltRun)
-        .where(
-            EltRun.id == classification.id,
-            EltRun.tenant_id == tenant,
-            EltRun.owner_user_id == owner,
-            EltRun.status == _CLASS_READY,
-            EltRun.draft_json == classification.draft_json,
-        )
-        .values(status=_CLASS_SAVING)
-    )
-    if locked.rowcount != 1:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="文档分类正在保存或已改变，请核对")
-    return classification.id
-
-
-def _unlock_review_classification(db, classification_id, tenant, owner):
-    if classification_id is None:
-        return
-    released = db.execute(
-        update(EltRun)
-        .where(
-            EltRun.id == classification_id,
-            EltRun.tenant_id == tenant,
-            EltRun.owner_user_id == owner,
-            EltRun.status == _CLASS_SAVING,
-        )
-        .values(status=_CLASS_READY)
-    )
-    if released.rowcount != 1:
-        raise HTTPException(status_code=409, detail="分类写入锁状态异常，请人工核对")
-
-
-def _release_failed_review(
-    db, review_id, tenant, owner, saving_draft, old_draft, classification_lock
-):
-    """Release only this review's lock when the library was not called."""
-    released = db.execute(
-        update(EltRun)
-        .where(
-            EltRun.id == review_id,
-            EltRun.tenant_id == tenant,
-            EltRun.owner_user_id == owner,
-            EltRun.status == _SAVING,
-            EltRun.draft_json == saving_draft,
-        )
-        .values(status=_READY, stage=_READY, draft_json=old_draft)
-    )
-    if released.rowcount != 1:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="审阅锁状态已改变，请人工核对")
-    _unlock_review_classification(db, classification_lock, tenant, owner)
-    db.commit()
-
-
-def _proposals(run):
-    state = load_json(run.draft_json, {})
-    versions = state.get("versions")
-    if not isinstance(versions, list) or not versions:
-        raise HTTPException(status_code=409, detail="审阅状态无效")
-    return state, versions
-
-
-def _cas(db, run, old_draft, **values):
-    result = db.execute(
-        update(EltRun)
-        .where(
-            EltRun.id == run.id,
-            EltRun.tenant_id == run.tenant_id,
-            EltRun.owner_user_id == run.owner_user_id,
-            EltRun.status == _READY,
-            EltRun.draft_json == old_draft,
-        )
-        .values(**values)
-    )
-    if result.rowcount != 1:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="审阅版本已改变，请刷新")
-    db.commit()
 
 
 async def _body(file, *, allow_legacy=False):
@@ -690,6 +479,7 @@ def reviewed_excel_auto_slices(classification_id: str, version: str, user=Depend
                 {
                     **{key: value for key, value in item.items() if key != "workbook"},
                     "index": index,
+                    "display_name": Path(item["filename"]).stem,
                     "sha256": hashlib.sha256(item["workbook"]).hexdigest(),
                 }
                 for index, item in enumerate(slices)
@@ -1049,13 +839,17 @@ async def reviewed_excel_classification_analyze(
                 except ModelRequestNotSent as exc:
                     record_not_sent(state, request_sha, exc.public_message)
                     _classification_cas(db, run, claimed_draft, state)
+                    if use_login_notice:
+                        raise _model_processing_failure(exc) from None
                     raise
-                except (ValueError, TypeError, EltError):
+                except (ValueError, TypeError, EltError) as exc:
                     if audit_holder[0] != audit_draft_before_response:
                         checkpoint["results"] = checkpoint["results"][:index]
                         checkpoint["phase"] = "failed"
                         checkpoint["calls_in_round"] = previous_calls + 1
                         _classification_cas(db, run, audit_holder[0], state)
+                    if use_login_notice:
+                        raise _model_processing_failure(exc) from None
                     raise
                 if index + 1 < len(batches):
                     if checkpoint["calls_in_round"] >= max_calls:
@@ -1133,12 +927,16 @@ async def reviewed_excel_classification_analyze(
                 except ModelRequestNotSent as exc:
                     record_not_sent(state, request_sha, exc.public_message)
                     _classification_cas(db, run, claimed_draft, state)
+                    if use_login_notice:
+                        raise _model_processing_failure(exc) from None
                     raise
-                except (ValueError, TypeError, EltError):
+                except (ValueError, TypeError, EltError) as exc:
                     if audit_holder[0] != claimed_draft:
                         checkpoint["phase"] = "failed"
                         checkpoint["calls_in_round"] = previous_calls + 1
                         _classification_cas(db, run, audit_holder[0], state)
+                    if use_login_notice:
+                        raise _model_processing_failure(exc) from None
                     raise
                 claimed_draft = audit_holder[0]
                 _recheck(request, (tenant, owner))
@@ -1289,7 +1087,7 @@ async def reviewed_excel_preview(
 ):
     _expected_actor(expected_actor, user)
     tenant, owner = _identity(user)
-    notice_grant = login_notice_grant(request, tenant, owner) if use_login_notice else None
+    notice_grant = require_login_notice_grant(request, tenant, owner) if use_login_notice else None
     if use_login_notice:
         model_opt_in = own_file_authorized = bool(notice_grant)
         sample_authorized = False
@@ -1431,6 +1229,55 @@ async def reviewed_excel_preview(
         request.state.elt_stage = "generate_candidates"
         proposal = make_proposals(review)
         versions = [proposal]
+        candidate_key = ""
+        if use_login_notice:
+            if notice_grant is None:
+                raise HTTPException(status_code=403, detail="缺少有效的模型处理授权，请重新登录。")
+            if not classification_id:
+                raise HTTPException(
+                    status_code=409, detail="模型处理须先建立文件分类记录，请重新开始处理"
+                )
+            candidate_key = hashlib.sha256(
+                dump_json(
+                    {
+                        "version": classification_version,
+                        "source": review["sha256"],
+                        "slice": auto_slice_index,
+                        "sheet": region_sheet,
+                        "range": region_range,
+                        "publication": notice_grant["publication"]["record_sha256"],
+                        "model_revision": notice_grant["route"]["config_revision"],
+                    }
+                ).encode()
+            ).hexdigest()
+            with tenant_scope(tenant), get_db() as db:
+                classification = _classification_run(db, classification_id, tenant, owner)
+                old = classification.draft_json
+                state = load_json(old, {})
+                if (
+                    not state.get("versions")
+                    or state["versions"][-1].get("version") != classification_version
+                ):
+                    raise HTTPException(status_code=409, detail="分类版本已变化，请重新处理")
+                claims = state.setdefault("template_candidate_requests", {})
+                existing = claims.get(candidate_key)
+                if existing:
+                    if existing.get("state") == "completed":
+                        return _stored_candidate_response(db, existing["review_id"], tenant, owner)
+                    error = _model_processing_failure(
+                        ReviewedExcelError(
+                            "上次候选处理仍在进行或结果未知，请先核对状态；不会重复发送"
+                        )
+                    )
+                    error.status_code = 409
+                    raise error
+                if len(claims) >= 200:
+                    raise HTTPException(
+                        status_code=409, detail="本文件候选请求已达上限，请先核对已有结果"
+                    )
+                claims[candidate_key] = {"state": "inflight"}
+                _recheck(request, (tenant, owner))
+                _classification_cas(db, classification, old, state)
         if model_opt_in:
             if sample_authorized == own_file_authorized:
                 raise ReviewedExcelError("请明确选择获授权样本或授权本人文件发送模型")
@@ -1459,6 +1306,13 @@ async def reviewed_excel_preview(
                     )
                 versions.append(proposal)
             except ValueError as exc:
+                if use_login_notice:
+                    if isinstance(exc, ModelRequestNotSent):
+                        with tenant_scope(tenant), get_db() as db:
+                            _update_candidate_claim(
+                                db, classification_id, candidate_key, tenant, owner
+                            )
+                    raise _model_processing_failure(exc) from None
                 proposal["model"] = {"status": "unavailable", "message": public_excel_error(exc)}
             proposal["model"]["authorization"] = template_model_authorization(
                 notice_grant,
@@ -1522,7 +1376,10 @@ async def reviewed_excel_preview(
                 ),
             )
             db.add(run)
-            db.commit()
+            if candidate_key:
+                _update_candidate_claim(db, classification_id, candidate_key, tenant, owner, run.id)
+            else:
+                db.commit()
             review_id = run.id
         return {
             "success": True,
@@ -1546,11 +1403,13 @@ def reviewed_excel_history(review_id: str, user=Depends(_read)):
             "success": True,
             "review_id": run.id,
             "source_sha256": run.file_sha256,
+            "selected_region": load_json(run.summary_json, {}).get("selected_region"),
             "usage_restrictions": _usage_restrictions(db, run, tenant, owner),
             "status": run.status,
             "versions": versions,
             "confirmation": state.get("confirmation"),
             "receipt": load_json(run.receipt_json, {}),
+            "revision_parent": load_json(run.summary_json, {}).get("revision_parent"),
         }
 
 
@@ -1623,22 +1482,57 @@ async def reviewed_excel_refine(
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
             state, versions = _proposals(run)
+            if run.status == _SAVED and notice_grant and versions[-1]["version"] == parent_version:
+                body = _source(db, run, tenant, owner)
+                clean_workbook(body, run.file_sha256, current_cells)
+                _recheck(request, (tenant, owner))
+                run = _fork_saved_review(
+                    db, run, versions[-1], feedback, current_cells, notice_grant, tenant, owner
+                )
+                state, versions = _proposals(run)
+                if run.status in {_READY, _SAVED} and versions[-1]["version"] != parent_version:
+                    return _refinement_response(run, versions[-1], replayed=True)
+            if run.status == _MODEL_PENDING:
+                error = _model_processing_failure(
+                    ReviewedExcelError("上次模型处理仍在进行或结果未知，请先核对状态；不会重复发送")
+                )
+                error.status_code = 409
+                raise error
             if run.status != _READY or versions[-1]["version"] != parent_version:
                 raise HTTPException(status_code=409, detail="审阅版本已过期，请刷新")
+            if len(versions) >= 50:
+                raise ReviewedExcelError("提案版本已达上限")
             old_draft = run.draft_json
             body = _source(db, run, tenant, owner)
             review = inspect_workbook(body)
             clean_workbook(body, run.file_sha256, current_cells)
-            with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
-                proposal = await run_in_threadpool(
-                    refine_proposal,
-                    review,
-                    parent_version,
-                    feedback,
-                    owner_id=owner,
-                    current=current_cells,
-                    initial=True,
-                )
+            if use_login_notice:
+                _recheck(request, (tenant, owner))
+                _cas(db, run, old_draft, status=_MODEL_PENDING, stage="model_candidates")
+            try:
+                with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
+                    proposal = await run_in_threadpool(
+                        refine_proposal,
+                        review,
+                        parent_version,
+                        feedback,
+                        owner_id=owner,
+                        current=current_cells,
+                        initial=True,
+                    )
+            except ValueError as exc:
+                if use_login_notice:
+                    if isinstance(exc, ModelRequestNotSent):
+                        _cas(
+                            db,
+                            run,
+                            old_draft,
+                            expected_status=_MODEL_PENDING,
+                            status=_READY,
+                            stage=_READY,
+                        )
+                    raise _model_processing_failure(exc) from None
+                raise
             source_scope = load_json(run.summary_json, {}).get("selected_region") or {}
             proposal["model"]["authorization"] = template_model_authorization(
                 notice_grant,
@@ -1655,30 +1549,21 @@ async def reviewed_excel_refine(
                 )
             _build_candidate_previews(body, review, proposal)
             _recheck(request, (tenant, owner))
-            if len(versions) >= 50:
-                raise ReviewedExcelError("提案版本已达上限")
             versions.append(proposal)
             state["versions"] = versions
-            _cas(db, run, old_draft, draft_json=dump_json(state))
-        return {"success": True, "proposal": proposal}
+            _cas(
+                db,
+                run,
+                old_draft,
+                expected_status=_MODEL_PENDING if use_login_notice else _READY,
+                status=_READY,
+                stage=_READY,
+                draft_json=dump_json(state),
+            )
+            response = _refinement_response(run, proposal)
+        return response
     except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
-
-
-def _intake_selection_key(run, proposal_version, candidate_id, selected, name, note):
-    return hashlib.sha256(
-        dump_json(
-            {
-                "review_id": run.id,
-                "source_sha256": run.file_sha256,
-                "version": proposal_version,
-                "candidate": candidate_id,
-                "selections": selected,
-                "name": name.strip(),
-                "note": note.strip(),
-            }
-        ).encode()
-    ).hexdigest()
 
 
 def _authorize_intake(request, expected, target_type=""):
@@ -1726,6 +1611,7 @@ def reviewed_excel_intake_preview(
             state, versions = _proposals(review)
             if review.status != _READY or versions[-1]["version"] != proposal_version:
                 raise HTTPException(status_code=409, detail="审阅版本已变化，请重新选择候选")
+            _require_private_model(request, versions[-1], tenant, owner)
             candidate = next(
                 (item for item in versions[-1]["candidates"] if item["id"] == candidate_id), None
             )
@@ -1850,6 +1736,8 @@ async def reviewed_excel_save(
                     detail="此来源仅供数据/模板测试，打印版式未验证；可预览和下载测试候选，不得发布到企业模板库",
                 )
             state, versions = _proposals(run)
+            if private_intake:
+                _require_private_model(request, versions[-1], tenant, owner)
             request_key = hashlib.sha256(
                 dump_json(
                     {
@@ -2039,6 +1927,15 @@ async def reviewed_excel_save(
                                 "selected_region"
                             ),
                             "review_id": review_id,
+                            **(
+                                {
+                                    "revision_parent": load_json(run.summary_json, {})[
+                                        "revision_parent"
+                                    ]
+                                }
+                                if load_json(run.summary_json, {}).get("revision_parent")
+                                else {}
+                            ),
                         },
                     }
                 )
@@ -2060,7 +1957,19 @@ async def reviewed_excel_save(
                         status=_SAVED,
                         stage=_SAVED,
                         receipt_json=dump_json(
-                            {"request_key": request_key, "template_id": template_id}
+                            {
+                                "request_key": request_key,
+                                "template_id": template_id,
+                                **(
+                                    {
+                                        "revision_parent": load_json(run.summary_json, {})[
+                                            "revision_parent"
+                                        ]
+                                    }
+                                    if load_json(run.summary_json, {}).get("revision_parent")
+                                    else {}
+                                ),
+                            }
                         ),
                     )
                 )

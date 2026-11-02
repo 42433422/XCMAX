@@ -229,7 +229,7 @@
 .message.user {
   align-self: flex-end;
   background: transparent;
-  color: var(--xc-color-text-primary, #1f2937);
+  color: var(--xc-color-text, #1f2937);
   padding: 8px 0;
   border-radius: 0;
   box-shadow: none;

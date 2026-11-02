@@ -14,7 +14,6 @@
       <ChatMessageList
         :empty-intro="getIndustryPreset(currentIndustryId).scenario"
         @fill-example="fillComposer"
-        @model-settings="openModelSettings"
         :session-key="messageSessionKey"
         :proactive-suggestions="proactiveSuggestionsByMessage"
         @pick-proactive-suggestion="pickProactiveSuggestion"
@@ -125,7 +124,7 @@
         @proactive-suggestions-change="onProactiveSuggestionsChange"
         @toggle-tts="setTtsEnabled"
       />
-      <ChatModelStatus ref="modelStatusRef" :session-id="currentSessionId" :mod-id="String(modsStore.activeModId || '')" />
+      <ChatModelRecovery :scope-key="messageSessionKey" />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <span class="sheet-link-label">关联工作表：</span>
         <button class="sheet-link-btn" :class="{ active: linkedExcelAllSheets }" @click="bindAllExcelSheetsToChat">
@@ -240,6 +239,7 @@ import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import ChatQuickActions from '@/components/chat/ChatQuickActions.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
+import ChatModelRecovery from '@/components/chat/ChatModelRecovery.vue'
 import ChatSidePanel from '@/components/chat/ChatSidePanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
@@ -254,7 +254,6 @@ import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySug
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
-import ChatModelStatus from '@/components/chat/ChatModelStatus.vue'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
@@ -272,8 +271,6 @@ const props = withDefaults(
 )
 
 const router = useRouter()
-const modelStatusRef = ref<InstanceType<typeof ChatModelStatus> | null>(null)
-function openModelSettings() { modelStatusRef.value?.refreshAndReveal() }
 const modsStore = useModsStore()
 const { mods: modsFromStore } = storeToRefs(modsStore)
 const taskCenterStore = useAgentTaskCenterStore()

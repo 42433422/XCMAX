@@ -14,8 +14,8 @@ const api = vi.hoisted(() => ({
   continueRun: vi.fn(), pauseRun: vi.fn(), resumeRun: vi.fn(), retryRun: vi.fn(), cancelRun: vi.fn(),
 }))
 vi.mock('@/api/agentRuns', () => ({ default: api }))
-const { resolveRoute } = vi.hoisted(() => ({ resolveRoute: vi.fn() }))
-vi.mock('@/api/chat', () => ({ default: { getModelStatus: resolveRoute } }))
+const { resolveRoute, followPlatform } = vi.hoisted(() => ({ resolveRoute: vi.fn(), followPlatform: vi.fn() }))
+vi.mock('@/api/chat', () => ({ default: { getModelStatus: resolveRoute, followPlatformModel: followPlatform } }))
 vi.mock('pinia', async () => ({
   ...await vi.importActual<typeof import('pinia')>('pinia'),
   storeToRefs: (store: unknown) => store,
@@ -120,7 +120,8 @@ const controls = () => [api.continueRun, api.pauseRun, api.resumeRun, api.retryR
 const button = (label: string) => wrapper!.findAll('button').find(item => item.text() === label)!
 beforeEach(() => {
   localStorage.clear()
-  resolveRoute.mockReset().mockResolvedValue({ ok: true, provider: 'platform', model: 'configured-chat' })
+  resolveRoute.mockReset().mockResolvedValue({ ok: true })
+  followPlatform.mockReset().mockResolvedValue({ ok: true })
   Object.values(api).forEach(mock => mock.mockReset().mockResolvedValue({ success: true }))
   activeTaskId.value = ''; expandedTaskIds.value = []
   loadConversation.mockClear(); toggleExpanded.mockClear()
@@ -129,11 +130,12 @@ afterEach(() => { wrapper?.unmount(); wrapper = undefined })
 
 describe('shipped chat Mod task navigation', () => {
   it.each([['host', HostChatView], ['desktop Mod', ModChatView]] as const)(
-    'connects %s empty examples, safe retry and platform model status to the composer', async (_label, component) => {
+    'connects %s empty examples and safe retry without exposing model diagnostics', async (_label, component) => {
       await mountView(summary(), false, component, true)
       await flushPromises()
-      expect(wrapper!.get('[data-testid="chat-model-status"] summary').text()).toBe('模型信息')
-      expect((wrapper!.get('[data-testid="chat-model-status"]').element as HTMLDetailsElement).open).toBe(false)
+      expect(wrapper!.find('[data-testid="chat-model-status"]').exists()).toBe(false)
+      expect(wrapper!.text()).not.toContain('模型信息')
+      expect(wrapper!.find('.chat-model-recovery').exists()).toBe(false)
       await wrapper!.get('.chat-welcome button').trigger('click')
       expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toContain('仅回答，不执行操作')
       ;(chatApi.messages as Ref<UiChatMessage[]>).value = [
@@ -144,10 +146,21 @@ describe('shipped chat Mod task navigation', () => {
       await button('重试本次请求（填入原文）').trigger('click')
       expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toBe('仅回答测试')
       expect(chatApi.sendMessage).not.toHaveBeenCalled()
-      await button('查看模型状态').trigger('click')
+      expect(wrapper!.get('[data-testid="chat-error-recovery"]').text()).toContain('已执行的业务操作不会撤销')
+      expect(wrapper!.text()).not.toContain('查看模型状态')
+    },
+  )
+  it.each([['host', HostChatView], ['desktop Mod', ModChatView]] as const)(
+    'keeps %s preference recovery explicit and never retries the failed chat automatically', async (_label, component) => {
+      resolveRoute.mockRejectedValue({ status: 400, data: { detail: { code: 'INVALID_CHAT_PREFERENCE' } } })
+      await mountView(summary(), false, component, true)
       await flushPromises()
-      expect((wrapper!.get('[data-testid="chat-model-status"]').element as HTMLDetailsElement).open).toBe(true)
-      expect(resolveRoute).toHaveBeenCalledTimes(2)
+      await button('恢复平台默认模型').trigger('click')
+      await flushPromises()
+      expect(followPlatform).toHaveBeenCalledTimes(1)
+      expect(chatApi.sendMessage).not.toHaveBeenCalled()
+      expect(wrapper!.find('.chat-model-recovery').exists()).toBe(false)
+      expect(wrapper!.text()).not.toContain('模型信息')
     },
   )
   it.each([['host', HostChatView], ['desktop Mod', ModChatView]] as const)(
@@ -170,6 +183,9 @@ describe('shipped chat Mod task navigation', () => {
       expect(rows[1]!.get('[data-testid="proactive-suggestions"]').text()).toContain('客户')
       expect(rows[3]!.findAll('.proactive-suggestions__chip')).toHaveLength(3)
       expect(rows[3]!.get('.proactive-suggestions').text()).toContain('映射')
+      expect(wrapper!.find('.proactive-suggestions__hint').exists()).toBe(false)
+      expect(wrapper!.text()).not.toContain('选择一条建议填入输入框')
+      expect(wrapper!.find('.message-storage-details').exists()).toBe(false)
       expect(wrapper!.find('.input-area .proactive-suggestions').exists()).toBe(false)
       const choice = rows[3]!.get('.proactive-suggestions__chip')
       await choice.trigger('click')
