@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import os
@@ -13,6 +14,7 @@ DEFAULT_MODEL = "mimo-v2.5-tts"
 DEFAULT_VOICE = "冰糖"
 DEFAULT_STYLE = "温和、清晰、专业的客服语气，语速适中，吐字清楚。"
 DEFAULT_FORMAT = "wav"
+DEFAULT_TIMEOUT_S = 8.0
 _DEFAULT_ROOT = "https://token-plan-cn.xiaomimimo.com"
 
 
@@ -46,7 +48,7 @@ def synthesize_mimo_bytes(
     style: str = DEFAULT_STYLE,
     audio_format: str = DEFAULT_FORMAT,
     model: str = DEFAULT_MODEL,
-    timeout_s: float = 45.0,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> tuple[bytes, dict[str, Any]]:
     """同步合成，成功返回 (bytes, meta)；失败抛 RuntimeError。"""
     t = (text or "").strip()
@@ -76,10 +78,16 @@ def synthesize_mimo_bytes(
 
     import httpx
 
-    with httpx.Client(timeout=timeout_s) as client:
-        resp = client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+    async def request() -> dict[str, Any]:
+        # A per-read HTTP timeout alone lets a slow stream delay Edge indefinitely.
+        async with asyncio.timeout(timeout_s):
+            async with httpx.AsyncClient(timeout=timeout_s) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                resp.raise_for_status()
+                data: dict[str, Any] = resp.json()
+                return data
+
+    data = asyncio.run(request())
 
     choice0 = (data.get("choices") or [None])[0] or {}
     message = choice0.get("message") or {}

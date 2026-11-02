@@ -177,7 +177,7 @@
       "task_id": "finance.ledger.query_016",
       "instruction": "查询这个月的账本",
       "difficulty": "easy",
-      "failure": "returned records differ: finance.ledger_query",
+      "failure": "run status: expected completed, got blocked; 工具超时，业务结果未知；必须核对原调用，不可自动重试; returned records differ: finance.ledger_query",
       "plan": [
         {
           "tool_id": "finance",
