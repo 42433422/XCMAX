@@ -210,6 +210,13 @@ class FileSystemTemplateStore(TemplateStorePort):
         except RECOVERABLE_ERRORS as exc:
             logger.warning("Template removal state unavailable: %s", exc)
             hidden = private_paths  # Fail closed rather than resurrecting removed private files.
+        hidden |= {
+            key(t["path"])
+            for t in templates
+            if key(t["path"]) in private_paths
+            and os.path.normcase(os.path.realpath(t["path"]))
+            != os.path.normcase(os.path.abspath(t["path"]))
+        }
         hidden &= private_paths
         return [t for t in templates if key(t["path"]) not in hidden]
 
@@ -353,19 +360,12 @@ class FileSystemTemplateStore(TemplateStorePort):
 
         # 1.5) 支持 "fs:<filename>" 形式（文件扫描来源）
         if template_id.startswith("fs:"):
-            raw_filename = template_id.split(":", 1)[1]
-            filename = os.path.basename(raw_filename)
-            if (
-                not filename
-                or filename != raw_filename
-                or "/" in raw_filename
-                or "\\" in raw_filename
-            ):
-                return None
-            for folder in self._discovery_directories():
-                path = os.path.join(folder, filename)
-                if os.path.isfile(path) and self._visible_scanned_templates([{"path": path}]):
-                    return path
+            # Resolve only IDs advertised by the server's visible catalog.
+            # Request strings never become filesystem path components.
+            for row in self._discover_excel_templates() + self._discover_word_templates():
+                if row["id"] == template_id:
+                    return cast("str | None", row.get("path"))
+            return None
 
         # 2) 模板文件路由目前仍使用 "shipment"/"fallback" 这种字符串 ID，继续走 legacy 逻辑
         templates = self._legacy_templates()

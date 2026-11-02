@@ -436,5 +436,6 @@ def test_symlink_file_or_parent_is_rejected(files, kind):
     except (OSError, NotImplementedError):
         pytest.skip("symlinks unavailable")
     _delete(base)
+    assert FileSystemTemplateStore(str(base)).resolve_template_file("fs:sample.xlsx") is None
     assert (folder / outside.name).is_file()
     assert outside.read_bytes() == b"synthetic template"

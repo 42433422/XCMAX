@@ -128,7 +128,7 @@ def run_archive_template_delete(
         candidates = []
         for folder in ("templates", "document_templates"):
             path = os.path.join(tenant_root, folder, filename)
-            if os.path.realpath(path) != os.path.abspath(path):
+            if os.path.normcase(os.path.realpath(path)) != os.path.normcase(os.path.abspath(path)):
                 return {"success": False, "message": "模板路径包含符号链接，无法删除"}, 403
             if os.path.isfile(path):
                 candidates.append(path)
