@@ -437,7 +437,7 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
     wrapper.unmount()
   })
 
-  it('session validate 无 username 时保留有效会话但不收养无归属的 market storage', async () => {
+  it('必要首挂拒绝无身份资料，默认刷新仍兼容有效会话且不收养 market storage', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: false })
     mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: true, data: {} })
     localStorage.setItem(
@@ -452,6 +452,10 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
     const wrapper = await mountSettings()
     await flushPromises()
     const vm = wrapper.vm as any
+    expect(vm.localUser).toBeNull()
+    expect(vm.isLoggedIn).toBe(false)
+    expect(vm.accountError).toBe(true)
+    await vm.loadLocalUser()
     expect(vm.localUser).toBeNull()
     expect(vm.isLoggedIn).toBe(true)
     wrapper.unmount()
@@ -522,12 +526,13 @@ describe('SettingsView – profileBrandTitle 计算属性', () => {
     wrapper.unmount()
   })
 
-  it('无 brand 无 user 时返回未登录提示', async () => {
+  it('无 brand 且首挂身份未确认时返回可重试提示', async () => {
     mockAccountProfileStore.displayBrand = ''
     const wrapper = await mountSettings()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.profileBrandTitle).toBe('未登录')
+    expect(vm.profileBrandTitle).toBe('登录状态暂时无法确认，请稍后重试')
+    expect(vm.accountError).toBe(true)
     wrapper.unmount()
   })
 
@@ -559,11 +564,11 @@ describe('SettingsView – profileBrandTitle 计算属性', () => {
 describe('SettingsView – profileSubline 计算属性', () => {
   beforeEach(resetSettingsTest)
 
-  it('无 user 时返回登录提示', async () => {
+  it('首挂无已核实 user 时提示稍后重试', async () => {
     const wrapper = await mountSettings()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.profileSubline).toBe('登录后同步修茈市场')
+    expect(vm.profileSubline).toBe('登录状态暂时无法确认，请稍后重试')
     wrapper.unmount()
   })
 
@@ -1446,10 +1451,9 @@ describe('SettingsView – loadIndustries', () => {
       data: [{ id: 'mfg', name: '制造业', code: 'mfg' }],
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadIndustries()
     expect(vm.industries.length).toBe(1)
     wrapper.unmount()
   })
@@ -1461,10 +1465,9 @@ describe('SettingsView – loadIndustries', () => {
       data: { industries: [{ id: 'retail', name: '零售', code: 'rtl' }], current: 'retail' },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadIndustries()
     expect(vm.industries.length).toBe(1)
     wrapper.unmount()
   })
@@ -1472,9 +1475,8 @@ describe('SettingsView – loadIndustries', () => {
   it('API 失败时不抛错', async () => {
     mockSystemApiGetIndustries.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    expect(wrapper.exists()).toBe(true)
+    await flushPromises()
+    await expect((wrapper.vm as any).loadIndustries()).resolves.toBeUndefined()
     wrapper.unmount()
   })
 })
@@ -1489,13 +1491,12 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
   it('成功时从 response.data.units.primary 设置主单位', async () => {
     mockSystemApiGetCurrentIndustry.mockResolvedValueOnce({
       success: true,
-      data: { units: { primary: '件' } },
+      data: { id: 'verified-industry', units: { primary: '件' } },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadCurrentIndustryDetail()
     expect(vm.currentIndustryUnit).toBe('件')
     wrapper.unmount()
   })
@@ -1506,10 +1507,9 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
       data: {},
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadCurrentIndustryDetail()
     expect(vm.currentIndustryUnit).toBe('天')
     wrapper.unmount()
   })
@@ -1525,10 +1525,9 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
     mockModsStore.activeModId = 'ext-1'
     mockSystemApiGetCurrentIndustry.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadCurrentIndustryDetail()
     expect(vm.currentIndustryUnit).toBe('小时')
     wrapper.unmount()
   })
@@ -1536,10 +1535,9 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
   it('失败且无 mod 时保持默认', async () => {
     mockSystemApiGetCurrentIndustry.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadCurrentIndustryDetail()
     expect(vm.currentIndustryUnit).toBe('天')
     wrapper.unmount()
   })
@@ -1563,10 +1561,9 @@ describe('SettingsView – loadIntentPackages', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadIntentPackages()
     expect(vm.intentPackages.base.enabled).toBe(false)
     expect(vm.intentPackages.base.keywords).toEqual(['新词'])
     expect(vm.intentPackages.industry.enabled).toBe(true)
@@ -1579,10 +1576,9 @@ describe('SettingsView – loadIntentPackages', () => {
       data: [{ key: 'base' }],
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadIntentPackages()
     expect(vm.intentPackages.base.enabled).toBe(true)
     wrapper.unmount()
   })
@@ -1590,9 +1586,8 @@ describe('SettingsView – loadIntentPackages', () => {
   it('API 失败时不抛错', async () => {
     mockIntentPackagesApiGetPackages.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    expect(wrapper.exists()).toBe(true)
+    await flushPromises()
+    await expect((wrapper.vm as any).loadIntentPackages()).resolves.toBeUndefined()
     wrapper.unmount()
   })
 })

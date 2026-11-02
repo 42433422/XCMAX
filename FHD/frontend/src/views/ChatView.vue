@@ -563,6 +563,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
 }
 
 const { onAutoRefreshToolbarChange: _legacyWechatToolbarChange } = useChatViewHost({
+  pageScopeKey: () => messageSessionKey.value,
   modsStore,
   modsFromStore,
   autoRefreshStarredWechat,

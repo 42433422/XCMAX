@@ -1,11 +1,11 @@
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useModsStore } from '@/stores/mods'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useStartupAuth } from '@/composables/useStartupAuth'
-import { useStartupSplash, waitForCriticalFonts } from '@/composables/useStartupSplash'
+import { startupPageReadyKey, useStartupSplash, waitForCriticalFonts } from '@/composables/useStartupSplash'
 import { useAppShellBridge } from '@/composables/useAppShellBridge'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
 import { getAuthSessionEpoch } from '@/utils/authSessionCache'
@@ -21,6 +21,14 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
   const publicEntry = computed(() => route.meta?.publicAccess === true || hideChrome.value ||
     ['login', 'lan-gate', 'product-onboarding'].includes(String(route.name || '')))
   const splash = useStartupSplash()
+  const pagePreparations = new Set<(signal: AbortSignal) => Promise<void>>()
+  provide(startupPageReadyKey, prepare => {
+    const owner = String(route.name || route.path)
+    const prepareCurrentPage = (signal: AbortSignal) => owner === String(route.name || route.path)
+      ? prepare(signal) : Promise.resolve()
+    pagePreparations.add(prepareCurrentPage)
+    return () => pagePreparations.delete(prepareCurrentPage)
+  })
   // The existing auth helper owns login redirection. Release the mask only after that route is active.
   const { ensureStartupAuthenticated } = useStartupAuth({
     router, modsStore, dismissStartupSplashImmediate: () => {},
@@ -70,6 +78,12 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
       await waitForCriticalFonts()
       // Keep the route mounted while blocked: its onMounted hooks must be able to finish.
       await waitUntil(() => !viewPending.value, signal)
+      stage('正在读取当前页面…')
+      for (const prepare of pagePreparations) {
+        if (!current()) return
+        await prepare(signal)
+      }
+      await nextTick()
     })
   }
 
@@ -92,6 +106,9 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
       if (mounted) retryStartup()
     }
   }, { immediate: true, flush: 'sync' })
+  watch(() => route.fullPath, () => {
+    if (mounted && splash.startupVisible.value && !publicEntry.value) retryStartup()
+  }, { flush: 'sync' })
 
   watch(splash.appReady, ready => {
     const root = document.getElementById('app')

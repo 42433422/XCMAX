@@ -155,3 +155,102 @@ test.describe('First usable workspace readiness', () => {
     await expect(page.locator('#messageInput')).toBeVisible()
   })
 })
+
+test.describe('Real initial ChatView conversation readiness', () => {
+  test.skip(isFullStack(), 'deterministic synthetic API and real ChatView fault injection')
+  test.describe.configure({ timeout: 90_000 })
+  const conversationUrl = /\/api\/conversations\/(?!sessions(?:\?|$))[^/?]+(?:\?|$)/
+  const history = (id: string, text = '') => ({ success: true, id, metadata: {},
+    messages: text ? [{ role: 'user', content: text, time: '12:00' }] : [] })
+
+  for (const empty of [false, true]) {
+    test(`the actual current conversation read stays masked until its ${empty ? 'legal empty' : 'nonempty'} response`, async ({ page }) => {
+      await installStartupReadinessMocks(page)
+      const gate = deferred()
+      let requested = false
+      await page.route(conversationUrl, async route => {
+        requested = true
+        await gate.promise
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
+          history(new URL(route.request().url()).pathname.split('/').pop()!, empty ? '' : 'initial server conversation restored'),
+        ) })
+      })
+      try {
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await expect.poll(() => requested, { timeout: 20_000 }).toBe(true)
+        // Observe the real mounted stores/fonts; no Suspense or page component is replaced.
+        await expect.poll(() => page.evaluate(() => {
+          const app = (document.querySelector('#app') as unknown as { __vue_app__: { config: { globalProperties: { $pinia: { _s: Map<string, { workspaceReady?: boolean; isLoaded?: boolean }> } } } } }).__vue_app__
+          const stores = app.config.globalProperties.$pinia._s
+          return stores.get('accountProfile')?.workspaceReady && stores.get('mods')?.isLoaded && document.fonts.check('14px FontAwesome', '\uf015')
+        }), { timeout: 20_000 }).toBe(true)
+        await expect(page.locator('#messageInput')).toBeAttached()
+        await expect(overlay(page)).toHaveAttribute('data-state', 'loading')
+        await expect(workspace(page)).toHaveAttribute('inert')
+        await expect(page.locator('.app-shell.is-ready')).toHaveCount(0)
+      } finally { gate.release() }
+      await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
+      await expect(overlay(page)).toHaveCount(0)
+      if (!empty) await expect(page.locator('#view-chat')).toContainText('initial server conversation restored')
+      await page.locator('#messageInput').fill('conversation is ready')
+    })
+  }
+
+  for (const status of [500, 404, 200]) {
+    test(`conversation ${status === 200 ? 'rejected payload' : `HTTP ${status}`} stays blocked and retry performs a fresh read`, async ({ page }) => {
+      await installStartupReadinessMocks(page)
+      let failing = true, reads = 0
+      await page.route(conversationUrl, async route => {
+        reads++
+        await route.fulfill({ status: failing ? status : 200, contentType: 'application/json', body: JSON.stringify(
+          failing ? { success: false, message: 'Synthetic conversation unavailable' }
+            : history(new URL(route.request().url()).pathname.split('/').pop()!, 'conversation recovered after fresh read'),
+        ) })
+      })
+      await page.goto('/', { waitUntil: 'domcontentloaded' })
+      await expect(overlay(page)).toHaveAttribute('data-state', 'error', { timeout: 25_000 })
+      await expect(workspace(page)).toHaveAttribute('inert')
+      await expect(page.locator('.app-shell.is-ready')).toHaveCount(0)
+      const failedReads = reads
+      failing = false
+      await overlay(page).getByRole('button', { name: '重试', exact: true }).click()
+      await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
+      expect(reads).toBeGreaterThan(failedReads)
+      await expect(page.locator('#view-chat')).toContainText('conversation recovered after fresh read')
+      await expect(overlay(page)).toHaveCount(0)
+    })
+  }
+
+  test('cancel and a new account ignore the old conversation response while the new read is pending', async ({ page }) => {
+    const mock = await installStartupReadinessMocks(page)
+    const old = deferred(), current = deferred()
+    let phase = 0, oldRequested = false, newRequested = false
+    await page.route(conversationUrl, async route => {
+      const oldAccount = phase === 0
+      if (oldAccount) { oldRequested = true; await old.promise }
+      else { newRequested = true; await current.promise }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
+        history(new URL(route.request().url()).pathname.split('/').pop()!, oldAccount ? 'old account private server conversation' : 'new account server conversation'),
+      ) })
+    })
+    try {
+      await page.goto('/', { waitUntil: 'domcontentloaded' })
+      await expect.poll(() => oldRequested, { timeout: 20_000 }).toBe(true)
+      await overlay(page).getByRole('button', { name: '取消', exact: true }).click()
+      await expect(page.locator('#lv-username')).toBeVisible()
+      phase = 1; mock.setUser(2)
+      await page.locator('#lv-username').fill('startup-test-2')
+      await page.locator('#lv-password').fill('Synthetic@2026')
+      await page.locator('.login-basic').click()
+      await expect.poll(() => newRequested, { timeout: 20_000 }).toBe(true)
+      old.release()
+      await page.waitForTimeout(150)
+      await expect(overlay(page)).toHaveAttribute('data-state', 'loading')
+      await expect(workspace(page)).toHaveAttribute('inert')
+      await expect(page.locator('body')).not.toContainText('old account private server conversation')
+    } finally { old.release(); current.release() }
+    await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
+    await expect(page.locator('#view-chat')).toContainText('new account server conversation')
+    await expect(page.locator('body')).not.toContainText('old account private server conversation')
+  })
+})

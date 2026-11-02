@@ -137,3 +137,63 @@ it('provides both translated state labels', async () => {
   expect(messages.default.settings.accountUnavailable).toBeTruthy()
  }
 })
+
+it('awaits required profile data and accepts only a verified success payload', async () => {
+ const p = pending(); api.getCurrentUser.mockReturnValue(p.promise)
+ const s = useSettingsAccount(); let complete = false
+ const loading = s.loadLocalUser({ required: true, current: () => true }).then(() => { complete = true })
+ await Promise.resolve(); expect(complete).toBe(false); expect(s.localUser.value).toBeNull()
+ p.resolve(me); await loading
+ expect(complete).toBe(true); expect(s.localUser.value).toEqual(user)
+})
+
+it.each([
+ { success: false, data: { user } },
+ { data: { user } },
+])('rejects a required profile with an unsuccessful envelope: %j', async payload => {
+ api.getCurrentUser.mockResolvedValue(payload)
+ const s = useSettingsAccount()
+ await expect(s.loadLocalUser({ required: true })).rejects.toThrow()
+ expect(s.localUser.value).toBeNull(); expect(s.accountError.value).toBe(true)
+})
+
+it('rejects required legacy validation without a verified account identity', async () => {
+ api.getCurrentUser.mockResolvedValue({ success: true, data: {} })
+ api.validateSession.mockResolvedValue({ success: true, data: { valid: true } })
+ const s = useSettingsAccount()
+ await expect(s.loadLocalUser({ required: true })).rejects.toThrow()
+ expect(s.localUser.value).toBeNull(); expect(s.accountError.value).toBe(true)
+})
+
+it('keeps the required legacy 404 fallback for a verified server username', async () => {
+ api.getCurrentUser.mockRejectedValue({ status: 404 })
+ api.validateSession.mockResolvedValue({ success: true, data: { valid: true, username: 'verified' } })
+ const s = useSettingsAccount(); await s.loadLocalUser({ required: true })
+ expect(s.localUser.value?.username).toBe('verified'); expect(s.accountError.value).toBe(false)
+})
+
+it('does not write a required account result after its startup attempt retires', async () => {
+ let current = true
+ const p = pending(); api.getCurrentUser.mockReturnValue(p.promise)
+ const s = useSettingsAccount(); const loading = s.loadLocalUser({ required: true, current: () => current })
+ current = false; p.resolve(me); await loading
+ expect(s.localUser.value).toBeNull(); expect(s.sessionValid.value).toBe(false)
+})
+
+it('restarts a required retry instead of sharing the retired account request', async () => {
+ const p = pending(); api.getCurrentUser.mockReturnValueOnce(p.promise).mockResolvedValueOnce(me)
+ const s = useSettingsAccount(); const old = s.loadLocalUser({ required: true })
+ const fresh = s.loadLocalUser({ required: true })
+ await fresh; p.resolve({ success: true, data: { user: { username: 'retired' } } }); await old
+ expect(api.getCurrentUser).toHaveBeenCalledTimes(2)
+ expect(s.localUser.value).toEqual(user)
+})
+
+it('propagates required transport failure and permits a fresh retry', async () => {
+ api.getCurrentUser.mockRejectedValueOnce(new Error('synthetic offline'))
+ const s = useSettingsAccount()
+ await expect(s.loadLocalUser({ required: true })).rejects.toThrow('synthetic offline')
+ expect(s.accountError.value).toBe(true)
+ api.getCurrentUser.mockResolvedValue(me); await s.loadLocalUser({ required: true })
+ expect(s.localUser.value).toEqual(user); expect(s.accountError.value).toBe(false)
+})

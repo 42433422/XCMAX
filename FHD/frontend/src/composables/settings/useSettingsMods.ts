@@ -318,38 +318,51 @@ export function useSettingsMods() {
     return preset?.name || String(currentIndustry.value || '').trim() || ''
   })
 
-  async function loadIndustries() {
+  async function loadIndustries(options: { required?: boolean; current?: () => boolean } = {}) {
+    const current = options.current || (() => true)
     try {
       const response = await systemApi.getIndustries()
+      if (!current()) return
+      const payload = response.data as ApiIndustry[] | { industries?: ApiIndustry[]; current?: string | number } | undefined
+      const list = Array.isArray(payload) ? payload : payload?.industries
+      if (options.required && (response.success !== true || !Array.isArray(list))) {
+        throw new Error('设置页行业列表未就绪，请重试')
+      }
       if (response.success) {
-        const payload = response.data as ApiIndustry[] | { industries?: ApiIndustry[]; current?: string | number } | undefined
-        industries.value = Array.isArray(payload) ? payload : payload?.industries || []
+        industries.value = list || []
         const cur = (!Array.isArray(payload) ? payload?.current : undefined) ?? industryStore.currentIndustry?.id ?? DEFAULT_INDUSTRY_ID
         currentIndustry.value = String(cur).trim() || DEFAULT_INDUSTRY_ID
       }
     } catch (e) {
+      if (!current()) return
+      if (options.required) throw e
       console.error('加载行业列表失败:', e)
     }
   }
 
-  async function loadCurrentIndustryDetail() {
+  async function loadCurrentIndustryDetail(options: { required?: boolean; current?: () => boolean } = {}) {
+    const current = options.current || (() => true)
     try {
       const response = await systemApi.getCurrentIndustry()
+      if (!current()) return
+      const detail = asRecord(response.data)
+      if (options.required && (response.success !== true || !String(detail.id ?? '').trim())) {
+        throw new Error('设置页行业详情未就绪，请重试')
+      }
       if (response.success) {
-        // 主单位优先采用 active mod 的 manifest.industry.units.primary —— 让"切 mod"
-        // 在后端尚未对齐前也能立刻把主单位切对。
+        if (detail.id !== undefined) currentIndustry.value = String(detail.id).trim()
+        // The active Mod's manifest remains the display-unit preference.
         const fromMod = activeModIndustry.value?.units?.primary
-        const units = asRecord(response.data).units as Record<string, unknown> | undefined
+        const units = detail.units as Record<string, unknown> | undefined
         currentIndustryUnit.value = (typeof fromMod === 'string' && fromMod.trim()) || asString(units?.primary) || '天'
         updateIndustryKeywords()
       }
     } catch (e) {
+      if (!current()) return
+      if (options.required) throw e
       console.error('加载行业详情失败:', e)
-      // server 失败时也用 mod manifest 兜底，避免主单位卡在默认「天」之前的状态
       const fromMod = activeModIndustry.value?.units?.primary
-      if (typeof fromMod === 'string' && fromMod.trim()) {
-        currentIndustryUnit.value = fromMod.trim()
-      }
+      if (typeof fromMod === 'string' && fromMod.trim()) currentIndustryUnit.value = fromMod.trim()
       updateIndustryKeywords()
     }
   }

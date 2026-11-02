@@ -92,6 +92,12 @@ export async function installE2eShellMocks(page: Page): Promise<void> {
     }))
   }
 
+  await page.route(/\/api\/conversations\/(?!sessions(?:\?|$))[^/?]+(?:\?|$)/, route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({
+      success: true, id: new URL(route.request().url()).pathname.split('/').pop(), messages: [], metadata: {},
+    }),
+  }))
+
 }
 
 /** @deprecated 使用 installE2eShellMocks */

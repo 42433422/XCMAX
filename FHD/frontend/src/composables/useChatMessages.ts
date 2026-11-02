@@ -13,6 +13,7 @@ import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 import { restoreApprovalCard } from '@/utils/chatApprovalCard'
+import { captureAuthSession } from '@/utils/authSessionCache'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 
@@ -460,18 +461,27 @@ export function useChatMessages(sessionId: Ref<string>) {
     persistMessagesCache()
   }
 
-  async function syncFromServer(): Promise<boolean> {
+  async function syncFromServer(options: { required?: boolean; isCurrent?: () => boolean } = {}): Promise<boolean> {
     try {
       const sid = String(sessionId.value || '').trim()
-      if (!sid) return false
+      if (!sid) { if (options.required) throw new Error('当前会话未就绪'); return false }
+      const sessionCurrent = captureAuthSession()
       const scope = [sid, activeModId.value, productReadAccountEpoch.value]
       const revision = JSON.stringify(messages.value)
       const data = await chatApi.getConversation(sid)
-      if (scope.some((value, i) => value !== [sessionId.value, activeModId.value, productReadAccountEpoch.value][i])
-        || revision !== JSON.stringify(messages.value)) return false
+      if (!sessionCurrent() || options.isCurrent?.() === false ||
+        scope.some((value, i) => value !== [sessionId.value, activeModId.value, productReadAccountEpoch.value][i])
+        || revision !== JSON.stringify(messages.value)) {
+        if (options.required) throw new Error('当前会话已改变，请重试')
+        return false
+      }
       const dataRow = asRecord(data)
+      if (options.required && (dataRow.success !== true || !Array.isArray(dataRow.messages)
+        || dataRow.id !== sid)) {
+        throw new Error('当前会话内容未确认，请重试')
+      }
       const serverMessages = asArray(dataRow.messages)
-      if (!serverMessages.length) return false
+      if (!serverMessages.length) return options.required === true
 
       const mapped: ChatMessage[] = serverMessages.map((msg: unknown) => {
         const row = asRecord(msg)
@@ -485,7 +495,7 @@ export function useChatMessages(sessionId: Ref<string>) {
         }
       })
       const sanitized = sanitizeMessagesList(mapped)
-      if (!sanitized.length) return false
+      if (!sanitized.length) { if (options.required) throw new Error('当前会话内容无法读取，请重试'); return false }
       const matched = new Set<number>()
       const unsaved = messages.value.filter(local => {
         const index = sanitized.findIndex((server, i) => !matched.has(i) && samePersistedMessage(local, server, toPlainText))
@@ -495,6 +505,7 @@ export function useChatMessages(sessionId: Ref<string>) {
       loadMessages([...sanitized, ...unsaved.filter(message => !isWelcomeMessage(message))])
       return true
     } catch (_e) {
+      if (options.required) throw _e
       return false
     }
   }

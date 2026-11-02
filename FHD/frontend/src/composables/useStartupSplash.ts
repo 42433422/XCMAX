@@ -1,6 +1,45 @@
-import { ref } from 'vue'
+import { inject, onActivated, onBeforeUnmount, onDeactivated, ref, type InjectionKey } from 'vue'
+import { captureAuthSession } from '@/utils/authSessionCache'
 
 export const STARTUP_READY_TIMEOUT_MS = 20_000
+
+type PreparePage = (signal: AbortSignal) => Promise<void>
+export const startupPageReadyKey: InjectionKey<(prepare: PreparePage) => () => void> = Symbol('startup-page-ready')
+
+/** The mounted page owns its necessary data; the shell awaits the same read and retries it explicitly. */
+export function useStartupPageReady(load: (current: () => boolean) => Promise<void>, scopeKey: () => unknown = () => undefined) {
+  let version = 0, disposed = false, active = true, claimed = false
+  let pending: Promise<void> | undefined
+  let ownerCurrent = () => false
+  function begin() {
+    const request = ++version, sessionCurrent = captureAuthSession(), key = scopeKey()
+    const current = () => !disposed && active && request === version && sessionCurrent() && Object.is(key, scopeKey())
+    ownerCurrent = current
+    pending = Promise.resolve().then(async () => {
+      if (!current()) throw new Error('当前页面已改变，请重试')
+      await load(current)
+      if (!current()) throw new Error('当前页面已改变，请重试')
+    })
+    // The page also runs during ordinary navigation, outside a startup attempt.
+    void pending.catch(() => {})
+    return pending
+  }
+  const register = inject(startupPageReadyKey, null)
+  const prepare: PreparePage = async signal => {
+    if (!pending || claimed || !ownerCurrent()) begin()
+    claimed = true
+    const request = version
+    const retire = () => { if (request === version) version++ }
+    signal.addEventListener('abort', retire, { once: true })
+    if (signal.aborted) retire()
+    try { await pending } finally { signal.removeEventListener('abort', retire) }
+  }
+  let unregister = register?.(prepare)
+  onActivated(() => { active = true; unregister ??= register?.(prepare) })
+  onDeactivated(() => { active = false; version++; unregister?.(); unregister = undefined })
+  onBeforeUnmount(() => { disposed = true; version++; unregister?.() })
+  return () => { claimed = false; return begin() }
+}
 
 /** Only the local icon face is critical; unrelated fonts and business assets stay in the background. */
 export async function waitForCriticalFonts(): Promise<void> {

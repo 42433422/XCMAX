@@ -599,14 +599,18 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const confirmWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'confirm')
   const cancelWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'cancel')
 
-  async function syncSessionMessages(): Promise<void> {
-    if (isLoading.value || isExecuting.value) return
-    try {
-      await syncFromServer()
-    } finally {
-      applyPersistedTaskPanelStateForSession(String(sessionId.value || '').trim() || 'default')
-      await agentTaskRuntime.refreshTasks()
+  async function syncSessionMessages(options: { required?: boolean; isCurrent?: () => boolean } = {}): Promise<void> {
+    if (isLoading.value || isExecuting.value) {
+      if (options.required) throw new Error('当前会话正在处理，请稍后重试')
+      return
     }
+    const scope = captureLocalScope()
+    await syncFromServer(options)
+    if (!scope.isCurrent() || options.isCurrent?.() === false) return
+    applyPersistedTaskPanelStateForSession(scope.sessionId)
+    // Tasks have their own stale/error recovery and are not required to read the current conversation.
+    if (options.required) void agentTaskRuntime.refreshTasks().catch(() => {})
+    else await agentTaskRuntime.refreshTasks()
   }
   executeRemoteChatRoundRef.fn = executeRemoteChatRound
 

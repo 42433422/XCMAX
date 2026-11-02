@@ -37,7 +37,7 @@
             >
               {{ logoutLoading ? $t('settings.loggingOut') : $t('settings.logout') }}
             </button>
-            <button v-else-if="accountError && !adminSessionOnly" type="button" class="settings-profile__btn" :disabled="accountLoading" @click="loadLocalUser">{{ $t('chat.retry') }}</button>
+            <button v-else-if="accountError && !adminSessionOnly" type="button" class="settings-profile__btn" :disabled="accountLoading" @click="loadLocalUser()">{{ $t('chat.retry') }}</button>
             <router-link v-else-if="!adminSessionOnly && !accountLoading && !accountError" class="settings-profile__btn settings-profile__btn--primary" :to="loginRoute">
               {{ $t('settings.login') }}
             </router-link>
@@ -240,11 +240,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onActivated, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { useModsStore } from '@/stores/mods'
-import { useIndustryStore } from '../stores/industry'
 import { readStoredSidebarTheme, applySidebarTheme } from '@/utils/sidebarTheme'
 import HostModBridgeView from '@/components/HostModBridgeView.vue'
 import { useSettingsAccount } from '@/composables/settings/useSettingsAccount'
+import { useStartupPageReady } from '@/composables/useStartupSplash'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { useSettingsMods } from '@/composables/settings/useSettingsMods'
 import { useSettingsMemory } from '@/composables/settings/useSettingsMemory'
@@ -258,8 +257,6 @@ import SettingsAboutCard from './settings-view/SettingsAboutCard.vue'
 import SettingsPlatformModelCard from './settings-view/SettingsPlatformModelCard.vue'
 
 const route = useRoute()
-const modsStore = useModsStore()
-const industryStore = useIndustryStore()
 const accountProfile = useAccountProfileStore()
 
 const {
@@ -470,40 +467,39 @@ function scrollToSettingsSection() {
 
 watch(() => route.query.section, scrollToSettingsSection)
 
-onMounted(async () => {
+const preparePage = useStartupPageReady(async current => {
+  await loadLocalUser({ required: true, current })
+  if (!current()) return
+  refreshAccountExtras()
+  await loadIndustries({ required: true, current })
+  if (!current()) return
+  await loadCurrentIndustryDetail({ required: true, current })
+})
+
+function refreshAccountExtras() {
+  void loadAuditLogs()
+  void loadMemoryV2()
+  void loadPersyProfile()
+  void loadIntentPackages()
+}
+
+onMounted(() => {
   sidebarThemePreset.value = readStoredSidebarTheme()
   applySidebarTheme(sidebarThemePreset.value)
   scrollToSettingsSection()
-  await loadLocalUser()
-  void loadAuditLogs()
+  void preparePage().catch(() => {})
   void loadDesktopDatabaseStatus()
-  const uname = String(localUser.value?.username || '').trim()
-  if (!modsStore.isLoaded) {
-    await modsStore.initialize(true, {
-      accountUsername: uname,
-    })
-  }
-  await industryStore.initialize()
-  await loadIndustries()
-  const piniaIndustryId = industryStore.currentIndustry?.id
-  if (piniaIndustryId !== undefined && piniaIndustryId !== null && String(piniaIndustryId).trim() !== '') {
-    currentIndustry.value = String(piniaIndustryId).trim()
-  }
-  await loadCurrentIndustryDetail()
-  await loadIntentPackages()
   void loadPreferences()
   loadAutoLaunch()
-  void loadMemoryV2()
-  void loadPersyProfile()
   loadDistillationVersions()
 })
 
+let activatedOnce = false
 onActivated(() => {
-  void loadLocalUser().then(() => {
-    loadMemoryV2()
-    loadPersyProfile()
-  })
+  if (!activatedOnce) { activatedOnce = true; return }
+  void preparePage().catch(() => {})
 })
+
 </script>
 
 <style scoped src="./SettingsView.css"></style>

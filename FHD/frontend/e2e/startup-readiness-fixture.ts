@@ -32,7 +32,7 @@ export async function installStartupReadinessMocks(page: Page) {
     else if (['/api/mods/', '/api/mods/routes', '/api/agent/tasks', '/api/agent/runs'].includes(path)) body = { success: true, data: [] }
     else if (path === '/api/mods/loading-status') body = { success: true,
       data: { mods: [], discovered_mod_ids: [], mods_loaded: 0, load_mismatch: false } }
-    else if (path.startsWith('/api/conversations/')) body = { success: true, data: [], messages: [] }
+    else if (path.startsWith('/api/conversations/')) body = { success: true, id: path.split('/').pop(), data: [], messages: [], metadata: {} }
     else if (path === '/api/conversation/model-status') body = { ok: true }
     else if (path.includes('/stream')) return route.fulfill({ status: 200, contentType: 'text/event-stream', body: ': synthetic idle\n\n' })
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
