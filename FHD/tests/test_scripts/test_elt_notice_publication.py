@@ -201,8 +201,12 @@ def test_existing_browser_renders_synthetic_spa_and_rejects_shell(shell_only):
                 )
             else:
                 content = '<a href="/login/legal/service-agreement">协议</a><a href="/login/legal/privacy-policy">隐私</a>'
-            # Initial HTML alone is deliberately insufficient; the helper must wait for rendering.
-            html = f'<html><body><div id="app"></div><script>setTimeout(() => document.getElementById("app").innerHTML = {json.dumps(content)}, 100)</script></body></html>'
+            # The inert template stays invisible until its cloned DOM is mounted after the delay.
+            html = (
+                '<html><body><div id="app"></div><template id="policy">'
+                + content
+                + '</template><script>setTimeout(() => document.getElementById("app").replaceChildren(document.getElementById("policy").content.cloneNode(true)), 100)</script></body></html>'
+            )
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()

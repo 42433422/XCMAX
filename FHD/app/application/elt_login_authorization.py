@@ -275,7 +275,7 @@ async def attach_login_notice(response: Response, result: dict, body: dict) -> R
             "owner": identity["owner"],
             "tenant": identity["tenant"],
         }
-        if route_valid:
+        if route_valid and route is not None:
             receipt.update(
                 route={"base": route["base"], **_public_model_route(route)},
                 scopes=notice_operation_scopes(),

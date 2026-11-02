@@ -443,6 +443,10 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(template_scope, "ensure_templates_tenant_column", lambda: None)
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(routes, "get_app_data_dir", lambda: str(tmp_path))
+
+    from app.application import reviewed_excel_review_store
+
+    monkeypatch.setattr(reviewed_excel_review_store, "get_app_data_dir", lambda: str(tmp_path))
     from app.application.elt import archive_store
     from app.utils.path_io import path_utils
 
@@ -454,6 +458,7 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(archive_store, "default_archive_root", lambda: archive_root)
     monkeypatch.setattr(archive_routes, "default_archive_root", lambda: archive_root)
     monkeypatch.setattr(routes, "default_archive_root", lambda: archive_root)
+    monkeypatch.setattr(reviewed_excel_review_store, "default_archive_root", lambda: archive_root)
     actor = {"id": 7, "tenant": 1, "manage": True, "read": True, "admin": True}
 
     def authorize(permission):
@@ -6413,6 +6418,14 @@ def saved_model_review(client, monkeypatch):
     return result, saved.json()
 
 
+def stored_row_snapshot(connection, table_name, row_id):
+    from sqlalchemy import MetaData, Table, select
+
+    table = Table(table_name, MetaData(), autoload_with=connection)
+    projection = select(*table.columns).where(table.c.id == row_id).limit(1)
+    return dict(connection.execute(projection).mappings().one())
+
+
 @pytest.mark.parametrize("restricted", [False, True])
 def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_child(
     authorized_notice_client, review_store, monkeypatch, restricted
@@ -6422,6 +6435,7 @@ def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_c
     client, _, _ = authorized_notice_client
     parent, saved = saved_model_review(client, monkeypatch)
     parent_id = parent["review_id"]
+    template_id = int(str(saved["template_id"]).rsplit(":", 1)[-1])
     with review_store.engine.begin() as db:
         if restricted:
             summary = json.loads(
@@ -6436,13 +6450,9 @@ def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_c
                 text("UPDATE etl_runs SET summary_json=:summary WHERE id=:id"),
                 {"summary": json.dumps(summary), "id": parent_id},
             )
-        before = tuple(
-            db.execute(text("SELECT * FROM etl_runs WHERE id=:id"), {"id": parent_id}).one()
-        )
-        template_before = tuple(db.execute(text("SELECT * FROM templates")).one())
-        template_bytes = Path(
-            db.execute(text("SELECT original_file_path FROM templates")).scalar_one()
-        ).read_bytes()
+        before = stored_row_snapshot(db, "etl_runs", parent_id)
+        template_before = stored_row_snapshot(db, "templates", template_id)
+        template_bytes = Path(template_before["original_file_path"]).read_bytes()
     payload = {
         "review_id": parent_id,
         "parent_version": parent["proposal"]["version"],
@@ -6497,22 +6507,10 @@ def test_saved_review_refinement_forks_immutable_version_and_replays_canonical_c
     )
     assert saved_child.status_code == (409 if restricted else 200), saved_child.text
     with review_store.engine.connect() as db:
-        assert (
-            tuple(db.execute(text("SELECT * FROM etl_runs WHERE id=:id"), {"id": parent_id}).one())
-            == before
-        )
-        assert (
-            tuple(db.execute(text("SELECT * FROM templates ORDER BY id LIMIT 1")).one())
-            == template_before
-        )
-        assert (
-            Path(
-                db.execute(
-                    text("SELECT original_file_path FROM templates ORDER BY id LIMIT 1")
-                ).scalar_one()
-            ).read_bytes()
-            == template_bytes
-        )
+        assert stored_row_snapshot(db, "etl_runs", parent_id) == before
+        template_after = stored_row_snapshot(db, "templates", template_id)
+        assert template_after == template_before
+        assert Path(template_after["original_file_path"]).read_bytes() == template_bytes
         assert db.execute(text("SELECT count(*) FROM templates")).scalar_one() == (
             1 if restricted else 2
         )
@@ -6543,9 +6541,7 @@ def test_saved_review_refinement_failure_keeps_parent_and_deduplicates_child(
     parent, _ = saved_model_review(client, monkeypatch)
     parent_id = parent["review_id"]
     with review_store.engine.connect() as db:
-        before = tuple(
-            db.execute(text("SELECT * FROM etl_runs WHERE id=:id"), {"id": parent_id}).one()
-        )
+        before = stored_row_snapshot(db, "etl_runs", parent_id)
     model = Mock(
         side_effect=ModelRequestNotSent("synthetic unsent")
         if not_sent
@@ -6565,10 +6561,7 @@ def test_saved_review_refinement_failure_keeps_parent_and_deduplicates_child(
     assert replay.status_code == (503 if not_sent else 409), replay.text
     assert model.call_count == (2 if not_sent else 1)
     with review_store.engine.connect() as db:
-        assert (
-            tuple(db.execute(text("SELECT * FROM etl_runs WHERE id=:id"), {"id": parent_id}).one())
-            == before
-        )
+        assert stored_row_snapshot(db, "etl_runs", parent_id) == before
         children = db.execute(
             text(
                 "SELECT status, summary_json FROM etl_runs WHERE target_type='template_review' AND id<>:id"
