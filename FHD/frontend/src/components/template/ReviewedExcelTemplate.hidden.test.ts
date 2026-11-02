@@ -4,7 +4,7 @@ import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 
 const api = vi.hoisted(() => ({
   archiveClassifyExcel: vi.fn(), confirmClassification: vi.fn(), reviewExcel: vi.fn(),
-  reviewedExcelIdentity: vi.fn(), previewReviewedIntake: vi.fn(),
+  reviewedExcelIdentity: vi.fn(), previewReviewedIntake: vi.fn(), analyzeClassification: vi.fn(), autoSlices: vi.fn(),
 }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 vi.mock('@/api/xcmaxMarketProxy', () => ({ default: {
@@ -27,9 +27,10 @@ const classified = (sheets: SyntheticSheet[], confirmed = false) => ({
 })
 const reviewed = () => ({
   review_id: 'visible-review', sha256: 'synthetic-sha', cells: [], sheets: ['Visible'],
+  selected_region: { selection_basis: 'model_group' },
   proposal: { version: 'v1', parent_version: null, candidates: [0, 1, 2].map(i => ({
     id: `candidate-${i}`, label: `候选${i + 1}`, explanation: '合成测试', clear: [],
-  })), evidence: [], model: { status: 'not_called' } },
+  })), evidence: [], model: { status: 'returned', login_authorization: { status: 'authorized' } } },
 })
 let wrapper: VueWrapper
 let sheets: SyntheticSheet[]
@@ -45,10 +46,14 @@ async function start() {
 beforeEach(() => {
   vi.resetAllMocks()
   api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: { operations: {
-    classification: 'notice_not_published', template_candidates: 'notice_not_published',
+    classification: 'authorized', template_candidates: 'authorized',
   } } })
   api.archiveClassifyExcel.mockImplementation(async () => classified(sheets))
   api.confirmClassification.mockImplementation(async () => classified(sheets, true))
+  api.analyzeClassification.mockImplementation(async () => ({ version: 'model-v2', model_status: 'returned', sheets }))
+  api.autoSlices.mockImplementation(async () => ({ slices: sheets.filter(item => item.processable).map((item, index) => ({
+    index, basis: 'model_group', confirmed: false, sha256: `synthetic-slice-${index}`, filename: 'visible-slice.xlsx', fragments: [{ sheet: item.sheet, range: 'A1:B2' }],
+  })) }))
   api.reviewExcel.mockResolvedValue(reviewed())
   wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
 })
@@ -61,8 +66,11 @@ describe('hidden-sheet intake selection', () => {
     expect(api.reviewExcel).toHaveBeenCalledTimes(1)
     const form = api.reviewExcel.mock.calls[0][0] as FormData
     expect(form.get('file')).toBe(source)
-    expect(form.get('region_sheet')).toBe('Visible')
-    expect(form.get('region_range')).toBe('A1:B2')
+    expect(form.get('classification_id')).toBe('synthetic-hidden')
+    expect(form.get('classification_version')).toBe('model-v2')
+    expect(form.get('auto_slice_index')).toBe('0')
+    expect(form.get('use_login_notice')).toBe('true')
+    expect(api.autoSlices).toHaveBeenCalledTimes(1)
     expect(button('Hidden / A1:B2').attributes('disabled')).toBeDefined()
     expect(wrapper.text()).toContain(unavailableReason)
     expect(sheets.map(item => item.sheet_state)).toEqual([state, 'visible'])

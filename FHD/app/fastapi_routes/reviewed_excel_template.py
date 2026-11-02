@@ -36,7 +36,6 @@ from app.application.elt_login_authorization import (
     bind_login_notice_grant,
     classification_login_status,
     classification_notice_scope,
-    login_notice_grant,
     login_notice_identity,
     login_notice_status,
     require_login_notice_grant,
@@ -110,6 +109,21 @@ _READY = "template_review_ready"
 _SAVING = "template_review_saving"
 _SAVED = "template_review_saved"
 _CLASS_SAVING = "classification_template_saving"
+_MODEL_PENDING = "template_review_model_pending"
+
+
+def _model_processing_failure(exc: Exception) -> HTTPException:
+    not_sent = isinstance(exc, ModelRequestNotSent)
+    return HTTPException(
+        status_code=503,
+        detail={
+            "code": "model_configuration_error" if not_sent else "model_processing_failed",
+            "message": ("模型连接异常，未调用模型。" if not_sent else "模型处理未完成。")
+            + public_excel_error(exc),
+            "retryable": not_sent,
+            "outcome_unknown": not not_sent,
+        },
+    )
 
 
 def _identity(user):
@@ -362,14 +376,14 @@ def _proposals(run):
     return state, versions
 
 
-def _cas(db, run, old_draft, **values):
+def _cas(db, run, old_draft, *, expected_status=_READY, **values):
     result = db.execute(
         update(EltRun)
         .where(
             EltRun.id == run.id,
             EltRun.tenant_id == run.tenant_id,
             EltRun.owner_user_id == run.owner_user_id,
-            EltRun.status == _READY,
+            EltRun.status == expected_status,
             EltRun.draft_json == old_draft,
         )
         .values(**values)
@@ -1049,13 +1063,17 @@ async def reviewed_excel_classification_analyze(
                 except ModelRequestNotSent as exc:
                     record_not_sent(state, request_sha, exc.public_message)
                     _classification_cas(db, run, claimed_draft, state)
+                    if use_login_notice:
+                        raise _model_processing_failure(exc) from None
                     raise
-                except (ValueError, TypeError, EltError):
+                except (ValueError, TypeError, EltError) as exc:
                     if audit_holder[0] != audit_draft_before_response:
                         checkpoint["results"] = checkpoint["results"][:index]
                         checkpoint["phase"] = "failed"
                         checkpoint["calls_in_round"] = previous_calls + 1
                         _classification_cas(db, run, audit_holder[0], state)
+                    if use_login_notice:
+                        raise _model_processing_failure(exc) from None
                     raise
                 if index + 1 < len(batches):
                     if checkpoint["calls_in_round"] >= max_calls:
@@ -1133,12 +1151,16 @@ async def reviewed_excel_classification_analyze(
                 except ModelRequestNotSent as exc:
                     record_not_sent(state, request_sha, exc.public_message)
                     _classification_cas(db, run, claimed_draft, state)
+                    if use_login_notice:
+                        raise _model_processing_failure(exc) from None
                     raise
-                except (ValueError, TypeError, EltError):
+                except (ValueError, TypeError, EltError) as exc:
                     if audit_holder[0] != claimed_draft:
                         checkpoint["phase"] = "failed"
                         checkpoint["calls_in_round"] = previous_calls + 1
                         _classification_cas(db, run, audit_holder[0], state)
+                    if use_login_notice:
+                        raise _model_processing_failure(exc) from None
                     raise
                 claimed_draft = audit_holder[0]
                 _recheck(request, (tenant, owner))
@@ -1270,6 +1292,40 @@ async def reviewed_excel_classification_analyze(
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
+def _update_candidate_claim(db, classification_id, key, tenant, owner, review_id=""):
+    run = _classification_run(db, classification_id, tenant, owner)
+    old = run.draft_json
+    state = load_json(old, {})
+    claims = state.get("template_candidate_requests", {})
+    if claims.get(key, {}).get("state") != "inflight":
+        raise HTTPException(status_code=409, detail="模型候选请求状态已改变，请核对")
+    if review_id:
+        claims[key] = {"state": "completed", "review_id": review_id}
+    else:
+        claims.pop(key)
+    _classification_cas(db, run, old, state)
+
+
+def _stored_candidate_response(db, review_id, tenant, owner):
+    run = _run(db, review_id, tenant, owner)
+    _review_source_version(db, run, tenant, owner)
+    _, versions = _proposals(run)
+    if run.status == _MODEL_PENDING or versions[-1]["model"].get("status") != "returned":
+        error = _model_processing_failure(
+            ReviewedExcelError("候选存在未完成的模型请求，请先核对状态")
+        )
+        error.status_code = 409
+        raise error
+    return {
+        "success": True,
+        **inspect_workbook(_source(db, run, tenant, owner)),
+        "review_id": run.id,
+        "proposal": versions[-1],
+        "versions": versions,
+        "selected_region": load_json(run.summary_json, {}).get("selected_region"),
+    }
+
+
 @router.post("/api/templates/reviewed-excel/preview")
 async def reviewed_excel_preview(
     request: Request,
@@ -1289,7 +1345,7 @@ async def reviewed_excel_preview(
 ):
     _expected_actor(expected_actor, user)
     tenant, owner = _identity(user)
-    notice_grant = login_notice_grant(request, tenant, owner) if use_login_notice else None
+    notice_grant = require_login_notice_grant(request, tenant, owner) if use_login_notice else None
     if use_login_notice:
         model_opt_in = own_file_authorized = bool(notice_grant)
         sample_authorized = False
@@ -1431,6 +1487,53 @@ async def reviewed_excel_preview(
         request.state.elt_stage = "generate_candidates"
         proposal = make_proposals(review)
         versions = [proposal]
+        candidate_key = ""
+        if use_login_notice:
+            if not classification_id:
+                raise HTTPException(
+                    status_code=409, detail="模型处理须先建立文件分类记录，请重新开始处理"
+                )
+            candidate_key = hashlib.sha256(
+                dump_json(
+                    {
+                        "version": classification_version,
+                        "source": review["sha256"],
+                        "slice": auto_slice_index,
+                        "sheet": region_sheet,
+                        "range": region_range,
+                        "publication": notice_grant["publication"]["record_sha256"],
+                        "model_revision": notice_grant["route"]["config_revision"],
+                    }
+                ).encode()
+            ).hexdigest()
+            with tenant_scope(tenant), get_db() as db:
+                classification = _classification_run(db, classification_id, tenant, owner)
+                old = classification.draft_json
+                state = load_json(old, {})
+                if (
+                    not state.get("versions")
+                    or state["versions"][-1].get("version") != classification_version
+                ):
+                    raise HTTPException(status_code=409, detail="分类版本已变化，请重新处理")
+                claims = state.setdefault("template_candidate_requests", {})
+                existing = claims.get(candidate_key)
+                if existing:
+                    if existing.get("state") == "completed":
+                        return _stored_candidate_response(db, existing["review_id"], tenant, owner)
+                    error = _model_processing_failure(
+                        ReviewedExcelError(
+                            "上次候选处理仍在进行或结果未知，请先核对状态；不会重复发送"
+                        )
+                    )
+                    error.status_code = 409
+                    raise error
+                if len(claims) >= 200:
+                    raise HTTPException(
+                        status_code=409, detail="本文件候选请求已达上限，请先核对已有结果"
+                    )
+                claims[candidate_key] = {"state": "inflight"}
+                _recheck(request, (tenant, owner))
+                _classification_cas(db, classification, old, state)
         if model_opt_in:
             if sample_authorized == own_file_authorized:
                 raise ReviewedExcelError("请明确选择获授权样本或授权本人文件发送模型")
@@ -1459,6 +1562,13 @@ async def reviewed_excel_preview(
                     )
                 versions.append(proposal)
             except ValueError as exc:
+                if use_login_notice:
+                    if isinstance(exc, ModelRequestNotSent):
+                        with tenant_scope(tenant), get_db() as db:
+                            _update_candidate_claim(
+                                db, classification_id, candidate_key, tenant, owner
+                            )
+                    raise _model_processing_failure(exc) from None
                 proposal["model"] = {"status": "unavailable", "message": public_excel_error(exc)}
             proposal["model"]["authorization"] = template_model_authorization(
                 notice_grant,
@@ -1522,7 +1632,10 @@ async def reviewed_excel_preview(
                 ),
             )
             db.add(run)
-            db.commit()
+            if candidate_key:
+                _update_candidate_claim(db, classification_id, candidate_key, tenant, owner, run.id)
+            else:
+                db.commit()
             review_id = run.id
         return {
             "success": True,
@@ -1623,22 +1736,47 @@ async def reviewed_excel_refine(
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
             state, versions = _proposals(run)
+            if run.status == _MODEL_PENDING:
+                error = _model_processing_failure(
+                    ReviewedExcelError("上次模型处理仍在进行或结果未知，请先核对状态；不会重复发送")
+                )
+                error.status_code = 409
+                raise error
             if run.status != _READY or versions[-1]["version"] != parent_version:
                 raise HTTPException(status_code=409, detail="审阅版本已过期，请刷新")
+            if len(versions) >= 50:
+                raise ReviewedExcelError("提案版本已达上限")
             old_draft = run.draft_json
             body = _source(db, run, tenant, owner)
             review = inspect_workbook(body)
             clean_workbook(body, run.file_sha256, current_cells)
-            with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
-                proposal = await run_in_threadpool(
-                    refine_proposal,
-                    review,
-                    parent_version,
-                    feedback,
-                    owner_id=owner,
-                    current=current_cells,
-                    initial=True,
-                )
+            if use_login_notice:
+                _recheck(request, (tenant, owner))
+                _cas(db, run, old_draft, status=_MODEL_PENDING, stage="model_candidates")
+            try:
+                with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
+                    proposal = await run_in_threadpool(
+                        refine_proposal,
+                        review,
+                        parent_version,
+                        feedback,
+                        owner_id=owner,
+                        current=current_cells,
+                        initial=True,
+                    )
+            except ValueError as exc:
+                if use_login_notice:
+                    if isinstance(exc, ModelRequestNotSent):
+                        _cas(
+                            db,
+                            run,
+                            old_draft,
+                            expected_status=_MODEL_PENDING,
+                            status=_READY,
+                            stage=_READY,
+                        )
+                    raise _model_processing_failure(exc) from None
+                raise
             source_scope = load_json(run.summary_json, {}).get("selected_region") or {}
             proposal["model"]["authorization"] = template_model_authorization(
                 notice_grant,
@@ -1655,11 +1793,17 @@ async def reviewed_excel_refine(
                 )
             _build_candidate_previews(body, review, proposal)
             _recheck(request, (tenant, owner))
-            if len(versions) >= 50:
-                raise ReviewedExcelError("提案版本已达上限")
             versions.append(proposal)
             state["versions"] = versions
-            _cas(db, run, old_draft, draft_json=dump_json(state))
+            _cas(
+                db,
+                run,
+                old_draft,
+                expected_status=_MODEL_PENDING if use_login_notice else _READY,
+                status=_READY,
+                stage=_READY,
+                draft_json=dump_json(state),
+            )
         return {"success": True, "proposal": proposal}
     except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
@@ -1697,6 +1841,26 @@ def _authorize_intake(request, expected, target_type=""):
     return mod_id
 
 
+def _require_private_model(request, proposal, tenant, owner):
+    grant = require_login_notice_grant(request, tenant, owner)
+    model = proposal.get("model", {})
+    authorization = model.get("authorization", {})
+    if (
+        model.get("status") != "returned"
+        or authorization.get("notice_publication") != grant["publication"]
+        or authorization.get("model_route")
+        != {key: value for key, value in grant["route"].items() if key != "base"}
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "model_required",
+                "message": "数据对接须先完成当前已授权平台模型处理，未写入任何数据；请重新开始处理。",
+                "retryable": False,
+            },
+        )
+
+
 @router.post("/api/templates/reviewed-excel/intake-preview")
 def reviewed_excel_intake_preview(
     request: Request,
@@ -1726,6 +1890,7 @@ def reviewed_excel_intake_preview(
             state, versions = _proposals(review)
             if review.status != _READY or versions[-1]["version"] != proposal_version:
                 raise HTTPException(status_code=409, detail="审阅版本已变化，请重新选择候选")
+            _require_private_model(request, versions[-1], tenant, owner)
             candidate = next(
                 (item for item in versions[-1]["candidates"] if item["id"] == candidate_id), None
             )
@@ -1850,6 +2015,8 @@ async def reviewed_excel_save(
                     detail="此来源仅供数据/模板测试，打印版式未验证；可预览和下载测试候选，不得发布到企业模板库",
                 )
             state, versions = _proposals(run)
+            if private_intake:
+                _require_private_model(request, versions[-1], tenant, owner)
             request_key = hashlib.sha256(
                 dump_json(
                     {

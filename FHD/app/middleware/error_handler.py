@@ -97,6 +97,38 @@ class ReviewedExcelRoute(APIRoute):
         return handle
 
 
+_ELT_MODEL_MESSAGES = {
+    "model_required": "数据对接须先完成当前已授权平台模型处理，未写入任何数据；请重新开始处理。",
+    "notice_not_published": "登录数据处理条款尚未正式发布，未调用模型；请联系管理员发布后重新登录。",
+    "login_notice_required": "当前登录会话缺少有效的模型处理授权，请阅读登录说明后重新登录。",
+    "model_configuration_error": "模型连接异常：平台模型配置或登录连接未就绪，或接收方不在已披露范围；未调用模型，请联系管理员。",
+    "model_connection_error": "模型连接异常，未能建立模型处理授权；请检查平台模型连接后重新登录。",
+    "model_processing_failed": "模型处理未完成，结果可能已产生费用；请先核对处理状态，勿重复提交。",
+}
+
+
+def _elt_model_error(detail: object) -> dict:
+    """Only expose fixed messages and boolean state for the bounded ELT error contract."""
+    if not isinstance(detail, dict):
+        return {}
+    code = detail.get("code")
+    if not isinstance(code, str) or code not in _ELT_MODEL_MESSAGES:
+        return {}
+    valid = set(detail) <= {"code", "message", "retryable", "outcome_unknown"} and all(
+        isinstance(detail.get(key, False), bool) for key in ("retryable", "outcome_unknown")
+    )
+    unknown = code == "model_processing_failed" or detail.get("outcome_unknown") is True
+    return {
+        "error_code": code,
+        "message": _ELT_MODEL_MESSAGES[code],
+        "retryable": valid
+        and not unknown
+        and code in {"model_configuration_error", "model_connection_error"}
+        and detail.get("retryable") is True,
+        "outcome_unknown": unknown,
+    }
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     logger.info("Registering exception handlers...")
 
@@ -136,6 +168,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "success": False,
                 "error_code": f"http_{exc.status_code}",
                 "message": str(exc.detail),
+                **(_elt_model_error(exc.detail) if context else {}),
                 "path": request.url.path,
                 **context,
             },

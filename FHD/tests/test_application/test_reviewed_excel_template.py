@@ -104,7 +104,7 @@ def test_clean_formula_workbook_without_calculation_properties():
 
 def test_clean_copy_preserves_layout_and_ambiguous_cells():
     fixture = Path(__file__).parents[1] / "fixtures" / "etl_template"
-    expected = json.loads((fixture / "expected" / "quotation.json").read_text())
+    expected = json.loads((fixture / "expected" / "quotation.json").read_text(encoding="utf-8"))
     source = (fixture / "sources" / "synthetic_quotation.xlsx").read_bytes()
     info = inspect_workbook(source)
     selected = [{"sheet": expected["sheet"], "cell": cell} for cell in expected["instance_cells"]]
@@ -1923,7 +1923,9 @@ def test_save_replay_scope_expiry_and_history(review_store):
         assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 1
 
 
-def test_private_intake_requires_a_reviewed_business_plan_before_writing(review_store):
+def test_private_intake_requires_model_before_a_business_plan(
+    review_store, authorized_notice_client, monkeypatch
+):
     client = review_store.client
     preview = client.post(
         "/api/templates/reviewed-excel/preview",
@@ -1949,7 +1951,19 @@ def test_private_intake_requires_a_reviewed_business_plan_before_writing(review_
         },
     )
     assert response.status_code == 409
-    assert "先核对入库目标和记录数量" in response.text
+    assert response.json()["detail"]["code"] == "model_required"
+    monkeypatch.setattr(routes, "_authorize_intake", lambda *_: "synthetic")
+    response = client.post(
+        "/api/templates/reviewed-excel/intake-preview",
+        data={
+            "review_id": preview["review_id"],
+            "name": "synthetic",
+            "proposal_version": preview["proposal"]["version"],
+            "candidate_id": preview["proposal"]["candidates"][0]["id"],
+            "selections": "[]",
+        },
+    )
+    assert response.status_code == 409 and response.json()["detail"]["code"] == "model_required"
     with review_store.engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM templates")).scalar_one() == 0
 
@@ -2238,7 +2252,7 @@ def test_owner_file_template_authorization_uses_platform_by_default(monkeypatch,
 
 
 @pytest.mark.parametrize("published", [False, True])
-def test_login_notice_preview_without_effective_receipt_stays_local_and_refine_cannot_send(
+def test_login_notice_preview_without_effective_receipt_cannot_fall_back_or_send(
     review_store, monkeypatch, published
 ):
     from unittest.mock import Mock
@@ -2263,39 +2277,39 @@ def test_login_notice_preview_without_effective_receipt_stays_local_and_refine_c
             "sample_authorized": "true",
         },
     )
-    assert response.status_code == 200, response.text
-    result = response.json()
-    assert result["proposal"]["model"]["status"] == "not_called"
-    assert result["proposal"]["model"]["login_authorization"]["status"] == (
-        "login_notice_required" if published else "notice_not_published"
-    )
-    assert "authorization" not in result["proposal"]["model"]
+    expected_status = 403 if published else 503
+    expected_code = "login_notice_required" if published else "notice_not_published"
+    assert response.status_code == expected_status, response.text
+    assert response.json()["detail"]["code"] == expected_code
+    assert "proposal" not in response.json()
     rejected = review_store.client.post(
         "/api/templates/reviewed-excel/refine",
         data={
-            "review_id": result["review_id"],
-            "parent_version": result["proposal"]["version"],
+            "review_id": "synthetic",
+            "parent_version": "synthetic",
             "feedback": "synthetic",
             "use_login_notice": "true",
             "consent": "true",
             "own_file_authorized": "true",
         },
     )
-    assert rejected.status_code == 403
+    assert rejected.status_code == expected_status
+    assert rejected.json()["detail"]["code"] == expected_code
     identity = review_store.client.get("/api/templates/reviewed-excel/identity").json()
     assert identity["login_authorization"]["operations"]["classification"] != "authorized"
     rejected = review_store.client.post(
         "/api/templates/reviewed-excel/classifications/synthetic/analyze",
         data={"version": "synthetic", "use_login_notice": "true", "own_file_authorized": "true"},
     )
-    assert rejected.status_code == 403
+    assert rejected.status_code == expected_status
+    assert rejected.json()["detail"]["code"] == expected_code
     send.assert_not_called()
+    with review_store.engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM etl_runs")).scalar_one() == 0
 
 
-@pytest.mark.parametrize("multibatch", [False, True])
-def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_pipeline(
-    review_store, monkeypatch, multibatch
-):
+@pytest.fixture
+def authorized_notice_client(review_store, monkeypatch):
     import asyncio
     import time
     from http.cookies import SimpleCookie
@@ -2304,7 +2318,6 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     from fastapi.responses import JSONResponse
 
     from app.application import elt_login_authorization as notice
-    from app.application.elt.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("SECRET_KEY", "synthetic-login-notice-key-for-route-tests-123456789")
     monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
@@ -2343,6 +2356,16 @@ def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_
     client = review_store.client
     client.cookies.set(notice.NOTICE_COOKIE, cookies[notice.NOTICE_COOKIE].value)
     client.cookies.set("session_id", "synthetic-session")
+    return client, notice, route
+
+
+@pytest.mark.parametrize("multibatch", [False, True])
+def test_effective_login_receipt_derives_current_file_scope_and_calls_candidate_pipeline(
+    authorized_notice_client, monkeypatch, multibatch
+):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    client, notice, route = authorized_notice_client
     calls = []
 
     def fake(*args, **kwargs):
@@ -2719,7 +2742,7 @@ def test_local_save_failure_releases_only_own_locks_and_can_retry(
         if failure == "mkdir":
 
             def fail_mkdir(path, *args, **kwargs):
-                if "templates/reviewed_excel" in str(path):
+                if "templates/reviewed_excel" in Path(path).as_posix():
                     raise OSError("synthetic mkdir failure")
                 return real_mkdir(path, *args, **kwargs)
 
@@ -2727,7 +2750,7 @@ def test_local_save_failure_releases_only_own_locks_and_can_retry(
         elif failure == "open":
 
             def fail_open(path, *args, **kwargs):
-                if "templates/reviewed_excel" in str(path):
+                if "templates/reviewed_excel" in Path(path).as_posix():
                     raise OSError("synthetic open failure")
                 return real_open(path, *args, **kwargs)
 
@@ -6090,3 +6113,182 @@ def test_checkpoint_budget_change_is_409_preserving_original_audit(
             ).scalar_one()
             == original
         )
+
+
+def candidate_form(client, body):
+    result = client.post(
+        "/api/templates/reviewed-excel/classify",
+        files={"files": ("synthetic.xlsx", body)},
+        data={"expected_actor": "1:7"},
+    ).json()["files"][0]
+    labels = [
+        {"sheet": sheet["sheet"], "range": region["range"], "labels": region["labels"]}
+        for sheet in result["sheets"]
+        for region in sheet["regions"]
+    ]
+    confirmed = client.post(
+        f"/api/templates/reviewed-excel/classifications/{result['classification_id']}/confirm",
+        data={"version": result["version"], "labels_json": json.dumps(labels)},
+    ).json()
+    return {
+        "expected_actor": "1:7",
+        "use_login_notice": "true",
+        "classification_id": result["classification_id"],
+        "classification_version": confirmed["version"],
+        "region_sheet": confirmed["sheets"][0]["sheet"],
+        "region_range": confirmed["sheets"][0]["regions"][0]["range"],
+    }
+
+
+@pytest.mark.parametrize("not_sent", [False, True])
+def test_required_model_failure_has_no_success_or_saved_rule_candidates(
+    authorized_notice_client, review_store, monkeypatch, not_sent
+):
+    from unittest.mock import Mock
+
+    from app.application.elt.errors import ReviewedExcelError
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+    client, _, _ = authorized_notice_client
+    fault = (
+        ModelRequestNotSent("平台模型尚未配置")
+        if not_sent
+        else ReviewedExcelError("模型响应不完整；未自动重试")
+    )
+    send = Mock(side_effect=fault)
+    monkeypatch.setattr(routes, "refine_proposal", send)
+    body = sample()
+    form = candidate_form(client, body)
+    response = client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", body)},
+        data=form,
+    )
+    assert response.status_code == 503, response.text
+    result = response.json()
+    assert "success" not in result and "proposal" not in result
+    assert result["detail"]["code"] == (
+        "model_configuration_error" if not_sent else "model_processing_failed"
+    )
+    assert result["detail"]["retryable"] is not_sent
+    assert result["detail"]["outcome_unknown"] is not not_sent
+    send.assert_called_once()
+    retried = client.post(
+        "/api/templates/reviewed-excel/preview", files={"file": ("synthetic.xlsx", body)}, data=form
+    )
+    assert retried.status_code == (503 if not_sent else 409), retried.text
+    assert send.call_count == (2 if not_sent else 1)
+    with review_store.engine.connect() as conn:
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM etl_runs WHERE target_type='template_review'")
+            ).scalar_one()
+            == 0
+        )
+
+
+def synthetic_candidate_result(*_args, **_kwargs):
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    return LlmAssistResult(
+        used_llm=True,
+        provider="platform",
+        model="mimo-v2.6-flash",
+        data={"candidates": [{"clear": [], "reason": "synthetic"} for _ in range(3)]},
+    )
+
+
+@pytest.mark.parametrize("not_sent", [False, True])
+def test_refine_claim_releases_only_unsent_and_blocks_unknown_direct_replay(
+    authorized_notice_client, monkeypatch, not_sent
+):
+    from unittest.mock import Mock
+
+    from app.application.elt.errors import ReviewedExcelError
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+    client, _, _ = authorized_notice_client
+    body = sample()
+    form = candidate_form(client, body)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_llm_complete", synthetic_candidate_result
+    )
+    preview = client.post(
+        "/api/templates/reviewed-excel/preview", files={"file": ("synthetic.xlsx", body)}, data=form
+    ).json()
+    payload = {
+        "review_id": preview["review_id"],
+        "parent_version": preview["proposal"]["version"],
+        "feedback": "synthetic change",
+        "use_login_notice": "true",
+    }
+    fault = (
+        ModelRequestNotSent("synthetic unsent")
+        if not_sent
+        else ReviewedExcelError("synthetic invalid response")
+    )
+    model = Mock(side_effect=fault)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+    first = client.post("/api/templates/reviewed-excel/refine", data=payload)
+    assert first.status_code == 503, first.text
+    second = client.post("/api/templates/reviewed-excel/refine", data=payload)
+    assert second.status_code == (503 if not_sent else 409), second.text
+    assert model.call_count == (2 if not_sent else 1)
+    history = client.get(f"/api/templates/reviewed-excel/reviews/{preview['review_id']}").json()
+    assert history["status"] == (
+        "template_review_ready" if not_sent else "template_review_model_pending"
+    )
+    assert len(history["versions"]) == len(preview["versions"])
+    initial_replay = client.post(
+        "/api/templates/reviewed-excel/preview", files={"file": ("synthetic.xlsx", body)}, data=form
+    )
+    assert initial_replay.status_code == (200 if not_sent else 409), initial_replay.text
+    assert model.call_count == (2 if not_sent else 1)
+
+
+def test_preview_post_model_failure_keeps_claim_and_success_is_replayed(
+    authorized_notice_client, monkeypatch
+):
+    from unittest.mock import Mock
+
+    client, _, _ = authorized_notice_client
+    workbook = load_workbook(BytesIO(sample()))
+    workbook.copy_worksheet(workbook.active).title = "第二"
+    stream = BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    body = stream.getvalue()
+    form = candidate_form(client, body)
+    model = Mock(side_effect=synthetic_candidate_result)
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_llm_complete", model)
+    with monkeypatch.context() as failure:
+        failure.setattr(
+            routes,
+            "_build_candidate_previews",
+            Mock(side_effect=RuntimeError("synthetic-private-render-fault")),
+        )
+        first = client.post(
+            "/api/templates/reviewed-excel/preview",
+            files={"file": ("synthetic.xlsx", body)},
+            data=form,
+        )
+    assert first.status_code == 500
+    second = client.post(
+        "/api/templates/reviewed-excel/preview", files={"file": ("synthetic.xlsx", body)}, data=form
+    )
+    assert second.status_code == 409 and model.call_count == 1
+    # A separate document remains processable; a lost successful response reuses its stored result.
+    other = {**form, "region_sheet": "第二"}
+    saved = client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", body)},
+        data=other,
+    )
+    assert saved.status_code == 200, saved.text
+    replay = client.post(
+        "/api/templates/reviewed-excel/preview",
+        files={"file": ("synthetic.xlsx", body)},
+        data=other,
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["review_id"] == saved.json()["review_id"] and model.call_count == 2

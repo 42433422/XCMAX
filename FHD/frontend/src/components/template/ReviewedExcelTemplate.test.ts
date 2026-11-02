@@ -18,6 +18,7 @@ const candidates = [
   { id: 'identity', label: '模板三', explanation: '清理更多', clear: [{ sheet: '报价', cell: 'B2' }] },
 ]
 const proposal = (version: string) => ({ version, parent_version: null, candidates, evidence: [], model: { status: 'not_called' }, result_previews: candidates.map((c, i) => ({ candidate_id: c.id, sha256: String(i), layout: layout(i ? '' : '客户甲'), layout_truncated: false })) })
+const modelProposal = (version: string) => ({ ...proposal(version), model: { status: 'returned', login_authorization: { status: 'authorized' } } })
 const intakeResult = (summary = { new: 2, update: 1, skip: 3, error: 0, executed: 0 }) => ({ intake: {
   run_id: 'intake-run', mod_id: '', candidate_sha256: 'candidate-sha', knowledge: { action: 'new', documents: 1 },
   business: { id: 'intake-run', target_type: 'customer_products', status: 'preview_ready', preview_revision: 'revision-1', summary },
@@ -31,8 +32,8 @@ async function mountIntakeCandidate() {
   const state = wrapper.vm.$.setupState as Record<string, unknown>
   state.classifications = [{ name: file.name, confirmed: true, sheets: [] }]
   state.file = file; state.name = '合成模板'
-  state.review = { review_id: 'review-intake', sheets: [], cells: [], proposal: proposal('v1'), selected_region: { selection_basis: 'model_group' } }
-  state.proposals = [proposal('v1')]
+  state.review = { review_id: 'review-intake', sheets: [], cells: [], proposal: modelProposal('v1'), selected_region: { selection_basis: 'model_group' } }
+  state.proposals = [modelProposal('v1')]
   await flushPromises()
   const save = () => wrapper.findAll('button').find(button => button.text() === '使用此模板并入库')!
   return { wrapper, state, save }
@@ -207,8 +208,8 @@ describe('reviewed Excel template', () => {
       state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [] }]
       state.file = file
       state.name = 'note-tpl'
-      state.review = { review_id: 'r-note', sheets: [], cells: [], proposal: proposal('v1'), selected_region: { selection_basis: 'model_group' } }
-      state.proposals = [proposal('v1')]
+      state.review = { review_id: 'r-note', sheets: [], cells: [], proposal: modelProposal('v1'), selected_region: { selection_basis: 'model_group' } }
+      state.proposals = [modelProposal('v1')]
       state.templatePickerOpen = true
       await flushPromises()
       await wrapper.findAll('button').find(b => b.text() === '使用此模板并入库')!.trigger('click')
@@ -716,7 +717,7 @@ describe('reviewed Excel template', () => {
     expect(cards).toHaveLength(4); expect(cards[0].text()).toContain('客户甲'); expect(cards[2].find('td').text()).toBe('')
     expect(cards[3].text()).toContain('与模板 2 清理结果相同')
     expect(wrapper.find('.reviewed-template__cells').exists()).toBe(false)
-    await wrapper.findAll('.reviewed-template__preview--a4')[1].trigger('click')
+    await wrapper.findAll('.reviewed-template__select-candidate')[1].trigger('click')
     await wrapper.findAll('input[type=checkbox]').find((el) => el.element.closest('label')?.textContent?.includes('确认发布'))!.setValue(true)
     await wrapper.findAll('button').find((b) => b.text().includes('保存所选模板'))!.trigger('click'); await flushPromises()
     const form = api.saveReviewedExcel.mock.calls.at(-1)![0] as FormData
@@ -824,16 +825,16 @@ describe('reviewed Excel template', () => {
       state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [] }]
       state.file = file
       state.name = 'pick-tpl'
-      state.review = { review_id: 'r-pick', sheets: [], cells: [], proposal: proposal('v1'), selected_region: { selection_basis: 'model_group' } }
-      state.proposals = [proposal('v1')]
+      state.review = { review_id: 'r-pick', sheets: [], cells: [], proposal: modelProposal('v1'), selected_region: { selection_basis: 'model_group' } }
+      state.proposals = [modelProposal('v1')]
       state.requirementNotes = ['保留客户栏，清理空白行']
       state.templatePickerOpen = true
       await flushPromises()
-      expect(wrapper.text()).toContain('点击卡片仅选择模板')
+      expect(wrapper.text()).toContain('点击卡片边框或预览区放大核对')
       expect(wrapper.findAll('button').some(b => b.text() === '保存所选模板')).toBe(false)
       expect(wrapper.findAll('button').some(b => b.text() === '使用此模板并入库')).toBe(true)
       expect(wrapper.findAll('input[type=checkbox]').some(el => el.element.closest('label')?.textContent?.includes('确认发布'))).toBe(false)
-      await wrapper.findAll('.reviewed-template__preview--a4')[1].trigger('click')
+      await wrapper.findAll('.reviewed-template__select-candidate')[1].trigger('click')
       await flushPromises()
       expect(api.saveReviewedExcel).not.toHaveBeenCalled()
       expect(wrapper.text()).toContain('本次处理 1 份所选文档（pick.xlsx）')
@@ -867,8 +868,8 @@ describe('reviewed Excel template', () => {
       state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [], usage_restrictions: ['打印版式未验证'] }]
       state.file = file
       state.name = 'limited-tpl'
-      state.review = { review_id: 'r-lim', sheets: [], cells: [], proposal: proposal('v1'), selected_region: { selection_basis: 'model_group' }, usage_restrictions: ['打印版式未验证'] }
-      state.proposals = [proposal('v1')]
+      state.review = { review_id: 'r-lim', sheets: [], cells: [], proposal: modelProposal('v1'), selected_region: { selection_basis: 'model_group' }, usage_restrictions: ['打印版式未验证'] }
+      state.proposals = [modelProposal('v1')]
       state.templatePickerOpen = true
       await flushPromises()
       expect(state.publicationRestricted).toBe(true)
@@ -883,9 +884,6 @@ describe('reviewed Excel template', () => {
   })
 
   it('downloads a candidate workbook from the A4 picker', async () => {
-    api.archiveClassifyExcel.mockResolvedValue({ name: 'cand.xlsx', status: 'classified', classification_id: 'c-cand', version: 'v1', confirmed: true, sheets: [{ sheet: 'S', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['unknown'], checked_cells: 1, parent_heading: '', dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }] })
-    api.confirmClassification.mockResolvedValue({ version: 'confirmed-version', confirmed: true, sheets: [{ sheet: 'S', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['unknown'], checked_cells: 1, parent_heading: '', dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }] })
-    api.reviewExcel.mockResolvedValue({ review_id: 'r-cand', sha256: 'sha', sheets: ['S'], cells: [], proposal: proposal('v1') })
     api.downloadReviewedCandidate.mockResolvedValue({ blob: async () => new Blob(['cand']) })
     api.downloadReviewedExcel.mockResolvedValue({ blob: async () => new Blob(['saved']) })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
@@ -894,8 +892,9 @@ describe('reviewed Excel template', () => {
       const input = wrapper.get('input[type="file"][multiple]')
       Object.defineProperty(input.element, 'files', { configurable: true, value: [new File(['x'], 'cand.xlsx')] })
       await input.trigger('change'); await flushPromises()
-      await wrapper.findAll('button').find(b => b.text() === '开始处理')!.trigger('click'); await flushPromises()
       const state = wrapper.vm.$.setupState as Record<string, unknown>
+      state.review = { review_id: 'r-cand', sha256: 'synthetic-sha', sheets: ['S'], cells: [], proposal: modelProposal('v1') }
+      state.proposals = [modelProposal('v1')]
       state.name = 'cand-tpl'
       state.savedId = 'tpl-saved'
       await (state.downloadCandidate as (index: number) => Promise<void>)(0)
@@ -981,7 +980,7 @@ describe('reviewed Excel template', () => {
     latest.intake.run_id = latest.intake.business.id = 'latest-run'
     latest.intake.business.preview_revision = 'latest-revision'
     api.previewReviewedIntake.mockResolvedValueOnce(latest)
-    await wrapper.findAll('.reviewed-template__preview--a4')[1].trigger('click'); await flushPromises()
+    await wrapper.findAll('.reviewed-template__select-candidate')[1].trigger('click'); await flushPromises()
     finishOld(intakeResult({ new: 999, update: 0, skip: 0, error: 0, executed: 0 }))
     await flushPromises()
     expect(wrapper.get('[aria-label="本次入库范围"]').text()).not.toContain('999')

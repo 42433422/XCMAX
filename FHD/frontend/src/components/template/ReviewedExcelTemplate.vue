@@ -7,10 +7,11 @@ import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 import { eltApi, type EltRun } from '@/api/elt'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 import { autoIngestStatusLabel, actionLabel, targetLabel } from '@/views/eltCenter/eltCenterShared'
+import TemplateCandidatePreview from './TemplateCandidatePreview.vue'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
 type Candidate = { id: string; label: string; explanation: string; clear: { sheet: string; cell: string }[] }
-type LoginAuthorization = { status: 'authorized' | 'login_notice_required' | 'notice_not_published'; version?: string; purpose?: string; provider?: string; model?: string }
+type LoginAuthorization = { status: 'authorized' | 'login_notice_required' | 'notice_not_published' | 'model_connection_error' | 'model_configuration_error'; version?: string; purpose?: string; provider?: string; model?: string }
 type Proposal = { version: string; parent_version: string | null; candidates: Candidate[]; result_previews?: { candidate_id: string; sha256: string; layout: Layout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; login_authorization?: LoginAuthorization; cells_sent?: number; cells_total?: number; truncated?: boolean; values_truncated?: boolean; input_messages?: unknown[]; input_summary?: unknown } }
 type LayoutCell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 type Layout = { sheet: string; widths: number[]; rows: { height: number; cells: LayoutCell[] }[]; truncated: boolean }
@@ -132,11 +133,16 @@ const processingDiagnostic = computed(() => {
   const model = proposal.value?.model
   const authorization = model?.login_authorization || loginAuthorizationStatus.value
   if (model?.status === 'returned') return '模型已返回候选建议，仍需核对。'
-  if (model?.status === 'unavailable') return '模型调用未完成，当前显示本地规则候选。'
-  if (authorization?.status === 'notice_not_published') return '当前显示本地规则候选；登录数据处理条款尚未发布，本次未调用模型。'
-  if (authorization?.status === 'login_notice_required') return '当前显示本地规则候选；当前登录会话没有完整的分类与模板候选授权，本次未调用模型。'
+  if (props.archiveOnSelect) return modelAuthorizationMessage(authorization)
+  if (model?.status === 'unavailable') return '模型调用未完成，请查看处理诊断。'
   return '当前显示本地规则候选，本次未调用模型。'
 })
+function modelAuthorizationMessage(authorization: LoginAuthorization | null | undefined) {
+  if (authorization?.status === 'notice_not_published') return '登录数据处理条款尚未发布，本次未调用模型。请联系管理员正式发布条款后重新登录。'
+  if (authorization?.status === 'login_notice_required') return '当前登录会话没有完整的分类与模板候选授权，本次未调用模型。请在登录页阅读说明并重新登录。'
+  if (authorization?.status === 'model_configuration_error') return '模型连接异常：平台模型配置不可用，本次未调用模型。请联系管理员核对配置后重新登录。'
+  return '模型连接异常：无法确认平台模型可用，本次未生成候选。请重试核实连接状态。'
+}
 const feedback = ref('')
 const initialModel = ref(false)
 const selectedSliceKey = ref('')
@@ -149,6 +155,17 @@ watch(publicationRestricted, value => { if (value) publishToTenant.value = false
 const selected = computed(() => proposal.value?.candidates[candidateIndex.value]?.clear || [])
 const error = ref('')
 const busy = ref(false)
+const blockedCandidateKeys = ref<string[]>([])
+const blockedFeedbackKeys = ref<string[]>([])
+function modelFailureState(err: unknown) {
+  type Failure = { code?: string; error_code?: string; outcome_unknown?: boolean; retryable?: boolean }
+  const payload = (err as { data?: Failure & { detail?: Failure } })?.data
+  return payload?.detail || payload
+}
+function modelOutcomeUnknown(err: unknown) {
+  const state = modelFailureState(err)
+  return state?.outcome_unknown === true || !(state?.outcome_unknown === false || state?.retryable === true || ['notice_not_published', 'login_notice_required', 'model_connection_error', 'model_configuration_error'].includes(state?.code || state?.error_code || ''))
+}
 const savedId = ref('')
 const savedModelStatus = ref('')
 type IntakePlan = { run_id: string; mod_id: string; candidate_sha256: string; knowledge: { action: string; documents: number }; business: EltRun }
@@ -267,6 +284,18 @@ function startIngestPoll(batchId: string) {
   ingestPollTimer = setInterval(() => { void pollIngestProgress() }, 800)
 }
 function layoutFor(index: number) { return index === 0 ? review.value?.layout?.[sheetIndex.value] : proposal.value?.result_previews?.[index - 1]?.layout?.[sheetIndex.value] }
+const expandedCandidateIndex = ref<number | null>(null)
+function openCandidatePreview(index: number) {
+  if (proposal.value?.candidates[index]) expandedCandidateIndex.value = index
+}
+function candidateSliceBlocked(item: Classification | undefined, slice: AutoSlice) {
+  return props.archiveOnSelect && blockedCandidateKeys.value.includes(JSON.stringify([item?.classification_id, item?.version, slice.index, slice.sha256]))
+}
+function selectExpandedCandidate() {
+  if (expandedCandidateIndex.value === null || busy.value) return
+  pickCandidate(expandedCandidateIndex.value); expandedCandidateIndex.value = null
+}
+watch([review, selectedVersion], () => { expandedCandidateIndex.value = null })
 function equivalentTo(index: number): number | null {
   const candidates = proposal.value?.candidates || []
   const signature = (candidate: Candidate) => JSON.stringify(candidate.clear.map((item) => JSON.stringify([item.sheet, item.cell])).sort())
@@ -300,6 +329,8 @@ function resetReview() {
   feedback.value = ''; consent.value = false; publishToTenant.value = false
 }
 function resetSelectionState() {
+  blockedCandidateKeys.value = []
+  blockedFeedbackKeys.value = []
   loginModelFiles.value = []
   loginAuthorizationStatus.value = null
   autoSlices.value = {}; retryBudget.value = {}; selectedSliceKey.value = ''
@@ -352,13 +383,19 @@ function submitComposerRequirement() {
     error.value = '模型尚未启用，整理要求未执行，草稿已保留。'
     return
   }
+  if (props.archiveOnSelect && review.value) {
+    const current = captureFileOperation()
+    feedback.value = note
+    void refine().then(succeeded => {
+      if (!succeeded || !current()) return
+      requirementNotes.value = [...requirementNotes.value, note]
+      if (composerDraft.value.trim() === note) composerDraft.value = ''
+    })
+    return
+  }
   requirementNotes.value = [...requirementNotes.value, note]
   feedback.value = note
   composerDraft.value = ''
-  if (props.archiveOnSelect && review.value) {
-    if (proposal.value?.model.login_authorization?.status === 'authorized') void refine()
-    return
-  }
   if (props.archiveOnSelect && files.value.length && !review.value) void classify()
 }
 function onComposerDragEnter(event: DragEvent) {
@@ -494,22 +531,15 @@ async function classify() {
     } else {
       loginModelFiles.value = loginModelFiles.value.filter(id => id !== selectedItem.classification_id)
       if (loginAuthorizationStatus.value?.status === 'authorized') loginAuthorizationStatus.value = { ...loginAuthorizationStatus.value, status: 'login_notice_required' }
+      error.value = modelAuthorizationMessage(loginAuthorizationStatus.value)
+      archiveProgress.value = '模型处理未开始，未生成候选；修复上述状态后可点击开始处理重试。'
     }
   } catch (err) {
     if (current()) { error.value = err instanceof Error ? err.message : '无法核实平台模型处理状态，请重试。'; archiveProgress.value = '平台模型状态核实未完成，尚未开始后续处理。' }
     return
   } finally { if (current()) busy.value = false }
   if (!current()) return
-  if (loginModelFlow.value) { await runLoginModelPipeline(); return }
-  if (classifications.value.some((item) => item.status === 'classified' && !item.confirmed)) {
-    await confirmClassifications()
-  }
-  if (!current()) return
-  if (!classificationConfirmed.value || !previewSelectionReady.value) archiveProgress.value = '处理已暂停，请在页面内核对分类和片段后继续。'
-  if (requirementNotes.value.length) feedback.value = requirementNotes.value[requirementNotes.value.length - 1]
-  if (classificationConfirmed.value && previewSelectionReady.value && !review.value) {
-    await preview()
-  }
+  if (loginModelFlow.value) await runLoginModelPipeline()
 }
 async function loadArchiveQuota() {
   const current = captureOperation()
@@ -944,10 +974,18 @@ function retrySelectedPrintArea() {
 }
 async function preview(slice?: AutoSlice) {
   if (busy.value) return
+  if (props.archiveOnSelect && blockedCandidateKeys.value.includes(selectedSliceKey.value)) {
+    error.value = '上次模型候选请求结果未知，请先核对服务端记录，勿重复提交。'
+    archiveProgress.value = '候选处理结果待核对，未重复发送。'
+    return
+  }
   const current = captureFileOperation()
   if (!current()) return
   if (!file.value || (!slice && (!classificationConfirmed.value || !previewSelectionReady.value))) return
-  if (props.archiveOnSelect && loginModelFlow.value && !slice) return
+  if (props.archiveOnSelect && (!loginModelFlow.value || !slice)) {
+    error.value = modelAuthorizationMessage(loginAuthorizationStatus.value)
+    return
+  }
   const useModel = !props.archiveOnSelect && initialModel.value
   if (useModel && sampleAuthorized.value === templateOwnFileAuthorized.value) {
     error.value = '请先选择一种当前文件授权，或关闭模型选项使用本地规则。'
@@ -963,7 +1001,7 @@ async function preview(slice?: AutoSlice) {
     form.append('model_opt_in', String(useModel))
     form.append('sample_authorized', String(!props.archiveOnSelect && sampleAuthorized.value))
     form.append('own_file_authorized', String(!props.archiveOnSelect && templateOwnFileAuthorized.value))
-    if (props.archiveOnSelect) form.append('use_login_notice', String(loginModelFlow.value && !!slice))
+    if (props.archiveOnSelect) form.append('use_login_notice', 'true')
     const selectedFile = classifications.value[files.value.indexOf(file.value)]
     if (/\.xls$/i.test(file.value.name)) {
       if (!selectedFile?.classification_id) throw new Error('旧 XLS 必须先通过归档转换校验')
@@ -985,19 +1023,26 @@ async function preview(slice?: AutoSlice) {
     }
     const result = await templatePreviewApi.reviewExcel(form) as Review
     if (!current()) return
+    if (props.archiveOnSelect && result.proposal.model.status !== 'returned') throw new Error('模型连接异常：模型未返回有效候选，请核对服务端处理记录后重试。')
     proposals.value = result.versions?.length ? result.versions : [result.proposal]
     selectedVersion.value = proposals.value.length - 1
     candidateIndex.value = 0
     review.value = result
-    if (props.archiveOnSelect) archiveProgress.value = result.proposal.model.status === 'returned'
-      ? '平台模型候选已生成，请核对。' : result.proposal.model.status === 'unavailable'
-        ? '平台模型处理未完成，当前显示本地规则候选，请查看处理诊断。' : '当前仅生成本地规则候选，平台模型尚未启用。'
+    if (props.archiveOnSelect) archiveProgress.value = '平台模型候选已生成，请核对。'
     emit('stage', 'template')
-  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '预览失败'; if (props.archiveOnSelect) archiveProgress.value = '候选生成未完成，请重试生成候选。' }
+  } catch (err) {
+    if (!current()) return
+    const data = modelFailureState(err)
+    const outcomeUnknown = modelOutcomeUnknown(err)
+    if (props.archiveOnSelect && outcomeUnknown && !blockedCandidateKeys.value.includes(selectedSliceKey.value)) blockedCandidateKeys.value.push(selectedSliceKey.value)
+    error.value = err instanceof Error ? err.message : '模型连接异常，候选生成未完成'
+    if (props.archiveOnSelect) archiveProgress.value = outcomeUnknown ? '候选处理结果待核对，请先查看服务端记录，勿重复提交。' : data?.retryable === false ? '候选生成未完成，请先修复上述状态后重新登录核实。' : '候选生成未完成，可点击所选单据重新生成。'
+  }
   finally { if (current()) busy.value = false }
 }
 function canCommitSelectedTemplate() {
   if (busy.value || !file.value || !review.value || !name.value.trim() || !proposal.value) return false
+  if (props.archiveOnSelect && proposal.value.model.status !== 'returned') return false
   if (selectedVersion.value !== proposals.value.length - 1) return false
   if (proposal.value.result_previews?.length !== 3) return false
   if (review.value.selected_region?.selection_basis !== 'model_group' && (!classificationConfirmed.value || !previewSelectionReady.value)) return false
@@ -1058,6 +1103,11 @@ async function refine() {
   if (!current()) return
   if (busy.value || !file.value || !review.value || !proposal.value || selectedVersion.value !== proposals.value.length - 1 || !feedback.value.trim()) return
   if (props.archiveOnSelect ? proposal.value.model.login_authorization?.status !== 'authorized' : !consent.value || sampleAuthorized.value === templateOwnFileAuthorized.value) return
+  const feedbackKey = JSON.stringify([review.value.review_id, proposal.value.version])
+  if (props.archiveOnSelect && blockedFeedbackKeys.value.includes(feedbackKey)) {
+    error.value = '上次模型整理请求结果未知，请先核对服务端记录，勿重复发送；要求草稿已保留。'
+    return
+  }
   busy.value = true
   error.value = ''
   try {
@@ -1075,7 +1125,12 @@ async function refine() {
     proposals.value.push(result.proposal)
     selectedVersion.value = proposals.value.length - 1
     candidateIndex.value = 0
-  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '模型不可用，原候选未改变' }
+    return true
+  } catch (err) {
+    if (!current()) return
+    if (props.archiveOnSelect && modelOutcomeUnknown(err) && !blockedFeedbackKeys.value.includes(feedbackKey)) blockedFeedbackKeys.value.push(feedbackKey)
+    error.value = err instanceof Error ? err.message : '模型不可用，原候选未改变'
+  }
   finally { if (current()) busy.value = false }
 }
 async function download(id: string) {
@@ -1131,7 +1186,7 @@ async function downloadCandidate(index: number) {
       <div v-for="(note, noteIndex) in requirementNotes" :key="`req-${noteIndex}`" class="elt-bubble elt-bubble--user">
         整理要求：{{ note }}
       </div>
-      <div v-if="archiveProgress" class="elt-bubble elt-bubble--system" role="status">{{ archiveProgress }}</div>
+      <div v-if="archiveProgress" class="elt-bubble elt-bubble--system elt-processing-feedback" :class="{ 'elt-processing-feedback--busy': busy }" role="status" :aria-busy="busy"><span v-if="busy" class="elt-processing-feedback__spinner" aria-hidden="true"></span><span>{{ archiveProgress }}</span></div>
       <div v-if="error" class="elt-bubble elt-bubble--error" role="alert">{{ error }}</div>
 
     <details v-if="!archiveOnSelect" class="elt-admin-panel"><summary>管理员与档案（配额、撤回）</summary>
@@ -1164,10 +1219,10 @@ async function downloadCandidate(index: number) {
         <p v-for="slice in currentLoginSlices" :key="slice.index">
           {{ slice.fragments.map(part => `${part.sheet}!${part.range}`).join('、') }} · {{ slice.filename }}
           <small v-if="!processableSlice(currentClassification!, slice)">包含隐藏或不可处理工作表，或模型未确定完整关系；不能生成候选，原件不变。</small>
-          <button type="button" :disabled="busy || !processableSlice(currentClassification!, slice)" @click="previewAutoSlice(files.indexOf(file as File), slice)">用此单据生成模板</button>
+          <button type="button" :disabled="busy || !processableSlice(currentClassification!, slice) || candidateSliceBlocked(currentClassification, slice)" @click="previewAutoSlice(files.indexOf(file as File), slice)">用此单据生成模板</button><small v-if="candidateSliceBlocked(currentClassification, slice)">处理结果待核对，请先查看服务端记录，勿重复提交。</small>
         </p>
       </div>
-      <div v-if="!archiveOnSelect || (!loginModelFlow && !busy && classifications.some(item => item.status === 'classified') && (!classificationConfirmed || !previewSelectionReady))">
+      <div v-if="!archiveOnSelect">
 
     <div class="reviewed-template__step" data-elt-stage="classification">
     <h3 v-if="!archiveOnSelect">第二步：文件分类</h3>
@@ -1239,7 +1294,7 @@ async function downloadCandidate(index: number) {
             {{ slice.basis === 'ungrouped_region' ? '（模型未确定单据归组）' : '（模型建议同一单据）' }}
             {{ slice.filename }}
             <button type="button" :disabled="busy" @click="downloadAutoSlice(item, slice)">下载裁切 Excel</button>
-            <button type="button" :disabled="busy" @click="previewAutoSlice(i, slice)">用此单据生成模板</button>
+            <button type="button" :disabled="busy || candidateSliceBlocked(item, slice)" @click="previewAutoSlice(i, slice)">用此单据生成模板</button>
           </p>
         </div>
         <div v-for="(sheet, j) in item.sheets" :key="j">
@@ -1330,24 +1385,18 @@ async function downloadCandidate(index: number) {
           <small v-else>此版本无成品布局预览，请重新生成后核对。</small>
         </div>
       </details>
-      <div class="reviewed-template__previews reviewed-template__previews--a4" role="listbox" aria-label="候选模板">
+      <div class="reviewed-template__previews reviewed-template__previews--a4" role="list" aria-label="候选模板">
         <div
           v-for="(candidate, index) in proposal.candidates"
           :key="candidate.id"
           class="reviewed-template__preview reviewed-template__preview--a4 reviewed-template__preview--capsule"
           :class="{
             'reviewed-template__preview--selected': candidateIndex === index,
-            'reviewed-template__preview--capsule-green': candidateIndex === index,
-            'reviewed-template__preview--capsule-yellow': candidateIndex !== index,
           }"
-          role="option"
-          :aria-selected="candidateIndex === index"
-          tabindex="0"
-          @click="pickCandidate(index)"
-          @keydown.enter.prevent="pickCandidate(index)"
-          @keydown.space.prevent="pickCandidate(index)"
+          role="listitem"
+          @click="openCandidatePreview(index)"
         >
-          <span class="reviewed-template__a4-label">模板 {{ index + 1 }}：{{ candidate.label }}</span>
+          <button type="button" class="reviewed-template__a4-open" aria-haspopup="dialog" :aria-label="`放大预览模板 ${index + 1}：${candidate.label}`" @click.stop="openCandidatePreview(index)"><span class="reviewed-template__a4-label">模板 {{ index + 1 }}：{{ candidate.label }}</span><small>放大预览</small></button>
           <span class="reviewed-template__a4-page">
             <template v-if="layoutFor(index + 1)"><table><colgroup><col v-for="(width, col) in layoutFor(index + 1)!.widths" :key="col" :style="{ width: `${width * 7}px` }"></colgroup><tbody>
               <tr v-for="(row, rowIndex) in layoutFor(index + 1)!.rows" :key="rowIndex" :style="{ height: `${row.height * 1.333}px` }">
@@ -1357,13 +1406,15 @@ async function downloadCandidate(index: number) {
           </span>
           <small v-if="equivalentTo(index)" class="reviewed-template__a4-meta">与模板 {{ equivalentTo(index) }} 清理结果相同</small>
           <small v-else class="reviewed-template__a4-meta">{{ candidate.explanation }}</small>
-          <span class="reviewed-template__a4-actions" @click.stop>
+          <span class="reviewed-template__a4-actions" @click.stop @keydown.stop>
+            <button type="button" class="reviewed-template__select-candidate" :aria-pressed="candidateIndex === index" :disabled="busy" @click="pickCandidate(index)">{{ candidateIndex === index ? '已选择' : '选择此模板' }}</button>
             <button v-if="proposal.result_previews?.[index]" type="button" :disabled="busy" @click="downloadCandidate(index)">下载候选核对</button>
             <details><summary>查看差异与理由</summary><p>{{ candidate.explanation }}</p><p>清除 {{ candidate.clear.length }} 格；不确定内容保留。{{ candidate.clear.length ? '' : '与原件相同，待确认。' }}</p></details>
           </span>
         </div>
       </div>
-      <p class="reviewed-template__a4-hint">{{ archiveOnSelect ? '点击卡片仅选择模板；核对后点击「使用此模板并入库」开始写入。绿=已选，黄=未选。' : '点选卡片选用；黄胶囊=未选，绿胶囊=已选。' }}</p>
+      <p class="reviewed-template__a4-hint">点击卡片边框或预览区放大核对；点击「选择此模板」选用，核对后再保存入库。</p>
+      <TemplateCandidatePreview v-if="expandedCandidateIndex !== null && proposal.candidates[expandedCandidateIndex]" :title="`模板 ${expandedCandidateIndex + 1}：${proposal.candidates[expandedCandidateIndex].label}`" :explanation="proposal.candidates[expandedCandidateIndex].explanation" :layouts="proposal.result_previews?.[expandedCandidateIndex]?.layout || []" :initial-sheet="sheetIndex" :selected="candidateIndex === expandedCandidateIndex" :can-select="!busy" :cell-style="cellStyle" @close="expandedCandidateIndex = null" @select="selectExpandedCandidate" />
       <p v-if="!archiveOnSelect">版本 {{ selectedVersion + 1 }} · {{ proposal.model.status === 'returned' ? '模型已返回建议，尚待用户确认' : proposal.model.status === 'unavailable' ? '模型不可用，显示确定性规则建议' : '确定性规则建议，未调用模型' }}<span v-if="proposal.model.status === 'returned'"> · 输入 {{ proposal.model.cells_sent }}/{{ proposal.model.cells_total }} 格{{ proposal.model.truncated ? '（已截断）' : '' }}</span></p>
       <details v-if="archiveOnSelect" class="reviewed-template__diagnostics"><summary>处理诊断</summary>
         <p>{{ processingDiagnostic }}</p>
@@ -1487,12 +1538,22 @@ async function downloadCandidate(index: number) {
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
-  border: 1px solid #d9e0e8;
+  border: 1px solid var(--xc-color-border);
   border-radius: 12px;
   margin: 1rem 0;
-  background: #fff;
+  background: var(--xc-color-surface);
   min-width: 0;
 }
+.reviewed-template :where(button, select, input:not([type]), input[type="text"], input[type="number"]) {
+  font: inherit; color: var(--xc-color-text); background: var(--xc-color-surface); border: 1px solid var(--xc-color-border-strong); border-radius: var(--xc-radius-md); padding: 0.45rem 0.7rem; max-width: 100%;
+}
+.reviewed-template button { cursor: pointer; transition: border-color var(--xc-transition-fast); }
+.reviewed-template :where(button):hover:not(:disabled) { border-color: var(--xc-color-primary); color: var(--xc-color-primary); }
+.reviewed-template button:disabled { opacity: 0.55; cursor: not-allowed; }
+.reviewed-template button:focus-visible, .reviewed-template select:focus-visible, .reviewed-template input:focus-visible, .elt-composer__input:focus-visible { outline: 2px solid var(--xc-color-primary); outline-offset: 2px; }
+.reviewed-template input[type="checkbox"], .reviewed-template input[type="radio"] { accent-color: var(--xc-color-primary); }
+.reviewed-template summary { cursor: pointer; color: var(--xc-color-text-secondary); }
+.reviewed-template pre { overflow: auto; max-width: 100%; }
 .reviewed-template--chatlike {
   flex: 1 1 auto;
   min-height: 0;
@@ -1516,16 +1577,16 @@ async function downloadCandidate(index: number) {
   margin: auto;
   max-width: 28rem;
   text-align: center;
-  color: #5f6f7e;
+  color: var(--xc-color-text-secondary);
   padding: 2rem 1rem;
 }
 .elt-intake-empty__title {
   margin: 0 0 0.5rem;
   font-size: 1.15rem;
-  color: #16355f;
+  color: var(--xc-color-text);
   font-weight: 600;
 }
-.elt-quiet { color: #7a8794; font-size: 13px; }
+.elt-quiet { color: var(--xc-color-muted); font-size: 13px; }
 .elt-bubble {
   align-self: flex-start;
   max-width: min(40rem, 100%);
@@ -1534,17 +1595,22 @@ async function downloadCandidate(index: number) {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.elt-bubble--user { align-self: flex-end; background: #235d8c; color: #fff; }
-.elt-bubble--system { background: #eef3f8; color: #16355f; }
-.elt-bubble--error { background: #fdecec; color: #8b1e1e; }
-.elt-stage-title { margin: 0 0 0.35rem; font-size: 1rem; color: #16355f; }
+.elt-bubble--user { align-self: flex-end; background: var(--xc-color-primary); color: var(--xc-color-surface); }
+.elt-bubble--system { background: var(--xc-color-surface-2); color: var(--xc-color-text); }
+.elt-bubble--error { background: var(--xc-color-danger-bg); color: var(--xc-color-danger); }
+.elt-processing-feedback { display: flex; align-items: center; gap: var(--xc-space-3); min-height: 2.5rem; }
+.elt-processing-feedback--busy { border: 1px solid var(--xc-color-primary); color: var(--xc-color-text); background: color-mix(in srgb, var(--xc-color-primary) 8%, var(--xc-color-surface)); }
+.elt-processing-feedback__spinner { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; border: 2px solid var(--xc-color-border); border-top-color: var(--xc-color-primary); border-radius: 50%; animation: elt-progress-spin 0.9s linear infinite; }
+@keyframes elt-progress-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .elt-processing-feedback__spinner { animation: none; } }
+.elt-stage-title { margin: 0 0 0.35rem; font-size: 1rem; color: var(--xc-color-text); }
 .elt-admin-panel {
   margin: 0.25rem 0;
   padding: 0.5rem 0.75rem;
-  border: 1px dashed #d5deea;
+  border: 1px dashed var(--xc-color-border);
   border-radius: 8px;
-  background: #fff;
-  color: #5f6f7e;
+  background: var(--xc-color-surface);
+  color: var(--xc-color-text-secondary);
   font-size: 13px;
 }
 .elt-template-picker { min-width: 0; }
@@ -1561,21 +1627,21 @@ async function downloadCandidate(index: number) {
   gap: 0.5rem 0.65rem;
   align-items: center;
   padding: 0.75rem 0.85rem;
-  border: 1px solid #d5deea;
+  border: 1px solid var(--xc-color-border);
   border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 -8px 24px rgb(22 53 95 / 8%);
+  background: var(--xc-color-surface);
+  box-shadow: var(--xc-shadow-sm);
   margin-top: auto;
 }
-.elt-composer--dragover { border-color: #235d8c; background: #f3f8fc; }
+.elt-composer--dragover { border-color: var(--xc-color-primary); background: color-mix(in srgb, var(--xc-color-primary) 8%, var(--xc-color-surface)); }
 .elt-composer__drop {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   border-radius: 16px;
-  background: rgb(35 93 140 / 88%);
-  color: #fff;
+  background: color-mix(in srgb, var(--xc-color-primary) 88%, transparent);
+  color: var(--xc-color-surface);
   font-weight: 600;
   z-index: 2;
 }
@@ -1599,23 +1665,25 @@ async function downloadCandidate(index: number) {
 .elt-composer__chip {
   padding: 0.25rem 0.55rem;
   border-radius: 999px;
-  background: #eef3f8;
-  color: #16355f;
+  background: var(--xc-color-surface-2);
+  color: var(--xc-color-text);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
-.elt-composer__placeholder { color: #7a8794; font-size: 13px; }
+.elt-composer__placeholder { color: var(--xc-color-muted); font-size: 13px; }
 .elt-composer__prompt { grid-area: prompt; min-width: 0; }
 .elt-composer__input {
+  color: var(--xc-color-text);
+  box-sizing: border-box;
   width: 100%;
   min-height: 2.6rem;
   resize: vertical;
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--xc-color-border-strong);
   border-radius: 10px;
   padding: 0.45rem 0.65rem;
   font: inherit;
   line-height: 1.4;
-  background: #fff;
+  background: var(--xc-color-surface);
 }
 .elt-composer__send {
   grid-area: send;
@@ -1638,23 +1706,24 @@ async function downloadCandidate(index: number) {
 .elt-composer__send {
   border-radius: 10px;
   padding: 0.55rem 0.9rem;
-  border: 1px solid #d5deea;
-  background: #fff;
-  color: #31506d;
+  border: 1px solid var(--xc-color-border);
+  background: var(--xc-color-surface);
+  color: var(--xc-color-text-secondary);
 }
 .elt-composer__start {
   grid-area: start;
-  background: #235d8c;
-  border-color: #235d8c;
-  color: #fff;
+  background: var(--xc-color-primary);
+  border-color: var(--xc-color-primary);
+  color: var(--xc-color-surface);
   font-weight: 600;
 }
 .elt-composer__start:disabled { opacity: 0.55; }
+.elt-composer__start:hover:not(:disabled) { background: var(--xc-color-primary-hover); color: var(--xc-color-surface); }
 .elt-composer__retry { grid-column: 1 / -1; justify-self: start; }
 .elt-composer__hint {
   grid-area: hint;
   margin: 0;
-  color: #7a8794;
+  color: var(--xc-color-muted);
   font-size: 12px;
 }
 .reviewed-template__step {
@@ -1662,20 +1731,20 @@ async function downloadCandidate(index: number) {
   flex-direction: column;
   gap: 0.65rem;
   padding: 1rem 1.1rem;
-  border: 1px solid #e4ebf3;
+  border: 1px solid var(--xc-color-border);
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--xc-color-surface-2);
   min-width: 0;
 }
 .reviewed-template__step h3 {
   margin: 0 0 0.25rem;
   font-size: 1rem;
-  color: #16355f;
+  color: var(--xc-color-text);
 }
 .reviewed-template__step > p,
 .reviewed-template__limits {
   margin: 0;
-  color: #5f6f7e;
+  color: var(--xc-color-text-secondary);
   font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -1718,9 +1787,9 @@ async function downloadCandidate(index: number) {
 .reviewed-template__step details {
   margin: 0.25rem 0;
   padding: 0.5rem 0.75rem;
-  border: 1px dashed #d5deea;
+  border: 1px dashed var(--xc-color-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--xc-color-surface);
 }
 .classification-results,
 .classification-region {
@@ -1731,9 +1800,9 @@ async function downloadCandidate(index: number) {
 }
 .classification-region {
   padding: 0.65rem 0.75rem;
-  border: 1px solid #e4ebf3;
+  border: 1px solid var(--xc-color-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--xc-color-surface);
 }
 .reviewed-template__previews {
   display: grid;
@@ -1742,17 +1811,17 @@ async function downloadCandidate(index: number) {
   overflow-x: auto;
 }
 .reviewed-template__preview {
-  border: 1px solid #d9e0e8;
+  border: 1px solid var(--xc-color-border);
   border-radius: 8px;
   padding: 0.5rem;
   max-height: 16rem;
   overflow: auto;
   overflow-wrap: anywhere;
-  background: #fff;
+  background: var(--xc-color-surface);
 }
 .reviewed-template__preview small { display: block; }
 .reviewed-template__preview table { border-collapse: collapse; table-layout: fixed; }
-.reviewed-template__preview td { border: 1px solid #ddd; white-space: pre-wrap; min-width: 24px; font-size: 11px; }
+.reviewed-template__preview td { border: 1px solid currentColor; white-space: pre-wrap; min-width: 24px; font-size: 11px; }
 .reviewed-template__previews--a4 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.85rem;
@@ -1770,31 +1839,35 @@ async function downloadCandidate(index: number) {
   padding: 0.65rem;
   text-align: left;
   cursor: pointer;
-  border: 2px solid #d9e0e8;
+  border: 2px solid var(--xc-color-border);
   border-radius: 10px;
-  background: #f3f5f8;
+  background: var(--xc-color-surface-2);
   color: inherit;
   font: inherit;
   overflow: hidden;
 }
-.reviewed-template__preview--a4:hover { border-color: #9bb6d0; }
+.reviewed-template__preview--a4:hover { border-color: var(--xc-color-primary-light); }
 .reviewed-template__preview--selected {
-  border-color: #235d8c;
-  box-shadow: 0 0 0 3px rgb(35 93 140 / 22%);
-  background: #f3f8fc;
+  border-color: var(--xc-color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--xc-color-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--xc-color-primary) 8%, var(--xc-color-surface));
 }
+.reviewed-template .reviewed-template__a4-open { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0; border: none; text-align: left; background: transparent; }
+.reviewed-template__a4-open small { flex-shrink: 0; color: var(--xc-color-primary); }
+.reviewed-template .reviewed-template__select-candidate[aria-pressed="true"] { border-color: var(--xc-color-primary); color: var(--xc-color-primary); background: color-mix(in srgb, var(--xc-color-primary) 8%, var(--xc-color-surface)); }
 .reviewed-template__a4-label {
   font-size: 13px;
   font-weight: 600;
-  color: #16355f;
+  color: var(--xc-color-text);
   overflow-wrap: anywhere;
 }
 .reviewed-template__a4-page {
   aspect-ratio: 210 / 297;
   width: 100%;
-  background: #fff;
-  border: 1px solid #111;
-  box-shadow: 0 1px 0 #111, 2px 3px 0 rgb(0 0 0 / 6%);
+  background: white;
+  color: black;
+  border: 1px solid currentColor;
+  box-shadow: var(--xc-shadow-xs);
   padding: 6% 5% 7%;
   overflow: auto;
   display: block;
@@ -1805,15 +1878,15 @@ async function downloadCandidate(index: number) {
   table-layout: fixed;
 }
 .reviewed-template__a4-page td {
-  border: 1px solid #111;
+  border: 1px solid currentColor;
   white-space: pre-wrap;
   min-width: 18px;
   font-size: 9px;
-  color: #111;
+  color: black;
 }
 .reviewed-template__a4-meta {
   font-size: 11px;
-  color: #5f6f7e;
+  color: var(--xc-color-text-secondary);
   line-height: 1.35;
 }
 .reviewed-template__a4-actions {
@@ -1825,7 +1898,7 @@ async function downloadCandidate(index: number) {
 .reviewed-template__a4-hint {
   margin: 0.25rem 0 0;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--xc-color-muted);
 }
 .reviewed-template__source-ref {
   margin: 0.25rem 0 0.5rem;
@@ -1851,24 +1924,14 @@ async function downloadCandidate(index: number) {
   }
 }
 
-.reviewed-template__preview--capsule-yellow {
-  border-color: #e6b422;
-  background: linear-gradient(180deg, #fff8e1 0%, #f3f5f8 55%);
-  box-shadow: 0 0 0 2px rgb(230 180 34 / 28%);
-}
-.reviewed-template__preview--capsule-green {
-  border-color: #1f9d55;
-  background: linear-gradient(180deg, #e8f8ef 0%, #f3f8fc 55%);
-  box-shadow: 0 0 0 3px rgb(31 157 85 / 28%);
-}
 .elt-ingest-progress {
   display: grid;
   gap: 0.55rem;
   margin: 0.5rem 0 0;
   padding: 0.75rem;
-  border: 1px solid #d9e0e8;
+  border: 1px solid var(--xc-color-border);
   border-radius: 10px;
-  background: #fafbfc;
+  background: var(--xc-color-surface-2);
 }
 .elt-ingest-progress__row {
   display: grid;
@@ -1880,7 +1943,7 @@ async function downloadCandidate(index: number) {
 .elt-ingest-progress__track {
   height: 10px;
   border-radius: 999px;
-  background: #e5e7eb;
+  background: var(--xc-color-border);
   overflow: hidden;
 }
 .elt-ingest-progress__fill {
@@ -1888,6 +1951,6 @@ async function downloadCandidate(index: number) {
   border-radius: 999px;
   transition: width 0.25s ease;
 }
-.elt-ingest-progress__fill--kb { background: #2563eb; }
-.elt-ingest-progress__fill--biz { background: #059669; }
+.elt-ingest-progress__fill--kb { background: var(--xc-color-primary); }
+.elt-ingest-progress__fill--biz { background: var(--xc-color-success); }
 </style>

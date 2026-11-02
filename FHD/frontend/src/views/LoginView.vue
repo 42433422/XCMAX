@@ -151,15 +151,7 @@ onUnmounted(() => {
 
       <div class="login-panel-inner">
         <h1 id="login-heading" class="login-heading">{{ loginHeading }}</h1>
-        <p class="login-subheading" role="note">
-          <template v-if="accountKind === 'admin'">{{ $t('login.subheadingAdmin') }}</template>
-          <template v-else>{{ $t('login.subheadingEnterprise') }}</template>
-        </p>
-        <i18n-t keypath="login.dataProcessingNotice" scope="global" tag="p" id="login-data-processing-notice" class="login-hint" role="note">
-          <template #agreement><RouterLink :to="{ name: 'login-legal', params: { document: 'service-agreement' }, query: route.query }">{{ $t('login.serviceAgreement') }}</RouterLink></template>
-          <template #privacy><RouterLink :to="{ name: 'login-legal', params: { document: 'privacy-policy' }, query: route.query }">{{ $t('login.privacyPolicy') }}</RouterLink></template>
-          <template #recipients><RouterLink :to="{ name: 'login-legal', params: { document: 'model-recipients' }, query: route.query }">{{ $t('login.modelRecipients') }}</RouterLink></template>
-        </i18n-t>
+        <p v-if="accountKind === 'admin'" class="login-subheading" role="note">{{ $t('login.subheadingAdmin') }}</p>
 
         <div v-if="accountKind === 'enterprise'" class="login-mode-tabs" role="tablist">
           <button type="button" role="tab" :class="{ active: loginMode === 'password' }" @click="switchLoginMode('password')">
@@ -330,6 +322,11 @@ onUnmounted(() => {
         <transition name="fade">
           <p v-if="altLoginHint" class="login-hint" role="status">{{ altLoginHint }}</p>
         </transition>
+
+        <i18n-t keypath="login.dataProcessingNotice" scope="global" tag="p" id="login-data-processing-notice" class="login-data-processing-notice" role="note">
+          <template #agreement><RouterLink :to="{ name: 'login-legal', params: { document: 'service-agreement' }, query: route.query }">{{ $t('login.serviceAgreement') }}</RouterLink></template>
+          <template #privacy><RouterLink :to="{ name: 'login-legal', params: { document: 'privacy-policy' }, query: route.query }">{{ $t('login.privacyPolicy') }}</RouterLink></template>
+        </i18n-t>
 
         <footer class="login-footer">
           <router-link :to="forgotAccountRoute">{{ $t('login.forgotAccount') }}</router-link>

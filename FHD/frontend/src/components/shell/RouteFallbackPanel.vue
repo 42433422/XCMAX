@@ -39,12 +39,13 @@ function reload() {
 
 <style scoped>
 .route-fallback { display: flex; flex: 1 1 auto; align-items: center; justify-content: center; padding: 32px 20px; box-sizing: border-box; overflow: auto; }
-.route-fallback__card { max-width: 520px; padding: 32px 28px; border: 1px solid rgba(15, 76, 129, .1); border-radius: 16px; background: rgba(255, 255, 255, .96); box-shadow: 0 4px 18px rgba(15, 76, 129, .07); text-align: center; color: #172033; }
-.route-fallback__icon { color: #1677ff; font-size: 34px; }
+.route-fallback__card { max-width: 520px; padding: 32px 28px; border: 1px solid var(--xc-color-border); border-radius: var(--xc-radius-xl); background: var(--xc-color-surface); box-shadow: var(--xc-shadow-sm); text-align: center; color: var(--xc-color-text); }
+.route-fallback__icon { color: var(--xc-color-primary); font-size: 34px; }
 .route-fallback__card h2 { margin: 12px 0 8px; font-size: 18px; }
-.route-fallback__card p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.7; }
-.route-fallback__card code { padding: 1px 6px; border-radius: 6px; background: #f1f5f9; color: #334155; word-break: break-all; }
+.route-fallback__card p { margin: 0; color: var(--xc-color-muted); font-size: var(--xc-font-md); line-height: 1.7; }
+.route-fallback__card code { padding: 1px 6px; border-radius: var(--xc-radius-sm); background: var(--xc-color-surface-3); color: var(--xc-color-text-secondary); word-break: break-all; }
 .route-fallback__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 18px; }
-.route-fallback__btn { height: 34px; padding: 0 14px; border: 1px solid #d0d7e2; border-radius: 8px; background: #fff; color: #172033; font-size: 13px; cursor: pointer; }
-.route-fallback__btn.is-primary { border-color: #1677ff; background: #1677ff; color: #fff; }
+.route-fallback__btn { min-height: 36px; padding: 0 14px; border: 1px solid var(--xc-color-border-strong); border-radius: var(--xc-radius-md); background: var(--xc-color-surface); color: var(--xc-color-text); font: inherit; cursor: pointer; }
+.route-fallback__btn.is-primary { border-color: var(--xc-color-primary); background: var(--xc-color-primary); color: var(--xc-color-surface); }
+.route-fallback__btn:focus-visible { outline: 2px solid var(--xc-color-primary); outline-offset: 3px; }
 </style>

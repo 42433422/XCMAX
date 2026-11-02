@@ -101,7 +101,8 @@ const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
 }
 
 .route-view-shell--loading {
-  position: relative;
+  justify-content: center;
+  overflow: auto;
 }
 
 .route-view-shell > * {
