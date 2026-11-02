@@ -9,7 +9,6 @@
       <ChatMessageList
         :empty-intro="getIndustryPreset(currentIndustryId).scenario"
         @fill-example="fillComposer"
-        @model-settings="openModelSettings"
         :session-key="messageSessionKey"
         :proactive-suggestions="proactiveSuggestionsByMessage"
         @pick-proactive-suggestion="pickProactiveSuggestion"
@@ -98,7 +97,7 @@
         @proactive-suggestions-change="persistProactiveEnabled"
         @toggle-tts="setTtsEnabled"
       />
-      <ChatModelStatus ref="modelStatusRef" :session-id="currentSessionId" :mod-id="String(modsStore.activeModId || '')" />
+      <ChatModelRecovery :scope-key="messageSessionKey" />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <span class="sheet-link-label">关联工作表：</span>
         <button
@@ -208,7 +207,7 @@ import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import ChatQuickActions from '@/components/chat/ChatQuickActions.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
-import ChatModelStatus from '@/components/chat/ChatModelStatus.vue'
+import ChatModelRecovery from '@/components/chat/ChatModelRecovery.vue'
 import ChatTaskPanel from '@/components/chat/ChatTaskPanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
@@ -227,8 +226,6 @@ import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 
 const router = useRouter()
-const modelStatusRef = ref<InstanceType<typeof ChatModelStatus> | null>(null)
-function openModelSettings() { modelStatusRef.value?.refreshAndReveal() }
 const modsStore = useModsStore()
 const { mods: modsFromStore } = storeToRefs(modsStore)
 const industryStore = useIndustryStore()
