@@ -9,7 +9,8 @@ vi.mock('@/api/auth', () => ({
   },
 }))
 
-vi.mock('@/utils/authSessionCache', () => ({
+vi.mock('@/utils/authSessionCache', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/utils/authSessionCache')>()),
   invalidateEnterpriseSessionCache: vi.fn(),
   validateEnterpriseSessionCached: vi.fn().mockResolvedValue(true),
 }))

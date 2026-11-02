@@ -2,6 +2,7 @@ import { onMounted, onBeforeUnmount, onActivated, onDeactivated, type Ref } from
 import type { useModsStore } from '@/stores/mods'
 import { asRecord } from '@/utils/typeGuards'
 import { consumeFirstAiTaskPrompt } from '@/constants/productFlow'
+import { useStartupPageReady } from '@/composables/useStartupSplash'
 
 const CHAT_RIGHT_PANE_MQ = '(max-width: 1023px)'
 const AUTO_REFRESH_STARRED_WECHAT_KEY = 'xcagi_auto_refresh_starred_wechat'
@@ -13,7 +14,8 @@ export interface UseChatViewHostDeps {
   isTaskPaneResizable: Ref<boolean>
   messageInput: Ref<string>
   latestAssistantPush: Ref<{ title: string; description: string } | null>
-  syncSessionMessages: () => Promise<void>
+  syncSessionMessages: (options?: { required?: boolean; isCurrent?: () => boolean }) => Promise<void>
+  pageScopeKey?: () => unknown
   chatHandleAutoAction: (action: Record<string, unknown>, userMessage?: string) => void
   sendMessage: () => Promise<void>
   batchCalculateHeights: () => void
@@ -44,6 +46,15 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
   let taskPaneViewportMedia: MediaQueryList | null = null
   let returningToChat = false
   let chatViewActive = true
+  const preparePage = useStartupPageReady(async current => {
+    await syncSessionMessages({ required: true, isCurrent: current })
+    if (!current()) return
+    const firstTaskPrompt = consumeFirstAiTaskPrompt()
+    if (firstTaskPrompt) {
+      messageInput.value = firstTaskPrompt
+      void sendMessage()
+    }
+  }, deps.pageScopeKey)
   const emitChatViewActive = (active: boolean) => {
     chatViewActive = active
     try {
@@ -96,7 +107,8 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
         await modsStore.initialize()
       }
     })()
-    void syncSessionMessages().catch(() => {})
+    const initialPage = preparePage()
+    void initialPage.catch(() => {})
     setTimeout(() => {
       if (chatViewActive) batchCalculateHeights()
     }, 100)
@@ -119,11 +131,6 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
       const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null
       if (domInput) domInput.value = text
       return true
-    }
-    const firstTaskPrompt = consumeFirstAiTaskPrompt()
-    if (firstTaskPrompt) {
-      messageInput.value = firstTaskPrompt
-      void sendMessage()
     }
     ;(window as unknown as { __VUE_HANDLE_AUTO_ACTION__?: boolean }).__VUE_HANDLE_AUTO_ACTION__ = true
     ;(window as Window & { handleAutoAction: (a: unknown, m?: string) => void }).handleAutoAction = (

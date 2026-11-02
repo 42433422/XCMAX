@@ -40,11 +40,13 @@
         <div class="startup-placeholder__bar" aria-hidden="true"></div>
         <p class="startup-placeholder__hint" id="startup-timeout-hint" hidden>
           启动时间较长。若始终没有变化，请重新加载或重启应用后再试。
+          <button id="startup-reload" type="button">重新加载</button>
         </p>
       </main>
     </div>
     <script type="module" src="/src/main.ts"></script>
     <script>
+      document.getElementById('startup-reload')?.addEventListener('click', () => location.reload())
       window.setTimeout(() => {
         const root = document.getElementById('app')
         const hint = document.getElementById('startup-timeout-hint')

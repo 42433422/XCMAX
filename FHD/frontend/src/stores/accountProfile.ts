@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi, type AccountKind, type AccountTier } from '@/api/auth'
-import { invalidateEnterpriseSessionCache, validateEnterpriseSessionCached } from '@/utils/authSessionCache'
+import { captureAuthSession, getAuthSessionEpoch, invalidateEnterpriseSessionCache, validateEnterpriseSessionCached } from '@/utils/authSessionCache'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
@@ -66,8 +66,11 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const loaded = ref(false)
   const sessionCheckUnavailable = ref(false)
   const workspaceEpoch = ref(-1)
+  const workspaceHydrationReady = ref(false)
   const workspaceReady = computed(() => loaded.value && workspaceEpoch.value === productReadAccountEpoch.value)
   let hydrationEpoch = 0
+  let clearedEpoch = 0
+  let latestHydration: { epoch: number; promise: Promise<void> } | null = null
 
   const isAdminAccount = computed(() => accountKind.value === 'admin' && marketIsAdmin.value)
 
@@ -82,6 +85,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   function applySessionFields(data: Record<string, unknown>): Promise<void> {
     sessionCheckUnavailable.value = false
     const epoch = ++hydrationEpoch
+    workspaceHydrationReady.value = false
     const kind = String(data.account_kind || 'enterprise').trim()
     if (kind === 'personal' || kind === 'enterprise' || kind === 'admin') {
       accountKind.value = kind
@@ -125,13 +129,39 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     userRole.value = nestedUser && typeof nestedUser === 'object' && !Array.isArray(nestedUser)
       ? String((nestedUser as Record<string, unknown>).role || '') : ''
     loaded.value = true
-    return syncTenantScopedStoresFromProfile(
+    const hydration = syncTenantScopedStoresFromProfile(
       tenantId.value,
       marketUserId.value,
       localUserId.value,
       accountKind.value,
       impersonatingUsername.value,
-    ).then(() => { if (epoch === hydrationEpoch) workspaceEpoch.value = productReadAccountEpoch.value })
+    )
+    // The synchronous scope update above establishes the owner of this hydration.
+    const scopeCurrent = captureAuthSession(), cleared = clearedEpoch
+    async function finish(error?: unknown, failed = false): Promise<void> {
+      let observed = epoch
+      while (scopeCurrent() && cleared === clearedEpoch) {
+        const latest = latestHydration
+        if (latest && latest.epoch > observed) {
+          observed = latest.epoch
+          try { await latest.promise; failed = false }
+          catch (newerError) { error = newerError; failed = true }
+          continue
+        }
+        if (observed !== hydrationEpoch) break
+        if (failed) throw error
+        // Earlier same-owner reads join the newest result; only its own read publishes readiness.
+        if (epoch === hydrationEpoch) {
+          workspaceEpoch.value = productReadAccountEpoch.value
+          workspaceHydrationReady.value = true
+        }
+        return
+      }
+      throw new Error('登录工作空间已改变，请重试')
+    }
+    const promise = hydration.then(() => finish(), error => finish(error, true))
+    latestHydration = { epoch, promise }
+    return promise
   }
 
   function applyFromMeData(data: Record<string, unknown> | null | undefined): Promise<void> {
@@ -147,6 +177,22 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   async function refreshFromServer() {
     const retryUnavailable = sessionCheckUnavailable.value
     let requestEpoch = hydrationEpoch
+    const authEpoch = getAuthSessionEpoch(), cleared = clearedEpoch
+    let scopeCurrent = captureAuthSession()
+    const current = () => scopeCurrent() && authEpoch === getAuthSessionEpoch() && cleared === clearedEpoch
+    async function followLatestHydration() {
+      let error: unknown, failed = false
+      while (current()) {
+        const latest = latestHydration
+        if (!latest || latest.epoch <= requestEpoch) {
+          if (failed) throw error
+          return
+        }
+        requestEpoch = latest.epoch
+        try { await latest.promise; failed = false }
+        catch (newerError) { error = newerError; failed = true }
+      }
+    }
     try {
       let sku = 'generic'
       try {
@@ -156,24 +202,40 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       }
       if (isEnterpriseEdition(sku)) {
         const valid = await validateEnterpriseSessionCached(retryUnavailable)
-        if (requestEpoch !== hydrationEpoch) return
+        if (!current()) return
+        if (requestEpoch !== hydrationEpoch) {
+          while (current() && requestEpoch !== hydrationEpoch) await followLatestHydration()
+          return
+        }
         if (!valid) {
           clear()
           return
         }
       }
       const res = await authApi.getCurrentUser()
-      if (requestEpoch !== hydrationEpoch) return
+      if (!current()) return
+      if (requestEpoch !== hydrationEpoch) {
+        while (current() && requestEpoch !== hydrationEpoch) await followLatestHydration()
+        return
+      }
       if (res?.success && res.data) {
         const hydration = applyFromMeData(res.data as Record<string, unknown>)
         requestEpoch = hydrationEpoch
+        scopeCurrent = captureAuthSession()
         await hydration
         return
       }
       invalidateEnterpriseSessionCache()
       clear()
-    } catch (error) {
-      if (requestEpoch !== hydrationEpoch) return
+    } catch (caughtError) {
+      let error = caughtError
+      while (current() && requestEpoch !== hydrationEpoch) {
+        try {
+          await followLatestHydration()
+          if (current() && requestEpoch === hydrationEpoch) return
+        } catch (newerError) { error = newerError }
+      }
+      if (!current()) return
       // 仅当服务端明确判定会话失效（401/403）才清空资料；超时/被取代/网络抖动属瞬时失败，清空会隐藏依赖权限的入口。
       const status = (error as { status?: unknown } | null | undefined)?.status
       if (status !== 401 && status !== 403) { sessionCheckUnavailable.value = true; return }
@@ -184,8 +246,11 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
 
   function clear(hydrate = true) {
     hydrationEpoch++
+    clearedEpoch++
+    latestHydration = null
     sessionCheckUnavailable.value = false
     workspaceEpoch.value = -1
+    workspaceHydrationReady.value = false
     accountKind.value = 'enterprise'
     companyBrand.value = ''
     marketIsAdmin.value = false
@@ -230,6 +295,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     userRole,
     loaded,
     workspaceReady,
+    workspaceHydrationReady,
     isAdminAccount,
     isImpersonating,
     displayBrand,

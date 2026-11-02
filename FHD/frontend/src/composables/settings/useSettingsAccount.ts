@@ -72,11 +72,11 @@ export function useSettingsAccount() {
     }
   }
 
-  function applyAccountMetaFromAuthPayload(res: unknown) {
-    if (!res || typeof res !== 'object') return
+  function applyAccountMetaFromAuthPayload(res: unknown): Promise<void> {
+    if (!res || typeof res !== 'object') return Promise.resolve()
     const o = res as Record<string, unknown>
     const base = o.data && typeof o.data === 'object' && !Array.isArray(o.data) ? (o.data as Record<string, unknown>) : {}
-    void accountProfileStore.applyFromMeData({
+    return accountProfileStore.applyFromMeData({
       ...base,
       account_kind: o.account_kind ?? base.account_kind,
       company_brand: o.company_brand ?? base.company_brand,
@@ -85,7 +85,7 @@ export function useSettingsAccount() {
       ...Object.fromEntries(['tenant_id', 'tenant_name', 'market_user_id', 'local_user_id'].filter(key => key in o).map(key => [key, o[key]])),
       impersonating_market_user_id: o.impersonating_market_user_id ?? base.impersonating_market_user_id,
       impersonating_username: o.impersonating_username ?? base.impersonating_username,
-    }).catch(() => undefined)
+    })
   }
 
   const isLoggedIn = computed(() => Boolean(localUser.value) || sessionValid.value)
@@ -129,12 +129,17 @@ export function useSettingsAccount() {
     profileEmailDraft.value = String(u.email || '').trim()
   }
 
-  function loadLocalUser(): Promise<void> {
-    if (logoutLoading.value) return Promise.resolve()
-    if (accountRequest) return accountRequest
+  function loadLocalUser(options: { required?: boolean; current?: () => boolean } = {}): Promise<void> {
+    const required = options.required === true
+    const attemptCurrent = options.current || (() => true)
+    if (!attemptCurrent()) return Promise.resolve()
+    if (logoutLoading.value) return required ? Promise.reject(new Error('账号正在退出，请重新登录')) : Promise.resolve()
+    if (accountRequest && !required) return accountRequest
+    if (accountRequest) accountController?.abort()
+
     const epoch = ++accountEpoch
     const sessionCurrent = captureAuthSession()
-    const isCurrent = () => epoch === accountEpoch && sessionCurrent()
+    const isCurrent = () => epoch === accountEpoch && sessionCurrent() && attemptCurrent()
     const controller = accountController = new AbortController()
     const timeout = setTimeout(() => controller.abort(new Error('账号状态核实超时，请重试。')), 8_000)
     let rejectOnAbort!: () => void
@@ -150,6 +155,9 @@ export function useSettingsAccount() {
         let user: User | null = null
         try {
           payload = await Promise.race([authApi.getCurrentUser({ signal: controller.signal }), aborted])
+          if (required && (payload as { success?: unknown } | null)?.success !== true) {
+            throw new Error('设置页账号资料未就绪，请重试')
+          }
           user = unwrapUserFromMe(payload)
         } catch (error) {
           // A missing legacy profile can fall back; a network outage is not evidence of logout.
@@ -164,9 +172,15 @@ export function useSettingsAccount() {
         } else {
           sessionValid.value = true
         }
+        if (required && (!sessionValid.value || (!user && !accountProfileStore.isAdminAccount))) {
+          throw new Error('设置页账号身份未确认，请重试')
+        }
         localUser.value = user
         if (sessionValid.value) {
-          applyAccountMetaFromAuthPayload(payload)
+          const hydration = applyAccountMetaFromAuthPayload(payload)
+          if (required) await Promise.race([hydration, aborted])
+          else void hydration.catch(() => undefined)
+          if (!isCurrent()) return
           companyBrandDraft.value = accountProfileStore.companyBrand || ''
         }
         if (!sessionValid.value) { invalidateEnterpriseSessionCache(); accountProfileStore.clear() }
@@ -181,6 +195,7 @@ export function useSettingsAccount() {
           accountProfileStore.clear()
           syncProfileDraftsFromUser(null)
         } else accountError.value = true
+        if (required) throw error
       } finally {
         clearTimeout(timeout)
         controller.signal.removeEventListener('abort', rejectOnAbort)

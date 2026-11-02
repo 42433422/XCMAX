@@ -286,7 +286,7 @@ describe('SettingsView.vue – component structure', () => {
 describe('SettingsView.vue – profile section', () => {
   beforeEach(resetSettingsMocks)
 
-  it('shows login link when not logged in', async () => {
+  it('offers account retry when the required profile cannot be verified', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: false,
       data: { user: null, permissions: [] },
@@ -294,9 +294,9 @@ describe('SettingsView.vue – profile section', () => {
     mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
     await flushPromises()
-    // When not logged in, should show login link (router-link with primary btn class)
-    const loginBtn = wrapper.find('.settings-profile__btn--primary')
-    expect(loginBtn.exists()).toBe(true)
+    expect((wrapper.vm as any).accountError).toBe(true)
+    expect(wrapper.find('.settings-profile__actions button.settings-profile__btn').exists()).toBe(true)
+    expect(wrapper.find('.settings-profile__btn--primary').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -717,22 +717,25 @@ describe('SettingsView.vue – API error handling', () => {
 })
 
 describe('SettingsView.vue – industry loading', () => {
-  beforeEach(resetSettingsMocks)
+  beforeEach(() => {
+    resetSettingsMocks()
+    mockAuthApiGetCurrentUser.mockReset().mockResolvedValue({ success: true, data: { user: {
+      id: 1, username: 'synthetic-settings-user', display_name: 'Settings User', role: 'user',
+    } } })
+    mockSystemApiGetIndustries.mockReset().mockResolvedValue({ success: true, data: [] })
+    mockSystemApiGetCurrentIndustry.mockReset().mockResolvedValue({ success: true, data: { id: 'default' } })
+  })
 
-  it('calls industryStore.initialize on mount', async () => {
+  it('loads verified current industry details on mount', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 100))
-    expect(mockIndustryStore.initialize).toHaveBeenCalled()
+    await flushPromises()
+    expect(mockSystemApiGetCurrentIndustry).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
 
   it('calls systemApi.getIndustries on mount', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     expect(mockSystemApiGetIndustries).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -746,9 +749,8 @@ describe('SettingsView.vue – industry loading', () => {
       },
     })
     const wrapper = await mountSettings()
-    // Wait for async operations
-    await new Promise((r) => setTimeout(r, 50))
-    expect(wrapper.exists()).toBe(true)
+    await flushPromises()
+    expect((wrapper.vm as any).industries).toEqual([{ id: 'manufacturing', name: '制造业', code: 'mfg' }])
     wrapper.unmount()
   })
 })

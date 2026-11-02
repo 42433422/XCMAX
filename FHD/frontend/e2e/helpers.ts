@@ -70,11 +70,34 @@ export async function installE2eShellMocks(page: Page): Promise<void> {
         success: true,
         data: {
           user: { id: 1, username: 'e2e-user', role: 'user' },
+          account_kind: 'personal',
           permissions: [],
         },
       }),
     })
   })
+  // Required startup contracts are explicit; elapsed time or an unavailable
+  // backend must never satisfy the workspace readiness gate.
+  const required: Record<string, unknown> = {
+    '/api/workspace/prefs': { success: true, owner_id: 'session:1', data: { product_flow_completed: true, host_pack_acknowledged: true, selected_industry_id: '通用' } },
+    '/api/system/industry': { success: true, data: { id: '通用', name: '通用', code: '通用' } },
+    '/api/system/industries': { success: true, data: { industries: [{ id: '通用', name: '通用', code: '通用' }] } },
+    '/api/mods/': { success: true, data: [] },
+    '/api/mods/routes': { success: true, data: [] },
+    '/api/mods/loading-status': { success: true, data: { mods: [], discovered_mod_ids: [], mods_loaded: 0, load_mismatch: false } },
+  }
+  for (const [path, body] of Object.entries(required)) {
+    await page.route(`**${path}`, route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify(body),
+    }))
+  }
+
+  await page.route(/\/api\/conversations\/(?!sessions(?:\?|$))[^/?]+(?:\?|$)/, route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({
+      success: true, id: new URL(route.request().url()).pathname.split('/').pop(), messages: [], metadata: {},
+    }),
+  }))
+
 }
 
 /** @deprecated 使用 installE2eShellMocks */

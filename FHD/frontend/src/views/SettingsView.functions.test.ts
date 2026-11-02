@@ -354,6 +354,7 @@ async function mountMemory(record: Record<string, unknown> = {}) {
   mockMemoryV2List.mockResolvedValue({ success: true, memories: [{ memory_id: 'm1', memory_type: 'preference', key: 'k', value: 'v', status: 'pending', ...record }] })
   const wrapper = await mountSettings()
   await flushPromises()
+  await (wrapper.vm as any).loadMemoryV2()
   return wrapper
 }
 
@@ -513,6 +514,7 @@ describe('SettingsView functions – memoryV2FoldMeta computed', () => {
       planner_context: '',
     })
     const wrapper = await mountSettings()
+    await (wrapper.vm as any).loadMemoryV2()
     await nextTick()
     await nextTick()
     await new Promise((r) => setTimeout(r, 50))
@@ -913,6 +915,7 @@ describe('SettingsView functions – persyFoldMeta computed', () => {
       },
     })
     const wrapper = await mountSettings()
+    await (wrapper.vm as any).loadPersyProfile()
     await nextTick()
     await nextTick()
     await new Promise((r) => setTimeout(r, 50))
@@ -937,6 +940,7 @@ describe('SettingsView functions – persyFoldMeta computed', () => {
       } as any,
     })
     const wrapper = await mountSettings()
+    await (wrapper.vm as any).loadPersyProfile()
     await nextTick()
     await nextTick()
     await new Promise((r) => setTimeout(r, 50))
@@ -1042,6 +1046,7 @@ describe('SettingsView functions – runPersyInfer', () => {
     })
     mockButlerProfileGet.mockResolvedValue({ success: true, profile: { ...profile, identity_primary: '原身份' } })
     const wrapper = await mountSettings()
+    await (wrapper.vm as any).loadPersyProfile()
     await flushPromises()
     const vm = wrapper.vm as any
     await wrapper.get('.persy-profile__footer button').trigger('click')

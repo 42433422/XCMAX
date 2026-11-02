@@ -10,21 +10,52 @@ import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/u
 import { isDesktopShell } from '@/utils/desktopShell'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { useRoute } from 'vue-router'
 
-const { hideChrome, appReady, isAdminConsoleSpa } = useAppBoot()
+const viewPending = ref(false)
+const { hideChrome, appReady, startupVisible, startupError, startupStage, retryStartup, cancelStartup, isAdminConsoleSpa } = useAppBoot(viewPending)
+const startupPanel = ref(null)
+watch([startupVisible, startupError], async ([visible]) => {
+  if (visible) { await nextTick(); startupPanel.value?.focus() }
+}, { immediate: true })
+const reloadStartup = () => window.location.reload()
 usePrivateDeliverySync()
 const account = useAccountProfileStore()
 const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value, account.loaded,
   account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId,
   account.accountKind, account.marketIsAdmin, account.tenantIsOwner, account.userRole,
   [...account.permissions].sort(), [...account.entitledIndustries].sort()]))
+const currentRoute = useRoute()
+const routeReadinessHandlers = computed(() => {
+  const path = currentRoute.fullPath, scope = cacheScope.value
+  const current = () => path === currentRoute.fullPath && scope === cacheScope.value
+  return {
+    pending: () => { if (current()) viewPending.value = true },
+    resolve: () => { if (current()) viewPending.value = false },
+  }
+})
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'is-ready': appReady || hideChrome, 'app-shell--bare': hideChrome }">
+  <section v-if="startupVisible" ref="startupPanel" class="startup-readiness" tabindex="-1"
+    role="dialog" aria-modal="true" aria-labelledby="startup-title" aria-describedby="startup-status"
+    data-testid="startup-readiness" :data-state="startupError ? 'error' : 'loading'">
+    <div class="startup-readiness__panel">
+      <h1 id="startup-title">{{ startupError ? '工作台暂未就绪' : '正在进入工作台' }}</h1>
+      <p id="startup-status" role="status" aria-live="polite">{{ startupError || startupStage }}</p>
+      <div class="startup-readiness__actions">
+        <button v-if="startupError" type="button" class="btn btn-primary" @click="retryStartup">重试</button>
+        <button v-if="startupError" type="button" class="btn btn-secondary" @click="reloadStartup">重新加载</button>
+        <button type="button" class="btn btn-secondary" @click="cancelStartup">{{ startupError ? '返回登录' : '取消' }}</button>
+      </div>
+    </div>
+  </section>
+  <div class="app-shell" data-testid="startup-workspace" :inert="startupVisible || undefined"
+    :aria-hidden="startupVisible || undefined" :aria-busy="startupVisible || undefined"
+    :class="{ 'is-ready': appReady || hideChrome, 'app-shell--bare': hideChrome }">
     <LegacyFloatPanels v-if="!hideChrome" />
     <AppGlobalProviders :show-lan-gate="!isAdminConsoleSpa()" />
     <VirtualCursorOverlay />
@@ -42,14 +73,14 @@ const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
         <RouteErrorBoundary v-else :path="route.fullPath">
           <keep-alive v-if="isDesktopShell() && !isAdminConsoleSpa()" :key="cacheScope" :max="12">
-            <Suspense>
+            <Suspense v-on="routeReadinessHandlers">
               <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
               <template #fallback>
                 <div class="route-view-shell route-view-shell--loading" aria-busy="true"><RouteLoadingFeedback active /></div>
               </template>
             </Suspense>
           </keep-alive>
-          <Suspense v-else>
+          <Suspense v-else v-on="routeReadinessHandlers">
             <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
             <template #fallback>
               <div class="route-view-shell route-view-shell--loading" aria-busy="true"><RouteLoadingFeedback active /></div>
@@ -61,6 +92,21 @@ const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
   </div>
 </template>
 <style>
+.startup-readiness {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--app-bg, #f4f7fb);
+  color: var(--app-text, #253858);
+  outline: none;
+}
+.startup-readiness__panel { max-width: 480px; text-align: center; }
+.startup-readiness h1 { font-size: 22px; }
+.startup-readiness p { line-height: 1.6; overflow-wrap: anywhere; }
+.startup-readiness__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 24px; }
 .app-shell {
   opacity: 1;
   transition: opacity 320ms ease;

@@ -454,6 +454,96 @@ describe('useChatMessages', () => {
   })
 })
 
+describe('required initial conversation readiness', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    activeModIdRef.value = ''
+  })
+
+  it('waits for the actual current conversation response before applying messages', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('required-session'))
+    let finish!: (value: Awaited<ReturnType<typeof api.getConversation>>) => void
+    vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const pending = chat.syncFromServer({ required: true })
+    expect(api.getConversation).toHaveBeenCalledWith('required-session')
+    expect(chat.messages.value.some(row => row.content.includes('server initial reply'))).toBe(false)
+    finish({ success: true, id: 'required-session', messages: [{ role: 'assistant', content: 'server initial reply' }] } as never)
+    await expect(pending).resolves.toBe(true)
+    expect(chat.messages.value.some(row => row.content.includes('server initial reply'))).toBe(true)
+  })
+
+  it('accepts a verified empty new conversation without discarding local unsaved messages', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('new-session'))
+    chat.addMessage('locally retained draft', 'user')
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, id: 'new-session', messages: [] } as never)
+    await expect(chat.syncFromServer({ required: true })).resolves.toBe(true)
+    expect(chat.messages.value.some(row => row.content.includes('locally retained draft'))).toBe(true)
+  })
+
+  it.each([
+    { success: false, messages: [] },
+    { success: true },
+    { success: true, messages: '[]' },
+    { success: true, messages: [] },
+    { messages: [] },
+    { success: true, id: 'another-session', messages: [] },
+    { success: true, id: 'required-session', messages: [{}] },
+    null,
+  ])('rejects an unverified or malformed required response: %j', async payload => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('required-session'))
+    const before = JSON.stringify(chat.messages.value)
+    vi.mocked(api.getConversation).mockResolvedValueOnce(payload as never)
+    await expect(chat.syncFromServer({ required: true })).rejects.toThrow()
+    expect(JSON.stringify(chat.messages.value)).toBe(before)
+  })
+
+  it('propagates a required transport failure and permits a fresh successful retry', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('required-session'))
+    vi.mocked(api.getConversation).mockRejectedValueOnce(new Error('synthetic conversation timeout'))
+      .mockResolvedValueOnce({ success: true, id: 'required-session', messages: [] } as never)
+    await expect(chat.syncFromServer({ required: true })).rejects.toThrow('synthetic conversation timeout')
+    await expect(chat.syncFromServer({ required: true })).resolves.toBe(true)
+    expect(api.getConversation).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['session', 'mod', 'account', 'authentication', 'live-message', 'attempt'] as const)(
+    'rejects and does not apply a required response after %s changes', async change => {
+      const api = (await import('@/api/chat')).default
+      const sid = ref('required-session')
+      const chat = useChatMessages(sid)
+      let current = true
+      let finish!: (value: Awaited<ReturnType<typeof api.getConversation>>) => void
+      vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+      const pending = chat.syncFromServer({ required: true, isCurrent: () => current })
+      if (change === 'session') sid.value = 'next-session'
+      if (change === 'mod') activeModIdRef.value = 'next-mod'
+      if (change === 'account') (await import('@/utils/productReadAccountScope')).productReadAccountEpoch.value++
+      if (change === 'authentication') invalidateEnterpriseSessionCache()
+      if (change === 'live-message') chat.addMessage('new live message', 'user')
+      if (change === 'attempt') current = false
+      await nextTick()
+      finish({ success: true, id: 'required-session', messages: [{ role: 'assistant', content: 'retired initial reply' }] } as never)
+      await expect(pending).rejects.toThrow()
+      expect(chat.messages.value.some(row => row.content.includes('retired initial reply'))).toBe(false)
+      if (change === 'live-message') expect(chat.messages.value.some(row => row.content.includes('new live message'))).toBe(true)
+      activeModIdRef.value = ''
+    },
+  )
+
+  it('does not accept an absent required session id as an empty conversation', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref(''))
+    await expect(chat.syncFromServer({ required: true })).rejects.toThrow()
+    expect(api.getConversation).not.toHaveBeenCalled()
+  })
+})
+
 describe('message persistence failure UX', () => {
   beforeEach(() => { localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks() })
 
