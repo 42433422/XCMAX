@@ -1,11 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useStartupAuth } from '@/composables/useStartupAuth'
 import { flushPromises } from '@vue/test-utils'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
-import { fetchSessionMarketHandoff } from '@/api/marketAccount'
+import { fetchSessionMarketHandoff, persistMarketTokensFromHandoff } from '@/api/marketAccount'
+import { STARTUP_READY_TIMEOUT_MS, useStartupSplash } from '@/composables/useStartupSplash'
 
 vi.mock('@/api/auth', () => ({
   authApi: {
@@ -51,6 +52,7 @@ describe('useStartupAuth', () => {
     vi.clearAllMocks()
     vi.mocked(fetchSessionMarketHandoff).mockResolvedValue(null)
   })
+  afterEach(() => { vi.useRealTimers() })
 
   function getComposable() {
     return useStartupAuth({
@@ -161,6 +163,106 @@ describe('useStartupAuth', () => {
     finishProfile()
     await expect(startup).resolves.toMatchObject({ ok: true })
     expect(fetchSessionMarketHandoff).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['success', 'unauthorized'])('retires an invalidated attempt without changing the auth epoch: %s', async outcome => {
+    let settle!: (value: unknown) => void
+    let current = true
+    vi.mocked(authApi.validateSession).mockReturnValue(new Promise((resolve, reject) => { settle = outcome === 'success' ? resolve : reject }))
+    const startup = getComposable().ensureStartupAuthenticated(() => current)
+    current = false
+    settle(outcome === 'success' ? { success: true } : { status: 401 })
+    await expect(startup).resolves.toMatchObject({ ok: false })
+    expect(mockRouter.replace).not.toHaveBeenCalled()
+    expect(fetchSessionMarketHandoff).not.toHaveBeenCalled()
+  })
+
+  it('does not persist a late optional handoff from a retired attempt', async () => {
+    let finish!: (value: unknown) => void
+    let current = true
+    vi.mocked(fetchSessionMarketHandoff).mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const handoff = getComposable().syncMarketTokensFromSession(() => current)
+    current = false
+    finish({ synthetic: true })
+    await handoff
+    expect(persistMarketTokensFromHandoff).not.toHaveBeenCalled()
+  })
+
+  it.each(['timeout', 'cancel', 'retry'] as const)('ignores old invalid and rejected auth after %s and a successful retry', async action => {
+    vi.useFakeTimers()
+    vi.spyOn(useAccountProfileStore(), 'refreshFromServer').mockResolvedValue(undefined)
+    for (const outcome of ['invalid', 'rejected']) {
+      vi.clearAllMocks()
+      let finish!: () => void
+      vi.mocked(authApi.validateSession).mockReturnValueOnce(new Promise((resolve, reject) => {
+        finish = () => outcome === 'invalid' ? resolve({ valid: false }) : reject(new Error('late validation failure'))
+      })).mockResolvedValueOnce({ valid: true })
+      const splash = useStartupSplash()
+      const { ensureStartupAuthenticated } = getComposable()
+      const task = async (current: () => boolean) => {
+        const result = await ensureStartupAuthenticated(current)
+        if (current() && !result.ok) throw new Error('unconfirmed session')
+      }
+      const old = splash.runStartup(task)
+      if (action === 'timeout') await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
+      if (action === 'cancel') splash.cancelStartup()
+      await splash.runStartup(task)
+      expect(splash.appReady.value).toBe(true)
+      finish()
+      await old
+      expect(mockRouter.replace).not.toHaveBeenCalled()
+      expect(mockDismiss).not.toHaveBeenCalled()
+      expect(useAccountProfileStore().refreshFromServer).toHaveBeenCalledOnce()
+      expect(fetchSessionMarketHandoff).toHaveBeenCalledOnce()
+      splash.teardownOnUnmount()
+    }
+  })
+
+  it.each(['timeout', 'cancel', 'retry', 'session'] as const)('does not persist a retired background handoff after %s', async action => {
+    vi.useFakeTimers()
+    vi.spyOn(useAccountProfileStore(), 'refreshFromServer').mockResolvedValue(undefined)
+    vi.mocked(authApi.validateSession).mockResolvedValue({ valid: true })
+    let finishHandoff!: () => void
+    vi.mocked(fetchSessionMarketHandoff).mockReturnValue(new Promise(resolve => { finishHandoff = () => resolve(null) }))
+    const splash = useStartupSplash()
+    const { ensureStartupAuthenticated } = getComposable()
+    let finishResource!: () => void
+    const resource = new Promise<void>(resolve => { finishResource = resolve })
+    const old = splash.runStartup(async current => {
+      await ensureStartupAuthenticated(current)
+      await resource
+    })
+    await flushPromises()
+    expect(fetchSessionMarketHandoff).toHaveBeenCalledOnce()
+    if (action === 'timeout') await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
+    if (action === 'cancel') splash.cancelStartup()
+    if (action === 'retry') await splash.runStartup(async () => {})
+    if (action === 'session') invalidateEnterpriseSessionCache()
+    finishHandoff()
+    await flushPromises()
+    expect(persistMarketTokensFromHandoff).not.toHaveBeenCalled()
+    finishResource()
+    await old
+    splash.teardownOnUnmount()
+  })
+
+  it('allows the successful session background handoff to finish after workspace readiness', async () => {
+    vi.spyOn(useAccountProfileStore(), 'refreshFromServer').mockResolvedValue(undefined)
+    vi.mocked(authApi.validateSession).mockResolvedValue({ valid: true })
+    let finishHandoff!: () => void
+    vi.mocked(fetchSessionMarketHandoff).mockReturnValue(new Promise(resolve => { finishHandoff = () => resolve(null) }))
+    const splash = useStartupSplash()
+    const { ensureStartupAuthenticated } = getComposable()
+    await splash.runStartup(async current => {
+      const result = await ensureStartupAuthenticated(current)
+      expect(result.ok).toBe(true)
+    })
+    expect(splash.appReady.value).toBe(true)
+    expect(persistMarketTokensFromHandoff).not.toHaveBeenCalled()
+    finishHandoff()
+    await flushPromises()
+    expect(persistMarketTokensFromHandoff).toHaveBeenCalledWith(null)
+    splash.teardownOnUnmount()
   })
 
   it.each(['success', 'unauthorized'])('does not redirect or start handoff from an old startup %s', async outcome => {

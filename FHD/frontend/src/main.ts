@@ -175,21 +175,17 @@ async function bootstrap() {
     () => router.isReady(),
   )
   app.use(i18n)
+  // Speculative chunks must not compete with the current workspace's critical resources.
+  window.addEventListener('xcagi:startup-ready', () => {
+    const host = window.location.hostname
+    if (import.meta.env.DEV || host === '127.0.0.1' || host === 'localhost') prefetchStaticRouteChunks()
+  }, { once: true })
   app.mount('#app')
   const startupRoot = document.getElementById('app')
   if (startupRoot) startupRoot.dataset.startupMounted = 'true'
 
   if (typeof performance !== 'undefined' && performance.mark) {
     performance.mark('bootstrap_mount')
-  }
-
-  // 侧栏切换页面「卡顿」根因之一：路由组件均为懒加载 chunk，首次进入某页需现拉 JS。
-  // 桌面壳（localhost）下后台分批预取静态路由 chunk，让点击即切、无首访拉取等待。
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname
-    if (import.meta.env.DEV || host === '127.0.0.1' || host === 'localhost') {
-      prefetchStaticRouteChunks()
-    }
   }
 
   if (!readVanillaNoModUi()) {

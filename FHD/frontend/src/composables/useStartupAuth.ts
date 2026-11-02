@@ -22,18 +22,18 @@ export function useStartupAuth(options: {
 }) {
   const { router, modsStore, dismissStartupSplashImmediate } = options
 
-  async function syncMarketTokensFromSession() {
+  async function syncMarketTokensFromSession(current: () => boolean = () => true) {
     try {
       const handoff = await fetchSessionMarketHandoff()
-      persistMarketTokensFromHandoff(handoff)
+      if (current()) persistMarketTokensFromHandoff(handoff)
     } catch (error) {
       console.debug('[useStartupAuth] session-handoff skipped:', error instanceof Error ? error.message : error)
     }
   }
 
-  async function ensureStartupAuthenticated(): Promise<StartupAuthResult> {
+  async function ensureStartupAuthenticated(isAttemptCurrent: () => boolean = () => true): Promise<StartupAuthResult> {
     const epoch = getAuthSessionEpoch()
-    const current = () => epoch === getAuthSessionEpoch()
+    const current = () => epoch === getAuthSessionEpoch() && isAttemptCurrent()
     try {
       const res = await authApi.validateSession()
       if (!current()) return { ok: false, entitledModIds: [] }
@@ -48,7 +48,7 @@ export function useStartupAuth(options: {
           })
         if (!current()) return { ok: false, entitledModIds: [] }
         // Optional token synchronization must not block the authenticated workspace.
-        void syncMarketTokensFromSession()
+        void syncMarketTokensFromSession(current)
         let entitledModIds: string[] = []
         let accountUsername = ''
         try {
