@@ -9,13 +9,14 @@ name: Desktop Manifest Drift Check
 
 on:
   schedule:
-    - cron: "30 2 * * *"  # 每日 02:30 UTC
+    - cron: "30 2 * * *"  # 当前公开版本每天核验
+    - cron: "30 3 * * 0"  # 每周核验完整 SHA-256
   workflow_dispatch:
     inputs:
       version:
-        description: "产品版本（默认 1.0.0.3）"
+        description: "历史版本可选；留空检查当前公开指针"
         required: false
-        default: "1.0.0.3"
+        default: ""
         type: string
       full_sha256:
         description: "下载制品核对 sha256（高带宽，默认仅 HEAD 尺寸）"
@@ -30,16 +31,11 @@ concurrency:
   group: desktop-manifest-drift-check
   cancel-in-progress: true
 
-
-defaults:
-  run:
-    working-directory: FHD
-
 jobs:
   drift-check:
     name: verify download manifest vs live artifacts
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: FHD
@@ -53,15 +49,15 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/dev/verify_desktop_manifest_drift.py \
-            --version "${{ inputs.version || '1.0.0.3' }}" \
+            --version "${{ inputs.version || '' }}" \
             --output "${RUNNER_TEMP}/drift-size.json" \
             | tee "${GITHUB_STEP_SUMMARY}"
       - name: Check sha256 when requested
-        if: ${{ inputs.full_sha256 == true }}
+        if: ${{ github.event.schedule == '30 3 * * 0' || inputs.full_sha256 == true }}
         run: |
           set -euo pipefail
           python scripts/dev/verify_desktop_manifest_drift.py \
-            --version "${{ inputs.version || '1.0.0.3' }}" \
+            --version "${{ inputs.version || '' }}" \
             --full-sha256 \
             --output "${RUNNER_TEMP}/drift-full.json" \
             | tee "${GITHUB_STEP_SUMMARY}"

@@ -1457,7 +1457,9 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       always() &&
-      startsWith(github.ref, 'refs/tags/') &&
+      inputs.verify_only != true &&
+      inputs.windows_installer_only != true &&
+      inputs.candidate_only != true &&
       needs.release-preflight.result == 'success' &&
       needs.windows.result == 'success' &&
       needs.macos.result == 'success' &&
@@ -1466,11 +1468,48 @@ jobs:
       needs.verify-public-windows-signature.result == 'success' &&
       needs.verify-download-center.result == 'success'
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
+      - name: Render GitHub release notes from the exact published pointer
+        working-directory: .
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          python FHD/scripts/release/render_github_release_notes.py \
+            --pointer artifacts/xcagi-download-manifest/download-release.json \
+            --version "$PRODUCT_VERSION" --sha "$RELEASE_SHA" \
+            --output artifacts/github-release-notes.md
+      - name: Guard against overwriting an unrelated tag or already-published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          tag="FHD/v${PRODUCT_VERSION}"
+          existing="$(gh api "repos/${GH_REPO}/releases/tags/${tag}" 2>/dev/null || true)"
+          if [ -n "$existing" ]; then
+            jq -e --arg sha "$RELEASE_SHA" '.draft == true and .target_commitish == $sha' <<<"$existing" >/dev/null
+          fi
+          ref_sha="$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -n "$ref_sha" ] && [ "$ref_sha" != "$RELEASE_SHA" ]; then
+            echo "::error::Git tag already points to a different commit"
+            exit 1
+          fi
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: FHD/v${{ inputs.version }}
+          target_commitish: ${{ inputs.release_sha }}
+          name: XCAGI ${{ inputs.version }}
+          body_path: artifacts/github-release-notes.md
+          draft: true
           files: |
             artifacts/**/*.exe
             artifacts/**/*.exe.blockmap
