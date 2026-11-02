@@ -21,10 +21,12 @@ from __future__ import annotations
 import os
 import shutil
 from datetime import datetime
+from hashlib import sha256
 from io import BytesIO
 from typing import Any, BinaryIO
 
 from app.application.facades.template_facade import document_templates_service as _tpl
+from app.infrastructure.templates.template_discovery import template_path_key
 from app.infrastructure.tenant_scope import current_tenant_id
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir
@@ -120,7 +122,8 @@ def run_archive_template_delete(
             )
         ):
             return {"success": False, "message": "内置模板不可删除，请先另存为自定义模板"}, 403
-        runtime = os.path.realpath(get_app_data_dir())
+        runtime_root = get_app_data_dir()
+        runtime = os.path.realpath(runtime_root)
         tenant_root = os.path.join(runtime, "tenants", str(tenant_id))
         candidates = []
         for folder in ("templates", "document_templates"):
@@ -131,38 +134,112 @@ def run_archive_template_delete(
                 candidates.append(path)
         if not candidates:
             return {"success": False, "message": f"模板文件不存在: {filename}"}, 404
-        if len(candidates) != 1:
-            return {"success": False, "message": "存在同名模板，无法确定删除目标"}, 409
-        target_path = candidates[0]
         from sqlalchemy import text
 
+        from app.db.init_db import init_template_tables
         from app.db.session import get_db
+        from app.infrastructure.templates.tenant_scope import ensure_templates_tenant_column
 
-        # Keep even inactive/cross-tenant references intact; a DB-backed template
-        # is removed by its db ID using the existing soft-delete contract below.
+        # Never mutate filesystem bytes. Persist a reversible inactive asset in
+        # the existing table: concurrent references/path replacements stay safe.
         try:
+            init_template_tables()
+            ensure_templates_tenant_column()
             with get_db() as db:
-                paths = db.execute(
+                rows = db.execute(
                     text(
-                        "SELECT original_file_path FROM templates WHERE original_file_path IS NOT NULL"
+                        "SELECT id, tenant_id, template_key, original_file_path, is_active FROM templates "
+                        "WHERE original_file_path IS NOT NULL"
                     )
-                ).scalars()
-                if any(
-                    os.path.normcase(os.path.realpath(p)) == os.path.normcase(target_path)
-                    for p in paths
-                    if p
-                ):
-                    return {
-                        "success": False,
-                        "message": "模板文件仍被引用，请通过已保存模板移除",
-                    }, 409
-            os.remove(target_path)
+                ).fetchall()
+
+                def file_key(path):
+                    return os.path.normcase(os.path.realpath(path))
+
+                def removal_key(path):
+                    identity = template_path_key(path, runtime_root=runtime_root)
+                    return f"removed_fs_{tenant_id}_{sha256(identity.encode('utf-8')).hexdigest()}"
+
+                inactive_paths = {
+                    template_path_key(r.original_file_path, runtime_root=runtime_root)
+                    for r in rows
+                    if r.tenant_id == tenant_id and r.is_active == 0
+                }
+                visible = [
+                    path
+                    for path in candidates
+                    if template_path_key(path, runtime_root=runtime_root) not in inactive_paths
+                ]
+                if not visible and len(candidates) > 1:
+                    matching = [
+                        r
+                        for r in rows
+                        if file_key(r.original_file_path) in {file_key(p) for p in candidates}
+                    ]
+                    if matching and all(
+                        r.tenant_id == tenant_id
+                        and r.is_active == 0
+                        and r.template_key == removal_key(r.original_file_path)
+                        for r in matching
+                    ):
+                        return {
+                            "success": True,
+                            "message": "模板已移除",
+                            "deleted": {
+                                "id": template_id,
+                                "soft_deleted": True,
+                                "already_removed": True,
+                            },
+                        }, 200
+                targets = visible or candidates
+                if len(targets) != 1:
+                    return {"success": False, "message": "存在同名模板，无法确定删除目标"}, 409
+                target_path = targets[0]
+                path_key = file_key(target_path)
+                marker_key = removal_key(target_path)
+                marker_id = None
+                for row in rows:
+                    if file_key(row.original_file_path) != path_key:
+                        continue
+                    if (
+                        row.tenant_id == tenant_id
+                        and row.template_key == marker_key
+                        and row.is_active == 0
+                    ):
+                        marker_id = row.id
+                    else:
+                        return {
+                            "success": False,
+                            "message": "模板文件仍被引用，请通过已保存模板移除",
+                        }, 409
+                if marker_id is None:
+                    result = db.execute(
+                        text(
+                            "INSERT INTO templates (template_key, template_name, template_type, "
+                            "original_file_path, is_active, tenant_id) "
+                            "VALUES (:key, :name, :type, :path, 0, :tenant_id) RETURNING id"
+                        ),
+                        {
+                            "key": marker_key,
+                            "name": os.path.splitext(filename)[0],
+                            "type": "Word" if filename.lower().endswith(".docx") else "Excel",
+                            "path": target_path,
+                            "tenant_id": tenant_id,
+                        },
+                    )
+                    marker_id = result.scalar_one()
+                    db.commit()
         except RECOVERABLE_ERRORS:
             return {"success": False, "message": "无法安全删除模板，请稍后重试"}, 503
         return {
             "success": True,
             "message": "模板删除成功",
-            "deleted": {"id": template_id, "path": target_path},
+            "deleted": {
+                "id": template_id,
+                "path": target_path,
+                "db_id": marker_id,
+                "soft_deleted": True,
+            },
         }, 200
 
     db_id = None
