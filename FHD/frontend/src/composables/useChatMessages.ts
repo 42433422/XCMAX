@@ -15,40 +15,21 @@ import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 import { restoreApprovalCard } from '@/utils/chatApprovalCard'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
-const VOICE_PLAY_TIMEOUT_MS = 30_000
 
 // TTS 语音队列：按顺序播放，避免多条并发抢扬声器
 const voiceQueue: string[] = []
 let isPlayingVoice = false
+let voiceGeneration = 0
+let voiceTimer: ReturnType<typeof setTimeout> | undefined
 
-async function playNextVoice() {
-  if (voiceQueue.length === 0) {
-    isPlayingVoice = false
-    return
-  }
-
-  isPlayingVoice = true
+async function playNextVoice(generation = voiceGeneration) {
+  if (generation !== voiceGeneration) return
   const text = voiceQueue.shift()
-  if (!text) {
-    playNextVoice()
-    return
-  }
-
-  try {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
-    await Promise.race([
-      speakText(text),
-      new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('TTS timeout')), VOICE_PLAY_TIMEOUT_MS)
-      }),
-    ]).finally(() => {
-      if (timeoutId) clearTimeout(timeoutId)
-    })
-  } catch {
-    stopSpeaking()
-  }
-  // 短间隔让句子之间有呼吸
-  setTimeout(() => playNextVoice(), 350)
+  if (!text) { isPlayingVoice = false; return }
+  isPlayingVoice = true
+  await speakText(text)
+  if (generation !== voiceGeneration) return
+  voiceTimer = setTimeout(() => { void playNextVoice(generation) }, 350)
 }
 
 export function queueVoice(text: string) {
@@ -71,6 +52,9 @@ export function queueVoice(text: string) {
 }
 
 export function clearVoiceQueue() {
+  voiceGeneration++
+  clearTimeout(voiceTimer)
+  voiceTimer = undefined
   voiceQueue.length = 0
   isPlayingVoice = false
   stopSpeaking()

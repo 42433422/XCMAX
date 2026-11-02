@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_EDGE_VOICE = "zh-CN-XiaoxiaoNeural"
 DEFAULT_MIMO_VOICE = "冰糖"
 _CACHE_MAX_SIZE = 50
+_EDGE_TIMEOUT_S = 15.0
 
 _EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2,3}-[A-Za-z]+Neural$")
 _TTS_CACHE: OrderedDict[tuple[str, str, str, str, str], dict[str, str]] = OrderedDict()
@@ -201,14 +202,14 @@ async def _synthesize_mp3_bytes(req: TtsRequest) -> bytes:
         kwargs["rate"] = req.rate
     if req.pitch:
         kwargs["pitch"] = req.pitch
-    communicate = edge_tts.Communicate(**kwargs)
-
     chunks: list[bytes] = []
-    async for item in communicate.stream():
-        if item.get("type") == "audio":
-            data = item.get("data")
-            if isinstance(data, (bytes, bytearray)) and data:
-                chunks.append(bytes(data))
+    async with asyncio.timeout(_EDGE_TIMEOUT_S):
+        communicate = edge_tts.Communicate(**kwargs)
+        async for item in communicate.stream():
+            if item.get("type") == "audio":
+                data = item.get("data")
+                if isinstance(data, (bytes, bytearray)) and data:
+                    chunks.append(bytes(data))
     return b"".join(chunks)
 
 
@@ -284,8 +285,6 @@ def synthesize_to_data_uri(
             return payload
     except RECOVERABLE_ERRORS as exc:
         logger.info("MiMo TTS unavailable, falling back to Edge: %s", exc)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
-        logger.warning("MiMo TTS failed, falling back to Edge: %s", exc)
 
     # 2) Edge neural
     req = TtsRequest(text=text_norm, voice=edge_voice, lang=normalized_lang, rate=rate, pitch=pitch)
