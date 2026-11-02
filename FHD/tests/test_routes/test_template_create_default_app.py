@@ -106,12 +106,12 @@ def _template_count(engine):
         return db.execute(text("SELECT count(*) FROM templates")).scalar_one()
 
 
-def test_default_factory_registers_only_template_create_mutation(template_app):
+def test_default_factory_registers_template_create_and_delete(template_app):
     client, _engine, _repo = template_app
     paths = client.app.openapi()["paths"]
     assert "post" in paths["/api/templates/create"]
     assert "post" not in paths.get("/api/templates/update", {})
-    assert "delete" not in paths.get("/api/templates/delete", {})
+    assert "post" in paths["/api/templates/delete"]
 
 
 def test_default_factory_registers_template_upload_and_analyze(template_app):
@@ -154,6 +154,140 @@ def test_create_rejects_anonymous_or_missing_tenant_without_writes(
     )
     assert response.status_code == expected, response.text
     assert _template_count(engine) == 0
+
+
+@pytest.mark.parametrize("method", ["POST", "DELETE"])
+@pytest.mark.parametrize("session_id, expected", [(None, 401), ("label-session-9", 403)])
+def test_delete_requires_real_login_and_tenant(template_app, method, session_id, expected):
+    client, _engine, _repo = template_app
+    headers = {"X-User-ID": "7", "X-Tenant-ID": "11"}
+    if session_id:
+        headers["X-Session-ID"] = session_id
+    response = client.request(method, "/api/templates/delete", headers=headers, json={"id": "db:1"})
+    assert response.status_code == expected, response.text
+
+
+@pytest.mark.parametrize("method", ["POST", "DELETE"])
+def test_delete_soft_deletes_only_owned_rows_with_agent_confirmation(
+    template_app, monkeypatch, method
+):
+    client, engine, repo = template_app
+    monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
+    with engine.begin() as db:
+        for tid in (11, 22, None):
+            db.execute(
+                text(
+                    "INSERT INTO templates (id, template_key, template_name, tenant_id, is_active) "
+                    "VALUES (:id, :key, 'synthetic', :tid, 1)"
+                ),
+                {"id": {11: 1, 22: 2, None: 3}[tid], "key": f"test-{tid}", "tid": tid},
+            )
+    headers = {"X-Session-ID": "label-session-7", "X-User-ID": "8", "X-Tenant-ID": "22"}
+    for template_id in ("db:2", "db:3", "db:999"):
+        response = client.request(
+            method, "/api/templates/delete", headers=headers, json={"id": template_id}
+        )
+        assert response.status_code == 404, response.text
+        assert response.json()["success"] is False
+    for _repeat in range(2):
+        response = client.request(
+            method,
+            "/api/templates/delete",
+            headers=headers,
+            json={"id": "db:1", "tenant_id": 22, "user_id": 8},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+    run = repo.get(response.json()["run_id"])
+    assert run.user_id == "7" and run.status == "completed"
+    assert run.tool_calls[0].permission == "tool.document_template.delete"
+    assert {"step.waiting_user", "step.approved", "tool.completed"} <= {
+        event.event_type for event in run.events
+    }
+    with engine.connect() as db:
+        assert db.execute(text("SELECT is_active FROM templates ORDER BY id")).scalars().all() == [
+            0,
+            1,
+            1,
+        ]
+
+
+def test_default_delete_refuses_builtin_without_reporting_success(
+    template_app, tmp_path, monkeypatch
+):
+    client, _engine, _repo = template_app
+    builtin = tmp_path / "resources/templates/standard.xlsx"
+    builtin.parent.mkdir(parents=True)
+    builtin.write_bytes(b"synthetic standard form")
+    monkeypatch.setattr(
+        "app.fastapi_routes.domains.system.system_routes.get_base_dir", lambda: str(tmp_path)
+    )
+    response = client.post(
+        "/api/templates/delete",
+        headers={"X-Session-ID": "label-session-7"},
+        json={"id": "fs:standard.xlsx"},
+    )
+    assert response.status_code == 403, response.text
+    assert response.json()["success"] is False
+    assert builtin.read_bytes() == b"synthetic standard form"
+
+
+@pytest.mark.parametrize(
+    "folder, suffix", [("templates", ".xlsx"), ("document_templates", ".docx")]
+)
+def test_db_delete_does_not_resurrect_as_scanned_file(template_app, tmp_path, folder, suffix):
+    client, engine, _repo = template_app
+    own = tmp_path / "tenants/11" / folder / f"synthetic{suffix}"
+    other = tmp_path / "tenants/22" / folder / own.name
+    for path in (own, other):
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"synthetic retained bytes")
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "INSERT INTO templates (id, template_key, template_name, template_type, "
+                "original_file_path, tenant_id, is_active) "
+                "VALUES (1, 'regression-file', 'synthetic', 'Excel', :path, 11, 1)"
+            ),
+            {"path": str(own)},
+        )
+    headers = {"X-Session-ID": "label-session-7"}
+    assert any(
+        t["id"] == "db:1" for t in client.get("/api/templates", headers=headers).json()["templates"]
+    )
+    response = client.post("/api/templates/delete", headers=headers, json={"id": "db:1"})
+    assert response.status_code == 200, response.text
+    rows = client.get("/api/templates", headers=headers).json()["templates"]
+    assert all(t.get("path") != str(own) for t in rows)
+    for template_id in ("db:1", f"fs:{own.name}"):
+        assert (
+            client.get(f"/api/templates/detail/{template_id}", headers=headers).status_code == 404
+        )
+    other_rows = client.get("/api/templates", headers={"X-Session-ID": "label-session-8"}).json()[
+        "templates"
+    ]
+    assert any(t.get("path") == str(other) for t in other_rows)
+    assert own.read_bytes() == other.read_bytes() == b"synthetic retained bytes"
+
+
+def test_default_fs_delete_commits_removal_without_destroying_bytes(template_app, tmp_path):
+    client, _engine, _repo = template_app
+    target = tmp_path / "tenants/11/templates/synthetic-private.xlsx"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"synthetic retained bytes")
+    headers = {"X-Session-ID": "label-session-7"}
+    template_id = f"fs:{target.name}"
+    before = client.get("/api/templates", headers=headers).json()["templates"]
+    assert any(t["id"] == template_id for t in before)
+    for _repeat in range(2):
+        response = client.post("/api/templates/delete", headers=headers, json={"id": template_id})
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        assert response.json()["deleted"]["soft_deleted"] is True
+    after = client.get("/api/templates", headers=headers).json()["templates"]
+    assert all(t.get("path") != str(target) for t in after)
+    assert client.get(f"/api/templates/detail/{template_id}", headers=headers).status_code == 404
+    assert target.read_bytes() == b"synthetic retained bytes"
 
 
 def test_label_create_readback_uses_authenticated_owner_and_tenant(template_app, tmp_path):
