@@ -26,3 +26,25 @@ GREEN须本最终包实测通过；YELLOW为有限证据或过渡方案，RED为
 ## 8. 发版复用 Runbook
 Windows 对外交付唯一安装器为 `tools/XcagiInstaller` 新版 WPF 单文件包；`build-installer.ps1` 和双 SKU 入口均不得跳过外壳。NSIS 仅作内嵌载荷；跨平台诊断载荷不得交付。`windows-release` 域阻断旁路漂移，打包后须实际加载包内更新器依赖。
 验收全过后才按既有授权发布临时下载指针，重新从客户入口完整下载核对哈希、版本、运行构建、说明及原始证据；候选验收通过但未发布须报告「候选验收通过，发布未完成」。最终INTERIM_CLOSED仅表示未签名过渡交付闭环，stable OTA仍关闭。
+
+## 9. Windows 候选五模式账号隔离
+
+`fhd-windows-candidate-acceptance.yml` 默认 `account_mode=shared-serial`，沿用 `XCAGI_TEST_USER/PASS`，最多一项。选择 `isolated-parallel` 前，配置五个专用企业测试账号；即使只选 Lifecycle/Rollback，也必须完整配置五组，缺项或重复身份直接失败，不回退共享账号。
+
+| 模式 | Actions Secrets（用户名、密码） | Actions Variable（云端身份） |
+|---|---|---|
+| Clean | `XCAGI_TEST_CLEAN_USER`、`XCAGI_TEST_CLEAN_PASS` | `XCAGI_TEST_CLEAN_MARKET_USER_ID` |
+| Upgrade | `XCAGI_TEST_UPGRADE_USER`、`XCAGI_TEST_UPGRADE_PASS` | `XCAGI_TEST_UPGRADE_MARKET_USER_ID` |
+| Gui | `XCAGI_TEST_GUI_USER`、`XCAGI_TEST_GUI_PASS` | `XCAGI_TEST_GUI_MARKET_USER_ID` |
+| Recovery | `XCAGI_TEST_RECOVERY_USER`、`XCAGI_TEST_RECOVERY_PASS` | `XCAGI_TEST_RECOVERY_MARKET_USER_ID` |
+| Rollback | `XCAGI_TEST_ROLLBACK_USER`、`XCAGI_TEST_ROLLBACK_PASS` | `XCAGI_TEST_ROLLBACK_MARKET_USER_ID` |
+
+五个用户名与五个正整数市场用户 ID 必须分别唯一；用已核实的 `/api/auth/me` 的 `data.market_user_id` 配置 ID。每项在业务操作前核验实际云端身份、企业资格、非管理员及无代操作身份，证据只增加身份哈希。桌面 tenant_id 是各 VM 本地编号，可以都为 1；同一模式升级、重装、恢复、回滚仍保留原账号及本地 tenant/workspace 断言。
+
+五项都核对现有企业桌面访问资格，兼容企业授权也可满足，不要求新购套餐。只有 Gui/Recovery 需要可写 ERP Mods 与现有普通 `user`/`operator` 角色；申请人可处理自己的审批请求，不新增平台管理员、审批管理员、生产运维或发布权限。不要以猜测的 purchase/inventory 权限或自建租户角色替换现有业务角色。
+
+Gui/Recovery 保留聊天入口的 `ai_business` 用例，Recovery 另测取消自己的授权；当前客户写入可走确定性规划，这不构成付费模型调用、充值或无限额度的要求。Clean/Upgrade/Rollback 不因账号池含五项而增配 ERP/AI 权益。
+
+复用前须取得管理员确认的五行非秘密清单：模式、市场用户 ID、用户名、专用合成测试用途、未删除及桌面访问资格、现有角色/Mod 权益、凭据库引用。仓库演示配置和历史验收不能证明当前账号库存。现有 `/api/admin/users?is_enterprise=true&limit=50&offset=0` 与 `/api/admin/users/{id}/mods` 需要既有管理员会话，且不能单凭企业标记判定可复用；不读取密码、密码哈希或模型凭据。名单核验后只申请把指定凭据库中的现有凭据写入上述十个 Secrets，并写入五个 ID Variables；新建账号、扩权、购买或充值须另有具体证据与授权。不得使用客户数据、复制发布签名私钥或创建额外 GitHub 账号。
+
+每项使用新的 GitHub 托管 Windows VM，安装目录、APPDATA、端口、注册表、备份任务及 SQLite 均在 VM 内；GUI 标记包含 run、attempt、mode、phase。现有 fixtures 只改本地合成数据，没有远端批量清理。账号池由固定 concurrency group 排队复用，禁止同时手动运行未使用该锁的历史工作流。每项仍校验同一原包来源和 SHA-256，发布仍要求五项全部通过；单项/Lifecycle 结果不能充当完整发布验收。账号配置与真实五账号验收未完成时，不得宣称并发已上线。
