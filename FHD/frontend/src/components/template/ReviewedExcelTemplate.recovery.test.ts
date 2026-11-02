@@ -30,7 +30,7 @@ async function stage(names = ['a.xlsx']) {
 beforeEach(() => {
   vi.resetAllMocks(); sourceNames = []; updateProductReadAccountScope({ tenantId: 1, localUserId: 'recovery-A', accountKind: 'local' })
   api.archiveClassifyExcel.mockImplementation(async (form: FormData) => { const name = (form.get('file') as File).name; return { name, sha256: `sha-${name}`, status: 'classified', classification_id: name, version: 'v1', sheets: [sheet] } })
-  api.reviewedExcelIdentity.mockResolvedValue({ login_authorization: { status: 'authorized', operations: { classification: 'authorized', template_candidates: 'authorized' } } })
+  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   api.analyzeClassification.mockImplementation(async () => modelResult())
   api.autoSlices.mockResolvedValue({ slices: [slice()] }); api.reviewExcel.mockResolvedValue(review())
   api.recentClassifications.mockImplementation(async () => ({ files: sourceNames.map(name => ({ classification_id: name, sha256: `sha-${name}`, checkpoint: checkpoint(), latest: { version: 'v1' } })) }))
@@ -38,12 +38,12 @@ beforeEach(() => {
 })
 afterEach(() => { wrapper.unmount(); vi.restoreAllMocks() })
 
-describe('explicit archive budget recovery and stopping', () => {
-  it('requires the visible new-round action after exhausted failure, consumes it once and ignores duplicate clicks', async () => {
+describe('archive round recovery and stopping', () => {
+  it('continues an exhausted failure on the visible action once and ignores duplicate clicks', async () => {
     api.analyzeClassification.mockRejectedValueOnce(new Error('本轮调用失败'))
     await stage(); await start()
-    expect(startButton().text()).toBe('确认新一轮并重试')
-    expect(startButton().attributes('aria-label')).toBe('确认新一轮并重试（a.xlsx）')
+    expect(startButton().text()).toBe('继续处理')
+    expect(startButton().attributes('aria-label')).toBe('继续处理（a.xlsx）')
     expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
     await (state().classify as () => Promise<void>)(); await flushPromises()
     expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
@@ -53,7 +53,7 @@ describe('explicit archive budget recovery and stopping', () => {
     startButton().element.dispatchEvent(new MouseEvent('click', { bubbles: true })); await flushPromises()
     expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
     const form = api.analyzeClassification.mock.calls[1][1] as FormData
-    expect([form.get('retry_authorized'), form.get('continue_authorized'), form.get('version')]).toEqual(['true', 'true', 'v1'])
+    expect([form.get('retry_authorized'), form.get('continue_authorized'), form.get('version')]).toEqual([null, null, 'v1'])
     pending.resolve(modelResult()); await flushPromises()
     expect(wrapper.findAll('[data-document-key]')).toHaveLength(1)
     expect(startButton().text()).toBe('开始处理'); expect(wrapper.find('.elt-composer__retry').exists()).toBe(false)
@@ -61,29 +61,29 @@ describe('explicit archive budget recovery and stopping', () => {
     expect(wrapper.emitted('stage')?.some(args => args[0] === 'template')).toBe(true)
   })
 
-  it('does not automatically renew again after a user-approved new round fails', async () => {
+  it('does not automatically retry again after a continued round fails', async () => {
     api.analyzeClassification.mockRejectedValue(new Error('本轮调用失败'))
     await stage(); await start(); await start()
     expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
-    expect(startButton().text()).toBe('确认新一轮并重试')
+    expect(startButton().text()).toBe('继续处理')
     expect(wrapper.findAll('[data-document-key]')).toHaveLength(0)
     await flushPromises(); expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
     expect((api.analyzeClassification.mock.calls[0][1] as FormData).get('continue_authorized')).toBeNull()
-    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('continue_authorized')).toBe('true')
+    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('continue_authorized')).toBeNull()
   })
 
-  it('binds a new-round approval to one failed source/version instead of sharing it with the next source', async () => {
+  it('binds a continued round to one failed source/version instead of sharing it with the next source', async () => {
     api.analyzeClassification.mockRejectedValueOnce(new Error('a失败')).mockRejectedValueOnce(new Error('b失败'))
     await stage(['a.xlsx', 'b.xlsx']); await start()
-    expect(startButton().attributes('aria-label')).toBe('确认新一轮并重试（a.xlsx）')
+    expect(startButton().attributes('aria-label')).toBe('继续处理（a.xlsx）')
     await start()
     expect(api.analyzeClassification.mock.calls.map(call => call[0])).toEqual(['a.xlsx', 'b.xlsx', 'a.xlsx'])
-    expect(startButton().attributes('aria-label')).toBe('确认新一轮并重试（b.xlsx）')
+    expect(startButton().attributes('aria-label')).toBe('继续处理（b.xlsx）')
     expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('continue_authorized')).toBeNull()
-    expect((api.analyzeClassification.mock.calls[2][1] as FormData).get('continue_authorized')).toBe('true')
+    expect((api.analyzeClassification.mock.calls[2][1] as FormData).get('continue_authorized')).toBeNull()
   })
 
-  it('does not reuse a retired approval for a newly staged file', async () => {
+  it('does not reuse a retired round action for a newly staged file', async () => {
     api.analyzeClassification.mockRejectedValueOnce(new Error('a失败'))
     await stage(); await start(); const oldKey = startButton().attributes('data-round-approval')!
     await stage(['b.xlsx'])
@@ -92,13 +92,13 @@ describe('explicit archive budget recovery and stopping', () => {
     expect((api.analyzeClassification.mock.calls.at(-1)![1] as FormData).get('continue_authorized')).toBeNull()
   })
 
-  it('also makes paused-round continuation an explicit new-round action', async () => {
+  it('continues a paused round on the ordinary continue action', async () => {
     api.analyzeClassification.mockResolvedValueOnce({ ...modelResult(), phase: 'paused', checkpoint: checkpoint('paused'), version: 'v1', model_status: 'not_called' })
     await stage(); await start()
-    expect(startButton().text()).toBe('确认新一轮并重试')
+    expect(startButton().text()).toBe('继续处理')
     await (state().classify as () => Promise<void>)(); expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
     await start()
-    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('continue_authorized')).toBe('true')
+    expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('continue_authorized')).toBeNull()
     expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('retry_authorized')).toBeNull()
   })
 

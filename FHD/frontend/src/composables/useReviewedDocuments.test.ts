@@ -13,7 +13,7 @@ vi.mock('@/utils/xcagiStorageKeys', () => ({ readActiveExtensionModIdFromStorage
 const layout = (value: string) => [{ sheet: 'Sheet1', widths: [20], rows: [{ height: 20, cells: [{ cell: 'A1', value, formula: false, rowspan: 1, colspan: 1, bold: true, italic: false, font_size: 11, font_color: '', fill: '', align: 'left' }] }], truncated: false }]
 function proposal(id: string, version = `${id}-v1`): DocumentProposal {
   const candidates = [0, 1, 2].map(index => ({ id: `${id}-candidate-${index}`, label: `候选${index + 1}`, explanation: '专用合成候选', clear: index ? [{ sheet: 'Sheet1', cell: `A${index + 1}` }] : [] }))
-  return { version, parent_version: null, candidates, evidence: [], model: { status: 'returned', login_authorization: { status: 'authorized' } }, result_previews: candidates.map(candidate => ({ candidate_id: candidate.id, sha256: candidate.id, layout: layout(candidate.id), layout_truncated: false })) }
+  return { version, parent_version: null, candidates, evidence: [], model: { status: 'returned' }, result_previews: candidates.map(candidate => ({ candidate_id: candidate.id, sha256: candidate.id, layout: layout(candidate.id), layout_truncated: false })) }
 }
 const review = (id: string): DocumentReview => ({ review_id: id, sha256: `source-${id}`, layout: layout(`原件-${id}`), proposal: proposal(id) })
 const slice = (index = 0, name = '报价单', sha = `slice-${index}`): DocumentSlice => ({ index, basis: 'model_group', confirmed: false, sha256: sha, filename: `${name}.xlsx`, display_name: name, fragments: [{ sheet: 'Sheet1', range: 'A1:D4' }] })
@@ -77,7 +77,8 @@ describe('reviewed document ownership and receipts', () => {
     pendingA.resolve(review('A')); await taskA
     for (const [index, doc] of [a, b].entries()) {
       const form = api.reviewExcel.mock.calls[index][0] as FormData
-      expect([form.get('classification_id'), form.get('classification_version'), form.get('auto_slice_index'), form.get('use_login_notice')]).toEqual([doc.classificationId, doc.classificationVersion, '0', 'true'])
+      expect([form.get('classification_id'), form.get('classification_version'), form.get('auto_slice_index')]).toEqual([doc.classificationId, doc.classificationVersion, '0'])
+      for (const key of ['use_login_notice', 'model_opt_in', 'sample_authorized', 'own_file_authorized']) expect(form.has(key)).toBe(false)
       expect(form.get('file')).toBe(doc.source)
       expect(controller.proposal(doc).candidates).toHaveLength(3)
       expect(doc.review?.layout?.[0].rows[0].cells[0].value).toBe(`原件-${doc.classificationId}`)
@@ -140,7 +141,7 @@ describe('reviewed document ownership and receipts', () => {
     expect(b.review?.review_id).toBe('review-B'); expect(b.requirements).toEqual([])
     const form = api.refineReviewedExcel.mock.calls[0][0] as FormData
     expect([form.get('review_id'), form.get('parent_version'), form.get('feedback')]).toEqual(['review-A', 'review-A-v1', '保留报价单标题'])
-    expect([form.get('consent'), form.get('sample_authorized'), form.get('own_file_authorized')]).toEqual(['false', 'false', 'false'])
+    for (const key of ['use_login_notice', 'consent', 'sample_authorized', 'own_file_authorized']) expect(form.has(key)).toBe(false)
     await selected(a, 2); await controller.save(a)
     expect(controller.saved(a)).toBe(true); expect(a.receipts).toHaveLength(2)
     expect(a.receipts[0]).toEqual(oldReceipt); expect(a.receipts[1].review_id).toBe('A-child')

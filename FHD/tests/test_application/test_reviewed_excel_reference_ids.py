@@ -172,16 +172,15 @@ def test_independent_prompt_has_only_source_facts_and_no_program_candidates(monk
     from app.application.reviewed_excel_classification import _classify_semantic_batch
     from tests.fixtures.etl_template.sources.generate import sample
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     captured = {}
 
-    def fake(messages, schema, tokens):
+    def fake(messages, schema, tokens, **kwargs):
         captured["messages"] = messages
         captured["schema"] = schema
         payload = json.loads(messages[1]["content"])
         return SimpleNamespace(model="fixture", data=synthetic_document_answer(payload))
 
-    monkeypatch.setattr(template, "_template_mimo_complete", fake)
+    monkeypatch.setattr(template, "_template_platform_complete", fake)
     result = _classify_semantic_batch(template.inspect_workbook(sample()), reference_ids=True)
     payload = json.loads(captured["messages"][1]["content"])
     assert not {"rule_hints", "structure_map", "relationship_context", "labels"} & payload.keys()

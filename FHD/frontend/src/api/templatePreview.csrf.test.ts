@@ -211,7 +211,7 @@ describe('reviewed Excel CSRF handling', () => {
   })
 
   it('preserves authorization and read-only archive inventory without claiming a model call', async () => {
-    const identity = { actor: '1:7', login_authorization: { status: 'notice_not_published' } }, quota = { configured: true, limit_bytes: 1000, reserved_bytes: 42 }
+    const identity = { actor: '1:7' }, quota = { configured: true, limit_bytes: 1000, reserved_bytes: 42 }
     const assets = { assets: [{ id: 'asset-7', versions: [{ id: 'version-1', sha256: 'original-hash' }] }] }, history = { files: [{ classification_id: 'class-7', latest: { model_status: 'not_called' } }] }
     mock.get.mockResolvedValueOnce(identity).mockResolvedValueOnce(quota).mockResolvedValueOnce(assets).mockResolvedValueOnce(history)
     expect(await templatePreviewApi.reviewedExcelIdentity()).toBe(identity); expect(await templatePreviewApi.archiveQuota()).toBe(quota)
@@ -280,11 +280,12 @@ describe('reviewed Excel CSRF handling', () => {
     expect(mock.download).toHaveBeenCalledTimes(1)
   })
 
-  it('returns a paused classification without authorizing another model round', async () => {
-    const form = new FormData(); form.set('version', 'classification-v1'); form.set('use_login_notice', 'true')
+  it('returns a paused classification without adding consent flags or issuing another model call', async () => {
+    const form = new FormData(); form.set('version', 'classification-v1')
     const paused = { phase: 'paused', checkpoint: { max_calls: 4, calls_in_round: 4, version: 'classification-v1' } }; mock.post.mockResolvedValueOnce(paused)
     expect(await templatePreviewApi.analyzeClassification('class/7', form)).toBe(paused)
-    expect(form.get('continue_authorized')).toBeNull(); expect(form.get('retry_authorized')).toBeNull()
+    expect(form.get('version')).toBe('classification-v1')
+    for (const key of ['use_login_notice', 'continue_authorized', 'retry_authorized', 'sample_authorized', 'own_file_authorized']) expect(form.has(key)).toBe(false)
     expect(mock.post).toHaveBeenCalledExactlyOnceWith('/api/templates/reviewed-excel/classifications/class%2F7/analyze', form); expect(mock.get).not.toHaveBeenCalled()
   })
 

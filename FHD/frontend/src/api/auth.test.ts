@@ -51,14 +51,12 @@ describe('authApi', () => {
     )
   })
 
-  it('only forwards an explicit displayed notice version for credential login', async () => {
-    const options = { dataProcessingNoticeVersion: 'synthetic-notice-version' }
+  it('uses normal credential and phone login without a feature-specific consent receipt', async () => {
+    const options = { signal: new AbortController().signal }
     await authApi.login('u', 'p', 'enterprise', '', options)
-    expect(apiMock.post.mock.calls.at(-1)?.[1]).toMatchObject({ data_processing_notice_version: options.dataProcessingNoticeVersion })
+    expect(apiMock.post.mock.calls.at(-1)?.[1]).toEqual({ username: 'u', password: 'p', account_kind: 'enterprise' })
     await authApi.loginWithPhoneCode('139', '0000', 'enterprise', options)
-    expect(apiMock.post.mock.calls.at(-1)?.[1]).toMatchObject({ data_processing_notice_version: options.dataProcessingNoticeVersion })
-    await authApi.login('u', 'p')
-    expect(apiMock.post.mock.calls.at(-1)?.[1]).not.toHaveProperty('data_processing_notice_version')
+    expect(apiMock.post.mock.calls.at(-1)?.[1]).toEqual({ phone: '139', code: '0000', account_kind: 'enterprise' })
   })
 
   it('covers remaining endpoints', async () => {
