@@ -1,5 +1,5 @@
 {
-  "lines": 2420866,
+  "lines": 2420936,
   "updated": "2026-11-02",
-  "note": "PR #2925 合入含 #2915 的最新 main：考勤长按拖动；相对 main 基线实测净增登记。"
+  "note": "merge main into #2925"
 }

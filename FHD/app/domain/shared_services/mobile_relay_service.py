@@ -7,6 +7,7 @@ import logging
 import secrets as secrets
 from typing import Any, cast
 
+from app.application.mobile_relay_configuration import get_relay_public_base_url
 from app.application.mobile_relay_ports import PairingPorts, TaskPorts
 from app.db.session import get_db
 from app.domain.shared_services.mobile_relay_pairing import RelayPairing
@@ -14,7 +15,7 @@ from app.domain.shared_services.mobile_relay_tasks import RelayTaskQueue
 from app.domain.shared_services.mobile_relay_utils import _epoch_from_iso as _epoch_from_iso
 from app.domain.shared_services.mobile_relay_utils import _json_dumps as _json_dumps
 from app.domain.shared_services.mobile_relay_utils import _json_loads as _json_loads
-from app.domain.shared_services.mobile_relay_utils import _public_base_url as _public_base_url
+from app.domain.shared_services.mobile_relay_utils import _public_base_url as _normalize_url
 from app.domain.shared_services.mobile_relay_utils import _row_dict as _row_dict
 from app.domain.shared_services.mobile_relay_utils import _token_hash as _token_hash
 from app.domain.shared_services.mobile_relay_utils import _utc_after as _utc_after
@@ -25,10 +26,16 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _public_base_url(raw: str) -> str:
+    """Preserve the legacy helper using the deployment-configured default."""
+    return _normalize_url(raw, default_base_url=get_relay_public_base_url())
+
+
 class MobileRelayService:
     """Compose SQL storage, pairing and task execution through explicit capabilities."""
 
-    def __init__(self):
+    def __init__(self, *, default_public_base_url: str | None = None):
+        self._default_public_base_url = default_public_base_url or get_relay_public_base_url()
         self._pairing = RelayPairing(
             PairingPorts(
                 database=lambda: self._get_db(),
@@ -38,6 +45,7 @@ class MobileRelayService:
                     db, relay_id=relay_id, desktop_token=desktop_token
                 ),
                 public_desktop=lambda data: self._public_desktop(data),
+                public_base_url=self._default_public_base_url,
             )
         )
         self._tasks = RelayTaskQueue(
