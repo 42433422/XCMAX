@@ -80,7 +80,6 @@
     "starAutoRefreshTitle": "(Deprecated binding) Starred WeChat polling belongs in workflow settings, not this chat toggle",
     "proactiveSuggestions": "Proactive awareness",
     "proactiveSuggestionsTitle": "When on, suggests three possible next replies or actions from the current dialogue; picking fills the composer and never auto-sends",
-    "proactiveSuggestionsHint": "Pick a suggestion to fill the composer (never auto-sent)",
     "proactiveSuggestionsLoading": "Generating next-step suggestions…",
     "composerDropHint": "Drop to upload attachments",
     "composerDropReject": "Unsupported file type — drop Excel, images, or PDF",
