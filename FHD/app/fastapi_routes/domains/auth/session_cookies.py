@@ -33,8 +33,6 @@ class SessionCookies:
         return response
 
     def remove(self, response: Response) -> Response:
-        from app.application.elt_login_authorization import NOTICE_COOKIE
-
         response.delete_cookie(self.environ.get("SESSION_COOKIE_NAME", "session_id"), path="/")
-        response.delete_cookie(NOTICE_COOKIE, path="/")
+        response.delete_cookie("xcagi_elt_notice", path="/")
         return response
