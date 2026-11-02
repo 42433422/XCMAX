@@ -38,8 +38,7 @@
 [domain->infrastructure] app/domain/shared_services/materials_service.py:19
 [domain->infrastructure] app/domain/shared_services/mobile_relay_desktop_client.py:123
 [domain->infrastructure] app/domain/shared_services/mobile_relay_desktop_client.py:124
-[domain->infrastructure] app/domain/shared_services/mobile_relay_service.py:22
-[domain->infrastructure] app/domain/shared_services/mobile_relay_utils.py:11
+[domain->infrastructure] app/domain/shared_services/mobile_relay_service.py:23
 [domain->infrastructure] app/domain/shared_services/modstore_library_sync.py:80
 [domain->infrastructure] app/domain/shared_services/ocr_service.py:20
 [domain->infrastructure] app/domain/shared_services/persona/embedding_inferencer.py:12
