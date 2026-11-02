@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 import hashlib
 import json
 import os
-from contextlib import nullcontext
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -29,14 +28,10 @@ from app.application.elt.errors import EltError, ReviewedExcelError, public_exce
 from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
 from app.application.elt.service_uploads import UploadServiceMixin
 from app.application.elt_login_authorization import (
-    bind_login_notice_grant,
-    classification_login_status,
-    classification_notice_scope,
-    login_notice_identity,
-    login_notice_status,
-    require_login_notice_grant,
+    bind_model_session,
+    model_session_identity,
+    require_model_session,
     template_model_authorization,
-    validate_classification_notice,
 )
 from app.application.reviewed_excel_audit import ModelRequestNotSent, record_not_sent
 from app.application.reviewed_excel_classification import (
@@ -139,7 +134,7 @@ def _identity(user):
 @router.get("/api/templates/reviewed-excel/identity")
 def reviewed_excel_identity(request: Request, user=Depends(_manage)):
     tenant, owner = _identity(user)
-    return login_notice_identity(request, tenant, owner)
+    return model_session_identity(request, tenant, owner)
 
 
 def _expected_actor(expected: str, user):
@@ -645,25 +640,11 @@ async def reviewed_excel_classification_analyze(
     classification_id: str,
     request: Request,
     version: str = Form(..., max_length=64),
-    sample_authorized: bool = Form(False),
-    own_file_authorized: bool = Form(False),
-    use_login_notice: bool = Form(False),
-    continue_authorized: bool = Form(False),
-    retry_authorized: bool = Form(False),
     auto_group: bool = Form(False),
     user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
-    notice_grant = (
-        require_login_notice_grant(request, tenant, owner, "classification")
-        if use_login_notice
-        else None
-    )
-    if notice_grant:
-        own_file_authorized = True
-        sample_authorized = False
-    if sample_authorized == own_file_authorized:
-        raise HTTPException(status_code=400, detail="请明确选择获授权样本或授权本人文件发送模型")
+    model_session = require_model_session(request, tenant, owner)
     try:
         with tenant_scope(tenant), get_db() as db:
             run = _classification_run(db, classification_id, tenant, owner)
@@ -685,9 +666,6 @@ async def reviewed_excel_classification_analyze(
                 validate_checkpoint_budget(checkpoint)
             except ReviewedExcelError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
-            authorization_kind = "owner_file" if own_file_authorized else "authorized_sample"
-            if notice_grant:
-                validate_classification_notice(checkpoint, notice_grant)
             if checkpoint and (
                 checkpoint.get("version") != version
                 or checkpoint.get("source_sha256") != run.file_sha256
@@ -695,12 +673,6 @@ async def reviewed_excel_classification_analyze(
                 raise HTTPException(
                     status_code=409, detail="分类或来源版本已改变；未覆盖已确认结果"
                 )
-            if (
-                checkpoint
-                and checkpoint.get("authorization", {}).get("kind", authorization_kind)
-                != authorization_kind
-            ):
-                raise HTTPException(status_code=409, detail="授权范围已改变，请核对已有批次")
             if checkpoint and checkpoint.get("auto_group", False) != auto_group:
                 raise HTTPException(status_code=409, detail="分组模式已改变，请核对已有批次")
             if checkpoint and checkpoint.get("phase") == "inflight":
@@ -708,18 +680,10 @@ async def reviewed_excel_classification_analyze(
                     status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发"
                 )
             if checkpoint and checkpoint.get("phase") == "failed":
-                if not retry_authorized:
-                    raise HTTPException(status_code=409, detail="已收到失败响应，需明确授权重试")
                 if checkpoint.get("calls_in_round", 0) >= checkpoint["max_calls"]:
-                    if not continue_authorized:
-                        raise HTTPException(
-                            status_code=409, detail="本轮预算已用完，需明确确认继续"
-                        )
                     checkpoint["calls_in_round"] = 0
                 checkpoint["phase"] = "ready"
             if checkpoint and checkpoint.get("phase") == "paused":
-                if not continue_authorized:
-                    raise HTTPException(status_code=409, detail="本轮预算已用完，需明确确认继续")
                 checkpoint["phase"] = "ready"
                 checkpoint["calls_in_round"] = 0
             from app.application.reviewed_excel_plan import (
@@ -754,15 +718,14 @@ async def reviewed_excel_classification_analyze(
                     "calls_in_round": 0,
                     "auto_group": auto_group,
                     "authorization": {
-                        "kind": authorization_kind,
+                        "kind": "account_session",
                         "tenant_id": tenant,
                         "owner_user_id": owner,
                         "source_sha256": run.file_sha256,
                         "provider": template_provider,
                         "provider_basis": "configured_before_call",
                         "scope": "this_file_bounded_cells_and_structure",
-                        "authorized_at": utcnow().isoformat(),
-                        **classification_notice_scope(notice_grant, classification_id, version),
+                        "requested_at": utcnow().isoformat(),
                     },
                 }
                 store_coordinate_plan(checkpoint, batches)
@@ -812,7 +775,7 @@ async def reviewed_excel_classification_analyze(
                 previous_calls = checkpoint.get("calls_in_round", 0)
                 audit_draft_before_response = claimed_draft
                 try:
-                    with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
+                    with bind_model_session(model_session):
                         batch_result = await run_in_threadpool(
                             _call_with_response_audit,
                             _classify_semantic_batch,
@@ -834,18 +797,14 @@ async def reviewed_excel_classification_analyze(
                 except ModelRequestNotSent as exc:
                     record_not_sent(state, request_sha, exc.public_message)
                     _classification_cas(db, run, claimed_draft, state)
-                    if use_login_notice:
-                        raise _model_processing_failure(exc) from None
-                    raise
+                    raise _model_processing_failure(exc) from None
                 except (ValueError, TypeError, EltError) as exc:
                     if audit_holder[0] != audit_draft_before_response:
                         checkpoint["results"] = checkpoint["results"][:index]
                         checkpoint["phase"] = "failed"
                         checkpoint["calls_in_round"] = previous_calls + 1
                         _classification_cas(db, run, audit_holder[0], state)
-                    if use_login_notice:
-                        raise _model_processing_failure(exc) from None
-                    raise
+                    raise _model_processing_failure(exc) from None
                 if index + 1 < len(batches):
                     if checkpoint["calls_in_round"] >= max_calls:
                         checkpoint["phase"] = "paused"
@@ -909,7 +868,7 @@ async def reviewed_excel_classification_analyze(
                 )
                 previous_calls = checkpoint.get("calls_in_round", 0)
                 try:
-                    with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
+                    with bind_model_session(model_session):
                         result["suggested_documents"] = await run_in_threadpool(
                             _call_with_response_audit,
                             group_semantic_fragments,
@@ -922,17 +881,13 @@ async def reviewed_excel_classification_analyze(
                 except ModelRequestNotSent as exc:
                     record_not_sent(state, request_sha, exc.public_message)
                     _classification_cas(db, run, claimed_draft, state)
-                    if use_login_notice:
-                        raise _model_processing_failure(exc) from None
-                    raise
+                    raise _model_processing_failure(exc) from None
                 except (ValueError, TypeError, EltError) as exc:
                     if audit_holder[0] != claimed_draft:
                         checkpoint["phase"] = "failed"
                         checkpoint["calls_in_round"] = previous_calls + 1
                         _classification_cas(db, run, audit_holder[0], state)
-                    if use_login_notice:
-                        raise _model_processing_failure(exc) from None
-                    raise
+                    raise _model_processing_failure(exc) from None
                 claimed_draft = audit_holder[0]
                 _recheck(request, (tenant, owner))
                 _source(db, run, tenant, owner)
@@ -1037,7 +992,6 @@ async def reviewed_excel_classification_analyze(
                 "sheets": sheets,
                 "model_status": "returned",
                 "model_authorization": checkpoint.get("authorization"),
-                **classification_login_status(request, tenant, owner, use_login_notice),
                 "actual_model_providers": actual_providers,
                 "read_only_print_areas": review["read_only_print_areas"],
                 "suggested_documents": result["suggested_documents"],
@@ -1067,10 +1021,6 @@ async def reviewed_excel_classification_analyze(
 async def reviewed_excel_preview(
     request: Request,
     file: UploadFile = File(...),
-    model_opt_in: bool = Form(False),
-    sample_authorized: bool = Form(False),
-    own_file_authorized: bool = Form(False),
-    use_login_notice: bool = Form(False),
     expected_actor: str = Form(..., max_length=80),
     classification_id: str = Form("", max_length=36),
     classification_version: str = Form("", max_length=64),
@@ -1082,10 +1032,9 @@ async def reviewed_excel_preview(
 ):
     _expected_actor(expected_actor, user)
     tenant, owner = _identity(user)
-    notice_grant = require_login_notice_grant(request, tenant, owner) if use_login_notice else None
-    if use_login_notice:
-        model_opt_in = own_file_authorized = bool(notice_grant)
-        sample_authorized = False
+    model_session = require_model_session(request, tenant, owner)
+    if not classification_id or not classification_version:
+        raise HTTPException(status_code=409, detail="请先建立文件分类记录，再生成候选")
     try:
         request.state.elt_stage = "read_workbook"
         body = await _body(file)
@@ -1225,13 +1174,7 @@ async def reviewed_excel_preview(
         proposal = make_proposals(review)
         versions = [proposal]
         candidate_key = ""
-        if use_login_notice:
-            if notice_grant is None:
-                raise HTTPException(status_code=403, detail="缺少有效的模型处理授权，请重新登录。")
-            if not classification_id:
-                raise HTTPException(
-                    status_code=409, detail="模型处理须先建立文件分类记录，请重新开始处理"
-                )
+        if classification_id:
             candidate_key = hashlib.sha256(
                 dump_json(
                     {
@@ -1240,8 +1183,6 @@ async def reviewed_excel_preview(
                         "slice": auto_slice_index,
                         "sheet": region_sheet,
                         "range": region_range,
-                        "publication": notice_grant["publication"]["record_sha256"],
-                        "model_revision": notice_grant["route"]["config_revision"],
                     }
                 ).encode()
             ).hexdigest()
@@ -1273,52 +1214,33 @@ async def reviewed_excel_preview(
                 claims[candidate_key] = {"state": "inflight"}
                 _recheck(request, (tenant, owner))
                 _classification_cas(db, classification, old, state)
-        if model_opt_in:
-            if sample_authorized == own_file_authorized:
-                raise ReviewedExcelError("请明确选择获授权样本或授权本人文件发送模型")
-            from app.application.reviewed_excel_template import configured_template_llm_provider
-
-            if own_file_authorized and configured_template_llm_provider() not in {
-                "mimo",
-                "platform",
-            }:
-                raise ReviewedExcelError(
-                    "本人文件仅授权已配置的平台模型；当前供应商不受支持，未调用模型"
+        try:
+            request.state.elt_stage = "model_candidates"
+            with (
+                tenant_scope(tenant),
+                bind_model_session(model_session),
+            ):
+                proposal = await run_in_threadpool(
+                    refine_proposal,
+                    review,
+                    proposal["version"],
+                    "生成三个清理候选，保留固定说明和公式",
+                    owner_id=owner,
+                    initial=True,
                 )
-            try:
-                request.state.elt_stage = "model_candidates"
-                with (
-                    tenant_scope(tenant),
-                    bind_login_notice_grant(notice_grant) if notice_grant else nullcontext(),
-                ):
-                    proposal = await run_in_threadpool(
-                        refine_proposal,
-                        review,
-                        proposal["version"],
-                        "生成三个清理候选，保留固定说明和公式",
-                        owner_id=owner,
-                        initial=True,
-                    )
-                versions.append(proposal)
-            except ValueError as exc:
-                if use_login_notice:
-                    if isinstance(exc, ModelRequestNotSent):
-                        with tenant_scope(tenant), get_db() as db:
-                            _update_candidate_claim(
-                                db, classification_id, candidate_key, tenant, owner
-                            )
-                    raise _model_processing_failure(exc) from None
-                proposal["model"] = {"status": "unavailable", "message": public_excel_error(exc)}
-            proposal["model"]["authorization"] = template_model_authorization(
-                notice_grant,
-                tenant,
-                owner,
-                own_file_authorized,
-                review["sha256"],
-                selected_region or {},
-            )
-        if use_login_notice:
-            proposal["model"]["login_authorization"] = login_notice_status(request, tenant, owner)
+            versions.append(proposal)
+        except ValueError as exc:
+            if classification_id and isinstance(exc, ModelRequestNotSent):
+                with tenant_scope(tenant), get_db() as db:
+                    _update_candidate_claim(db, classification_id, candidate_key, tenant, owner)
+            raise _model_processing_failure(exc) from None
+        proposal["model"]["authorization"] = template_model_authorization(
+            model_session,
+            tenant,
+            owner,
+            review["sha256"],
+            selected_region or {},
+        )
         request.state.elt_stage = "render_candidates"
         for version in versions:
             _build_candidate_previews(body, review, version)
@@ -1449,26 +1371,10 @@ async def reviewed_excel_refine(
     parent_version: str = Form(..., max_length=64),
     feedback: str = Form(..., max_length=1000),
     current: str = Form("[]", max_length=100_000),
-    consent: bool = Form(False),
-    sample_authorized: bool = Form(False),
-    own_file_authorized: bool = Form(False),
-    use_login_notice: bool = Form(False),
     user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
-    notice_grant = require_login_notice_grant(request, tenant, owner) if use_login_notice else None
-    if notice_grant:
-        consent = own_file_authorized = True
-        sample_authorized = False
-    if not consent or sample_authorized == own_file_authorized:
-        raise HTTPException(status_code=400, detail="请明确选择获授权样本或授权本人文件发送模型")
-    from app.application.reviewed_excel_template import configured_template_llm_provider
-
-    if own_file_authorized and configured_template_llm_provider() not in {"mimo", "platform"}:
-        raise HTTPException(
-            status_code=400,
-            detail="本人文件仅授权已配置的平台模型；当前供应商不受支持，未调用模型",
-        )
+    model_session = require_model_session(request, tenant, owner)
     try:
         current_cells = json.loads(current)
         if not isinstance(current_cells, list):
@@ -1477,12 +1383,12 @@ async def reviewed_excel_refine(
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
             state, versions = _proposals(run)
-            if run.status == _SAVED and notice_grant and versions[-1]["version"] == parent_version:
+            if run.status == _SAVED and versions[-1]["version"] == parent_version:
                 body = _source(db, run, tenant, owner)
                 clean_workbook(body, run.file_sha256, current_cells)
                 _recheck(request, (tenant, owner))
                 run = _fork_saved_review(
-                    db, run, versions[-1], feedback, current_cells, notice_grant, tenant, owner
+                    db, run, versions[-1], feedback, current_cells, tenant, owner
                 )
                 state, versions = _proposals(run)
                 if run.status in {_READY, _SAVED} and versions[-1]["version"] != parent_version:
@@ -1501,11 +1407,10 @@ async def reviewed_excel_refine(
             body = _source(db, run, tenant, owner)
             review = inspect_workbook(body)
             clean_workbook(body, run.file_sha256, current_cells)
-            if use_login_notice:
-                _recheck(request, (tenant, owner))
-                _cas(db, run, old_draft, status=_MODEL_PENDING, stage="model_candidates")
+            _recheck(request, (tenant, owner))
+            _cas(db, run, old_draft, status=_MODEL_PENDING, stage="model_candidates")
             try:
-                with bind_login_notice_grant(notice_grant) if notice_grant else nullcontext():
+                with bind_model_session(model_session):
                     proposal = await run_in_threadpool(
                         refine_proposal,
                         review,
@@ -1516,32 +1421,25 @@ async def reviewed_excel_refine(
                         initial=True,
                     )
             except ValueError as exc:
-                if use_login_notice:
-                    if isinstance(exc, ModelRequestNotSent):
-                        _cas(
-                            db,
-                            run,
-                            old_draft,
-                            expected_status=_MODEL_PENDING,
-                            status=_READY,
-                            stage=_READY,
-                        )
-                    raise _model_processing_failure(exc) from None
-                raise
+                if isinstance(exc, ModelRequestNotSent):
+                    _cas(
+                        db,
+                        run,
+                        old_draft,
+                        expected_status=_MODEL_PENDING,
+                        status=_READY,
+                        stage=_READY,
+                    )
+                raise _model_processing_failure(exc) from None
             source_scope = load_json(run.summary_json, {}).get("selected_region") or {}
             proposal["model"]["authorization"] = template_model_authorization(
-                notice_grant,
+                model_session,
                 tenant,
                 owner,
-                own_file_authorized,
                 run.file_sha256,
                 source_scope,
                 feedback=True,
             )
-            if use_login_notice:
-                proposal["model"]["login_authorization"] = login_notice_status(
-                    request, tenant, owner
-                )
             _build_candidate_previews(body, review, proposal)
             _recheck(request, (tenant, owner))
             versions.append(proposal)
@@ -1550,7 +1448,7 @@ async def reviewed_excel_refine(
                 db,
                 run,
                 old_draft,
-                expected_status=_MODEL_PENDING if use_login_notice else _READY,
+                expected_status=_MODEL_PENDING,
                 status=_READY,
                 stage=_READY,
                 draft_json=dump_json(state),

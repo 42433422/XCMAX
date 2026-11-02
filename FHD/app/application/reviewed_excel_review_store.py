@@ -14,7 +14,7 @@ from app.application.elt.archive_policy import ArchivePolicyError
 from app.application.elt.archive_store import default_archive_root, read_original
 from app.application.elt.errors import ReviewedExcelError, public_excel_error
 from app.application.elt.service_support import dump_json, load_json, utcnow
-from app.application.elt_login_authorization import require_login_notice_grant
+from app.application.elt_login_authorization import require_model_session
 from app.application.reviewed_excel_audit import ModelRequestNotSent
 from app.application.reviewed_excel_classification_store import (
     _CLASS_READY,
@@ -325,7 +325,7 @@ def _refinement_response(run, proposal, *, replayed=False):
     }
 
 
-def _fork_saved_review(db, parent, proposal, feedback, current_cells, grant, tenant, owner):
+def _fork_saved_review(db, parent, proposal, feedback, current_cells, tenant, owner):
     summary = load_json(parent.summary_json, {})
     request_digest = hashlib.sha256(
         dump_json(
@@ -338,8 +338,6 @@ def _fork_saved_review(db, parent, proposal, feedback, current_cells, grant, ten
                 "scope": summary.get("selected_region"),
                 "feedback": feedback,
                 "current": sorted(current_cells, key=lambda item: (item["sheet"], item["cell"])),
-                "publication": grant["publication"],
-                "route": grant["route"],
             }
         ).encode()
     ).hexdigest()
@@ -396,20 +394,14 @@ def _intake_selection_key(run, proposal_version, candidate_id, selected, name, n
 
 
 def _require_private_model(request, proposal, tenant, owner):
-    grant = require_login_notice_grant(request, tenant, owner)
+    require_model_session(request, tenant, owner)
     model = proposal.get("model", {})
-    authorization = model.get("authorization", {})
-    if (
-        model.get("status") != "returned"
-        or authorization.get("notice_publication") != grant["publication"]
-        or authorization.get("model_route")
-        != {key: value for key, value in grant["route"].items() if key != "base"}
-    ):
+    if model.get("status") != "returned":
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "model_required",
-                "message": "数据对接须先完成当前已授权平台模型处理，未写入任何数据；请重新开始处理。",
+                "message": "数据对接须先完成模型处理，未写入任何数据；请重新开始处理。",
                 "retryable": False,
             },
         )

@@ -238,8 +238,9 @@ def test_http_preview_download_allowed_but_formal_save_blocked_by_server_lineage
     assert response.status_code == 200, response.text
     preview = response.json()
     assert preview["usage_restrictions"]
+    candidate = preview["proposal"]["candidates"][0]
     download = client.get(
-        f"/api/templates/reviewed-excel/reviews/{preview['review_id']}/versions/{preview['proposal']['version']}/candidates/preserve/download"
+        f"/api/templates/reviewed-excel/reviews/{preview['review_id']}/versions/{preview['proposal']['version']}/candidates/{candidate['id']}/download"
     )
     assert download.status_code == 200
     # Remove mutable latest state to prove the immutable server summary is enough.
@@ -255,8 +256,8 @@ def test_http_preview_download_allowed_but_formal_save_blocked_by_server_lineage
         data={
             "review_id": preview["review_id"],
             "proposal_version": preview["proposal"]["version"],
-            "candidate_id": "preserve",
-            "selections": "[]",
+            "candidate_id": candidate["id"],
+            "selections": json.dumps(candidate["clear"]),
             "name": "must not publish",
             "publish_to_tenant": "true",
         },

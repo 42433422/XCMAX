@@ -122,25 +122,13 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
 
 
 def configured_template_llm_provider() -> str:
-    """Return the live template LLM route: platform by default, MiMo only when explicitly mapped."""
-    import os
-
-    raw = os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower()
-    if raw == "mimo":
-        return "mimo"
-    if raw in {"", "platform", "modstore", "etl_default"}:
-        return "platform"
-    return raw
+    """Reviewed documents use the current account's normal chat route."""
+    return "platform"
 
 
 def template_llm_model_label() -> str:
-    """Audit / claim label for the configured template route (never invent private aliases)."""
-    import os
-
-    provider = configured_template_llm_provider()
-    if provider == "mimo":
-        return os.environ.get("FHD_TEMPLATE_MIMO_MODEL", "").strip() or "mimo-unconfigured"
-    return os.environ.get("FHD_TEMPLATE_PLATFORM_MODEL", "").strip() or "platform-default"
+    """The server resolves the concrete model at dispatch time."""
+    return "platform-default"
 
 
 def _template_platform_complete(
@@ -155,7 +143,7 @@ def _template_platform_complete(
 
     try:
         from app.application.elt import llm_assist
-        from app.application.elt.llm_assist_runtime import etl_llm_mode, etl_llm_timeout_seconds
+        from app.application.elt.llm_assist_runtime import etl_llm_mode
         from app.application.elt.llm_session_provider import (
             bind_etl_llm_owner,
             current_owner_market_provider,
@@ -174,7 +162,7 @@ def _template_platform_complete(
     try:
         timeout_seconds = template_timeout_seconds()
         try:
-            provider = current_owner_market_provider(timeout_seconds=etl_llm_timeout_seconds())
+            provider = current_owner_market_provider(timeout_seconds=timeout_seconds)
             if provider is None or not provider.is_configured:
                 raise ModelRequestNotSent("平台模型未登录或不可用；未调用模型")
         except INFRA_TRANSIENT:
@@ -222,80 +210,8 @@ def _template_platform_complete(
 def _template_llm_complete(
     messages: list[dict], schema: dict, max_tokens: int, *, owner_id: int | None = None
 ):
-    """Dispatch template calls to platform models by default; keep explicit MiMo mapping."""
-    from app.application.reviewed_excel_audit import ModelRequestNotSent
-
-    provider = configured_template_llm_provider()
-    if provider == "mimo":
-        return _template_mimo_complete(messages, schema, max_tokens)
-    if provider == "platform":
-        return _template_platform_complete(messages, schema, max_tokens, owner_id=owner_id)
-    raise ModelRequestNotSent("模板模型供应商配置不受支持；未调用模型")
-
-
-def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int):
-    """Explicit template-only MiMo route; kept when platform config still maps to MiMo ids."""
-    import asyncio
-    import logging
-    import os
-
-    from app.application.elt import llm_assist
-    from app.application.reviewed_excel_audit import ModelRequestNotSent
-    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
-    from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
-    from app.infrastructure.llm.structured_output import extract_json
-    from app.utils.operational_errors import BOUNDARY_ERRORS
-
-    base = os.environ.get("FHD_TEMPLATE_MIMO_BASE_URL", "").strip().rstrip("/")
-    model = os.environ.get("FHD_TEMPLATE_MIMO_MODEL", "").strip()
-    if (
-        llm_assist.etl_llm_mode() == "off"
-        or base != "https://token-plan-cn.xiaomimimo.com/v1"
-        or model not in {"mimo-v2.6-flash", "mimo-v2.6-pro"}
-    ):
-        raise ModelRequestNotSent("模板 MiMo 配置未完成或不受支持；未调用模型")
-    from app.application.reviewed_excel_budget import template_timeout_seconds
-
-    timeout_seconds = template_timeout_seconds()
-    adapter = OpenAICompatibleAdapter(provider="xiaomi", model=model, base_url=base)
-    if not adapter.is_configured:
-        raise ModelRequestNotSent("模板 MiMo 凭据未配置；未调用模型")
-    provider = XiaomiMimoProvider(adapter)
-    from app.application.reviewed_excel_audit import response_capture
-
-    audit_callback = response_capture()
-
-    async def call():
-        try:
-            return await asyncio.wait_for(
-                provider.chat_completion(
-                    messages,
-                    temperature=0.0,
-                    max_tokens=max_tokens,
-                    thinking={"type": "disabled"},
-                    _reviewed_excel_transport_timeout=timeout_seconds,
-                    **(
-                        {"_reviewed_excel_audit_response": audit_callback} if audit_callback else {}
-                    ),
-                ),
-                timeout=timeout_seconds,
-            )
-        finally:
-            await adapter.close()
-
-    try:
-        response = asyncio.run(call())
-        choice = (response or {}).get("choices", [])[0]
-        if choice.get("finish_reason") != "stop":
-            raise ReviewedExcelError("incomplete")
-        data = extract_json(str((choice.get("message") or {}).get("content") or ""))
-        if data is None or not _validate_template_schema(schema, data):
-            raise ReviewedExcelError("invalid")
-    except BOUNDARY_ERRORS as exc:
-        # Never log the provider exception, request, response or credential.
-        logging.getLogger(__name__).info("template MiMo call failed: %s", type(exc).__name__)
-        raise ReviewedExcelError("模型调用失败或结果不完整，可能已产生费用；未自动重试") from None
-    return llm_assist.LlmAssistResult(used_llm=True, model=model, data=data, provider="mimo")
+    """Use the account route and billing contract shared with intelligent chat."""
+    return _template_platform_complete(messages, schema, max_tokens, owner_id=owner_id)
 
 
 def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:

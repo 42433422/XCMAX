@@ -1,5 +1,5 @@
 {
-  "lines": 2420540,
+  "lines": 2420132,
   "updated": "2026-11-02",
-  "note": "PR #2915 合入最新 main：抽取 workbook preview/lineage 纯投影函数与回归；相对 main 基线 2420388 实测 2420540，净增 152 行（纯函数+测试+CHANGELOG），不抬高安全/覆盖率门槛。"
+  "note": "PR #2915 合入最新 main：ELT workbook preview/lineage 纯投影；相对 main 基线实测净增登记。"
 }

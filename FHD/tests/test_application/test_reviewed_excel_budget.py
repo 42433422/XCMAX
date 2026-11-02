@@ -75,8 +75,8 @@ def test_single_row_overhead_budget_rejects_before_provider(monkeypatch):
     review = workbook_review(1)
     monkeypatch.setattr("app.application.reviewed_excel_budget.MAX_REQUEST_BYTES", 100)
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *a: pytest.fail("must not call provider"),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *a, **kwargs: pytest.fail("must not call provider"),
     )
     with pytest.raises(RequestBudgetExceeded, match="单行"):
         plan_semantic_batches(review, neutral=True)
@@ -93,13 +93,14 @@ def test_prepare_and_execution_use_identical_bounded_output_budget(monkeypatch):
     review = workbook_review(180, formulas=False)
     prepared = _classify_semantic_batch(review, prepare_only=True, reference_ids=True)
     assert 4000 < prepared["max_tokens"] <= MAX_OUTPUT_TOKENS
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
 
-    def capture(messages, schema, tokens):
+    def capture(messages, schema, tokens, **kwargs):
         assert {"messages": messages, "schema": schema, "max_tokens": tokens} == prepared
         raise RuntimeError("synthetic provider boundary")
 
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", capture)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete", capture
+    )
     with pytest.raises(RuntimeError, match="synthetic provider boundary"):
         _classify_semantic_batch(
             review, reference_ids=True, expected_request_sha256=request_digest(prepared)
@@ -466,8 +467,8 @@ def test_indivisible_merge_closure_rejects_before_provider(monkeypatch):
 
     monkeypatch.setattr(classification, "_classify_semantic_batch", reject)
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *a: pytest.fail("must not call provider"),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *a, **kwargs: pytest.fail("must not call provider"),
     )
     with pytest.raises(RequestBudgetExceeded, match="合并闭包无安全二维分割"):
         fit_transport_batches(review, [review["cells"]])
@@ -517,10 +518,9 @@ def test_required_extent_is_source_derived_not_a_business_region(reference_ids, 
             "layout_references": [],
         }
         untouched = deepcopy(raw)
-        monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
         monkeypatch.setattr(
-            "app.application.reviewed_excel_template._template_mimo_complete",
-            lambda *args: LlmAssistResult(used_llm=True, data=raw),
+            "app.application.reviewed_excel_template._template_platform_complete",
+            lambda *args, **kwargs: LlmAssistResult(used_llm=True, data=raw),
         )
         with pytest.raises(ReviewedExcelError, match="白名单"):
             _classify_semantic_batch(review, reference_ids=True)

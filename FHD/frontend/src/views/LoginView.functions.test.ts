@@ -229,7 +229,7 @@ describe('LoginView functions – selectEnterpriseLogin / selectAdminLogin', () 
     await wrapper.find('#lv-invitation-code').setValue('one-use-code')
     await wrapper.find('.login-form').trigger('submit.prevent')
     await flushPromises()
-    expect(mockAuthApiLogin).toHaveBeenCalledWith('member', 'password', 'enterprise', 'one-use-code', { dataProcessingNoticeVersion: '2026-11-01' })
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('member', 'password', 'enterprise', 'one-use-code')
   })
 
   it('selectAdminLogin navigates to admin console URL', async () => {
@@ -463,7 +463,7 @@ describe('LoginView functions – tryAutoLogin', () => {
     mockAuthApiLogin.mockResolvedValue({ success: true })
     await mountLoginView()
     await flushPromises()
-    expect(mockAuthApiLogin).toHaveBeenCalledWith('autouser', 'autopass', 'enterprise', '', {})
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('autouser', 'autopass', 'enterprise', '')
   })
 
   it('tryAutoLogin does not trigger when autoLogin is false', async () => {
@@ -478,17 +478,34 @@ describe('LoginView functions – tryAutoLogin', () => {
     expect(mockAuthApiLogin).not.toHaveBeenCalled()
   })
 
-  it.each(['password', 'phone'] as const)('allows %s basic login without optional model authorization', async mode => {
+  it.each(['password', 'phone'] as const)('submits and retries %s login through the sole form without feature-specific authorization', async mode => {
     mockLoadLoginPreferences.mockReturnValue({ rememberPassword: false, autoLogin: false, username: '', password: '' })
-    mockAuthApiLogin.mockResolvedValue({ success: false, message: 'synthetic' })
-    mockAuthApiLoginWithPhoneCode.mockResolvedValue({ success: false, message: 'synthetic' })
+    mockAuthApiLogin.mockReset().mockResolvedValue({ success: false, message: 'synthetic' })
+    mockAuthApiLoginWithPhoneCode.mockReset().mockResolvedValue({ success: false, message: 'synthetic' })
     const { wrapper } = await mountLoginView()
     const vm = wrapper.vm as any
-    vm.loginMode = mode
-    vm.username = 'synthetic'; vm.password = 'synthetic'; vm.phone = '13800138000'; vm.smsCode = '123456'
-    await vm.submitBasicLogin(); await flushPromises()
-    if (mode === 'password') expect(mockAuthApiLogin).toHaveBeenCalledWith('synthetic', 'synthetic', 'enterprise', '', {})
-    else expect(mockAuthApiLoginWithPhoneCode).toHaveBeenCalledWith('13800138000', '123456', 'enterprise', {})
+    try {
+      vm.loginMode = mode
+      vm.username = 'synthetic'; vm.password = 'synthetic'; vm.phone = '13800138000'; vm.smsCode = '123456'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.findAll('.login-submit')).toHaveLength(1)
+      expect(wrapper.find('.login-basic').exists()).toBe(false)
+      const request = mode === 'password' ? mockAuthApiLogin : mockAuthApiLoginWithPhoneCode
+      const otherRequest = mode === 'password' ? mockAuthApiLoginWithPhoneCode : mockAuthApiLogin
+      const args = mode === 'password' ? ['synthetic', 'synthetic', 'enterprise', ''] : ['13800138000', '123456', 'enterprise']
+      await wrapper.get('.login-form').trigger('submit.prevent'); await flushPromises()
+      expect(request).toHaveBeenCalledExactlyOnceWith(...args)
+      expect(otherRequest).not.toHaveBeenCalled()
+      expect(vm.errorMessage).toBe('synthetic')
+      expect(vm.loading).toBe(false)
+      expect(wrapper.get('.login-submit').attributes('disabled')).toBeUndefined()
+      request.mockResolvedValueOnce({ success: true, data: { success: true, username: 'synthetic' } })
+      await wrapper.get('.login-form').trigger('submit.prevent'); await flushPromises()
+      expect(request).toHaveBeenNthCalledWith(2, ...args)
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(vm.errorMessage).toBe('')
+      expect(vm.loading).toBe(false)
+    } finally { wrapper.unmount() }
   })
 })
 

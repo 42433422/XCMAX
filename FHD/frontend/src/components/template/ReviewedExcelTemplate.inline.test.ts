@@ -18,14 +18,13 @@ const classified = (name = 'synthetic.xlsx') => ({
     dependency_status: '待确认', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [],
   }] }],
 })
-const authorization = { status: 'authorized', operations: { classification: 'authorized', template_candidates: 'authorized' } }
 const reviewed = (id = 'model-review') => ({
   review_id: id, sha256: 'synthetic-sha', cells: [], sheets: ['Sheet1'],
   layout: [{ sheet: 'Sheet1', widths: [], rows: [], truncated: false }],
   selected_region: { selection_basis: 'model_group' },
   proposal: { version: 'v1', parent_version: null, candidates: [0, 1, 2].map(i => ({
     id: `candidate-${i}`, label: `候选${i + 1}`, explanation: '合成模型建议', clear: [],
-  })), result_previews: [0, 1, 2].map(i => ({ candidate_id: `candidate-${i}`, sha256: `candidate-sha-${i}`, layout: [], layout_truncated: false })), evidence: [], model: { status: 'returned', login_authorization: authorization } },
+  })), result_previews: [0, 1, 2].map(i => ({ candidate_id: `candidate-${i}`, sha256: `candidate-sha-${i}`, layout: [], layout_truncated: false })), evidence: [], model: { status: 'returned' } },
 })
 const modelSlice = (index = 0, sheet = 'Sheet1') => ({
   index, basis: 'model_group', confirmed: false, sha256: `slice-${index}`,
@@ -48,7 +47,7 @@ async function stageFile(name = 'synthetic.xlsx') {
 async function start() { await button('开始处理').trigger('click'); await flushPromises() }
 async function openDocument(index = 0) { await wrapper.findAll('[data-document-key]')[index].trigger('click'); await flushPromises() }
 function enableModelPipeline(slices = [modelSlice()]) {
-  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: authorization })
+  api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7' })
   api.analyzeClassification.mockResolvedValue({ version: 'model-v2', model_status: 'returned', sheets: classified().sheets })
   api.autoSlices.mockResolvedValue({ slices })
   api.reviewExcel.mockResolvedValue(reviewed())
@@ -83,7 +82,9 @@ describe('model-required inline ELT processing', () => {
     expect(api.reviewExcel).toHaveBeenCalledTimes(1)
     const form = api.reviewExcel.mock.calls[0][0] as FormData
     expect(form.get('file')).toBe(source)
-    expect([form.get('auto_slice_index'), form.get('use_login_notice'), form.get('sample_authorized'), form.get('own_file_authorized')]).toEqual(['0', 'true', 'false', 'false'])
+    expect(form.get('auto_slice_index')).toBe('0')
+    for (const key of ['use_login_notice', 'model_opt_in', 'sample_authorized', 'own_file_authorized']) expect(form.has(key)).toBe(false)
+    expect(api.reviewedExcelIdentity).not.toHaveBeenCalled()
     expect(api.reviewExcel.mock.invocationCallOrder[0]).toBeGreaterThan(api.autoSlices.mock.invocationCallOrder[0])
     expect(wrapper.get('[role=status]').text()).toBe('模板已生成。')
     expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
@@ -100,34 +101,33 @@ describe('model-required inline ELT processing', () => {
     expect(api.previewReviewedIntake).not.toHaveBeenCalled()
   })
 
-  it.each([
-    ['notice_not_published', '条款尚未发布'],
-    ['login_notice_required', '没有完整的分类与模板候选授权'],
-    ['model_configuration_error', '模型连接异常：平台模型配置不可用'],
-    ['model_connection_error', '模型连接异常'],
-  ])('stops for %s without local fallback or changing authorization', async (status, message) => {
-    api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: { status } })
+  it.each(['model_configuration_error', 'model_connection_error', 'authentication_required'])('stops for a real %s response without local fallback', async code => {
+    api.analyzeClassification.mockRejectedValueOnce(Object.assign(new Error(code), {
+      data: { detail: { code, retryable: false, outcome_unknown: false } },
+    }))
     await stageFile(); await start()
-    expect(wrapper.get('[role=alert]').text()).toContain(message)
-    expect(api.analyzeClassification).not.toHaveBeenCalled()
+    expect(wrapper.get('[role=alert]').text()).toContain(code)
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
     expect(api.reviewExcel).not.toHaveBeenCalled()
     expect(api.confirmClassification).not.toHaveBeenCalled()
     expect(wrapper.findAll('.reviewed-template__preview--a4')).toHaveLength(0)
     expect(wrapper.text()).not.toContain('当前显示本地规则候选')
     expect(wrapper.findAll('input[type=checkbox]')).toHaveLength(0)
-    enableModelPipeline(); await start()
-    expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(1)
+    enableModelPipeline(); await stageFile('recovered.xlsx'); await start()
+    expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(2)
     expect(api.reviewExcel).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['classification', 'template_candidates'])('rejects incomplete %s authorization', async missing => {
+  it.each(['classification', 'template_candidates'])('uses an ordinary session when legacy %s scope is absent', async missing => {
     api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:7', login_authorization: {
-      ...authorization, operations: { ...authorization.operations, [missing]: 'login_notice_required' },
+      status: 'login_notice_required', operations: { [missing]: 'login_notice_required' },
     } })
     await stageFile(); await start()
-    expect(api.analyzeClassification).not.toHaveBeenCalled()
-    expect(api.reviewExcel).not.toHaveBeenCalled()
-    expect(wrapper.get('[role=alert]').text()).toContain('没有完整')
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
+    expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+    expect(api.reviewedExcelIdentity).not.toHaveBeenCalled()
+    expect(wrapper.findAll('input[type=checkbox]')).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('重新登录')
   })
 
   it.each(['not_called', 'unavailable'])('rejects a server %s proposal instead of presenting success', async status => {
@@ -167,11 +167,12 @@ describe('model-required inline ELT processing', () => {
     expect(wrapper.get('[role=alert]').text()).toContain('未知')
   })
 
-  it('stops visibly when identity verification fails', async () => {
-    api.reviewedExcelIdentity.mockRejectedValueOnce(new Error('授权状态读取失败'))
+  it('does not depend on a separate notice identity lookup for a normal session', async () => {
+    api.reviewedExcelIdentity.mockRejectedValueOnce(new Error('obsolete notice lookup unavailable'))
     await stageFile(); await start()
-    expect(api.reviewExcel).not.toHaveBeenCalled()
-    expect(wrapper.get('[role=alert]').text()).toContain('授权状态读取失败')
+    expect(api.reviewedExcelIdentity).not.toHaveBeenCalled()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
+    expect(api.reviewExcel).toHaveBeenCalledTimes(1)
   })
 
   it('never resends an unknown classification outcome or falls back to local candidates', async () => {
@@ -224,22 +225,21 @@ describe('model-required inline ELT processing', () => {
     await stageFile(); await start()
     updateProductReadAccountScope({ tenantId: 1, localUserId: 'pipeline-B', accountKind: 'local' })
     await flushPromises()
-    api.reviewedExcelIdentity.mockResolvedValue({ actor: '1:8', login_authorization: { status: 'login_notice_required' } })
+    api.analyzeClassification.mockRejectedValueOnce(new Error('new account request pending verification'))
     await stageFile('new-account.xlsx'); await start()
     pending.resolve({ version: 'stale', model_status: 'returned', sheets: classified().sheets }); await flushPromises()
     expect(api.autoSlices).not.toHaveBeenCalled()
     expect(api.reviewExcel).not.toHaveBeenCalled()
   })
 
-  it('uses the signed grant for feedback and leaves explicit per-file consents false', async () => {
+  it('submits feedback through the normal session without feature or per-file consent fields', async () => {
     const proposal = reviewed().proposal
     api.refineReviewedExcel.mockResolvedValue({ review_id: 'model-review', proposal: { ...proposal, version: 'v2', parent_version: 'v1' } })
     await stageFile(); await start()
     await wrapper.get('.elt-composer__input').setValue('保留备注')
     await button('发送').trigger('click'); await flushPromises()
     const form = api.refineReviewedExcel.mock.calls[0][0] as FormData
-    expect(form.get('use_login_notice')).toBe('true')
-    expect([form.get('consent'), form.get('sample_authorized'), form.get('own_file_authorized')]).toEqual(['false', 'false', 'false'])
+    for (const key of ['use_login_notice', 'consent', 'sample_authorized', 'own_file_authorized']) expect(form.has(key)).toBe(false)
   })
 
   it.each(['nested', 'production', 'network'])('retains feedback draft and prevents retry of an unknown %s refinement', async envelope => {

@@ -54,10 +54,9 @@ def answer(*regions, documents=(), layout=()):
 
 def execute(monkeypatch, review, raw):
     original = deepcopy(raw)
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setattr(
-        "app.application.reviewed_excel_template._template_mimo_complete",
-        lambda *args: SimpleNamespace(data=raw, model="synthetic-no-network"),
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *args, **kwargs: SimpleNamespace(data=raw, model="synthetic-no-network"),
     )
     try:
         return _classify_semantic_batch(review, reference_ids=True)
