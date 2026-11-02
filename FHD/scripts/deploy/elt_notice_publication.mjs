@@ -5,6 +5,9 @@ const { chromium } = require('@playwright/test')
 const origin = new URL(process.argv[2]).origin
 const channel = process.argv[3]
 if (channel && !['chrome', 'msedge'].includes(channel)) throw new Error('unsupported browser channel')
+const rawBasePath = process.argv[4] || ''
+const basePath = rawBasePath === '/' ? '' : rawBasePath.replace(/\/$/, '')
+if (basePath && !/^\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(basePath)) throw new Error('invalid base path')
 const browser = await chromium.launch({ headless: true, ...(channel ? { channel } : {}) })
 try {
   const context = await browser.newContext({ serviceWorkers: 'block' })
@@ -13,7 +16,7 @@ try {
   page.setDefaultTimeout(15000)
   const pages = {}
   for (const kind of ['service-agreement', 'privacy-policy', 'model-recipients']) {
-    const path = `/login/legal/${kind}`
+    const path = `${basePath}/login/legal/${kind}`
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' })
     if (!response?.ok() || page.url() !== `${origin}${path}`) throw new Error('policy response or redirect')
     const article = page.locator('main.login-legal > article')
@@ -25,9 +28,9 @@ try {
       policy_links: await article.locator(':scope > nav a:visible').evaluateAll(links => links.map(link => link.href)),
     }
   }
-  const response = await page.goto(`${origin}/login`, { waitUntil: 'domcontentloaded' })
-  if (!response?.ok() || page.url() !== `${origin}/login`) throw new Error('login response or redirect')
-  await page.locator('a[href="/login/legal/privacy-policy"]').first().waitFor({ state: 'visible' })
+  const response = await page.goto(`${origin}${basePath}/login`, { waitUntil: 'domcontentloaded' })
+  if (!response?.ok() || page.url() !== `${origin}${basePath}/login`) throw new Error('login response or redirect')
+  await page.locator(`a[href="${basePath}/login/legal/privacy-policy"]`).first().waitFor({ state: 'visible' })
   pages.login_links = await page.locator('a:visible').evaluateAll(links => links.map(link => link.href))
   process.stdout.write(JSON.stringify(pages))
 } finally {

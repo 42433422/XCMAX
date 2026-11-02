@@ -59,7 +59,7 @@ def _interim_public_download_text() -> str:
 def test_unsigned_public_download_requires_an_owner_risk_acceptance() -> None:
     text = _interim_public_download_text()
 
-    assert "needs: [windows-installer-delivery]" in text
+    assert "needs: [windows-installer-delivery, notice-publication-policy]" in text
     assert "inputs.windows_installer_only == true" in text
     assert "--risk-acceptance FHD/config/windows_signing_acceptance.json" in text
     assert "--release-metadata-source FHD/config/download_release.json" in text

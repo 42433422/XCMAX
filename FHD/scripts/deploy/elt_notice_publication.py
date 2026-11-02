@@ -24,13 +24,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from dotenv.parser import parse_stream
-
 FHD_ROOT = Path(__file__).resolve().parents[2]
 ENV_KEY = "FHD_ELT_NOTICE_PUBLICATION"
 
 
 def production_origin(value: str) -> str:
+    if any(
+        character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value
+    ):
+        raise ValueError("origin must not contain whitespace or control characters")
     parsed = urlsplit(value)
     if (
         parsed.scheme != "https"
@@ -44,6 +46,18 @@ def production_origin(value: str) -> str:
         raise ValueError("origin must be an HTTPS origin without credentials, path or query")
     host = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
     return f"https://{host}" + (f":{parsed.port}" if parsed.port not in {None, 443} else "")
+
+
+def canonical_base_path(value: str) -> str:
+    """An explicit deployment prefix; never infer it from redirects or page content."""
+    if value in {"", "/"}:
+        return ""
+    prefix = value.removesuffix("/")
+    if not re.fullmatch(r"/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", prefix):
+        raise ValueError(
+            "base-path must be a canonical absolute path without query, fragment or traversal"
+        )
+    return prefix
 
 
 def source_documents(root: Path = FHD_ROOT) -> dict:
@@ -71,8 +85,46 @@ def normalized(value: str) -> str:
     return "".join(unicodedata.normalize("NFKC", value).split())
 
 
-def verify_policy_links(links: list[str], origin: str) -> None:
-    required = {"/login/legal/service-agreement", "/login/legal/privacy-policy"}
+def validate_record(record: dict, documents: dict) -> dict:
+    """Validate an existing publication fact without changing its completion time."""
+    keys = ("notice_version", "recipient_disclosure_version", "published_at")
+    if not isinstance(record, dict) or set(record) != set(keys):
+        raise ValueError("publication record must contain exactly the three notice fields")
+    if (
+        record["notice_version"] != documents["service-agreement"]["version"]
+        or record["recipient_disclosure_version"] != documents["privacy-policy"]["version"]
+        or not isinstance(record["published_at"], str)
+    ):
+        raise ValueError("publication record does not match the source policy versions")
+    published = datetime.fromisoformat(record["published_at"].replace("Z", "+00:00"))
+    if published.tzinfo is None or published > datetime.now(UTC):
+        raise ValueError(
+            "publication completion time must include a timezone and not be in the future"
+        )
+    return {key: record[key] for key in keys}
+
+
+def record_from_env(name: str, documents: dict) -> dict:
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", name):
+        raise ValueError("record-env must name an environment variable")
+    raw = os.environ.get(name, "")
+    if not raw or len(raw.encode("utf-8")) > 4096:
+        raise ValueError("publication input is missing or exceeds 4096 bytes")
+
+    def unique_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("publication input has duplicate fields")
+            result[key] = value
+        return result
+
+    return validate_record(json.loads(raw, object_pairs_hook=unique_pairs), documents)
+
+
+def verify_policy_links(links: list[str], origin: str, base_path: str = "") -> None:
+    prefix = canonical_base_path(base_path)
+    required = {f"{prefix}/login/legal/service-agreement", f"{prefix}/login/legal/privacy-policy"}
     found = set()
     for href in links:
         target = urlsplit(href)
@@ -85,7 +137,7 @@ def verify_policy_links(links: list[str], origin: str) -> None:
         raise ValueError("both same-origin policy links must remain accessible")
 
 
-def verify_rendered(documents: dict, pages: dict, origin: str) -> None:
+def verify_rendered(documents: dict, pages: dict, origin: str, base_path: str = "") -> None:
     for kind in ("service-agreement", "privacy-policy", "model-recipients"):
         expected = documents["privacy-policy" if kind == "model-recipients" else kind]
         page = pages.get(kind, {})
@@ -93,7 +145,7 @@ def verify_rendered(documents: dict, pages: dict, origin: str) -> None:
             f"版本 {expected['version']} · 修订日期 {expected['updatedAt']}"
         ) != normalized(page.get("version", "")):
             raise ValueError(f"{kind}: deployed title/version does not match the source")
-        verify_policy_links(page.get("policy_links", []), origin)
+        verify_policy_links(page.get("policy_links", []), origin, base_path)
         sections = page.get("sections", [])
         if len(sections) != len(expected["sections"]):
             raise ValueError(f"{kind}: rendered policy sections are incomplete")
@@ -109,13 +161,13 @@ def verify_rendered(documents: dict, pages: dict, origin: str) -> None:
                     chunks.extend(cell for row in table["rows"] for cell in row)
             if normalized(actual) != normalized("".join(chunks)):
                 raise ValueError(f"{kind}: rendered disclosure differs from the source")
-    verify_policy_links(pages.get("login_links", []), origin)
+    verify_policy_links(pages.get("login_links", []), origin, base_path)
 
 
-def render_policies(origin: str, browser_channel: str | None = None) -> dict:
+def render_policies(origin: str, browser_channel: str | None = None, base_path: str = "") -> dict:
     helper = Path(__file__).with_suffix(".mjs")
     result = subprocess.run(
-        ["node", str(helper), origin, *([browser_channel] if browser_channel else [])],
+        ["node", str(helper), origin, browser_channel or "", canonical_base_path(base_path)],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -145,6 +197,8 @@ def atomic_write(target: Path, content: bytes) -> None:
 
 
 def install_record(target: Path, record: dict) -> None:
+    from dotenv.parser import parse_stream
+
     if target.is_symlink():
         raise ValueError("env-file must not be a symlink")
     original = target.read_bytes() if target.exists() else b""
@@ -173,6 +227,16 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--origin", required=True, type=production_origin)
+    parser.add_argument(
+        "--base-path",
+        default="",
+        type=canonical_base_path,
+        help="explicit deployed FHD prefix, e.g. /admin; empty keeps root routes",
+    )
+    parser.add_argument(
+        "--record-env",
+        help="validate an existing nonsecret JSON record from this environment variable; retain its published_at",
+    )
     targets = parser.add_mutually_exclusive_group()
     targets.add_argument(
         "--env-file",
@@ -192,8 +256,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         documents = source_documents()
-        verify_rendered(documents, render_policies(args.origin, args.browser_channel), args.origin)
-        record = {
+        record = record_from_env(args.record_env, documents) if args.record_env else None
+        verify_rendered(
+            documents,
+            render_policies(args.origin, args.browser_channel, args.base_path),
+            args.origin,
+            args.base_path,
+        )
+        record = record or {
             "notice_version": documents["service-agreement"]["version"],
             "recipient_disclosure_version": documents["privacy-policy"]["version"],
             "published_at": datetime.now(UTC).isoformat(),

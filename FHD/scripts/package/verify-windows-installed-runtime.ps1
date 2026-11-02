@@ -44,6 +44,21 @@ function Wait-PathRemoved {
   throw "Timed out waiting for uninstall to remove: $Path"
 }
 
+function New-NoticePublicationProbeStartInfo {
+  param([string]$BackendExe, [string]$ProbeDir, [string]$Digest)
+  $info = New-Object System.Diagnostics.ProcessStartInfo
+  $info.FileName = $BackendExe
+  $info.Arguments = '--verify-notice-publication-sha256 ' + $Digest + ' --data-dir "' + (Join-Path $ProbeDir 'notice-data') + '"'
+  $info.WorkingDirectory = $ProbeDir
+  $info.UseShellExecute = $false
+  $info.CreateNoWindow = $true
+  $info.RedirectStandardOutput = $true
+  $info.RedirectStandardError = $true
+  # Exercise only the installed fallback; preserve the runner's own environment.
+  $info.EnvironmentVariables.Remove('FHD_ELT_NOTICE_PUBLICATION')
+  return $info
+}
+
 if (-not (Test-Path -LiteralPath $InstallerPath)) {
   throw "Windows installer not found: $InstallerPath"
 }
@@ -135,6 +150,9 @@ try {
   if ($actualVersion -ne $ExpectedProductVersion) {
     throw "Installed build-info version mismatch: actual=$actualVersion expected=$ExpectedProductVersion"
   }
+  & python (Join-Path $PSScriptRoot 'notice_publication_material.py') verify `
+    --resources-root (Join-Path $InstallDir 'resources') --source-sha $ExpectedBuildSha
+  if ($LASTEXITCODE -ne 0) { throw 'Installed notice publication material verification failed' }
 
   $exeProductVersion = ([string]((Get-Item -LiteralPath $installedExe).VersionInfo.ProductVersion)).Trim()
   if ($exeProductVersion -ne $ExpectedProductVersion) {
@@ -154,6 +172,32 @@ try {
   $probeDir = Join-Path (Split-Path -Parent $InstallDir) ("xcagi-installed-probe-" + [Guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Force -Path $probeDir | Out-Null
   try {
+    if ($buildInfo.notice_publication) {
+      Write-Host 'Verifying the installed backend reads its bundled notice publication record.'
+      $noticeProbe = New-Object System.Diagnostics.Process
+      $noticeProbe.StartInfo = New-NoticePublicationProbeStartInfo -BackendExe $backendExe -ProbeDir $probeDir -Digest ([string]$buildInfo.notice_publication.sha256)
+      if (-not $noticeProbe.Start()) { throw 'Installed notice publication probe could not start' }
+      $noticeOutput = $noticeProbe.StandardOutput.ReadToEndAsync()
+      $noticeError = $noticeProbe.StandardError.ReadToEndAsync()
+      $noticeCompleted = $false
+      try {
+        if (-not $noticeProbe.WaitForExit(90000)) {
+          Stop-Process -Id $noticeProbe.Id -Force -ErrorAction SilentlyContinue
+          [void]$noticeProbe.WaitForExit(5000)
+          throw 'Installed notice publication probe timed out'
+        }
+        $noticeProbe.Refresh()
+        $noticeCompleted = $true
+        if ($noticeProbe.ExitCode -ne 0) { throw 'Installed notice publication probe failed' }
+      } finally {
+        if ($noticeCompleted -or $noticeOutput.IsCompleted) { [System.IO.File]::WriteAllText((Join-Path $probeDir 'notice.stdout.log'), $noticeOutput.GetAwaiter().GetResult()) }
+        if ($noticeCompleted -or $noticeError.IsCompleted) { [System.IO.File]::WriteAllText((Join-Path $probeDir 'notice.stderr.log'), $noticeError.GetAwaiter().GetResult()) }
+        $noticeProbe.Dispose()
+      }
+      & python (Join-Path $PSScriptRoot 'notice_publication_material.py') verify-probe `
+        --resources-root (Join-Path $InstallDir 'resources') --source-sha $ExpectedBuildSha --probe-output (Join-Path $probeDir 'notice.stdout.log')
+      if ($LASTEXITCODE -ne 0) { throw 'Installed notice publication probe evidence failed' }
+    }
     Write-Host 'Verifying installed backend critical dependencies and synthetic XLSX derivation.'
     $probe = Start-Process -FilePath $backendExe `
       -ArgumentList @('--verify-frozen-critical-runtime', '--data-dir', "`"$(Join-Path $probeDir 'data')`"") `
@@ -171,7 +215,7 @@ try {
       throw "Installed backend critical runtime probe failed with exit code $($probe.ExitCode)"
     }
   } finally {
-    foreach ($relativeLog in @('stdout.log', 'stderr.log', 'data\logs\backend-bootstrap.log', 'data\logs\frozen-runtime-probe.log')) {
+    foreach ($relativeLog in @('notice.stdout.log', 'notice.stderr.log', 'stdout.log', 'stderr.log', 'data\logs\backend-bootstrap.log', 'data\logs\frozen-runtime-probe.log')) {
       $probeLog = Join-Path $probeDir $relativeLog
       if (Test-Path -LiteralPath $probeLog) {
         Write-Host "[installed-runtime-probe] $relativeLog"

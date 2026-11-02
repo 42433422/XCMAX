@@ -19,9 +19,12 @@ publication = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(publication)
 
 
-def rendered(documents, origin="https://example.com"):
+def rendered(documents, origin="https://example.com", base_path=""):
     pages = {}
-    links = [f"{origin}/login/legal/service-agreement", f"{origin}/login/legal/privacy-policy"]
+    links = [
+        f"{origin}{base_path}/login/legal/service-agreement",
+        f"{origin}{base_path}/login/legal/privacy-policy",
+    ]
     for key in ("service-agreement", "privacy-policy", "model-recipients"):
         doc = documents["privacy-policy" if key == "model-recipients" else key]
         sections = []
@@ -61,11 +64,48 @@ def test_current_source_covers_both_versions_and_integrated_recipient():
         "https://example.com/login",
         "https://example.com?key=secret",
         "https://example.com#part",
+        "https://example.com\n",
     ],
 )
 def test_refuses_non_origin_or_plain_http(origin):
     with pytest.raises(ValueError):
         publication.production_origin(origin)
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [("", ""), ("/", ""), ("/admin", "/admin"), ("/admin/", "/admin"), ("/fhd/v1", "/fhd/v1")],
+)
+def test_base_path_is_explicit_and_canonical(value, expected):
+    assert publication.canonical_base_path(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "admin",
+        "//admin",
+        "/admin//legal",
+        "/../admin",
+        "/admin?x=1",
+        "/admin#x",
+        "/%61dmin",
+        "/admin\\x",
+        "/admin\n",
+    ],
+)
+def test_base_path_rejects_non_path_or_ambiguous_prefix(value):
+    with pytest.raises(ValueError):
+        publication.canonical_base_path(value)
+
+
+def test_prefixed_policy_and_login_links_must_match_deployment_prefix():
+    docs = publication.source_documents()
+    pages = rendered(docs, base_path="/admin")
+    publication.verify_rendered(docs, pages, "https://example.com", "/admin")
+    pages["login_links"] = rendered(docs)["login_links"]
+    with pytest.raises(ValueError):
+        publication.verify_rendered(docs, pages, "https://example.com", "/admin")
 
 
 @pytest.mark.parametrize("failure", ["shell", "version", "missing_disclosure", "alias", "links"])
@@ -160,6 +200,89 @@ def test_record_file_is_genuinely_verified_strict_json(monkeypatch, tmp_path, ca
     assert "Verified nonsecret publication record written" in capsys.readouterr().out
 
 
+def test_ci_record_env_retains_original_completion_time(monkeypatch, tmp_path):
+    docs = publication.source_documents()
+    record = {
+        "notice_version": docs["service-agreement"]["version"],
+        "recipient_disclosure_version": docs["privacy-policy"]["version"],
+        "published_at": "2026-11-01T04:00:00Z",
+    }
+    monkeypatch.setenv("TEST_NOTICE_PUBLICATION_JSON", json.dumps(record))
+
+    def render(origin, channel, base_path):
+        assert (origin, channel, base_path) == ("https://example.com", "msedge", "/admin")
+        return rendered(docs, origin, base_path)
+
+    monkeypatch.setattr(publication, "render_policies", render)
+    output = tmp_path / "record.json"
+    assert (
+        publication.main(
+            [
+                "--origin",
+                "https://example.com",
+                "--base-path",
+                "/admin/",
+                "--browser-channel",
+                "msedge",
+                "--record-env",
+                "TEST_NOTICE_PUBLICATION_JSON",
+                "--record-file",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(output.read_text(encoding="utf-8")) == record
+
+
+@pytest.mark.parametrize(
+    "mutation", ["extra", "version", "future", "naive", "duplicate", "missing", "oversized"]
+)
+def test_invalid_ci_record_is_rejected_before_browser_or_write(monkeypatch, tmp_path, mutation):
+    docs = publication.source_documents()
+    record = {
+        "notice_version": docs["service-agreement"]["version"],
+        "recipient_disclosure_version": docs["privacy-policy"]["version"],
+        "published_at": "2026-11-01T04:00:00Z",
+    }
+    if mutation == "extra":
+        record["secret"] = "forbidden-input"
+    elif mutation == "version":
+        record["notice_version"] = "old"
+    elif mutation == "future":
+        record["published_at"] = "2999-01-01T00:00:00Z"
+    elif mutation == "naive":
+        record["published_at"] = "2026-11-01T00:00:00"
+    raw = json.dumps(record)
+    if mutation == "duplicate":
+        raw = raw[:-1] + ', "notice_version":"2026-11-01"}'
+    elif mutation == "missing":
+        raw = ""
+    elif mutation == "oversized":
+        raw += " " * 4097
+    monkeypatch.setenv("TEST_NOTICE_PUBLICATION_JSON", raw)
+
+    def no_browser(*_):
+        pytest.fail("invalid record reached the browser")
+
+    monkeypatch.setattr(publication, "render_policies", no_browser)
+    output = tmp_path / "record.json"
+    assert (
+        publication.main(
+            [
+                "--origin",
+                "https://example.com",
+                "--record-env",
+                "TEST_NOTICE_PUBLICATION_JSON",
+                "--record-file",
+                str(output),
+            ]
+        )
+        == 1
+    )
+    assert not output.exists()
+
+
 def test_failed_record_replace_preserves_previous_file_and_reports_failure(
     monkeypatch, tmp_path, capsys
 ):
@@ -181,18 +304,19 @@ def test_failed_record_replace_preserves_previous_file_and_reports_failure(
 @pytest.mark.skipif(
     not os.environ.get("ELT_NOTICE_BROWSER_SMOKE"), reason="opt-in existing browser smoke"
 )
-@pytest.mark.parametrize("shell_only", [False, True])
-def test_existing_browser_renders_synthetic_spa_and_rejects_shell(shell_only):
+@pytest.mark.parametrize("base_path,shell_only", [("", False), ("/admin", False), ("/admin", True)])
+def test_existing_browser_renders_synthetic_spa_and_rejects_shell(base_path, shell_only):
     docs = publication.source_documents()
-    fixture = rendered(docs)
+    fixture = rendered(docs, base_path=base_path)
 
     class SyntheticPolicy(BaseHTTPRequestHandler):
         def do_GET(self):
             kind = self.path.rsplit("/", 1)[-1]
+            links = f'<a href="{base_path}/login/legal/service-agreement">Service</a><a href="{base_path}/login/legal/privacy-policy">Privacy</a>'
             if kind in fixture and not shell_only:
                 page = fixture[kind]
                 content = (
-                    '<main class="login-legal"><article><nav><a href="/login/legal/service-agreement">协议</a><a href="/login/legal/privacy-policy">隐私</a></nav>'
+                    f'<main class="login-legal"><article><nav>{links}</nav>'
                     + f"<h1>{escape(page['title'])}</h1><p>{escape(page['version'])}</p>"
                     + "".join(
                         f"<section>{escape(section)}</section>" for section in page["sections"]
@@ -200,7 +324,7 @@ def test_existing_browser_renders_synthetic_spa_and_rejects_shell(shell_only):
                     + "</article></main>"
                 )
             else:
-                content = '<a href="/login/legal/service-agreement">协议</a><a href="/login/legal/privacy-policy">隐私</a>'
+                content = links
             # The inert template stays invisible until its cloned DOM is mounted after the delay.
             html = (
                 '<html><body><div id="app"></div><template id="policy">'
@@ -225,6 +349,7 @@ def test_existing_browser_renders_synthetic_spa_and_rejects_shell(shell_only):
                 str(SCRIPT.with_suffix(".mjs")),
                 f"http://127.0.0.1:{server.server_port}",
                 os.environ["ELT_NOTICE_BROWSER_SMOKE"],
+                base_path,
             ],
             capture_output=True,
             encoding="utf-8",
@@ -235,7 +360,7 @@ def test_existing_browser_renders_synthetic_spa_and_rejects_shell(shell_only):
         else:
             assert result.returncode == 0, result.stderr
             publication.verify_rendered(
-                docs, json.loads(result.stdout), f"http://127.0.0.1:{server.server_port}"
+                docs, json.loads(result.stdout), f"http://127.0.0.1:{server.server_port}", base_path
             )
     finally:
         server.shutdown()
