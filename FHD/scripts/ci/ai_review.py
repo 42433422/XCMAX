@@ -427,7 +427,7 @@ _RULES: list[tuple[str, str, str, str, str]] = [
 
 def _is_generated_corp_butler(file_path: str) -> bool:
     path = file_path.replace("\\", "/")
-    return path.startswith("成都修茈科技有限公司/corp-butler/") and path.endswith((".js", ".css"))
+    return "/corp-butler/" in path and path.endswith((".js", ".css"))
 
 
 def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:

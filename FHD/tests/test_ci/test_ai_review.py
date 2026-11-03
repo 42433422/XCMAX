@@ -355,7 +355,7 @@ class TestMatchRules:
     def test_generated_corp_butler_ignores_vue_runtime_innerhtml(self) -> None:
         hunks = [
             review.DiffHunk(
-                file_path="成都修茈科技有限公司/corp-butler/corp-butler.js",
+                file_path="\\346\\210\\220\\351\\203\\275/corp-butler/corp-butler.js",
                 start_line=1,
                 lines=[(1, "+", "el.innerHTML = html")],
                 raw_header="@@ -1,0 +1,1 @@",
