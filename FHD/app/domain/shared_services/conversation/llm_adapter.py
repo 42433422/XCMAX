@@ -11,7 +11,7 @@ import logging
 import math
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 from urllib.parse import urlsplit
 
 import httpx
@@ -235,7 +235,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         return bool(self._api_key)
 
     async def _replace_client(
-        self, current: Optional[httpx.AsyncClient], factory: Any
+        self, current: Optional[httpx.AsyncClient], factory: Callable[[], httpx.AsyncClient]
     ) -> httpx.AsyncClient:
         if current is not None and not current.is_closed:
             try:

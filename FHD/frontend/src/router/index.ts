@@ -79,6 +79,15 @@ router.beforeEach(async (to, _from, finish) => {
     if (generation === getSidebarNavigationGeneration()) showAppToast('连接暂不可用，未能验证会话。请检查连接后重试；没有判定账号失效。', 'warning')
     next(false)
   }
+  const refreshSignedInProfile = (profile: { loaded: boolean; refreshFromServer: () => Promise<unknown> }) => {
+    void profile.refreshFromServer().then(() => {
+      if (profile.loaded) return
+      const current = router.currentRoute.value
+      if (current.meta?.publicAccess || current.name === 'login') return
+      const redirect = current.fullPath && current.fullPath !== '/login' ? current.fullPath : '/'
+      void router.replace({ name: 'login', query: { redirect } })
+    }).catch(() => undefined)
+  }
   let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {
     const nextView = normalizeDutyRosterGraphView(to.query.view)
@@ -115,7 +124,7 @@ router.beforeEach(async (to, _from, finish) => {
       const { useAccountProfileStore } = await import('@/stores/accountProfile')
       const profile = useAccountProfileStore()
       if (!profile.loaded) await profile.refreshFromServer()
-      else if (profile.sessionCheckUnavailable) void profile.refreshFromServer()
+      else if (profile.sessionCheckUnavailable) refreshSignedInProfile(profile)
       if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
       if (!profile.isAdminAccount) {
         next({
@@ -143,7 +152,13 @@ router.beforeEach(async (to, _from, finish) => {
     const profile = useAccountProfileStore()
     // Settings is safe during the desktop session hint's background refresh.
     const identityMissing = !profile.loaded || profile.workspaceReady === false
-    if (profile.loaded && profile.sessionCheckUnavailable && !identityMissing) void profile.refreshFromServer()
+    if (profile.loaded && profile.sessionCheckUnavailable && !identityMissing) {
+      refreshSignedInProfile(profile)
+      if (!profile.loaded) {
+        next({ name: 'login', query: { redirect: to.fullPath !== '/login' ? to.fullPath : '/' } })
+        return
+      }
+    }
     if ((identityMissing || profile.sessionCheckUnavailable) && !(profile.loaded && profile.sessionCheckUnavailable && !identityMissing) && !(isDesktopShell() && to.name === 'settings')) {
       const sku = await fetchProductSku().catch(() => null)
       if (profile.sessionCheckUnavailable || sku === null || isEnterpriseEdition(sku)) {
@@ -303,7 +318,7 @@ router.beforeEach(async (to, _from, finish) => {
       } else if (!profile.loaded) {
         await profile.refreshFromServer()
       } else if (profile.sessionCheckUnavailable) {
-        void profile.refreshFromServer()
+        refreshSignedInProfile(profile)
       }
       if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
       if (!provisionalDesktopEntry && profile.isAdminAccount && to.name !== 'login') {
@@ -333,7 +348,7 @@ router.beforeEach(async (to, _from, finish) => {
       const { useAccountProfileStore } = await import('@/stores/accountProfile')
       const profile = useAccountProfileStore()
       if (!profile.loaded) await profile.refreshFromServer()
-      else if (profile.sessionCheckUnavailable) void profile.refreshFromServer()
+      else if (profile.sessionCheckUnavailable) refreshSignedInProfile(profile)
       if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
       if (!profile.isAdminAccount) {
         next({ name: 'chat' })
@@ -369,7 +384,7 @@ router.beforeEach(async (to, _from, finish) => {
           } else if (!profile.loaded) {
             await profile.refreshFromServer()
           } else if (profile.sessionCheckUnavailable) {
-            void profile.refreshFromServer()
+            refreshSignedInProfile(profile)
           }
           if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
           if (!provisionalDesktopEntry && !isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {

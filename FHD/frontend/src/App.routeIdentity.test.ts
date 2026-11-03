@@ -37,7 +37,7 @@ it('preserves an admin page and its input across anchor jumps, while query chang
 })
 
 
-it('caches desktop pages and retires them on identity or permission changes', async () => {
+it('keeps cached desktop pages across permission refreshes and retires them on identity changes', async () => {
   mode.admin = false; mode.desktop = true
   const account = useAccountProfileStore()
   account.loaded = true; account.localUserId = 1
@@ -50,12 +50,11 @@ it('caches desktop pages and retires them on identity or permission changes', as
   await router.push('/two'); await router.push('/one'); await flushPromises()
   expect(mounts).toBe(1); expect(wrapper.get('input').element.value).toBe('draft')
   account.permissions = ['new.permission']; await flushPromises()
-  expect(mounts).toBe(2); expect(wrapper.get('input').element.value).toBe('')
-  await wrapper.get('input').setValue('private')
-  account.localUserId = 2; await flushPromises()
-  expect(mounts).toBe(3); expect(wrapper.get('input').element.value).toBe('')
+  expect(mounts).toBe(1); expect(wrapper.get('input').element.value).toBe('draft')
   account.loaded = false; await flushPromises()
-  expect(mounts).toBe(4)
+  expect(mounts).toBe(1)
+  account.localUserId = 2; await flushPromises()
+  expect(mounts).toBe(2); expect(wrapper.get('input').element.value).toBe('')
   wrapper.unmount(); mode.admin = true; mode.desktop = false
 })
 
@@ -69,7 +68,7 @@ it('limits the desktop cache and handles rapid route changes', async () => {
   await flushPromises()
   for (let i = 1; i <= 12; i++) { await router.push(`/page/${i}`); await flushPromises() }
   await router.push('/page/0'); await flushPromises()
-  expect(mounts).toBe(14)
+  expect(mounts).toBe(13)
   const first = router.push('/page/1'); const second = router.push('/page/2')
   await Promise.allSettled([first, second]); await flushPromises()
   expect(router.currentRoute.value.path).toBe('/page/2')

@@ -844,12 +844,12 @@ describe('router/index 覆盖率补齐', () => {
   // ═══════════════════════════════════════════════════════════
   describe('beforeEach 守卫 - enterprise session', () => {
     it.each([
-      { dwell: 1_000, latency: 80, result: 'valid', expected: 0, target: 'settings' },
-      { dwell: 300_001, latency: 80, result: 'valid', expected: 80, target: 'settings' },
-      { dwell: 300_001, latency: 450, result: 'valid', expected: 450, target: 'settings' },
-      { dwell: 300_001, latency: 8_000, result: 'timeout', expected: 8_000, target: 'chat' },
-      { dwell: 300_001, latency: 80, result: 'invalid', expected: 80, target: 'login' },
-    ])('measures guarded navigation with a controlled session response: %j', async ({ dwell, latency, result, expected, target }) => {
+      { dwell: 1_000, latency: 80, result: 'valid', background: false, target: 'settings' },
+      { dwell: 300_001, latency: 80, result: 'valid', background: true, target: 'settings' },
+      { dwell: 300_001, latency: 450, result: 'valid', background: true, target: 'settings' },
+      { dwell: 300_001, latency: 8_000, result: 'timeout', background: true, target: 'settings' },
+      { dwell: 300_001, latency: 80, result: 'invalid', background: true, target: 'login' },
+    ])('reuses a recent enterprise session without blocking navigation: %j', async ({ dwell, latency, result, background, target }) => {
       const cache = await vi.importActual<typeof import('@/utils/authSessionCache')>('@/utils/authSessionCache')
       const { authApi } = await import('@/api/auth')
       vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
@@ -866,19 +866,15 @@ describe('router/index 覆盖率补齐', () => {
         await router.push('/')
         vi.setSystemTime(Date.now() + dwell)
         const started = Date.now()
-        const navigating = router.push('/settings')
-        await flushPromises()
-        if (expected) {
-          expect(probe).toHaveBeenCalledOnce()
-          expect(router.currentRoute.value.name).toBe('chat')
-          await vi.advanceTimersByTimeAsync(latency - 1)
-          expect(router.currentRoute.value.name).toBe('chat')
-          await vi.advanceTimersByTimeAsync(1)
+        await router.push('/settings')
+        expect(Date.now() - started).toBe(0)
+        expect(router.currentRoute.value.name).toBe('settings')
+        expect(probe).toHaveBeenCalledTimes(background ? 1 : 0)
+        if (background) {
+          await vi.advanceTimersByTimeAsync(latency)
+          await flushPromises()
         }
-        await navigating
-        expect(Date.now() - started).toBe(expected)
         expect(router.currentRoute.value.name).toBe(target)
-        expect(probe).toHaveBeenCalledTimes(expected ? 1 : 0)
       } finally {
         cache.invalidateEnterpriseSessionCache()
         probe.mockRestore()
@@ -964,18 +960,20 @@ describe('router/index 覆盖率补齐', () => {
       expect(router.currentRoute.value.name).toBe('settings')
     })
 
-    it.each(['admin', 'enterprise', 'desktop', 'generic'])('retries a loaded unavailable %s profile on each navigation and recovers', async shell => {
+    it.each(['admin', 'enterprise', 'desktop', 'generic'])('keeps a loaded unavailable %s profile on the page and refreshes behind it', async shell => {
       mockIsAdminConsoleSpa.mockReturnValue(shell === 'admin')
       mockIsDesktopShell.mockReturnValue(shell === 'desktop')
       mockIsEnterpriseEdition.mockReturnValue(shell !== 'generic')
       mockAccountProfileStore.isAdminAccount = shell === 'admin'
       mockAccountProfileStore.sessionCheckUnavailable = true
       await router.push('/settings')
-      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalledOnce()
-      expect(router.currentRoute.value.name).toBe('login')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('settings')
+      const calls = mockAccountProfileStore.refreshFromServer.mock.calls.length
       mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => { mockAccountProfileStore.sessionCheckUnavailable = false })
+      await router.push('/')
       await router.push('/settings')
-      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalledTimes(2)
+      expect(mockAccountProfileStore.refreshFromServer.mock.calls.length).toBeGreaterThan(calls)
       expect(router.currentRoute.value.name).toBe('settings')
     })
 

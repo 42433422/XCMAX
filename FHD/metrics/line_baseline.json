@@ -1,5 +1,5 @@
 {
-  "lines": 2424196,
+  "lines": 2424206,
   "updated": "2026-11-03",
-  "note": "Ruff format wraps desktop-fix lines. Arch-fitness keys follow the same existing domain imports. Login remount resumes unread polling and task center, and LLM client replacement survives a closed event loop."
+  "note": "CI: mypy accepts sheet extent and LLM client replacement. Route tests match non-blocking session reuse, and a refresh that drops the profile still leaves protected pages."
 }

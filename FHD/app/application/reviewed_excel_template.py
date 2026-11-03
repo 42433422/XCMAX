@@ -316,11 +316,9 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
 
 def _sheet_axis(value: object) -> int:
     """openpyxl reports max_row/max_column as None when a sheet has no dimensions."""
-    try:
-        count = int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+    if isinstance(value, bool) or not isinstance(value, int):
         return 0
-    return count if count > 0 else 0
+    return value if value > 0 else 0
 
 
 def _sheet_cell_extent(sheet: object) -> int:
