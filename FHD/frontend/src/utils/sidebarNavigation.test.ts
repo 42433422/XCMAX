@@ -94,4 +94,27 @@ describe('sidebarNavigation', () => {
     expect(getQueuedSidebarViewKey()).toBeNull()
     expect(isSidebarNavigationPending()).toBe(false)
   })
+
+  it('starts the next target without waiting for a slow in-flight push', async () => {
+    let releaseFirst: (() => void) | undefined
+    let pushes = 0
+    const push = vi.fn(() => {
+      pushes += 1
+      if (pushes === 1) return new Promise<void>((resolve) => { releaseFirst = resolve })
+      return Promise.resolve()
+    })
+    const router = {
+      push,
+      hasRoute: (name: string) => ['customers', 'print'].includes(name),
+      resolve: () => ({ matched: [{}] }),
+    } as unknown as Router
+    const first = navigateFromSidebarKey(router, 'customers')
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1))
+    const second = navigateFromSidebarKey(router, 'print')
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(2))
+    expect(push.mock.calls.at(-1)?.[0]).toEqual({ name: 'print' })
+    releaseFirst?.()
+    await Promise.all([first, second])
+    expect(isSidebarNavigationPending()).toBe(false)
+  })
 })

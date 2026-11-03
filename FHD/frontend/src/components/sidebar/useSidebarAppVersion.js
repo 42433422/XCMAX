@@ -27,6 +27,8 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
   let failureCount = 0
   let nextRetryAt = 0
   let lastApiReachableAt = null
+  let lastSuccessAt = null
+  const HEALTH_GRACE_MS = 90_000
   const runtimeHealthCheck = computed(() => {
     if (lastCheckedAt.value === null) return { iso: '', text: '尚未检测', title: '尚未检测' }
     const date = new Date(lastCheckedAt.value)
@@ -71,13 +73,21 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
         healthAppVersion.value = String(data?.version || '').trim()
         failureCount = 0
         nextRetryAt = 0
+        lastSuccessAt = Date.now()
         lastCheckedAt.value = Date.now()
       } catch {
         if (!stopped && epoch === lifecycle) {
-          connection.value = lastApiReachableAt !== null && Date.now() - lastApiReachableAt < 30_000 ? 'reachable' : 'offline'
-          lastCheckedAt.value = Date.now()
-          failureCount = Math.min(failureCount + 1, 4)
-          nextRetryAt = Date.now() + Math.min(30_000 * 2 ** failureCount, 300_000)
+          const recentlyHealthy = lastSuccessAt !== null && Date.now() - lastSuccessAt < HEALTH_GRACE_MS
+          // One blip while the shell is navigating or the chat stream is busy is not an outage.
+          if (recentlyHealthy && failureCount === 0) {
+            failureCount = 1
+            nextRetryAt = Date.now() + 8_000
+          } else {
+            connection.value = lastApiReachableAt !== null && Date.now() - lastApiReachableAt < 30_000 ? 'reachable' : 'offline'
+            lastCheckedAt.value = Date.now()
+            failureCount = Math.min(failureCount + 1, 4)
+            nextRetryAt = Date.now() + Math.min(30_000 * 2 ** failureCount, 300_000)
+          }
         }
       } finally {
         clearTimeout(timeout)

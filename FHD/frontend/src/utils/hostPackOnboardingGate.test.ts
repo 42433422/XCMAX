@@ -91,6 +91,21 @@ describe('hostPackOnboardingGate', () => {
     await expect(needsHostPackCompletion(true)).resolves.toBe(false)
   })
 
+  it('returns an expired host-pack result immediately and refreshes in the background', async () => {
+    const start = 1_700_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(start)
+    await expect(needsHostPackCompletion(false)).resolves.toBe(true)
+    expect(fetchIndustryBaseline).toHaveBeenCalledTimes(1)
+    vi.spyOn(Date, 'now').mockReturnValue(start + 65_000)
+    let releaseBaseline!: (value: IndustryBaselinePlan) => void
+    vi.mocked(fetchIndustryBaseline).mockReturnValue(new Promise((resolve) => { releaseBaseline = resolve }))
+    await expect(needsHostPackCompletion(false)).resolves.toBe(true)
+    await vi.waitFor(() => expect(fetchIndustryBaseline).toHaveBeenCalledTimes(2))
+    releaseBaseline({ baseline_ready: true } as IndustryBaselinePlan)
+    await vi.waitFor(() => expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toContain('"needs":false'))
+    vi.restoreAllMocks()
+  })
+
   it('reuses the short session cache for a deep-link reload', async () => {
     vi.mocked(fetchIndustryBaseline).mockResolvedValue({
       baseline_ready: true,

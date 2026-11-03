@@ -286,6 +286,30 @@ it('same-tick stop/start does not start a stale fetch or clear the new request',
   expect(vi.getTimerCount()).toBe(0)
 })
 
+it('keeps the last healthy status through one navigation-time probe miss', async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-10-21T01:00:00Z'))
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'healthy', version: '1.0.0.7' }) })
+    .mockImplementation((_url: string, options: RequestInit) => new Promise((_resolve, reject) => {
+      options.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    }))
+  vi.stubGlobal('fetch', fetchMock)
+  const sidebar = useSidebarAppVersion({ shouldShowAdminDeployStatus: ref(false) })
+  await sidebar.refreshHealthAppVersion()
+  expect(sidebar.runtimeHealth.value.text).toBe('系统正常')
+  const pending = sidebar.refreshHealthAppVersion()
+  await vi.advanceTimersByTimeAsync(8_000)
+  await pending
+  expect(sidebar.runtimeHealth.value.text).toBe('系统正常')
+  expect(sidebar.runtimeHealth.value.tone).not.toBe('offline')
+  const again = sidebar.refreshHealthAppVersion()
+  await vi.advanceTimersByTimeAsync(8_000)
+  await again
+  expect(sidebar.runtimeHealth.value.text).toBe('健康检查未响应')
+  sidebar.stopHealthPolling()
+})
+
 it('clears false offline after xcagi:api-reachable (e.g. successful voice)', async () => {
   vi.useFakeTimers()
   const fetchMock = vi.fn()
