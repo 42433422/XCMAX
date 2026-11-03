@@ -4,6 +4,8 @@ __pycache__/
 *.mp4
 !new/hero-video.mp4
 !public/hero-video.mp4
+# 官网首页 hero 宣传片（/assets/，由站点直接提供；不走 public/ 与 marketing-assets/ 的 512KiB 门禁）
+!assets/xcagi-hero-720p.mp4
 # 能力中心功能详情页的实机验收录像（网页转码件，小体积；原片不入仓）
 !capabilities/assets/evidence/*.mp4
 
