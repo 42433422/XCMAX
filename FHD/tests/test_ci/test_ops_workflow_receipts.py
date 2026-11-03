@@ -65,62 +65,14 @@ def health(runtime=True, recovery=()):
         ("ok", "false", health(), health(), "0", "healthy", "false"),
         ("ok", "false", health(False), health(), "0", "healthy", "true"),
         ("ok", "false", health(False), health(False), "0", "unhealthy", "true"),
-        (
-            "ok",
-            "false",
-            health(False),
-            '{"ok":true}\n__HTTP_CODE__200',
-            "0",
-            "unhealthy",
-            "true",
-        ),
+        ("ok", "false", health(False), '{"ok":true}\n__HTTP_CODE__200', "0", "unhealthy", "true"),
         ("ok", "false", health(False), health(), "1", "unknown", "false"),
-        (
-            "ok",
-            "false",
-            health(recovery=["loop"]),
-            health(),
-            "0",
-            "recovering",
-            "false",
-        ),
+        ("ok", "false", health(recovery=["loop"]), health(), "0", "recovering", "false"),
         ("ok", "true", health(recovery=["loop"]), health(), "0", "recovering", "false"),
-        (
-            "ok",
-            "false",
-            health(False),
-            health(recovery=["loop"]),
-            "0",
-            "recovering",
-            "true",
-        ),
-        (
-            "ok",
-            "false",
-            health(recovery=None),
-            health(recovery=None),
-            "0",
-            "unhealthy",
-            "true",
-        ),
-        (
-            "ok",
-            "false",
-            health(recovery="loop"),
-            health(recovery="loop"),
-            "0",
-            "unhealthy",
-            "true",
-        ),
-        (
-            "ok",
-            "false",
-            health(recovery=[None]),
-            health(recovery=[None]),
-            "0",
-            "unhealthy",
-            "true",
-        ),
+        ("ok", "false", health(False), health(recovery=["loop"]), "0", "recovering", "true"),
+        ("ok", "false", health(recovery=None), health(recovery=None), "0", "unhealthy", "true"),
+        ("ok", "false", health(recovery="loop"), health(recovery="loop"), "0", "unhealthy", "true"),
+        ("ok", "false", health(recovery=[None]), health(recovery=[None]), "0", "unhealthy", "true"),
     ],
 )
 def test_watchdog_never_closes_without_independent_health(
@@ -137,18 +89,18 @@ def test_watchdog_never_closes_without_independent_health(
     stub(
         tmp_path / "ssh",
         """
-    [ "" != fail ] || exit 255
-    [ "" != empty ] || exit 0
+    [ "$TRANSPORT" != fail ] || exit 255
+    [ "$TRANSPORT" != empty ] || exit 0
     exec bash -s
     """,
     )
     stub(
         tmp_path / "curl",
         """
-    if [ -e "/restarted" ]; then printf '%s' ""; else printf '%s' ""; fi
+    if [ -e "$RUNNER_TEMP/restarted" ]; then printf '%s' "$AFTER"; else printf '%s' "$BEFORE"; fi
     """,
     )
-    stub(tmp_path / "systemctl", 'touch "/restarted"\nexit ""\n')
+    stub(tmp_path / "systemctl", 'touch "$RUNNER_TEMP/restarted"\nexit "$RESTART_EXIT"\n')
     stub(tmp_path / "sleep", "exit 0\n")
     env = {
         **os.environ,
@@ -195,20 +147,20 @@ def test_slo_closes_opened_tunnel_when_probe_retries_fail(tmp_path, failure):
     stub(
         tmp_path / "ssh",
         """
-    if [[ "  " == *" -O exit "* ]]; then
-      echo closed >> "/trace"
+    if [[ " $* " == *" -O exit "* ]]; then
+      echo closed >> "$RUNNER_TEMP/trace"
     else
-      echo opened >> "/trace"
+      echo opened >> "$RUNNER_TEMP/trace"
     fi
     """,
     )
     stub(
         tmp_path / "curl",
         """
-    echo probe >> "/probes"
-    [ "" != readiness ] || exit 56
-    [[ "  " == *"/-/ready"* ]] && exit 0
-    [ "" != query ] || exit 56
+    echo probe >> "$RUNNER_TEMP/probes"
+    [ "$FAILURE" != readiness ] || exit 56
+    [[ " $* " == *"/-/ready"* ]] && exit 0
+    [ "$FAILURE" != query ] || exit 56
     echo '{"status":"error"}'
     """,
     )
