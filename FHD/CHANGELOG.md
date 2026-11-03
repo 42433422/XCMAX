@@ -1,5 +1,6 @@
 ## Unreleased
 
+- fix(desktop): 单击系统托盘/菜单栏图标弹出主窗口；右键仍打开菜单。此前只设置了 context menu，单击没有显示窗口。
 - fix(login): 登录失败改为页内「登录失败 / 用户名或密码错误」，去掉弹窗与底部连接诊断（#2）
 - fix(jianuo): Win/Mac 桌面 chrome CSS 分平台加载，共享样式不再同时带 mac/win 类（#1）
 - fix(jianuo): analyze 保留标签词表并兜底非法标签，避免 failover 成功后仍 503（#3）

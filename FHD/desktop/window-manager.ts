@@ -90,15 +90,28 @@ export function toggleMainWindow(): void {
     void createWindow()
     return
   }
-  if (mainWindow.isVisible()) {
+  // 最小化窗口在 Windows 上 isVisible() 仍为 true，再 hide 会让托盘「显示」把窗口藏掉。
+  if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
     mainWindow.hide()
   } else {
     showMainWindow()
   }
 }
 
+/** 托盘唤起时，窗口若几乎不在当前工作区内，拉回该显示器，避免点了却看不见。 */
+function bringOffscreenWindowIntoWorkArea(win: BrowserWindow): void {
+  const bounds = win.getBounds()
+  const work = screen.getDisplayMatching(bounds).workArea
+  const overlapW = Math.min(bounds.x + bounds.width, work.x + work.width) - Math.max(bounds.x, work.x)
+  const overlapH = Math.min(bounds.y + bounds.height, work.y + work.height) - Math.max(bounds.y, work.y)
+  const visibleEnough =
+    overlapW >= Math.min(240, bounds.width / 2) && overlapH >= Math.min(180, bounds.height / 2)
+  if (visibleEnough) return
+  win.setBounds(clampWindowBounds(bounds, work))
+}
+
 /**
- * 仅显示并聚焦主窗口（不隐藏），用于语音唤起、深链等"确保窗口可见"场景，
+ * 仅显示并聚焦主窗口（不隐藏），用于托盘单击、语音唤起、深链等“确保窗口可见”场景，
  * 区别于 toggleMainWindow 的显隐切换语义。
  */
 export function showMainWindow(): void {
@@ -107,9 +120,20 @@ export function showMainWindow(): void {
     void createWindow()
     return
   }
-  mainWindow.show()
   if (mainWindow.isMinimized()) mainWindow.restore()
+  bringOffscreenWindowIntoWorkArea(mainWindow)
+  mainWindow.show()
+  if (process.platform === 'darwin') {
+    app.focus({ steal: true })
+  }
   mainWindow.focus()
+  if (process.platform === 'win32') {
+    // 托盘单击拿不到前台许可，短暂置顶再取消，窗口才会真正露到最前。
+    mainWindow.setAlwaysOnTop(true)
+    mainWindow.moveTop()
+    mainWindow.focus()
+    mainWindow.setAlwaysOnTop(false)
+  }
 }
 
 /** macOS 全屏/恢复后窗口可能只剩顶部一条，拉回工作区。 */

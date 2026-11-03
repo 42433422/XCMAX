@@ -17,7 +17,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { APP_NAME, DEFAULT_PORT, shellIconPath } from './desktop-config'
 import { desktopRuntime } from './runtime-state'
-import { broadcastToRenderer, toggleMainWindow } from './window-manager'
+import { broadcastToRenderer, showMainWindow, toggleMainWindow } from './window-manager'
 import { writeBackendLog } from './backend-process'
 import { readLocalProductVersion, runUpdateCheckWithDirectNet } from './updater'
 import { parseDesktopDeepLink } from './desktop-navigation'
@@ -304,6 +304,14 @@ function menuBarTrayIcon(): Electron.NativeImage | null {
   return resized
 }
 
+function trayClickOpensMenu(event: Electron.KeyboardEvent | undefined): boolean {
+  if (!event) return false
+  // Linux 有时把右键并进 click，并用 button=2 区分；macOS Ctrl-单击等同右键。
+  const button = (event as Electron.KeyboardEvent & { button?: number }).button
+  if (button === 2) return true
+  return process.platform === 'darwin' && event.ctrlKey === true
+}
+
 export function createTray(): void {
   const image = menuBarTrayIcon()
   if (!image) {
@@ -312,14 +320,29 @@ export function createTray(): void {
   const tray = new Tray(image)
   desktopRuntime.tray = tray
   tray.setToolTip(APP_NAME)
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: '显示 / 隐藏 XCAGI', click: () => toggleMainWindow() },
-      { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
-      { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
-      { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
-      { type: 'separator' },
-      { label: '退出', click: () => app.quit() }
-    ])
-  )
+  // 单击要立刻弹出主窗口。setContextMenu 在 macOS 上会吞掉 click（菜单栏单击只出菜单），
+  // Windows 左键则没有任何 click 回调，所以菜单只挂在右键上。
+  if (process.platform === 'darwin' || process.platform === 'win32') {
+    tray.setIgnoreDoubleClickEvents(true)
+  }
+  const menu = Menu.buildFromTemplate([
+    { label: '显示 / 隐藏 XCAGI', click: () => toggleMainWindow() },
+    { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
+    { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
+    { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() }
+  ])
+  const reveal = () => showMainWindow()
+  tray.on('click', event => {
+    if (trayClickOpensMenu(event)) {
+      tray.popUpContextMenu(menu)
+      return
+    }
+    reveal()
+  })
+  tray.on('double-click', reveal)
+  tray.on('right-click', () => {
+    tray.popUpContextMenu(menu)
+  })
 }

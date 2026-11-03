@@ -1,31 +1,110 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import fs from 'node:fs'
 
+const trayHarness = vi.hoisted(() => {
+  const listeners = new Map<string, (event?: { ctrlKey?: boolean; button?: number }) => void>()
+  const menu = { id: 'tray-menu' }
+  const tray = {
+    setToolTip: vi.fn(),
+    setContextMenu: vi.fn(),
+    setIgnoreDoubleClickEvents: vi.fn(),
+    popUpContextMenu: vi.fn(),
+    on: vi.fn((event: string, listener: (event?: { ctrlKey?: boolean; button?: number }) => void) => {
+      listeners.set(event, listener)
+    }),
+  }
+  return { listeners, menu, tray }
+})
+
 vi.mock('electron', () => ({
   BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
   ClipboardItem: class { types: string[]; constructor(data: Record<string, unknown>) { this.types = Object.keys(data) } },
-  Menu: { buildFromTemplate: vi.fn(() => ({})), setApplicationMenu: vi.fn() },
-  Tray: vi.fn(),
-  app: { getPath: vi.fn(() => '/tmp/xcagi-test'), getName: vi.fn(() => 'XCAGI'), isQuitting: false },
+  Menu: { buildFromTemplate: vi.fn(() => trayHarness.menu), setApplicationMenu: vi.fn() },
+  Tray: vi.fn(function () { return trayHarness.tray }),
+  app: { getPath: vi.fn(() => '/tmp/xcagi-test'), getName: vi.fn(() => 'XCAGI'), isQuitting: false, quit: vi.fn() },
   clipboard: { write: vi.fn() },
   desktopCapturer: { getSources: vi.fn(async () => [{ display_id: '1', thumbnail: { isEmpty: () => false, toPNG: () => Buffer.from('png') } }]) },
-  dialog: {}, nativeImage: {},
+  dialog: {},
+  nativeImage: {
+    createFromPath: vi.fn(() => ({
+      isEmpty: () => false,
+      resize: vi.fn(() => ({ isEmpty: () => false, setTemplateImage: vi.fn() })),
+    })),
+  },
   screen: { getPrimaryDisplay: () => ({ id: 1, size: { width: 10, height: 10 } }) },
   session: { defaultSession: { cookies: { get: vi.fn(() => Promise.resolve([])) } } },
   shell: { openPath: vi.fn(), openExternal: vi.fn(() => Promise.resolve()) },
 }))
 vi.mock('node:child_process', () => ({ execFile: vi.fn() }))
 vi.mock('./desktop-config', () => ({ APP_NAME: 'XCAGI', DEFAULT_PORT: 17500, shellIconPath: vi.fn(() => '/tmp/icon.png') }))
-vi.mock('./window-manager', () => ({ broadcastToRenderer: vi.fn(), toggleMainWindow: vi.fn() }))
+vi.mock('./window-manager', () => ({ broadcastToRenderer: vi.fn(), toggleMainWindow: vi.fn(), showMainWindow: vi.fn() }))
 vi.mock('./backend-process', () => ({ writeBackendLog: vi.fn() }))
 vi.mock('./updater', () => ({ readLocalProductVersion: vi.fn(() => '1.0.0.1'), runUpdateCheckWithDirectNet: vi.fn() }))
 vi.mock('./desktop-navigation', () => ({ parseDesktopDeepLink: vi.fn(() => null) }))
 
 import { execFile } from 'node:child_process'
 import { clipboard } from 'electron'
-import { openKellaiDesktop, captureFullScreenScreenshot } from './app-shell'
+import { openKellaiDesktop, captureFullScreenScreenshot, createTray } from './app-shell'
+import { showMainWindow } from './window-manager'
 
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
+
+describe('createTray（单击弹出主窗口，右键才是菜单）', () => {
+  function installTray(platform: string) {
+    const original = process.platform
+    Object.defineProperty(process, 'platform', { value: platform, configurable: true })
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true)
+    trayHarness.listeners.clear()
+    trayHarness.tray.setContextMenu.mockClear()
+    trayHarness.tray.popUpContextMenu.mockClear()
+    trayHarness.tray.setIgnoreDoubleClickEvents.mockClear()
+    vi.mocked(showMainWindow).mockClear()
+    createTray()
+    return () => {
+      Object.defineProperty(process, 'platform', { value: original, configurable: true })
+    }
+  }
+
+  it.each(['darwin', 'win32', 'linux'])('左键单击显示主窗口，且不安装会吞掉单击的 context menu（%s）', platform => {
+    const restore = installTray(platform)
+    try {
+      expect(trayHarness.tray.setContextMenu).not.toHaveBeenCalled()
+      trayHarness.listeners.get('click')?.({ ctrlKey: false, button: 0 })
+      expect(showMainWindow).toHaveBeenCalledTimes(1)
+      expect(trayHarness.tray.popUpContextMenu).not.toHaveBeenCalled()
+      trayHarness.listeners.get('double-click')?.()
+      expect(showMainWindow).toHaveBeenCalledTimes(2)
+    } finally {
+      restore()
+    }
+  })
+
+  it('右键弹出菜单而不是把窗口藏起来', () => {
+    const restore = installTray('win32')
+    try {
+      trayHarness.listeners.get('right-click')?.()
+      expect(trayHarness.tray.popUpContextMenu).toHaveBeenCalledWith(trayHarness.menu)
+      expect(showMainWindow).not.toHaveBeenCalled()
+      trayHarness.listeners.get('click')?.({ button: 2 })
+      expect(showMainWindow).not.toHaveBeenCalled()
+      expect(trayHarness.tray.popUpContextMenu).toHaveBeenCalledTimes(2)
+    } finally {
+      restore()
+    }
+  })
+
+  it('macOS Ctrl-单击等同右键菜单', () => {
+    const restore = installTray('darwin')
+    try {
+      expect(trayHarness.tray.setIgnoreDoubleClickEvents).toHaveBeenCalledWith(true)
+      trayHarness.listeners.get('click')?.({ ctrlKey: true, button: 0 })
+      expect(trayHarness.tray.popUpContextMenu).toHaveBeenCalledWith(trayHarness.menu)
+      expect(showMainWindow).not.toHaveBeenCalled()
+    } finally {
+      restore()
+    }
+  })
+})
 
 describe('openKellaiDesktop（客来来第三方联动）', () => {
   it.each([false, true])('macOS application missing: %s', async missing => {

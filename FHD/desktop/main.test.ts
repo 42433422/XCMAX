@@ -54,7 +54,15 @@ const electronMocks = vi.hoisted(() => {
   ;(BrowserWindow as unknown as { getAllWindows: () => unknown[] }).getAllWindows =
     vi.fn(() => [dialogParentWindow])
   const Menu = { buildFromTemplate: vi.fn(() => ({})), setApplicationMenu: vi.fn() }
-  const Tray = vi.fn(function () { return ({ setToolTip: vi.fn(), setContextMenu: vi.fn() }) })
+  const Tray = vi.fn(function () {
+    return {
+      setToolTip: vi.fn(),
+      setContextMenu: vi.fn(),
+      setIgnoreDoubleClickEvents: vi.fn(),
+      popUpContextMenu: vi.fn(),
+      on: vi.fn(),
+    }
+  })
   const Notification = vi.fn(() => ({ show: vi.fn() }))
   ;(Notification as unknown as { isSupported: () => boolean }).isSupported = vi.fn(() => true)
   const dialog = {
