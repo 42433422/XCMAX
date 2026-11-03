@@ -1,5 +1,4 @@
 """Shared CSS must not ship both mac and win chrome selectors (#1)."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,7 +12,8 @@ PLATFORM = FRONTEND / "public" / "platform"
 SHARED_STYLE_GLOBS = (
     "src/styles/**/*.css",
     "src/views/**/*.css",
-    "src/components/**/*.{css,vue}",
+    "src/components/**/*.css",
+    "src/components/**/*.vue",
 )
 
 
@@ -21,7 +21,7 @@ def _iter_shared_style_files() -> list[Path]:
     files: list[Path] = []
     for pattern in SHARED_STYLE_GLOBS:
         files.extend(FRONTEND.glob(pattern))
-    return sorted({p for p in files if p.is_file()})
+    return sorted({path for path in files if path.is_file()})
 
 
 def test_shared_styles_do_not_embed_platform_chrome_classes() -> None:
