@@ -36,12 +36,18 @@ def health(runtime=True, recovery=()):
                     "pending_job_count": 60,
                     "missing_required_jobs": [],
                     "unhealthy_runtime_jobs": [] if runtime else ["loop"],
-                    "runtime_jobs": [] if runtime else [{
-                        "job_id": "loop", "state": "failing", "last_status": "failed",
-                        "last_error_code": "execution_failed",
-                        "last_run_at": "2026-11-03T00:00:00+00:00",
-                        "last_success_at": "2026-11-02T00:00:00+00:00",
-                    }],
+                    "runtime_jobs": []
+                    if runtime
+                    else [
+                        {
+                            "job_id": "loop",
+                            "state": "failing",
+                            "last_status": "failed",
+                            "last_error_code": "execution_failed",
+                            "last_run_at": "2026-11-03T00:00:00+00:00",
+                            "last_success_at": "2026-11-02T00:00:00+00:00",
+                        }
+                    ],
                     **({"recovering_runtime_jobs": recovery} if recovery is not None else {}),
                 },
             }
@@ -59,14 +65,62 @@ def health(runtime=True, recovery=()):
         ("ok", "false", health(), health(), "0", "healthy", "false"),
         ("ok", "false", health(False), health(), "0", "healthy", "true"),
         ("ok", "false", health(False), health(False), "0", "unhealthy", "true"),
-        ("ok", "false", health(False), '{"ok":true}\n__HTTP_CODE__200', "0", "unhealthy", "true"),
+        (
+            "ok",
+            "false",
+            health(False),
+            '{"ok":true}\n__HTTP_CODE__200',
+            "0",
+            "unhealthy",
+            "true",
+        ),
         ("ok", "false", health(False), health(), "1", "unknown", "false"),
-        ("ok", "false", health(recovery=["loop"]), health(), "0", "recovering", "false"),
+        (
+            "ok",
+            "false",
+            health(recovery=["loop"]),
+            health(),
+            "0",
+            "recovering",
+            "false",
+        ),
         ("ok", "true", health(recovery=["loop"]), health(), "0", "recovering", "false"),
-        ("ok", "false", health(False), health(recovery=["loop"]), "0", "recovering", "true"),
-        ("ok", "false", health(recovery=None), health(recovery=None), "0", "unhealthy", "true"),
-        ("ok", "false", health(recovery="loop"), health(recovery="loop"), "0", "unhealthy", "true"),
-        ("ok", "false", health(recovery=[None]), health(recovery=[None]), "0", "unhealthy", "true"),
+        (
+            "ok",
+            "false",
+            health(False),
+            health(recovery=["loop"]),
+            "0",
+            "recovering",
+            "true",
+        ),
+        (
+            "ok",
+            "false",
+            health(recovery=None),
+            health(recovery=None),
+            "0",
+            "unhealthy",
+            "true",
+        ),
+        (
+            "ok",
+            "false",
+            health(recovery="loop"),
+            health(recovery="loop"),
+            "0",
+            "unhealthy",
+            "true",
+        ),
+        (
+            "ok",
+            "false",
+            health(recovery=[None]),
+            health(recovery=[None]),
+            "0",
+            "unhealthy",
+            "true",
+        ),
     ],
 )
 def test_watchdog_never_closes_without_independent_health(
@@ -83,18 +137,18 @@ def test_watchdog_never_closes_without_independent_health(
     stub(
         tmp_path / "ssh",
         """
-    [ "$TRANSPORT" != fail ] || exit 255
-    [ "$TRANSPORT" != empty ] || exit 0
+    [ "" != fail ] || exit 255
+    [ "" != empty ] || exit 0
     exec bash -s
     """,
     )
     stub(
         tmp_path / "curl",
         """
-    if [ -e "$RUNNER_TEMP/restarted" ]; then printf '%s' "$AFTER"; else printf '%s' "$BEFORE"; fi
+    if [ -e "/restarted" ]; then printf '%s' ""; else printf '%s' ""; fi
     """,
     )
-    stub(tmp_path / "systemctl", 'touch "$RUNNER_TEMP/restarted"\nexit "$RESTART_EXIT"\n')
+    stub(tmp_path / "systemctl", 'touch "/restarted"\nexit ""\n')
     stub(tmp_path / "sleep", "exit 0\n")
     env = {
         **os.environ,
@@ -141,20 +195,20 @@ def test_slo_closes_opened_tunnel_when_probe_retries_fail(tmp_path, failure):
     stub(
         tmp_path / "ssh",
         """
-    if [[ " $* " == *" -O exit "* ]]; then
-      echo closed >> "$RUNNER_TEMP/trace"
+    if [[ "  " == *" -O exit "* ]]; then
+      echo closed >> "/trace"
     else
-      echo opened >> "$RUNNER_TEMP/trace"
+      echo opened >> "/trace"
     fi
     """,
     )
     stub(
         tmp_path / "curl",
         """
-    echo probe >> "$RUNNER_TEMP/probes"
-    [ "$FAILURE" != readiness ] || exit 56
-    [[ " $* " == *"/-/ready"* ]] && exit 0
-    [ "$FAILURE" != query ] || exit 56
+    echo probe >> "/probes"
+    [ "" != readiness ] || exit 56
+    [[ "  " == *"/-/ready"* ]] && exit 0
+    [ "" != query ] || exit 56
     echo '{"status":"error"}'
     """,
     )
@@ -180,3 +234,4 @@ def test_slo_closes_opened_tunnel_when_probe_retries_fail(tmp_path, failure):
     assert run(closing["run"], env).returncode == 0
     assert (tmp_path / "trace").read_text().splitlines() == ["opened", "closed"]
     assert not (tmp_path / "fhd_prometheus_metrics_key").exists()
+
