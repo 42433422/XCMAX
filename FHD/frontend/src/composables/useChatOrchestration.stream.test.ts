@@ -185,7 +185,7 @@ vi.mock('./useChatRequest', () => ({
     stopLoadingProgress: vi.fn(),
     requestChatByModeWithTimeout,
     requestChatByModeBatchWithTimeout: vi.fn(),
-    resolveChatTimeoutMs: () => 30_000,
+    resolveChatTimeoutMs: () => 90_000,
   }),
 }))
 vi.mock('./useChatResponseAttach', () => ({
@@ -646,6 +646,7 @@ describe('useChatOrchestration stream', () => {
       await vi.waitFor(() => expect(callbacks).toHaveLength(2))
     }
     expect(oldSignal.aborted).toBe(true)
+    expect(addMessage.mock.calls.some(call => String(call[0]).includes('已停止接收'))).toBe(action === 'stop')
     callbacks[0]({ type: 'route_metadata', route_metadata: { provider: 'old', model: 'stale', route_source: 'preference', key_source: 'user_override', config_revision: 'old' } })
     callbacks[0]({ type: 'token', text: 'late old answer' })
     callbacks[0]({ type: 'requires_token', token_name: 'DB_WRITE' })
@@ -664,6 +665,78 @@ describe('useChatOrchestration stream', () => {
       expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, 'correct answer')
     }
     expect(api.isLoading.value).toBe(false)
+  })
+
+  it('a follow-up send supersedes the in-flight stream without a stop banner', async () => {
+    const finishes: Array<() => void> = []
+    readPlannerSseResponse.mockImplementation((_res, onEvent) => new Promise<void>((resolve) => {
+      finishes.push(() => {
+        onEvent({ type: 'done', result: { success: true, response: 'late' } })
+        resolve()
+      })
+    }))
+    const api = useChatOrchestration({ sessionId: ref('rapid') })
+    const first = api.sendMessage('查今天的订单')
+    await vi.waitFor(() => expect(sendChatStream).toHaveBeenCalledTimes(1))
+    const second = api.sendMessage('再查库存')
+    await vi.waitFor(() => expect(sendChatStream).toHaveBeenCalledTimes(2))
+    expect(sendChatStream.mock.calls[0][1].signal.aborted).toBe(true)
+    expect(addMessage.mock.calls.some(call => String(call[0]).includes('已停止接收'))).toBe(false)
+    expect(api.isLoading.value).toBe(true)
+    finishes.forEach(finish => finish())
+    await first
+    await second
+    expect(api.isLoading.value).toBe(false)
+    expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, 'late')
+  })
+
+  it('turns a silent thinking stream into a recoverable timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      readPlannerSseResponse.mockImplementation(async (_res, onEvent, signal) => {
+        onEvent({ type: 'tool_progress', phase: 'started', label: '正在处理任务' })
+        onEvent({ type: 'tool_progress', phase: 'accepted', label: '模型服务', text: '模型服务已接收任务，正在思考…' })
+        onEvent({ type: 'token', text: '\n（仍在处理中，已等待 12 秒，请稍候…）\n', ephemeral: true })
+        await vi.advanceTimersByTimeAsync(41_000)
+        if (signal?.aborted) throw new DOMException('stall', 'AbortError')
+      })
+      const api = useChatOrchestration({ sessionId: ref('stall') })
+      await api.sendMessage('今天发了多少货')
+      expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('请求超时（>40s）'))
+      expect(applyPlainTextToMessageIndex.mock.calls.some(call => String(call[1]).includes('仍在处理中'))).toBe(false)
+      expect(api.isLoading.value).toBe(false)
+      expect(api.isStreamingReply.value).toBe(false)
+      readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+        onEvent({ type: 'done', result: { success: true, response: '可以重试' } })
+      })
+      await api.sendMessage('今天发了多少货')
+      expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '可以重试')
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each(['complete', 'deadline'])('preserves the reply budget during a silent tool execution: %s', async outcome => {
+    vi.useFakeTimers()
+    try {
+      readPlannerSseResponse.mockImplementation(async (_res, onEvent, signal) => {
+        onEvent({ type: 'tool_progress', phase: 'started', run_id: 'tool-run' })
+        onEvent({ type: 'token', text: '\n[正在调用工具: Excel 导入]\n' })
+        await vi.advanceTimersByTimeAsync(50_000)
+        onEvent({ type: 'token', text: '仍在执行工具…', ephemeral: true })
+        expect(signal?.aborted).toBe(false)
+        if (outcome === 'deadline') {
+          await vi.advanceTimersByTimeAsync(41_000)
+          expect(signal?.aborted).toBe(true)
+          throw new DOMException('deadline', 'AbortError')
+        }
+        onEvent({ type: 'done', result: { success: true, response: '导入完成' } })
+      })
+      const api = useChatOrchestration({ sessionId: ref('long-tool') })
+      await api.sendMessage('导入 Excel')
+      expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0,
+        outcome === 'complete' ? '导入完成' : expect.stringContaining('任务可能仍在执行'))
+      expect(api.isLoading.value).toBe(false)
+      expect(api.isStreamingReply.value).toBe(false)
+    } finally { vi.useRealTimers() }
   })
 
   it('discards a stopped non-stream response even if transport ignores abort', async () => {

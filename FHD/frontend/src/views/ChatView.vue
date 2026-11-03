@@ -172,7 +172,7 @@
           <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
           <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
         </button>
-        <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply">停止回复</button>
+        <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply()">停止回复</button>
         <button
           class="btn btn-primary send-message-btn"
           id="sendMessageBtn"

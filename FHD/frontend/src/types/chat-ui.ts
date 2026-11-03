@@ -62,6 +62,8 @@ export interface UiChatMessage {
   }>
   contextSummary?: string
   streamingShell?: boolean
+  /** Heartbeat / idle copy while the shell is still waiting for visible text. */
+  waitingHint?: string
   toolProgressLabel?: string
   /** Agent 执行时间线（计划-查询-执行 步骤），流式时实时更新，类似 Codex 对话 */
   executionProgress?: ChatExecutionProgressItem[]

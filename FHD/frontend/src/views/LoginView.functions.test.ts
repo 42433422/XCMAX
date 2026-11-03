@@ -859,6 +859,24 @@ describe('LoginView functions – formatLoginFailurePayload edge cases', () => {
     expect(mockAuthApiLogin).not.toHaveBeenCalled()
     expect(vm.errorMessage).toBeTruthy()
   })
+
+  it('keeps the submit button enabled and shows a stable empty-field alert', async () => {
+    const { wrapper } = await mountLoginView()
+    const button = wrapper.get('.login-submit')
+    expect(button.attributes('disabled')).toBeUndefined()
+    await wrapper.get('.login-form').trigger('submit')
+    await flushPromises()
+    expect(mockAuthApiLogin).not.toHaveBeenCalled()
+    const alert = wrapper.get('[data-testid="login-error"]')
+    expect(alert.text()).toContain('请输入账号和密码')
+    expect(wrapper.get('#lv-username').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.get('#lv-password').attributes('aria-invalid')).toBe('true')
+    await wrapper.find('#lv-username').setValue('wuxinghua1')
+    await wrapper.get('.login-form').trigger('submit')
+    expect(wrapper.get('[data-testid="login-error"]').text()).toContain('请输入账号和密码')
+    expect(wrapper.get('#lv-username').attributes('aria-invalid')).toBeUndefined()
+    expect(wrapper.get('#lv-password').attributes('aria-invalid')).toBe('true')
+  })
 })
 
 describe('LoginView functions – sendPhoneCode edge cases', () => {

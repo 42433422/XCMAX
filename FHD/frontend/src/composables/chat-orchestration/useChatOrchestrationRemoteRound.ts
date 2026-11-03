@@ -23,6 +23,9 @@ import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDelive
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 
+/** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
+export const CHAT_STREAM_STALL_MS = 40_000
+
 type ChatMessagesApi = ReturnType<typeof useChatMessages>
 
 export interface ChatOrchestrationRemoteRoundDeps {
@@ -308,10 +311,22 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const baseS = resolveChatTimeoutMs(primaryForStream)
       const timeoutMsS = Math.min(120000, baseS)
       const controller = new AbortController()
+      const streamState = { stalled: false }
       const abort = () => controller.abort()
       requestScope.signal?.addEventListener('abort', abort, { once: true })
       if (requestScope.signal?.aborted) abort()
-      let killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
+      let killTimer = 0
+      const stallTimer = window.setTimeout(() => {
+        streamState.stalled = true
+        controller.abort()
+      }, CHAT_STREAM_STALL_MS)
+      const armDeadline = () => {
+        window.clearTimeout(killTimer)
+        killTimer = window.setTimeout(() => {
+          controller.abort()
+        }, timeoutMsS)
+      }
+      armDeadline()
       const msgIndex = pushStreamingAiShell()
       const streamMessage = messages.value[msgIndex]
       if (streamMessage) streamMessage.turnId = requestScope.turnId
@@ -379,21 +394,39 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }
         await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
           if (!isOwnerCurrent()) { controller.abort(); return }
-          if (ev.type === 'token' || ev.type === 'tool_progress') {
-            window.clearTimeout(killTimer)
-            killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
+          const heartbeat = (ev.type === 'token' && ev.ephemeral === true)
+            || (ev.type === 'tool_progress' && ev.phase === 'accepted')
+          if ((ev.type === 'token' || ev.type === 'tool_progress') && !heartbeat) {
+            // Legacy tools send a visible call marker, then can execute silently
+            // for minutes. Run creation alone is not evidence of model progress.
+            if ((ev.type === 'token' && ev.text.trim())
+              || (ev.type === 'tool_progress' && ev.phase !== 'started')) {
+              window.clearTimeout(stallTimer)
+            }
+            armDeadline()
           }
           if (ev.type === 'route_metadata') {
             consumeRoute(ev.route_metadata)
           } else if (ev.type === 'tool_progress') {
             streamRunId = ev.run_id || streamRunId
+            const hint = String(ev.text || ev.label || '').trim()
+            if (heartbeat && round.isActive() && streamMessage && hint) streamMessage.waitingHint = hint
             setLoadingProgress(ev.label || '正在执行任务…', requestScope.sessionId)
             if (streamRunId) syncStreamRun({ run_id: streamRunId })
           } else if (ev.type === 'token') {
-            streamPlain += ev.text || ''
-            if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, streamPlain)
-            flushTtsFromStream(streamPlain, false)
-            setLoadingProgress('正在生成回复…', requestScope.sessionId)
+            if (ev.ephemeral) {
+              const hint = String(ev.text || '').replace(/\s+/g, ' ').trim()
+              if (round.isActive() && streamMessage && hint) streamMessage.waitingHint = hint
+              setLoadingProgress(hint || '仍在等待模型响应…', requestScope.sessionId)
+            } else {
+              streamPlain += ev.text || ''
+              if (round.isActive()) {
+                applyPlainTextToMessageIndex(msgIndex, streamPlain)
+                if (streamMessage) delete streamMessage.waitingHint
+              }
+              flushTtsFromStream(streamPlain, false)
+              setLoadingProgress('正在生成回复…', requestScope.sessionId)
+            }
           } else if (ev.type === 'done') {
             doneResult = ev.result
             awaitingAuthorization = false
@@ -472,23 +505,43 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }
       } catch (err: unknown) {
         const timedOut = asRecord(err).name === 'AbortError'
+        const stallText = `请求超时（>${Math.floor(CHAT_STREAM_STALL_MS / 1000)}s）。本轮尚未收到可显示的回复，请重试。已执行的操作请到任务工作区核对，勿重复提交。`
         const errText =
           timedOut
             ? streamRunId
               ? '对话连接已超时，任务可能仍在执行。请到任务工作区核对结果，勿重复提交。'
-              : `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
+              : streamState.stalled
+                ? stallText
+                : `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
         if (round.isActive()) {
           const visibleError = err instanceof IncompletePlannerSseError
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] ${errText}`
             : timedOut && streamRunId ? errText : `处理失败：${errText}`
           applyPlainTextToMessageIndex(msgIndex, visibleError)
-          if (streamMessage) streamMessage.workflowAction = 'failed'
+          if (streamMessage) {
+            streamMessage.workflowAction = 'failed'
+            delete streamMessage.streamingShell
+            delete streamMessage.waitingHint
+          }
         }
         if (streamRunId) syncStreamRun({ run_id: streamRunId })
       } finally {
+        if (round.isActive() && streamMessage?.streamingShell) {
+          const leftover = streamPlain.trim()
+          applyPlainTextToMessageIndex(
+            msgIndex,
+            leftover
+              ? `${leftover}\n\n[回复未完成] 本轮回复已结束，但没有完成回执。请重试。`
+              : '处理失败：本轮回复已结束，但没有收到正文。请重试。',
+          )
+          streamMessage.workflowAction = 'failed'
+          delete streamMessage.streamingShell
+          delete streamMessage.waitingHint
+        }
         if (round.isActive()) deps.flushMessagesCache?.()
         round.setStreaming(false)
+        window.clearTimeout(stallTimer)
         window.clearTimeout(killTimer)
         requestScope.signal?.removeEventListener('abort', abort)
         round.setLoading(false)

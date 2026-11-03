@@ -449,6 +449,10 @@ router.beforeEach(async (to, _from, finish) => {
   }
 
   if (shouldRouteToHostPackOnboarding(to.name) && !to.meta?.publicAccess && !isAdminConsoleSpa()) {
+    if (generation !== getSidebarNavigationGeneration()) {
+      next(false)
+      return
+    }
     try {
       // The login success navigation refreshes this gate once.  Reusing its
       // short session cache keeps a subsequent desktop deep-link/reload from

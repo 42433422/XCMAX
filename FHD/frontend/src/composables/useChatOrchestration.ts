@@ -45,6 +45,7 @@ import agentRunsApi from '@/api/agentRuns'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { asRecord } from '@/utils/typeGuards'
 import { lastChatModelRoute } from '@/utils/chatModelRoute'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -458,7 +459,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     { deep: true },
   )
 
-  function stopReply() {
+  /**
+   * Cancel the in-flight round.
+   * A newer send supersedes quietly: the previous stream is aborted and an empty
+   * thinking shell is removed, without the manual-stop banner.
+   */
+  function stopReply(options?: { supersede?: boolean }) {
     localViewRevision++
     const stopped = chatSessionActivity.cancelSession()
     chatRequest.cancelPendingChatBatch()
@@ -466,16 +472,23 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     clearVoiceQueue()
     pendingDbWriteChatRetryMessages.value = null
     plannerWriteUnlockResumeDraft.value = ''
-    if (stopped) {
-      for (const msg of messages.value) delete msg.streamingShell
-      const routeMetadata = lastChatModelRoute(sessionId.value, resolveChatIdentity(String(modsStore.activeModId || '')))
-      addMessage('已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。', 'ai', routeMetadata ? { routeMetadata } : undefined)
-    }
+    if (!stopped) return
+    const kept = messages.value.filter((msg) => {
+      if (!msg.streamingShell) return true
+      const plain = plainTextFromChatHtml(msg.content).trim()
+      delete msg.streamingShell
+      delete msg.waitingHint
+      return plain.length > 0
+    })
+    if (kept.length !== messages.value.length) messages.value = kept
+    if (options?.supersede) return
+    const routeMetadata = lastChatModelRoute(sessionId.value, resolveChatIdentity(String(modsStore.activeModId || '')))
+    addMessage('已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。', 'ai', routeMetadata ? { routeMetadata } : undefined)
   }
 
   async function sendMessage(message: string) {
     const taskSessionId = String(sessionId.value || '').trim() || 'default'
-    if (isLoading.value) stopReply()
+    if (isLoading.value) stopReply({ supersede: true })
     const generation = chatSessionActivity.beginRound(taskSessionId)
     generation.setLoading(true)
     const turnId = createBusinessHarnessId('turn')
