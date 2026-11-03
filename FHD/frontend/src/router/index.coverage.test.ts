@@ -831,6 +831,15 @@ describe('router/index 覆盖率补齐', () => {
       expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
     })
 
+    it('refreshes a loaded admin route in the background when the session check timed out', async () => {
+      mockAccountProfileStore.loaded = true
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      mockAccountProfileStore.isAdminAccount = true
+      await router.push('/admin/entitlements')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('admin-entitlements')
+    })
+
     it('profile refresh 异常时重定向到 chat', async () => {
       mockAccountProfileStore.loaded = false
       mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('network'))
@@ -990,6 +999,48 @@ describe('router/index 覆盖率补齐', () => {
       mockValidateEnterpriseSession.mockResolvedValue(false)
       await router.push('/settings')
       expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('login')
+    })
+
+    it('sends the protected page to login when the background refresh drops the signed-in profile', async () => {
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockResolvedValue(true)
+      mockAccountProfileStore.loaded = true
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      let finish!: () => void
+      mockAccountProfileStore.refreshFromServer.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve }))
+      await router.push('/settings')
+      expect(router.currentRoute.value.name).toBe('settings')
+      mockAccountProfileStore.loaded = false
+      finish()
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('login')
+      expect(router.currentRoute.value.query.redirect).toBe('/settings')
+    })
+
+    it('keeps the page when the background profile refresh fails', async () => {
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockResolvedValue(true)
+      mockAccountProfileStore.loaded = true
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('timeout'))
+      await router.push('/settings')
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('settings')
+    })
+
+    it.each(['admin', 'desktop', 'enterprise', 'admin-route'] as const)('cancels navigation when an unavailable profile stays unloaded: %s', async (shell) => {
+      mockIsAdminConsoleSpa.mockReturnValue(shell === 'admin')
+      mockIsDesktopShell.mockReturnValue(shell === 'desktop')
+      mockIsEnterpriseEdition.mockReturnValue(shell === 'enterprise' || shell === 'desktop')
+      mockAccountProfileStore.loaded = false
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      mockAccountProfileStore.isAdminAccount = shell === 'admin' || shell === 'admin-route'
+      mockAccountProfileStore.refreshFromServer.mockImplementation(async () => {
+        mockAccountProfileStore.loaded = false
+        mockAccountProfileStore.sessionCheckUnavailable = true
+      })
+      await router.push(shell === 'admin-route' ? '/admin/entitlements' : '/settings')
       expect(router.currentRoute.value.name).toBe('login')
     })
 

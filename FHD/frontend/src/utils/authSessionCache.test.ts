@@ -41,6 +41,13 @@ describe('authSessionCache', () => {
     vi.restoreAllMocks()
   })
 
+  it('reuses a definitive invalid session inside the short TTL', async () => {
+    vi.mocked(authApi.validateSession).mockResolvedValue({ valid: false })
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(false)
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(false)
+    expect(authApi.validateSession).toHaveBeenCalledTimes(1)
+  })
+
   it('forces refresh when requested', async () => {
     vi.mocked(authApi.validateSession).mockResolvedValue({ valid: true })
     await validateEnterpriseSessionCached()

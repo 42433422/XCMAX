@@ -88,6 +88,37 @@ describe('TopQuickNav', () => {
     wrapper.unmount()
   })
 
+  it('跟随视口、方向键和空列表，且空查询回车不跳转', async () => {
+    if (typeof Element.prototype.scrollIntoView !== 'function') {
+      Element.prototype.scrollIntoView = () => undefined
+    }
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => undefined)
+    const wrapper = await mountNav()
+    const option = document.querySelector('.top-quick-nav__option')
+    option?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+    window.dispatchEvent(new Event('resize'))
+    window.dispatchEvent(new Event('scroll'))
+    const input = wrapper.find('input').element as HTMLInputElement
+    const rect = input.getBoundingClientRect.bind(input)
+    Object.defineProperty(input, 'getBoundingClientRect', { configurable: true, value: undefined })
+    window.dispatchEvent(new Event('resize'))
+    Object.defineProperty(input, 'getBoundingClientRect', { configurable: true, value: rect })
+
+    await wrapper.find('input').trigger('blur')
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    await wrapper.find('input').trigger('keydown', { key: 'ArrowDown' })
+    expect(document.querySelector('.top-quick-nav__list')).toBeTruthy()
+
+    await wrapper.find('input').trigger('keydown', { key: 'ArrowUp' })
+    expect(scrollIntoView).toHaveBeenCalled()
+    await wrapper.find('input').setValue('不存在的东西')
+    await wrapper.find('input').trigger('keydown', { key: 'ArrowDown' })
+    await wrapper.find('input').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('select')).toBeFalsy()
+    wrapper.unmount()
+    scrollIntoView.mockRestore()
+  })
+
   it('空查询回车不跳转，输入法确认回车也不跳转', async () => {
     const wrapper = await mountNav()
     await wrapper.find('input').trigger('keydown', { key: 'Enter' })

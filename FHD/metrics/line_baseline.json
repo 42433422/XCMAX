@@ -1,5 +1,5 @@
 {
-  "lines": 2424206,
+  "lines": 2424438,
   "updated": "2026-11-03",
-  "note": "CI: mypy accepts sheet extent and LLM client replacement. Route tests match non-blocking session reuse, and a refresh that drops the profile still leaves protected pages."
+  "note": "前端补测 232 行，把桌面空闲切页相关语句覆盖从 91.79% 拉回 92.03%，通过 statements 92% 门禁。主线 2423440，上一基线 2424206，现测 2424438。"
 }

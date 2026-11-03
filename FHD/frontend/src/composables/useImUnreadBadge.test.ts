@@ -1,4 +1,4 @@
-import { defineComponent } from 'vue'
+import { defineComponent, reactive } from 'vue'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { fetchImUnreadTotal } from '@/api/im'
@@ -91,6 +91,36 @@ describe('useImUnreadBadge', () => {
     await flushPromises()
     expect(fetchImUnreadTotal).toHaveBeenCalled()
     second.unmount()
+  })
+
+  it('restarts unread polling when login ends and the route becomes private', async () => {
+    const { useRoute } = await import('vue-router')
+    const route = reactive({ name: 'login' })
+    vi.mocked(useRoute).mockReturnValue(route as never)
+    const callbacks: Array<() => void> = []
+    const intervalSpy = vi.spyOn(window, 'setInterval').mockImplementation((handler) => {
+      callbacks.push(handler as () => void)
+      return 1 as unknown as ReturnType<typeof setInterval>
+    })
+    const clearSpy = vi.spyOn(window, 'clearInterval').mockImplementation(() => undefined)
+    const wrapper = mount(Host)
+    await flushPromises()
+    route.name = 'chat'
+    await flushPromises()
+    window.dispatchEvent(new Event('xcagi:session-unauthorized'))
+    route.name = 'login'
+    await flushPromises()
+    vi.mocked(fetchImUnreadTotal).mockClear()
+    route.name = 'settings'
+    await flushPromises()
+    expect(fetchImUnreadTotal).toHaveBeenCalled()
+    callbacks.at(-1)?.()
+    await flushPromises()
+    expect(fetchImUnreadTotal.mock.calls.length).toBeGreaterThan(1)
+    wrapper.unmount()
+    vi.mocked(useRoute).mockReturnValue({ name: 'chat' } as never)
+    intervalSpy.mockRestore()
+    clearSpy.mockRestore()
   })
 
   it('refreshImUnreadTotal sets 0 for admin console SPA', async () => {

@@ -194,6 +194,40 @@ describe('agent task center store', () => {
     expect(store.unreadCount).toBe(0)
   })
 
+  it('stops the workspace after an unauthorized list or stream and stays stopped', async () => {
+    class FakeEventSource {
+      static instances: FakeEventSource[] = []
+      listeners = new Map<string, () => void>()
+      onerror: (() => void) | null = null
+      closed = false
+      constructor(public url: string) { FakeEventSource.instances.push(this) }
+      addEventListener(type: string, listener: () => void): void { this.listeners.set(type, listener) }
+      emit(type: string): void { this.listeners.get(type)?.() }
+      close(): void { this.closed = true }
+    }
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const store = useAgentTaskCenterStore()
+    apiMock.listTasks.mockRejectedValueOnce(Object.assign(new Error('unauthorized'), { status: 401 }))
+    await store.refresh()
+    expect(store.tasks).toEqual([])
+    expect(store.error).toBe('')
+    apiMock.listTasks.mockRejectedValueOnce(Object.assign(new Error('unauthorized'), { status: 403 }))
+    await store.refresh()
+    expect(apiMock.listTasks).toHaveBeenCalledTimes(2)
+
+    store.resumeAfterLogin()
+    await vi.waitFor(() => expect(FakeEventSource.instances.length).toBeGreaterThan(0))
+    const stream = FakeEventSource.instances.at(-1)!
+    stream.emit('stream.unauthorized')
+    stream.emit('stream.unauthorized')
+    expect(stream.closed).toBe(true)
+    expect(store.tasks).toEqual([])
+    store.start()
+    expect(FakeEventSource.instances.at(-1)).toBe(stream)
+    store.resumeAfterLogin()
+    store.stop()
+  })
+
   it('handles refresh and detail failures without losing durable state', async () => {
     const store = useAgentTaskCenterStore()
     store.loading = true
