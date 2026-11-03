@@ -160,6 +160,20 @@ describe('GlobalTaskCenter', () => {
   })
 })
 
+it('resumes task polling when remounted with the user id already set', async () => {
+  const pinia = createPinia()
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
+  await router.push('/')
+  const store = useAgentTaskCenterStore(pinia)
+  store.stop()
+  const resume = vi.spyOn(store, 'resumeAfterLogin')
+  useAccountProfileStore().localUserId = 9
+  const wrapper = mount(GlobalTaskCenter, { global: { plugins: [pinia, router], stubs: { Teleport: true } } })
+  expect(resume).toHaveBeenCalled()
+  useAccountProfileStore().localUserId = 1
+  wrapper.unmount()
+})
+
 it('restarts scope synchronously on account and Mod changes', async () => {
   const pinia = createPinia()
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })

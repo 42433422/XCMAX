@@ -1,5 +1,16 @@
+import { defineComponent } from 'vue'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { fetchImUnreadTotal } from '@/api/im'
 import { useImUnreadBadge } from './useImUnreadBadge'
+
+const Host = defineComponent({
+  setup() {
+    useImUnreadBadge()
+    return {}
+  },
+  template: '<div />',
+})
 
 vi.mock('@/api/im', () => ({
   fetchImUnreadTotal: vi.fn().mockResolvedValue(5),
@@ -65,6 +76,21 @@ describe('useImUnreadBadge', () => {
     const { imUnreadTotal, refreshImUnreadTotal } = useImUnreadBadge()
     await refreshImUnreadTotal()
     expect(imUnreadTotal.value).toBe(0)
+  })
+
+  it('resumes unread polling when the sidebar remounts signed in', async () => {
+    const { useRoute } = await import('vue-router')
+    vi.mocked(useRoute).mockReturnValue({ name: 'chat' } as any)
+    const first = mount(Host)
+    await flushPromises()
+    window.dispatchEvent(new Event('xcagi:session-unauthorized'))
+    first.unmount()
+
+    vi.mocked(fetchImUnreadTotal).mockClear()
+    const second = mount(Host)
+    await flushPromises()
+    expect(fetchImUnreadTotal).toHaveBeenCalled()
+    second.unmount()
   })
 
   it('refreshImUnreadTotal sets 0 for admin console SPA', async () => {

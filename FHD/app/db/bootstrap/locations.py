@@ -115,7 +115,9 @@ class DatabaseFiles:
             if source is None:
                 if db_file == "error_collection.db":
                     self._create_empty_sqlite(target)
-                    self.logger.info("未找到种子数据库文件：%s（已创建空库，供 Mod 专用库复制）", db_file)
+                    self.logger.info(
+                        "未找到种子数据库文件：%s（已创建空库，供 Mod 专用库复制）", db_file
+                    )
                 else:
                     self.logger.warning("未找到种子数据库文件：%s（将由 ORM/运行时创建）", db_file)
                 continue

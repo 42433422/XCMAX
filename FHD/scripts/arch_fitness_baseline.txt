@@ -11,11 +11,11 @@
 [domain->infrastructure] app/domain/shared_services/conversation/api_llm.py:82
 [domain->infrastructure] app/domain/shared_services/conversation/context.py:159
 [domain->infrastructure] app/domain/shared_services/conversation/context.py:6
-[domain->infrastructure] app/domain/shared_services/conversation/llm_adapter.py:414
+[domain->infrastructure] app/domain/shared_services/conversation/llm_adapter.py:432
 [domain->infrastructure] app/domain/shared_services/conversation/manager.py:139
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:418
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:443
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:444
+[domain->infrastructure] app/domain/shared_services/conversation/manager.py:421
+[domain->infrastructure] app/domain/shared_services/conversation/manager.py:446
+[domain->infrastructure] app/domain/shared_services/conversation/manager.py:447
 [domain->infrastructure] app/domain/shared_services/conversation/manager.py:77
 [domain->infrastructure] app/domain/shared_services/conversation/modstore_adapter.py:46
 [domain->infrastructure] app/domain/shared_services/conversation/modstore_adapter.py:47

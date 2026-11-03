@@ -1,5 +1,5 @@
 {
-  "lines": 2424117,
+  "lines": 2424196,
   "updated": "2026-11-03",
-  "note": "Changelog gate requires an Unreleased note for the desktop fixes. Previous baseline undercounted the idle page-switch commit."
+  "note": "Ruff format wraps desktop-fix lines. Arch-fitness keys follow the same existing domain imports. Login remount resumes unread polling and task center, and LLM client replacement survives a closed event loop."
 }

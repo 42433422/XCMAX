@@ -90,7 +90,9 @@ def apply_order_created_side_effect(event: NeuroEvent) -> dict[str, Any]:
         _ORDER_CREATED_PROJECTIONS[order_id] = dict(record)
         _ORDER_CREATED_EVENT_LOG.append(dict(record))
         if len(_ORDER_CREATED_EVENT_LOG) > _MAX_ORDER_CREATED_MEMORY:
-            del _ORDER_CREATED_EVENT_LOG[: len(_ORDER_CREATED_EVENT_LOG) - _MAX_ORDER_CREATED_MEMORY]
+            del _ORDER_CREATED_EVENT_LOG[
+                : len(_ORDER_CREATED_EVENT_LOG) - _MAX_ORDER_CREATED_MEMORY
+            ]
         while len(_ORDER_CREATED_PROJECTIONS) > _MAX_ORDER_CREATED_MEMORY:
             _ORDER_CREATED_PROJECTIONS.pop(next(iter(_ORDER_CREATED_PROJECTIONS)))
     return record

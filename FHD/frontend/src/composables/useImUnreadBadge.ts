@@ -49,6 +49,12 @@ export function useImUnreadBadge() {
     void refreshImUnreadTotal()
   }
 
+  function resumeAfterAuthenticatedRemount(): void {
+    // 登录页会卸掉侧栏。重新挂上时路由已经是登录后的页面，看不到 public → private 的变化。
+    if (!loggedOut || isPublicRoute(route.name) || isAdminConsoleSpa()) return
+    loggedOut = false
+  }
+
   watch(
     () => route.name,
     (name, previous) => {
@@ -60,6 +66,7 @@ export function useImUnreadBadge() {
   )
 
   onMounted(() => {
+    resumeAfterAuthenticatedRemount()
     void refreshImUnreadTotal()
     pollTimer = setInterval(() => void refreshImUnreadTotal(), 30_000)
     window.addEventListener(XCMAX_SYNC_IM_MESSAGE_EVENT, onSyncImActivity)

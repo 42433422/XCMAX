@@ -30,9 +30,7 @@ def test_required_runtime_failure_degrades_health_and_blocks_delivery(monkeypatc
         required=True,
         detail="module missing",
     )
-    monkeypatch.setattr(
-        "app.runtime_integrity.neuro_degraded_reasons", lambda _: ["offline"]
-    )
+    monkeypatch.setattr("app.runtime_integrity.neuro_degraded_reasons", lambda _: ["offline"])
     register_health_routes(app)
 
     body = TestClient(app).get("/api/health", params={"lite": lite}).json()

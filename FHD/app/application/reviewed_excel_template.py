@@ -405,8 +405,9 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                         }
                     )
             if len(layout) < 20:
-                max_row, max_col = min(_sheet_axis(sheet.max_row), 40), min(
-                    _sheet_axis(sheet.max_column), 20
+                max_row, max_col = (
+                    min(_sheet_axis(sheet.max_row), 40),
+                    min(_sheet_axis(sheet.max_column), 20),
                 )
                 merged = {}
                 covered: set[tuple[int, int]] = set()

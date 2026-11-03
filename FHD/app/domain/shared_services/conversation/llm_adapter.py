@@ -238,7 +238,12 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         self, current: Optional[httpx.AsyncClient], factory: Any
     ) -> httpx.AsyncClient:
         if current is not None and not current.is_closed:
-            await current.aclose()
+            try:
+                await current.aclose()
+            except RuntimeError:
+                # 客户端绑在上一个事件循环上。asyncio.run() 结束后那个循环已关闭，
+                # 在新循环里 aclose 会抛 Event loop is closed，不能因此建不出新客户端。
+                logger.debug("closed leftover LLM HTTP client after its event loop ended")
         return factory()
 
     async def _get_client(self) -> httpx.AsyncClient:

@@ -155,7 +155,11 @@ def merge_public_degradation(payload: dict[str, Any], neuro: object) -> None:
     elif payload["degradedReasons"]:
         if payload.get("status") != "unhealthy":
             payload["status"] = "degraded"
-    elif payload.get("status") == "degraded" and isinstance(runtime, dict) and runtime.get("status") == "healthy":
+    elif (
+        payload.get("status") == "degraded"
+        and isinstance(runtime, dict)
+        and runtime.get("status") == "healthy"
+    ):
         payload["status"] = "healthy"
 
 

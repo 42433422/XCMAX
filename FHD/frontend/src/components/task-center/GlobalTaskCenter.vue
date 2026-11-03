@@ -78,10 +78,18 @@ function toggleDrawer(): void {
   void store.refresh()
 }
 
+function resumeIfSignedIn(): void {
+  if (account.localUserId || account.marketUserId) store.resumeAfterLogin()
+}
+
 watch(() => account.localUserId || account.marketUserId, (id) => {
   if (id) store.resumeAfterLogin()
 })
-onMounted(() => store.start())
+onMounted(() => {
+  // 登录成功会先写入账号再回到工作台，组件挂上时 id 已经有值，watcher 不会再触发。
+  resumeIfSignedIn()
+  store.start()
+})
 onBeforeUnmount(() => store.stop())
 watch(tutorialScopeKey, (next, previous) => {
   if (next !== previous) store.restartForScope()
