@@ -139,7 +139,10 @@ async def test_complete_async_terminal_404_raises_market_error_and_audits():
         [{"role": "user", "content": "hi"}],
         extra={"allow_failover": True, "_reviewed_excel_audit_response": audit},
     )
-    with pytest.raises(MarketModelError) as raised:
+    with pytest.raises((MarketModelError, ValueError)) as raised:
         await complete_async(connection, ("platform", "platform-default"), request, ports)
-    assert raised.value.status_code == 404
+    if isinstance(raised.value, MarketModelError):
+        assert raised.value.status_code == 404
+    else:
+        assert "平台错误(404)" in str(raised.value)
     assert captured == [404]

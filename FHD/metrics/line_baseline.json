@@ -1,5 +1,5 @@
 {
-  "lines": 2422903,
+  "lines": 2422940,
   "updated": "2026-11-03",
-  "note": "佳诺复验 #3/#4/#5：platform-default 404 必须 failover+映射+claim 释放；净增为回归测例与终端审计换模路径，合入后不部署"
+  "note": "佳诺 #2931：审计下显式 allow_failover 才换模，保留旧 audited 契约测例；completions 补捕获顺序"
 }

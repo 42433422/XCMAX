@@ -38,6 +38,23 @@ def _failover_extra(extra: dict | None, *, primary: bool) -> dict:
     return payload
 
 
+def _audit_allows_failover(extra: dict | None) -> bool:
+    """Audited calls failover only when allow_failover is explicitly True."""
+    payload = extra or {}
+    if payload.get("_reviewed_excel_audit_response") is None:
+        return True
+    return payload.get("allow_failover") is True
+
+
+def _status_error(request: ChatInput, response: httpx.Response, status: int) -> Exception:
+    if request.extra.get("key_source") or request.extra.get("route_token"):
+        error: Exception = market_response_error(response, status)
+    else:
+        error = ValueError(f"平台错误({status}): {response.text[:500]}")
+    error.response = response  # type: ignore[attr-defined]
+    return error
+
+
 def _capture_reviewed_response(
     request: ChatInput, connection: Connection, response: httpx.Response
 ):
@@ -77,10 +94,14 @@ def post_sync(
         latency_ms = (response_ports.clock() - start) * 1000.0
         status = _response_status_code(response)
         if status >= 400:
-            # Defer audit capture to complete_* so failoverable attempts stay inflight.
-            error = market_response_error(response, status)
-            error.response = response
-            raise error
+            # Audited single-shot captures here before the error body is parsed.
+            # Explicit allow_failover=True defers capture to complete_* terminal attempt.
+            if (
+                request.extra.get("_reviewed_excel_audit_response") is not None
+                and request.extra.get("allow_failover") is not True
+            ):
+                _capture_reviewed_response(request, connection, response)
+            raise _status_error(request, response, status)
         _capture_reviewed_response(request, connection, response)
         result = response.json()
     return finish_completion(result, connection, route, latency_ms, response_ports)
@@ -113,15 +134,19 @@ def complete_sync(
             if status is None:
                 match = re.search(r"平台错误\((\d{3})\)", str(exc))
                 status = int(match.group(1)) if match else None
-            can_failover = index + 1 < len(candidates) and ports.failoverable(status, str(exc))
+            can_failover = (
+                index + 1 < len(candidates)
+                and ports.failoverable(status, str(exc))
+                and _audit_allows_failover(request.extra)
+            )
             if can_failover:
                 ports.response.logger.warning(
                     "[Modstore] 桌面侧换模重试 %s/%s -> %s", *candidate, candidates[index + 1]
                 )
                 continue
-            # Terminal failure: archive audited body once, then raise.
+            # Terminal failure: archive once when post_sync deferred capture.
             response = getattr(exc, "response", None)
-            if response is not None:
+            if response is not None and _audit_allows_failover(request.extra):
                 _capture_reviewed_response(request, connection, response)
             raise
     if last_error is not None:
@@ -158,7 +183,11 @@ async def complete_async(
             )
         except httpx.HTTPError as exc:
             last_error = exc
-            if index + 1 < len(candidates) and ports.failoverable(None, str(exc)):
+            if (
+                index + 1 < len(candidates)
+                and ports.failoverable(None, str(exc))
+                and _audit_allows_failover(request.extra)
+            ):
                 continue
             raise
         except ValueError:
@@ -169,10 +198,16 @@ async def complete_async(
         latency_ms = (ports.response.clock() - start) * 1000.0
         status = ports.status_code(response, 200)
         if status >= 400:
-            error = market_response_error(response, status)
-            # Attach raw response so a terminal failure can still be audited.
-            error.response = response
-            if index + 1 < len(candidates) and ports.failoverable(status, response.text[:500]):
+            will_failover = (
+                index + 1 < len(candidates)
+                and ports.failoverable(status, response.text[:500])
+                and _audit_allows_failover(request.extra)
+            )
+            # Archive before parsing the error body so audited receipts stay exact.
+            if not will_failover:
+                _capture_reviewed_response(request, connection, response)
+            error = _status_error(attempt, response, status)
+            if will_failover:
                 last_error = error
                 ports.response.logger.warning(
                     "[Modstore] 桌面侧换模重试 %s/%s -> %s",
@@ -180,7 +215,6 @@ async def complete_async(
                     candidates[index + 1],
                 )
                 continue
-            _capture_reviewed_response(request, connection, response)
             raise error
         _capture_reviewed_response(request, connection, response)
         return finish_completion(response.json(), connection, candidate, latency_ms, ports.response)
