@@ -1,5 +1,5 @@
 {
-  "lines": 2409727,
+  "lines": 2409756,
   "updated": "2026-11-03",
-  "note": "字幕重打包已把基线降到 2409723。corp-site-deploy 增加 repository_dispatch（云代理无法 workflow_dispatch），净增 4 行，基线抬到 2409727。"
+  "note": "AI review 对 Vite 产出的 corp-butler.js 豁免 Vue 运行时 innerHTML，并加回归测试，避免字幕重打包被误判阻断。"
 }

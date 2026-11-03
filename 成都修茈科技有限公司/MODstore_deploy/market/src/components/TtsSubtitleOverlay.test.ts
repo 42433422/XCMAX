@@ -13,7 +13,7 @@ import {
 describe('TtsSubtitleOverlay', () => {
   beforeEach(() => {
     endTtsSubtitles()
-    document.body.innerHTML = ''
+    document.body.replaceChildren()
   })
 
   it('shows only the current spoken line', async () => {
