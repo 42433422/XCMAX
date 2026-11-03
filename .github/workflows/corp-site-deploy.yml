@@ -16,6 +16,10 @@ on:
         description: Git branch to deploy on server
         required: false
         default: main
+  # Cursor 云代理 token 没有 actions:write，不能 workflow_dispatch。
+  # 合入 main 后用 repository_dispatch（event_type=corp-site-deploy）触发同一套发布。
+  repository_dispatch:
+    types: [corp-site-deploy]
   # push 事件在 main 上曾整体未投递（#1952/#1953 合并后无任何 push 事件 run），
   # 且服务器 cron 自动更新被 hotfix hold 冻结，静态站会静默停留在旧版本；小时级巡检兜底。
   schedule: [{cron: '23 * * * *'}]
@@ -58,7 +62,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || vars.XCMAX_AUTO_SITE_DEPLOY == 'true'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' || vars.XCMAX_AUTO_SITE_DEPLOY == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: SSH — git sync + xcmax-site-auto-update + nginx reload
@@ -70,7 +74,7 @@ jobs:
           command_timeout: 25m
           script: |
             set -euo pipefail
-            BRANCH="${{ github.event.inputs.branch }}"
+            BRANCH="${{ github.event.inputs.branch || github.event.client_payload.branch }}"
             if [ -z "${BRANCH}" ]; then BRANCH="${{ vars.XCMAX_GIT_BRANCH }}"; fi
             if [ -z "${BRANCH}" ]; then BRANCH="main"; fi
             REMOTE_ROOT="${{ vars.XCMAX_REMOTE_ROOT }}"
