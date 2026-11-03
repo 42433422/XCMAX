@@ -89,6 +89,10 @@ export async function fetchImConversations(): Promise<ImConversationSummary[]> {
 export async function fetchImUnreadTotal(): Promise<number> {
   try {
     const res = await apiFetch('/api/im/unread-total', { headers: jsonHeaders })
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('xcagi:session-unauthorized'))
+      return 0
+    }
     const ct = res.headers.get('content-type') || ''
     if (!res.ok || !ct.toLowerCase().includes('application/json')) return 0
     const data = (await res.json()) as { success?: boolean; unread_total?: number }

@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { fetchImUnreadTotal } from '@/api/im'
 import { XCMAX_SYNC_IM_MESSAGE_EVENT, XCMAX_SYNC_IM_READ_EVENT } from '@/composables/useXcmaxSync'
@@ -6,6 +6,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
 const imUnreadTotal = ref(0)
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let loggedOut = false
 
 function isPublicRoute(name: unknown): boolean {
   const n = String(name || '')
@@ -15,9 +16,20 @@ function isPublicRoute(name: unknown): boolean {
 export function useImUnreadBadge() {
   const route = useRoute()
 
+  function stopPolling(): void {
+    if (pollTimer) clearInterval(pollTimer)
+    pollTimer = null
+  }
+
+  function onLoggedOut(): void {
+    loggedOut = true
+    imUnreadTotal.value = 0
+    stopPolling()
+  }
+
   async function refreshImUnreadTotal(): Promise<void> {
-    // 公共页（登录/授权等）不轮询未读，避免对未鉴权接口发请求
-    if (isPublicRoute(route.name) || isAdminConsoleSpa()) {
+    // 公共页或已确认未登录时不再请求，避免未读接口 401 轮询。
+    if (loggedOut || isPublicRoute(route.name) || isAdminConsoleSpa()) {
       imUnreadTotal.value = 0
       return
     }
@@ -37,16 +49,28 @@ export function useImUnreadBadge() {
     void refreshImUnreadTotal()
   }
 
+  watch(
+    () => route.name,
+    (name, previous) => {
+      if (!loggedOut || !isPublicRoute(previous) || isPublicRoute(name)) return
+      loggedOut = false
+      void refreshImUnreadTotal()
+      if (!pollTimer) pollTimer = setInterval(() => void refreshImUnreadTotal(), 30_000)
+    },
+  )
+
   onMounted(() => {
     void refreshImUnreadTotal()
     pollTimer = setInterval(() => void refreshImUnreadTotal(), 30_000)
     window.addEventListener(XCMAX_SYNC_IM_MESSAGE_EVENT, onSyncImActivity)
     window.addEventListener(XCMAX_SYNC_IM_READ_EVENT, onSyncImActivity)
+    window.addEventListener('xcagi:session-unauthorized', onLoggedOut)
   })
   onUnmounted(() => {
-    if (pollTimer) clearInterval(pollTimer)
+    stopPolling()
     window.removeEventListener(XCMAX_SYNC_IM_MESSAGE_EVENT, onSyncImActivity)
     window.removeEventListener(XCMAX_SYNC_IM_READ_EVENT, onSyncImActivity)
+    window.removeEventListener('xcagi:session-unauthorized', onLoggedOut)
   })
 
   return { imUnreadTotal, refreshImUnreadTotal }

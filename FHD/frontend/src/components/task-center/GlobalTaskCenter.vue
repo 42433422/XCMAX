@@ -78,6 +78,9 @@ function toggleDrawer(): void {
   void store.refresh()
 }
 
+watch(() => account.localUserId || account.marketUserId, (id) => {
+  if (id) store.resumeAfterLogin()
+})
 onMounted(() => store.start())
 onBeforeUnmount(() => store.stop())
 watch(tutorialScopeKey, (next, previous) => {
