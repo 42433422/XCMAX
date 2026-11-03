@@ -595,11 +595,3 @@
 }
 
 
-/* Windows: keep inline failure banner (no floating dialog). */
-html.xcagi-electron-win .login-error {
-  border-radius: 2px;
-  border: 1px solid #c42b1c;
-  background: #fff4f4;
-  box-shadow: none;
-  font-family: "Segoe UI", system-ui, sans-serif;
-}

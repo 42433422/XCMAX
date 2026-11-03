@@ -2,6 +2,7 @@
 
 - fix(desktop): 单击系统托盘/菜单栏图标弹出主窗口；右键仍打开菜单。此前只设置了 context menu，单击没有显示窗口。
 - fix(login): 登录失败改为页内「登录失败 / 用户名或密码错误」，去掉弹窗与底部连接诊断（#2）
+- fix(jianuo): Win/Mac 桌面 chrome CSS 分平台加载，共享样式不再同时带 mac/win 类（#1）
 - fix(jianuo): analyze 保留标签词表并兜底非法标签，避免 failover 成功后仍 503（#3）
 - fix(jianuo): analyze/preview failover past platform-default 404; map config 404 to `model_configuration_error`; release/reclaim candidate claims (#3/#4/#5 retest)
 
@@ -9,6 +10,7 @@
 
 ## Unreleased
 
+- Windows / macOS 桌面壳样式按平台分别加载，安装包 CSS 不再混入另一边的窗口 chrome 类。
 - 佳诺实测闭环：智能对话与数据对接 AI 上下文按 feature channel 隔离（记忆召回不再串用）；平台默认模型 HTTP 404 映射为可重试配置错误并释放 preview candidate claim，非审计路径允许换模；Windows 桌面提前挂上 win 类、顶栏/侧栏去毛玻璃，登录失败改为系统对话框风格。
 
 - 工作台启动页等待当前账号资料、侧栏、图标与当前页必要内容完成后再进入；聊天首屏确认真实会话内容，设置首屏确认用户与行业资料，同账号后台刷新保留已验证数据，首屏仍等待本轮加载。失败或超时保留重试、重新加载与返回登录，取消和换账号后旧请求不会放开新工作台；其它页面预取延后到首屏就绪。

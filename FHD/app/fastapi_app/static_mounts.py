@@ -153,7 +153,7 @@ def mount_vue_dist_public_static(app: FastAPI) -> None:
     if not os.path.isdir(vue_dist):
         logger.warning("Vue dist 目录不存在，跳过 public 静态挂载: %s", vue_dist)
         return
-    for sub in ("font-awesome", "startup", "yuangong", "workflow"):
+    for sub in ("font-awesome", "startup", "yuangong", "workflow", "platform"):
         directory = os.path.join(vue_dist, sub)
         if not os.path.isdir(directory):
             continue

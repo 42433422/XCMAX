@@ -69,8 +69,4 @@ const enterprisePurchaseUrl = purchaseAuthorizationUrl()
     right: 16px;
   }
 }
-:global(html.xcagi-electron-win .login-account-actions) {
-  top: 58px; /* Windows titleBarOverlay occupies the first 50px. */
-  -webkit-app-region: no-drag;
-}
 </style>
