@@ -51,6 +51,24 @@ def test_initialize_databases_skips_existing(tmp_path, monkeypatch: pytest.Monke
     assert existing.read_bytes() == b"keep"
 
 
+def test_missing_error_collection_seed_is_created_for_mod_copies(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work_dir = tmp_path / "appdata"
+    monkeypatch.setattr(init_db_mod, "get_app_data_dir", lambda: str(work_dir))
+    monkeypatch.setattr(init_db_mod, "get_resource_path", lambda *a, **k: str(tmp_path / "empty"))
+    monkeypatch.setattr(init_db_mod, "get_base_dir", lambda: str(tmp_path / "empty"))
+    init_db_mod.initialize_databases(db_files=["error_collection.db"])
+    assert (work_dir / "error_collection.db").is_file()
+    init_db_mod.ensure_sqlite_per_mod_database_copies(
+        ["erp_demo"], db_files=["error_collection.db"]
+    )
+    copied = work_dir / "error_collection__erp_demo.db"
+    assert copied.is_file()
+    with sqlite3.connect(copied) as connection:
+        assert connection.execute("SELECT 1").fetchone()[0] == 1
+
+
 def test_initialize_databases_missing_seed_warns(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     work_dir = tmp_path / "appdata"
     monkeypatch.setattr(init_db_mod, "get_app_data_dir", lambda: str(work_dir))

@@ -90,6 +90,13 @@ class DatabaseFiles:
     copy_file: Callable[[str, str], str]
     logger: Logger
 
+    def _create_empty_sqlite(self, path: str) -> None:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with self.sqlite_connect(path) as connection:
+            connection.commit()
+
     def initialize(self, db_files: Iterable[str]) -> None:
         work_dir = self.app_data_dir()
         os.makedirs(work_dir, exist_ok=True)
@@ -106,7 +113,11 @@ class DatabaseFiles:
                 None,
             )
             if source is None:
-                self.logger.warning("未找到种子数据库文件：%s（将由 ORM/运行时创建）", db_file)
+                if db_file == "error_collection.db":
+                    self._create_empty_sqlite(target)
+                    self.logger.info("未找到种子数据库文件：%s（已创建空库，供 Mod 专用库复制）", db_file)
+                else:
+                    self.logger.warning("未找到种子数据库文件：%s（将由 ORM/运行时创建）", db_file)
                 continue
             try:
                 self.copy_file(source, target)
@@ -133,13 +144,16 @@ class DatabaseFiles:
                 if filename == db_name or os.path.exists(destination):
                     continue
                 if not os.path.exists(source):
-                    self.logger.warning(
-                        "无法为 Mod %s 准备专用库：母库不存在 %s（跳过 %s）",
-                        mod_id,
-                        source,
-                        filename,
-                    )
-                    continue
+                    if os.path.basename(source) == "error_collection.db":
+                        self._create_empty_sqlite(source)
+                    else:
+                        self.logger.warning(
+                            "无法为 Mod %s 准备专用库：母库不存在 %s（跳过 %s）",
+                            mod_id,
+                            source,
+                            filename,
+                        )
+                        continue
                 try:
                     self.copy_file(source, destination)
                     self.logger.info("已为 Mod %s 从母库复制专用 SQLite：%s", mod_id, filename)
