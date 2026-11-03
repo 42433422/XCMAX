@@ -190,11 +190,16 @@ def _template_platform_complete(
             if finish not in {None, "stop"}:
                 raise ReviewedExcelError("incomplete")
             data = extract_json(str((choice.get("message") or {}).get("content") or ""))
+            if data is not None:
+                from app.application.reviewed_excel_partition import coerce_payload_document_labels
+
+                data = coerce_payload_document_labels(data)
             if data is None or not _validate_template_schema(schema, data):
                 raise ReviewedExcelError("invalid")
             model = str((response or {}).get("model") or template_llm_model_label())
+            provider_name = str((response or {}).get("provider") or "platform")
             return llm_assist.LlmAssistResult(
-                used_llm=True, model=model, data=data, provider="platform"
+                used_llm=True, model=model, data=data, provider=provider_name
             )
         except ModelRequestNotSent:
             raise

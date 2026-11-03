@@ -1,5 +1,5 @@
 {
-  "lines": 2422964,
+  "lines": 2423192,
   "updated": "2026-11-03",
-  "note": "佳诺 #2931：首枪 allow_failover=False + _pending_client_failover，404 后再显式换模；兼容登录流测例"
+  "note": "佳诺 #3：unsafe 测例 lambda 默认参数绑定，避免晚绑定误收"
 }

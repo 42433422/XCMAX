@@ -125,6 +125,7 @@ def record_response(state: dict, expected: str, body: bytes, status: int, reques
         parsed = json.loads(body)
         usage = parsed.get("usage") if isinstance(parsed, dict) else None
     except (ValueError, UnicodeDecodeError):
+        parsed = None
         usage = None
     entry = {
         **records[-1],
@@ -135,6 +136,14 @@ def record_response(state: dict, expected: str, body: bytes, status: int, reques
         "response_base64": base64.b64encode(body).decode("ascii"),
         "response_sha256": hashlib.sha256(body).hexdigest(),
     }
+    if isinstance(parsed, dict):
+        for key in ("model", "provider"):
+            value = parsed.get(key)
+            if isinstance(value, str) and value.strip():
+                entry[key] = value.strip()[:160]
+        failover_from = parsed.get("failover_from")
+        if isinstance(failover_from, str) and failover_from.strip():
+            entry["failover_from"] = failover_from.strip()[:160]
     if (
         len(json.dumps([*records[:-1], entry], ensure_ascii=False).encode("utf-8"))
         > MAX_ARCHIVE_BYTES

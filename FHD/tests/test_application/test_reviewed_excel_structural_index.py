@@ -113,7 +113,7 @@ def test_neutralize_keeps_structural_index_drops_structure_map():
     assert kept["workbook_structural_index"]["schema_version"] == SCHEMA_VERSION
     assert "structure_map" not in kept
     assert "rule_hints" not in kept
-    assert "labels" not in kept
+    assert kept.get("labels") == ["a"]
 
 
 def test_prefer_structural_when_strictly_more_atoms():

@@ -1734,16 +1734,27 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
         [{**valid, "range": "A1:E4"}],
         [valid, valid],
         [{**valid, "evidence": [{"sheet": "报价", "cell": "Z99"}]}],
-        [{**valid, "labels": ["customer_products"]}],
         [{**valid, "extra": True}],
     ]
     for regions in invalid:
         monkeypatch.setattr(
             "app.application.reviewed_excel_template._template_platform_complete",
-            lambda *a, **k: LlmAssistResult(used_llm=True, data={"regions": regions}),
+            lambda *a, regions=regions, **k: LlmAssistResult(
+                used_llm=True, data={"regions": regions}
+            ),
         )
         with pytest.raises(ValueError):
             classify_semantic_workbook(review)
+
+    # Freestyle labels are coerced to unknown so analyze can keep geometry.
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_platform_complete",
+        lambda *a, **k: LlmAssistResult(
+            used_llm=True, data={"regions": [{**valid, "labels": ["customer_products"]}]}
+        ),
+    )
+    coerced = classify_semantic_workbook(review)
+    assert coerced["regions"][0]["labels"] == ["unknown"]
 
 
 def test_semantic_classification_uses_bounded_fenced_model_output(monkeypatch):

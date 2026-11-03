@@ -1,5 +1,6 @@
 ## Unreleased
 
+- fix(jianuo): analyze 保留标签词表并兜底非法标签，避免 failover 成功后仍 503（#3）
 - fix(jianuo): analyze/preview failover past platform-default 404; map config 404 to `model_configuration_error`; release/reclaim candidate claims (#3/#4/#5 retest)
 
 # XCAGI 版本更新日志（用户更新记录 SSOT）
