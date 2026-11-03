@@ -30,8 +30,8 @@ def test_required_runtime_failure_degrades_health_and_blocks_delivery(monkeypatc
         required=True,
         detail="module missing",
     )
-    monkeypatch.setitem(
-        register_health_routes.__globals__, "neuro_degraded_reasons", lambda _: ["offline"]
+    monkeypatch.setattr(
+        "app.runtime_integrity.neuro_degraded_reasons", lambda _: ["offline"]
     )
     register_health_routes(app)
 
@@ -203,7 +203,13 @@ def test_scoped_route_configuration_replaces_only_unscoped_llm_failure(monkeypat
     other = client.get("/api/health", headers={"X-Session-ID": "B"}).json()
     assert other["status"] == "degraded"
     assert other["neuro"]["cognition"]["cognition"]["llm_port_available"] is False
-    assert "LLM_RUNTIME_UNAVAILABLE" in client.get("/api/health").json()["degradedReasons"]
+    anonymous = client.get("/api/health").json()
+    assert anonymous["status"] == "healthy"
+    assert "LLM_RUNTIME_UNAVAILABLE" not in anonymous["degradedReasons"]
+    assert anonymous["capabilities"]["cognition.llm_port_available"] == {
+        "ready": False,
+        "status": "not_ready",
+    }
     route["ok"] = True
     record_runtime_component(app, "required-component", ok=False, required=True)
     assert client.get("/api/health", headers={"X-Session-ID": "A"}).json()["status"] == "unhealthy"

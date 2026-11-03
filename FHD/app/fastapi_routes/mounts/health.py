@@ -9,7 +9,7 @@ from copy import deepcopy
 from fastapi import FastAPI, Request, Response
 
 from app.build_identity import build_identity
-from app.runtime_integrity import neuro_degraded_reasons, runtime_integrity_snapshot
+from app.runtime_integrity import merge_public_degradation, runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -100,21 +100,11 @@ def register_health_routes(app: FastAPI) -> None:
         model_health = await _session_model_health(request)
         if model_health is not None:
             payload["sessionModel"] = model_health
-            if model_health["status"] == "configured":
-                cognition = payload.get("neuro", {}).get("cognition")
-                cognition = cognition.get("cognition") if isinstance(cognition, dict) else None
-                if isinstance(cognition, dict):
-                    cognition["llm_port_available"] = True
-                    cognition["availability_scope"] = "current_session"
-            else:
+            if model_health["status"] != "configured":
                 payload["degradedReasons"].append("SESSION_MODEL_" + model_health["status"].upper())
                 if payload["status"] == "healthy":
                     payload["status"] = "degraded"
-        neuro_reasons = neuro_degraded_reasons(payload.get("neuro"))
-        if neuro_reasons:
-            payload["degradedReasons"].extend(neuro_reasons)
-            if payload["status"] == "healthy":
-                payload["status"] = "degraded"
+        merge_public_degradation(payload, payload.get("neuro"))
         return payload
 
     @app.get("/api/ping", tags=["health"])
