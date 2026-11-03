@@ -114,8 +114,9 @@ router.beforeEach(async (to, _from, finish) => {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile')
       const profile = useAccountProfileStore()
-      if (!profile.loaded || profile.sessionCheckUnavailable) await profile.refreshFromServer()
-      if (profile.sessionCheckUnavailable) { unavailable(); return }
+      if (!profile.loaded) await profile.refreshFromServer()
+      else if (profile.sessionCheckUnavailable) void profile.refreshFromServer()
+      if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
       if (!profile.isAdminAccount) {
         next({
           name: 'login',
@@ -141,7 +142,9 @@ router.beforeEach(async (to, _from, finish) => {
     const { useAccountProfileStore } = await import('@/stores/accountProfile')
     const profile = useAccountProfileStore()
     // Settings is safe during the desktop session hint's background refresh.
-    if ((!profile.loaded || profile.workspaceReady === false || profile.sessionCheckUnavailable) && !(isDesktopShell() && to.name === 'settings')) {
+    const identityMissing = !profile.loaded || profile.workspaceReady === false
+    if (profile.loaded && profile.sessionCheckUnavailable && !identityMissing) void profile.refreshFromServer()
+    if ((identityMissing || profile.sessionCheckUnavailable) && !(profile.loaded && profile.sessionCheckUnavailable && !identityMissing) && !(isDesktopShell() && to.name === 'settings')) {
       const sku = await fetchProductSku().catch(() => null)
       if (profile.sessionCheckUnavailable || sku === null || isEnterpriseEdition(sku)) {
         try { await profile.refreshFromServer() } catch { unavailable(); return }
@@ -297,10 +300,12 @@ router.beforeEach(async (to, _from, finish) => {
       if (useSessionHint) {
         provisionalDesktopEntry = true
         refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
-      } else if (!profile.loaded || profile.sessionCheckUnavailable) {
+      } else if (!profile.loaded) {
         await profile.refreshFromServer()
+      } else if (profile.sessionCheckUnavailable) {
+        void profile.refreshFromServer()
       }
-      if (profile.sessionCheckUnavailable) { unavailable(); return }
+      if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
       if (!provisionalDesktopEntry && profile.isAdminAccount && to.name !== 'login') {
         try {
           const { authApi } = await import('@/api/auth')
@@ -327,10 +332,9 @@ router.beforeEach(async (to, _from, finish) => {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile')
       const profile = useAccountProfileStore()
-      if (!profile.loaded || profile.sessionCheckUnavailable) {
-        await profile.refreshFromServer()
-      }
-      if (profile.sessionCheckUnavailable) { unavailable(); return }
+      if (!profile.loaded) await profile.refreshFromServer()
+      else if (profile.sessionCheckUnavailable) void profile.refreshFromServer()
+      if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
       if (!profile.isAdminAccount) {
         next({ name: 'chat' })
         return
@@ -362,10 +366,12 @@ router.beforeEach(async (to, _from, finish) => {
           const profile = useAccountProfileStore()
           if (provisionalDesktopEntry && !profile.loaded) {
             refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
-          } else if (!profile.loaded || profile.sessionCheckUnavailable) {
+          } else if (!profile.loaded) {
             await profile.refreshFromServer()
+          } else if (profile.sessionCheckUnavailable) {
+            void profile.refreshFromServer()
           }
-          if (profile.sessionCheckUnavailable) { unavailable(); return }
+          if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
           if (!provisionalDesktopEntry && !isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
             // 非桌面：网页企业壳把 admin 会话导向独立管理端；桌面已在上方拒入
             if (isDesktopShell()) {
@@ -450,6 +456,14 @@ router.beforeEach(async (to, _from, finish) => {
 
   next()
 })
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('xcagi:enterprise-session-invalid', () => {
+    const current = router.currentRoute.value
+    if (current.meta?.publicAccess || current.name === 'login') return
+    void router.replace({ name: 'login', query: { redirect: current.fullPath && current.fullPath !== '/login' ? current.fullPath : '/' } })
+  })
+}
 
 router.afterEach((to) => {
   const title = to.meta?.title

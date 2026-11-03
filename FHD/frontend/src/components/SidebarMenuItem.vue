@@ -16,6 +16,7 @@
       :aria-current="isActive && !hasActiveChild ? 'page' : undefined"
       :aria-expanded="hasChildren ? isExpanded : undefined"
       :title="itemTooltip"
+      @mouseenter="warmRoute(item.key)"
       @contextmenu.prevent
       @pointerdown="$emit('reorder-pointer-down', $event)"
       @keydown="$emit('keydown', $event)"
@@ -48,6 +49,7 @@
               :aria-label="child.name"
               :aria-current="activeView === child.key ? 'page' : undefined"
               :title="child.description ? `${child.name} · ${child.description}` : child.name"
+              @mouseenter="warmRoute(child.key)"
               @click.stop="activateChild(child.key)"
               @pointerup.stop="activateChildFromPointer(child.key, $event)"
             >
@@ -65,7 +67,13 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import SidebarDragHoldProgress from '@/components/SidebarDragHoldProgress.vue'
+import { prefetchShellRoute } from '@/utils/shellRoutePrefetch'
+
+function warmRoute(key) {
+  try { prefetchShellRoute(useRouter(), String(key || '')) } catch { /* item still works without a router */ }
+}
 
 const props = defineProps({
   item: {

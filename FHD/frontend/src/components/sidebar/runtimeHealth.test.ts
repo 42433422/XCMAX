@@ -64,7 +64,7 @@ describe('live sidebar health', () => {
     vi.stubGlobal('fetch', fetchMock)
     const sidebar = useSidebarAppVersion({ shouldShowAdminDeployStatus: ref(false) })
     await sidebar.refreshHealthAppVersion()
-    expect(fetchMock).toHaveBeenCalledWith('https://business.example.test/api/health', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenCalledWith('https://business.example.test/api/health?lite=1', expect.objectContaining({ credentials: 'include' }))
     sidebar.stopHealthPolling()
   })
 

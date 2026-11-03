@@ -5,6 +5,7 @@ import ImMessengerView from './ImMessengerView.vue'
 import SharedIssueAcceptancePanel from '@/components/SharedIssueAcceptancePanel.vue'
 
 vi.mock('@/components/im/KellaiCustomerInbox.vue', () => ({
+  __isTeleport: false,
   default: { template: '<section class="kellai-inbox-stub">客来来客户会话（只读）</section>' },
 }))
 

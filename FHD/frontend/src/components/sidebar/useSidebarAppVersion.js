@@ -59,7 +59,7 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
     pendingRequest = Promise.resolve().then(async () => {
       try {
         if (stopped || epoch !== lifecycle) return
-        const res = await fetch(buildFullApiUrl('/api/health'), {
+        const res = await fetch(buildFullApiUrl('/api/health?lite=1'), {
           credentials: 'include', cache: 'no-store', signal: requestController.signal,
         })
         if (!res.ok && res.status !== 503) throw new Error('Health request failed')

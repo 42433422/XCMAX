@@ -1,5 +1,5 @@
 {
-  "lines": 2423810,
+  "lines": 2424065,
   "updated": "2026-11-03",
-  "note": "Desktop abnormal fixes for memory growth, crash detail, health alignment, ELT hardening, auth storms, and quick navigation."
+  "note": "Idle page-switch performance: prefetch shell routes, keep cached pages, and avoid blocking session checks."
 }
