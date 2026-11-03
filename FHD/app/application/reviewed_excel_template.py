@@ -197,9 +197,9 @@ def _template_platform_complete(
             if data is None or not _validate_template_schema(schema, data):
                 raise ReviewedExcelError("invalid")
             model = str((response or {}).get("model") or template_llm_model_label())
-            provider = str((response or {}).get("provider") or "platform")
+            provider_name = str((response or {}).get("provider") or "platform")
             return llm_assist.LlmAssistResult(
-                used_llm=True, model=model, data=data, provider=provider
+                used_llm=True, model=model, data=data, provider=provider_name
             )
         except ModelRequestNotSent:
             raise
