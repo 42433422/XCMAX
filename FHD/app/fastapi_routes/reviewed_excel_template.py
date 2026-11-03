@@ -1223,20 +1223,15 @@ async def reviewed_excel_preview(
                 if existing:
                     if existing.get("state") == "completed" and existing.get("review_id"):
                         return _stored_candidate_response(db, existing["review_id"], tenant, owner)
-                    # Reclaim orphan inflight/failed claims (no completed review). Prior
-                    # platform-default 404s used to leave inflight and block all retries.
-                    if existing.get("state") in {"inflight", "failed"} and not existing.get(
-                        "review_id"
-                    ):
-                        claims.pop(candidate_key, None)
-                    else:
-                        error = _model_processing_failure(
-                            ReviewedExcelError(
-                                "上次候选处理仍在进行或结果未知，请先核对状态；不会重复发送"
-                            )
+                    # Unknown-outcome inflight must stay locked (no double-send). Definite
+                    # config/404 failures release the claim in the except path below.
+                    error = _model_processing_failure(
+                        ReviewedExcelError(
+                            "上次候选处理仍在进行或结果未知，请先核对状态；不会重复发送"
                         )
-                        error.status_code = 409
-                        raise error
+                    )
+                    error.status_code = 409
+                    raise error
                 if len(claims) >= 200:
                     raise HTTPException(
                         status_code=409, detail="本文件候选请求已达上限，请先核对已有结果"
