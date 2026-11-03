@@ -314,6 +314,21 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
     return entries
 
 
+def _sheet_axis(value: object) -> int:
+    """openpyxl reports max_row/max_column as None when a sheet has no dimensions."""
+    try:
+        count = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+    return count if count > 0 else 0
+
+
+def _sheet_cell_extent(sheet: object) -> int:
+    return _sheet_axis(getattr(sheet, "max_row", None)) * _sheet_axis(
+        getattr(sheet, "max_column", None)
+    )
+
+
 def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
     if not body or len(body) > MAX_BYTES:
         raise ReviewedExcelError("文件为空或超过 20 MB")
@@ -367,9 +382,10 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
         for sheet in wb.worksheets:
             if len(sheet.merged_cells.ranges) > 5000:
                 raise ReviewedExcelError("合并区域超过 5000 个，暂不能安全预览")
-            if sheet.max_row * sheet.max_column > 100_000:
+            extent = _sheet_cell_extent(sheet)
+            if extent > 100_000:
                 raise ReviewedExcelError("工作表范围过大，暂不能安全预览")
-            grid_budget += sheet.max_row * sheet.max_column
+            grid_budget += extent
             if grid_budget > 250_000:
                 raise ReviewedExcelError("工作簿总单元格范围过大，暂不能安全预览")
             for row in sheet.iter_rows():
@@ -389,7 +405,9 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                         }
                     )
             if len(layout) < 20:
-                max_row, max_col = min(sheet.max_row, 40), min(sheet.max_column, 20)
+                max_row, max_col = min(_sheet_axis(sheet.max_row), 40), min(
+                    _sheet_axis(sheet.max_column), 20
+                )
                 merged = {}
                 covered: set[tuple[int, int]] = set()
                 for region in sheet.merged_cells.ranges:
@@ -478,7 +496,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                     if any(obj.get("geometry_error") for obj in objects)
                     else drawing_row_boundaries(sheet, objects)
                 )
-                if drawing_columns[sheet.title] * sheet.max_row > 100_000:
+                if drawing_columns[sheet.title] * _sheet_axis(sheet.max_row) > 100_000:
                     raise ReviewedExcelError("绘图工作表范围过大，暂不能安全预览")
         return {
             "usage_restrictions": ["仅供数据/模板测试；打印版式未验证，不得发布到企业模板库"]

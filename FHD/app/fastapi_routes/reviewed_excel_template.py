@@ -655,6 +655,7 @@ async def reviewed_excel_classification_analyze(
     auto_group: bool = Form(False),
     user=Depends(_manage),
 ):
+    request.state.elt_stage = "analyze"
     tenant, owner = _identity(user)
     model_session = require_model_session(request, tenant, owner)
     with _docking_channel():
@@ -966,6 +967,7 @@ async def _reviewed_excel_classification_analyze_body(
                                     "matched": values[(ref["sheet"], ref["cell"])],
                                 }
                                 for ref in region["evidence"]
+                                if (ref.get("sheet"), ref.get("cell")) in values
                             ],
                             "parent_heading": headings[0]["matched"] if headings else "",
                             "header_cells": headers,
