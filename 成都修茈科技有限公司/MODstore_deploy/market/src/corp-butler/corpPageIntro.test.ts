@@ -8,6 +8,7 @@ import {
   setCorpProactiveIntroEnabled,
   speakCorpIntro,
   stopCorpIntroSpeech,
+  stripCorpPageContextNarration,
   CORP_PROACTIVE_INTRO_KEY,
 } from './corpPageIntro'
 
@@ -47,8 +48,21 @@ describe('corpPageIntro', () => {
     expect(pageId).toBe('home')
     expect(text).toContain('小C')
     expect(text).toMatch(/XCAGI|行业 Mod|桌面/)
-    expect(text).not.toMatch(/你现在在|这页重点/)
+    expect(text).not.toMatch(/你现在在|这页重点|你正在看|当前页面是/)
     expect(text.length).toBeLessThanOrEqual(140)
+  })
+
+  it('drops page-location preamble and keeps the product intro', () => {
+    const raw = '嗨，我是小C。你现在在「成都修茈科技有限公司」。首页主推 XCAGI。这页重点：行业 Mod。'
+    expect(stripCorpPageContextNarration(raw)).toBe('嗨，我是小C。首页主推 XCAGI。')
+    const spoken = stripCorpPageContextNarration(
+      '嗨，我是小C。你正在看「产品中心」。XCAGI 可以安装行业 Mod。',
+    )
+    expect(spoken).toContain('XCAGI')
+    expect(spoken).not.toMatch(/你现在在|你正在看|这页重点/)
+    expect(stripCorpPageContextNarration('您正在官网首页，可了解 XCAGI 桌面与行业 Mod。')).toBe(
+      '可了解 XCAGI 桌面与行业 Mod。',
+    )
   })
 
   it('builds page-specific intro for download page', () => {
@@ -146,5 +160,21 @@ describe('corpPageIntro', () => {
     )
     await speakCorpIntro('服务失败也不阻断页面')
     expect(fetch).toHaveBeenCalledOnce()
+  })
+
+  it('does not speak or caption the page-location preamble', async () => {
+    const bodies: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(String(init?.body || ''))
+        return new Response(JSON.stringify({ data: {} }), { status: 200 })
+      }),
+    )
+    await speakCorpIntro('嗨，我是小C。你现在在「成都修茈科技有限公司」。首页主推 XCAGI 桌面。')
+    expect(bodies.length).toBeGreaterThan(0)
+    expect(bodies.join('\n')).not.toMatch(/你现在在|这页重点/)
+    expect(bodies.join('\n')).toContain('XCAGI')
+    expect(bodies.join('\n')).toContain('小C')
   })
 })
