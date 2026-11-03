@@ -377,7 +377,12 @@ def _xcagi_guarded_planner_stream_events(
     completed = False
     total_timeout = _xcagi_chat_timeout_seconds()
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
+    # Idle notices are not model text. A silent turn must end with a recoverable
+    # error instead of heartbeats until the much longer total budget. The floor
+    # stays above the 20s first-token default so a slow but live model is not cut off.
+    silence_limit = max(_xcagi_stream_first_token_timeout_seconds(), 45.0)
     started_at = time.monotonic()
+    real_progress = False
     try:
         yield MODEL_STREAM_ACCEPTED_EVENT
 
@@ -396,6 +401,16 @@ def _xcagi_guarded_planner_stream_events(
                 # A read-close error after disconnect is not a business failure.
                 lifetime.check()
             except queue.Empty:
+                if not real_progress and time.monotonic() - started_at >= silence_limit:
+                    yield {
+                        "type": "error",
+                        "status_code": 504,
+                        "message": (
+                            f"模型长时间没有返回正文（>{int(silence_limit)} 秒）。"
+                            "请重试；已执行的操作请到任务工作区核对，勿重复提交。"
+                        ),
+                    }
+                    return
                 if time.monotonic() < next_notice:
                     continue
                 next_notice = time.monotonic() + idle_notice_seconds
@@ -416,6 +431,8 @@ def _xcagi_guarded_planner_stream_events(
                 yield {"type": "error", "message": detail, "status_code": exc.status_code}
                 return
 
+            if not (isinstance(item, dict) and item.get("ephemeral")):
+                real_progress = True
             yield item
     finally:
         worker.close()

@@ -94,4 +94,37 @@ describe('sidebarNavigation', () => {
     expect(getQueuedSidebarViewKey()).toBeNull()
     expect(isSidebarNavigationPending()).toBe(false)
   })
+
+  it('propagates a current push failure and permits a retry', async () => {
+    const router = makeRouter()
+    const error = new Error('Failed to fetch dynamically imported module')
+    vi.mocked(router.push).mockRejectedValueOnce(error)
+    await expect(navigateFromSidebarKey(router, 'print')).rejects.toBe(error)
+    expect(isSidebarNavigationPending()).toBe(false)
+    await expect(navigateFromSidebarKey(router, 'print')).resolves.toBe(true)
+  })
+
+  it('starts the next target immediately and consumes a superseded push rejection', async () => {
+    let rejectFirst: ((error: Error) => void) | undefined
+    let pushes = 0
+    const push = vi.fn(() => {
+      pushes += 1
+      if (pushes === 1) return new Promise<void>((_, reject) => { rejectFirst = reject })
+      return Promise.resolve()
+    })
+    const router = {
+      push,
+      hasRoute: (name: string) => ['customers', 'print'].includes(name),
+      resolve: () => ({ matched: [{}] }),
+    } as unknown as Router
+    const first = navigateFromSidebarKey(router, 'customers')
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1))
+    const second = navigateFromSidebarKey(router, 'print')
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(2))
+    expect(push.mock.calls.at(-1)?.[0]).toEqual({ name: 'print' })
+    await Promise.all([first, second])
+    rejectFirst?.(new Error('Superseded chunk load failed'))
+    await Promise.resolve()
+    expect(isSidebarNavigationPending()).toBe(false)
+  })
 })

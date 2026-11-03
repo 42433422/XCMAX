@@ -175,6 +175,7 @@ onUnmounted(() => {
                 autocomplete="username"
                 :placeholder="accountPlaceholder"
                 :disabled="loading"
+                :aria-invalid="Boolean(errorMessage) && !username.trim() ? 'true' : undefined"
                 autofocus
                 @focus="usernameFocused = true"
                 @blur="usernameFocused = false"
@@ -192,6 +193,7 @@ onUnmounted(() => {
                 autocomplete="current-password"
                 :placeholder="passwordPlaceholder"
                 :disabled="loading"
+                :aria-invalid="Boolean(errorMessage) && !password ? 'true' : undefined"
                 @focus="passwordFocused = true"
                 @blur="passwordFocused = false"
               />
@@ -261,14 +263,12 @@ onUnmounted(() => {
             </div>
           </template>
 
-          <transition name="fade">
-            <div v-if="errorMessage" class="login-error" role="alert">
-              <strong class="login-error-title">{{ $t('login.errTitle') }}</strong>
-              <span class="login-error-detail">{{ errorMessage }}</span>
-            </div>
-          </transition>
+          <div v-if="errorMessage" class="login-error" role="alert" data-testid="login-error">
+            <strong class="login-error-title">{{ $t('login.errTitle') }}</strong>
+            <span class="login-error-detail">{{ errorMessage }}</span>
+          </div>
 
-          <button class="login-submit" type="submit" aria-describedby="login-data-processing-notice" :disabled="!canSubmit || loading">
+          <button class="login-submit" type="submit" aria-describedby="login-data-processing-notice" :disabled="loading">
             <span>{{ loading ? $t('login.submitting') : $t('login.submit') }}</span>
             <span v-if="loading" class="login-spinner" aria-hidden="true"></span>
             <svg v-else viewBox="0 0 20 20" fill="currentColor" width="16" height="16">

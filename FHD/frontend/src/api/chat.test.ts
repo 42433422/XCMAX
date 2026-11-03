@@ -65,7 +65,7 @@ describe('chatApi thin wrappers', () => {
     await chatApi.newConversation()
     expect(apiMock.post).toHaveBeenCalled()
     expect(apiMock.get).toHaveBeenCalledWith('/api/ai/context', { user_id: 'u' })
-    expect(apiMock.post).toHaveBeenCalledWith('/api/conversations/message', { x: 1 }, { timeoutMs: 8000 })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/conversations/message', { x: 1 }, { timeoutMs: 20_000 })
   })
 
   it('merges market authorization header when token present', async () => {
