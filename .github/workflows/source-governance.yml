@@ -63,3 +63,17 @@ jobs:
         run: |
           test -s FHD/templates/sunbird-vue-dist/index.html
           grep -q '/sunbird/assets/' FHD/templates/sunbird-vue-dist/index.html
+
+  close-resolved-incidents:
+    if: github.event_name == 'pull_request' && github.head_ref == 'cursor/close-stale-incidents-5cfa'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Close incidents already green on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 .github/workflows/close_resolved_incidents.py
