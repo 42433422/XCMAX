@@ -77,7 +77,7 @@
         <p class="home-platforms" aria-label="正式平台状态">平台状态：Windows <span data-platform-status="Windows 桌面">签约级</span><i></i>macOS <span data-platform-status="macOS 桌面">签约级</span><i></i>Android <span data-platform-status="Android">实验骨架·非签约级</span><i></i>Web <span data-platform-status="Web / 后端">签约级</span></p>
       </div>
       <figure class="home-hero-figure">
-        <video id="home-hero-promo" src="/assets/xcagi-hero-720p.mp4" poster="/assets/xcagi-hero-poster.jpg" width="1280" height="720" muted autoplay loop playsinline controls preload="metadata"></video>
+        <video id="home-hero-promo" src="/assets/xcagi-hero-720p.mp4" poster="/assets/xcagi-hero-poster.jpg" width="1280" height="720" muted loop playsinline controls preload="none"></video>
         <figcaption>XCAGI 产品演示</figcaption>
       </figure>
     </div>
@@ -135,6 +135,19 @@
    校验并更新；仓库数据更新后随发布自动生效，页面不拥有事实。 */
 ;(function () {
   'use strict'
+  var hero = document.getElementById('home-hero-promo')
+  var pageLoaded = document.readyState === 'complete'
+  var factsLoaded = false
+  function playHero() {
+    if (!hero) return
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    hero.play().catch(function () {})
+  }
+  function armHero() {
+    if (!pageLoaded || !factsLoaded) return
+    window.setTimeout(playHero, 1500)
+  }
+  if (!pageLoaded) window.addEventListener('load', function () { pageLoaded = true; armHero() })
   fetch('/site/data/public-site.json', { credentials: 'same-origin' })
     .then(function (r) { return r.ok ? r.json() : null })
     .then(function (data) {
@@ -161,6 +174,7 @@
       }
     })
     .catch(function () { /* 拉取失败保留占位文案，不手写事实 */ })
+    .then(function () { factsLoaded = true; armHero() })
 })()
 </script>
 <script src="./main.js?v=20260925a"></script>
