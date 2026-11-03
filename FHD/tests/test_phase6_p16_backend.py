@@ -256,9 +256,9 @@ class TestInitDbEnsureSqlitePerModCopies:
             patch("app.db.init_db.shutil.copy2", side_effect=OSError("denied")) as mock_copy,
         ):
             ensure_sqlite_per_mod_database_copies(["mymod"])
-        # Mother db exists so a copy is attempted, but copy2 raises a RECOVERABLE_ERROR
-        # which is swallowed -> no exception propagates and the per-mod file is absent.
-        assert mock_copy.call_count == 1
+        # products.db is copied. A missing error_collection mother is created, then copied.
+        # Both copy2 calls raise and are swallowed, so the per-mod file stays absent.
+        assert mock_copy.call_count == 2
         assert not os.path.exists(dest_path)
 
 
