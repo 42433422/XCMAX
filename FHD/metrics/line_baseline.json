@@ -1,5 +1,5 @@
 {
-  "lines": 2409723,
+  "lines": 2409727,
   "updated": "2026-11-03",
-  "note": "官网小C字幕只留当前句，并重打包 corp-butler，去掉上一句/下一句与过期 bundle 行。"
+  "note": "字幕重打包已把基线降到 2409723。corp-site-deploy 增加 repository_dispatch（云代理无法 workflow_dispatch），净增 4 行，基线抬到 2409727。"
 }
