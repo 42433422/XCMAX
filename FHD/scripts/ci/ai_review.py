@@ -425,6 +425,11 @@ _RULES: list[tuple[str, str, str, str, str]] = [
 ]
 
 
+def _is_generated_corp_butler(file_path: str) -> bool:
+    path = file_path.replace("\\", "/")
+    return "/corp-butler/" in path and path.endswith((".js", ".css"))
+
+
 def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
     """对 diff hunks 应用规则匹配，返回所有 finding（仅新增行 '+'）。"""
     findings: list[Finding] = []
@@ -448,6 +453,9 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
                     continue
                 if is_test_fixture_json and rule_name not in _KB_EVIDENCE_SECRET_RULES:
                     # Behavior-matrix density fixtures embed pattern seeds as JSON strings.
+                    continue
+                if rule_name == "html-innerhtml-assignment" and _is_generated_corp_butler(hunk.file_path):
+                    # Vite 打包的官网悬浮球含 Vue 运行时 innerHTML，字幕行为以 Vue 源码为准。
                     continue
                 if pattern.search(content):
                     key = (hunk.file_path, line_no, rule_name)

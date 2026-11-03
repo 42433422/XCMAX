@@ -49,16 +49,33 @@ function clip(text: string, max: number): string {
   return `${t.slice(0, Math.max(0, max - 1))}…`
 }
 
-/** 生成适合朗读的短介绍：按当前页说清「这页是什么」，不堆「你现在在…」元叙述。 */
+/** 页面位置元叙述：不进官网口播，也不进字幕。 */
+const CORP_PAGE_CONTEXT_CLAUSE =
+  /(?:你现在在|你当前在|你正在看|你正在浏览|当前页面是|本页位置是)[「“"]?[^。！？；\n」”"]{0,48}[」”"]?[。.]?|您正在(?:查看)?[^，。！？\n]{1,32}[，,]?|这页重点[：:][^。！？\n]*[。.]?/g
+
+export function stripCorpPageContextNarration(text: string): string {
+  return String(text || '')
+    .replace(CORP_PAGE_CONTEXT_CLAUSE, '')
+    .replace(/\s+/g, ' ')
+    .replace(/([。！？])\1+/g, '$1')
+    .replace(/^[。！？；\s]+/, '')
+    .trim()
+}
+
+/** 生成适合朗读的短介绍：问候后只留产品内容，不说「你现在在…」。 */
 export function buildCorpPageIntroScript(pathname: string): {
   pageId: string
   text: string
 } {
   const pageId = resolveCorpPageId(pathname)
   const page = getCorpPageKnowledge(pageId, pathname)
-  const body = clip(page.summary || page.welcomeDesc || '', 72)
+  const body = stripCorpPageContextNarration(clip(page.summary || page.welcomeDesc || '', 72))
   const text = clip(
-    body ? `嗨，我是小C。${body}有需要直接问我，或点快捷问题。` : '嗨，我是小C。想了解产品、案例或预约沟通，直接跟我说，或点快捷问题就行。',
+    stripCorpPageContextNarration(
+      body
+        ? `嗨，我是小C。${body}有需要直接问我，或点快捷问题。`
+        : '嗨，我是小C。想了解产品、案例或预约沟通，直接跟我说，或点快捷问题就行。',
+    ),
     140,
   )
   return { pageId, text }
@@ -134,10 +151,12 @@ export function speakCorpIntro(text: string): Promise<void> {
   if (prefersReducedMotion()) return Promise.resolve()
 
   stopCorpIntroSpeech()
-  // 朗读/字幕共用清洗：去掉网址、路径、装饰符，避免念出 slash、html、箭头
-  const plain = cleanTextForTts(text, 800)
+  // 朗读/字幕共用清洗：去掉网址、路径、装饰符，以及「你现在在…」页面位置句
+  const plain = stripCorpPageContextNarration(cleanTextForTts(text, 800))
   if (!plain) return Promise.resolve()
   const lines = splitSentences(plain)
+    .map((line) => stripCorpPageContextNarration(line))
+    .filter(Boolean)
   const zhLines = lines.length ? lines : [plain]
   corpSubtitleGen = beginTtsSubtitles(zhLines)
   const gen = corpSubtitleGen

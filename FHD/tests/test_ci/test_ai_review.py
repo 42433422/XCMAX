@@ -352,6 +352,27 @@ class TestMatchRules:
             finding.rule in {"n-plus-one-inline", "unbounded-while-true"} for finding in findings
         )
 
+    def test_generated_corp_butler_ignores_vue_runtime_innerhtml(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="\\346\\210\\220\\351\\203\\275/corp-butler/corp-butler.js",
+                start_line=1,
+                lines=[(1, "+", "el.innerHTML = html")],
+                raw_header="@@ -1,0 +1,1 @@",
+            )
+        ]
+        assert review.match_high_risk_rules(hunks) == []
+        source = [
+            review.DiffHunk(
+                file_path="成都修茈科技有限公司/page.html",
+                start_line=1,
+                lines=[(1, "+", "el.innerHTML = html")],
+                raw_header="@@ -1,0 +1,1 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(source)
+        assert any(f.rule == "html-innerhtml-assignment" for f in findings)
+
     def test_kb_evidence_still_scans_for_committed_secrets(self) -> None:
         hunks = [
             review.DiffHunk(
