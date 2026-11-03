@@ -2,7 +2,7 @@
 
 > 适用事件：`.github/security/credential-incidents.json` 中的 MIMO / QQ Bot / SMTP 三项历史事件。  
 > QQ Bot：产品功能已从代码删除；收口动作只剩控制台作废旧密钥（见下表）。  
-> **当前状态：尚未完成供应商侧撤销、轮换及旧凭据拒绝验证。** 不得把本手册、PR、CI 通过、`accepted_risk` 或代码删除视为已完成处置。  
+> **登记状态（2026-11-01）：MIMO、QQ Bot、SMTP 三项事件已按 #2889 登记 `resolved`，#2808 的 23 条告警已逐项处置。** 证据索引见 `.github/security/credential-incidents.json` 与 `.github/security/gitleaks-disposition/registry.json`；新版本仍须通过精确 SHA 的完整发布扫描。  
 > 执行者：具备相应服务商后台与生产密钥管理权限的账号所有者/授权运维。复核者必须独立于执行者。
 
 ## 1. 立即控制范围（P0）
