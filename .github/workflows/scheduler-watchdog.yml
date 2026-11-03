@@ -1,14 +1,3 @@
-# root 原生 workflow（非 fhd-/modstore- 前缀，不经 CI SSOT publisher）——直接编辑此处。
-# 与 ops-uptime.yml 同级：站外拨测 + 自动处置。
-#
-# 目的：防止 APScheduler 卡死（collector 实例堆积 / 线程池耗尽）导致整个
-# modstore-scheduler.service 停摆。每 10 分钟探测一次 /api/xcmax/scheduler/health，
-# 失败即 SSH 进 CVM 重启 modstore-scheduler.service。
-#
-# 适用范围：生产 CVM（119.27.178.147）的 systemd modstore-scheduler.service。
-# 本地 macOS launchd modstore-daily 不在此 workflow 范围内（GitHub Actions 无法 SSH 到
-# 笔记本）；如需本地 watchdog，复制本脚本到 ~/bin/scheduler-watchdog.sh 并注册为
-# launchd plist（每 10 分钟跑一次，curl 失败时 launchctl kickstart -k <service>）。
 name: Scheduler Watchdog
 
 on:
@@ -31,10 +20,8 @@ permissions:
   contents: read
 
 env:
-  # modstore-scheduler 监听 127.0.0.1:9990（无公网 nginx 转发），必须从 CVM 本机 curl
   HEALTH_URL: http://127.0.0.1:9990/api/xcmax/scheduler/health
   SERVICE_NAME: modstore-scheduler
-  # 探测容忍秒数：超过此值未响应视为卡死
   CURL_TIMEOUT: 20
 
 jobs:
@@ -74,7 +61,6 @@ jobs:
           chmod 600 "$KEY_FILE"
           trap 'rm -f "$KEY_FILE"' EXIT
 
-          # Emit health separately from restart: missing SSH output is unknown.
           REMOTE_CMD=$(cat <<'EOF'
           set -uo pipefail
           URL="${HEALTH_URL:-http://127.0.0.1:9990/api/xcmax/scheduler/health}"
@@ -101,8 +87,22 @@ jobs:
               "required_jobs": data.get("missing_required_jobs") == [],
               "runtime_jobs": data.get("unhealthy_runtime_jobs") == [],
           }
-          print("healthy" if all(checks.values()) else "unhealthy",
-                " ".join(f"{key}={value}" for key, value in checks.items()))
+          rows = {}
+          for item in data.get("runtime_jobs") or []:
+              if isinstance(item, dict):
+                  rows[str(item.get("job_id") or "")] = item
+          bits = []
+          for job_id in list(data.get("unhealthy_runtime_jobs") or []):
+              row = rows.get(str(job_id)) or {}
+              bits.append(":".join((
+                  str(job_id),
+                  str(row.get("state") or "unhealthy"),
+                  str(row.get("last_status") or ""),
+                  str(row.get("last_error_code") or ""),
+              )))
+          detail = (" jobs=" + ",".join(bits)) if bits else ""
+          label = "healthy" if all(checks.values()) else "unhealthy"
+          print(label, " ".join(f"{key}={value}" for key, value in checks.items()) + detail)
           ' 2>/dev/null)" || reason="invalid_health_response"
             [ "${reason%% *}" = "healthy" ]
           }
