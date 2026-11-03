@@ -1,4 +1,7 @@
+import { installDesktopRendererErrorReporting } from '@/utils/desktopRendererErrors'
 import { createApp } from 'vue'
+
+installDesktopRendererErrorReporting()
 import { createPinia } from 'pinia'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import './fhd/installFetchDbReadToken'

@@ -56,18 +56,41 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
 
 // 渲染进程错误遥测：全局捕获 window.onerror / unhandledrejection，失败静默。
 // 通过 ipcRenderer 直连上报通道，避免依赖页面上下文注入的时序问题。
-const reportRendererError = (payload: { type: string; error: string; stack?: string }) => {
+const reportRendererError = (payload: { type: string; error: string; stack?: string; source?: string }) => {
   void ipcRenderer.invoke('xcagi:report-error', payload).catch(() => undefined)
+}
+
+function errorText(value: unknown): string {
+  if (value instanceof Error) return value.message || value.name
+  if (typeof value === 'string') return value
+  if (value == null) return ''
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function resourceTarget(event: Event): string {
+  const target = event.target
+  if (!target || target === window) return ''
+  const element = target as { tagName?: string; src?: string; href?: string }
+  const tag = element.tagName || target.constructor?.name || 'resource'
+  const url = element.src || element.href || ''
+  return url ? `${tag} ${url}` : tag
 }
 
 window.addEventListener(
   'error',
   (event) => {
     const err = event.error
+    const location = [event.filename, event.lineno, event.colno].filter((part) => part !== undefined && part !== '').join(':')
+    const message = errorText(err) || String(event.message || '').trim() || resourceTarget(event)
     reportRendererError({
       type: 'renderer:error',
-      error: err instanceof Error ? err.message : String(event.message || 'unknown'),
+      error: message || 'renderer error without message',
       stack: err instanceof Error ? err.stack : undefined,
+      source: location || undefined,
     })
   },
   true,
@@ -79,7 +102,7 @@ window.addEventListener(
     const reason = event.reason
     reportRendererError({
       type: 'renderer:unhandledrejection',
-      error: reason instanceof Error ? reason.message : String(reason),
+      error: errorText(reason) || 'unhandled rejection without reason',
       stack: reason instanceof Error ? reason.stack : undefined,
     })
   },

@@ -198,14 +198,17 @@ export function registerDesktopIpcHandlers(): void {
   // 渲染进程错误遥测：复用后端 crash-report 通道（opt-in 由后端统一聚合），best-effort。
   handleTrusted(
     'xcagi:report-error',
-    (_event, payload: { type?: string; error?: string; stack?: string }) => {
+    (_event, payload: { type?: string; error?: string; stack?: string; source?: string }) => {
       const p = payload && typeof payload === 'object' ? payload : {}
+      const source = typeof p.source === 'string' ? p.source : ''
+      const message = String(p.error || '').trim()
       reportRendererError(
         { port: DEFAULT_PORT, writeLog: writeBackendLog },
         {
           type: String(p.type || 'renderer:error'),
-          error: String(p.error || 'unknown'),
+          error: message || (source ? `renderer error at ${source}` : 'renderer error without message'),
           stack: typeof p.stack === 'string' ? p.stack : undefined,
+          source: source || undefined,
         },
       )
     },
