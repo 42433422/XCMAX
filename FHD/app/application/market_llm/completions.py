@@ -113,9 +113,7 @@ def complete_sync(
             if status is None:
                 match = re.search(r"平台错误\((\d{3})\)", str(exc))
                 status = int(match.group(1)) if match else None
-            can_failover = index + 1 < len(candidates) and ports.failoverable(
-                status, str(exc)
-            )
+            can_failover = index + 1 < len(candidates) and ports.failoverable(status, str(exc))
             if can_failover:
                 ports.response.logger.warning(
                     "[Modstore] 桌面侧换模重试 %s/%s -> %s", *candidate, candidates[index + 1]
@@ -174,9 +172,7 @@ async def complete_async(
             error = market_response_error(response, status)
             # Attach raw response so a terminal failure can still be audited.
             error.response = response
-            if index + 1 < len(candidates) and ports.failoverable(
-                status, response.text[:500]
-            ):
+            if index + 1 < len(candidates) and ports.failoverable(status, response.text[:500]):
                 last_error = error
                 ports.response.logger.warning(
                     "[Modstore] 桌面侧换模重试 %s/%s -> %s",

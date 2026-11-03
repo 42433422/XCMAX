@@ -1,5 +1,5 @@
 {
-  "lines": 2422616,
+  "lines": 2422903,
   "updated": "2026-11-03",
-  "note": "佳诺 #2930 CI 修：ruff format、broad-except、capability SSOT"
+  "note": "佳诺复验 #3/#4/#5：platform-default 404 必须 failover+映射+claim 释放；净增为回归测例与终端审计换模路径，合入后不部署"
 }
