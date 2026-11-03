@@ -39,8 +39,25 @@
           var root = document.documentElement
           root.classList.add('xcagi-electron')
           root.classList.remove('xcagi-electron-mac', 'xcagi-electron-win')
-          if (p === 'darwin') root.classList.add('xcagi-electron-mac')
-          else if (p === 'win32') root.classList.add('xcagi-electron-win')
+          var sheet = null
+          if (p === 'darwin') {
+            root.classList.add('xcagi-electron-mac')
+            sheet = 'mac'
+          } else if (p === 'win32') {
+            root.classList.add('xcagi-electron-win')
+            sheet = 'win'
+          }
+          if (!sheet) return
+          var other = sheet === 'win' ? 'mac' : 'win'
+          var stale = document.getElementById('xcagi-platform-chrome-' + other)
+          if (stale) stale.remove()
+          var id = 'xcagi-platform-chrome-' + sheet
+          if (document.getElementById(id)) return
+          var link = document.createElement('link')
+          link.id = id
+          link.rel = 'stylesheet'
+          link.href = '/platform/electron-' + sheet + '.css'
+          document.head.appendChild(link)
         } catch (e) {}
       })()
     </script>

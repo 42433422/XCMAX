@@ -1,0 +1,10 @@
+/* macOS desktop chrome only — loaded when html.xcagi-electron-mac is set. */
+html.xcagi-electron-mac .main-container {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+html.xcagi-electron-mac .main-content .top-bar {
+  position: relative;
+  z-index: 2;
+}

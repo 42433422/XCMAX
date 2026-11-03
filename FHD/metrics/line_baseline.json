@@ -1,5 +1,5 @@
 {
-  "lines": 2423192,
+  "lines": 2423216,
   "updated": "2026-11-03",
-  "note": "佳诺 #3：unsafe 测例 lambda 默认参数绑定，避免晚绑定误收"
+  "note": "佳诺 #1：平台 chrome CSS 拆到 public/platform 互斥加载（+electron-mac/win.css、挂载/SPA 排除、回归测例、index/window-manager 注入）；共享 base/login CSS 已删双类规则，净增约 24 行"
 }

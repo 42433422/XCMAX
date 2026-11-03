@@ -1,0 +1,51 @@
+/* Windows desktop chrome only — loaded when html.xcagi-electron-win is set. */
+html.xcagi-electron-win .sidebar-header,
+html.xcagi-electron-win .main-content .top-bar {
+  position: relative;
+  z-index: 2;
+}
+
+html.xcagi-electron-win .top-bar,
+html.xcagi-electron-win .main-content .top-bar {
+  -webkit-app-region: drag;
+  padding-right: 140px;
+  backdrop-filter: none;
+  background: #ffffff;
+  box-shadow: none;
+  border-bottom: 1px solid #d0d7de;
+}
+
+html.xcagi-electron-win .login-view .login-brand { -webkit-app-region: drag; }
+
+html.xcagi-electron-win .main-content .top-bar button,
+html.xcagi-electron-win .main-content .top-bar input,
+html.xcagi-electron-win .main-content .top-bar a,
+html.xcagi-electron-win .main-content .top-bar .top-bar-actions,
+html.xcagi-electron-win .main-content .top-bar .top-quick-nav,
+html.xcagi-electron-win .main-content .top-bar .page-account-sub {
+  -webkit-app-region: no-drag;
+}
+
+html.xcagi-electron-win .sidebar-header {
+  -webkit-app-region: drag;
+  padding-right: 8px;
+}
+
+html.xcagi-electron-win .sidebar {
+  border-right: 1px solid #d0d7de;
+  background: #f6f8fa;
+}
+
+/* Windows: keep inline failure banner (no floating dialog) — aligns #2933. */
+html.xcagi-electron-win .login-error {
+  border-radius: 2px;
+  border: 1px solid #c42b1c;
+  background: #fff4f4;
+  box-shadow: none;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+html.xcagi-electron-win .login-account-actions {
+  top: 58px; /* Windows titleBarOverlay occupies the first 50px. */
+  -webkit-app-region: no-drag;
+}

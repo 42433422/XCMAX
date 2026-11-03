@@ -136,12 +136,37 @@ function ensureMacWindowInWorkArea(win: BrowserWindow): void {
 }
 
 function tagDesktopWebContents(win: BrowserWindow): void {
-  const classes = ['xcagi-electron']
-  if (process.platform === 'darwin') classes.push('xcagi-electron-mac')
-  if (process.platform === 'win32') classes.push('xcagi-electron-win')
+  const platformClass =
+    process.platform === 'darwin'
+      ? 'xcagi-electron-mac'
+      : process.platform === 'win32'
+        ? 'xcagi-electron-win'
+        : ''
+  const sheet = platformClass === 'xcagi-electron-mac'
+    ? 'mac'
+    : platformClass === 'xcagi-electron-win'
+      ? 'win'
+      : ''
   void win.webContents
     .executeJavaScript(
-      classes.map(c => `document.documentElement.classList.add('${c}');`).join('')
+      `(() => {
+        const root = document.documentElement;
+        root.classList.add('xcagi-electron');
+        root.classList.remove('xcagi-electron-mac', 'xcagi-electron-win');
+        ${platformClass ? `root.classList.add('${platformClass}');` : ''}
+        const sheet = ${sheet ? `'${sheet}'` : 'null'};
+        if (!sheet) return;
+        const other = sheet === 'win' ? 'mac' : 'win';
+        const stale = document.getElementById('xcagi-platform-chrome-' + other);
+        if (stale) stale.remove();
+        const id = 'xcagi-platform-chrome-' + sheet;
+        if (document.getElementById(id)) return;
+        const link = document.createElement('link');
+        link.id = id;
+        link.rel = 'stylesheet';
+        link.href = '/platform/electron-' + sheet + '.css';
+        document.head.appendChild(link);
+      })();`
     )
     .catch(() => { })
 }
