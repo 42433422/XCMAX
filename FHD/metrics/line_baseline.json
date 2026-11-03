@@ -1,5 +1,5 @@
 {
-  "lines": 2423440,
+  "lines": 2423810,
   "updated": "2026-11-03",
-  "note": "合入 main 后在佳诺 #1 基线 2423271 上保留托盘单击弹出主窗口（click/double-click、离屏拉回、Windows 置顶与回归测试），净增 169 行。仓库主人要求修复点击托盘不弹出。"
+  "note": "Desktop abnormal fixes for memory growth, crash detail, health alignment, ELT hardening, auth storms, and quick navigation."
 }
