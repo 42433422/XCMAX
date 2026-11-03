@@ -1,5 +1,5 @@
 {
-  "lines": 2410022,
+  "lines": 2410113,
   "updated": "2026-11-03",
-  "note": "Desktop chat UX recovery: supersede without stop banner, 40s thinking stall, conversation timeout 20s, health grace, host-pack stale cache, changelog. Tests included."
+  "note": "PR #2942 审查修复：工具执行保留回复预算，离线刷新不覆盖就绪，导航失败可重试，复用安全文本转换并修复构建。相对原 PR 生产逻辑净增3行、必要回归净增88行，共91行；用户已授权全部解决并合入 main。"
 }

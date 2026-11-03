@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, sanitizeTaskSummaryHtml } from './sanitizeHtml'
+import { plainTextFromChatHtml, sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, sanitizeTaskSummaryHtml } from './sanitizeHtml'
+
+describe('plainTextFromChatHtml', () => {
+  it.each(['<script', '<script>alert(1)</script>', '<br><br />&nbsp;'])('treats non-visible shell content %s as empty', (html) => {
+    expect(plainTextFromChatHtml(html).trim()).toBe('')
+  })
+
+  it('preserves visible reply text around unsafe or unfinished tags', () => {
+    expect(plainTextFromChatHtml('<p>已有回复<br>下一行</p><script>alert(1)</script><script').trim()).toBe('已有回复\n下一行')
+  })
+})
 
 describe('sanitizeChatBubbleHtml', () => {
   it('returns empty string for null/empty', () => {

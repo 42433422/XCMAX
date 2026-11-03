@@ -45,6 +45,7 @@ import agentRunsApi from '@/api/agentRuns'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { asRecord } from '@/utils/typeGuards'
 import { lastChatModelRoute } from '@/utils/chatModelRoute'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -458,10 +459,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     { deep: true },
   )
 
-  function plainBubbleText(content: unknown): string {
-    return String(content || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
-  }
-
   /**
    * Cancel the in-flight round.
    * A newer send supersedes quietly: the previous stream is aborted and an empty
@@ -478,7 +475,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (!stopped) return
     const kept = messages.value.filter((msg) => {
       if (!msg.streamingShell) return true
-      const plain = plainBubbleText(msg.content)
+      const plain = plainTextFromChatHtml(msg.content).trim()
       delete msg.streamingShell
       delete msg.waitingHint
       return plain.length > 0

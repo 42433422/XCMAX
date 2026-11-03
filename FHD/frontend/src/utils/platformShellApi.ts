@@ -105,7 +105,11 @@ export async function seedOnboardingDemo(industryId: string): Promise<Onboarding
   return (body?.data || body) as OnboardingDemoSeedResult
 }
 
-export async function fetchIndustryBaseline(industryId: string, force = false): Promise<IndustryBaselinePlan> {
+export async function fetchIndustryBaseline(
+  industryId: string,
+  force = false,
+  options: { requireAvailable?: boolean } = {},
+): Promise<IndustryBaselinePlan> {
   const key = String(industryId || '').trim() || '通用'
   if (!force && baselineCache.has(key)) {
     return baselineCache.get(key) as IndustryBaselinePlan
@@ -118,8 +122,9 @@ export async function fetchIndustryBaseline(industryId: string, force = false): 
     if (!r.ok) throw new Error(`industry-baseline HTTP ${r.status}`)
     const body = await r.json()
     data = (body?.data || body) as IndustryBaselinePlan
-  } catch {
-    data = offlineIndustryBaseline(key)
+  } catch (error) {
+    if (options.requireAvailable) throw error
+    return offlineIndustryBaseline(key)
   }
   baselineCache.set(key, data)
   return data

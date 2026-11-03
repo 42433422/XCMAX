@@ -185,7 +185,7 @@ vi.mock('./useChatRequest', () => ({
     stopLoadingProgress: vi.fn(),
     requestChatByModeWithTimeout,
     requestChatByModeBatchWithTimeout: vi.fn(),
-    resolveChatTimeoutMs: () => 30_000,
+    resolveChatTimeoutMs: () => 90_000,
   }),
 }))
 vi.mock('./useChatResponseAttach', () => ({
@@ -694,6 +694,7 @@ describe('useChatOrchestration stream', () => {
     vi.useFakeTimers()
     try {
       readPlannerSseResponse.mockImplementation(async (_res, onEvent, signal) => {
+        onEvent({ type: 'tool_progress', phase: 'started', label: '正在处理任务' })
         onEvent({ type: 'tool_progress', phase: 'accepted', label: '模型服务', text: '模型服务已接收任务，正在思考…' })
         onEvent({ type: 'token', text: '\n（仍在处理中，已等待 12 秒，请稍候…）\n', ephemeral: true })
         await vi.advanceTimersByTimeAsync(41_000)
@@ -710,6 +711,31 @@ describe('useChatOrchestration stream', () => {
       })
       await api.sendMessage('今天发了多少货')
       expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '可以重试')
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each(['complete', 'deadline'])('preserves the reply budget during a silent tool execution: %s', async outcome => {
+    vi.useFakeTimers()
+    try {
+      readPlannerSseResponse.mockImplementation(async (_res, onEvent, signal) => {
+        onEvent({ type: 'tool_progress', phase: 'started', run_id: 'tool-run' })
+        onEvent({ type: 'token', text: '\n[正在调用工具: Excel 导入]\n' })
+        await vi.advanceTimersByTimeAsync(50_000)
+        onEvent({ type: 'token', text: '仍在执行工具…', ephemeral: true })
+        expect(signal?.aborted).toBe(false)
+        if (outcome === 'deadline') {
+          await vi.advanceTimersByTimeAsync(41_000)
+          expect(signal?.aborted).toBe(true)
+          throw new DOMException('deadline', 'AbortError')
+        }
+        onEvent({ type: 'done', result: { success: true, response: '导入完成' } })
+      })
+      const api = useChatOrchestration({ sessionId: ref('long-tool') })
+      await api.sendMessage('导入 Excel')
+      expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0,
+        outcome === 'complete' ? '导入完成' : expect.stringContaining('任务可能仍在执行'))
+      expect(api.isLoading.value).toBe(false)
+      expect(api.isStreamingReply.value).toBe(false)
     } finally { vi.useRealTimers() }
   })
 

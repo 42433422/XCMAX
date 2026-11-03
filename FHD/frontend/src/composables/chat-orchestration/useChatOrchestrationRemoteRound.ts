@@ -23,7 +23,7 @@ import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDelive
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 
-/** No visible token or tool progress for this long → recoverable timeout, not an endless thinking shell. */
+/** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
 
 type ChatMessagesApi = ReturnType<typeof useChatMessages>
@@ -311,27 +311,21 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const baseS = resolveChatTimeoutMs(primaryForStream)
       const timeoutMsS = Math.min(120000, baseS)
       const controller = new AbortController()
-      let streamAbort: 'stall' | 'deadline' | 'cancel' = 'cancel'
+      const streamState = { stalled: false }
       const abort = () => controller.abort()
       requestScope.signal?.addEventListener('abort', abort, { once: true })
       if (requestScope.signal?.aborted) abort()
-      let stallTimer = 0
       let killTimer = 0
-      const armStall = () => {
-        window.clearTimeout(stallTimer)
-        stallTimer = window.setTimeout(() => {
-          streamAbort = 'stall'
-          controller.abort()
-        }, CHAT_STREAM_STALL_MS)
-      }
+      const stallTimer = window.setTimeout(() => {
+        streamState.stalled = true
+        controller.abort()
+      }, CHAT_STREAM_STALL_MS)
       const armDeadline = () => {
         window.clearTimeout(killTimer)
         killTimer = window.setTimeout(() => {
-          streamAbort = 'deadline'
           controller.abort()
         }, timeoutMsS)
       }
-      armStall()
       armDeadline()
       const msgIndex = pushStreamingAiShell()
       const streamMessage = messages.value[msgIndex]
@@ -403,7 +397,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           const heartbeat = (ev.type === 'token' && ev.ephemeral === true)
             || (ev.type === 'tool_progress' && ev.phase === 'accepted')
           if ((ev.type === 'token' || ev.type === 'tool_progress') && !heartbeat) {
-            armStall()
+            // Legacy tools send a visible call marker, then can execute silently
+            // for minutes. Run creation alone is not evidence of model progress.
+            if ((ev.type === 'token' && ev.text.trim())
+              || (ev.type === 'tool_progress' && ev.phase !== 'started')) {
+              window.clearTimeout(stallTimer)
+            }
             armDeadline()
           }
           if (ev.type === 'route_metadata') {
@@ -511,7 +510,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           timedOut
             ? streamRunId
               ? '对话连接已超时，任务可能仍在执行。请到任务工作区核对结果，勿重复提交。'
-              : streamAbort === 'stall'
+              : streamState.stalled
                 ? stallText
                 : `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')

@@ -69,6 +69,7 @@ describe('hostPackOnboardingGate', () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+    vi.restoreAllMocks()
   })
 
   it('exempts onboarding and mod-store routes', () => {
@@ -114,6 +115,34 @@ describe('hostPackOnboardingGate', () => {
     await expect(needsHostPackCompletion(false)).resolves.toBe(false)
     expect(fetchIndustryBaseline).toHaveBeenCalledTimes(1)
     expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toContain('"needs":false')
+  })
+
+  it('retains confirmed readiness when a background baseline refresh fails', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
+    await expect(needsHostPackCompletion()).resolves.toBe(false)
+    const confirmed = sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')
+    vi.mocked(Date.now).mockReturnValue(1_700_000_065_000)
+    vi.mocked(fetchIndustryBaseline).mockRejectedValue(new Error('industry-baseline HTTP 503'))
+
+    await expect(needsHostPackCompletion()).resolves.toBe(false)
+    await vi.waitFor(() => expect(fetchIndustryBaseline).toHaveBeenCalledTimes(2))
+    expect(fetchIndustryBaseline).toHaveBeenLastCalledWith('涂料', true, { requireAvailable: true })
+    expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toBe(confirmed)
+  })
+
+  it('requires onboarding when a background refresh confirms required packages are missing', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
+    await expect(needsHostPackCompletion()).resolves.toBe(false)
+    vi.mocked(Date.now).mockReturnValue(1_700_000_065_000)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({
+      baseline_ready: false, missing_required_mod_ids: ['required-mod'],
+    } as IndustryBaselinePlan)
+
+    await expect(needsHostPackCompletion()).resolves.toBe(false)
+    await vi.waitFor(() => expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toContain('"needs":true'))
+    await expect(resolveHostPackOnboardingStep()).resolves.toBe('host-pack')
   })
 
   it('skips gate for admin account session', async () => {
@@ -179,7 +208,7 @@ describe('hostPackOnboardingGate', () => {
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog(''))
     vi.mocked(fetchWorkspacePrefs).mockResolvedValue({ success: true, owner_id: 'tenant:10', data: { selected_industry_id: '考勤' } })
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('host-pack')
-    expect(fetchIndustryBaseline).toHaveBeenCalledWith('考勤', true)
+    expect(fetchIndustryBaseline).toHaveBeenCalledWith('考勤', true, { requireAvailable: true })
     await expect(resolveHostPackOnboardingStep()).resolves.toBe('host-pack')
     expect(fetchWorkspacePrefs).toHaveBeenCalledTimes(1)
   })
@@ -188,7 +217,7 @@ describe('hostPackOnboardingGate', () => {
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog('饰品包装'))
     vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBeNull()
-    expect(fetchIndustryBaseline).toHaveBeenCalledWith('饰品包装', true)
+    expect(fetchIndustryBaseline).toHaveBeenCalledWith('饰品包装', true, { requireAvailable: true })
     expect(fetchWorkspacePrefs).not.toHaveBeenCalled()
   })
 

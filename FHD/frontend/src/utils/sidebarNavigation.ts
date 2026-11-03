@@ -116,18 +116,19 @@ async function ensureModRoutesRegisteredUnlessStale(
 }
 
 function navigationSettled(push: Promise<unknown>, isStale: () => boolean): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let settled = false
-    const finish = () => {
+    const finish = (succeeded: boolean, error?: unknown) => {
       if (settled) return
       settled = true
       clearInterval(timer)
-      resolve()
+      if (succeeded) resolve()
+      else reject(error)
     }
     const timer = setInterval(() => {
-      if (isStale()) finish()
+      if (isStale()) finish(true)
     }, 16)
-    push.then(finish, finish)
+    push.then(() => finish(true), (error) => finish(isStale(), error))
   })
 }
 

@@ -471,15 +471,28 @@ describe('platformShellApi', () => {
       expect(result.baseline_ready).toBe(false)
     })
 
-    it('caches offline baseline after error', async () => {
+    it.each(['network', 'http'])('preserves confirmed baseline when an available refresh fails (%s)', async (failure) => {
+      const baseline = { industry_id: 'retail', baseline_ready: true }
+      mockApiFetch.mockResolvedValueOnce(makeResponse({ data: baseline }))
+      await fetchIndustryBaseline('retail')
+      if (failure === 'network') mockApiFetch.mockRejectedValueOnce(new Error('network'))
+      else mockApiFetch.mockResolvedValueOnce(makeResponse(null, false, 503))
+
+      await expect(fetchIndustryBaseline('retail', true, { requireAvailable: true })).rejects.toThrow()
+      await expect(fetchIndustryBaseline('retail')).resolves.toEqual(baseline)
+      expect(mockApiFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('retries after an offline fallback instead of caching it as confirmed evidence', async () => {
       mockApiFetch.mockRejectedValueOnce(new Error('network'))
+      const baseline = { industry_id: 'retail', baseline_ready: true }
+      mockApiFetch.mockResolvedValueOnce(makeResponse({ data: baseline }))
 
       await fetchIndustryBaseline('retail')
-      // Second call should use cache (offline baseline)
-      const result = await fetchIndustryBaseline('retail')
+      const result = await fetchIndustryBaseline('retail', false, { requireAvailable: true })
 
-      expect(mockApiFetch).toHaveBeenCalledTimes(1)
-      expect(result.summary).toBe('行业基线暂不可用')
+      expect(mockApiFetch).toHaveBeenCalledTimes(2)
+      expect(result).toEqual(baseline)
     })
 
     it('uses "通用" as cache key for empty industryId on error', async () => {

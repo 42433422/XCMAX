@@ -225,7 +225,8 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
         )
         if (!industryId && !completed) return saveResult(true, 'welcome')
       }
-      const plan = await fetchIndustryBaseline(industryId || defaultOnboardingIndustryId(), force)
+      // An offline placeholder is not evidence that a confirmed package was removed.
+      const plan = await fetchIndustryBaseline(industryId || defaultOnboardingIndustryId(), force, { requireAvailable: true })
       const needs = !isOnboardingEntryReady(plan)
       return saveResult(needs, needs ? 'host-pack' : null)
     } catch {
