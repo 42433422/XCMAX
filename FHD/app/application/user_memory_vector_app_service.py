@@ -211,9 +211,7 @@ class UserMemoryRagApplicationService:
             hits = [
                 hit
                 for hit in hits
-                if allows_channel(
-                    hit.get("metadata") if isinstance(hit, dict) else None, channel
-                )
+                if allows_channel(hit.get("metadata") if isinstance(hit, dict) else None, channel)
             ]
         return {
             "success": True,

@@ -50,11 +50,7 @@ def _model_processing_failure(exc: Exception) -> HTTPException:
             "message": (
                 "模型连接异常，未调用模型。"
                 if not_sent
-                else (
-                    "模型配置或入口不可用。"
-                    if definite
-                    else "模型处理未完成。"
-                )
+                else ("模型配置或入口不可用。" if definite else "模型处理未完成。")
             )
             + public_excel_error(exc),
             "retryable": config_like,

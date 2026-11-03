@@ -1,5 +1,5 @@
 {
-  "lines": 2422478,
+  "lines": 2422616,
   "updated": "2026-11-03",
-  "note": "佳诺实测 #1-#6 闭环：对话/对接 AI 隔离、platform-default 404 可重试+claim 释放、Windows 平台化"
+  "note": "佳诺 #2930 CI 修：ruff format、broad-except、capability SSOT"
 }

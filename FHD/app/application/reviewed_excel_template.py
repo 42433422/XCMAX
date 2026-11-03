@@ -139,6 +139,7 @@ def _template_platform_complete(
     import logging
 
     from app.application.reviewed_excel_audit import ModelRequestNotSent, response_capture
+    from app.infrastructure.modstore_transport import MarketModelError
     from app.utils.operational_errors import BOUNDARY_ERRORS, INFRA_TRANSIENT
 
     try:
@@ -197,15 +198,9 @@ def _template_platform_complete(
             )
         except ModelRequestNotSent:
             raise
-        except Exception as exc:
-            from app.infrastructure.modstore_transport import MarketModelError
-
-            if isinstance(exc, MarketModelError):
-                raise ReviewedExcelError(
-                    str(exc), provider_status=exc.status_code
-                ) from None
-            if not isinstance(exc, BOUNDARY_ERRORS):
-                raise
+        except MarketModelError as exc:
+            raise ReviewedExcelError(str(exc), provider_status=exc.status_code) from None
+        except BOUNDARY_ERRORS:
             logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
             raise ReviewedExcelError(
                 "模型调用失败或结果不完整，可能已产生费用；未自动重试"

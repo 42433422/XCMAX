@@ -262,9 +262,7 @@ class AIChatApplicationService(
             channel = BUSINESS_DOCKING
         context = tag_mapping(context, channel=channel)
         with ai_feature_channel(channel):
-            return self._process_chat_impl(
-                user_id, message, context, source, file_context
-            )
+            return self._process_chat_impl(user_id, message, context, source, file_context)
 
     def _process_chat_impl(
         self,

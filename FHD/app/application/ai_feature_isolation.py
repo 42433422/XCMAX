@@ -10,10 +10,18 @@ SMART_CHAT = "smart_chat"
 BUSINESS_DOCKING = "business_docking"
 CHANNELS = frozenset({SMART_CHAT, BUSINESS_DOCKING})
 _CHAT_ALIASES = frozenset({"chat", "smart_chat", "conversation", "ai_chat"})
-_DOCK_ALIASES = frozenset({
-    "dock", "docking", "business_docking", "data_docking", "elt", "etl",
-    "reviewed_excel", "office_docking",
-})
+_DOCK_ALIASES = frozenset(
+    {
+        "dock",
+        "docking",
+        "business_docking",
+        "data_docking",
+        "elt",
+        "etl",
+        "reviewed_excel",
+        "office_docking",
+    }
+)
 _CHANNEL: ContextVar[str | None] = ContextVar("ai_feature_channel", default=None)
 
 
@@ -50,7 +58,9 @@ def ai_feature_channel(channel: str) -> Iterator[str]:
         reset_ai_feature_channel(token)
 
 
-def tag_mapping(payload: Mapping[str, Any] | None = None, *, channel: str | None = None) -> dict[str, Any]:
+def tag_mapping(
+    payload: Mapping[str, Any] | None = None, *, channel: str | None = None
+) -> dict[str, Any]:
     data = dict(payload or {})
     resolved = normalize_channel(channel) or current_ai_feature_channel()
     if resolved:
