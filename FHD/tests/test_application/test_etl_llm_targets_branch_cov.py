@@ -651,6 +651,7 @@ def test_session_provider_chat_completion_success(monkeypatch):
                 "provider": "p1",
                 "model": "m1",
                 "allow_failover": False,
+                "_pending_client_failover": True,
             }
             return {"ok": True}
 

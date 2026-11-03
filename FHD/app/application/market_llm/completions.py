@@ -95,10 +95,16 @@ def post_sync(
         status = _response_status_code(response)
         if status >= 400:
             # Audited single-shot captures here before the error body is parsed.
-            # Explicit allow_failover=True defers capture to complete_* terminal attempt.
+            # Explicit allow_failover=True or pending outer client failover defers capture.
+            pending_outer = request.extra.get("_pending_client_failover") is True and status in {
+                400,
+                403,
+                404,
+            }
             if (
                 request.extra.get("_reviewed_excel_audit_response") is not None
                 and request.extra.get("allow_failover") is not True
+                and not pending_outer
             ):
                 _capture_reviewed_response(request, connection, response)
             raise _status_error(request, response, status)
@@ -203,8 +209,14 @@ async def complete_async(
                 and ports.failoverable(status, response.text[:500])
                 and _audit_allows_failover(request.extra)
             )
+            pending_outer = (
+                request.extra.get("_pending_client_failover") is True
+                and ports.failoverable(status, response.text[:500])
+                and status in {400, 403, 404}
+            )
             # Archive before parsing the error body so audited receipts stay exact.
-            if not will_failover:
+            # Outer SessionMarketProvider retry must not lock the audit slot yet.
+            if not will_failover and not pending_outer:
                 _capture_reviewed_response(request, connection, response)
             error = _status_error(attempt, response, status)
             if will_failover:

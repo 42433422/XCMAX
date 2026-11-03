@@ -1,5 +1,5 @@
 {
-  "lines": 2422940,
+  "lines": 2422964,
   "updated": "2026-11-03",
-  "note": "佳诺 #2931：审计下显式 allow_failover 才换模，保留旧 audited 契约测例；completions 补捕获顺序"
+  "note": "佳诺 #2931：首枪 allow_failover=False + _pending_client_failover，404 后再显式换模；兼容登录流测例"
 }

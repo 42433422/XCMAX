@@ -74,9 +74,15 @@ class SessionMarketProvider:
             value = route.get(key)
             if isinstance(value, str) and value:
                 kwargs[key] = value
-        # Prefer client-side failover (same chain as intelligent chat). Keep any
-        # audit callback; completions only archives the terminal attempt.
-        kwargs.update(provider=provider_name, model=model_name, allow_failover=True)
+        # First shot keeps allow_failover=False (login/chat pin contract). On
+        # config 404/400/403, strip the pin and retry with explicit failover so
+        # analyzed/preview audited calls can use the intelligent-chat chain.
+        kwargs.update(
+            provider=provider_name,
+            model=model_name,
+            allow_failover=False,
+            _pending_client_failover=True,
+        )
         from app.application.elt.errors import provider_http_status
         from app.infrastructure.modstore_transport import MarketModelError
 
@@ -103,13 +109,17 @@ class SessionMarketProvider:
                 status = provider_http_status(exc)
                 if status not in {404, 400, 403}:
                     raise
-                # Pinned route_token collapses candidates to one model; strip and
-                # retry so analyze/preview can use the chat-equivalent chain.
                 _clear_pin()
                 retry = {
                     key: value
                     for key, value in kwargs.items()
-                    if key not in {"route_token", "key_source", "config_revision"}
+                    if key
+                    not in {
+                        "route_token",
+                        "key_source",
+                        "config_revision",
+                        "_pending_client_failover",
+                    }
                 }
                 retry.update(allow_failover=True)
                 return cast(
