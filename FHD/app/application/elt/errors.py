@@ -30,16 +30,32 @@ class ReviewedExcelError(ValueError):
         self.provider_status = provider_status
 
 
+def provider_http_status(exc: BaseException | None) -> int | None:
+    """Best-effort HTTP status from provider failures, including wrapped causes."""
+    import re
+
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        for attr in ("provider_status", "status_code"):
+            raw = getattr(current, attr, None)
+            try:
+                code = int(raw) if raw is not None else None
+            except (TypeError, ValueError):
+                code = None
+            if code is not None and 400 <= code <= 599:
+                return code
+        match = re.search(r"平台错误\((\d{3})\)", str(current))
+        if match:
+            return int(match.group(1))
+        current = current.__cause__ or current.__context__
+    return None
+
+
 def is_definite_provider_failure(exc: Exception) -> bool:
     """True when the provider answered with a terminal client/config error."""
-    status = getattr(exc, "provider_status", None)
-    if status is None:
-        status = getattr(exc, "status_code", None)
-    try:
-        code = int(status) if status is not None else None
-    except (TypeError, ValueError):
-        code = None
-    return code in {400, 401, 403, 404}
+    return provider_http_status(exc) in {400, 401, 403, 404}
 
 
 def public_excel_error(exc: Exception) -> str:

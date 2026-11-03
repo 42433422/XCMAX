@@ -198,9 +198,27 @@ def _template_platform_complete(
             )
         except ModelRequestNotSent:
             raise
-        except MarketModelError as exc:
-            raise ReviewedExcelError(str(exc), provider_status=exc.status_code) from None
-        except BOUNDARY_ERRORS:
+        except (MarketModelError, ValueError) as exc:
+            from app.application.elt.errors import provider_http_status
+
+            status = provider_http_status(exc)
+            if status in {400, 401, 403, 404} or isinstance(exc, MarketModelError):
+                raise ReviewedExcelError(
+                    str(exc),
+                    provider_status=status or getattr(exc, "status_code", None),
+                ) from None
+            logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
+            raise ReviewedExcelError(
+                "模型调用失败或结果不完整，可能已产生费用；未自动重试"
+            ) from None
+        except BOUNDARY_ERRORS as exc:
+            from app.application.elt.errors import provider_http_status
+
+            status = provider_http_status(exc)
+            if status in {400, 401, 403, 404}:
+                raise ReviewedExcelError(
+                    "当前模型或模型服务入口不可用", provider_status=status
+                ) from None
             logging.getLogger(__name__).info("template platform call failed: BOUNDARY")
             raise ReviewedExcelError(
                 "模型调用失败或结果不完整，可能已产生费用；未自动重试"

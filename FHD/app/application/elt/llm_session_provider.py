@@ -74,8 +74,19 @@ class SessionMarketProvider:
             value = route.get(key)
             if isinstance(value, str) and value:
                 kwargs[key] = value
-        kwargs.update(provider=provider_name, model=model_name, allow_failover=False)
+        # Prefer client-side failover (same chain as intelligent chat). Keep any
+        # audit callback; completions only archives the terminal attempt.
+        kwargs.update(provider=provider_name, model=model_name, allow_failover=True)
+        from app.application.elt.errors import provider_http_status
         from app.infrastructure.modstore_transport import MarketModelError
+
+        def _clear_pin() -> None:
+            for attr in ("_route_snapshots", "_route_aliases"):
+                cache = getattr(adapter, attr, None)
+                if isinstance(cache, dict):
+                    cache.clear()
+            if hasattr(adapter, "_account_default"):
+                adapter._account_default = None
 
         try:
             try:
@@ -88,18 +99,13 @@ class SessionMarketProvider:
                         **kwargs,
                     ),
                 )
-            except MarketModelError as exc:
-                # Audited template calls must keep the recorded body; callers map 404.
-                if kwargs.get("_reviewed_excel_audit_response") is not None:
+            except (MarketModelError, ValueError) as exc:
+                status = provider_http_status(exc)
+                if status not in {404, 400, 403}:
                     raise
-                if getattr(exc, "status_code", None) not in {404, 400, 403}:
-                    raise
-                for attr in ("_route_snapshots", "_route_aliases"):
-                    cache = getattr(adapter, attr, None)
-                    if isinstance(cache, dict):
-                        cache.clear()
-                if hasattr(adapter, "_account_default"):
-                    adapter._account_default = None
+                # Pinned route_token collapses candidates to one model; strip and
+                # retry so analyze/preview can use the chat-equivalent chain.
+                _clear_pin()
                 retry = {
                     key: value
                     for key, value in kwargs.items()

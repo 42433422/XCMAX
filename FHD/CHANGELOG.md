@@ -1,3 +1,7 @@
+## Unreleased
+
+- fix(jianuo): analyze/preview failover past platform-default 404; map config 404 to `model_configuration_error`; release/reclaim candidate claims (#3/#4/#5 retest)
+
 # XCAGI 版本更新日志（用户更新记录 SSOT）
 
 ## Unreleased
