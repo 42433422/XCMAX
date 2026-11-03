@@ -1,5 +1,5 @@
 {
-  "lines": 2423021,
+  "lines": 2423181,
   "updated": "2026-11-03",
-  "note": "佳诺 #3：analyze 保留 closed-vocab labels + schema enum + freestyle→unknown 兜底；补回归测例与 audit 实模字段"
+  "note": "佳诺 #3 跟随：mypy 消影 + 复核净增行数基线"
 }
