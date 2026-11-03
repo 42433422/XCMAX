@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 from app.fastapi_app import static_mounts
 from app.fastapi_routes import spa_fallback
 
