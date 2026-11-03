@@ -147,10 +147,22 @@ async def lifespan(app: FastAPI):
 
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成%s", "（重服务后台加载）" if fast_start else "")
+    try:
+        from app.desktop_runtime.process_memory import start_process_memory_guard
+
+        start_process_memory_guard()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("desktop memory guard skipped: %s", exc)
 
     try:
         yield
     finally:
+        try:
+            from app.desktop_runtime.process_memory import stop_process_memory_guard
+
+            stop_process_memory_guard()
+        except RECOVERABLE_ERRORS:
+            logger.debug("desktop memory guard stop skipped", exc_info=True)
         # 无论正常关闭还是被注入异常（如 CancelledError）终止，都在 finally 中
         # 完成全部清理，避免神经总线、监控循环与各调度线程在异常关闭路径下泄漏。
         from app.fastapi_app.mod_startup import wait_for_background_mod_load

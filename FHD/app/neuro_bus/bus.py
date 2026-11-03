@@ -458,6 +458,8 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         # 持久化（如果启用）
         if self._enable_persistence:
             self._event_buffer.append(event.to_dict())
+            if len(self._event_buffer) > 2000:
+                del self._event_buffer[:1000]
 
         span_id = None
         if self._rel_tracer is not None and _should_trace_event():

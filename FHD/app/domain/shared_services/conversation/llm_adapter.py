@@ -234,13 +234,23 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         """检查是否已正确配置（有API Key）"""
         return bool(self._api_key)
 
+    async def _replace_client(
+        self, current: Optional[httpx.AsyncClient], factory: Any
+    ) -> httpx.AsyncClient:
+        if current is not None and not current.is_closed:
+            await current.aclose()
+        return factory()
+
     async def _get_client(self) -> httpx.AsyncClient:
         """获取/创建异步HTTP客户端（用于同步请求）"""
         loop_id = id(asyncio.get_running_loop())
         if self._client is None or self._client.is_closed or self._client_loop_id != loop_id:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(30.0, connect=10.0),
-                limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+            self._client = await self._replace_client(
+                self._client,
+                lambda: httpx.AsyncClient(
+                    timeout=httpx.Timeout(30.0, connect=10.0),
+                    limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+                ),
             )
             self._client_loop_id = loop_id
         return self._client
@@ -253,9 +263,12 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
             or self._stream_client.is_closed
             or self._stream_client_loop_id != loop_id
         ):
-            self._stream_client = httpx.AsyncClient(
-                timeout=httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0),
-                limits=httpx.Limits(max_keepalive_connections=200, max_connections=1000),
+            self._stream_client = await self._replace_client(
+                self._stream_client,
+                lambda: httpx.AsyncClient(
+                    timeout=httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0),
+                    limits=httpx.Limits(max_keepalive_connections=20, max_connections=40),
+                ),
             )
             self._stream_client_loop_id = loop_id
         return self._stream_client

@@ -400,6 +400,16 @@ class EventStore:
                 except RECOVERABLE_ERRORS as error:
                     logger.error("[EventStore] 回调失败: %s", error)
 
+    def trim_memory(self, max_kept: int = 5000) -> int:
+        """Drop oldest in-memory events when a long desktop run retains too many."""
+        if self._storage.connection is not None:
+            return 0
+        excess = len(self._events) - max(0, int(max_kept))
+        if excess <= 0:
+            return 0
+        self._journal.cleanup_oldest(excess)
+        return excess
+
     def close(self) -> None:
         """Release the owned SQLite connection; subsequent SQLite operations fail."""
         self._storage.close()
