@@ -8,6 +8,7 @@ def test_failoverable_status_and_markers():
     assert is_market_chat_failoverable(429, "insufficient_quota")
     assert is_market_chat_failoverable(None, "平台错误(402): 余额不足")
     assert is_market_chat_failoverable(403, "配额不足")
+    assert is_market_chat_failoverable(404, "当前模型或模型服务入口不可用")
     assert not is_market_chat_failoverable(401, "凭证无效")
 
 

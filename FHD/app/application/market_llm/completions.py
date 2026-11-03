@@ -145,10 +145,16 @@ async def complete_async(
         latency_ms = (ports.response.clock() - start) * 1000.0
         status = ports.status_code(response, 200)
         if status >= 400:
-            if request.extra.get("key_source") or request.extra.get("route_token"):
-                raise market_response_error(response, status)
-            error = ValueError(f"平台错误({status}): {response.text[:500]}")
-            if index + 1 < len(candidates) and ports.failoverable(status, response.text[:500]):
+            error: Exception = (
+                market_response_error(response, status)
+                if request.extra.get("key_source") or request.extra.get("route_token")
+                else ValueError(f"平台错误({status}): {response.text[:500]}")
+            )
+            if (
+                index + 1 < len(candidates)
+                and ports.failoverable(status, response.text[:500])
+                and request.extra.get("_reviewed_excel_audit_response") is None
+            ):
                 last_error = error
                 continue
             raise error

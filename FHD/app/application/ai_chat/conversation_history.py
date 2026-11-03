@@ -271,13 +271,18 @@ def persist_recallable_chat_turn(
     )
 
     service = get_user_memory_vector_ingest_app_service()
+    from app.application.ai_feature_isolation import tag_mapping
+
+    tagged = tag_mapping(context)
     chunk = service.build_chat_turn_chunk(
         user_id=normalized_user_id,
         user_message=message,
         assistant_message=assistant_text,
-        session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
-        source=str(source or "chat"),
+        session_id=str(tagged.get("session_id") or tagged.get("conversation_id") or ""),
+        source=str(source or tagged.get("ai_feature_channel") or "chat"),
     )
+    if tagged.get("ai_feature_channel"):
+        chunk.metadata["ai_feature_channel"] = tagged["ai_feature_channel"]
     service.ingest_chunks(normalized_user_id, [chunk])
     if access_context is not None:
         from app.application.persy_memory_app_service import get_persy_memory_app_service

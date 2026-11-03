@@ -240,10 +240,38 @@ class AIChatApplicationService(
         if not message:
             return {"success": False, "message": "消息内容不能为空"}
         from app.application.agent_task_context import scoped_conversation_user_id
+        from app.application.ai_feature_isolation import (
+            BUSINESS_DOCKING,
+            SMART_CHAT,
+            ai_feature_channel,
+            normalize_channel,
+            tag_mapping,
+        )
 
         context = dict(context or {})
         context.setdefault("conversation_id", context.get("session_id") or user_id)
         user_id = scoped_conversation_user_id(user_id, context)
+        channel = normalize_channel(context.get("ai_feature_channel") or source) or SMART_CHAT
+        if str(source or "").strip().lower() in {
+            "office_docking",
+            "chat_office_docking",
+            "business_docking",
+            "elt",
+            "etl",
+        }:
+            channel = BUSINESS_DOCKING
+        context = tag_mapping(context, channel=channel)
+        with ai_feature_channel(channel):
+            return self._process_chat_impl(user_id, message, context, source, file_context)
+
+    def _process_chat_impl(
+        self,
+        user_id: str,
+        message: str,
+        context: dict[str, Any],
+        source: str | None,
+        file_context: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         try:
             from app.neuro_bus.application_neuro_bridge import neuro_notify_chat_received
 

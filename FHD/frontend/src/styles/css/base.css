@@ -647,3 +647,20 @@ textarea:focus,
 .template-preview-action {
   margin: 0;
 }
+
+
+/* Windows platform chrome: flatter top bar / sidebar, native overlay buttons only. */
+html.xcagi-electron-win .top-bar {
+  backdrop-filter: none;
+  background: #ffffff;
+  box-shadow: none;
+  border-bottom: 1px solid #d0d7de;
+}
+html.xcagi-electron-win .sidebar-header {
+  -webkit-app-region: drag;
+  padding-right: 8px;
+}
+html.xcagi-electron-win .sidebar {
+  border-right: 1px solid #d0d7de;
+  background: #f6f8fa;
+}

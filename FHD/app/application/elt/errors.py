@@ -22,9 +22,24 @@ class EltConflict(EltError):
 class ReviewedExcelError(ValueError):
     """A validation message authored by the reviewed Excel boundary, safe for users."""
 
-    def __init__(self, public_message: str):
+    provider_status: int | None = None
+
+    def __init__(self, public_message: str, *, provider_status: int | None = None):
         super().__init__(public_message)
         self.public_message = public_message
+        self.provider_status = provider_status
+
+
+def is_definite_provider_failure(exc: Exception) -> bool:
+    """True when the provider answered with a terminal client/config error."""
+    status = getattr(exc, "provider_status", None)
+    if status is None:
+        status = getattr(exc, "status_code", None)
+    try:
+        code = int(status) if status is not None else None
+    except (TypeError, ValueError):
+        code = None
+    return code in {400, 401, 403, 404}
 
 
 def public_excel_error(exc: Exception) -> str:

@@ -1,5 +1,5 @@
 {
-  "lines": 2422303,
-  "updated": "2026-11-02",
-  "note": "ssot after recover #2927"
+  "lines": 2422616,
+  "updated": "2026-11-03",
+  "note": "佳诺 #2930 CI 修：ruff format、broad-except、capability SSOT"
 }

@@ -38,15 +38,23 @@ _MODEL_PENDING = "template_review_model_pending"
 
 
 def _model_processing_failure(exc: Exception) -> HTTPException:
+    from app.application.elt.errors import is_definite_provider_failure
+
     not_sent = isinstance(exc, ModelRequestNotSent)
+    definite = (not not_sent) and is_definite_provider_failure(exc)
+    config_like = not_sent or definite
     return HTTPException(
         status_code=503,
         detail={
-            "code": "model_configuration_error" if not_sent else "model_processing_failed",
-            "message": ("模型连接异常，未调用模型。" if not_sent else "模型处理未完成。")
+            "code": "model_configuration_error" if config_like else "model_processing_failed",
+            "message": (
+                "模型连接异常，未调用模型。"
+                if not_sent
+                else ("模型配置或入口不可用。" if definite else "模型处理未完成。")
+            )
             + public_excel_error(exc),
-            "retryable": not_sent,
-            "outcome_unknown": not not_sent,
+            "retryable": config_like,
+            "outcome_unknown": not config_like,
         },
     )
 
