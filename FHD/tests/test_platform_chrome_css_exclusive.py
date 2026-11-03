@@ -1,4 +1,5 @@
 """Shared CSS must not ship both mac and win chrome selectors (#1)."""
+
 from __future__ import annotations
 
 from pathlib import Path
