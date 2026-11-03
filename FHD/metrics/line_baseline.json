@@ -1,5 +1,5 @@
 {
-  "lines": 2423190,
+  "lines": 2423192,
   "updated": "2026-11-03",
-  "note": "佳诺 #3：unsafe-region 测例改为 freestyle labels 收 unknown"
+  "note": "佳诺 #3：unsafe 测例 lambda 默认参数绑定，避免晚绑定误收"
 }

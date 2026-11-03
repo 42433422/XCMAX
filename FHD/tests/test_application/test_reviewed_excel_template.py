@@ -1739,7 +1739,9 @@ def test_semantic_classification_rejects_unsafe_model_regions(monkeypatch):
     for regions in invalid:
         monkeypatch.setattr(
             "app.application.reviewed_excel_template._template_platform_complete",
-            lambda *a, **k: LlmAssistResult(used_llm=True, data={"regions": regions}),
+            lambda *a, regions=regions, **k: LlmAssistResult(
+                used_llm=True, data={"regions": regions}
+            ),
         )
         with pytest.raises(ValueError):
             classify_semantic_workbook(review)
