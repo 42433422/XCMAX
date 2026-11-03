@@ -234,4 +234,3 @@ def test_slo_closes_opened_tunnel_when_probe_retries_fail(tmp_path, failure):
     assert run(closing["run"], env).returncode == 0
     assert (tmp_path / "trace").read_text().splitlines() == ["opened", "closed"]
     assert not (tmp_path / "fhd_prometheus_metrics_key").exists()
-
