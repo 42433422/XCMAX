@@ -35,12 +35,12 @@ def chat_failover_max_attempts() -> int:
 
 def is_market_chat_failoverable(status_code: Optional[int], error_text: str) -> bool:
     """市场返回是否值得换厂商/模型再试。"""
-    if status_code in {402, 403, 429}:
+    if status_code in {402, 403, 404, 429}:
         return True
     text = str(error_text or "")
     # 「平台错误(429): ...」
     m = re.search(r"平台错误\((\d{3})\)", text)
-    if m and int(m.group(1)) in {402, 403, 429}:
+    if m and int(m.group(1)) in {402, 403, 404, 429}:
         return True
     low = text.lower()
     return any(n in text or n in low for n in _FAILOVER_NEEDLES)

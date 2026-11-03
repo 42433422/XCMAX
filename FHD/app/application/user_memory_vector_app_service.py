@@ -161,18 +161,26 @@ class UserMemoryVectorIngestApplicationService:
         ts = datetime.now().isoformat()
         user_text = str(user_message or "").strip()
         assistant_text = str(assistant_message or "").strip()
+        from app.application.ai_feature_isolation import SMART_CHAT, tag_mapping
+
         return UserMemoryVectorChunk(
             chunk_id=uuid.uuid4().hex,
             content=(f"[chat_turn] user={user_text[:500]}; assistant={assistant_text[:1000]}"),
-            metadata={
-                "source": str(source or "chat"),
-                "session_id": str(session_id or ""),
-                "user_id": user_id,
-                "user_message_preview": user_text[:200],
-                "assistant_message_preview": assistant_text[:300],
-                "last_used": ts,
-                "ts": ts,
-            },
+            metadata=tag_mapping(
+                {
+                    "source": str(source or "chat"),
+                    "session_id": str(session_id or ""),
+                    "user_id": user_id,
+                    "user_message_preview": user_text[:200],
+                    "assistant_message_preview": assistant_text[:300],
+                    "last_used": ts,
+                    "ts": ts,
+                },
+                channel=SMART_CHAT
+                if str(source or "chat").strip().lower()
+                not in {"office_docking", "chat_office_docking", "business_docking", "elt", "etl"}
+                else None,
+            ),
         )
 
 
@@ -196,6 +204,17 @@ class UserMemoryRagApplicationService:
 
         query_vector = self._embedder.embed_query(query_text)
         hits = self._vector_store.query(index_id=user_id, query_vector=query_vector, top_k=top_k)
+        from app.application.ai_feature_isolation import allows_channel, current_ai_feature_channel
+
+        channel = current_ai_feature_channel()
+        if channel:
+            hits = [
+                hit
+                for hit in hits
+                if allows_channel(
+                    hit.get("metadata") if isinstance(hit, dict) else None, channel
+                )
+            ]
         return {
             "success": True,
             "user_id": user_id,

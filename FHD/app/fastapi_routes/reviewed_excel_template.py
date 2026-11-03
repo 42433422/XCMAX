@@ -24,7 +24,12 @@ from sqlalchemy import update
 from starlette.concurrency import run_in_threadpool
 
 from app.application.elt.archive_store import default_archive_root as default_archive_root
-from app.application.elt.errors import EltError, ReviewedExcelError, public_excel_error
+from app.application.elt.errors import (
+    EltError,
+    ReviewedExcelError,
+    is_definite_provider_failure,
+    public_excel_error,
+)
 from app.application.elt.service_support import dump_json, load_json, new_id, utcnow
 from app.application.elt.service_uploads import UploadServiceMixin
 from app.application.elt_login_authorization import (
@@ -125,7 +130,14 @@ _read = require_permission("etl.read")
 _archive_admin = require_permission("admin.manage_users")
 
 
+def _docking_channel():
+    from app.application.ai_feature_isolation import BUSINESS_DOCKING, ai_feature_channel
+
+    return ai_feature_channel(BUSINESS_DOCKING)
+
+
 def _identity(user):
+
     if getattr(user, "tenant_id", None) is None or getattr(user, "id", None) is None:
         raise HTTPException(status_code=403, detail="需要登录并具有租户上下文")
     return int(user.tenant_id), int(user.id)
@@ -645,6 +657,15 @@ async def reviewed_excel_classification_analyze(
 ):
     tenant, owner = _identity(user)
     model_session = require_model_session(request, tenant, owner)
+    with _docking_channel():
+        return await _reviewed_excel_classification_analyze_body(
+            classification_id, request, version, auto_group, tenant, owner, model_session
+        )
+
+
+async def _reviewed_excel_classification_analyze_body(
+    classification_id, request, version, auto_group, tenant, owner, model_session
+):
     try:
         with tenant_scope(tenant), get_db() as db:
             run = _classification_run(db, classification_id, tenant, owner)
@@ -1035,6 +1056,8 @@ async def reviewed_excel_preview(
     model_session = require_model_session(request, tenant, owner)
     if not classification_id or not classification_version:
         raise HTTPException(status_code=409, detail="请先建立文件分类记录，再生成候选")
+    _dock_cm = _docking_channel()
+    _dock_cm.__enter__()
     try:
         request.state.elt_stage = "read_workbook"
         body = await _body(file)
@@ -1230,7 +1253,11 @@ async def reviewed_excel_preview(
                 )
             versions.append(proposal)
         except ValueError as exc:
-            if classification_id and isinstance(exc, ModelRequestNotSent):
+            # Release claim when the model was never sent OR the provider gave a
+            # definite config/404 failure so retry is not stuck on inflight.
+            if classification_id and (
+                isinstance(exc, ModelRequestNotSent) or is_definite_provider_failure(exc)
+            ):
                 with tenant_scope(tenant), get_db() as db:
                     _update_candidate_claim(db, classification_id, candidate_key, tenant, owner)
             raise _model_processing_failure(exc) from None
@@ -1308,6 +1335,8 @@ async def reviewed_excel_preview(
         }
     except (ValueError, TypeError, EltError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
+    finally:
+        _dock_cm.__exit__(None, None, None)
 
 
 @router.get("/api/templates/reviewed-excel/reviews/{review_id}")
@@ -1375,6 +1404,15 @@ async def reviewed_excel_refine(
 ):
     tenant, owner = _identity(user)
     model_session = require_model_session(request, tenant, owner)
+    with _docking_channel():
+        return await _reviewed_excel_refine_body(
+            request, review_id, parent_version, feedback, current, tenant, owner, model_session
+        )
+
+
+async def _reviewed_excel_refine_body(
+    request, review_id, parent_version, feedback, current, tenant, owner, model_session
+):
     try:
         current_cells = json.loads(current)
         if not isinstance(current_cells, list):

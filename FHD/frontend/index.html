@@ -31,6 +31,18 @@
         })
       })()
     </script>
+      <script>
+      ;(function () {
+        try {
+          var p = window.xcagiDesktop && window.xcagiDesktop.platform
+          if (!p) return
+          var root = document.documentElement
+          root.classList.add('xcagi-electron')
+          if (p === 'darwin') root.classList.add('xcagi-electron-mac')
+          if (p === 'win32') root.classList.add('xcagi-electron-win')
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="app" data-startup-mounted="false">
