@@ -1,5 +1,5 @@
 {
-  "lines": 2424065,
+  "lines": 2424117,
   "updated": "2026-11-03",
-  "note": "Idle page-switch performance: prefetch shell routes, keep cached pages, and avoid blocking session checks."
+  "note": "Changelog gate requires an Unreleased note for the desktop fixes. Previous baseline undercounted the idle page-switch commit."
 }
