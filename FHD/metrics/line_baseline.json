@@ -1,5 +1,5 @@
 {
-  "lines": 2423192,
+  "lines": 2423271,
   "updated": "2026-11-03",
-  "note": "佳诺 #3：unsafe 测例 lambda 默认参数绑定，避免晚绑定误收"
+  "note": "佳诺 #1 补齐：先前抬升基线时 platform CSS/测例尚未 tracked，合入后计入约 +55 行；本 PR 同步抬升并附 capability 日期戳"
 }
