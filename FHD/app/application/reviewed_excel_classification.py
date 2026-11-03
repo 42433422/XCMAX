@@ -49,6 +49,8 @@ def _classify_semantic_batch(
         raise ReviewedExcelError("模板模型供应商未配置，未进行模型分类，未调用模型")
 
     allowed_labels = DOCUMENT_LABELS
+    from app.application.reviewed_excel_partition import normalize_document_labels
+
     rules = [] if reference_ids else classify_review_workbook(review)
     from app.application.reviewed_excel_evidence import (
         MAX_MODEL_CELLS,
@@ -126,7 +128,11 @@ def _classify_semantic_batch(
         "properties": {
             "sheet": {"type": "string"},
             "range": {"type": "string"},
-            "labels": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+            "labels": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "enum": sorted(allowed_labels)},
+            },
             "evidence": {"type": "array", "maxItems": 100, "items": cell_schema},
             "dependencies": {"type": "array", "maxItems": 100, "items": cell_schema},
             "reason": {"type": "string"},
@@ -336,6 +342,8 @@ def _classify_semantic_batch(
         } | ({"drawing_evidence"} if drawings else set()):
             raise ReviewedExcelError("模型区域格式无效，原分类未改变")
         sheet, area, labels = region["sheet"], region["range"], region["labels"]
+        labels = normalize_document_labels(labels, allowed_labels)
+        region = {**region, "labels": labels}
         original_area = area
         if (
             not isinstance(sheet, str)

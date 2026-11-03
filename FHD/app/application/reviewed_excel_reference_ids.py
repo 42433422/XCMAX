@@ -282,7 +282,7 @@ def prepare_reference_messages(
 ) -> tuple[dict, dict]:
     import json
 
-    neutralize_messages(messages)
+    neutralize_messages(messages, keep_output_labels=False)
     payload = json.loads(messages[1]["content"])
     if not payload.get("drawing_evidence"):
         references, provider_schema = _boundary_contract(payload, schema, review)
@@ -319,8 +319,12 @@ def prepare_reference_messages(
     return references, provider_schema
 
 
-def neutralize_messages(messages: list[dict]) -> None:
-    """Remove software-produced business hints and geometry candidates from model input."""
+def neutralize_messages(messages: list[dict], *, keep_output_labels: bool = True) -> None:
+    """Remove software-produced business hints and geometry candidates from model input.
+
+    Closed-vocab `labels` stays by default: it constrains model output rather than
+    leaking program-side business guesses. Reference/atom contracts opt out.
+    """
     import json
 
     payload = json.loads(messages[1]["content"])
@@ -334,7 +338,10 @@ def neutralize_messages(messages: list[dict]) -> None:
         area = anchors.get((cell["sheet"], cell["cell"]))
         if area:
             cell["required_extent"] = area
-    for key in ("rule_hints", "structure_map", "relationship_context", "labels"):
+    drop = ["rule_hints", "structure_map", "relationship_context"]
+    if not keep_output_labels:
+        drop.append("labels")
+    for key in drop:
         payload.pop(key, None)
     for coverage in payload["batch_coverage"]:
         selected = [cell for cell in payload["cells"] if cell["sheet"] == coverage["sheet"]]

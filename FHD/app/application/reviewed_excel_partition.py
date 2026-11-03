@@ -28,6 +28,39 @@ DOCUMENT_LABELS = frozenset(
 )
 
 
+def normalize_document_labels(labels, allowed: frozenset[str] | None = None) -> list[str]:
+    """Keep closed-vocab labels; map free-form model labels to unknown."""
+    allowed = DOCUMENT_LABELS if allowed is None else allowed
+    if not isinstance(labels, list):
+        return ["unknown"]
+    cleaned: list[str] = []
+    for item in labels:
+        if not isinstance(item, str):
+            continue
+        value = item.strip()
+        if value in allowed and value not in cleaned:
+            cleaned.append(value)
+    if not cleaned:
+        return ["unknown"]
+    if "unknown" in cleaned and len(cleaned) > 1:
+        cleaned = [value for value in cleaned if value != "unknown"] or ["unknown"]
+    return cleaned
+
+
+def coerce_payload_document_labels(payload: dict) -> dict:
+    """Repair freestyle region labels before schema / domain validation."""
+    if not isinstance(payload, dict):
+        return payload
+    for key in ("physical_regions", "regions"):
+        regions = payload.get(key)
+        if not isinstance(regions, list):
+            continue
+        for region in regions:
+            if isinstance(region, dict) and "labels" in region:
+                region["labels"] = normalize_document_labels(region.get("labels"))
+    return payload
+
+
 def apply_classification_corrections(review: dict, latest: dict, labels: list) -> dict:
     """Validate user corrections against source geometry, preserving shared context conservatively."""
     from copy import deepcopy

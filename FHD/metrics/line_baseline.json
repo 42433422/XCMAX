@@ -1,5 +1,5 @@
 {
-  "lines": 2422964,
+  "lines": 2423021,
   "updated": "2026-11-03",
-  "note": "佳诺 #2931：首枪 allow_failover=False + _pending_client_failover，404 后再显式换模；兼容登录流测例"
+  "note": "佳诺 #3：analyze 保留 closed-vocab labels + schema enum + freestyle→unknown 兜底；补回归测例与 audit 实模字段"
 }
