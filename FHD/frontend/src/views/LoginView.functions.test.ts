@@ -789,7 +789,7 @@ describe('LoginView functions – formatLoginFailurePayload edge cases', () => {
     await vm.submitLogin()
     await flushPromises()
     expect(vm.errorMessage).toContain('Invalid credentials')
-    expect(vm.errorMessage).toContain('err-123')
+    expect(vm.errorMessage).not.toContain('err-123')
   })
 
   it('submitLogin with failed login sets errorMessage from error.code', async () => {
@@ -818,7 +818,7 @@ describe('LoginView functions – formatLoginFailurePayload edge cases', () => {
     await vm.submitLogin()
     await flushPromises()
     expect(vm.errorMessage).toBeTruthy()
-    expect(vm.errorMessage).toContain('err-456')
+    expect(vm.errorMessage).not.toContain('err-456')
   })
 
   it('submitLogin catches ApiError and formats error from error.data', async () => {

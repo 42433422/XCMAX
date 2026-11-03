@@ -10,7 +10,6 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { canResumeRecentDesktopSession } from '@/utils/authSessionCache'
 import OtpCells from '@/components/OtpCells.vue'
 import LoginAccountActions from '@/components/login/LoginAccountActions.vue'
-import ConnectionRecovery from '@/components/login/ConnectionRecovery.vue'
 import { useLoginViewState } from './login-view/useLoginViewState'
 import { useLoginViewMeta } from './login-view/useLoginViewMeta'
 import { useLoginViewSession } from './login-view/useLoginViewSession'
@@ -20,10 +19,6 @@ import { useLoginViewActions } from './login-view/useLoginViewActions'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
-const isWinDesktop =
-  typeof document !== 'undefined' &&
-  document.documentElement.classList.contains('xcagi-electron-win')
-
 // 逻辑按领域拆分到 login-view/ 下的 composables，此处仅组装（模板与拆分前逐字一致）
 const state = useLoginViewState(route)
 const meta = useLoginViewMeta(state)
@@ -267,22 +262,9 @@ onUnmounted(() => {
           </template>
 
           <transition name="fade">
-            <div
-              v-if="errorMessage"
-              class="login-error"
-              :class="{ 'login-error-dialog': isWinDesktop }"
-              :role="isWinDesktop ? 'alertdialog' : 'alert'"
-              :aria-modal="isWinDesktop ? 'true' : undefined"
-            >
-              <strong v-if="isWinDesktop" class="login-error-title">登录失败</strong>
-              <svg v-else viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-                <path
-                  fill-rule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              <span>{{ errorMessage }}</span>
+            <div v-if="errorMessage" class="login-error" role="alert">
+              <strong class="login-error-title">{{ $t('login.errTitle') }}</strong>
+              <span class="login-error-detail">{{ errorMessage }}</span>
             </div>
           </transition>
 
@@ -310,7 +292,6 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <ConnectionRecovery v-if="errorMessage" />
 
         <!-- SSO 仅在启用时显示 -->
         <div v-if="oidcEnabled && accountKind === 'enterprise'" class="login-alt">
