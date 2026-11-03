@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>XCAGI｜企业业务自动化桌面平台</title>
     <meta name="keywords" content="XCAGI,企业业务自动化,考勤,销售,客服,ERP,Excel单据,企业流程" />
-    <link rel="stylesheet" href="./styles.css?v=20260925a" />
+    <link rel="stylesheet" href="./styles.css?v=20261103a" />
     <link rel="stylesheet" href="/world-will-ticker.css?v=20260729a" />
     <noscript
       ></noscript
@@ -76,6 +76,10 @@
         <div class="home-actions"><a class="home-button home-button--primary" href="/market/account-plans?plan=saas-trial-30&amp;source=official-pricing"><span data-ssot-price="saas-trial-30">¥99</span> 体验 30 天</a><a class="home-button home-button--quiet" href="/cases.html">查看案例公开说明</a></div>
         <p class="home-platforms" aria-label="正式平台状态">平台状态：Windows <span data-platform-status="Windows 桌面">签约级</span><i></i>macOS <span data-platform-status="macOS 桌面">签约级</span><i></i>Android <span data-platform-status="Android">实验骨架·非签约级</span><i></i>Web <span data-platform-status="Web / 后端">签约级</span></p>
       </div>
+      <figure class="home-hero-figure">
+        <video id="home-hero-promo" src="/assets/xcagi-hero-720p.mp4" poster="/assets/xcagi-hero-poster.jpg" width="1280" height="720" muted loop playsinline controls preload="none"></video>
+        <figcaption>XCAGI 产品演示</figcaption>
+      </figure>
     </div>
   </section>
   <section class="home-section" id="cases"><div class="home-wrap"><div class="home-section-head"><p class="home-kicker">客户案例</p><h2>公开材料先完成授权与证据核验</h2><p>当前暂无获准公开的客户案例。产品能力与验收状态可在验证中心查看。</p><a href="/cases.html">查看公开说明 →</a></div></div></section>
@@ -131,6 +135,19 @@
    校验并更新；仓库数据更新后随发布自动生效，页面不拥有事实。 */
 ;(function () {
   'use strict'
+  var hero = document.getElementById('home-hero-promo')
+  var pageLoaded = document.readyState === 'complete'
+  var factsLoaded = false
+  function playHero() {
+    if (!hero) return
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    hero.play().catch(function () {})
+  }
+  function armHero() {
+    if (!pageLoaded || !factsLoaded) return
+    window.setTimeout(playHero, 1500)
+  }
+  if (!pageLoaded) window.addEventListener('load', function () { pageLoaded = true; armHero() })
   fetch('/site/data/public-site.json', { credentials: 'same-origin' })
     .then(function (r) { return r.ok ? r.json() : null })
     .then(function (data) {
@@ -157,6 +174,7 @@
       }
     })
     .catch(function () { /* 拉取失败保留占位文案，不手写事实 */ })
+    .then(function () { factsLoaded = true; armHero() })
 })()
 </script>
 <script src="./main.js?v=20260925a"></script>

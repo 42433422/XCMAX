@@ -12,7 +12,7 @@ const SITE_DIR = path.join(__dirname, '..')
 const REPO_ROOT = path.join(SITE_DIR, '..')
 const TEMPLATE_DIR = path.join(SITE_DIR, 'templates')
 const DATA_DIR = path.join(SITE_DIR, 'data')
-const ASSET_VER = '20260925a'
+const ASSET_VER = '20261103a'
 /** @type {{ file: string, activeNav: string }[]} */
 const WRAP_PAGES = [
   { file: 'index.html', activeNav: 'home' },
