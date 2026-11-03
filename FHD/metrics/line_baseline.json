@@ -1,5 +1,5 @@
 {
-  "lines": 2423181,
+  "lines": 2423190,
   "updated": "2026-11-03",
-  "note": "佳诺 #3 跟随：mypy 消影 + 复核净增行数基线"
+  "note": "佳诺 #3：unsafe-region 测例改为 freestyle labels 收 unknown"
 }
