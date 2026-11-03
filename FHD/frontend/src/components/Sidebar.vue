@@ -128,6 +128,7 @@
  * Facade：侧边栏装配入口（实现拆分至 sidebar/ 子模块与 Sidebar.css，行为与拆分前一致）。
  */
 import { TransitionGroup, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
 import { useSidebarLayoutStore } from '@/stores/sidebarLayout'
 import { useModsStore } from '@/stores/mods'
@@ -142,6 +143,7 @@ import { useSidebarAppVersion } from './sidebar/useSidebarAppVersion'
 import { useSidebarAdminDeployStatus } from './sidebar/useSidebarAdminDeployStatus'
 import { useSidebarEntitlementSync } from './sidebar/useSidebarEntitlementSync'
 import { useSidebarMenuReorder } from './sidebar/useSidebarMenuReorder'
+import { prefetchShellRouteChunks } from '@/utils/shellRoutePrefetch'
 
 const { imUnreadTotal } = useImUnreadBadge()
 
@@ -153,6 +155,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['change-view'])
+const router = useRouter()
 
 const industryStore = useIndustryStore()
 const sidebarLayoutStore = useSidebarLayoutStore()
@@ -297,6 +300,7 @@ function onMenuItemKeydown(event, key) {
 }
 
 onMounted(async () => {
+  prefetchShellRouteChunks(router)
   startHealthPolling()
   window.addEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
   sidebarLayoutStore.initialize(sidebarLayoutSeedKeys())

@@ -35,12 +35,12 @@ async function mountNav() {
   return wrapper
 }
 
-const optionNames = (wrapper) => wrapper.findAll('.top-quick-nav__option').map((node) => node.text())
+const optionNames = () => [...document.querySelectorAll('.top-quick-nav__option')].map((node) => node.textContent || '')
 
 describe('TopQuickNav', () => {
   it('聚焦后展示全部侧边栏入口', async () => {
     const wrapper = await mountNav()
-    const names = optionNames(wrapper)
+    const names = optionNames()
     expect(names).toContain('智能对话')
     expect(names).toContain('订单管理')
     expect(names).toContain('员工空间')
@@ -51,9 +51,9 @@ describe('TopQuickNav', () => {
   it('按关键词过滤功能名', async () => {
     const wrapper = await mountNav()
     await wrapper.find('input').setValue('订单')
-    expect(optionNames(wrapper)).toEqual(['订单管理'])
+    expect(optionNames()).toEqual(['订单管理'])
     await wrapper.find('input').setValue('不存在的东西')
-    expect(wrapper.find('.top-quick-nav__empty').exists()).toBe(true)
+    expect(document.querySelector('.top-quick-nav__empty')).toBeTruthy()
     wrapper.unmount()
   })
 
@@ -71,20 +71,62 @@ describe('TopQuickNav', () => {
     const input = wrapper.find('input')
     await input.trigger('keydown', { key: 'ArrowDown' })
     await input.trigger('keydown', { key: 'ArrowDown' })
-    const highlighted = wrapper.findAll('.top-quick-nav__option').findIndex((node) => node.classes().includes('highlighted'))
+    const highlighted = [...document.querySelectorAll('.top-quick-nav__option')].findIndex((node) => node.classList.contains('highlighted'))
     expect(highlighted).toBe(2)
     await input.trigger('keydown', { key: 'Escape' })
-    expect(wrapper.find('.top-quick-nav__list').exists()).toBe(false)
+    expect(document.querySelector('.top-quick-nav__list')).toBeNull()
     wrapper.unmount()
   })
 
   it('点击选项 emit select 并收起下拉', async () => {
     const wrapper = await mountNav()
-    const options = wrapper.findAll('.top-quick-nav__option')
-    const target = options.find((node) => node.text().includes('系统设置'))
-    await target.trigger('mousedown')
+    const target = [...document.querySelectorAll('.top-quick-nav__option')].find((node) => (node.textContent || '').includes('系统设置'))
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await wrapper.vm.$nextTick()
     expect(wrapper.emitted('select')).toEqual([['settings']])
-    expect(wrapper.find('.top-quick-nav__list').exists()).toBe(false)
+    expect(document.querySelector('.top-quick-nav__list')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('跟随视口、方向键和空列表，且空查询回车不跳转', async () => {
+    if (typeof Element.prototype.scrollIntoView !== 'function') {
+      Element.prototype.scrollIntoView = () => undefined
+    }
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => undefined)
+    const wrapper = await mountNav()
+    const option = document.querySelector('.top-quick-nav__option')
+    option?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+    window.dispatchEvent(new Event('resize'))
+    window.dispatchEvent(new Event('scroll'))
+    const input = wrapper.find('input').element as HTMLInputElement
+    const rect = input.getBoundingClientRect.bind(input)
+    Object.defineProperty(input, 'getBoundingClientRect', { configurable: true, value: undefined })
+    window.dispatchEvent(new Event('resize'))
+    Object.defineProperty(input, 'getBoundingClientRect', { configurable: true, value: rect })
+
+    await wrapper.find('input').trigger('blur')
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    await wrapper.find('input').trigger('keydown', { key: 'ArrowDown' })
+    expect(document.querySelector('.top-quick-nav__list')).toBeTruthy()
+
+    await wrapper.find('input').trigger('keydown', { key: 'ArrowUp' })
+    expect(scrollIntoView).toHaveBeenCalled()
+    await wrapper.find('input').setValue('不存在的东西')
+    await wrapper.find('input').trigger('keydown', { key: 'ArrowDown' })
+    await wrapper.find('input').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('select')).toBeFalsy()
+    wrapper.unmount()
+    scrollIntoView.mockRestore()
+  })
+
+  it('空查询回车不跳转，输入法确认回车也不跳转', async () => {
+    const wrapper = await mountNav()
+    await wrapper.find('input').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('select')).toBeFalsy()
+    await wrapper.find('input').trigger('keydown', { key: 'Enter', isComposing: true })
+    await wrapper.find('input').setValue('客户')
+    await wrapper.find('input').trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(wrapper.emitted('select')).toBeFalsy()
     wrapper.unmount()
   })
 })

@@ -30,6 +30,24 @@ describe('authSessionCache', () => {
     expect(authApi.validateSession).toHaveBeenCalledTimes(1)
   })
 
+  it('reuses a valid session after the short TTL and refreshes behind the click', async () => {
+    const now = 1_700_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    vi.mocked(authApi.validateSession).mockResolvedValue({ valid: true })
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
+    vi.spyOn(Date, 'now').mockReturnValue(now + 6 * 60_000)
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
+    await vi.waitFor(() => expect(authApi.validateSession).toHaveBeenCalledTimes(2))
+    vi.restoreAllMocks()
+  })
+
+  it('reuses a definitive invalid session inside the short TTL', async () => {
+    vi.mocked(authApi.validateSession).mockResolvedValue({ valid: false })
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(false)
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(false)
+    expect(authApi.validateSession).toHaveBeenCalledTimes(1)
+  })
+
   it('forces refresh when requested', async () => {
     vi.mocked(authApi.validateSession).mockResolvedValue({ valid: true })
     await validateEnterpriseSessionCached()

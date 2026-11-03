@@ -24,10 +24,9 @@ watch([startupVisible, startupError], async ([visible]) => {
 const reloadStartup = () => window.location.reload()
 usePrivateDeliverySync()
 const account = useAccountProfileStore()
-const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value, account.loaded,
-  account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId,
-  account.accountKind, account.marketIsAdmin, account.tenantIsOwner, account.userRole,
-  [...account.permissions].sort(), [...account.entitledIndustries].sort()]))
+// Identity only. Profile refreshes after idle must not drop every cached page.
+const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
+  account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId]))
 const currentRoute = useRoute()
 const routeReadinessHandlers = computed(() => {
   const path = currentRoute.fullPath, scope = cacheScope.value
@@ -64,7 +63,7 @@ const routeReadinessHandlers = computed(() => {
     <MainLayout v-else>
       <router-view v-slot="{ Component, route }">
         <transition v-if="!isAdminConsoleSpa() && !isDesktopShell()" name="route-fade" mode="out-in">
-          <keep-alive :max="12">
+          <keep-alive :max="32">
             <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
           </keep-alive>
         </transition>
@@ -72,7 +71,7 @@ const routeReadinessHandlers = computed(() => {
         <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
         <RouteErrorBoundary v-else :path="route.fullPath">
-          <keep-alive v-if="isDesktopShell() && !isAdminConsoleSpa()" :key="cacheScope" :max="12">
+          <keep-alive v-if="isDesktopShell() && !isAdminConsoleSpa()" :key="cacheScope" :max="32">
             <Suspense v-on="routeReadinessHandlers">
               <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
               <template #fallback>

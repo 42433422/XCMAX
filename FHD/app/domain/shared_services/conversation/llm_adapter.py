@@ -11,7 +11,7 @@ import logging
 import math
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 from urllib.parse import urlsplit
 
 import httpx
@@ -234,13 +234,28 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         """检查是否已正确配置（有API Key）"""
         return bool(self._api_key)
 
+    async def _replace_client(
+        self, current: Optional[httpx.AsyncClient], factory: Callable[[], httpx.AsyncClient]
+    ) -> httpx.AsyncClient:
+        if current is not None and not current.is_closed:
+            try:
+                await current.aclose()
+            except RuntimeError:
+                # 客户端绑在上一个事件循环上。asyncio.run() 结束后那个循环已关闭，
+                # 在新循环里 aclose 会抛 Event loop is closed，不能因此建不出新客户端。
+                logger.debug("closed leftover LLM HTTP client after its event loop ended")
+        return factory()
+
     async def _get_client(self) -> httpx.AsyncClient:
         """获取/创建异步HTTP客户端（用于同步请求）"""
         loop_id = id(asyncio.get_running_loop())
         if self._client is None or self._client.is_closed or self._client_loop_id != loop_id:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(30.0, connect=10.0),
-                limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+            self._client = await self._replace_client(
+                self._client,
+                lambda: httpx.AsyncClient(
+                    timeout=httpx.Timeout(30.0, connect=10.0),
+                    limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+                ),
             )
             self._client_loop_id = loop_id
         return self._client
@@ -253,9 +268,12 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
             or self._stream_client.is_closed
             or self._stream_client_loop_id != loop_id
         ):
-            self._stream_client = httpx.AsyncClient(
-                timeout=httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0),
-                limits=httpx.Limits(max_keepalive_connections=200, max_connections=1000),
+            self._stream_client = await self._replace_client(
+                self._stream_client,
+                lambda: httpx.AsyncClient(
+                    timeout=httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0),
+                    limits=httpx.Limits(max_keepalive_connections=20, max_connections=40),
+                ),
             )
             self._stream_client_loop_id = loop_id
         return self._stream_client

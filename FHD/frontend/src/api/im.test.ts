@@ -77,6 +77,40 @@ describe('IM request and response contracts', () => {
     apiFetch.mockResolvedValue(jsonRes(body, options))
     expect(await im.fetchImUnreadTotal()).toBe(expected)
   })
+  it('paints the first conversation page and appends or ignores the rest', async () => {
+    const onMore = vi.fn()
+    apiFetch
+      .mockResolvedValueOnce(jsonRes({ success: true, conversations: [{ id: 1 }], next_cursor: 'c2' }))
+      .mockResolvedValueOnce(jsonRes({ success: true, conversations: [{ id: 2 }] }))
+    await expect(im.fetchImConversations({ firstPageOnly: true, onMore })).resolves.toEqual([{ id: 1 }])
+    await vi.waitFor(() => expect(onMore).toHaveBeenCalledWith([{ id: 2 }]))
+
+    onMore.mockClear()
+    apiFetch.mockReset()
+    apiFetch
+      .mockResolvedValueOnce(jsonRes({ success: true, conversations: [{ id: 1 }], next_cursor: 'c2' }))
+      .mockResolvedValueOnce(jsonRes({ success: true, conversations: [] }))
+    await im.fetchImConversations({ firstPageOnly: true, onMore })
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2))
+    expect(onMore).not.toHaveBeenCalled()
+
+    apiFetch.mockReset()
+    apiFetch
+      .mockResolvedValueOnce(jsonRes({ success: true, conversations: [{ id: 1 }], next_cursor: 'c2' }))
+      .mockRejectedValueOnce(new Error('net'))
+    await expect(im.fetchImConversations({ firstPageOnly: true, onMore })).resolves.toEqual([{ id: 1 }])
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2))
+  })
+
+  it('tells the shell when the unread total is unauthorized', async () => {
+    const unauthorized = vi.fn()
+    window.addEventListener('xcagi:session-unauthorized', unauthorized)
+    apiFetch.mockResolvedValue(jsonRes({}, { ok: false, status: 403 }))
+    await expect(im.fetchImUnreadTotal()).resolves.toBe(0)
+    expect(unauthorized).toHaveBeenCalledOnce()
+    window.removeEventListener('xcagi:session-unauthorized', unauthorized)
+  })
+
   it('handles unread network errors and rejects missing mutation records with server messages', async () => {
     apiFetch.mockRejectedValueOnce(new Error('net'))
     expect(await im.fetchImUnreadTotal()).toBe(0)

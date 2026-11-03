@@ -28,6 +28,7 @@ import {
   handleDesktopWillNavigate,
   isBenignDesktopLoadAbort,
 } from './desktop-navigation'
+import { reportRendererError } from './desktop-resilience'
 
 /** 闪屏进度 0–100；供启动阶段与单测共用。 */
 export function clampSplashProgress(percent: number): number {
@@ -298,11 +299,31 @@ export async function createWindow(): Promise<void> {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message), target => mainWindow.webContents.downloadURL(target)) }
   })
+  const reportMainRenderer = (type: string, error: string, source?: string) => {
+    reportRendererError({ port: DEFAULT_PORT, writeLog: writeBackendLog }, { type, error, source })
+  }
+  mainWindow.webContents.on('console-message', (...args: unknown[]) => {
+    const details = (typeof args[1] === 'object' && args[1]) ? args[1] as { level?: string | number; message?: string; lineNumber?: number; sourceId?: string } : null
+    const resolvedLevel = details ? details.level : args[1]
+    const resolvedMessage = details ? String(details.message || '') : String(args[2] || '')
+    const resolvedLine = details ? details.lineNumber : args[3]
+    const resolvedSource = details ? details.sourceId : args[4]
+    const isError = resolvedLevel === 'error' || resolvedLevel === 3
+    if (!isError || !resolvedMessage.trim()) return
+    reportMainRenderer(
+      'renderer:console',
+      resolvedMessage.trim().slice(0, 4000),
+      [resolvedSource, resolvedLine].filter((part) => part !== undefined && part !== '').join(':'),
+    )
+  })
   mainWindow.webContents.on('unresponsive', () => {
     writeBackendLog('[crash] renderer unresponsive\n')
+    reportMainRenderer('renderer:unresponsive', 'renderer process is unresponsive')
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    writeBackendLog(`[crash] renderer gone reason=${details.reason} exitCode=${details.exitCode}\n`)
+    const summary = `reason=${details.reason} exitCode=${details.exitCode}`
+    writeBackendLog(`[crash] renderer gone ${summary}\n`)
+    reportMainRenderer('renderer:gone', summary)
     if (checkPendingRollback()) {
       desktopRuntime.rendererFailedDuringStartup = true
       return

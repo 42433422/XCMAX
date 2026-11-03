@@ -116,8 +116,57 @@ def neuro_degraded_reasons(neuro: object) -> list[str]:
     return list(dict.fromkeys(reasons))
 
 
+# A missing process-wide LLM port is a capability fact. Desktop chat uses the
+# signed-in account's model route, so this must not flip /api/health and
+# /api/desktop/status to different degraded flags.
+_NON_BLOCKING_NEURO_REASONS = frozenset({"LLM_RUNTIME_UNAVAILABLE"})
+
+
+def llm_port_capability(neuro: object) -> dict[str, object] | None:
+    """Report cognition.llm_port_available without treating it as process failure."""
+    if not isinstance(neuro, dict) or neuro.get("enabled") is False:
+        return None
+    cognition = neuro.get("cognition")
+    if not isinstance(cognition, dict):
+        return None
+    state = cognition.get("cognition")
+    if not isinstance(state, dict) or "llm_port_available" not in state:
+        return None
+    ready = state.get("llm_port_available") is True
+    return {"ready": ready, "status": "ready" if ready else "not_ready"}
+
+
+def merge_public_degradation(payload: dict[str, Any], neuro: object) -> None:
+    """Apply the same neuro degradation rules to health and desktop status."""
+    reasons = [str(item) for item in payload.get("degradedReasons") or []]
+    for reason in neuro_degraded_reasons(neuro):
+        if reason not in _NON_BLOCKING_NEURO_REASONS:
+            reasons.append(reason)
+    payload["degradedReasons"] = list(dict.fromkeys(reasons))
+    capability = llm_port_capability(neuro)
+    if capability is not None:
+        capabilities = dict(payload.get("capabilities") or {})
+        capabilities["cognition.llm_port_available"] = capability
+        payload["capabilities"] = capabilities
+    runtime = payload.get("runtime") if isinstance(payload.get("runtime"), dict) else {}
+    blockers = runtime.get("blockers") if isinstance(runtime, dict) else None
+    if blockers:
+        payload["status"] = "unhealthy"
+    elif payload["degradedReasons"]:
+        if payload.get("status") != "unhealthy":
+            payload["status"] = "degraded"
+    elif (
+        payload.get("status") == "degraded"
+        and isinstance(runtime, dict)
+        and runtime.get("status") == "healthy"
+    ):
+        payload["status"] = "healthy"
+
+
 __all__ = [
     "clear_runtime_issue",
+    "llm_port_capability",
+    "merge_public_degradation",
     "neuro_degraded_reasons",
     "record_runtime_component",
     "record_runtime_issue",

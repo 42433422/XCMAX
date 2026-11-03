@@ -402,7 +402,10 @@ class _InMemoryPersonaRepository:
         return self._store.pop(user_id, None) is not None
 
     async def append_event(self, user_id: str, event_type: str, event_data: dict) -> None:
-        self._events.setdefault(user_id, []).append({"type": event_type, "data": event_data})
+        events = self._events.setdefault(user_id, [])
+        events.append({"type": event_type, "data": event_data})
+        if len(events) > 200:
+            del events[:-200]
 
     async def list_recent_events(self, user_id: str, limit: int = 20) -> list[dict]:
         return self._events.get(user_id, [])[-limit:]

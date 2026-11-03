@@ -31,6 +31,10 @@ export class AuthenticatedEventStream extends EventTarget {
         headers: { Accept: 'text/event-stream', ...clientShellRequestHeaders(), ...getActiveExtensionModHeaders(url) },
         signal: this.controller.signal,
       })
+      if (response.status === 401 || response.status === 403) {
+        this.dispatchEvent(new CustomEvent('stream.unauthorized', { detail: response.status }))
+        return
+      }
       if (!response.ok || !response.body) throw new Error('Task stream unavailable')
       const reader = response.body.getReader()
       const decoder = new TextDecoder()

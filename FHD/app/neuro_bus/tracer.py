@@ -55,7 +55,9 @@ class Span:
             from opentelemetry import trace as _otel_trace
 
             tracer = _otel_trace.get_tracer("xcagi.neurobus")
-            self._otel_span = tracer.start_as_current_span(self.name).__enter__()
+            # start_span does not push a current-span context. start_as_current_span().__enter__
+            # without __exit__ retained every span on the context stack for the process lifetime.
+            self._otel_span = tracer.start_span(self.name)
         except ImportError:
             pass
 

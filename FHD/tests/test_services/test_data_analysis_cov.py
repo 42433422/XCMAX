@@ -394,6 +394,18 @@ class TestOpenAICompatibleAdapter:
         assert c1 is c2
         await a.close()
 
+    @pytest.mark.asyncio
+    async def test_replace_client_continues_when_old_loop_is_closed(self):
+        a = self._make_adapter()
+        old = AsyncMock()
+        old.is_closed = False
+        old.aclose = AsyncMock(side_effect=RuntimeError("Event loop is closed"))
+        a._client = old
+        a._client_loop_id = 0
+        fresh = await a._get_client()
+        assert fresh is not old
+        await fresh.aclose()
+
     # _get_stream_client reuse
     @pytest.mark.asyncio
     async def test_get_stream_client_reuse(self):

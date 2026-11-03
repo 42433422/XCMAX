@@ -1,4 +1,7 @@
+import { installDesktopRendererErrorReporting } from '@/utils/desktopRendererErrors'
 import { createApp } from 'vue'
+
+installDesktopRendererErrorReporting()
 import { createPinia } from 'pinia'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import './fhd/installFetchDbReadToken'
@@ -27,6 +30,7 @@ import { initServiceWorker, unregisterStaleServiceWorkers } from './utils/servic
 import { bootstrapHostConfig } from '@/stores/hostConfig'
 import { waitForInitialBootstrapDependencies } from './bootstrapDependencies'
 import { prefetchRouteChunks } from './utils/routePrefetch'
+import { prefetchShellRouteChunks } from './utils/shellRoutePrefetch'
 
 import './styles/tokens.css'
 import './styles/css/base.css'
@@ -177,6 +181,7 @@ async function bootstrap() {
   app.use(i18n)
   // Speculative chunks must not compete with the current workspace's critical resources.
   window.addEventListener('xcagi:startup-ready', () => {
+    prefetchShellRouteChunks(router)
     const host = window.location.hostname
     if (import.meta.env.DEV || host === '127.0.0.1' || host === 'localhost') prefetchStaticRouteChunks()
   }, { once: true })

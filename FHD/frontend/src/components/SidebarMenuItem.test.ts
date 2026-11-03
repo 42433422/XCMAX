@@ -2,6 +2,10 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import SidebarMenuItem from './SidebarMenuItem.vue'
 
+const prefetchShellRoute = vi.hoisted(() => vi.fn())
+vi.mock('@/utils/shellRoutePrefetch', () => ({ prefetchShellRoute }))
+vi.mock('vue-router', () => ({ useRouter: () => ({}) }))
+
 const employeeWorkflowItem = {
   key: 'employee-workflow',
   name: '员工工作台',
@@ -59,6 +63,23 @@ describe('SidebarMenuItem.vue', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('warms the parent and child route on hover and ignores a prefetch failure', async () => {
+    prefetchShellRoute.mockImplementationOnce(() => {
+      throw new Error('no router')
+    })
+    const wrapper = mount(SidebarMenuItem, {
+      props: {
+        item: employeeWorkflowItem,
+        activeView: 'printer-list',
+        isExpanded: true,
+      },
+    })
+    await wrapper.get('button.menu-item').trigger('mouseenter')
+    await wrapper.get('button.submenu-item[data-view="workflow-employee-space"]').trigger('mouseenter')
+    expect(prefetchShellRoute).toHaveBeenCalledTimes(2)
+    expect(prefetchShellRoute).toHaveBeenNthCalledWith(2, expect.anything(), 'workflow-employee-space')
   })
 
   it('emits parent-click when the top-level button is clicked', async () => {

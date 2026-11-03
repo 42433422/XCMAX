@@ -87,6 +87,9 @@ class PatternPredictor:
 
         # 追加到历史
         self._history.append(item)
+        if len(self._ngrams) > 4000 or len(self._markov) > 4000:
+            self._ngrams.clear()
+            self._markov.clear()
 
     def predict(self, context: list[str] | None = None) -> PredictionResult:
         """预测下一项。

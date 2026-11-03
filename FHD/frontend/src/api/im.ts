@@ -66,11 +66,12 @@ export async function fetchImContacts(keyword?: string): Promise<ImContact[]> {
   return data.contacts ?? []
 }
 
-export async function fetchImConversations(): Promise<ImConversationSummary[]> {
+export async function fetchImConversationPages(options?: { maxPages?: number; cursor?: string }): Promise<{ conversations: ImConversationSummary[]; nextCursor: string }> {
   const epoch = productReadAccountEpoch.value
   const conversations = new Map<number, ImConversationSummary>()
   const cursors = new Set<string>()
-  let cursor = ''
+  let cursor = options?.cursor || ''
+  let pages = 0
   do {
     const query = new URLSearchParams({ limit: '50' })
     if (cursor) query.set('cursor', cursor)
@@ -79,16 +80,36 @@ export async function fetchImConversations(): Promise<ImConversationSummary[]> {
     if (epoch !== productReadAccountEpoch.value) throw new Error('账号已切换，请重新加载会话')
     if (!data.success) throw new Error('加载会话失败')
     for (const item of data.conversations ?? []) if (!conversations.has(item.id)) conversations.set(item.id, item)
-    cursor = data.next_cursor || '' // Older hosts return a complete snapshot without a cursor.
+    cursor = data.next_cursor || ''
+    pages += 1
     if (cursor && cursors.has(cursor)) throw new Error('会话分页游标重复，请重新加载')
     if (cursor) cursors.add(cursor)
+    if (options?.maxPages != null && pages >= options.maxPages) break
   } while (cursor)
-  return [...conversations.values()]
+  return { conversations: [...conversations.values()], nextCursor: cursor }
+}
+
+export async function fetchImConversations(options?: {
+  firstPageOnly?: boolean
+  onMore?: (items: ImConversationSummary[]) => void
+}): Promise<ImConversationSummary[]> {
+  const first = await fetchImConversationPages(options?.firstPageOnly ? { maxPages: 1 } : undefined)
+  if (options?.firstPageOnly && first.nextCursor && options.onMore) {
+    const cursor = first.nextCursor
+    void fetchImConversationPages({ cursor }).then((rest) => {
+      if (rest.conversations.length) options.onMore?.(rest.conversations)
+    }).catch(() => undefined)
+  }
+  return first.conversations
 }
 
 export async function fetchImUnreadTotal(): Promise<number> {
   try {
     const res = await apiFetch('/api/im/unread-total', { headers: jsonHeaders })
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('xcagi:session-unauthorized'))
+      return 0
+    }
     const ct = res.headers.get('content-type') || ''
     if (!res.ok || !ct.toLowerCase().includes('application/json')) return 0
     const data = (await res.json()) as { success?: boolean; unread_total?: number }

@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { defineAsyncComponent, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   createDirectConversation,
   fetchCsInbox,
@@ -115,6 +115,7 @@ import {
   type ImMessage,
 } from '@/api/im'
 import { authApi } from '@/api/auth'
+import { useAccountProfileStore } from '@/stores/accountProfile'
 import { useImSounds } from '@/composables/useImSounds'
 import { showAppToast } from '@/composables/useAppToast'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
@@ -147,11 +148,12 @@ import {
 import { useEnterpriseCsRecovery } from '@/utils/enterpriseCsRecovery'
 import SharedIssueAcceptancePanel from '@/components/SharedIssueAcceptancePanel.vue'
 import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue'
-import AiGroupChatView from '@/views/AiGroupChatView.vue'
 import MessengerContactPicker from '@/views/im/MessengerContactPicker.vue'
 import ConversationSidebar from '@/views/im/ConversationSidebar.vue'
 import SystemEmployeeChat from '@/views/im/SystemEmployeeChat.vue'
 import ConversationChat from '@/views/im/ConversationChat.vue'
+
+const AiGroupChatView = defineAsyncComponent(() => import('@/views/AiGroupChatView.vue'))
 
 type CurrentUserPayload = {
   user?: { id?: number }
@@ -409,7 +411,14 @@ async function loadConversations(): Promise<void> {
   if (!localUserId.value) return
   busy.value = true
   try {
-    const regular = await fetchImConversations()
+    const regular = await fetchImConversations({
+      firstPageOnly: true,
+      onMore: (more) => {
+        const seen = new Set(conversations.value.map((item) => item.id))
+        const extra = more.filter((item) => !seen.has(item.id))
+        if (extra.length) conversations.value = [...conversations.value, ...extra]
+      },
+    })
     if (isAdminCustomerServiceConsole.value) {
       // 运营者:把「企业客户→专属客服」收件箱会话并进侧栏(置顶),按 id 去重。
       let inbox: ImConversationSummary[] = []
@@ -472,26 +481,46 @@ function scrollToBottom(): void {
   if (el) el.scrollTop = el.scrollHeight
 }
 
-onMounted(async () => {
-  localUserId.value = await resolveLocalUserId()
-  if (!localUserId.value) {
-    showAppToast('请先登录后使用信息功能', 'warning')
-    return
+function knownLocalUserId(): number | null {
+  try {
+    const id = Number(useAccountProfileStore().localUserId)
+    return Number.isFinite(id) && id > 0 ? id : null
+  } catch {
+    return null
   }
-  offSyncMessage = onImMessage(({ conversation_id, message }) => {
-    applyIncomingMessage(message, conversation_id)
-  })
-  offSyncRead = onImReadState(({ conversation_id, user_id, last_message_id }) => {
-    applyReadState(conversation_id, user_id, last_message_id)
-  })
-  connectWs()
-  const initialLoads = [loadContacts(), loadConversations(), loadDutyEmployees()]
-  if (isAdminCustomerServiceConsole.value) {
-    closeOverlappingAssistantFloat()
-    activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY
-    initialLoads.push(loadCodexConversation())
-  }
-  await Promise.all(initialLoads)
+}
+
+onMounted(() => {
+  const knownId = knownLocalUserId()
+  if (knownId) localUserId.value = knownId
+  const contactsPromise = loadContacts()
+  const identityPromise = resolveLocalUserId()
+  void (async () => {
+    if (!localUserId.value || !isDesktopShell()) {
+      const id = await identityPromise
+      if (id) localUserId.value = id
+    } else {
+      void identityPromise.then((id) => { if (id) localUserId.value = id })
+    }
+    if (!localUserId.value) {
+      showAppToast('请先登录后使用信息功能', 'warning')
+      return
+    }
+    offSyncMessage = onImMessage(({ conversation_id, message }) => {
+      applyIncomingMessage(message, conversation_id)
+    })
+    offSyncRead = onImReadState(({ conversation_id, user_id, last_message_id }) => {
+      applyReadState(conversation_id, user_id, last_message_id)
+    })
+    connectWs()
+    const initialLoads = [contactsPromise, loadConversations(), loadDutyEmployees()]
+    if (isAdminCustomerServiceConsole.value) {
+      closeOverlappingAssistantFloat()
+      activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY
+      initialLoads.push(loadCodexConversation())
+    }
+    await Promise.all(initialLoads)
+  })()
 })
 
 onUnmounted(() => {

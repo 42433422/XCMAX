@@ -20,6 +20,8 @@ export function getAuthSessionEpoch(): number {
 }
 /** 企业版会话校验缓存：减少侧栏频繁切换时重复打 /api/auth/session/validate */
 const SESSION_TTL_MS = 5 * 60_000
+/** 空闲超过短 TTL 后，导航仍沿用最近一次成功结果，并在后台复核。 */
+const SESSION_NAV_STALE_MS = 30 * 60_000
 /**
  * This marker contains no credential and never authorizes an API request.  It
  * only lets the Electron shell render the already-known workspace while the
@@ -110,8 +112,16 @@ export function readValid(res: unknown): boolean {
 
 export async function validateEnterpriseSessionCached(force = false): Promise<boolean> {
   const now = Date.now()
-  if (!force && cachedValid !== null && now - cachedAt < SESSION_TTL_MS) {
-    return cachedValid
+  if (!force && cachedValid === true && now - cachedAt < SESSION_TTL_MS) return true
+  if (!force && cachedValid !== null && cachedValid !== true && now - cachedAt < SESSION_TTL_MS) return cachedValid
+  if (!force && cachedValid === true && now - cachedAt < SESSION_NAV_STALE_MS) {
+    if (!validationInFlight) {
+      void validateEnterpriseSessionCached(true).then((valid) => {
+        if (valid || typeof window === 'undefined') return
+        window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
+      }).catch(() => undefined)
+    }
+    return true
   }
   if (validationInFlight) return validationInFlight
   const requestEpoch = cacheEpoch.value

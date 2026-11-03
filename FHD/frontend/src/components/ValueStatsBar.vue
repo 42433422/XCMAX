@@ -30,7 +30,16 @@ async function load() {
     const raw = response?.data?.progress?.completed_count
     const count = Math.floor(Number(raw))
     completedCount.value = Number.isFinite(count) && count >= 0 ? count : 0
-  } catch {
+  } catch (error) {
+    const status = Number(error && typeof error === 'object' ? error.status : 0)
+    if (status === 401 || status === 403) {
+      completedCount.value = null
+      if (refreshTimer !== null) {
+        window.clearInterval(refreshTimer)
+        refreshTimer = null
+      }
+      return
+    }
     completedCount.value = null
   }
 }
