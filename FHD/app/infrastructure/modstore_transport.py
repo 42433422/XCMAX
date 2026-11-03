@@ -32,6 +32,7 @@ class MarketModelError(ValueError):
 
     code: str | None = None
     recovery: str | None = None
+    response: Any | None = None
 
     def __init__(self, payload: dict[str, Any]):
         # Gateway/provider error text may contain credentials, URLs or request data.

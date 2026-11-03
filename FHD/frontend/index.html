@@ -38,8 +38,9 @@
           if (!p) return
           var root = document.documentElement
           root.classList.add('xcagi-electron')
+          root.classList.remove('xcagi-electron-mac', 'xcagi-electron-win')
           if (p === 'darwin') root.classList.add('xcagi-electron-mac')
-          if (p === 'win32') root.classList.add('xcagi-electron-win')
+          else if (p === 'win32') root.classList.add('xcagi-electron-win')
         } catch (e) {}
       })()
     </script>

@@ -1221,8 +1221,10 @@ async def reviewed_excel_preview(
                 claims = state.setdefault("template_candidate_requests", {})
                 existing = claims.get(candidate_key)
                 if existing:
-                    if existing.get("state") == "completed":
+                    if existing.get("state") == "completed" and existing.get("review_id"):
                         return _stored_candidate_response(db, existing["review_id"], tenant, owner)
+                    # Unknown-outcome inflight must stay locked (no double-send). Definite
+                    # config/404 failures release the claim in the except path below.
                     error = _model_processing_failure(
                         ReviewedExcelError(
                             "上次候选处理仍在进行或结果未知，请先核对状态；不会重复发送"
@@ -1255,11 +1257,20 @@ async def reviewed_excel_preview(
         except ValueError as exc:
             # Release claim when the model was never sent OR the provider gave a
             # definite config/404 failure so retry is not stuck on inflight.
-            if classification_id and (
-                isinstance(exc, ModelRequestNotSent) or is_definite_provider_failure(exc)
-            ):
+            from app.application.elt.errors import provider_http_status
+
+            release = classification_id and (
+                isinstance(exc, ModelRequestNotSent)
+                or is_definite_provider_failure(exc)
+                or provider_http_status(exc) in {400, 401, 403, 404}
+            )
+            if release:
                 with tenant_scope(tenant), get_db() as db:
-                    _update_candidate_claim(db, classification_id, candidate_key, tenant, owner)
+                    try:
+                        _update_candidate_claim(db, classification_id, candidate_key, tenant, owner)
+                    except HTTPException:
+                        # Claim already moved; still surface the model failure.
+                        pass
             raise _model_processing_failure(exc) from None
         proposal["model"]["authorization"] = template_model_authorization(
             model_session,

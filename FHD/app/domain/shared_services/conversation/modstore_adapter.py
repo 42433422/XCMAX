@@ -298,6 +298,10 @@ class ModstorePlatformAdapter:
 
     def _chat_input(self, connection, route, messages, temperature, max_tokens, extra):
         snapshot = self._pinned_snapshot(connection, route)
+        extra = dict(extra or {})
+        # Callers that explicitly opt into client failover (template analyze/preview)
+        # must keep allow_failover=True even when a route snapshot is pinned.
+        force_failover = extra.get("allow_failover") is True
         if snapshot:
             self.last_route_metadata = {
                 **routing.route_metadata(snapshot),
@@ -310,8 +314,9 @@ class ModstorePlatformAdapter:
                     for key in ("route_token", "key_source", "config_revision")
                     if key in snapshot
                 },
-                "allow_failover": False,
             }
+            if not force_failover:
+                extra["allow_failover"] = False
         return ChatInput(messages, temperature, max_tokens, extra)
 
     @contextmanager

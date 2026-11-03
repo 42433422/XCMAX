@@ -60,7 +60,8 @@ class ChatInput:
             {
                 key: value
                 for key, value in self.extra.items()
-                if key not in {"timeout", "_reviewed_excel_audit_response"}
+                if key
+                not in {"timeout", "_reviewed_excel_audit_response", "_pending_client_failover"}
             }
         )
         if connection.user_id:
