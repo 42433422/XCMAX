@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 concurrency:
@@ -56,18 +56,36 @@ jobs:
 
       - name: Export gitleaks SARIF to metrics
         run: |
-          # gitleaks-action 将结果上传到 GitHub Code Scanning，
-          # 但我们额外保存一份到 metrics/ 供 telemetry_backlog_loop 读取。
-          # 使用 gitleaks CLI 直接扫描生成 SARIF（与 action 独立，确保有文件落盘）。
-          DATE=$(date -u +%Y-%m-%d)
+          set -euo pipefail
+          export SCAN_DATE="$(date -u +%Y-%m-%d)"
+          set +e
           docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:latest \
-            detect --source /repo --report-format sarif --report-path /repo/metrics/gitleaks-${DATE}.json \
-            --no-banner --redact || true
-          # 如果 gitleaks 未发现泄漏，report-format sarif 仍会生成空 runs 数组
-          if [ ! -f metrics/gitleaks-${DATE}.json ]; then
-            echo '{"runs":[{"results":[]}]}' > metrics/gitleaks-${DATE}.json
-          fi
-          echo "gitleaks SARIF saved to metrics/gitleaks-${DATE}.json"
+            detect --source /repo --report-format sarif \
+            --report-path "/repo/metrics/gitleaks-${SCAN_DATE}.json" \
+            --no-banner --redact
+          status=$?
+          set -e
+          test "$status" -le 1
+          test -s "metrics/gitleaks-${SCAN_DATE}.json"
+          export SCAN_EXIT_CODE="$status"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(f"metrics/gitleaks-{os.environ['SCAN_DATE']}.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          runs = payload.get("runs") if isinstance(payload, dict) else None
+          if not isinstance(runs, list) or any(
+              not isinstance(run, dict) or not isinstance(run.get("results"), list)
+              for run in runs
+          ):
+              raise SystemExit("Missing or invalid gitleaks SARIF")
+          findings = sum(len(run["results"]) for run in runs)
+          if os.environ["SCAN_EXIT_CODE"] == "1" and findings == 0:
+              raise SystemExit("Gitleaks failed but reported no findings")
+          print(f"gitleaks findings: {findings}")
+          PY
 
       # Trivy: 容器/依赖漏洞扫描（JSON 格式）
       - name: Run Trivy dependency scan
@@ -83,49 +101,59 @@ jobs:
           ignore-unfixed: false
           exit-code: "1"
 
-      - name: Verify metrics files
+      - name: Verify and summarize scanner evidence
         run: |
-          DATE=$(date -u +%Y-%m-%d)
-          echo "=== metrics/ contents ==="
-          ls -la metrics/gitleaks-${DATE}.json metrics/trivy-${DATE}.json 2>&1 || true
-          echo "=== gitleaks summary ==="
-          python3 -c "
+          set -euo pipefail
+          export SCAN_DATE="$(date -u +%Y-%m-%d)"
+          python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
-          f = Path('metrics/gitleaks-${DATE}.json')
-          if f.exists():
-              data = json.loads(f.read_text())
-              total = sum(len(r.get('results', [])) for r in data.get('runs', []))
-              print(f'gitleaks findings: {total}')
-          " || true
-          echo "=== trivy summary ==="
-          python3 -c "
-          import json
-          from pathlib import Path
-          f = Path('metrics/trivy-${DATE}.json')
-          if f.exists():
-              data = json.loads(f.read_text())
-              crit_high = 0
-              for result in data.get('Results', []):
-                  for v in result.get('Vulnerabilities', []):
-                      if v.get('Severity') in ('CRITICAL', 'HIGH'):
-                          crit_high += 1
-              print(f'trivy CRITICAL/HIGH: {crit_high}')
-          " || true
+
+          base = Path("metrics")
+          day = os.environ["SCAN_DATE"]
+          leaks = json.loads((base / f"gitleaks-{day}.json").read_text(encoding="utf-8"))
+          trivy = json.loads((base / f"trivy-{day}.json").read_text(encoding="utf-8"))
+          if not isinstance(leaks, dict) or not isinstance(leaks.get("runs"), list):
+              raise SystemExit("Missing or invalid Gitleaks report")
+          if not isinstance(trivy, dict) or not isinstance(trivy.get("Results"), list):
+              raise SystemExit("Missing or invalid Trivy report")
+          counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0}
+          for result in trivy["Results"]:
+              if not isinstance(result, dict):
+                  raise SystemExit("Invalid Trivy result")
+              for category in ("Vulnerabilities", "Misconfigurations", "Secrets"):
+                  for finding in result.get(category) or []:
+                      if not isinstance(finding, dict):
+                          raise SystemExit("Invalid Trivy finding")
+                      severity = str(finding.get("Severity") or "").upper()
+                      if severity in counts:
+                          counts[severity] += 1
+          total_leaks = sum(len(run.get("results", [])) for run in leaks["runs"])
+          rows = [f"Gitleaks findings: {total_leaks}"]
+          rows += [f"Trivy {severity}: {value}" for severity, value in counts.items()]
+          summary = "\n".join(rows) + "\n"
+          print(summary, end="")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as out:
+              out.write(summary)
+          PY
 
       - name: Prune old metrics files (keep 120 days)
         run: |
           find metrics/ -name "gitleaks-*.json" -mtime +120 -delete 2>/dev/null || true
           find metrics/ -name "trivy-*.json" -mtime +120 -delete 2>/dev/null || true
 
-      - name: Commit metrics
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metrics/gitleaks-*.json metrics/trivy-*.json
-          git diff --staged --quiet || git commit -m "chore(metrics): security scan $(date -u +%Y%m%d)"
-          git push || true
+      - name: Upload daily security evidence (protected main is read-only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-security-metrics-${{ steps.metrics-date.outputs.date }}-${{ github.run_id }}
+          path: |
+            FHD/metrics/gitleaks-${{ steps.metrics-date.outputs.date }}.json
+            FHD/metrics/trivy-${{ steps.metrics-date.outputs.date }}.json
+          retention-days: 120
+          if-no-files-found: error
 
       - name: Fail after preserving evidence when Trivy found blockers or failed
-        if: steps.trivy.outcome != 'success'
+        if: always() && steps.trivy.outcome != 'success'
         run: exit 1
