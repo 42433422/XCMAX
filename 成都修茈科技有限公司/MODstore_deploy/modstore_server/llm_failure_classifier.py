@@ -78,8 +78,6 @@ _TRANSIENT_NEEDLES = (
     "504",
     "bad gateway",
     "service unavailable",
-    "gateway timeout",
-    "internal server error",
     "eof occurred",
     "broken pipe",
     "connection refused",
@@ -108,7 +106,7 @@ _TRANSIENT_NEEDLES = (
     "executorready",
 )
 
-_TRANSIENT_STATUS = {429, 500, 502, 503, 504}
+_TRANSIENT_STATUS = {429, 502, 503, 504}
 
 # FastAPI/Starlette ``str(HTTPException(403, "..."))`` 形如 ``"403: 配额不足: llm_calls"``。
 _LEADING_STATUS_RE = re.compile(r"^\s*(\d{3})\b")

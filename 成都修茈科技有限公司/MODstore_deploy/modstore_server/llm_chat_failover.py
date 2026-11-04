@@ -59,6 +59,9 @@ def is_chat_failoverable_failure(error_text: str, status_code: Optional[int] = N
         return False
     if is_wallet_balance_failure(error_text, status_code):
         return True
+    if status_code == 500 or "error 500" in (error_text or "").lower():
+        # 网关/上游 500 在聊天链路按瞬态处理；事故分类仍保持 500=code 的既有语义。
+        return True
     if is_quota_or_billing_failure(error_text, status_code):
         return True
     if is_transient_failure(error_text, status_code):
