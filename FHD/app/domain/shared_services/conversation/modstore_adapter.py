@@ -96,7 +96,7 @@ class ModstorePlatformAdapter:
         user_id: int | None = None,
         default_provider: str = "xiaomi",
         default_model: str = "mimo-v2.5-pro",
-        timeout: float = 60.0,
+        timeout: float = 150.0,
     ):
         """初始化市场地址、凭据、默认模型和连接超时；显式值保持原环境回退规则。"""
         self.platform_url = (

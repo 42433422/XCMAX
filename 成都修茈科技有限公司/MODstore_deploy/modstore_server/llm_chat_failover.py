@@ -31,7 +31,9 @@ def chat_failover_max_attempts() -> int:
     return max(1, min(n, 8))
 
 
-def is_wallet_balance_failure(error_text: str, status_code: Optional[int] = None) -> bool:
+def is_wallet_balance_failure(
+    error_text: str, status_code: Optional[int] = None
+) -> bool:
     """本侧钱包预授权/扣费失败（换平台 Key 无效，只有 BYOK 可能得救）。"""
     if status_code == 402:
         return True
@@ -39,8 +41,26 @@ def is_wallet_balance_failure(error_text: str, status_code: Optional[int] = None
     return "余额不足" in text
 
 
-def is_chat_failoverable_failure(error_text: str, status_code: Optional[int] = None) -> bool:
+_WALLET_DEPENDENCY_NEEDLES = (
+    "java 支付服务不可用",
+    "支付服务不可用",
+    "wallet_dependency_unavailable",
+    "payment service unavailable",
+)
+
+
+def is_wallet_dependency_failure(error_text: str) -> bool:
+    """钱包/支付服务本身不可达：换平台 Key 仍会反复打同一依赖，只有 BYOK 可绕过。"""
+    low = str(error_text or "").lower()
+    return any(n in low for n in _WALLET_DEPENDENCY_NEEDLES)
+
+
+def is_chat_failoverable_failure(
+    error_text: str, status_code: Optional[int] = None
+) -> bool:
     """上游配额/额度或瞬时限流——换厂商/模型可能恢复。"""
+    if is_wallet_dependency_failure(error_text):
+        return False
     if is_wallet_balance_failure(error_text, status_code):
         return True
     if is_quota_or_billing_failure(error_text, status_code):
@@ -82,7 +102,9 @@ async def list_chat_failover_candidates(
 
     async def first_model_id(provider: str) -> str:
         try:
-            block = await get_models_for_provider(db, user_id, provider, force_refresh=False)
+            block = await get_models_for_provider(
+                db, user_id, provider, force_refresh=False
+            )
         except RECOVERABLE_ERRORS:
             return ""
         mids = list(block.get("runtime_models") or block.get("models") or [])
@@ -136,15 +158,20 @@ def remaining_candidates_after_failure(
         return []
     if not is_chat_failoverable_failure(error_text, status_code):
         return []
-    if is_wallet_balance_failure(error_text, status_code):
-        # 钱包没钱：平台 Key 预授权仍会失败；仅尝试用户 BYOK
-        return [(p, m) for p, m in rest if key_source_by_provider.get(p) == "user_override"]
+    if is_wallet_dependency_failure(error_text) or is_wallet_balance_failure(
+        error_text, status_code
+    ):
+        # 钱包没钱/支付服务不可达：平台 Key 预授权仍会失败；仅尝试用户 BYOK。
+        return [
+            (p, m) for p, m in rest if key_source_by_provider.get(p) == "user_override"
+        ]
     return rest
 
 
 __all__ = [
     "chat_failover_max_attempts",
     "is_wallet_balance_failure",
+    "is_wallet_dependency_failure",
     "is_chat_failoverable_failure",
     "list_chat_failover_candidates",
     "remaining_candidates_after_failure",
