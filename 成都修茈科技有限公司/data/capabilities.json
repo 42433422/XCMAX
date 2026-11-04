@@ -6,15 +6,15 @@
   "stats": {
     "total": 157,
     "by_status": {
-      "verified": 106,
-      "partial": 15,
+      "verified": 104,
+      "partial": 17,
       "implemented": 3,
       "planned": 33
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 106,
+    "verified_total": 104,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 98,
@@ -40,9 +40,9 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 127,
+        "verified": 125,
         "partial": 0,
-        "pending": 1,
+        "pending": 3,
         "last_verified_at": "2026-09-29"
       },
       "android": {
@@ -1558,7 +1558,7 @@
             {
               "id": "erp-sales-order",
               "name": "销售订单管理",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -1584,10 +1584,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
-                  "run_count": 1,
-                  "accepted_count": 1
+                  "status": "pending",
+                  "verified_at": null,
+                  "run_count": 0,
+                  "accepted_count": 0
                 }
               ],
               "summary": "销售订单创建与流转。",
@@ -1718,7 +1718,7 @@
             {
               "id": "erp-uom",
               "name": "计量单位管理",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -1744,10 +1744,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
-                  "run_count": 1,
-                  "accepted_count": 1
+                  "status": "pending",
+                  "verified_at": null,
+                  "run_count": 0,
+                  "accepted_count": 0
                 }
               ],
               "summary": "多计量单位与换算。",
