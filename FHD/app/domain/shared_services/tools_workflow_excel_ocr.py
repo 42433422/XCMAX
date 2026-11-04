@@ -13,8 +13,10 @@ logger = logging.getLogger(__name__)
 def _registered_router_excel_analysis(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    file_path = str(params.get("file_path") or "").strip()
-    if not file_path:
+    """注册路由适配器；Excel 分析语义统一由 handle_excel_analysis 提供。"""
+    payload = dict(params or {})
+    payload["action"] = action
+    if not str(payload.get("file_path") or "").strip():
         excel_ctx = (
             runtime_context.get("excel_analysis")
             if isinstance(runtime_context.get("excel_analysis"), dict)
@@ -27,92 +29,26 @@ def _registered_router_excel_analysis(
                     last_ctx.get("result") if isinstance(last_ctx.get("result"), dict) else last_ctx
                 )
         if isinstance(excel_ctx, dict):
-            file_path = str(excel_ctx.get("file_path") or "").strip()
-    if not file_path:
+            payload["file_path"] = str(excel_ctx.get("file_path") or "").strip()
+    if not str(payload.get("file_path") or "").strip():
         return {"success": False, "message": "excel_analysis 缺少 file_path 参数"}
-    question = str(params.get("question") or "").strip()
+    if action == "query" and not payload.get("query_expression"):
+        payload["action"] = "excel_query"
+        payload["natural_language"] = str(payload.get("question") or user_message).strip()
     try:
-        from app.infrastructure.skills.excel_analyzer.excel_template_analyzer import (
-            get_excel_analyzer_skill,
+        from app.application.tools.workflow import handle_excel_analysis
+
+        result = handle_excel_analysis(
+            payload, workspace_root=runtime_context.get("workspace_root")
         )
-        from app.infrastructure.skills.excel_toolkit.excel_toolkit import get_excel_toolkit_skill
-    except ImportError:
-        return {"success": False, "message": "Excel Skill 未正确安装"}
-    toolkit_skill = get_excel_toolkit_skill()
-    analyzer_skill = get_excel_analyzer_skill()
-    if action == "read":
-        result = toolkit_skill.execute(file_path=file_path, action="view")
-        return result
-    if action == "structure":
-        result = analyzer_skill.execute(file_path=file_path)
-        return result
-    if action == "statistics":
-        view_result = toolkit_skill.execute(file_path=file_path, action="view")
-        if not view_result.get("success"):
-            return view_result
-        content = view_result.get("content") or []
-        total_rows = view_result.get("row_count") or 0
-        all_values = []
-        for row in content:
-            for cell in row.get("cells") or []:
-                v = cell.get("value")
-                if v is not None:
-                    try:
-                        all_values.append(float(v))
-                    except (TypeError, ValueError):
-                        pass
-        if all_values:
-            stats = {
-                "count": len(all_values),
-                "sum": round(sum(all_values), 4),
-                "avg": round(sum(all_values) / len(all_values), 4),
-                "min": min(all_values),
-                "max": max(all_values),
-            }
-        else:
-            stats = {"count": 0}
-        return {
-            "success": True,
-            "file_path": file_path,
-            "total_rows": total_rows,
-            "statistics": stats,
-        }
-    if action == "query":
-        view_result = toolkit_skill.execute(file_path=file_path, action="view")
-        if not view_result.get("success"):
-            return view_result
-        content = view_result.get("content") or []
-        if not question:
-            return {"success": True, "data": content[:20]}
-        question_lower = question.lower()
-        if any(kw in question_lower for kw in ["多少", "总和", "总计", "total", "sum"]):
-            all_vals = []
-            for row in content:
-                for cell in row.get("cells") or []:
-                    try:
-                        all_vals.append(float(cell.get("value")))
-                    except (TypeError, ValueError):
-                        pass
-            total = sum(all_vals) if all_vals else 0
-            return {"success": True, "answer": f"所有数值总和为 {round(total, 4)}", "total": total}
-        if any(kw in question_lower for kw in ["最大", "最高", "max"]):
-            all_vals = [
-                float(c.get("value"))
-                for row in content
-                for c in row.get("cells") or []
-                if c.get("value") is not None
-            ]
-            try:
-                mx = max(all_vals)
-                return {"success": True, "answer": f"最大值为 {mx}", "max": mx}
-            except ValueError:
-                return {"success": True, "answer": "未找到数值"}
-        return {
-            "success": True,
-            "data": content[:20],
-            "message": f"已读取前 {min(20, len(content))} 行数据",
-        }
-    return {"success": False, "message": f"未知 excel_analysis action: {action}"}
+    except RECOVERABLE_ERRORS as err:
+        logger.error("excel_analysis 执行失败: %s", err, exc_info=True)
+        return {"success": False, "message": f"Excel 分析失败：{str(err)}"}
+    if not isinstance(result, dict):
+        return {"success": False, "message": str(result)}
+    if not result.get("success") and "error" in result and "message" not in result:
+        result["message"] = result["error"]
+    return result
 
 
 def _registered_router_generate_office_document(

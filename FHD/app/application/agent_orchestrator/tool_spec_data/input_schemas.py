@@ -735,6 +735,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "file_path": {"type": "string"},
             "sheet_name": {"type": "string"},
             "header_row": {"type": "integer"},
+            "offset": {"type": "integer"},
+            "max_rows": {"type": "integer"},
         },
     },
     ("excel_analysis", "query"): {
@@ -745,6 +747,8 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "question": {"type": "string"},
             "natural_language": {"type": "string"},
             "sheet_name": {"type": "string"},
+            "offset": {"type": "integer"},
+            "max_rows": {"type": "integer"},
         },
     },
     ("excel_import", "execute_import"): {

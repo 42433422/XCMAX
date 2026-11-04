@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,38 @@ import pandas as pd
 
 from app.application.tools.workflow_tools.contracts import ExcelIO, NaturalQuery, Payload
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+_EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS = 1000
+_EXCEL_ANALYSIS_MAX_PAGE_ROWS = 5000
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name) or default)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def page_rows(requested: Any = None) -> int:
+    hard_max = _env_positive_int("FHD_EXCEL_ANALYSIS_MAX_PAGE_ROWS", _EXCEL_ANALYSIS_MAX_PAGE_ROWS)
+    default_rows = min(
+        _env_positive_int("FHD_EXCEL_ANALYSIS_PAGE_ROWS", _EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS),
+        hard_max,
+    )
+    try:
+        rows = int(requested) if requested is not None else default_rows
+    except (TypeError, ValueError):
+        rows = default_rows
+    return min(max(1, rows), hard_max)
+
+
+def page_budget(args: Payload) -> tuple[int, int]:
+    try:
+        offset = max(0, int(args.get("offset") or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    return offset, page_rows(args.get("max_rows"))
 
 
 def read_excel_dataframe(
@@ -35,11 +68,22 @@ def frame_records(df: pd.DataFrame, limit: int = 200) -> list[Payload]:
     )
 
 
-def table_result(df: pd.DataFrame) -> Payload:
+def table_result(df: pd.DataFrame, *, offset: int = 0, max_rows: Any = None) -> Payload:
+    offset = max(0, int(offset or 0))
+    rows = page_rows(max_rows)
+    page = df.iloc[offset : offset + rows]
+    returned = len(page)
+    has_more = offset + returned < len(df)
     return {
         "row_count": len(df),
+        "returned_rows": returned,
+        "offset": offset,
+        "page_rows": rows,
+        "truncated": has_more,
+        "has_more": has_more,
+        "next_offset": offset + returned if has_more else None,
         "columns": list(df.columns.astype(str)),
-        "records": frame_records(df),
+        "records": frame_records(page, limit=returned),
     }
 
 
@@ -48,6 +92,9 @@ def natural_language_query(
     natural_language: str,
     translate: Callable[[str, pd.DataFrame], str | None],
     execute: Callable[[str, pd.DataFrame], pd.DataFrame],
+    *,
+    offset: int = 0,
+    max_rows: Any = None,
 ) -> Payload:
     generated_code = ""
     error: str | None = None
@@ -64,9 +111,7 @@ def natural_language_query(
     return {
         "generated_code": generated_code,
         "result_kind": "dataframe",
-        **table_result(result),
-        "truncated": len(result) > 200,
-        "returned_rows": min(len(result), 200),
+        **table_result(result, offset=offset, max_rows=max_rows),
         **({"error": error} if error else {}),
     }
 
@@ -151,9 +196,14 @@ class ExcelAnalysis:
                 "sheet_name": sheet,
                 "header_row": header,
             }
+        offset, max_rows = page_budget(args)
         if action == "excel_query":
             out = self.query(
-                df, str(args.get("natural_language") or "").strip(), file_path=file_path
+                df,
+                str(args.get("natural_language") or "").strip(),
+                file_path=file_path,
+                offset=offset,
+                max_rows=max_rows,
             )
             out["action"] = "excel_query"
             return out
@@ -162,9 +212,7 @@ class ExcelAnalysis:
             out = {
                 **base,
                 "sheet_name": sheet,
-                **table_result(df),
-                "returned_rows": min(len(df), 200),
-                "truncated": len(df) > 200,
+                **table_result(df, offset=offset, max_rows=max_rows),
             }
             try:
                 hint = str(self.customer_hint(str(path), str(sheet).strip() or None) or "").strip()
@@ -177,7 +225,7 @@ class ExcelAnalysis:
             return out
         if action == "query":
             result = self.filter_frame(df, str(args.get("query_expression") or "").strip())
-            return {**base, **table_result(result)}
+            return {**base, **table_result(result, offset=offset, max_rows=max_rows)}
         if action == "aggregate":
             try:
                 result = aggregate_frame(df, args)
@@ -192,15 +240,20 @@ class ExcelAnalysis:
                 return {"success": False, "error": code}
             return {
                 **base,
-                **table_result(result),
+                **table_result(result, offset=offset, max_rows=max_rows),
                 "source_row_count": len(df),
-                "returned_rows": min(len(result), 200),
-                "truncated": len(result) > 200,
             }
         if action == "statistics":
+            numeric = df.select_dtypes(include="number")
+            numeric_summary = (
+                json.loads(numeric.agg(["count", "sum", "mean", "min", "max"]).to_json())
+                if len(numeric.columns)
+                else {}
+            )
             return {
                 **base,
                 "row_count": len(df),
                 "dtypes": {str(k): str(v) for k, v in df.dtypes.items()},
+                "numeric_summary": numeric_summary,
             }
         return {"success": False, "error": f"unsupported_action:{action}"}

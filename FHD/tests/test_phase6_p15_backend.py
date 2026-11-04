@@ -2801,26 +2801,29 @@ class TestTWRSettings:
 
 
 class TestTWRExcelAnalysis:
-    """Cover ``_registered_router_excel_analysis``."""
+    """Excel 分析统一委托 handle_excel_analysis，不再维护第二套实现。"""
 
-    def test_excel_analysis_no_file_path(self) -> None:
+    def test_missing_file_path(self) -> None:
         result = twr._registered_router_excel_analysis("read", {}, {}, "normal", "")
         assert result["success"] is False
         assert "file_path" in result["message"]
 
-    def test_excel_analysis_file_path_from_runtime_context(self) -> None:
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
-            ) as mock_toolkit,
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
-            ) as mock_analyzer,
-        ):
-            tk = MagicMock()
-            tk.execute.return_value = {"success": True, "content": []}
-            mock_toolkit.return_value = tk
-            mock_analyzer.return_value = MagicMock()
+    def test_delegates_to_unified_handler(self) -> None:
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
+            result = twr._registered_router_excel_analysis(
+                "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "normal", ""
+            )
+        assert result["success"] is True
+        assert mock_exec.call_args.args[0]["action"] == "statistics"
+
+    def test_file_path_from_runtime_context(self) -> None:
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
             result = twr._registered_router_excel_analysis(
                 "read",
                 {},
@@ -2828,21 +2831,14 @@ class TestTWRExcelAnalysis:
                 "normal",
                 "",
             )
-            assert result["success"] is True
+        assert result["success"] is True
+        assert mock_exec.call_args.args[0]["file_path"] == "/tmp/x.xlsx"
 
-    def test_excel_analysis_file_path_from_last_context(self) -> None:
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
-            ) as mock_toolkit,
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
-            ) as mock_analyzer,
-        ):
-            tk = MagicMock()
-            tk.execute.return_value = {"success": True, "content": []}
-            mock_toolkit.return_value = tk
-            mock_analyzer.return_value = MagicMock()
+    def test_file_path_from_last_context(self) -> None:
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
             result = twr._registered_router_excel_analysis(
                 "read",
                 {},
@@ -2850,35 +2846,19 @@ class TestTWRExcelAnalysis:
                 "normal",
                 "",
             )
-            assert result["success"] is True
+        assert result["success"] is True
+        assert mock_exec.call_args.args[0]["file_path"] == "/tmp/x.xlsx"
 
-    def test_excel_analysis_unknown_action(self) -> None:
-        result = twr._registered_router_excel_analysis(
-            "unknown",
-            {"file_path": "/tmp/x.xlsx"},
-            {},
-            "normal",
-            "",
-        )
-        assert result["success"] is False
-        assert "未知" in result["message"]
-
-    def test_excel_analysis_import_error(self) -> None:
-        import builtins
-
-        real_import = builtins.__import__
-
-        def fake_import(name, *args, **kwargs):
-            if "excel_template_analyzer" in name:
-                raise ImportError("no module")
-            return real_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=fake_import):
+    def test_error_message_alias(self) -> None:
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": False, "error": "unsupported_action"},
+        ):
             result = twr._registered_router_excel_analysis(
-                "read", {"file_path": "/tmp/x.xlsx"}, {}, "normal", ""
+                "unknown", {"file_path": "/tmp/x.xlsx"}, {}, "normal", ""
             )
-            assert result["success"] is False
-            assert "Excel Skill" in result["message"]
+        assert result["success"] is False
+        assert result["message"] == "unsupported_action"
 
 
 class TestTWRExcelImport:

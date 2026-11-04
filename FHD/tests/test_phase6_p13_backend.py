@@ -2333,9 +2333,10 @@ class TestRunNaturalLanguagePandas:
 
     def test_truncation(self) -> None:
         df = pd.DataFrame({"a": list(range(300))})
-        result = run_natural_language_pandas(df, "select all")
+        result = run_natural_language_pandas(df, "select all", max_rows=200)
         assert result["truncated"] is True
         assert result["returned_rows"] == 200
+        assert result["next_offset"] == 200
 
 
 class TestInvalidateWorkflowToolRegistry:

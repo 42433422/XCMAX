@@ -10,7 +10,7 @@ def excel_tool_specs() -> list[Payload]:
     return [
         tool_spec(
             "excel_analysis",
-            "分析 Excel 文件内容，支持读取、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。",
+            "分析 Excel 文件内容，支持读取、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。read/query/aggregate 单次默认返回 1000 行；当结果 has_more=true 时，用 next_offset 作为 offset 继续分页读取，直到 has_more=false。",
             {
                 "file_path": {
                     "type": "string",
@@ -25,6 +25,14 @@ def excel_tool_specs() -> list[Payload]:
                     "description": "表头所在行号（Excel 从 1 开始计数）。报价单等多行标题表格必须与上传预览 extract-grid "
                     "检测到的 header_row_index / tables[].header_row 一致，否则会出现 "
                     "Unnamed 列、大量 nan、价格错位。",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "分页起始数据行（从 0 开始，默认 0）。上一次结果 has_more=true 时，传 next_offset 继续读取。",
+                },
+                "max_rows": {
+                    "type": "integer",
+                    "description": "本次最多返回的数据行数（默认 1000，服务端可配置上限），不要一次性拉全表。",
                 },
                 "action": {
                     "type": "string",
