@@ -100,7 +100,9 @@ async def stream_openai_compatible(
         tools=tools,
         tool_choice=tool_choice,
     )
-    async with _facade().httpx.AsyncClient(timeout=None, limits=_facade()._STREAM_LIMITS) as client:
+    async with _facade().httpx.AsyncClient(
+        timeout=_facade()._STREAM_TIMEOUT, limits=_facade()._STREAM_LIMITS
+    ) as client:
         async with client.stream(
             "POST",
             url,

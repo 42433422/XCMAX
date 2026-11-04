@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 _FAILOVER_NEEDLES = (
     "insufficient_quota",
@@ -22,6 +22,23 @@ _FAILOVER_NEEDLES = (
     "额度",
     "余额不足",
     "payment required",
+    # 网关/上游 5xx 与传输抖动：换厂商或模型可能恢复
+    "internal server error",
+    "bad gateway",
+    "service unavailable",
+    "gateway timeout",
+    "temporarily unavailable",
+    "overloaded",
+    "timeout",
+    "timed out",
+    "readtimeout",
+    "connecterror",
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "remotedisconnected",
+    "remote protocol error",
+    "eof occurred",
 )
 
 
@@ -35,12 +52,12 @@ def chat_failover_max_attempts() -> int:
 
 def is_market_chat_failoverable(status_code: Optional[int], error_text: str) -> bool:
     """市场返回是否值得换厂商/模型再试。"""
-    if status_code in {402, 403, 429}:
+    if status_code in {402, 403, 429, 500, 502, 503, 504}:
         return True
     text = str(error_text or "")
     # 「平台错误(429): ...」
     m = re.search(r"平台错误\((\d{3})\)", text)
-    if m and int(m.group(1)) in {402, 403, 429}:
+    if m and int(m.group(1)) in {402, 403, 429, 500, 502, 503, 504}:
         return True
     low = text.lower()
     return any(n in text or n in low for n in _FAILOVER_NEEDLES)
@@ -148,22 +165,9 @@ def build_chat_failover_candidates(
     return out[:limit]
 
 
-def iter_unique_routes(routes: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
-    seen: set[tuple[str, str]] = set()
-    out: list[tuple[str, str]] = []
-    for p, m in routes:
-        key = ((p or "").strip().lower(), (m or "").strip())
-        if not key[0] or not key[1] or key in seen:
-            continue
-        seen.add(key)
-        out.append(key)
-    return out
-
-
 __all__ = [
     "build_chat_failover_candidates",
     "chat_failover_max_attempts",
     "first_model_from_catalog_block",
     "is_market_chat_failoverable",
-    "iter_unique_routes",
 ]

@@ -8,6 +8,10 @@ def test_failoverable_status_and_markers():
     assert is_market_chat_failoverable(429, "insufficient_quota")
     assert is_market_chat_failoverable(None, "平台错误(402): 余额不足")
     assert is_market_chat_failoverable(403, "配额不足")
+    assert is_market_chat_failoverable(500, "Internal Server Error")
+    assert is_market_chat_failoverable(503, "Service Unavailable")
+    assert is_market_chat_failoverable(None, "平台错误(503): 上游暂不可用")
+    assert is_market_chat_failoverable(None, "ReadTimeout: timed out")
     assert not is_market_chat_failoverable(401, "凭证无效")
 
 

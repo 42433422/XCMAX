@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
@@ -50,8 +51,29 @@ _MODEL_ALIASES: dict[tuple[str, str], str] = {
 # 禁止使用进程级单例 AsyncClient：会在 ``asyncio.run()`` / 线程池等多事件循环场景下
 # 绑定已关闭的 loop，触发 ``RuntimeError: Event loop is closed``（httpx aclose）。
 _LLM_LIMITS = httpx.Limits(max_connections=1000, max_keepalive_connections=200)
-_LLM_TIMEOUT = httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0)
 _STREAM_LIMITS = httpx.Limits(max_connections=1000, max_keepalive_connections=200)
+
+
+def _read_timeout_seconds(name: str, default: float) -> float:
+    try:
+        return max(1.0, float(os.environ.get(name, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+_LLM_TIMEOUT = httpx.Timeout(
+    connect=15.0,
+    read=_read_timeout_seconds("MODSTORE_LLM_READ_TIMEOUT", 300.0),
+    write=60.0,
+    pool=30.0,
+)
+# 流式曾用 timeout=None：上游卡住可挂到 nginx 的 3600s，既拖慢响应也无法换模。
+_STREAM_TIMEOUT = httpx.Timeout(
+    connect=15.0,
+    read=_read_timeout_seconds("MODSTORE_LLM_STREAM_READ_TIMEOUT", 120.0),
+    write=60.0,
+    pool=30.0,
+)
 
 
 def _normalize_openai_base(provider: str, base_url: Optional[str]) -> str:
@@ -198,7 +220,7 @@ async def chat_dispatch(
             st = last.get("status")
             retryable = (
                 transient_exc
-                or st in (429, 502, 503, 504)
+                or st in (429, 500, 502, 503, 504)
                 or any(
                     x in err.lower()
                     for x in (
