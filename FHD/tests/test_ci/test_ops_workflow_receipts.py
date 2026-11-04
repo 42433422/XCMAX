@@ -24,7 +24,7 @@ def run(script, env):
     return subprocess.run(["bash", "-c", script], env=env, capture_output=True, timeout=15)
 
 
-def health(runtime=True, recovery=()):
+def health(runtime=True, recovery=(), error_code="execution_failed"):
     return (
         json.dumps(
             {
@@ -36,18 +36,20 @@ def health(runtime=True, recovery=()):
                     "pending_job_count": 60,
                     "missing_required_jobs": [],
                     "unhealthy_runtime_jobs": [] if runtime else ["loop"],
-                    "runtime_jobs": []
-                    if runtime
-                    else [
-                        {
-                            "job_id": "loop",
-                            "state": "failing",
-                            "last_status": "failed",
-                            "last_error_code": "execution_failed",
-                            "last_run_at": "2026-11-03T00:00:00+00:00",
-                            "last_success_at": "2026-11-02T00:00:00+00:00",
-                        }
-                    ],
+                    "runtime_jobs": (
+                        []
+                        if runtime
+                        else [
+                            {
+                                "job_id": "loop",
+                                "state": "failing",
+                                "last_status": "failed",
+                                "last_error_code": error_code,
+                                "last_run_at": "2026-11-03T00:00:00+00:00",
+                                "last_success_at": "2026-11-02T00:00:00+00:00",
+                            }
+                        ]
+                    ),
                     **({"recovering_runtime_jobs": recovery} if recovery is not None else {}),
                 },
             }
@@ -73,6 +75,15 @@ def health(runtime=True, recovery=()):
         ("ok", "false", health(recovery=None), health(recovery=None), "0", "unhealthy", "true"),
         ("ok", "false", health(recovery="loop"), health(recovery="loop"), "0", "unhealthy", "true"),
         ("ok", "false", health(recovery=[None]), health(recovery=[None]), "0", "unhealthy", "true"),
+        (
+            "ok",
+            "false",
+            health(False, error_code="api_key=must-not-leak"),
+            health(),
+            "0",
+            "healthy",
+            "true",
+        ),
     ],
 )
 def test_watchdog_never_closes_without_independent_health(
@@ -122,6 +133,9 @@ def test_watchdog_never_closes_without_independent_health(
     assert result.returncode == 0, result.stderr
     output = (tmp_path / "output").read_text().splitlines()
     assert f"health={expected}" in output and f"restart_triggered={restarted}" in output
+    visible = "\n".join(output) + result.stdout.decode() + result.stderr.decode()
+    assert "must-not-leak" not in visible
+    assert "api_key" not in visible
     assert not (tmp_path / "scheduler_watchdog_key").exists()
     if dry == "true" or (expected in {"healthy", "recovering"} and restarted == "false"):
         assert not (tmp_path / "restarted").exists()

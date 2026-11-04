@@ -201,11 +201,28 @@ def _add_column_if_missing(engine: Engine, table: str, column: str, ddl_type: st
         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {compatible_ddl}"))
 
 
+def _ensure_scheduler_runtime_indexes(engine: Engine) -> None:
+    """Keep per-job ledger lookups index-only on databases created before the index existed."""
+    statements = (
+        "CREATE INDEX IF NOT EXISTS ix_scheduler_job_runs_job_id_id "
+        "ON scheduler_job_runs (job_id, id)",
+        "CREATE INDEX IF NOT EXISTS ix_scheduler_job_runs_job_status_id "
+        "ON scheduler_job_runs (job_id, status, id)",
+    )
+    try:
+        with engine.begin() as conn:
+            for stmt in statements:
+                conn.execute(text(stmt))
+    except RECOVERABLE_ERRORS:
+        return
+
+
 def init_db(db_path: Optional[Path] = None) -> None:
     engine = get_engine(db_path)
     _create_schema(engine)
     _ensure_columns(engine)
     _ensure_daily_action_items_table(engine)
+    _ensure_scheduler_runtime_indexes(engine)
     init_default_plan_templates()
 
 
