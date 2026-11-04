@@ -38,7 +38,9 @@ export function useStartupAuth(options: {
       const res = await authApi.validateSession()
       if (!current()) return { ok: false, entitledModIds: [] }
       const resRow = asRecord(res)
-      if (readValid(res)) {
+      let valid = false
+      try { valid = readValid(res) } catch { valid = false }
+      if (valid) {
         clearHostPackSkippedSession()
         // Establish the trusted owner before taking a market credential snapshot.
         await import('@/stores/accountProfile')
@@ -61,8 +63,11 @@ export function useStartupAuth(options: {
         }
         return { ok: true, entitledModIds, accountUsername }
       }
-    } catch {
-      // Fall through to the local login page.
+    } catch (error) {
+      if (!current()) return { ok: false, entitledModIds: [] }
+      const status = Number((error as { status?: unknown } | null)?.status)
+      // Timeout, abort, or a dropped connection is not a logged-out session.
+      if (status !== 401 && status !== 403) return { ok: false, entitledModIds: [] }
     }
     if (!current()) return { ok: false, entitledModIds: [] }
     dismissStartupSplashImmediate()

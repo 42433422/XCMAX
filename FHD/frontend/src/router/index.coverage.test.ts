@@ -1002,7 +1002,7 @@ describe('router/index 覆盖率补齐', () => {
       expect(router.currentRoute.value.name).toBe('login')
     })
 
-    it('sends the protected page to login when the background refresh drops the signed-in profile', async () => {
+    it('keeps a valid session when a background refresh has not republished the profile', async () => {
       mockIsEnterpriseEdition.mockReturnValue(true)
       mockValidateEnterpriseSession.mockResolvedValue(true)
       mockAccountProfileStore.loaded = true
@@ -1014,8 +1014,7 @@ describe('router/index 覆盖率补齐', () => {
       mockAccountProfileStore.loaded = false
       finish()
       await flushPromises()
-      expect(router.currentRoute.value.name).toBe('login')
-      expect(router.currentRoute.value.query.redirect).toBe('/settings')
+      expect(router.currentRoute.value.name).toBe('settings')
     })
 
     it('keeps the page when the background profile refresh fails', async () => {

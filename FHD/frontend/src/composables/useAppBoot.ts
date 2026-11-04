@@ -9,7 +9,6 @@ import { startupPageReadyKey, useStartupSplash, waitForCriticalFonts } from '@/c
 import { useAppShellBridge } from '@/composables/useAppShellBridge'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
 import { getAuthSessionEpoch } from '@/utils/authSessionCache'
-import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { buildLoginLocation } from '@/utils/startupRedirect'
 
 export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
@@ -125,7 +124,10 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     }
   }
 
-  watch(() => [getAuthSessionEpoch(), productReadAccountEpoch.value, publicEntry.value], () => {
+  // Scope-generation bumps and in-splash route changes must not restart this gate.
+  // Those restarts kept the overlay up while chat assets loaded, then a slow
+  // hydration was treated as logout. A real login/logout still changes the auth epoch.
+  watch(() => [getAuthSessionEpoch(), publicEntry.value], () => {
     if (publicEntry.value) {
       splash.dismissStartupSplashImmediate()
       xcmaxSync.stop()
@@ -134,9 +136,6 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
       if (mounted) retryStartup()
     }
   }, { immediate: true, flush: 'sync' })
-  watch(() => route.fullPath, () => {
-    if (mounted && splash.startupVisible.value && !publicEntry.value) retryStartup()
-  }, { flush: 'sync' })
 
   watch(splash.appReady, ready => {
     const root = document.getElementById('app')

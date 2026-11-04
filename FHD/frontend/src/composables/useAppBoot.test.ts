@@ -265,7 +265,7 @@ describe('workspace startup readiness', () => {
     state.ensureAuth.mockResolvedValueOnce({ ok: true, entitledModIds: ['old-mod'] }).mockReturnValueOnce(auth.promise)
     const boot = mountBoot()
     await settle()
-    state.accountEpoch.value++
+    state.authEpoch.value++
     await settle()
     state.account.workspaceReady = true
     await settle()
@@ -419,13 +419,26 @@ describe('workspace startup readiness', () => {
     expect(boot.appReady.value).toBe(true)
   })
 
-  it.each(['auth', 'account'] as const)('retires old %s scope work and waits for the new session', async (scope) => {
+  it('keeps the workbench up when only the scope generation changes', async () => {
+    const boot = mountBoot()
+    await settle()
+    expect(boot.appReady.value).toBe(true)
+    const calls = state.ensureAuth.mock.calls.length
+    state.accountEpoch.value++
+    state.route.fullPath = '/chat?hydrating=1'
+    await settle()
+    expect(state.ensureAuth.mock.calls.length).toBe(calls)
+    expect(boot.appReady.value).toBe(true)
+    expect(boot.startupVisible.value).toBe(false)
+    expect(state.router.replace).not.toHaveBeenCalled()
+  })
+
+  it.each(['auth'] as const)('retires old %s scope work and waits for the new session', async (scope) => {
     const old = deferred<unknown[]>(), current = deferred<unknown[]>()
     state.loadFont.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise)
     const boot = mountBoot()
     await settle()
     if (scope === 'auth') state.authEpoch.value++
-    else state.accountEpoch.value++
     expect(boot.appReady.value).toBe(false)
     await settle()
     old.resolve([{ status: 'loaded' }]); await settle()
@@ -440,7 +453,7 @@ describe('workspace startup readiness', () => {
     state.ensureAuth.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise)
     const boot = mountBoot()
     await settle()
-    state.accountEpoch.value++
+    state.authEpoch.value++
     await settle()
     old.resolve({ ok: true, entitledModIds: ['old-mod'] })
     await settle()
@@ -464,7 +477,7 @@ describe('workspace startup readiness', () => {
     })
     const boot = mountBoot()
     await settle()
-    state.accountEpoch.value++
+    state.authEpoch.value++
     await settle()
     old.resolve(); await settle()
     expect(forced).toBe(2)
@@ -534,7 +547,7 @@ describe('workspace startup readiness', () => {
     expect(state.sync.stop).toHaveBeenCalled()
   })
 
-  it('retries startup when the route changes while the gate is still visible', async () => {
+  it('does not restart startup when the route changes under the splash', async () => {
     const font = deferred<unknown[]>()
     state.loadFont.mockReturnValue(font.promise)
     const boot = mountBoot()
@@ -543,8 +556,9 @@ describe('workspace startup readiness', () => {
     const before = state.loadFont.mock.calls.length
     state.route.fullPath = '/settings'
     await settle()
-    expect(state.loadFont.mock.calls.length).toBeGreaterThan(before)
+    expect(state.loadFont.mock.calls.length).toBe(before)
     font.resolve([{ status: 'loaded' }]); await settle()
+    expect(boot.appReady.value).toBe(true)
   })
 
   it('re-initializes mods when the tab becomes visible after a ready workspace lost its catalog', async () => {

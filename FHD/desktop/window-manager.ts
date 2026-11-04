@@ -241,6 +241,7 @@ export async function createWindow(): Promise<void> {
   desktopRuntime.mainWindow = mainWindow
   desktopRuntime.rendererFailedDuringStartup = false
   let startupWindowShown = false
+  let lastRendererReloadAt = 0
   const showStartupWindow = () => {
     if (startupWindowShown || mainWindow.isDestroyed()) return
     startupWindowShown = true
@@ -328,19 +329,16 @@ export async function createWindow(): Promise<void> {
       desktopRuntime.rendererFailedDuringStartup = true
       return
     }
-    if (!app.isQuitting && details.reason !== 'clean-exit') {
-      void dialog.showMessageBox(mainWindow, {
-        type: 'error',
-        title: APP_NAME,
-        message: '界面进程意外退出',
-        detail: '崩溃信息已保存在数据目录。可以重新加载界面继续工作，后端与本地数据不会被清除。',
-        buttons: ['重新加载', '退出'],
-        defaultId: 0,
-        cancelId: 1,
-      }).then(({ response }) => {
-        if (response === 0 && !mainWindow.isDestroyed()) mainWindow.reload()
-        else app.quit()
-      })
+    if (!app.isQuitting && details.reason !== 'clean-exit' && !mainWindow.isDestroyed()) {
+      const now = Date.now()
+      if (now - lastRendererReloadAt < 3000) {
+        writeBackendLog(`[crash] skip reload; renderer crashed again within 3s (${summary})\n`)
+        return
+      }
+      lastRendererReloadAt = now
+      // Reload the same document. Quitting or sending the user to login drops a still-valid session.
+      writeBackendLog(`[crash] reloading renderer in place after ${summary}\n`)
+      mainWindow.reload()
     }
   })
 
