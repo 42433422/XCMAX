@@ -18,6 +18,38 @@ from tests.fixtures.etl_template.sources.generate import large_quotation, sample
 from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
 
 
+@pytest.fixture(autouse=True)
+def _legacy_transport_budget(monkeypatch):
+    """Pin this suite's historical 2000-cell/384KB multi-batch scenarios.
+
+    These synthetic workbooks are sized for pause/resume/namespacing mechanics;
+    pack-size tuning is covered by test_reviewed_excel_budget.py.
+    """
+    from app.application import (
+        reviewed_excel_budget,
+        reviewed_excel_evidence,
+        reviewed_excel_grouping,
+        reviewed_excel_multipack_stitch,
+        reviewed_excel_plan,
+    )
+
+    for module in (
+        reviewed_excel_evidence,
+        reviewed_excel_budget,
+        reviewed_excel_plan,
+        reviewed_excel_grouping,
+        reviewed_excel_multipack_stitch,
+    ):
+        monkeypatch.setattr(module, "MAX_MODEL_CELLS", 2000, raising=False)
+    monkeypatch.setattr(reviewed_excel_budget, "MAX_REQUEST_BYTES", 384_000, raising=False)
+    for module in (
+        reviewed_excel_evidence,
+        reviewed_excel_grouping,
+        reviewed_excel_multipack_stitch,
+    ):
+        monkeypatch.setattr(module, "MAX_MODEL_TEXT_BYTES", 384_000, raising=False)
+
+
 def input_digest(messages):
     return hashlib.sha256(
         json.dumps(messages, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
