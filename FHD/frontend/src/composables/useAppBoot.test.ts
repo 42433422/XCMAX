@@ -125,6 +125,41 @@ describe('workspace startup readiness', () => {
     expect(boot.appReady.value).toBe(true)
   })
 
+  it('retries a session check that timed out and enters once it succeeds', async () => {
+    state.ensureAuth
+      .mockResolvedValueOnce({ ok: false, entitledModIds: [], unavailable: true })
+      .mockResolvedValueOnce({ ok: true, entitledModIds: [] })
+    const boot = mountBoot()
+    await settle()
+    expect(boot.startupError.value).toBe('')
+    await vi.advanceTimersByTimeAsync(500)
+    await settle()
+    expect(state.ensureAuth).toHaveBeenCalledTimes(2)
+    expect(boot.startupError.value).toBe('')
+    expect(boot.appReady.value).toBe(true)
+  })
+
+  it('reports an unreachable session check instead of asking to log in again', async () => {
+    state.ensureAuth.mockResolvedValue({ ok: false, entitledModIds: [], unavailable: true })
+    const boot = mountBoot()
+    await settle()
+    await vi.advanceTimersByTimeAsync(2_000)
+    await settle()
+    expect(state.ensureAuth).toHaveBeenCalledTimes(3)
+    expect(boot.appReady.value).toBe(false)
+    expect(boot.startupError.value).toContain('本地服务响应超时')
+    expect(boot.startupError.value).not.toContain('请返回登录')
+  })
+
+  it('still sends a signed-out session back to login without retrying', async () => {
+    state.ensureAuth.mockResolvedValue({ ok: false, entitledModIds: [] })
+    const boot = mountBoot()
+    await settle()
+    expect(state.ensureAuth).toHaveBeenCalledOnce()
+    expect(boot.appReady.value).toBe(false)
+    expect(boot.startupError.value).toContain('登录未确认')
+  })
+
   it('waits for current workspace hydration within authenticated startup', async () => {
     const hydration = deferred()
     state.account.workspaceReady = false

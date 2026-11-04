@@ -89,6 +89,7 @@ describe('useStartupAuth', () => {
     const { ensureStartupAuthenticated } = getComposable()
     const result = await ensureStartupAuthenticated()
     expect(result.ok).toBe(false)
+    expect(result.unavailable).toBe(true)
     expect(mockDismiss).not.toHaveBeenCalled()
     expect(mockRouter.replace).not.toHaveBeenCalled()
   })

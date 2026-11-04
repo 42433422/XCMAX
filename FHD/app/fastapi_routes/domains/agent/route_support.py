@@ -140,6 +140,14 @@ def owned_run(
         return None, JSONResponse(
             {"success": False, "message": "agent run 不存在"}, status_code=404
         )
+    if not run_owned_by(run, principal):
+        return None, JSONResponse(
+            {"success": False, "message": "无权访问该 agent run"}, status_code=403
+        )
+    return run, None
+
+
+def run_owned_by(run: Any, principal: AgentPrincipal) -> bool:
     runtime_context = run.metadata.get("runtime_context") or {}
     binding = runtime_context.get("_mod_authorization") or {}
     requested_binding = principal.mod_authorization or {}
@@ -148,15 +156,11 @@ def owned_run(
     # Legacy unbound runs still require the authenticated owner and tenant.
     # Platform administration is not a grant to access customer task data.
     same_mod = (not run_mod) or run_mod == requested_mod
-    if (
-        not same_mod
-        or run.user_id != principal.user_id
-        or tenant_id_of_run(run) != principal.tenant_id
-    ):
-        return None, JSONResponse(
-            {"success": False, "message": "无权访问该 agent run"}, status_code=403
-        )
-    return run, None
+    return (
+        same_mod
+        and run.user_id == principal.user_id
+        and tenant_id_of_run(run) == principal.tenant_id
+    )
 
 
 def task_scope_matches(
@@ -175,7 +179,7 @@ def task_scope_matches(
         # 就把用户**自己**的历史任务隐藏（前端 window.fetch 补丁总会注入该头，
         # 故该分支等于让这类任务永久不可见）。此处不再据 mod 绑定额外过滤。
         return True
-    return all(owned_run(orchestrator, run.run_id, principal)[1] is None for run in runs)
+    return all(run_owned_by(run, principal) for run in runs)
 
 
 def scoped_tasks(

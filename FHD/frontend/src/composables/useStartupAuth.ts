@@ -13,6 +13,8 @@ export type StartupAuthResult = {
   ok: boolean
   entitledModIds: string[]
   accountUsername?: string
+  /** The session could not be checked (timeout, dropped connection, 5xx); not a logout. */
+  unavailable?: boolean
 }
 
 export function useStartupAuth(options: {
@@ -67,7 +69,7 @@ export function useStartupAuth(options: {
       if (!current()) return { ok: false, entitledModIds: [] }
       const status = Number((error as { status?: unknown } | null)?.status)
       // Timeout, abort, or a dropped connection is not a logged-out session.
-      if (status !== 401 && status !== 403) return { ok: false, entitledModIds: [] }
+      if (status !== 401 && status !== 403) return { ok: false, entitledModIds: [], unavailable: true }
     }
     if (!current()) return { ok: false, entitledModIds: [] }
     dismissStartupSplashImmediate()
