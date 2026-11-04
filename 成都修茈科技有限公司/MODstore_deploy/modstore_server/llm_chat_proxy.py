@@ -16,12 +16,8 @@ from modstore_server.llm_chat_providers import (
     chat_anthropic_compatible as chat_anthropic_compatible,
 )
 from modstore_server.llm_chat_providers import chat_google as chat_google
-from modstore_server.llm_chat_providers import (
-    chat_openai_compatible as chat_openai_compatible,
-)
-from modstore_server.llm_chat_providers import (
-    stream_openai_compatible as stream_openai_compatible,
-)
+from modstore_server.llm_chat_providers import chat_openai_compatible as chat_openai_compatible
+from modstore_server.llm_chat_providers import stream_openai_compatible as stream_openai_compatible
 from modstore_server.llm_key_resolver import (
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
     is_minimax_token_plan_key,
@@ -31,13 +27,9 @@ from modstore_server.llm_key_resolver import (
 )
 from modstore_server.llm_media_proxy import _first_video_url as _first_video_url
 from modstore_server.llm_media_proxy import image_dispatch as image_dispatch
-from modstore_server.llm_media_proxy import (
-    image_openai_compatible as image_openai_compatible,
-)
+from modstore_server.llm_media_proxy import image_openai_compatible as image_openai_compatible
 from modstore_server.llm_media_proxy import video_dispatch as video_dispatch
-from modstore_server.llm_media_proxy import (
-    video_openai_compatible as video_openai_compatible,
-)
+from modstore_server.llm_media_proxy import video_openai_compatible as video_openai_compatible
 from modstore_server.multimodal_llm import messages_use_openai_multipart_content
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.platform_model_config import PlatformApiKey
