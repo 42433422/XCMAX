@@ -42,17 +42,17 @@ async function syncTenantScopedStoresFromProfile(
   const refreshing = refreshTenantScopedClientStores(input)
   const epoch = productReadAccountEpoch.value
   await refreshing
-  // Preferences already retried once inside the refresh. If the generation
-  // still moved, a newer profile read owns industry loading — do not fail this login.
-  if (epoch !== productReadAccountEpoch.value) return
+  // A newer profile owns the scope; this hydration must not publish readiness.
+  if (epoch !== productReadAccountEpoch.value) throw new Error(SCOPE_MOVED)
   if (tenantId !== null || localUserId !== null || marketUserId !== null) {
     const { useIndustryStore } = await import('@/stores/industry')
     try {
       await useIndustryStore().loadFromServer(accountKind !== 'admin')
     } catch (error) {
-      if (scopeMoved(error)) return
+      if (scopeMoved(error)) throw new Error(SCOPE_MOVED)
       throw error
     }
+    if (epoch !== productReadAccountEpoch.value) throw new Error(SCOPE_MOVED)
   }
 }
 
@@ -80,11 +80,8 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const sessionCheckUnavailable = ref(false)
   const workspaceEpoch = ref(-1)
   const workspaceHydrationReady = ref(false)
-  // Hydration readiness outlives a later scope-generation bump. The epoch match
-  // only keeps an already verified workspace visible while the next read is in flight.
-  const workspaceReady = computed(() => loaded.value && (
-    workspaceHydrationReady.value || workspaceEpoch.value === productReadAccountEpoch.value
-  ))
+  // A previously verified workspace stays visible only while its scope remains current.
+  const workspaceReady = computed(() => loaded.value && workspaceEpoch.value === productReadAccountEpoch.value)
   let hydrationEpoch = 0
   let clearedEpoch = 0
   let latestHydration: { epoch: number; promise: Promise<void> } | null = null
@@ -154,10 +151,12 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       impersonatingUsername.value,
     )
     // The synchronous scope update above establishes the owner of this hydration.
+    const ownerEpoch = productReadAccountEpoch.value
     const scopeCurrent = captureAuthSession()
     const authAtStart = getAuthSessionEpoch()
     const cleared = clearedEpoch
     function publishReady() {
+      if (ownerEpoch !== productReadAccountEpoch.value) throw new Error(SCOPE_MOVED)
       workspaceEpoch.value = productReadAccountEpoch.value
       workspaceHydrationReady.value = true
     }

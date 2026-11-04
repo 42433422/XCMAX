@@ -84,11 +84,11 @@ export function applyWorkspacePrefsToLocalCache(prefs: WorkspacePrefs, scope?: s
   }
 }
 
-export async function hydrateWorkspacePrefsFromServer(scope?: string): Promise<WorkspacePrefs | null> {
+export async function hydrateWorkspacePrefsFromServer(scope?: string, isCurrent: () => boolean = () => true): Promise<WorkspacePrefs | null> {
   try {
     const resp = await fetchWorkspacePrefs()
     const prefs = resp.data || {}
-    if (resp.owner_id) {
+    if (resp.owner_id && isCurrent()) {
       applyWorkspacePrefsToLocalCache(prefs, scope)
     }
     return prefs

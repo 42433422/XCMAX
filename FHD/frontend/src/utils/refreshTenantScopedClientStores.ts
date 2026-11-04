@@ -23,19 +23,15 @@ function reloadScopedStore(reload: () => void): void {
 }
 
 export async function refreshTenantScopedClientStores(input?: TenantStorageScopeInput, hydrate = true): Promise<void> {
-  let scope = resolveTenantStorageScope(input)
-  // A concurrent login/refresh can bump the scope generation while prefs load.
-  // Retry once, then adopt the generation this call just wrote instead of aborting.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    updateProductReadAccountScope(input)
-    const epoch = productReadAccountEpoch.value
-    invalidateTenantStorageScopeCache()
-    scope = resolveTenantStorageScope(input)
-    setTenantStorageScopeCache(scope)
-    reloadScopedStore(() => useWorkflowAiEmployeesStore().reloadForTenantScope(scope))
-    if (hydrate) await hydrateWorkspacePrefsFromServer(scope)
-    if (epoch === productReadAccountEpoch.value) break
-  }
+  updateProductReadAccountScope(input)
+  const epoch = productReadAccountEpoch.value
+  invalidateTenantStorageScopeCache()
+  const scope = resolveTenantStorageScope(input)
+  setTenantStorageScopeCache(scope)
+  reloadScopedStore(() => useWorkflowAiEmployeesStore().reloadForTenantScope(scope))
+  if (hydrate) await hydrateWorkspacePrefsFromServer(scope, () => epoch === productReadAccountEpoch.value)
+  // A later login owns the active scope. Never restore the older input or publish its stores.
+  if (epoch !== productReadAccountEpoch.value) return
   // Workspace preferences can write tenant-scoped localStorage in this same
   // document.  The browser emits no `storage` event to its writing document,
   // so refresh the reactive sidebar acknowledgement explicitly.
