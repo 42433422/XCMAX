@@ -169,6 +169,10 @@ def format_runtime_context_for_llm(runtime_context: Mapping[str, Any] | None) ->
             )
         else:
             lines.append('- 调用示例: {"file_path": "' + fp_single + '", "action": "read"}')
+        lines.append(
+            "- excel_analysis.read 单页默认 1000 行；若结果 has_more=true，"
+            "用 next_offset 作为 offset 继续读取，直到覆盖所需数据或 has_more=false。"
+        )
 
         linked_preview = runtime_context.get("excel_linked_grid_preview")
         if isinstance(linked_preview, dict):

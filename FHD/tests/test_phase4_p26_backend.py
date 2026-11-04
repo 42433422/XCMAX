@@ -265,55 +265,21 @@ def test_settings_enable_startup(mock_get: MagicMock) -> None:
 
 
 def test_excel_analysis_missing_file_path() -> None:
-    out = _registered_router_excel_analysis("analyze", {}, {}, "pro", "")
+    out = _registered_router_excel_analysis("read", {}, {}, "pro", "")
     assert out["success"] is False
+    assert "file_path" in out["message"]
 
 
-def test_excel_analysis_read_from_runtime_context() -> None:
-    mock_skill = MagicMock()
-    mock_skill.execute.return_value = {"success": True, "content": []}
-    with (
-        patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_skill,
-        ),
-        patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=MagicMock(),
-        ),
-    ):
-        out = _registered_router_excel_analysis(
-            "read",
-            {},
-            {"excel_analysis": {"file_path": "/tmp/x.xlsx"}},
-            "pro",
-            "",
-        )
-    assert out["success"] is True
-
-
-def test_excel_analysis_statistics() -> None:
-    mock_tk = MagicMock()
-    mock_tk.execute.return_value = {
-        "success": True,
-        "content": [{"cells": [{"value": "1"}, {"value": "2"}]}],
-        "row_count": 1,
-    }
-    with (
-        patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_tk,
-        ),
-        patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=MagicMock(),
-        ),
-    ):
+def test_excel_analysis_delegates_to_unified_handler() -> None:
+    with patch(
+        "app.application.tools.workflow.handle_excel_analysis",
+        return_value={"success": True},
+    ) as mock_exec:
         out = _registered_router_excel_analysis(
             "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "pro", ""
         )
     assert out["success"] is True
-    assert out["statistics"]["sum"] == 3.0
+    assert mock_exec.call_args.args[0]["action"] == "statistics"
 
 
 def test_excel_import_missing_pending_id() -> None:

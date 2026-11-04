@@ -1258,48 +1258,39 @@ class TestMemoryV2Router:
 
 
 class TestExcelAnalysisRouter:
-    def test_missing_file_path_no_context(self):
+    def test_missing_file_path(self):
         result = _registered_router_excel_analysis("read", {}, {}, "admin", "")
         assert result["success"] is False
         assert "file_path" in result["message"]
 
-    def test_file_path_from_excel_analysis_context(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {"success": True}
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
+    def test_delegates_action_and_params(self):
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
             result = _registered_router_excel_analysis(
-                "read",
-                {},
-                {"excel_analysis": {"file_path": "/tmp/x.xlsx"}},
-                "admin",
-                "",
+                "read", {"file_path": "/tmp/x.xlsx", "max_rows": 100}, {}, "admin", ""
             )
         assert result["success"] is True
+        assert mock_exec.call_args.args[0]["action"] == "read"
+        assert mock_exec.call_args.args[0]["max_rows"] == 100
 
-    def test_file_path_from_last_excel_analysis_context(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {"success": True}
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
+    def test_file_path_from_runtime_context(self):
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
+            result = _registered_router_excel_analysis(
+                "read", {}, {"excel_analysis": {"file_path": "/tmp/x.xlsx"}}, "admin", ""
+            )
+        assert result["success"] is True
+        assert mock_exec.call_args.args[0]["file_path"] == "/tmp/x.xlsx"
+
+    def test_file_path_from_last_context(self):
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
             result = _registered_router_excel_analysis(
                 "read",
                 {},
@@ -1308,292 +1299,30 @@ class TestExcelAnalysisRouter:
                 "",
             )
         assert result["success"] is True
+        assert mock_exec.call_args.args[0]["file_path"] == "/tmp/x.xlsx"
 
-    def test_import_error(self):
-        real_import = __import__
+    def test_query_question_uses_natural_language(self):
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
+            result = _registered_router_excel_analysis(
+                "query", {"file_path": "/tmp/x.xlsx", "question": "总和是多少"}, {}, "admin", ""
+            )
+        assert result["success"] is True
+        assert mock_exec.call_args.args[0]["action"] == "excel_query"
+        assert mock_exec.call_args.args[0]["natural_language"] == "总和是多少"
 
-        def fake_import(name, *args, **kwargs):
-            if "excel_toolkit" in name or "excel_analyzer" in name:
-                raise ImportError("no skill")
-            return real_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=fake_import):
+    def test_error_message_alias(self):
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": False, "error": "read_excel_failed"},
+        ):
             result = _registered_router_excel_analysis(
                 "read", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
             )
         assert result["success"] is False
-
-    def test_read_action(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {"success": True, "content": []}
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "read", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
-            )
-        assert result["success"] is True
-
-    def test_structure_action(self):
-        mock_toolkit = MagicMock()
-        mock_analyzer = MagicMock()
-        mock_analyzer.execute.return_value = {"success": True}
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "structure", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
-            )
-        assert result["success"] is True
-
-    def test_statistics_action_with_values(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {
-            "success": True,
-            "content": [{"cells": [{"value": 1}, {"value": 2}, {"value": "x"}]}],
-            "row_count": 1,
-        }
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
-            )
-        assert result["success"] is True
-        assert result["statistics"]["count"] == 2
-
-    def test_statistics_action_no_values(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {
-            "success": True,
-            "content": [{"cells": [{"value": "x"}]}],
-            "row_count": 1,
-        }
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
-            )
-        assert result["success"] is True
-        assert result["statistics"]["count"] == 0
-
-    def test_statistics_action_view_fails(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {"success": False}
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
-            )
-        assert result["success"] is False
-
-    def test_query_no_question(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {
-            "success": True,
-            "content": [{"cells": [{"value": 1}]}],
-        }
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "query", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
-            )
-        assert result["success"] is True
-        assert "data" in result
-
-    def test_query_sum_question(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {
-            "success": True,
-            "content": [{"cells": [{"value": 1}, {"value": 2}]}],
-        }
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "query",
-                {"file_path": "/tmp/x.xlsx", "question": "总和是多少"},
-                {},
-                "admin",
-                "",
-            )
-        assert result["success"] is True
-        assert "total" in result
-
-    def test_query_max_question(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {
-            "success": True,
-            "content": [{"cells": [{"value": 5}, {"value": 3}]}],
-        }
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "query",
-                {"file_path": "/tmp/x.xlsx", "question": "最大值"},
-                {},
-                "admin",
-                "",
-            )
-        assert result["success"] is True
-        assert result["max"] == 5
-
-    def test_query_max_no_values(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {
-            "success": True,
-            "content": [{"cells": [{"value": None}]}],
-        }
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "query",
-                {"file_path": "/tmp/x.xlsx", "question": "最大值"},
-                {},
-                "admin",
-                "",
-            )
-        assert result["success"] is True
-        assert "未找到" in result["answer"]
-
-    def test_query_view_fails(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {"success": False}
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "query", {"file_path": "/tmp/x.xlsx", "question": "x"}, {}, "admin", ""
-            )
-        assert result["success"] is False
-
-    def test_query_default_branch(self):
-        mock_toolkit = MagicMock()
-        mock_toolkit.execute.return_value = {
-            "success": True,
-            "content": [{"cells": [{"value": 1}]}],
-        }
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "query",
-                {"file_path": "/tmp/x.xlsx", "question": "随便看看"},
-                {},
-                "admin",
-                "",
-            )
-        assert result["success"] is True
-
-    def test_unknown_action(self):
-        mock_toolkit = MagicMock()
-        mock_analyzer = MagicMock()
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-                return_value=mock_toolkit,
-            ),
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-                return_value=mock_analyzer,
-            ),
-        ):
-            result = _registered_router_excel_analysis(
-                "fly", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
-            )
-        assert result["success"] is False
+        assert result["message"] == "read_excel_failed"
 
 
 # ===========================================================================

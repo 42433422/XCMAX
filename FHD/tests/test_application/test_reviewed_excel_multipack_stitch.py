@@ -19,8 +19,13 @@ def _cell(sheet: str, coord: str, value: str) -> dict:
     }
 
 
-def test_overlap_anchors_on_long_sheet():
-    # 2500 fake cells on one sheet → must split with overlap metadata
+def test_overlap_anchors_on_long_sheet(monkeypatch):
+    # 2500 fake cells on one sheet → must split with overlap metadata. The pack
+    # boundary mechanism is independent of the tuned pack size, so pin the
+    # historical 2000-cell budget instead of resizing the synthetic sheet.
+    from app.application import reviewed_excel_multipack_stitch as stitch
+
+    monkeypatch.setattr(stitch, "MAX_MODEL_CELLS", 2000)
     cells = []
     for row in range(1, 501):
         for col in range(1, 6):

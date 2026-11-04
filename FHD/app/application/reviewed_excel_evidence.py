@@ -545,8 +545,8 @@ def candidate_fragment_links(
     return {"items": links, "omitted": total - len(links)}
 
 
-MAX_MODEL_CELLS = 2000
-MAX_MODEL_TEXT_BYTES = 384_000  # raised with 2000-cell packs; product envelope ~256–384KB
+MAX_MODEL_CELLS = 20000
+MAX_MODEL_TEXT_BYTES = 3_840_000  # raised with 20000-cell packs; ~192KB per 1000 cells
 MAX_VALUE_CHARS = 4000
 
 

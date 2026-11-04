@@ -7,9 +7,9 @@ function bindOrdersTableEvents() {
     const tbody = document.getElementById('ordersTableBody');
     if (!tbody) return;
     tbody.addEventListener('click', function(e) {
-        const target = e.target.closest('[data-action="delete-order"][data-order-number]');
+        const target = e.target.closest('[data-action="delete-order"][data-order-id]');
         if (!target) return;
-        deleteOrder(target.getAttribute('data-order-number'));
+        deleteOrder(target.getAttribute('data-order-id'));
     });
 }
 
@@ -60,7 +60,7 @@ function renderOrders(orders) {
         deleteBtn.className = 'btn btn-danger btn-sm';
         deleteBtn.textContent = '删除';
         deleteBtn.setAttribute('data-action', 'delete-order');
-        deleteBtn.setAttribute('data-order-number', encodeURIComponent(o.order_number || ''));
+        deleteBtn.setAttribute('data-order-id', encodeURIComponent(o.id || ''));
         actionTd.appendChild(deleteBtn);
         tr.appendChild(actionTd);
 
@@ -68,11 +68,11 @@ function renderOrders(orders) {
     });
 }
 
-function deleteOrder(orderNumber) {
-    const decodedOrderNumber = decodeURIComponent(orderNumber);
-    if (!confirm('确定要删除订单 ' + decodedOrderNumber + ' 吗？')) return;
+function deleteOrder(recordId) {
+    const decodedRecordId = decodeURIComponent(recordId);
+    if (!confirm('确定要删除这条出货记录吗？此操作不可恢复！')) return;
     
-    fetch(API_BASE + '/api/orders/' + encodeURIComponent(decodedOrderNumber), {
+    fetch(API_BASE + '/api/shipment/orders/' + encodeURIComponent(decodedRecordId), {
         method: 'DELETE'
     }).then(r => r.json()).then(data => {
         if (data.success) {
@@ -87,11 +87,6 @@ function deleteOrder(orderNumber) {
 }
 
 function clearAllOrders() {
-    const key = prompt('请输入密钥确认清空:');
-    if (key !== '61408693') {
-        alert('密钥错误');
-        return;
-    }
     if (!confirm('确定要清空所有出货记录吗？此操作不可恢复！')) return;
     
     fetch(API_BASE + '/api/orders/clear-all', {

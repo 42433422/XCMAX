@@ -129,8 +129,8 @@ def test_complete_merge_metadata_over_request_budget_is_rejected_before_provider
     _, review = merged_source(1)
     # Legal, disjoint source geometry; only one nonempty cell. The rejection must
     # be the complete request envelope, not the cell-pack guards. Scale merges so
-    # the prepared request exceeds the live MAX_REQUEST_BYTES (384KB for 2000-cell packs).
-    merge_count = 30_000
+    # the prepared request exceeds the live MAX_REQUEST_BYTES (3.84MB for 20000-cell packs).
+    merge_count = 300_000
     review["sheet_overview"][0]["rows"] = merge_count
     review["sheet_overview"][0]["merged_regions"] = [
         f"A{row}:B{row}" for row in range(1, merge_count + 1)
