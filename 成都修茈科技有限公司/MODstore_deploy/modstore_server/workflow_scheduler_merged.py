@@ -64,8 +64,13 @@ def scheduler_integrity_status() -> dict[str, _facade().Any]:
         engine_running = bool(getattr(_facade()._scheduler, "running", False))
         try:
             active = {str(job.id) for job in _facade()._scheduler.get_jobs()}
-        except RECOVERABLE_ERRORS:
-            _facade().logger.exception("scheduler integrity: get_jobs failed")
+        except RECOVERABLE_ERRORS as exc:
+            from modstore_server.scheduler_runtime import public_exception_type
+
+            _facade().logger.error(
+                "scheduler integrity: get_jobs failed: error_type=%s",
+                public_exception_type(exc),
+            )
     missing = sorted(set(required) - active)
     complete = bool(_facade()._scheduler_registration_complete)
     return {
@@ -85,16 +90,17 @@ def _run_scheduler_startup_probe(stage: str, fn: _facade().Callable[[], _facade(
         fn()
         return True
     except RECOVERABLE_ERRORS as exc:
-        failure = {
-            "stage": stage,
-            "error_type": type(exc).__name__,
-            "message": str(exc)[:240],
-        }
+        from modstore_server.scheduler_runtime import public_error_code, public_exception_type
+
+        failure = {"stage": stage, "error_type": public_exception_type(exc)}
+        code = public_error_code(stage, str(exc))
+        if code:
+            failure["error_code"] = code
         _facade()._scheduler_startup_probe_failures.append(failure)
-        _facade().logger.warning(
-            "scheduler startup probe failed; registration continues: stage=%s error=%s",
+        _facade().logger.error(
+            "scheduler startup probe failed; registration continues: stage=%s error_type=%s",
             stage,
-            failure["message"],
+            failure["error_type"],
         )
         return False
 
@@ -119,8 +125,14 @@ def _startup_recovery_kwargs(job_id: str, *, delay_seconds: int) -> dict[str, _f
         )
         state = str((row or {}).get("state") or "missing")
         due = not runtime.get("ok") or row is None or state in {"stale", "failing"}
-    except RECOVERABLE_ERRORS:
-        _facade().logger.exception("scheduler startup recovery status failed: job_id=%s", job_id)
+    except RECOVERABLE_ERRORS as exc:
+        from modstore_server.scheduler_runtime import public_exception_type
+
+        _facade().logger.error(
+            "scheduler startup recovery status failed: job_id=%s error_type=%s",
+            job_id,
+            public_exception_type(exc),
+        )
     if not due:
         return {}
     now = _facade().datetime.now(_facade().timezone.utc)

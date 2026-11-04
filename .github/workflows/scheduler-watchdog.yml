@@ -88,22 +88,33 @@ jobs:
               "runtime_jobs": data.get("unhealthy_runtime_jobs") == [],
               "runtime_recovered": data.get("recovering_runtime_jobs") == [],
           }
+          safe_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_:.-+")
+          def safe(value, limit=160):
+              text = str(value or "")
+              if not text or len(text) > limit or any(char not in safe_chars for char in text):
+                  return ""
+              return text
           rows = {}
           for item in data.get("runtime_jobs") or []:
               if isinstance(item, dict):
-                  rows[str(item.get("job_id") or "")] = item
+                  job_key = safe(item.get("job_id"))
+                  if job_key:
+                      rows[job_key] = item
           bits = []
           recovering = data.get("recovering_runtime_jobs")
           affected = list(data.get("unhealthy_runtime_jobs") or [])
           for job_id in affected + (recovering if isinstance(recovering, list) else []):
-              row = rows.get(str(job_id)) or {}
+              job_key = safe(job_id)
+              if not job_key:
+                  continue
+              row = rows.get(job_key) or {}
               bits.append(":".join((
-                  str(job_id),
-                  str(row.get("state") or "unhealthy"),
-                  str(row.get("last_status") or ""),
-                  str(row.get("last_error_code") or ""),
-                  "last_run_at=" + str(row.get("last_run_at") or ""),
-                  "last_success_at=" + str(row.get("last_success_at") or ""),
+                  job_key,
+                  safe(row.get("state") or "unhealthy") or "unhealthy",
+                  safe(row.get("last_status") or ""),
+                  safe(row.get("last_error_code") or ""),
+                  "last_run_at=" + safe(row.get("last_run_at") or ""),
+                  "last_success_at=" + safe(row.get("last_success_at") or ""),
               )))
           detail = (" jobs=" + ",".join(bits)) if bits else ""
           waiting = isinstance(recovering, list) and bool(recovering) and all(

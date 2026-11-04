@@ -87,6 +87,53 @@ def test_runtime_window_keeps_last_success(db_ready, latest_status, state):
     assert entry["runs_counted"] == 3  # bounded history plus the older successful run
 
 
+def test_runtime_read_does_not_window_rank_the_ledger(db_ready):
+    from sqlalchemy import event
+
+    from modstore_server.db.scheduler_ops import JobRun
+    from modstore_server.models import get_session_factory
+    from modstore_server.scheduler_runtime import get_runtime_status
+
+    daily = _job("daily")
+    now = datetime.now(timezone.utc)
+    with get_session_factory()() as session:
+        session.add(JobRun(job_id=daily, status="success", started_at=now - timedelta(minutes=5)))
+        session.add_all(
+            JobRun(
+                job_id=_job("noisy"), status="failed", started_at=now, error="api_key=must-not-leak"
+            )
+            for _ in range(12)
+        )
+        for _ in range(240):
+            session.add(JobRun(job_id=_job("bulk"), status="success", started_at=now))
+        session.commit()
+        engine = session.get_bind()
+
+    statements: list[str] = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        status = get_runtime_status(scan_limit=5000)
+        cold = "\n".join(statements).lower()
+        statements.clear()
+        again = get_runtime_status(scan_limit=5000)
+        warm = "\n".join(statements).lower()
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    for blob in (cold, warm):
+        assert "row_number" not in blob
+        assert " over " not in blob and " over(" not in blob
+        assert "partition by" not in blob
+    assert "scheduler_job_runs.error" not in warm
+    assert _find(status, daily)["state"] == "healthy"
+    assert _find(again, daily)["state"] == "healthy"
+    assert "must-not-leak" not in json.dumps(status)
+
+
 def test_track_job_run_failure_reraises_and_records(db_ready):
     from modstore_server.scheduler_runtime import get_runtime_status, track_job_run
 
@@ -149,6 +196,8 @@ def test_employee_cron_failure_code_is_safe_for_public_runtime(db_ready):
         ("FileNotFoundError('/private/must-not-leak')", "scheduler_exception:FileNotFoundError"),
         ("must-not-leak('secret')", None),
         ("message RuntimeError('must-not-leak')", None),
+        ("execution_timeout", "execution_timeout"),
+        ("CustomError('safe_code')", None),
     ],
 )
 def test_non_employee_failure_exposes_only_reviewed_exception_type(db_ready, error, code):

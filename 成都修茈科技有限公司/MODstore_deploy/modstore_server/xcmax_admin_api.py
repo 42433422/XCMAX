@@ -320,8 +320,13 @@ async def scheduler_health() -> dict[str, Any]:
                         "trigger": str(j.trigger),
                     }
                 )
-        except RECOVERABLE_ERRORS:
-            logger.exception("scheduler_health: get_jobs failed")
+        except RECOVERABLE_ERRORS as exc:
+            from modstore_server.scheduler_runtime import public_exception_type
+
+            logger.error(
+                "scheduler_health: get_jobs failed: error_type=%s",
+                public_exception_type(exc),
+            )
 
         running = bool(getattr(_scheduler, "running", False))
         integrity = scheduler_integrity_status()
@@ -348,8 +353,13 @@ async def scheduler_health() -> dict[str, Any]:
                 "reported_at": datetime.now(UTC).isoformat(),
             },
         }
-    except RECOVERABLE_ERRORS:
-        logger.exception("scheduler_health endpoint failed")
+    except RECOVERABLE_ERRORS as exc:
+        from modstore_server.scheduler_runtime import public_exception_type
+
+        logger.error(
+            "scheduler_health endpoint failed: error_type=%s",
+            public_exception_type(exc),
+        )
         return {
             "success": False,
             "ok": False,

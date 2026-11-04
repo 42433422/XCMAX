@@ -382,7 +382,7 @@ def run_pending_automated_remediation() -> dict[str, Any]:
     )
     status = str(result.get("status") or "")
     if status in {"failed", "blocked"}:
-        error = str(result.get("error") or "unknown")
+        error = str(result.get("error") or "")
         if error in _DEFERRED_REMEDIATION_ERRORS:
             result = {
                 **result,
@@ -390,7 +390,10 @@ def run_pending_automated_remediation() -> dict[str, Any]:
                 "scheduler_status": "deferred",
             }
         else:
-            raise RuntimeError(f"automated self-maintenance remediation failed: {error}")
+            from modstore_server.scheduler_runtime import public_error_code
+
+            code = public_error_code("self_maintenance_remediation_loop", error) or "unclassified"
+            raise RuntimeError(f"automated_self_maintenance_remediation_failed:{code}")
     if blocked:
         from modstore_server.maintenance_loop.store import _load_loop_memory
 
@@ -422,14 +425,25 @@ def register_autonomy_jobs(
                 result = run_pending_automated_remediation()
                 if result.get("scheduler_status") == "deferred":
                     raise DeferredJobRun(str(result.get("scheduler_reason") or "policy_hold"))
+
+            def _token(value: object) -> str:
+                text = str(value or "")
+                if text and len(text) <= 80 and text.replace("_", "").isalnum() and text.islower():
+                    return text
+                return "redacted"
+
             logger.info(
-                "self-maintenance remediation scheduler status=%s runtime_status=%s reason=%s",
-                result.get("status"),
-                result.get("scheduler_status") or "success",
-                result.get("reason") or (result.get("gate") or {}).get("reason"),
+                "self-maintenance remediation scheduler status=%s runtime_status=%s",
+                _token(result.get("status")),
+                _token(result.get("scheduler_status") or "success"),
             )
-        except RECOVERABLE_ERRORS:
-            logger.exception("self-maintenance remediation scheduler failed")
+        except RECOVERABLE_ERRORS as exc:
+            from modstore_server.scheduler_runtime import public_exception_type
+
+            logger.error(
+                "self-maintenance remediation scheduler failed: error_type=%s",
+                public_exception_type(exc),
+            )
 
     scheduler.add_job(
         _remediate,

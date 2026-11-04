@@ -326,9 +326,32 @@ def test_pending_unexpected_remediation_failure_still_raises(
 
     with pytest.raises(
         RuntimeError,
-        match="automated self-maintenance remediation failed: execution_timeout",
+        match="automated_self_maintenance_remediation_failed:execution_timeout",
     ):
         run_pending_automated_remediation()
+
+
+def test_remediation_failure_does_not_embed_raw_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "modstore_server.autonomy_scheduler.pending_automated_remediation",
+        lambda: {
+            "branch": "devfleet/trae/broken",
+            "reason": "structured_review_blocking_findings",
+            "run_id": "run-broken",
+            "task_id": "task-broken",
+        },
+    )
+    monkeypatch.setattr(
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
+        lambda **_kwargs: {"status": "failed", "error": "api_key=must-not-leak"},
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="automated_self_maintenance_remediation_failed:unclassified",
+    ) as raised:
+        run_pending_automated_remediation()
+    assert "must-not-leak" not in str(raised.value)
 
 
 def test_remediation_scheduler_records_retort_hold_as_deferred(

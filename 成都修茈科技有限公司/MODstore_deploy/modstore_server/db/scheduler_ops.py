@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, Index, Integer, String, Text
 
 from modstore_server.db.db_base import Base
 
@@ -19,6 +19,10 @@ class JobRun(Base):
     """调度器某个 job/阶段的一次完成（或跳过）执行。"""
 
     __tablename__ = "scheduler_job_runs"
+    __table_args__ = (
+        Index("ix_scheduler_job_runs_job_id_id", "job_id", "id"),
+        Index("ix_scheduler_job_runs_job_status_id", "job_id", "status", "id"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(String(128), nullable=False, index=True)
@@ -33,4 +37,34 @@ class JobRun(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
-__all__ = ["JobRun"]
+class JobHealth(Base):
+    """One current summary row per job.
+
+    Health reads use this table instead of ranking ``scheduler_job_runs``.
+    ``last_error_code`` is the public code only; the raw ledger text stays on
+    ``JobRun`` and is not copied here.
+    """
+
+    __tablename__ = "scheduler_job_health"
+
+    job_id = Column(String(128), primary_key=True)
+    last_run_id = Column(Integer, nullable=False, index=True)
+    last_status = Column(String(16), nullable=False, default="")
+    last_started_at = Column(DateTime, nullable=True)
+    last_success_started_at = Column(DateTime, nullable=True)
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+    total_runs = Column(Integer, nullable=False, default=0)
+    runs_since_success = Column(Integer, nullable=False, default=0)
+    last_error_code = Column(String(160), nullable=False, default="")
+
+
+class SchedulerHealthCheckpoint(Base):
+    """Highest ledger id already reflected in ``scheduler_job_health``."""
+
+    __tablename__ = "scheduler_health_checkpoint"
+
+    singleton = Column(Integer, primary_key=True, default=1)
+    summarized_through_id = Column(Integer, nullable=False, default=0)
+
+
+__all__ = ["JobHealth", "JobRun", "SchedulerHealthCheckpoint"]
