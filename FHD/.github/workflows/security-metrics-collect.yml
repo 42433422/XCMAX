@@ -140,10 +140,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xcagi-security-metrics-${ steps.metrics-date.outputs.date }-${ github.run_id }
+          name: xcagi-security-metrics-${{ steps.metrics-date.outputs.date }}-${{ github.run_id }}
           path: |
-            FHD/metrics/gitleaks-${ steps.metrics-date.outputs.date }.json
-            FHD/metrics/trivy-${ steps.metrics-date.outputs.date }.json
+            FHD/metrics/gitleaks-${{ steps.metrics-date.outputs.date }}.json
+            FHD/metrics/trivy-${{ steps.metrics-date.outputs.date }}.json
           retention-days: 120
           if-no-files-found: error
 

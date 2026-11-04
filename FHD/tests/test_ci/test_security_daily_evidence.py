@@ -30,6 +30,8 @@ def test_daily_reports_are_persistent_and_scanner_gate_is_not_weakened(workflow)
     upload = next(s for s in steps if s.get("uses") == "actions/upload-artifact@v4")
     assert upload["if"] == "always()"
     assert upload["with"]["retention-days"] == 120
+    assert "${{ steps.metrics-date.outputs.date }}" in upload["with"]["path"]
+    assert "${{ github.run_id }}" in upload["with"]["name"]
     assert "FHD/metrics/gitleaks-" in upload["with"]["path"]
     assert "FHD/metrics/trivy-" in upload["with"]["path"]
     assert all("git push" not in s.get("run", "") for s in steps)
