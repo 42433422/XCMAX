@@ -93,19 +93,14 @@ def _primary_max_attempts() -> int:
 def _normalize_openai_base(
     provider: str, base_url: Optional[str], api_key: Optional[str] = None
 ) -> str:
-    if (
-        isinstance(api_key, PlatformApiKey)
-        and api_key.configuration["provider"] != provider
-    ):
+    if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
         raise ValueError("平台密钥不允许跨供应商使用")
     if isinstance(api_key, PlatformApiKey) and api_key.managed:
         return str(api_key.configuration["base_url"])
     if isinstance(api_key, PlatformApiKey):
         base_url = api_key.configuration["base_url"]
     b = (base_url or openai_compat_default_root(provider)).rstrip("/")
-    if not (
-        b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")
-    ):
+    if not (b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")):
         b = b + "/v1"
     return b
 
@@ -168,10 +163,7 @@ def _openai_assistant_message_parts(msg: Dict[str, Any]) -> tuple[str, str]:
         return "", ""
     content = str(msg.get("content") or "").strip()
     reasoning = str(
-        msg.get("reasoning_content")
-        or msg.get("reasoning")
-        or msg.get("thinking")
-        or ""
+        msg.get("reasoning_content") or msg.get("reasoning") or msg.get("thinking") or ""
     ).strip()
     return content, reasoning
 
@@ -194,10 +186,7 @@ async def chat_dispatch(
     fallback_api_key: Optional[str] = None,
     fallback_base_url: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if (
-        isinstance(api_key, PlatformApiKey)
-        and api_key.configuration["provider"] != provider
-    ):
+    if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
         return {"ok": False, "error": "平台密钥不允许跨供应商使用"}
     if isinstance(api_key, PlatformApiKey):
         base_url = api_key.configuration["base_url"]
@@ -241,9 +230,7 @@ async def chat_dispatch(
                 response_format=response_format,
             )
         if provider == "anthropic":
-            return await chat_anthropic(
-                api_key, model, messages, max_tokens=max_tokens or 1024
-            )
+            return await chat_anthropic(api_key, model, messages, max_tokens=max_tokens or 1024)
         if provider == "google":
             return await chat_google(api_key, model, messages)
         return {"ok": False, "error": f"unsupported provider: {provider}"}
@@ -309,9 +296,7 @@ async def chat_dispatch(
     import asyncio as _asyncio
 
     try:
-        result = await _asyncio.wait_for(
-            _primary_with_retries(), timeout=float(timeout_fallback_s)
-        )
+        result = await _asyncio.wait_for(_primary_with_retries(), timeout=float(timeout_fallback_s))
         if result.get("ok"):
             return result
         # provider returned error — fall through to fallback
@@ -322,10 +307,7 @@ async def chat_dispatch(
     # ---- fallback
     fb_provider = str(fallback_provider)
     fb_key = fallback_api_key or api_key
-    if (
-        isinstance(fb_key, PlatformApiKey)
-        and fb_key.configuration["provider"] != fb_provider
-    ):
+    if isinstance(fb_key, PlatformApiKey) and fb_key.configuration["provider"] != fb_provider:
         return {"ok": False, "error": "备用供应商必须配置其独立的平台密钥"}
     fb_base = (
         fb_key.configuration["base_url"]
@@ -388,10 +370,7 @@ async def chat_dispatch_stream(
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Any = None,
 ) -> AsyncIterator[Dict[str, Any]]:
-    if (
-        isinstance(api_key, PlatformApiKey)
-        and api_key.configuration["provider"] != provider
-    ):
+    if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
         yield {"type": "error", "error": "平台密钥不允许跨供应商使用"}
         return
     if isinstance(api_key, PlatformApiKey):

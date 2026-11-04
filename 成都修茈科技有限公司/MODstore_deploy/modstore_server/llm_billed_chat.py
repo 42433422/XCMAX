@@ -67,9 +67,7 @@ def _sse(event: str, data: Dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def _route_error(
-    route: ChatRouteSnapshot, error: Any, status: int | None = None
-) -> str:
+def _route_error(route: ChatRouteSnapshot, error: Any, status: int | None = None) -> str:
     return _sse(
         "error",
         {
@@ -131,9 +129,7 @@ async def run_billed_llm_chat(
     route_snapshot: ChatRouteSnapshot | None = None,
 ) -> dict[str, Any]:
     """执行一轮 LLM 对话并完成钱包预授权/结算；配额/限流时可自动切换备用模型。"""
-    primary = route_snapshot or resolve_chat_route_snapshot(
-        db, user.id, provider, model
-    )
+    primary = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
     primary_provider, primary_model = primary.provider, primary.model
     if allow_failover and route_snapshot is None:
         candidates = await list_chat_failover_candidates(
@@ -223,9 +219,7 @@ async def run_billed_llm_chat(
             continue
     if last_exc is not None:
         raise last_exc
-    raise HTTPException(
-        502, failed_chat_route_detail(primary, "LLM 调用失败且无可用备用模型")
-    )
+    raise HTTPException(502, failed_chat_route_detail(primary, "LLM 调用失败且无可用备用模型"))
 
 
 async def stream_billed_llm_chat(
@@ -243,9 +237,7 @@ async def stream_billed_llm_chat(
     tool_choice: Any = None,
     route_snapshot: ChatRouteSnapshot | None = None,
 ) -> StreamingResponse:
-    primary = route_snapshot or resolve_chat_route_snapshot(
-        db, user.id, provider, model
-    )
+    primary = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
     primary_provider, primary_model = primary.provider, primary.model
     msgs = messages
     if not msgs:
@@ -266,10 +258,7 @@ async def stream_billed_llm_chat(
     candidates, snapshots = _candidate_snapshots(db, user.id, primary, candidates)
     key_source_by_provider = {p: snapshots[p, m].key_source for p, m in candidates}
 
-    if (
-        primary_provider not in key_source_by_provider
-        and primary_provider in KNOWN_PROVIDERS
-    ):
+    if primary_provider not in key_source_by_provider and primary_provider in KNOWN_PROVIDERS:
         raise HTTPException(
             400,
             failed_chat_route_detail(
@@ -296,9 +285,7 @@ async def stream_billed_llm_chat(
                 messages_use_openai_multipart_content(msgs)
                 and prov not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
             ):
-                last_error = (
-                    "多模态消息仅支持 OpenAI 兼容供应商；请更换 provider 或改发纯文本。"
-                )
+                last_error = "多模态消息仅支持 OpenAI 兼容供应商；请更换 provider 或改发纯文本。"
                 rest = remaining_candidates_after_failure(
                     queue,
                     idx,
@@ -341,9 +328,7 @@ async def stream_billed_llm_chat(
                         hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False
                     )
                 else:
-                    preauth_amount = estimate_preauthorization(
-                        db, prov, mdl, msgs, max_tokens
-                    )
+                    preauth_amount = estimate_preauthorization(db, prov, mdl, msgs, max_tokens)
                     hold = await wallet.preauthorize(
                         authorization_header(request),
                         preauth_amount,
@@ -472,9 +457,7 @@ async def stream_billed_llm_chat(
                         charge = Decimal("0")
                     else:
                         charge = calculate_charge(db, prov, mdl, usage)
-                        await wallet.settle(
-                            authorization_header(request), hold, charge, request_id
-                        )
+                        await wallet.settle(authorization_header(request), hold, charge, request_id)
                     saved_conversation_id = save_success_log(
                         db,
                         user_id=user.id,
@@ -506,12 +489,8 @@ async def stream_billed_llm_chat(
                 # break from async for → try next candidate
                 continue
             except _CHAT_ERRORS as exc:
-                status_code = (
-                    exc.status_code if isinstance(exc, HTTPException) else None
-                )
-                last_error = (
-                    str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
-                )
+                status_code = exc.status_code if isinstance(exc, HTTPException) else None
+                last_error = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
                 try:
                     save_failure_log(
                         db,
@@ -521,16 +500,12 @@ async def stream_billed_llm_chat(
                         error=str(exc),
                         hold_no=hold.hold_no,
                     )
-                    await wallet.release(
-                        authorization_header(request), hold, str(exc), request_id
-                    )
+                    await wallet.release(authorization_header(request), hold, str(exc), request_id)
                 except RECOVERABLE_ERRORS:
                     logger.exception(
                         "failed to release LLM wallet hold after unexpected stream error"
                     )
-                if not emitted_delta and is_chat_failoverable_failure(
-                    last_error, status_code
-                ):
+                if not emitted_delta and is_chat_failoverable_failure(last_error, status_code):
                     rest = remaining_candidates_after_failure(
                         queue,
                         idx,

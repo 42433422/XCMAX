@@ -296,9 +296,7 @@ def _oai_to_gemini(messages: List[Dict[str, str]]) -> List[Dict[str, Any]]:
     return contents
 
 
-async def chat_google(
-    api_key: str, model: str, messages: List[Dict[str, str]]
-) -> Dict[str, Any]:
+async def chat_google(api_key: str, model: str, messages: List[Dict[str, str]]) -> Dict[str, Any]:
     contents = _facade()._oai_to_gemini(messages)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     async with _facade().httpx.AsyncClient(
@@ -319,9 +317,7 @@ async def chat_google(
     if not cands:
         return {"ok": False, "error": "no candidates", "raw": data}
     first = cands[0] if isinstance(cands[0], dict) else {}
-    content_block = (
-        first.get("content") if isinstance(first.get("content"), dict) else {}
-    )
+    content_block = first.get("content") if isinstance(first.get("content"), dict) else {}
     parts = content_block.get("parts") or []
     texts = [str(p.get("text") or "") for p in parts if isinstance(p, dict)]
     usage = data.get("usageMetadata") or data.get("usage") or {}

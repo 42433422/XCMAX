@@ -123,22 +123,16 @@ async def _execute_billed_chat(
         )
     model = model.strip()
     if getattr(request.state, "llm_pat_user_id", None) is not None:
-        await assert_llm_chat_allowed(
-            db, int(user.id), provider, model, is_byok=is_byok
-        )
+        await assert_llm_chat_allowed(db, int(user.id), provider, model, is_byok=is_byok)
     request_id = new_request_id()
     enforce_risk_limits(db, user.id, provider, model, messages, request)
     wallet = JavaWalletClient(request=request)
     if is_byok:
         if getattr(request.state, "llm_pat_user_id", None) is not None:
             wallet.validate_pat(authorization_header(request))
-        hold = WalletHold(
-            hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False
-        )
+        hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
     else:
-        preauth_amount = estimate_preauthorization(
-            db, provider, model, messages, max_tokens
-        )
+        preauth_amount = estimate_preauthorization(db, provider, model, messages, max_tokens)
         try:
             hold = await wallet.preauthorize(
                 authorization_header(request),
@@ -148,9 +142,7 @@ async def _execute_billed_chat(
                 request_id,
             )
         except HTTPException as exc:
-            if getattr(
-                request.state, "llm_pat_user_id", None
-            ) is not None and exc.status_code in {
+            if getattr(request.state, "llm_pat_user_id", None) is not None and exc.status_code in {
                 502,
                 503,
                 504,
@@ -208,10 +200,7 @@ async def _execute_billed_chat(
             conversation_id=conversation_id,
         )
     except HTTPException as exc:
-        if (
-            upstream_started
-            and getattr(request.state, "llm_pat_user_id", None) is not None
-        ):
+        if upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None:
             logger.error(
                 "LLM settlement needs reconciliation request_id=%s hold=%s",
                 request_id,
@@ -226,17 +215,12 @@ async def _execute_billed_chat(
                 },
             ) from exc
         try:
-            await wallet.release(
-                authorization_header(request), hold, str(exc.detail), request_id
-            )
+            await wallet.release(authorization_header(request), hold, str(exc.detail), request_id)
         except RECOVERABLE_ERRORS:
             logger.exception("failed to release LLM wallet hold")
         raise
     except RECOVERABLE_ERRORS as exc:
-        if (
-            upstream_started
-            and getattr(request.state, "llm_pat_user_id", None) is not None
-        ):
+        if upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None:
             logger.error(
                 "LLM settlement needs reconciliation request_id=%s hold=%s",
                 request_id,
@@ -259,9 +243,7 @@ async def _execute_billed_chat(
                 error=str(exc),
                 hold_no=hold.hold_no,
             )
-            await wallet.release(
-                authorization_header(request), hold, str(exc), request_id
-            )
+            await wallet.release(authorization_header(request), hold, str(exc), request_id)
         except RECOVERABLE_ERRORS:
             logger.exception("failed to release LLM wallet hold after unexpected error")
         raise
