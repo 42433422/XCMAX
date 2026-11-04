@@ -72,7 +72,7 @@ import { useOrdersStore } from '@/stores/orders';
 import { pushErpPage } from '@/utils/erpPagePaths';
 import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
-import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog';
+import { appConfirm } from '@/utils/appDialog';
 import { useTutorialV2Store } from '@/stores/tutorialV2';
 
 const router = useRouter();
@@ -127,11 +127,6 @@ async function handleDelete(orderNumber) {
 }
 
 async function handleClearAll() {
-  const key = await appPrompt('请输入密钥确认清空:', '', { title: '密钥验证' });
-  if (key !== '61408693') {
-    await appAlert('密钥错误');
-    return;
-  }
   showClearConfirm.value = true;
 }
 

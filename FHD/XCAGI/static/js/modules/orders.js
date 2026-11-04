@@ -72,7 +72,7 @@ function deleteOrder(orderNumber) {
     const decodedOrderNumber = decodeURIComponent(orderNumber);
     if (!confirm('确定要删除订单 ' + decodedOrderNumber + ' 吗？')) return;
     
-    fetch(API_BASE + '/api/orders/' + encodeURIComponent(decodedOrderNumber), {
+    fetch(API_BASE + '/api/shipment/orders/' + encodeURIComponent(decodedOrderNumber), {
         method: 'DELETE'
     }).then(r => r.json()).then(data => {
         if (data.success) {
@@ -87,11 +87,6 @@ function deleteOrder(orderNumber) {
 }
 
 function clearAllOrders() {
-    const key = prompt('请输入密钥确认清空:');
-    if (key !== '61408693') {
-        alert('密钥错误');
-        return;
-    }
     if (!confirm('确定要清空所有出货记录吗？此操作不可恢复！')) return;
     
     fetch(API_BASE + '/api/orders/clear-all', {
