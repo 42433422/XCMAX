@@ -1,5 +1,5 @@
 {
-  "lines": 2411620,
+  "lines": 2411684,
   "updated": "2026-11-04",
-  "note": "L4-03 发布审批账本 ops/releases/d58b3559268977f95869a15d56868dd5386ed333.json 新增 1 行（security_scan_run_id 41862046410，approval_recorded_at 2026-11-04T16:31:16Z）。这是用户要求写入的不可变 MODstore 发布记录，不是产品代码，不能靠删无关代码换净删除。"
+  "note": "L4-03 生产发布：Cursor 云代理 token 无 actions:write，不能直接 workflow_dispatch。新增 64 行 ops-l4-dispatch-relay.yml，只把 repository_dispatch 转发为官方 Deploy MODstore Production 与 fhd-force-self-maintenance。这是落地已批准 SHA d58b3559 所必需的入口，不能靠删无关代码换净删除。"
 }
