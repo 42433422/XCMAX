@@ -35,7 +35,7 @@ B) 全局弹窗输入口令（否则不知道往 localStorage 写什么）
 
 应急（仅本机调试、不改代码）：
    浏览器 F12 → Console 执行：
-     localStorage.setItem("xcagi_db_read_token","61408693");
+     localStorage.setItem("xcagi_db_read_token","<与后端配置一致的口令>");
    （若你改了 FHD_DB_READ_TOKEN，把字符串改成与之一致。）然后 Ctrl+F5 强刷。
 
 临时关闭一级锁（不推荐生产）：
