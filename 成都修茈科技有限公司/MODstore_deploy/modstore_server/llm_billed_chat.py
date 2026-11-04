@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import time
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -51,6 +53,14 @@ def _sse(event: str, data: Dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+def _chat_total_deadline_s() -> float:
+    """单次请求跨候选/重试的总预算，防止上游慢请求把桌面端拖到超时。"""
+    try:
+        return max(10.0, float(os.environ.get("MODSTORE_LLM_CHAT_TOTAL_DEADLINE_S", "90")))
+    except (TypeError, ValueError):
+        return 90.0
+
+
 async def run_billed_llm_chat(
     request: Request,
     db: Session,
@@ -85,9 +95,16 @@ async def run_billed_llm_chat(
     queue = list(candidates)
     attempted: list[str] = []
     idx = 0
+    deadline = time.monotonic() + _chat_total_deadline_s()
     while idx < len(queue):
+        remaining_s = deadline - time.monotonic()
+        if remaining_s <= 2.0:
+            if last_exc is not None:
+                raise last_exc
+            raise HTTPException(504, "LLM 调用超过单次请求总耗时预算，已停止继续换模")
         prov, mdl = queue[idx]
         attempted.append(f"{prov}/{mdl}")
+        t0 = time.monotonic()
         try:
             out = await _run_billed_llm_chat_once(
                 request,
@@ -98,6 +115,7 @@ async def run_billed_llm_chat(
                 messages=messages,
                 max_tokens=max_tokens,
                 conversation_id=conversation_id,
+                upstream_timeout_s=remaining_s,
             )
             if len(attempted) > 1:
                 out["failover_from"] = f"{primary_provider}/{primary_model}"
@@ -124,10 +142,11 @@ async def run_billed_llm_chat(
             if not rest:
                 raise
             logger.warning(
-                "llm chat failover after %s/%s status=%s detail=%s next=%s",
+                "llm chat failover after %s/%s status=%s elapsed_ms=%.0f detail=%s next=%s",
                 prov,
                 mdl,
                 exc.status_code,
+                (time.monotonic() - t0) * 1000.0,
                 detail[:240],
                 [f"{p}/{m}" for p, m in rest],
             )

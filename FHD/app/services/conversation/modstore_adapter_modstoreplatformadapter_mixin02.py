@@ -49,34 +49,59 @@ class _ModstorePlatformAdapterPart02Mixin:
                 len(candidates),
             )
             retry_next = False
-            with _facade()._httpx_sync_client(
-                timeout=_facade().httpx.Timeout(
-                    self.timeout, connect=_facade()._market_connect_timeout()
-                ),
-                limits=_facade().httpx.Limits(max_keepalive_connections=10, max_connections=30),
-                headers=self._build_headers(),
-            ) as client:
-                with client.stream("POST", url, json=payload) as response:
-                    status_code = _facade()._response_status_code(response)
-                    if status_code >= 400:
-                        error_text = response.read().decode("utf-8", errors="ignore")[:500]
-                        err = ValueError(f"平台错误({status_code}): {error_text}")
-                        if idx + 1 < len(candidates) and _facade().is_market_chat_failoverable(
-                            status_code, error_text
-                        ):
-                            _facade().logger.warning(
-                                "[Modstream] 流式换模 %s/%s -> %s", prov, mdl, candidates[idx + 1]
-                            )
-                            last_error = err
-                            retry_next = True
+            emitted = False
+            try:
+                with _facade()._httpx_sync_client(
+                    timeout=_facade().httpx.Timeout(
+                        self.timeout, connect=_facade()._market_connect_timeout()
+                    ),
+                    limits=_facade().httpx.Limits(max_keepalive_connections=10, max_connections=30),
+                    headers=self._build_headers(),
+                ) as client:
+                    with client.stream("POST", url, json=payload) as response:
+                        status_code = _facade()._response_status_code(response)
+                        if status_code >= 400:
+                            error_text = response.read().decode("utf-8", errors="ignore")[:500]
+                            err = ValueError(f"平台错误({status_code}): {error_text}")
+                            if idx + 1 < len(candidates) and _facade().is_market_chat_failoverable(
+                                status_code, error_text
+                            ):
+                                _facade().logger.warning(
+                                    "[Modstream] 流式换模 %s/%s -> %s",
+                                    prov,
+                                    mdl,
+                                    candidates[idx + 1],
+                                )
+                                last_error = err
+                                retry_next = True
+                            else:
+                                _facade().logger.error(
+                                    "[Modstream] 平台同步流式返回错误 %s: %s",
+                                    status_code,
+                                    error_text,
+                                )
+                                raise err
                         else:
-                            _facade().logger.error(
-                                "[Modstream] 平台同步流式返回错误 %s: %s", status_code, error_text
-                            )
-                            raise err
-                    else:
-                        yield from _facade()._iter_market_sse_data_payloads(response)
-                        return
+                            for data in _facade()._iter_market_sse_data_payloads(response):
+                                emitted = True
+                                yield data
+                            return
+            except _facade().httpx.HTTPError as exc:
+                last_error = exc
+                if (
+                    emitted
+                    or idx + 1 >= len(candidates)
+                    or not _facade().is_market_chat_failoverable(None, str(exc))
+                ):
+                    raise
+                _facade().logger.warning(
+                    "[Modstream] 同步流式传输失败换模 %s/%s -> %s err=%s",
+                    prov,
+                    mdl,
+                    candidates[idx + 1],
+                    exc,
+                )
+                retry_next = True
             if retry_next:
                 continue
         if last_error is not None:

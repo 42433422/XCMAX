@@ -1,6 +1,7 @@
 from app.infrastructure.llm.modstore_chat_failover import (
     build_chat_failover_candidates,
     is_market_chat_failoverable,
+    is_market_chat_wallet_dependency_error,
 )
 
 
@@ -13,6 +14,9 @@ def test_failoverable_status_and_markers():
     assert is_market_chat_failoverable(None, "平台错误(503): 上游暂不可用")
     assert is_market_chat_failoverable(None, "ReadTimeout: timed out")
     assert not is_market_chat_failoverable(401, "凭证无效")
+    wallet_err = "平台错误(502): Java 支付服务不可用"
+    assert is_market_chat_wallet_dependency_error(wallet_err)
+    assert not is_market_chat_failoverable(502, wallet_err)
 
 
 def test_build_candidates_orders_primary_then_status():

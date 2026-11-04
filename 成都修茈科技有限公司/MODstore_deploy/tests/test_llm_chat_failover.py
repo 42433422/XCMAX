@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from modstore_server.llm_chat_failover import (
     is_chat_failoverable_failure,
     is_wallet_balance_failure,
+    is_wallet_dependency_failure,
     list_chat_failover_candidates,
     remaining_candidates_after_failure,
 )
@@ -45,6 +46,40 @@ def test_remaining_candidates_wallet_only_keeps_byok():
         },
     )
     assert rest == [("deepseek", "deepseek-chat")]
+
+
+def test_wallet_dependency_failure_only_keeps_byok():
+    candidates = [
+        ("openai", "gpt-4o-mini"),
+        ("deepseek", "deepseek-chat"),
+        ("xiaomi", "mimo-v2"),
+    ]
+    error_text = "Java 支付服务不可用: ConnectError (JAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080)"
+    assert is_wallet_dependency_failure(error_text)
+    rest = remaining_candidates_after_failure(
+        candidates,
+        0,
+        error_text=error_text,
+        status_code=502,
+        key_source_by_provider={
+            "openai": "platform",
+            "deepseek": "user_override",
+            "xiaomi": "platform",
+        },
+    )
+    assert rest == [("deepseek", "deepseek-chat")]
+
+
+def test_wallet_dependency_failure_stops_without_byok():
+    candidates = [("openai", "gpt-4o-mini"), ("xiaomi", "mimo-v2")]
+    rest = remaining_candidates_after_failure(
+        candidates,
+        0,
+        error_text="Java 支付服务不可用: ConnectError",
+        status_code=502,
+        key_source_by_provider={"openai": "platform", "xiaomi": "platform"},
+    )
+    assert rest == []
 
 
 def test_remaining_candidates_quota_keeps_all_next():

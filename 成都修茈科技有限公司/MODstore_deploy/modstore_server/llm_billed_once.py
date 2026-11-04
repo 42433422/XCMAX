@@ -49,6 +49,7 @@ async def run_billed_llm_chat_once(
     messages: list[dict[str, Any]],
     max_tokens: Optional[int] = None,
     conversation_id: Optional[int] = None,
+    upstream_timeout_s: Optional[float] = None,
 ) -> dict[str, Any]:
     """Execute and settle a single provider/model chat attempt."""
     if provider not in KNOWN_PROVIDERS:
@@ -101,6 +102,7 @@ async def run_billed_llm_chat_once(
             model=model,
             messages=messages,
             max_tokens=max_tokens,
+            total_timeout_s=upstream_timeout_s,
         )
         if not result.get("ok"):
             error = result.get("error") or "upstream error"

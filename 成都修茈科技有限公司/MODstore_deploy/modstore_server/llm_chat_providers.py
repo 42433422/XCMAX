@@ -13,6 +13,15 @@ def _facade() -> Any:
     return llm_chat_proxy
 
 
+def _json_dict(text: str) -> Optional[Dict[str, Any]]:
+    """上游 200 但返回 HTML/空包时不要抛异常（否则网关直接 500）。"""
+    try:
+        data = json.loads(text)
+    except (TypeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 async def chat_openai_compatible(
     base_url: str,
     api_key: str,
@@ -41,8 +50,12 @@ async def chat_openai_compatible(
         text = r.text
     if r.status_code >= 400:
         return {"ok": False, "status": r.status_code, "error": text[:2000]}
-    data = r.json()
+    data = _json_dict(text)
+    if data is None:
+        return {"ok": False, "status": 502, "error": f"上游返回非 JSON 响应: {text[:500]}"}
     choice0 = (data.get("choices") or [{}])[0]
+    if not isinstance(choice0, dict):
+        choice0 = {}
     msg = choice0.get("message") or {}
     content, reasoning_trace = _facade()._openai_assistant_message_parts(msg)
     if forbid_reasoning_fallback:
@@ -226,7 +239,9 @@ async def chat_anthropic_compatible(
         text = r.text
     if r.status_code >= 400:
         return {"ok": False, "status": r.status_code, "error": text[:2000]}
-    data = r.json()
+    data = _json_dict(text)
+    if data is None:
+        return {"ok": False, "status": 502, "error": f"上游返回非 JSON 响应: {text[:500]}"}
     blocks = data.get("content") or []
     parts: List[str] = []
     for b in blocks:
@@ -268,11 +283,15 @@ async def chat_google(api_key: str, model: str, messages: List[Dict[str, str]]) 
         text = r.text
     if r.status_code >= 400:
         return {"ok": False, "status": r.status_code, "error": text[:2000]}
-    data = r.json()
+    data = _json_dict(text)
+    if data is None:
+        return {"ok": False, "status": 502, "error": f"上游返回非 JSON 响应: {text[:500]}"}
     cands = data.get("candidates") or []
     if not cands:
         return {"ok": False, "error": "no candidates", "raw": data}
-    parts = ((cands[0] or {}).get("content") or {}).get("parts") or []
+    first = cands[0] if isinstance(cands[0], dict) else {}
+    content_block = first.get("content") if isinstance(first.get("content"), dict) else {}
+    parts = content_block.get("parts") or []
     texts = [str(p.get("text") or "") for p in parts if isinstance(p, dict)]
     usage = data.get("usageMetadata") or data.get("usage") or {}
     return {"ok": True, "content": "\n".join(texts), "usage": usage, "raw": data}

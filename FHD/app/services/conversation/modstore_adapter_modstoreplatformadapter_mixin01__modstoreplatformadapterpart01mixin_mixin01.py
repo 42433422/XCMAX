@@ -18,7 +18,7 @@ class __ModstorePlatformAdapterPart01MixinPart01Mixin:
         user_id: int | None = None,
         default_provider: str = "xiaomi",
         default_model: str = "mimo-v2.5-pro",
-        timeout: float = 60.0,
+        timeout: float = 150.0,
     ):
         """
         初始化平台代理适配器
@@ -46,7 +46,13 @@ class __ModstorePlatformAdapterPart01MixinPart01Mixin:
         )
         self.default_provider = _facade().os.environ.get("LLM_PROVIDER", default_provider).lower()
         self.default_model = _facade().os.environ.get("LLM_MODEL", default_model)
-        self.timeout = timeout
+        try:
+            self.timeout = max(
+                1.0,
+                float(_facade().os.environ.get("XCAGI_MARKET_TIMEOUT_S", timeout)),
+            )
+        except (TypeError, ValueError):
+            self.timeout = timeout
         self._source = "env"
         self._client: _facade().Optional[_facade().httpx.AsyncClient] = None
         _facade().logger.info(

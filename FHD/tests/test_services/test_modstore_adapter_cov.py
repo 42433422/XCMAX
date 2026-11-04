@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+import app.services.conversation.modstore_adapter as adapter_module
 from app.services.conversation.modstore_adapter import (
     ModstoreOpenAICompatibleClient,
     ModstorePlatformAdapter,
@@ -762,3 +763,132 @@ class TestStreamChatCompletionSyncNoPlatformAlias:
         with patch("httpx.Client", return_value=outer_cm):
             results = list(adapter.stream_chat_completion_sync([{"role": "user", "content": "hi"}]))
         assert results == ["ok"]
+
+
+class TestTransientTransportFailover:
+    """5xx / ReadTimeout 也换模：此前只覆盖 402/403/429，慢请求会直接失败。"""
+
+    def test_sync_stream_timeout_switches_model(self, monkeypatch):
+        adapter = _make_adapter()
+        monkeypatch.setattr(
+            adapter,
+            "_list_chat_failover_candidates_sync",
+            lambda p, m: [("openai", "a"), ("deepseek", "b")],
+        )
+        state = {"n": 0}
+
+        class Resp:
+            status_code = 200
+
+            @staticmethod
+            def iter_lines():
+                return iter(["data: ok"])
+
+            @staticmethod
+            def read():
+                return b""
+
+        class CM:
+            def __init__(self, fail):
+                self.fail = fail
+
+            def __enter__(self):
+                if self.fail:
+                    raise httpx.ReadTimeout("timed out")
+                return Resp()
+
+            def __exit__(self, *a):
+                return False
+
+        class Client:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def stream(self, *a, **k):
+                state["n"] += 1
+                return CM(state["n"] == 1)
+
+        monkeypatch.setattr(adapter_module, "_httpx_sync_client", lambda **k: Client())
+        out = list(adapter.stream_chat_completion_sync([{"role": "user", "content": "x"}]))
+        assert out == ["ok"]
+        assert state["n"] == 2
+
+    @pytest.mark.asyncio
+    async def test_async_stream_503_switches_model(self, monkeypatch):
+        adapter = _make_adapter()
+        monkeypatch.setattr(
+            adapter,
+            "_list_chat_failover_candidates_sync",
+            lambda p, m: [("openai", "a"), ("deepseek", "b")],
+        )
+
+        async def prep(msgs, p, m):
+            return msgs
+
+        monkeypatch.setattr(adapter, "_prepare_messages", prep)
+        state = {"n": 0}
+
+        class Resp503:
+            status_code = 503
+
+            @staticmethod
+            async def aread():
+                return b"service unavailable"
+
+        class Resp200:
+            status_code = 200
+
+            @staticmethod
+            async def aiter_lines():
+                yield "data: ok"
+
+        class CM:
+            def __init__(self, resp):
+                self.resp = resp
+
+            async def __aenter__(self):
+                return self.resp
+
+            async def __aexit__(self, *a):
+                return False
+
+        class Client:
+            def stream(self, *a, **k):
+                state["n"] += 1
+                return CM(Resp503() if state["n"] == 1 else Resp200())
+
+        async def get_client():
+            return Client()
+
+        monkeypatch.setattr(adapter, "_get_client", get_client)
+        out = [x async for x in adapter.stream_chat_completion([{"role": "user", "content": "x"}])]
+        assert out == ["ok"]
+        assert state["n"] == 2
+
+    def test_sync_chat_timeout_switches_model(self, monkeypatch):
+        adapter = _make_adapter()
+        monkeypatch.setattr(
+            adapter,
+            "_list_chat_failover_candidates_sync",
+            lambda p, m: [("openai", "a"), ("deepseek", "b")],
+        )
+        state = {"n": 0}
+
+        def fake_post(**kwargs):
+            state["n"] += 1
+            if state["n"] == 1:
+                raise httpx.ReadTimeout("timed out")
+            return {
+                "ok": True,
+                "content": "hello",
+                "provider": kwargs["provider"],
+                "model": kwargs["model"],
+            }
+
+        monkeypatch.setattr(adapter, "_post_market_chat_sync", fake_post)
+        out = adapter.chat_completion_sync([{"role": "user", "content": "x"}])
+        assert out["content"] == "hello"
+        assert state["n"] == 2

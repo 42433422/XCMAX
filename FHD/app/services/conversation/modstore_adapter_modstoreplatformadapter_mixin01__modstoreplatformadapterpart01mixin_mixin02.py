@@ -203,28 +203,77 @@ class __ModstorePlatformAdapterPart01MixinPart02Mixin:
         if not self.platform_url:
             raise ValueError("修茈市场平台URL未配置")
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
-        messages = await self._prepare_messages(messages, effective_provider, effective_model)
-        url = f"{self.platform_url}/api/llm/chat/stream"
-        payload: _facade().Dict[str, _facade().Any] = {
-            "provider": effective_provider,
-            "model": effective_model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": True,
-            **kwargs,
-        }
-        if self.user_id:
-            payload["user_id"] = self.user_id
-        _facade().logger.info(
-            "[Modstream] 启动流式请求: %s/%s", effective_provider, effective_model
+        candidates = await _facade().asyncio.to_thread(
+            self._list_chat_failover_candidates_sync, effective_provider, effective_model
         )
+        url = f"{self.platform_url}/api/llm/chat/stream"
         client = await self._get_client()
-        async with client.stream("POST", url, json=payload) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    yield line[6:]
+        last_error: Exception | None = None
+        for idx, (prov, mdl) in enumerate(candidates):
+            prepared = await self._prepare_messages(messages, prov, mdl)
+            payload: _facade().Dict[str, _facade().Any] = {
+                "provider": prov,
+                "model": mdl,
+                "messages": prepared,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True,
+                "allow_failover": idx == 0,
+                **kwargs,
+            }
+            if self.user_id:
+                payload["user_id"] = self.user_id
+            _facade().logger.info(
+                "[Modstream] 启动流式请求: %s/%s (attempt %s/%s)",
+                prov,
+                mdl,
+                idx + 1,
+                len(candidates),
+            )
+            emitted = False
+            try:
+                async with client.stream("POST", url, json=payload) as response:
+                    status_code = _facade()._response_status_code(response)
+                    if status_code >= 400:
+                        error_text = (await response.aread()).decode("utf-8", errors="ignore")[:500]
+                        err = ValueError(f"平台错误({status_code}): {error_text}")
+                        if idx + 1 < len(candidates) and _facade().is_market_chat_failoverable(
+                            status_code, error_text
+                        ):
+                            last_error = err
+                            _facade().logger.warning(
+                                "[Modstream] 流式换模 %s/%s -> %s err=%s",
+                                prov,
+                                mdl,
+                                candidates[idx + 1],
+                                error_text[:200],
+                            )
+                            continue
+                        raise err
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            emitted = True
+                            yield line[6:]
+                    return
+            except _facade().httpx.HTTPError as exc:
+                last_error = exc
+                if (
+                    emitted
+                    or idx + 1 >= len(candidates)
+                    or not _facade().is_market_chat_failoverable(None, str(exc))
+                ):
+                    raise
+                _facade().logger.warning(
+                    "[Modstream] 流式传输失败换模 %s/%s -> %s err=%s",
+                    prov,
+                    mdl,
+                    candidates[idx + 1],
+                    exc,
+                )
+                continue
+        if last_error is not None:
+            raise last_error
+        raise ValueError("平台流式聊天失败且无可用备用模型")
 
     def chat_completion_sync(
         self,
@@ -265,6 +314,20 @@ class __ModstorePlatformAdapterPart01MixinPart02Mixin:
                     allow_failover=idx == 0,
                     extra=kwargs or None,
                 )
+            except _facade().httpx.HTTPError as exc:
+                last_error = exc
+                if idx + 1 < len(candidates) and _facade().is_market_chat_failoverable(
+                    None, str(exc)
+                ):
+                    _facade().logger.warning(
+                        "[Modstore] 同步 HTTP 失败换模 %s/%s -> %s err=%s",
+                        prov,
+                        mdl,
+                        candidates[idx + 1],
+                        exc,
+                    )
+                    continue
+                raise
             except ValueError as exc:
                 last_error = exc
                 status_match = _facade().re.search("平台错误\\((\\d{3})\\)", str(exc))
