@@ -58,7 +58,8 @@ def test_export_rejects_missing_and_forged_empty_scans(
 ):
     data = yaml.safe_load((ROOT / WORKFLOWS[0]).read_text(encoding="utf-8"))
     script = next(
-        s["run"] for s in data["jobs"]["collect"]["steps"]
+        s["run"]
+        for s in data["jobs"]["collect"]["steps"]
         if s.get("name") == "Export gitleaks SARIF to metrics"
     )
     docker = tmp_path / "docker"
@@ -66,16 +67,17 @@ def test_export_rejects_missing_and_forged_empty_scans(
     if report is not None:
         payload = json.dumps(report, separators=(",", ":"))
         stub += "mkdir -p metrics\n"
-        stub += (
-            "printf '%s\\n' '" + payload + "' > "
-            '"metrics/gitleaks-$(date -u +%Y-%m-%d).json"\n'
-        )
+        stub += "printf '%s\\n' '" + payload + '\' > "metrics/gitleaks-$(date -u +%Y-%m-%d).json"\n'
     stub += f"exit {exit_code}\n"
     docker.write_text(stub, encoding="utf-8")
     docker.chmod(0o755)
     env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"}
     result = subprocess.run(
-        ["bash", "-c", script], cwd=tmp_path, env=env,
-        capture_output=True, timeout=15, check=False,
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        timeout=15,
+        check=False,
     )
     assert (result.returncode == 0) == passes, result.stderr.decode()
