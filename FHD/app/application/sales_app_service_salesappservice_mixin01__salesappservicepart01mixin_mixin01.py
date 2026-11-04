@@ -123,7 +123,11 @@ class __SalesAppServicePart01MixinPart01Mixin:
             for item_data, product in resolved_items:
                 product_id = product.id if product is not None else None
                 quantity = _facade()._to_decimal(item_data.get("quantity", "0"))
-                unit_price = _facade()._to_decimal(item_data.get("unit_price", "0"))
+                raw_price = item_data.get("unit_price")
+                price_value = (
+                    product.price if raw_price in (None, "") and product is not None else raw_price
+                )
+                unit_price = _facade()._to_decimal(price_value if price_value is not None else "0")
                 amount = quantity * unit_price
                 total_amount += amount
                 ctx.add(
@@ -133,7 +137,7 @@ class __SalesAppServicePart01MixinPart01Mixin:
                         product_name=product.name if product else item_data.get("product_name"),
                         specification=item_data.get("specification"),
                         quantity=quantity,
-                        unit=item_data.get("unit", "个"),
+                        unit=item_data.get("unit") or (product.unit if product else "个"),
                         unit_price=unit_price,
                         amount=amount,
                         ordered_quantity=quantity,

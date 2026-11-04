@@ -5,10 +5,30 @@ from typing import Any
 
 from app.application.workflow.types import WorkflowNode
 
+_ENGLISH_SELL = re.compile(
+    r"(?i)SELL\s+(\d+(?:\.\d+)?)\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+TO\s+(.+)"
+)
+
 
 def sales_quote_node(message: str, registry: dict[str, Any]) -> WorkflowNode | None:
     if "sales" not in registry:
         return None
+    english = _ENGLISH_SELL.fullmatch(message.strip())
+    if english:
+        quantity, model, customer = english.groups()
+        return WorkflowNode(
+            node_id="sales_create_order",
+            tool_id="sales",
+            action="create_order",
+            params={
+                "customer_name": customer.strip(),
+                "price_source": "catalog",
+                "items": [{"model_number": model, "quantity": float(quantity)}],
+            },
+            risk="medium",
+            idempotent=False,
+            description=f"为{customer.strip()}创建并确认{model}销售订单",
+        )
     match = re.fullmatch(
         r"(?:请|帮我)?给\s*(.+?)\s*的产品\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*报(?:个)?价"
         r"(?:[，,]\s*数量\s*(\d+(?:\.\d+)?))?"

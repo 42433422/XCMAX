@@ -12,10 +12,14 @@ def missing_quote_fields(data: dict[str, Any]) -> list[str]:
     if data.get("items") in (None, [], {}):
         missing.append("items")
     elif isinstance(data.get("items"), list):
+        allow_catalog_price = data.get("price_source") == "catalog"
         for index, item in enumerate(data["items"]):
             if isinstance(item, dict):
+                has_model = bool(str(item.get("model_number") or "").strip())
                 for field in ("quantity", "unit_price"):
-                    if item.get(field) in (None, ""):
+                    if item.get(field) in (None, "") and not (
+                        field == "unit_price" and has_model and allow_catalog_price
+                    ):
                         missing.append(f"items.{index}.{field}")
     return missing
 
@@ -67,17 +71,24 @@ def validated_quote_request(data: dict[str, Any]) -> list[dict[str, Any]]:
         raise ValueError("客户名称必须是文本")
     if not isinstance(data.get("items"), list):
         raise ValueError("报价明细必须是列表")
-    return validated_quote_items(data["items"])
+    return validated_quote_items(
+        data["items"], allow_catalog_price=(data.get("price_source") == "catalog")
+    )
 
 
-def validated_quote_items(items: list[Any]) -> list[dict[str, Any]]:
+def validated_quote_items(
+    items: list[Any], *, allow_catalog_price: bool = False
+) -> list[dict[str, Any]]:
     validated = []
     for index, item in enumerate(items, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"第 {index} 项报价明细格式错误")
         values = dict(item)
+        has_model = bool(str(item.get("model_number") or "").strip())
         for field, label in (("quantity", "数量"), ("unit_price", "单价")):
             raw = item.get(field)
+            if raw is None and field == "unit_price" and has_model and allow_catalog_price:
+                continue
             if raw is None or isinstance(raw, bool):
                 raise ValueError(f"第 {index} 项缺少有效{label}")
             try:
