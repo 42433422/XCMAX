@@ -45,9 +45,9 @@ def workbook_review(rows=120, *, formulas=True):
 
 def test_complete_request_includes_dense_formulas_schema_and_preserves_all_cells(monkeypatch):
     monkeypatch.delenv("FHD_TEMPLATE_LLM_PROVIDER", raising=False)
-    # 300 dense formula rows still exceed the raised ~384KB request envelope as one call,
+    # 3000 dense formula rows still exceed the raised ~3.84MB request envelope as one call,
     # while staying under MAX_MODEL_TEXT_BYTES so transport packing (not cell-count) splits.
-    review = workbook_review(300)
+    review = workbook_review(3000)
     assert sum(map(_model_cell_cost, review["cells"])) < MAX_MODEL_TEXT_BYTES
     with pytest.raises(RequestBudgetExceeded):
         _classify_semantic_batch(review, prepare_only=True, reference_ids=True)
@@ -283,7 +283,10 @@ def test_old_cell_chunk_boundaries_do_not_change_neutral_packing():
 def test_full_width_primary_row_is_not_rejected_for_optional_context(monkeypatch):
     from openpyxl.utils.cell import get_column_letter
 
-    width = MAX_MODEL_CELLS
+    # Excel caps a row at 16384 columns, so the algorithm is exercised exactly at that
+    # physical width instead of the product's larger 20000-cell pack budget.
+    width = 16384
+    monkeypatch.setattr("app.application.reviewed_excel_evidence.MAX_MODEL_CELLS", width)
     review = {
         "sheets": ["S"],
         "cells": [

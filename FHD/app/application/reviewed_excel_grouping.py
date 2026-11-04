@@ -15,7 +15,7 @@ from app.application.reviewed_excel_evidence import (
 def _structure_sample_cells(inside: list[dict]) -> list[dict]:
     """Sample first/middle/last structure rows and a capped formula set.
 
-    Classification transport may send up to MAX_MODEL_CELLS (2000) per pack;
+    Classification transport may send up to MAX_MODEL_CELLS (20000) per pack;
     grouping still samples structure only — never dumps full packs unsampled.
     Gate in prepare_grouping uses the shared cell/byte caps so multi-fragment
     samples (previously failing at 617 > 500) fit after sampling.
