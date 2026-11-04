@@ -233,12 +233,13 @@ def _job_summary(
 
 
 def _health_insert(session: Any) -> Any:
-    name = session.get_bind().dialect.name
-    if name == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert
-    else:
-        from sqlalchemy.dialects.sqlite import insert
-    return insert
+    if session.get_bind().dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        return pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    return sqlite_insert
 
 
 def _upsert_job_health(session: Any, run: Any) -> None:
