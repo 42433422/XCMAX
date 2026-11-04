@@ -1,5 +1,5 @@
 {
-  "lines": 2411368,
+  "lines": 2411619,
   "updated": "2026-11-04",
-  "note": "账号切换期间旧水合请求隔离与并发回归测试需要净增 30 行，避免跨账号状态和缓存污染。"
+  "note": "生产自维护 force-run 与 GET/POST status 500：evaluate_self_maintenance_need 把 runtime_provenance 模块写入 gate，ledger json.dumps 抛 TypeError。改为写入快照；ledger 对模块等非 JSON 值只记类型名；日任务 failed/blocked 改为抛 RuntimeError；公共错误码覆盖 TimeoutExpired/HTTPError/SSHException/JSONDecodeError 等。实现约 +100 行，回归测试约 +155 行，净增 251 行。这是用户要求的生产可观测性修复，不能靠删无关代码换净删除。"
 }

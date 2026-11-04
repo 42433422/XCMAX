@@ -177,7 +177,7 @@ def evaluate_self_maintenance_need() -> Dict[str, Any]:
         "proactive_signals": proactive_signals,
         "proactive_task_count": proactive_task_count,
         "repo_url": repo_url,
-        "runtime_provenance": runtime_provenance,
+        "runtime_provenance": runtime_provenance_result,
         "signal_count": signal_count,
     }
 
@@ -280,6 +280,31 @@ def reconcile_stale_self_maintenance_runs(
         "reconciled": reconciled,
         "stale_minutes": stale_minutes,
     }
+
+
+_DAILY_SUCCESS_STATUS_PREFIXES = ("skipped", "completed", "success", "heartbeat_")
+
+
+def raise_if_self_maintenance_scheduler_failed(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Surface coordinator failures to APScheduler instead of recording success.
+
+    Intentional skips and completed outcomes (including merge holds) stay
+    successful. ``failed``, ``blocked``, ``kb_schema_failed``, and any other
+    non-success status become a ``RuntimeError`` whose message is only a
+    public code, never the raw coordinator error.
+    """
+
+    status = str((result or {}).get("status") or "").strip()
+    if status.startswith(_DAILY_SUCCESS_STATUS_PREFIXES):
+        return result
+    from modstore_server.scheduler_runtime import public_error_code
+
+    code = (
+        public_error_code("self_maintenance_loop_daily", (result or {}).get("error"))
+        or "unclassified"
+    )
+    token = status if status.isidentifier() and status.islower() else "invalid_status"
+    raise RuntimeError(f"self_maintenance_loop_daily_failed:{token}:{code}")
 
 
 def should_run_self_maintenance_loop(
