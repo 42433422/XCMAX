@@ -86,33 +86,42 @@ jobs:
               "pending_jobs": type(pending) is int and pending >= 1,
               "required_jobs": data.get("missing_required_jobs") == [],
               "runtime_jobs": data.get("unhealthy_runtime_jobs") == [],
+              "runtime_recovered": data.get("recovering_runtime_jobs") == [],
           }
           rows = {}
           for item in data.get("runtime_jobs") or []:
               if isinstance(item, dict):
                   rows[str(item.get("job_id") or "")] = item
           bits = []
-          for job_id in list(data.get("unhealthy_runtime_jobs") or []):
+          recovering = data.get("recovering_runtime_jobs")
+          affected = list(data.get("unhealthy_runtime_jobs") or [])
+          for job_id in affected + (recovering if isinstance(recovering, list) else []):
               row = rows.get(str(job_id)) or {}
               bits.append(":".join((
                   str(job_id),
                   str(row.get("state") or "unhealthy"),
                   str(row.get("last_status") or ""),
                   str(row.get("last_error_code") or ""),
+                  "last_run_at=" + str(row.get("last_run_at") or ""),
+                  "last_success_at=" + str(row.get("last_success_at") or ""),
               )))
           detail = (" jobs=" + ",".join(bits)) if bits else ""
-          label = "healthy" if all(checks.values()) else "unhealthy"
+          waiting = isinstance(recovering, list) and bool(recovering) and all(
+              isinstance(job, str) and bool(job) for job in recovering
+          ) and all(value for key, value in checks.items() if key != "runtime_recovered")
+          label = "healthy" if all(checks.values()) else "recovering" if waiting else "unhealthy"
           print(label, " ".join(f"{key}={value}" for key, value in checks.items()) + detail)
           ' 2>/dev/null)" || reason="invalid_health_response"
-            [ "${reason%% *}" = "healthy" ]
+            [ "${reason%% *}" = "healthy" ] || [ "${reason%% *}" = "recovering" ]
           }
 
           echo "::restart_triggered::false"
           if probe; then
-            echo "::health::healthy"
+            echo "::health::${reason%% *}"
             echo "::reason::$reason"
             exit 0
           fi
+          initial_reason="$reason"
           echo "::health::unhealthy"
           echo "::reason::$reason"
           if [ "$DRY" = "true" ]; then
@@ -127,12 +136,12 @@ jobs:
           for _attempt in $(seq 1 24); do
             sleep 5
             if probe; then
-              echo "::health::healthy"
-              echo "::reason::post_restart $reason; awaiting next independent probe"
+              echo "::health::${reason%% *}"
+              echo "::reason::post_restart $reason; initial_probe=$initial_reason; awaiting next independent probe"
               exit 0
             fi
           done
-          echo "::reason::still_unhealthy_after_restart; $reason"
+          echo "::reason::still_unhealthy_after_restart; $reason; initial_probe=$initial_reason"
           EOF
           )
 

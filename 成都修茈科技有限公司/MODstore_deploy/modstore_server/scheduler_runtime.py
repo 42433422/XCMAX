@@ -35,6 +35,11 @@ _SAFE_EMPLOYEE_CRON_ERROR_CODE = re.compile(
     r"|employee_cron_input_resolution_failed"
     r")\b"
 )
+_SAFE_SCHEDULER_EXCEPTION = re.compile(
+    r"^(RuntimeError|ValueError|TypeError|KeyError|AttributeError|ImportError|"
+    r"ModuleNotFoundError|OSError|FileNotFoundError|PermissionError|TimeoutError|"
+    r"ConnectionError|OperationalError|IntegrityError)\("
+)
 
 
 def _utcnow() -> datetime:
@@ -147,10 +152,15 @@ def _safe_last_error_code(job_id: str, error: object) -> str | None:
     paths without leaking the underlying exception.
     """
 
-    if not str(job_id or "").startswith("employee_cron"):
-        return None
-    match = _SAFE_EMPLOYEE_CRON_ERROR_CODE.search(str(error or ""))
-    return match.group(1) if match else None
+    text = str(error or "")
+    if str(job_id or "").startswith("employee_cron"):
+        match = _SAFE_EMPLOYEE_CRON_ERROR_CODE.search(text)
+        if match:
+            return match.group(1)
+    # Historical non-employee records contain repr(exc). Only a fixed exception
+    # vocabulary may cross the public endpoint, never the exception message.
+    exception = _SAFE_SCHEDULER_EXCEPTION.match(text)
+    return f"scheduler_exception:{exception.group(1)}" if exception else None
 
 
 def _job_summary(
@@ -201,6 +211,7 @@ def get_runtime_status(
     返回 ``{"generated_at", "stale_after_seconds", "jobs": [...], "summary": {...}, "ok"}``，
     每个 job 带 ``last_run_at`` / ``last_success_at`` / ``last_status`` /
     ``consecutive_failures`` / ``state``（healthy | failing | stale）。
+    ``scan_limit`` 按 job 限制历史窗口，并额外保留最后一次成功；高频任务不能挤掉日任务。
     """
     stale_after = int(
         stale_after_seconds if stale_after_seconds is not None else DEFAULT_STALE_AFTER_SECONDS
@@ -208,12 +219,33 @@ def get_runtime_status(
     now = _utcnow()
 
     try:
+        from sqlalchemy import case, func, or_
+
         from modstore_server.db.scheduler_ops import JobRun
         from modstore_server.models import get_session_factory
 
         sf = get_session_factory()
         with sf() as session:
-            rows = session.query(JobRun).order_by(JobRun.id.desc()).limit(max(1, scan_limit)).all()
+            ranked = session.query(
+                JobRun.id.label("run_id"),
+                func.row_number()
+                .over(partition_by=JobRun.job_id, order_by=JobRun.id.desc())
+                .label("run_rank"),
+                func.max(case((JobRun.status == "success", JobRun.id)))
+                .over(partition_by=JobRun.job_id)
+                .label("last_success_id"),
+            ).subquery()
+            rows = (
+                session.query(JobRun)
+                .join(ranked, JobRun.id == ranked.c.run_id)
+                .filter(
+                    or_(
+                        ranked.c.run_rank <= max(1, scan_limit),
+                        JobRun.id == ranked.c.last_success_id,
+                    )
+                )
+                .all()
+            )
     except RECOVERABLE_ERRORS:
         logger.exception("get_runtime_status 读取失败")
         return {
