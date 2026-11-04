@@ -740,8 +740,8 @@ describe('SettingsView.vue – industry loading', () => {
     wrapper.unmount()
   })
 
-  it('populates industries from API response', async () => {
-    mockSystemApiGetIndustries.mockResolvedValueOnce({
+  it('adopts the current industry from API response', async () => {
+    mockSystemApiGetIndustries.mockResolvedValue({
       success: true,
       data: {
         industries: [{ id: 'manufacturing', name: '制造业', code: 'mfg' }],
@@ -750,7 +750,8 @@ describe('SettingsView.vue – industry loading', () => {
     })
     const wrapper = await mountSettings()
     await flushPromises()
-    expect((wrapper.vm as any).industries).toEqual([{ id: 'manufacturing', name: '制造业', code: 'mfg' }])
+    await (wrapper.vm as any).loadIndustries()
+    expect((wrapper.vm as any).currentIndustry).toBe('manufacturing')
     wrapper.unmount()
   })
 })
