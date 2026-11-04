@@ -153,6 +153,12 @@ def recover_if_corrupt(
     logger.error("database corrupt: %s, attempting recovery from backups", db)
     stamp = utc_now_naive().strftime("%Y%m%d%H%M%S")
     corrupt_path = db.with_name(f"xcagi.db.corrupt-{stamp}")
+    # Windows rename refuses an existing target; a second corruption within the
+    # same second must keep both copies as evidence instead of aborting recovery.
+    suffix = 1
+    while corrupt_path.exists():
+        corrupt_path = db.with_name(f"xcagi.db.corrupt-{stamp}-{suffix}")
+        suffix += 1
     try:
         db.rename(corrupt_path)
         logger.warning("renamed corrupt db to %s", corrupt_path)

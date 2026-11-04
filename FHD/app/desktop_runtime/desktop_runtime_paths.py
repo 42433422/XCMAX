@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import platform
+from functools import lru_cache
 from pathlib import Path
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -39,7 +40,18 @@ def get_desktop_data_dir(data_dir: str | os.PathLike[str] | None = None) -> Path
         if data_dir is not None
         else os.environ.get(DATA_DIR_ENV) or os.environ.get(LEGACY_DATA_DIR_ENV)
     )
-    return Path(raw).expanduser().resolve() if raw else _default_user_data_dir().resolve()
+    path = Path(raw).expanduser() if raw else _default_user_data_dir()
+    return _resolved(os.path.abspath(path))
+
+
+@lru_cache(maxsize=16)
+def _resolved(absolute: str) -> Path:
+    # Path.resolve() hits the filesystem (GetFinalPathNameByHandle on Windows) and
+    # this runs for every database session.
+    return Path(absolute).resolve()
+
+
+_ENSURED_ROOTS: set[Path] = set()
 
 
 def ensure_desktop_dirs(
@@ -56,8 +68,11 @@ def ensure_desktop_dirs(
         "cache": root / "cache",
         "backups": root / "backups",
     }
+    if root in _ENSURED_ROOTS and dirs["data"].is_dir():
+        return dirs
     for path in dirs.values():
         path.mkdir(parents=True, exist_ok=True)
+    _ENSURED_ROOTS.add(root)
     return dirs
 
 

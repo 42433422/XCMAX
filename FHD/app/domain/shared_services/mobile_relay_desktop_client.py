@@ -123,6 +123,7 @@ from app.application.desktop_relay.registration import RegistrationPorts, RelayR
 from app.infrastructure.relay.gitops import GIT_OP_KINDS as GIT_OP_KINDS
 from app.infrastructure.relay.gitops import handle_git_op
 from app.utils.device_system.device_identity import get_stable_device_id
+from app.utils.http_tls import shared_ssl_context
 from app.utils.operational_errors import RECOVERABLE_ERRORS as RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir, get_desktop_state_dir
 
@@ -158,7 +159,9 @@ def _create_worker(callback: Callable[[], None], name: str) -> Worker:
 
 def _relay_http_client(timeout: float) -> httpx.Client:
     """云中继须直连公网 API；桌面系统代理未运行时 trust_env 会导致 Invalid port 等异常。"""
-    return httpx.Client(timeout=timeout, trust_env=False)
+    return httpx.Client(
+        timeout=timeout, trust_env=False, verify=shared_ssl_context(trust_env=False)
+    )
 
 
 def _ensure_super_employee_service_classes() -> None:
