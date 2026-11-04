@@ -317,7 +317,9 @@ async def chat_google(api_key: str, model: str, messages: List[Dict[str, str]]) 
     if not cands:
         return {"ok": False, "error": "no candidates", "raw": data}
     first = cands[0] if isinstance(cands[0], dict) else {}
-    content_block = first.get("content") if isinstance(first.get("content"), dict) else {}
+    content_block: Dict[str, Any] = first.get("content") or {}
+    if not isinstance(content_block, dict):
+        content_block = {}
     parts = content_block.get("parts") or []
     texts = [str(p.get("text") or "") for p in parts if isinstance(p, dict)]
     usage = data.get("usageMetadata") or data.get("usage") or {}
