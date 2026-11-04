@@ -76,11 +76,24 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     return false
   }
 
+  async function authenticate(current: () => boolean, signal: AbortSignal) {
+    // A busy local backend can miss the session-check deadline right after launch.
+    // That is not a logout: retry within the startup budget, then say what failed.
+    const retryDelays = [500, 1500]
+    for (let attempt = 0; ; attempt++) {
+      const auth = await ensureStartupAuthenticated(current)
+      if (!auth.unavailable || !current() || signal.aborted) return auth
+      if (attempt >= retryDelays.length) throw new Error('本地服务响应超时，登录状态暂时无法确认，请重试')
+      await pause(retryDelays[attempt], signal)
+      if (!current() || signal.aborted) return auth
+    }
+  }
+
   function retryStartup() {
     if (publicEntry.value) { splash.dismissStartupSplashImmediate(); return }
     void splash.runStartup(async (current, stage, signal) => {
       stage('正在确认登录和工作空间…')
-      const auth = await ensureStartupAuthenticated(current)
+      const auth = await authenticate(current, signal)
       if (!current()) return
       if (!auth.ok) throw new Error('登录未确认，请返回登录后重试')
       // Another mount-time profile refresh can supersede the helper's request.
