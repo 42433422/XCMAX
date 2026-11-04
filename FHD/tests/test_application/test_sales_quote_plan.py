@@ -1,4 +1,29 @@
+from app.application.sales_quote_inputs import missing_quote_fields
 from app.application.workflow.sales_quote_plan import sales_quote_node
+
+
+def test_english_sell_creates_order_with_catalog_price():
+    node = sales_quote_node("SELL 2 P006 TO A006", {"sales": {}})
+    assert node and node.action == "create_order"
+    assert node.params == {
+        "customer_name": "A006",
+        "price_source": "catalog",
+        "items": [{"model_number": "P006", "quantity": 2.0}],
+    }
+
+
+def test_catalog_price_only_waives_price_for_model_items():
+    catalog = {
+        "customer_name": "A006",
+        "price_source": "catalog",
+        "items": [{"model_number": "P006", "quantity": 2}],
+    }
+    assert missing_quote_fields(catalog) == []
+    catalog["items"] = [{"product_name": "BOX", "quantity": 2}]
+    assert missing_quote_fields(catalog) == ["items.0.unit_price"]
+    catalog.pop("price_source")
+    catalog["items"] = [{"model_number": "P006", "quantity": 2}]
+    assert missing_quote_fields(catalog) == ["items.0.unit_price"]
 
 
 def test_explicit_quote_keeps_customer_model_and_terms():
