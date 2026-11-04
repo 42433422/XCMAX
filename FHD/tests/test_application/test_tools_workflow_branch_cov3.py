@@ -92,14 +92,15 @@ class TestRunNaturalLanguagePandas:
         assert result["generated_code"] == ""
         assert result["row_count"] == 2
 
-    def test_truncated_when_more_than_200_rows(self) -> None:
+    def test_truncated_when_more_than_page_size(self) -> None:
         df = pd.DataFrame({"a": list(range(250))})
         patch_ctx, _ = _patch_excel_text_to_pandas(translate_return="")
         with patch_ctx:
-            result = run_natural_language_pandas(df, "x")
+            result = run_natural_language_pandas(df, "x", max_rows=200)
         assert result["truncated"] is True
         assert result["returned_rows"] == 200
         assert result["row_count"] == 250
+        assert result["next_offset"] == 200
 
     def test_not_truncated_when_less_than_200_rows(self) -> None:
         df = pd.DataFrame({"a": list(range(10))})
