@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator, Iterator
 
 import httpx
@@ -30,29 +31,47 @@ def stream_sync(
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
             headers=connection.headers(),
         ) as client:
-            with (
-                client.stream(
-                    "POST", f"{connection.platform_url}/api/llm/chat/stream", json=payload
-                ) as response,
-                owned_model_read(response),
-            ):
-                check_stream_active()
-                status = ports.status_code(response, 200)
-                if status < 400:
-                    # No retry after output has begun: replaying a partial answer
-                    # could duplicate visible output or an upstream billed call.
-                    yield from ports.sync_payloads(response)
-                    return
-                if request.extra.get("key_source") or request.extra.get("route_token"):
-                    response.read()
-                    raise market_response_error(response, status)
-                text = response.read().decode("utf-8", errors="ignore")[:500]
-                error = ValueError(f"平台错误({status}): {text}")
-                if index + 1 >= len(candidates) or not ports.failoverable(status, text):
-                    raise error
-                last_error = error
+            emitted = False
+            try:
+                with (
+                    client.stream(
+                        "POST", f"{connection.platform_url}/api/llm/chat/stream", json=payload
+                    ) as response,
+                    owned_model_read(response),
+                ):
+                    check_stream_active()
+                    status = ports.status_code(response, 200)
+                    if status < 400:
+                        # No retry after output has begun: replaying a partial answer
+                        # could duplicate visible output or an upstream billed call.
+                        for data in ports.sync_payloads(response):
+                            emitted = True
+                            yield data
+                        return
+                    if request.extra.get("key_source") or request.extra.get("route_token"):
+                        response.read()
+                        raise market_response_error(response, status)
+                    text = response.read().decode("utf-8", errors="ignore")[:500]
+                    error = ValueError(f"平台错误({status}): {text}")
+                    if index + 1 >= len(candidates) or not ports.failoverable(status, text):
+                        raise error
+                    last_error = error
+                    ports.logger.warning(
+                        "[Modstream] 流式换模 %s/%s -> %s", *candidate, candidates[index + 1]
+                    )
+            except httpx.HTTPError as exc:
+                # 连接/读超时等传输故障：未输出首包时才允许换模。
+                if (
+                    emitted
+                    or index + 1 >= len(candidates)
+                    or not ports.failoverable(None, str(exc))
+                ):
+                    raise
+                last_error = exc
                 ports.logger.warning(
-                    "[Modstream] 流式换模 %s/%s -> %s", *candidate, candidates[index + 1]
+                    "[Modstream] 流式传输失败换模 %s/%s -> %s",
+                    *candidate,
+                    candidates[index + 1],
                 )
     if last_error is not None:
         raise last_error
@@ -64,19 +83,50 @@ async def stream_async(
 ) -> AsyncGenerator[str, None]:
     if not connection.platform_url:
         raise ValueError("修茈市场平台URL未配置")
-    messages = await ports.prepare_async(request.messages, *route)
-    payload = request.payload(connection, route, messages, stream=True)
-    client = await ports.async_client()
-    async with client.stream(
-        "POST",
-        f"{connection.platform_url}/api/llm/chat/stream",
-        json=payload,
-        headers=connection.headers(),
-    ) as response:
-        status = ports.status_code(response, 200)
-        if status >= 400 and (request.extra.get("key_source") or request.extra.get("route_token")):
-            await response.aread()
-            raise market_response_error(response, status)
-        response.raise_for_status()
-        async for data in ports.async_payloads(response):
-            yield data
+    candidates = await asyncio.to_thread(ports.candidates, *route)
+    last_error: Exception | None = None
+    for index, candidate in enumerate(candidates):
+        messages = await ports.prepare_async(request.messages, *candidate)
+        payload = request.payload(
+            connection, candidate, messages, stream=True, allow_failover=index == 0
+        )
+        client = await ports.async_client()
+        emitted = False
+        try:
+            async with client.stream(
+                "POST",
+                f"{connection.platform_url}/api/llm/chat/stream",
+                json=payload,
+                headers=connection.headers(),
+            ) as response:
+                status = ports.status_code(response, 200)
+                if status >= 400:
+                    await response.aread()
+                    if request.extra.get("key_source") or request.extra.get("route_token"):
+                        raise market_response_error(response, status)
+                    text = response.text[:500]
+                    error = ValueError(f"平台错误({status}): {text}")
+                    if index + 1 >= len(candidates) or not ports.failoverable(status, text):
+                        raise error
+                    last_error = error
+                    ports.logger.warning(
+                        "[Modstream] 流式换模 %s/%s -> %s", *candidate, candidates[index + 1]
+                    )
+                    continue
+                async for data in ports.async_payloads(response):
+                    emitted = True
+                    yield data
+                return
+        except httpx.HTTPError as exc:
+            # 传输故障只在未输出首包时换模，避免重复内容或重复计费。
+            if emitted or index + 1 >= len(candidates) or not ports.failoverable(None, str(exc)):
+                raise
+            last_error = exc
+            ports.logger.warning(
+                "[Modstream] 流式传输失败换模 %s/%s -> %s",
+                *candidate,
+                candidates[index + 1],
+            )
+    if last_error is not None:
+        raise last_error
+    raise ValueError("平台流式聊天失败且无可用备用模型")

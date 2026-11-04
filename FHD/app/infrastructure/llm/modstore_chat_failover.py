@@ -22,7 +22,38 @@ _FAILOVER_NEEDLES = (
     "额度",
     "余额不足",
     "payment required",
+    # 网关/上游 5xx 与传输抖动：换厂商或模型可能恢复
+    "internal server error",
+    "bad gateway",
+    "service unavailable",
+    "gateway timeout",
+    "temporarily unavailable",
+    "overloaded",
+    "timeout",
+    "timed out",
+    "readtimeout",
+    "connecterror",
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "remotedisconnected",
+    "remote protocol error",
+    "eof occurred",
 )
+
+
+_NON_FAILOVER_NEEDLES = (
+    "java 支付服务不可用",
+    "支付服务不可用",
+    "wallet_dependency_unavailable",
+    "payment service unavailable",
+)
+
+
+def is_market_chat_wallet_dependency_error(error_text: str) -> bool:
+    """支付/钱包依赖不可达：换厂商仍会打同一依赖，客户端不应再换模。"""
+    low = str(error_text or "").lower()
+    return any(n in low for n in _NON_FAILOVER_NEEDLES)
 
 
 def chat_failover_max_attempts() -> int:
@@ -35,12 +66,14 @@ def chat_failover_max_attempts() -> int:
 
 def is_market_chat_failoverable(status_code: Optional[int], error_text: str) -> bool:
     """市场返回是否值得换厂商/模型再试。"""
-    if status_code in {402, 403, 404, 429}:
+    if is_market_chat_wallet_dependency_error(error_text):
+        return False
+    if status_code in {402, 403, 404, 429, 500, 502, 503, 504}:
         return True
     text = str(error_text or "")
     # 「平台错误(429): ...」
     m = re.search(r"平台错误\((\d{3})\)", text)
-    if m and int(m.group(1)) in {402, 403, 404, 429}:
+    if m and int(m.group(1)) in {402, 403, 404, 429, 500, 502, 503, 504}:
         return True
     low = text.lower()
     return any(n in text or n in low for n in _FAILOVER_NEEDLES)
@@ -165,5 +198,6 @@ __all__ = [
     "chat_failover_max_attempts",
     "first_model_from_catalog_block",
     "is_market_chat_failoverable",
+    "is_market_chat_wallet_dependency_error",
     "iter_unique_routes",
 ]

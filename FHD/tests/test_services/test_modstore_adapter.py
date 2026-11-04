@@ -195,7 +195,7 @@ class TestModstorePlatformAdapterInit:
         assert adapter.platform_url == "http://localhost:9000"
         assert adapter.default_provider == "xiaomi"
         assert adapter.default_model == "mimo-v2.5-pro"
-        assert adapter.timeout == 60.0
+        assert adapter.timeout == 150.0
 
     def test_custom_init(self):
         adapter = ModstorePlatformAdapter(
