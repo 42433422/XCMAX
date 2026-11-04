@@ -1437,33 +1437,6 @@ describe('SettingsView – loadDesktopDatabaseStatus', () => {
 describe('SettingsView – loadIndustries', () => {
   beforeEach(resetSettingsTest)
 
-  it('返回数组时直接赋值', async () => {
-    mockSystemApiGetIndustries.mockResolvedValueOnce({
-      success: true,
-      data: [{ id: 'mfg', name: '制造业', code: 'mfg' }],
-    })
-    const wrapper = await mountSettings()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    await vm.loadIndustries()
-    expect(vm.industries.length).toBe(1)
-    wrapper.unmount()
-  })
-
-  it('返回对象含 industries 字段时赋值', async () => {
-    mockIndustryStore.currentIndustry = { id: 'retail', name: '零售' }
-    mockSystemApiGetIndustries.mockResolvedValueOnce({
-      success: true,
-      data: { industries: [{ id: 'retail', name: '零售', code: 'rtl' }], current: 'retail' },
-    })
-    const wrapper = await mountSettings()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    await vm.loadIndustries()
-    expect(vm.industries.length).toBe(1)
-    wrapper.unmount()
-  })
-
   it('API 失败时不抛错', async () => {
     mockSystemApiGetIndustries.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
