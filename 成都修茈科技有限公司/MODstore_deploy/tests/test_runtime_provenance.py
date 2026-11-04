@@ -170,6 +170,80 @@ def test_local_runtime_installer_manifest_covers_autonomy_controllers() -> None:
     assert '("*/manifest.json", "*/backend/employees/*.py")' in script
 
 
+def test_evaluation_stores_provenance_snapshot_not_the_module(monkeypatch) -> None:
+    snapshot = {
+        "head_sha": "abc",
+        "ok": True,
+        "reasons": [],
+        "source": "git_checkout",
+    }
+    monkeypatch.setattr(
+        _maintenance_schedule.runtime_provenance,
+        "collect_runtime_provenance",
+        lambda **_kwargs: snapshot,
+    )
+    monkeypatch.setattr(_maintenance_schedule, "_recent_employee_failure_count", lambda _hours: 0)
+    monkeypatch.setattr(
+        _maintenance_schedule,
+        "_recent_incident_signals",
+        lambda _hours, limit=8: {"count": 0, "events": []},
+    )
+    monkeypatch.setattr(
+        _maintenance_schedule.self_evolution_knowledge,
+        "collect_proactive_signals",
+        lambda: {"candidates": []},
+    )
+
+    evaluation = _maintenance_schedule.evaluate_self_maintenance_need()
+    start_record = {
+        "gate": evaluation,
+        "phase": "start",
+        "run_id": "run-provenance",
+        "runtime_provenance": evaluation.get("runtime_provenance"),
+    }
+
+    assert evaluation["runtime_provenance"] == snapshot
+    encoded = json.dumps(start_record)
+    assert json.loads(encoded)["runtime_provenance"] == snapshot
+    try:
+        from fastapi.encoders import jsonable_encoder
+    except ImportError:  # pragma: no cover - ledger crash is still covered above
+        return
+    response = jsonable_encoder({"ok": True, "result": start_record, "current_gate": evaluation})
+    assert response["current_gate"]["runtime_provenance"]["ok"] is True
+
+
+def test_append_ledger_sanitizes_module_and_non_json_values(monkeypatch, tmp_path: Path) -> None:
+    import modstore_server.runtime_provenance as provenance
+
+    ledger = tmp_path / "ledger.jsonl"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(ledger))
+
+    class _Odd:
+        def __repr__(self) -> str:
+            return "secret=must-not-leak"
+
+    _maintenance_store._append_ledger(
+        {
+            "blob": b"must-not-leak",
+            "phase": "start",
+            "run_id": "run-mod",
+            "runtime_provenance": provenance,
+            "tags": {"b", "a"},
+            "weird": _Odd(),
+        }
+    )
+
+    text = ledger.read_text(encoding="utf-8")
+    record = json.loads(text)
+    assert record["runtime_provenance"] == "module:modstore_server.runtime_provenance"
+    assert record["blob"] == "bytes:13"
+    assert record["weird"] == "non_json:_Odd"
+    assert set(record["tags"]) == {"a", "b"}
+    assert "must-not-leak" not in text
+    assert "__file__" not in text
+
+
 def test_ledger_adds_correlation_id_and_schema(monkeypatch, tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.jsonl"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(ledger))

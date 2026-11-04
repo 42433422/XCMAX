@@ -194,6 +194,16 @@ def test_employee_cron_failure_code_is_safe_for_public_runtime(db_ready):
     [
         ("RuntimeError('api_key=must-not-leak')", "scheduler_exception:RuntimeError"),
         ("FileNotFoundError('/private/must-not-leak')", "scheduler_exception:FileNotFoundError"),
+        (
+            "TimeoutExpired(['git', 'token=must-not-leak'], 20)",
+            "scheduler_exception:TimeoutExpired",
+        ),
+        ("HTTPError('https://user:must-not-leak@host')", "scheduler_exception:HTTPError"),
+        ("HTTPStatusError('must-not-leak')", "scheduler_exception:HTTPStatusError"),
+        ("ConnectError('must-not-leak')", "scheduler_exception:ConnectError"),
+        ("SSHException('key=must-not-leak')", "scheduler_exception:SSHException"),
+        ("JSONDecodeError('must-not-leak', 'doc', 0)", "scheduler_exception:JSONDecodeError"),
+        ("ValidationError('must-not-leak')", "scheduler_exception:ValidationError"),
         ("must-not-leak('secret')", None),
         ("message RuntimeError('must-not-leak')", None),
         ("execution_timeout", "execution_timeout"),
@@ -210,6 +220,77 @@ def test_non_employee_failure_exposes_only_reviewed_exception_type(db_ready, err
     entry = _find(get_runtime_status(), job_id)
     assert entry["state"] == "failing"
     assert entry["last_error_code"] == code
+    assert "must-not-leak" not in json.dumps(entry)
+
+
+def test_public_exception_type_keeps_recoverable_subclass_names():
+    import subprocess
+
+    from modstore_server.scheduler_runtime import public_exception_type
+
+    assert public_exception_type(subprocess.TimeoutExpired(["git"], 1)) == "TimeoutExpired"
+    assert public_exception_type(json.JSONDecodeError("m", "d", 0)) == "JSONDecodeError"
+    assert public_exception_type(subprocess.CalledProcessError(1, ["git"])) == "CalledProcessError"
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "skipped_active_lease",
+        "skipped_cooldown",
+        "completed",
+        "completed_merged",
+        "completed_held_for_remediation",
+        "success",
+    ],
+)
+def test_daily_self_maintenance_keeps_skip_and_completed_as_success(status):
+    from modstore_server.maintenance_loop.schedule import (
+        raise_if_self_maintenance_scheduler_failed,
+    )
+
+    result = {"status": status, "error": "api_key=must-not-leak"}
+    assert raise_if_self_maintenance_scheduler_failed(result) is result
+
+
+@pytest.mark.parametrize("status", ["failed", "blocked", "kb_schema_failed", ""])
+def test_daily_self_maintenance_soft_failure_raises_without_raw_error(status):
+    from modstore_server.maintenance_loop.schedule import (
+        raise_if_self_maintenance_scheduler_failed,
+    )
+
+    with pytest.raises(RuntimeError, match=r"^self_maintenance_loop_daily_failed:") as caught:
+        raise_if_self_maintenance_scheduler_failed(
+            {"status": status, "error": "TimeoutExpired(['token=must-not-leak'], 5)"}
+        )
+    message = str(caught.value)
+    assert "must-not-leak" not in message
+    if status in {"failed", "blocked", "kb_schema_failed"}:
+        assert message.startswith(f"self_maintenance_loop_daily_failed:{status}:")
+        assert "scheduler_exception:TimeoutExpired" in message
+    else:
+        assert message.startswith("self_maintenance_loop_daily_failed:invalid_status:")
+
+
+def test_daily_self_maintenance_soft_failure_is_a_runtime_failure(db_ready):
+    from modstore_server.maintenance_loop.schedule import (
+        raise_if_self_maintenance_scheduler_failed,
+    )
+    from modstore_server.scheduler_runtime import get_runtime_status, track_job_run
+
+    job_id = _job("self_maintenance_loop_daily")
+    with pytest.raises(RuntimeError):
+        with track_job_run(job_id):
+            raise_if_self_maintenance_scheduler_failed(
+                {"status": "failed", "error": "ConnectError('api_key=must-not-leak')"}
+            )
+
+    entry = _find(get_runtime_status(), job_id)
+    assert entry is not None
+    assert entry["state"] == "failing"
+    assert entry["last_status"] == "failed"
+    assert entry["consecutive_failures"] == 1
+    assert entry["last_error_code"] == "scheduler_exception:RuntimeError"
     assert "must-not-leak" not in json.dumps(entry)
 
 

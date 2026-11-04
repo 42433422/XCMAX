@@ -9,12 +9,52 @@ from collections import deque
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server import self_maintenance_runtime_evidence
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config
+
+
+def _json_fallback(value: Any) -> Any:
+    """Keep a ledger write alive when a value is not JSON.
+
+    Modules are recorded by import name only. Other exotic objects become a
+    type token. Raw ``repr`` is intentionally not used: exception messages and
+    module paths can carry secrets or host layout.
+    """
+
+    if isinstance(value, ModuleType):
+        name = str(getattr(value, "__name__", "") or "")
+        if name and all(part.isidentifier() for part in name.split(".")):
+            return f"module:{name}"
+        return "module:redacted"
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, (set, frozenset)):
+        return list(value)
+    if isinstance(value, (bytes, bytearray)):
+        return f"bytes:{len(value)}"
+    if isinstance(value, BaseException):
+        return f"exception:{type(value).__name__}"
+    type_name = type(value).__name__
+    if type_name.isidentifier():
+        return f"non_json:{type_name}"
+    return "non_json:value"
+
+
+def _dumps_ledger(payload: Any, *, indent: int | None = None) -> str:
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        indent=indent,
+        default=_json_fallback,
+    )
 
 
 def ledger_path() -> Path:
@@ -122,7 +162,7 @@ def _append_ledger(record: Dict[str, Any]) -> None:
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
         except (ImportError, OSError):
             pass
-        fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+        fh.write(_dumps_ledger(record) + "\n")
 
 
 def _read_ledger(
@@ -341,7 +381,7 @@ def _append_governance_audit(
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
         except (ImportError, OSError):
             pass
-        fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+        fh.write(_dumps_ledger(record) + "\n")
     return path
 
 
@@ -350,6 +390,6 @@ def _write_loop_memory(memory: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8") as fh:
-        json.dump(memory, fh, ensure_ascii=False, indent=2, sort_keys=True)
+        fh.write(_dumps_ledger(memory, indent=2))
         fh.write("\n")
     tmp.replace(path)
