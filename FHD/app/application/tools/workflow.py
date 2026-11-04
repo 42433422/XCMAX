@@ -138,7 +138,12 @@ def _excel_io() -> ExcelIO:
 
 def run_natural_language_pandas(df: pd.DataFrame, natural_language: str, **kwargs: Any) -> Payload:
     return natural_language_query(
-        df, natural_language, adapters.translate_pandas, _safe_exec_pandas
+        df,
+        natural_language,
+        adapters.translate_pandas,
+        _safe_exec_pandas,
+        offset=int(kwargs.get("offset") or 0),
+        max_rows=kwargs.get("max_rows"),
     )
 
 
