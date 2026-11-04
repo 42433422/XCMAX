@@ -307,6 +307,52 @@ class TestHandleExcelAnalysis:
         assert result["success"] is False
         assert "file_path" in result["error"]
 
+    def test_read_pagination(self, tmp_path):
+        from pathlib import Path
+
+        import pandas as pd
+
+        from app.application.tools.workflow import handle_excel_analysis
+
+        xlsx_path = str(tmp_path / "page.xlsx")
+        pd.DataFrame({"a": list(range(300))}).to_excel(xlsx_path, index=False)
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            first = handle_excel_analysis(
+                {"file_path": xlsx_path, "action": "read", "max_rows": 200}
+            )
+            second = handle_excel_analysis(
+                {"file_path": xlsx_path, "action": "read", "max_rows": 200, "offset": 200}
+            )
+        assert first["row_count"] == 300
+        assert first["returned_rows"] == 200
+        assert first["has_more"] is True
+        assert first["next_offset"] == 200
+        assert second["returned_rows"] == 100
+        assert second["has_more"] is False
+        assert second["next_offset"] is None
+
+    def test_read_default_page_and_env_cap(self, tmp_path, monkeypatch):
+        from pathlib import Path
+
+        import pandas as pd
+
+        from app.application.tools.workflow import handle_excel_analysis
+
+        monkeypatch.setenv("FHD_EXCEL_ANALYSIS_MAX_PAGE_ROWS", "500")
+        xlsx_path = str(tmp_path / "cap.xlsx")
+        pd.DataFrame({"a": list(range(600))}).to_excel(xlsx_path, index=False)
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            result = handle_excel_analysis(
+                {"file_path": xlsx_path, "action": "read", "max_rows": 9999}
+            )
+        assert result["page_rows"] == 500
+        assert result["returned_rows"] == 500
+        assert result["has_more"] is True
+
     def test_unsupported_action(self):
         from app.application.tools.workflow import handle_excel_analysis
 

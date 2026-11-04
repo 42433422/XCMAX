@@ -4,10 +4,61 @@
 from __future__ import annotations
 
 import importlib
+import os
+
+_EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS = 1000
+_EXCEL_ANALYSIS_MAX_PAGE_ROWS = 5000
 
 
 def _facade():
     return importlib.import_module("app.application.tools.workflow")
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name) or default)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _excel_analysis_page_rows(requested: _facade().Any = None) -> int:
+    hard_max = _env_positive_int("FHD_EXCEL_ANALYSIS_MAX_PAGE_ROWS", _EXCEL_ANALYSIS_MAX_PAGE_ROWS)
+    default_rows = min(
+        _env_positive_int("FHD_EXCEL_ANALYSIS_PAGE_ROWS", _EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS),
+        hard_max,
+    )
+    try:
+        rows = int(requested) if requested is not None else default_rows
+    except (TypeError, ValueError):
+        rows = default_rows
+    return min(max(1, rows), hard_max)
+
+
+def _excel_analysis_offset(value: _facade().Any = None) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _excel_analysis_page(
+    df: _facade().pd.DataFrame, offset: int, page_rows: int
+) -> tuple[list[_facade().Any], dict[str, _facade().Any]]:
+    total = int(len(df))
+    page = df.iloc[offset : offset + page_rows]
+    returned = int(len(page))
+    has_more = offset + returned < total
+    records = _facade().json.loads(page.replace({float("nan"): None}).to_json(orient="records"))
+    return records, {
+        "row_count": total,
+        "returned_rows": returned,
+        "offset": offset,
+        "page_rows": page_rows,
+        "truncated": has_more,
+        "has_more": has_more,
+        "next_offset": offset + returned if has_more else None,
+    }
 
 
 def _read_excel_dataframe(
@@ -24,7 +75,12 @@ def _read_excel_dataframe(
 
 
 def run_natural_language_pandas(
-    df: _facade().pd.DataFrame, natural_language: str, **kwargs
+    df: _facade().pd.DataFrame,
+    natural_language: str,
+    *,
+    offset: int = 0,
+    max_rows: _facade().Any = None,
+    **kwargs,
 ) -> dict[str, _facade().Any]:
     """将自然语言查询转换为 pandas 操作并执行（接 excel_text_to_pandas）。"""
     generated_code = ""
@@ -41,15 +97,13 @@ def run_natural_language_pandas(
         error_msg = "invalid_pandas_query"
     except _facade().RECOVERABLE_ERRORS:
         error_msg = "excel_query_failed"
-    records = _facade().json.loads(
-        result_df.head(200).replace({float("nan"): None}).to_json(orient="records")
+    records, page_meta = _excel_analysis_page(
+        result_df, _excel_analysis_offset(offset), _excel_analysis_page_rows(max_rows)
     )
     return {
         "generated_code": generated_code,
         "result_kind": "dataframe",
-        "row_count": len(result_df),
-        "truncated": len(result_df) > 200,
-        "returned_rows": min(len(result_df), 200),
+        **page_meta,
         "columns": list(result_df.columns.astype(str)),
         "records": records,
         **({"error": error_msg} if error_msg else {}),
@@ -94,26 +148,25 @@ def handle_excel_analysis(
             "sheet_name": sheet_name,
             "header_row": header_1b,
         }
+    offset = _excel_analysis_offset(args.get("offset"))
+    page_rows = _excel_analysis_page_rows(args.get("max_rows"))
     if action == "excel_query":
         nl = str(args.get("natural_language") or "").strip()
-        query_out = _facade().run_natural_language_pandas(df, nl, file_path=file_path)
+        query_out = _facade().run_natural_language_pandas(
+            df, nl, file_path=file_path, offset=offset, max_rows=page_rows
+        )
         query_out["action"] = "excel_query"
         return query_out
     if action == "read":
-        max_return = 200
-        slice_df = df.head(max_return)
+        records, page_meta = _excel_analysis_page(df, offset, page_rows)
         out: dict[str, _facade().Any] = {
             "success": True,
             "action": action,
             "file_path": file_path,
             "sheet_name": sheet_name,
             "columns": list(df.columns.astype(str)),
-            "row_count": int(len(df)),
-            "returned_rows": int(len(slice_df)),
-            "truncated": len(df) > max_return,
-            "records": _facade().json.loads(
-                slice_df.replace({float("nan"): None}).to_json(orient="records")
-            ),
+            **page_meta,
+            "records": records,
         }
         try:
             from app.application.template_grid_core import _extract_customer_hint_from_excel
@@ -131,14 +184,13 @@ def handle_excel_analysis(
     if action == "query":
         expr = str(args.get("query_expression") or "").strip()
         out_df = _facade().safe_filter_dataframe(df, expr)
+        records, page_meta = _excel_analysis_page(out_df, offset, page_rows)
         return {
             "success": True,
             "action": "query",
             "file_path": file_path,
-            "row_count": int(len(out_df)),
-            "records": _facade().json.loads(
-                out_df.head(200).replace({float("nan"): None}).to_json(orient="records")
-            ),
+            **page_meta,
+            "records": records,
             "columns": list(out_df.columns.astype(str)),
         }
     if action == "aggregate":
@@ -165,14 +217,13 @@ def handle_excel_analysis(
                 out_df = df
         else:
             out_df = df
+        records, page_meta = _excel_analysis_page(out_df, offset, page_rows)
         return {
             "success": True,
             "action": "aggregate",
             "file_path": file_path,
-            "row_count": int(len(out_df)),
-            "records": _facade().json.loads(
-                out_df.head(200).replace({float("nan"): None}).to_json(orient="records")
-            ),
+            **page_meta,
+            "records": records,
             "columns": list(out_df.columns.astype(str)),
         }
     if action == "statistics":
