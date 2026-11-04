@@ -198,16 +198,23 @@ export function registerDesktopIpcHandlers(): void {
   // 渲染进程错误遥测：复用后端 crash-report 通道（opt-in 由后端统一聚合），best-effort。
   handleTrusted(
     'xcagi:report-error',
-    (_event, payload: { type?: string; error?: string; stack?: string; source?: string }) => {
+    (_event, payload: { type?: string; error?: unknown; stack?: string; source?: string }) => {
       const p = payload && typeof payload === 'object' ? payload : {}
       const source = typeof p.source === 'string' ? p.source : ''
-      const message = String(p.error || '').trim()
+      const stack = typeof p.stack === 'string' ? p.stack : ''
+      const raw = p.error && typeof p.error === 'object'
+        ? String((p.error as { message?: unknown }).message || '')
+        : String(p.error || '')
+      const message = raw.trim()
+      const stackSummary = stack.split('\n').map(line => line.trim()).find(line => line && !line.startsWith('at '))
+        ?.replace(/^Error:\s*/, '') || ''
+      const useful = message && message !== 'unknown' ? message : stackSummary
       reportRendererError(
         { port: DEFAULT_PORT, writeLog: writeBackendLog },
         {
           type: String(p.type || 'renderer:error'),
-          error: message || (source ? `renderer error at ${source}` : 'renderer error without message'),
-          stack: typeof p.stack === 'string' ? p.stack : undefined,
+          error: useful || (source ? `renderer error at ${source}` : 'renderer error without message'),
+          stack: stack || undefined,
           source: source || undefined,
         },
       )
