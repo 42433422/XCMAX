@@ -50,16 +50,26 @@ async def run_billed_llm_chat_once(
     max_tokens: Optional[int] = None,
     conversation_id: Optional[int] = None,
     route_snapshot: ChatRouteSnapshot | None = None,
+    upstream_timeout_s: Optional[float] = None,
 ) -> dict[str, Any]:
     """Execute one attempt and attach its actual route to every final receipt."""
     route = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
     try:
         return await _execute_billed_chat(
-            request, db, user, route, messages, max_tokens, conversation_id
+            request,
+            db,
+            user,
+            route,
+            messages,
+            max_tokens,
+            conversation_id,
+            upstream_timeout_s,
         )
     except HTTPException as exc:
         raise HTTPException(
-            exc.status_code, failed_chat_route_detail(route, exc.detail), headers=exc.headers
+            exc.status_code,
+            failed_chat_route_detail(route, exc.detail),
+            headers=exc.headers,
         ) from exc
     except RECOVERABLE_ERRORS as exc:
         raise HTTPException(502, failed_chat_route_detail(route, str(exc))) from exc
@@ -91,6 +101,7 @@ async def _execute_billed_chat(
     messages: list[dict[str, Any]],
     max_tokens: Optional[int],
     conversation_id: Optional[int],
+    upstream_timeout_s: Optional[float] = None,
 ) -> dict[str, Any]:
     provider, model = route.provider, route.model
     api_key, key_source = route.api_key, route.key_source
@@ -124,7 +135,11 @@ async def _execute_billed_chat(
         preauth_amount = estimate_preauthorization(db, provider, model, messages, max_tokens)
         try:
             hold = await wallet.preauthorize(
-                authorization_header(request), preauth_amount, provider, model, request_id
+                authorization_header(request),
+                preauth_amount,
+                provider,
+                model,
+                request_id,
             )
         except HTTPException as exc:
             if getattr(request.state, "llm_pat_user_id", None) is not None and exc.status_code in {
@@ -147,6 +162,7 @@ async def _execute_billed_chat(
             model=model,
             messages=messages,
             max_tokens=max_tokens,
+            total_timeout_s=upstream_timeout_s,
         )
         if not result.get("ok"):
             error = result.get("error") or "upstream error"

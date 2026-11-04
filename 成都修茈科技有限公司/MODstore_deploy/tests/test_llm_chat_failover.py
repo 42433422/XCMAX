@@ -20,8 +20,11 @@ def test_failoverable_markers():
     assert is_chat_failoverable_failure("Error 429: insufficient_quota", 429)
     assert is_chat_failoverable_failure("配额不足", 403)
     assert is_chat_failoverable_failure("rate limit exceeded", 429)
+    assert is_chat_failoverable_failure("Error 500: internal server error", 500)
+    assert is_chat_failoverable_failure("ReadTimeout: timed out", None)
     assert is_wallet_balance_failure("余额不足，需要 ¥0.05，当前 ¥0", 402)
     assert not is_chat_failoverable_failure("invalid api key format", 401)
+    assert not is_chat_failoverable_failure("Java 支付服务不可用", 502)
 
 
 def test_remaining_candidates_wallet_only_keeps_byok():

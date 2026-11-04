@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, AsyncIterator, Dict, List, Optional
 from urllib.parse import urlsplit
 
@@ -49,8 +50,36 @@ _MODEL_ALIASES: dict[tuple[str, str], str] = {
 # 禁止使用进程级单例 AsyncClient：会在 ``asyncio.run()`` / 线程池等多事件循环场景下
 # 绑定已关闭的 loop，触发 ``RuntimeError: Event loop is closed``（httpx aclose）。
 _LLM_LIMITS = httpx.Limits(max_connections=1000, max_keepalive_connections=200)
-_LLM_TIMEOUT = httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0)
+
+
+def _timeout_seconds(name: str, default: float) -> float:
+    try:
+        return max(5.0, float(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
+_LLM_TIMEOUT = httpx.Timeout(
+    connect=15.0,
+    read=_timeout_seconds("MODSTORE_LLM_READ_TIMEOUT", 60.0),
+    write=60.0,
+    pool=30.0,
+)
 _STREAM_LIMITS = httpx.Limits(max_connections=1000, max_keepalive_connections=200)
+_STREAM_TIMEOUT = httpx.Timeout(
+    connect=15.0,
+    read=_timeout_seconds("MODSTORE_LLM_STREAM_READ_TIMEOUT", 120.0),
+    write=60.0,
+    pool=30.0,
+)
+
+
+def _primary_max_attempts() -> int:
+    try:
+        n = int(os.environ.get("MODSTORE_LLM_PRIMARY_MAX_ATTEMPTS", "2"))
+    except ValueError:
+        n = 2
+    return max(1, min(n, 5))
 
 
 def _normalize_openai_base(
@@ -141,6 +170,7 @@ async def chat_dispatch(
     max_tokens: Optional[int] = None,
     forbid_reasoning_fallback: bool = False,
     response_format: Optional[Dict[str, str]] = None,
+    total_timeout_s: Optional[float] = None,
     # Timeout fallback: if primary call exceeds this (seconds), retry with fallback_provider/model
     timeout_fallback_s: Optional[float] = None,
     fallback_provider: Optional[str] = None,
@@ -201,7 +231,8 @@ async def chat_dispatch(
         import asyncio as _asyncio
 
         last: Dict[str, Any] = {"ok": False, "error": "no primary attempt"}
-        for attempt in range(3):
+        attempts = _primary_max_attempts()
+        for attempt in range(attempts):
             transient_exc = False
             try:
                 last = await _primary()
@@ -219,7 +250,7 @@ async def chat_dispatch(
             st = last.get("status")
             retryable = (
                 transient_exc
-                or st in (429, 502, 503, 504)
+                or st in (429, 500, 502, 503, 504)
                 or any(
                     x in err.lower()
                     for x in (
@@ -232,13 +263,26 @@ async def chat_dispatch(
                     )
                 )
             )
-            if attempt < 2 and retryable:
+            if attempt < attempts - 1 and retryable:
                 await _asyncio.sleep(0.35 * (2**attempt))
                 continue
             break
         return last
 
     if not has_fallback:
+        if total_timeout_s and total_timeout_s > 0:
+            import asyncio as _asyncio
+
+            try:
+                return await _asyncio.wait_for(
+                    _primary_with_retries(), timeout=float(total_timeout_s)
+                )
+            except _asyncio.TimeoutError:
+                return {
+                    "ok": False,
+                    "status": 504,
+                    "error": f"上游调用超过总预算 {float(total_timeout_s):.1f}s，已中止",
+                }
         return await _primary_with_retries()
 
     import asyncio as _asyncio

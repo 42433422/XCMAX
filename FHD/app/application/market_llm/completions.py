@@ -134,7 +134,7 @@ def complete_sync(
                 allow_failover=index == 0,
                 extra=_failover_extra(request.extra, primary=index == 0) or None,
             )
-        except (MarketModelError, ValueError) as exc:
+        except (MarketModelError, ValueError, httpx.HTTPError) as exc:
             last_error = exc
             status = provider_http_status(exc)
             if status is None:

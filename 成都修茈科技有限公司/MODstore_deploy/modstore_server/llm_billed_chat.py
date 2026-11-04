@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import time
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -12,7 +14,9 @@ from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from modstore_server.llm_billed_once import failed_chat_route_detail
+from modstore_server.llm_billed_once import (
+    failed_chat_route_detail,
+)
 from modstore_server.llm_billed_once import run_billed_llm_chat_once as _run_billed_llm_chat_once
 from modstore_server.llm_billing import (
     JavaWalletClient,
@@ -49,6 +53,14 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _CHAT_ERRORS = (HTTPException,) + RECOVERABLE_ERRORS
+
+
+def _chat_total_deadline_s() -> float:
+    try:
+        value = float(os.environ.get("MODSTORE_LLM_CHAT_TOTAL_DEADLINE_S", "90"))
+    except ValueError:
+        value = 90.0
+    return max(15.0, min(value, 600.0))
 
 
 def _sse(event: str, data: Dict[str, Any]) -> str:
@@ -135,9 +147,14 @@ async def run_billed_llm_chat(
     queue = list(candidates)
     attempted: list[str] = []
     idx = 0
+    deadline = time.monotonic() + _chat_total_deadline_s()
     while idx < len(queue):
         prov, mdl = queue[idx]
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise last_exc or HTTPException(504, "模型上游调用超过总预算，请稍后重试")
         attempted.append(f"{prov}/{mdl}")
+        started_at = time.monotonic()
         try:
             out = await _run_billed_llm_chat_once(
                 request,
@@ -149,6 +166,7 @@ async def run_billed_llm_chat(
                 max_tokens=max_tokens,
                 conversation_id=conversation_id,
                 route_snapshot=snapshots[prov, mdl],
+                upstream_timeout_s=max(5.0, min(remaining, 90.0)),
             )
             if len(attempted) > 1:
                 out["failover_from"] = f"{primary_provider}/{primary_model}"
@@ -187,10 +205,11 @@ async def run_billed_llm_chat(
             if not rest:
                 raise last_exc from exc
             logger.warning(
-                "llm chat failover after %s/%s status=%s detail=%s next=%s",
+                "llm chat failover after %s/%s status=%s elapsed_ms=%.0f detail=%s next=%s",
                 prov,
                 mdl,
                 exc.status_code,
+                (time.monotonic() - started_at) * 1000.0,
                 detail[:240],
                 [f"{p}/{m}" for p, m in rest],
             )
@@ -243,7 +262,8 @@ async def stream_billed_llm_chat(
         raise HTTPException(
             400,
             failed_chat_route_detail(
-                primary, f"供应商「{primary_provider}」未配置可用 API Key（平台环境变量或 BYOK）。"
+                primary,
+                f"供应商「{primary_provider}」未配置可用 API Key（平台环境变量或 BYOK）。",
             ),
         )
 
