@@ -14,6 +14,7 @@ import asyncio
 
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -38,6 +39,28 @@ def test_default_security_headers_added():
     assert r.headers["x-frame-options"] == "DENY"
     assert "default-src 'self'" in r.headers["content-security-policy"]
     assert r.headers.get("strict-transport-security") is None  # http scheme
+
+
+def test_login_preserves_session_cookie_and_current_security_policy():
+    from app.fastapi_routes.domains.auth.session_cookies import SessionCookies
+
+    app = FastAPI()
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    @app.post("/api/auth/login")
+    async def login():
+        response = SessionCookies({}).attach(JSONResponse({"success": True}), "synthetic-session")
+        response.headers["Content-Security-Policy"] = "obsolete-policy"
+        return response
+
+    client = TestClient(app)
+    response = client.post("/api/auth/login")
+    assert response.status_code == 200
+    assert len(response.headers.get_list("set-cookie")) == 1
+    assert client.cookies.get("session_id") == "synthetic-session"
+    assert "xcagi_elt_notice" not in client.cookies
+    assert len(response.headers.get_list("content-security-policy")) == 1
+    assert "default-src 'self'" in response.headers["content-security-policy"]
 
 
 def test_desktop_mode_allows_vue_i18n_runtime_compile(monkeypatch):
@@ -74,6 +97,7 @@ def test_generated_label_preview_has_a_desktop_only_frame_source(monkeypatch, de
     }
     frame_sources = directives.get("frame-src", directives["default-src"])
     assert frame_sources == (["'self'", "blob:"] if desktop else ["'self'"])
+    assert directives["media-src"] == ["'self'", "data:"]
     assert directives["default-src"] == ["'self'"]
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["x-content-type-options"] == "nosniff"
@@ -93,6 +117,7 @@ def test_sandbox_query_param_relaxes_csp():
     # sandbox CSP 没有 frame-ancestors 'self' 限制（但其实仍然保留），关键是 'unsafe-inline' / 'unsafe-eval'
     assert "unsafe-inline" in csp
     assert "unsafe-eval" in csp
+    assert "media-src 'self' data:" in csp
     assert r.headers.get("x-frame-options") is None  # sandbox 不加 DENY
 
 
@@ -111,6 +136,7 @@ def test_xcmax_dashboard_path_relaxes_csp():
     # dashboard embed CSP 允许 Google Fonts（不再依赖 cdn.jsdelivr.net）
     assert "fonts.googleapis.com" in csp
     assert "frame-ancestors 'self'" in csp
+    assert "data:" in csp.split(";")[0]  # existing default permits TTS data audio
 
 
 def test_https_scheme_adds_hsts():

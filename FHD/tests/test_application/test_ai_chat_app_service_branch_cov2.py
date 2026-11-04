@@ -30,112 +30,18 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
+from app.infrastructure.tenant_scope import tenant_scope
+from tests.test_application.ai_chat_test_helpers import (
+    _make_node,
+    _make_node_result,
+    _make_plan,
+    _make_run_result,
+    _make_svc,
+)
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_svc() -> AIChatApplicationService:
-    """构造能正常实例化的服务（模拟所有构造依赖）。"""
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
-
-
-def _make_plan(
-    *,
-    plan_id: str = "plan_test",
-    intent: str = "test_intent",
-    nodes=None,
-    todo_steps=None,
-    risk_level: str = "low",
-    metadata=None,
-):
-    return SimpleNamespace(
-        plan_id=plan_id,
-        intent=intent,
-        nodes=nodes or [],
-        todo_steps=todo_steps or [],
-        risk_level=risk_level,
-        metadata=metadata or {},
-    )
-
-
-def _make_node(
-    *,
-    node_id: str = "n1",
-    tool_id: str = "products",
-    action: str = "query",
-    params=None,
-    risk: str = "low",
-    idempotent: bool = True,
-    depends_on=None,
-    description: str = "",
-):
-    return SimpleNamespace(
-        node_id=node_id,
-        tool_id=tool_id,
-        action=action,
-        params=params or {},
-        risk=risk,
-        idempotent=idempotent,
-        depends_on=depends_on or [],
-        description=description,
-    )
-
-
-def _make_node_result(
-    *,
-    node_id: str = "n1",
-    tool_id: str = "products",
-    action: str = "query",
-    success: bool = True,
-    output=None,
-    error: str = "",
-    params=None,
-    retryable: bool = True,
-    retries: int = 0,
-    recovery_hint: str = "",
-    started_at: str = "",
-    finished_at: str = "",
-    duration_ms: int = 0,
-):
-    return SimpleNamespace(
-        node_id=node_id,
-        tool_id=tool_id,
-        action=action,
-        success=success,
-        output=output or {},
-        error=error,
-        params=params or {},
-        retryable=retryable,
-        retries=retries,
-        recovery_hint=recovery_hint,
-        started_at=started_at,
-        finished_at=finished_at,
-        duration_ms=duration_ms,
-    )
-
-
-def _make_run_result(
-    *,
-    success: bool = True,
-    message: str = "",
-    node_results=None,
-    final_context=None,
-):
-    return SimpleNamespace(
-        success=success,
-        message=message,
-        node_results=node_results or [],
-        final_context=final_context or {},
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -189,12 +95,14 @@ class TestMergeToolRuntimeContext:
     """_merge_tool_runtime_context 分支测试。"""
 
     def test_none_context(self):
-        result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        with tenant_scope(1):
+            result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_non_dict_context(self):
-        result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not dict")  # type: ignore[arg-type]
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        with tenant_scope(1):
+            result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not dict")  # type: ignore[arg-type]
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_dict_with_none_values_skipped(self):
         ctx = {"ui_surface": None, "intent_channel": None, "tool_execution_profile": None}

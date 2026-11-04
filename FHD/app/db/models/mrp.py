@@ -15,7 +15,7 @@ from typing import Optional
 from sqlalchemy import ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 # 生产工单状态

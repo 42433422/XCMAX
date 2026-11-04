@@ -2,18 +2,17 @@ import { describe, expect, it, afterEach, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useModsStore } from '@/stores/mods'
 import { erpDomainModStatusPath, resolveErpApiPathWhenReady, resolveErpApiBase, resolveErpApiPath } from './erpDomainPaths'
-import { scopedActiveExtensionModStorageKey, writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
+import { writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
 import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
 const LS = 'xcagi_erp_domain_mod_facade_enabled'
 const TEST_SCOPE = 'tenant:1'
-const ACTIVE_LS = () => scopedActiveExtensionModStorageKey(TEST_SCOPE)
 
 describe('erpDomainPaths', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     localStorage.removeItem(LS)
-    localStorage.removeItem(ACTIVE_LS())
+    writeActiveExtensionModIdToStorage('', TEST_SCOPE)
   })
 
   beforeEach(() => {

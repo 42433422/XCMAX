@@ -291,7 +291,7 @@ def test_persist_chat_turn_with_session(
     chat_svc._persist_chat_turn(
         "u1",
         "hello",
-        {"session_id": "sess-1"},
+        {"session_id": "sess-1", "local_user_id": 17},
         {
             "success": True,
             "response": "world",

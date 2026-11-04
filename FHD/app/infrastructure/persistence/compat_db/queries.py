@@ -12,7 +12,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
 from app.infrastructure.db.sync_engine import get_sync_engine
-from app.infrastructure.persistence.compat_db.base import (
+from app.infrastructure.persistence.compat_db.compat_db_base import (
     TRIVIAL_MEASURE_UNITS,
     _exc_chain_has_undefined_table,
     _insp_table_exists,

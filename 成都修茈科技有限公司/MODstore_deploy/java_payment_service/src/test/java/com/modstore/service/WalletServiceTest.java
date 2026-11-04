@@ -306,13 +306,60 @@ class WalletServiceTest {
         void preauthorizeIdempotencyReturnsExisting() {
             WalletHold existing = new WalletHold();
             existing.setIdempotencyKey("idem-ai-2");
+            existing.setUser(user);
+            existing.setAmount(new BigDecimal("5.00"));
+            existing.setProvider("openai");
+            existing.setModel("gpt-4");
+            existing.setRequestId("req-2");
             when(walletHoldRepository.findByIdempotencyKey("idem-ai-2")).thenReturn(Optional.of(existing));
 
-            WalletHold result = walletService.preauthorizeAiUsage(user, new BigDecimal("5.00"),
+            WalletHold result = walletService.preauthorizeAiUsage(user, new BigDecimal("5.0"),
                     "openai", "gpt-4", "req-2", "idem-ai-2");
 
             assertThat(result).isSameAs(existing);
             verify(transactionRepository, never()).save(any());
+        }
+
+        @Test
+        void preauthorizeRejectsSameAccountKeyWithDifferentRequest() {
+            WalletHold existing = new WalletHold();
+            existing.setUser(user);
+            existing.setAmount(new BigDecimal("5.00"));
+            existing.setProvider("openai");
+            existing.setModel("gpt-4");
+            existing.setRequestId("req-2");
+            when(walletHoldRepository.findByIdempotencyKey("idem-conflict"))
+                    .thenReturn(Optional.of(existing));
+
+            assertThatThrownBy(() -> walletService.preauthorizeAiUsage(user, new BigDecimal("6.00"),
+                    "openai", "gpt-4", "req-2", "idem-conflict"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("预授权请求冲突");
+            assertThatThrownBy(() -> walletService.preauthorizeAiUsage(user, new BigDecimal("5.00"),
+                    "other", "gpt-4", "req-2", "idem-conflict")).hasMessage("预授权请求冲突");
+            assertThatThrownBy(() -> walletService.preauthorizeAiUsage(user, new BigDecimal("5.00"),
+                    "openai", "other", "req-2", "idem-conflict")).hasMessage("预授权请求冲突");
+            assertThatThrownBy(() -> walletService.preauthorizeAiUsage(user, new BigDecimal("5.00"),
+                    "openai", "gpt-4", "other", "idem-conflict")).hasMessage("预授权请求冲突");
+            verify(transactionRepository, never()).save(any());
+            verify(walletHoldRepository, never()).save(any());
+        }
+
+        @Test
+        void preauthorizeRejectsIdempotencyKeyOwnedByAnotherAccount() {
+            User other = new User();
+            other.setId(2L);
+            WalletHold existing = new WalletHold();
+            existing.setUser(other);
+            when(walletHoldRepository.findByIdempotencyKey("idem-conflict"))
+                    .thenReturn(Optional.of(existing));
+
+            assertThatThrownBy(() -> walletService.preauthorizeAiUsage(user, new BigDecimal("5.00"),
+                    "openai", "gpt-4", "req-2", "idem-conflict"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("预授权请求冲突");
+            verify(transactionRepository, never()).save(any());
+            verify(walletHoldRepository, never()).save(any());
         }
 
         @Test
@@ -334,13 +381,37 @@ class WalletServiceTest {
             hold.setModel("gpt-4");
             hold.setRequestId("req-1");
 
-            when(walletHoldRepository.findByHoldNo("AIH1")).thenReturn(Optional.of(hold));
+            when(walletHoldRepository.findByHoldNoForUpdate("AIH1")).thenReturn(Optional.of(hold));
             when(walletHoldRepository.save(any(WalletHold.class))).thenAnswer(inv -> inv.getArgument(0));
 
             WalletHold settled = walletService.settleAiUsage(user, "AIH1", new BigDecimal("5.00"), "idem-settle-1");
 
             assertThat(settled.getStatus()).isEqualTo("settled");
             assertThat(settled.getSettledAmount()).isEqualByComparingTo(new BigDecimal("5.00"));
+        }
+
+        @Test
+        void unknownHoldSourceIsRejected() {
+            WalletHold hold = new WalletHold();
+            hold.setUser(user);
+            hold.setBillingSource("unexpected");
+            when(walletHoldRepository.findByHoldNoForUpdate("unknown-source")).thenReturn(Optional.of(hold));
+            assertThatThrownBy(() -> walletService.settleAiUsage(user, "unknown-source", BigDecimal.ZERO, "idem"))
+                    .isInstanceOf(IllegalStateException.class).hasMessage("预授权请求冲突");
+            verify(transactionRepository, never()).save(any());
+        }
+
+        @Test
+        void serviceRejectsPreviouslySettledHoldWithDifferentAmount() {
+            WalletHold hold = new WalletHold();
+            hold.setUser(user);
+            hold.setBillingSource("llm-service");
+            hold.setStatus("settled");
+            hold.setSettledAmount(BigDecimal.ZERO);
+            when(walletHoldRepository.findByHoldNoForUpdate("service-settled")).thenReturn(Optional.of(hold));
+            assertThatThrownBy(() -> walletService.settleServiceAiUsage(user, "service-settled", new BigDecimal("2.00"), "idem"))
+                    .isInstanceOf(IllegalStateException.class).hasMessage("预授权请求冲突");
+            verify(transactionRepository, never()).save(any());
         }
 
         @Test
@@ -355,7 +426,7 @@ class WalletServiceTest {
             hold.setModel("gpt-4");
             hold.setRequestId("req-2");
 
-            when(walletHoldRepository.findByHoldNo("AIH2")).thenReturn(Optional.of(hold));
+            when(walletHoldRepository.findByHoldNoForUpdate("AIH2")).thenReturn(Optional.of(hold));
             when(walletHoldRepository.save(any(WalletHold.class))).thenAnswer(inv -> inv.getArgument(0));
             stubWalletFindByUserIdForUpdate();
             stubSaveWallet();
@@ -379,7 +450,7 @@ class WalletServiceTest {
             hold.setModel("gpt-4");
             hold.setRequestId("req-3");
 
-            when(walletHoldRepository.findByHoldNo("AIH3")).thenReturn(Optional.of(hold));
+            when(walletHoldRepository.findByHoldNoForUpdate("AIH3")).thenReturn(Optional.of(hold));
             when(walletHoldRepository.save(any(WalletHold.class))).thenAnswer(inv -> inv.getArgument(0));
             stubWalletFindByUserIdForUpdate();
             stubSaveWallet();
@@ -400,7 +471,7 @@ class WalletServiceTest {
             hold.setAmount(new BigDecimal("5.00"));
             hold.setStatus("released");
 
-            when(walletHoldRepository.findByHoldNo("AIH4")).thenReturn(Optional.of(hold));
+            when(walletHoldRepository.findByHoldNoForUpdate("AIH4")).thenReturn(Optional.of(hold));
 
             assertThatThrownBy(() -> walletService.settleAiUsage(user, "AIH4", new BigDecimal("5.00"), "idem-4"))
                     .isInstanceOf(IllegalStateException.class)
@@ -416,7 +487,7 @@ class WalletServiceTest {
             hold.setStatus("held");
             hold.setRequestId("req-5");
 
-            when(walletHoldRepository.findByHoldNo("AIH5")).thenReturn(Optional.of(hold));
+            when(walletHoldRepository.findByHoldNoForUpdate("AIH5")).thenReturn(Optional.of(hold));
             when(walletHoldRepository.save(any(WalletHold.class))).thenAnswer(inv -> inv.getArgument(0));
             stubWalletFindByUserIdForUpdate();
             stubSaveWallet();
@@ -437,7 +508,7 @@ class WalletServiceTest {
             hold.setAmount(new BigDecimal("5.00"));
             hold.setStatus("settled");
 
-            when(walletHoldRepository.findByHoldNo("AIH6")).thenReturn(Optional.of(hold));
+            when(walletHoldRepository.findByHoldNoForUpdate("AIH6")).thenReturn(Optional.of(hold));
 
             WalletHold result = walletService.releaseAiUsage(user, "AIH6", "test", "idem-6");
 

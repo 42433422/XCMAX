@@ -130,12 +130,27 @@ class TestHandleExcelAnalysisActions:
         from app.application.tools.workflow import handle_excel_analysis
 
         p = tmp_path / "data.xlsx"
-        pd.DataFrame({"a": [1, 2]}).to_excel(p, index=False)
+        pd.DataFrame({"数量": range(1, 206), "金额": [2 * n for n in range(1, 206)]}).to_excel(
+            p, index=False
+        )
         result = handle_excel_analysis(
-            {"file_path": str(p), "action": "aggregate"}, workspace_root=str(tmp_path)
+            {
+                "file_path": str(p),
+                "action": "aggregate",
+                "group_by": [],
+                "metrics": [
+                    {"column": "数量", "op": "sum"},
+                    {"column": "金额", "op": "sum"},
+                    {"column": "数量", "op": "count"},
+                ],
+            },
+            workspace_root=str(tmp_path),
         )
         assert result["success"] is True
-        assert result["row_count"] == 2
+        assert result["row_count"] == 1
+        assert result["source_row_count"] == 205
+        assert result["records"] == [{"数量_sum": 21115, "数量_count": 205, "金额_sum": 42230}]
+        assert result["truncated"] is False
 
     def test_action_aggregate_invalid_metrics(self, tmp_path: Path):
         from app.application.tools.workflow import handle_excel_analysis
@@ -151,7 +166,7 @@ class TestHandleExcelAnalysisActions:
             },
             workspace_root=str(tmp_path),
         )
-        assert result["success"] is True
+        assert result["success"] is False
 
     def test_action_statistics(self, tmp_path: Path):
         from app.application.tools.workflow import handle_excel_analysis
@@ -479,9 +494,11 @@ class TestExecuteWorkflowToolProductsBulkImport:
         from app.application.tools.workflow import execute_workflow_tool
 
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")
-        result = execute_workflow_tool(
-            "products_bulk_import", {"file_path": "x.xlsx"}, db_write_token="wrong"
-        )
+        with patch("app.domain.app_pure.excel_imports.run_bulk_import") as importer:
+            result = execute_workflow_tool(
+                "products_bulk_import", {"file_path": "x.xlsx"}, db_write_token="wrong"
+            )
+        importer.assert_not_called()
         parsed = json.loads(result)
         assert parsed.get("error") == "unauthorized"
 
@@ -489,7 +506,7 @@ class TestExecuteWorkflowToolProductsBulkImport:
         from app.application.tools.workflow import execute_workflow_tool
 
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")
-        with patch("app.application.excel_imports.run_bulk_import") as mock_run:
+        with patch("app.domain.app_pure.excel_imports.run_bulk_import") as mock_run:
             mock_run.return_value = {"success": True, "imported": 5}
             result = execute_workflow_tool(
                 "products_bulk_import",
@@ -503,7 +520,7 @@ class TestExecuteWorkflowToolProductsBulkImport:
         from app.application.tools.workflow import execute_workflow_tool
 
         monkeypatch.delenv("FHD_DB_WRITE_TOKEN", raising=False)
-        with patch("app.application.excel_imports.run_bulk_import") as mock_run:
+        with patch("app.domain.app_pure.excel_imports.run_bulk_import") as mock_run:
             mock_run.return_value = {"success": True}
             result = execute_workflow_tool("products_bulk_import", {"file_path": "x.xlsx"})
         parsed = json.loads(result)
@@ -603,15 +620,19 @@ class TestExecuteWorkflowToolGenerateOffice:
         from app.application.tools.workflow import execute_workflow_tool
 
         with (
-            patch("app.services.kitten_ai_document.generate.generate_office_file") as mock_gen,
-            patch("app.services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file"
+            ) as mock_gen,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup"
+            ) as mock_store,
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
             patch(
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
             ),
         ):
@@ -631,15 +652,19 @@ class TestExecuteWorkflowToolGenerateOffice:
         from app.application.tools.workflow import execute_workflow_tool
 
         with (
-            patch("app.services.kitten_ai_document.generate.generate_office_file") as mock_gen,
-            patch("app.services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file"
+            ) as mock_gen,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup"
+            ) as mock_store,
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
             patch(
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
             ),
         ):
@@ -659,8 +684,12 @@ class TestExecuteWorkflowToolGenerateOffice:
         from app.application.tools.workflow import execute_workflow_tool
 
         with (
-            patch("app.services.kitten_ai_document.generate.generate_office_file") as mock_gen,
-            patch("app.services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file"
+            ) as mock_gen,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup"
+            ) as mock_store,
         ):
             mock_gen.return_value = (b"content", "out.docx")
             mock_store.return_value = "tok789"
@@ -859,12 +888,13 @@ class TestImportProductsPreviewOrExecute:
             patch("app.bootstrap.get_products_service") as mock_ps,
             patch("app.bootstrap.get_customer_app_service") as mock_cs,
             patch(
-                "app.services.unified_query_service.find_purchase_unit",
+                "app.domain.shared_services.unified_query_service.find_purchase_unit",
                 return_value=True,
             ),
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
+                "success": True,
                 "success_count": 1,
                 "failed_count": 0,
                 "message": "ok",
@@ -885,17 +915,19 @@ class TestImportProductsPreviewOrExecute:
             patch("app.bootstrap.get_products_service") as mock_ps,
             patch("app.bootstrap.get_customer_app_service") as mock_cs,
             patch(
-                "app.services.unified_query_service.find_purchase_unit",
+                "app.domain.shared_services.unified_query_service.find_purchase_unit",
                 return_value=False,
             ),
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
+                "success": True,
                 "success_count": 1,
                 "failed_count": 0,
             }
             mock_ps.return_value = mock_svc
             mock_customer_svc = MagicMock()
+            mock_customer_svc.create.return_value = {"success": True}
             mock_cs.return_value = mock_customer_svc
             result = _import_products_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
@@ -905,25 +937,27 @@ class TestImportProductsPreviewOrExecute:
     def test_confirm_with_nested_result(self):
         from app.application.tools.workflow import _import_products_preview_or_execute
 
-        df = pd.DataFrame({"产品名称": ["A"], "数量": [1]})
+        df = pd.DataFrame({"产品名称": list("ABCDEF"), "数量": [1] * 6})
         with (
             patch("app.bootstrap.get_products_service") as mock_ps,
             patch("app.bootstrap.get_customer_app_service"),
             patch(
-                "app.services.unified_query_service.find_purchase_unit",
+                "app.domain.shared_services.unified_query_service.find_purchase_unit",
                 return_value=True,
             ),
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
+                "success": False,
                 "data": {"success_count": 5, "failed_count": 1},
             }
             mock_ps.return_value = mock_svc
             result = _import_products_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
-        assert parsed["success"] is True
+        assert parsed["success"] is False
         assert parsed["imported"] == 5
         assert parsed["failed"] == 1
+        assert parsed["retryable"] is False
 
     def test_confirm_skips_clause_like_rows(self):
         from app.application.tools.workflow import _import_products_preview_or_execute
@@ -938,12 +972,13 @@ class TestImportProductsPreviewOrExecute:
             patch("app.bootstrap.get_products_service") as mock_ps,
             patch("app.bootstrap.get_customer_app_service"),
             patch(
-                "app.services.unified_query_service.find_purchase_unit",
+                "app.domain.shared_services.unified_query_service.find_purchase_unit",
                 return_value=True,
             ),
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
+                "success": True,
                 "success_count": 1,
                 "failed_count": 0,
             }
@@ -997,7 +1032,7 @@ class TestImportCustomersPreviewOrExecute:
             mock_cs.return_value = mock_svc
             result = _import_customers_preview_or_execute(df, list(df.columns), True, 1)
         parsed = json.loads(result)
-        assert parsed["success"] is True
+        assert parsed["success"] is False
         assert parsed["failed"] == 1
 
     def test_confirm_skips_rows_without_name(self):
@@ -1056,7 +1091,7 @@ class TestImportOrdersPreviewOrExecute:
             mock_ss.return_value = mock_svc
             result = _import_orders_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
-        assert parsed["success"] is True
+        assert parsed["success"] is False
         assert parsed["failed"] == 1
 
     def test_confirm_no_unit_name_skipped(self):
@@ -1069,7 +1104,7 @@ class TestImportOrdersPreviewOrExecute:
             mock_ss.return_value = mock_svc
             result = _import_orders_preview_or_execute(df, list(df.columns), "", True, 1)
         parsed = json.loads(result)
-        assert parsed["success"] is True
+        assert parsed["success"] is False
         assert parsed["failed"] == 1
         assert parsed["imported"] == 0
 

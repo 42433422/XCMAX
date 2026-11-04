@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { ApiError } from '@/api'
 
 const flushPromises = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+const wrappers: VueWrapper[] = []
 
 const { sendForgotPasswordCode, resetForgotPassword } = vi.hoisted(() => ({
   sendForgotPasswordCode: vi.fn(),
@@ -39,11 +40,13 @@ async function mountView() {
   await router.push('/forgot-password')
   await router.isReady()
   const wrapper = mount(ForgotPasswordView, {
+    attachTo: document.body,
     global: {
       plugins: [router],
       stubs: { RouterLink: { template: '<a><slot /></a>' } },
     },
   })
+  wrappers.push(wrapper)
   return { wrapper, router }
 }
 
@@ -53,6 +56,7 @@ describe('ForgotPasswordView', () => {
   })
 
   afterEach(() => {
+    wrappers.splice(0).forEach(wrapper => wrapper.unmount())
     vi.useRealTimers()
   })
 
@@ -145,7 +149,9 @@ describe('ForgotPasswordView', () => {
     await flushPromises()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.login-error').text()).toContain('发送失败')
-    expect(wrapper.find('.login-error').text()).toContain('XCAGI_MARKET_BASE_URL')
+    expect(wrapper.find('.login-error').text()).toContain('检查连接')
+    expect(wrapper.text()).not.toContain('XCAGI_MARKET_BASE_URL')
+    expect(wrapper.find('.connection-recovery').exists()).toBe(true)
   })
 
   it('lowercases email before sending', async () => {
@@ -199,7 +205,7 @@ describe('ForgotPasswordView', () => {
     expect(sendForgotPasswordCode).toHaveBeenCalledWith('user@example.com')
   })
 
-  it('shows mismatch error when passwords do not match on reset', async () => {
+  it('explains mismatched passwords before the disabled button can be clicked', async () => {
     sendForgotPasswordCode.mockResolvedValue({ success: true })
     const { wrapper } = await mountView()
     await wrapper.find('input[type="email"]').setValue('user@example.com')
@@ -209,10 +215,35 @@ describe('ForgotPasswordView', () => {
     const passwordInputs = wrapper.findAll('input[type="password"]')
     await passwordInputs[0].setValue('password1')
     await passwordInputs[1].setValue('password2')
-    await wrapper.find('.login-form').trigger('submit')
+    wrapper.get<HTMLButtonElement>('.login-submit').element.click()
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.login-error').text()).toBe('两次输入的密码不一致')
+    expect(wrapper.find('#password-validation').text()).toContain('两次输入的密码不一致')
+    expect(passwordInputs[1].attributes('aria-invalid')).toBe('true')
+    expect(passwordInputs[1].attributes('aria-describedby')).toBe('password-validation')
     expect(resetForgotPassword).not.toHaveBeenCalled()
+    await passwordInputs[1].setValue('password1')
+    expect(wrapper.get('#password-validation').text()).toBe('')
+  })
+
+  it('returns to the existing email, clears verification secrets, and preserves resend cooldown for that email', async () => {
+    sendForgotPasswordCode.mockResolvedValue({ success: true })
+    const { wrapper } = await mountView()
+    await wrapper.get('input[type="email"]').setValue('wrong@example.com')
+    wrapper.get<HTMLButtonElement>('.login-submit').element.click()
+    await flushPromises()
+    await wrapper.get('input[autocomplete="one-time-code"]').setValue('123456')
+    await wrapper.findAll('input[type="password"]')[0].setValue('secret-password')
+    wrapper.get<HTMLButtonElement>('.btn-edit-email').element.click()
+    await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('input[type="email"]').element.value).toBe('wrong@example.com')
+    expect(document.activeElement).toBe(wrapper.get('input[type="email"]').element)
+    expect(wrapper.get<HTMLButtonElement>('.login-submit').element.disabled).toBe(true)
+    await wrapper.get('input[type="email"]').setValue('correct@example.com')
+    wrapper.get<HTMLButtonElement>('.login-submit').element.click()
+    await flushPromises()
+    expect(sendForgotPasswordCode).toHaveBeenLastCalledWith('correct@example.com')
+    expect(wrapper.get<HTMLInputElement>('input[autocomplete="one-time-code"]').element.value).toBe('')
+    expect(wrapper.findAll<HTMLInputElement>('input[type="password"]').every(input => input.element.value === '')).toBe(true)
   })
 
   it('disables reset button when canReset is false', async () => {

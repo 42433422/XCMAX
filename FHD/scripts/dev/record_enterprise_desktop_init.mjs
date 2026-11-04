@@ -4,6 +4,8 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { assertIdentity } from '../package/windows-acceptance-accounts.mjs'
+import { createEvidenceStep, redactCredentials as redact, visibleVersion, writeEvidence } from './desktop-acceptance-evidence.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const require = createRequire(path.join(root, 'frontend/package.json'))
 const { chromium, expect } = require('@playwright/test')
@@ -11,35 +13,19 @@ const dir = path.resolve(process.env.XCAGI_GUI_EVIDENCE || 'candidate/evidence-G
 fs.mkdirSync(dir, { recursive: true })
 const run = `${process.env.GITHUB_RUN_ID || Date.now()}-${process.env.GITHUB_RUN_ATTEMPT || 1}`
 const phase = process.env.XCAGI_GUI_PHASE || 'business'
+const legacyRollback = phase === 'readback' && process.env.XCAGI_GUI_MODE === 'Rollback'
+  && process.env.XCAGI_GUI_BUILD_SHA === '2e6f03bf67b88965e450721e5b8432ab6395782b'
 const seed = process.env.XCAGI_GUI_SEED ? JSON.parse(fs.readFileSync(process.env.XCAGI_GUI_SEED, 'utf8')) : null
-const marker = `WIN-GUI-${run}-${phase}`
+const marker = `WIN-GUI-${run}-${process.env.XCAGI_GUI_MODE || 'Gui'}-${phase}`
 const names = { customer: `${marker}-客户`, product: `${marker}-产品`, supplier: `${marker}-供应商`, ai: `${marker}-AI客户`, cancelled: `${marker}-取消客户` }
 const required = ['normal_login', 'tenant_identity', ...(seed ? ['old_ui_readback'] : [])]
-if (phase !== 'readback') required.push('customer', 'product', ...(phase === 'seed' ? ['old_sign_out'] : []))
-if (!['seed', 'readback'].includes(phase)) required.push('shipment_unit_readback', 'visible_version', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business', ...(phase === 'faults' ? ['controlled_stock_failure', 'authorization_cancel'] : []))
+if (!['readback', 'identity'].includes(phase)) required.push('customer', 'product', ...(phase === 'seed' ? ['old_sign_out'] : []))
+if (!['seed', 'readback', 'identity'].includes(phase)) required.push('shipment_unit_readback', 'visible_version', 'purchase', 'purchase_inbound', 'sales_order', 'shipping_delivery_export', 'stock_out', 'ui_readback', 'ai_business', ...(phase === 'faults' ? ['controlled_stock_failure', 'authorization_cancel'] : []))
 const observedRows = new Map(), workspaceOwners = []
 const evidence = { run, phase, started_at: new Date().toISOString(), marker, names, cases: [], observations: [], result: 'running' }
 let browser, page
 const digest = value => crypto.createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value)).digest('hex')
-async function step(id, action) {
-  const record = { id, started_at: new Date().toISOString(), input: names, status: 'running' }
-  evidence.cases.push(record)
-  try {
-    record.actual = await action()
-    record.status = 'passed'
-    await page.screenshot({ path: path.join(dir, `${id}.png`), fullPage: true })
-    return record.actual
-  } catch (error) {
-    record.status = 'failed'
-    record.error = String(error.stack || error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]')
-    if (page) {
-      await page.screenshot({ path: path.join(dir, `${id}-failed.png`), fullPage: true }).catch(() => {})
-      record.visible_buttons = await page.locator('button:visible').evaluateAll(buttons => buttons.map(b => ({ text: b.textContent, label: b.getAttribute('aria-label'), class: b.className, disabled: b.disabled }))).catch(() => []); const text = await page.locator('body').innerText().catch(() => '')
-      fs.writeFileSync(path.join(dir, `${id}-ui.txt`), text.replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'))
-    }
-    throw error
-  } finally { record.finished_at = new Date().toISOString() }
-}
+const step = createEvidenceStep({ getPage: () => page, evidence, names, dir })
 async function click(name, scope = page) { await scope.getByRole('button', { name, exact: typeof name === 'string' }).first().click() }
 async function nav(key, rootId) {
   const entry = page.locator(`[data-tour="sidebar-${key}"]:visible,[data-tour="sidebar-mod-erp-${key}"]:visible`).first()
@@ -98,6 +84,17 @@ async function openAiApproval(name) {
   await expect(detail).toContainText(requestNos[0]); await expect(detail).toContainText(name)
   return { requestNo: requestNos[0], detail }
 }
+async function hasRetainedSession() {
+  // Share the page's cookies; a visible shell is not proof of authentication.
+  const response = await page.request.get(new URL('/api/auth/me', page.url()).href, { timeout: 10000, maxRedirects: 0 })
+  const status = response.status()
+  if (status === 401) return false
+  if (status !== 200) throw new Error(`Session probe rejected: HTTP ${status}`)
+  const body = await response.json()
+  if (body.success === false && body.valid === false && body.error?.code === 'UNAUTHORIZED') return false
+  if (body.success !== true || !body.data?.user?.id) throw new Error('Session probe returned no authenticated identity')
+  return true
+}
 async function main() {
   if (phase === 'readback' && !seed) throw new Error('GUI recovery readback requires original business evidence')
   browser = await chromium.connectOverCDP(process.env.XCAGI_CDP || 'http://127.0.0.1:9222', { timeout: 60000 })
@@ -109,13 +106,25 @@ async function main() {
     const body = await r.json().catch(() => ({})), rows = body.data || body.customers || body.products || []
     if (Array.isArray(rows)) for (const row of rows) observedRows.set(row.customer_name || row.name || row.product_name, row)
   })
-  page.on('pageerror', error => evidence.observations.push({ browser_error: String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'), observed_at: new Date().toISOString() })); page.setDefaultTimeout(20000)
+  page.on('pageerror', error => evidence.observations.push({ browser_error: redact(error.message), observed_at: new Date().toISOString() })); page.on('console', msg => { const text = msg.text(); if (msg.type() === 'error' && text.startsWith('[Login] workspace hydration failed:')) evidence.observations.push({ login_bootstrap_error: redact(text), observed_at: new Date().toISOString() }) }); page.setDefaultTimeout(20000)
   await page.waitForURL(/127\.0\.0\.1:17500/, { timeout: 240000 })
   const login = await step('normal_login', async () => {
+    const retainedSession = await hasRetainedSession()
+    if (retainedSession && ['Gui', 'Recovery'].includes(process.env.XCAGI_GUI_MODE)) throw new Error('Fresh acceptance requires a logged-out session')
+    if (retainedSession) {
+      await expect(page.locator('[data-tour="sidebar-settings"]:visible,[data-tour="sidebar-mod-erp-settings"]:visible').first()).toBeVisible({ timeout: 60000 })
+      await nav('settings', '#view-settings'); await click('退出登录')
+      const confirmation = page.locator('.app-dialog-host-panel')
+      await expect(confirmation).toContainText(/退出登录|退出本机账号/)
+      const [logout] = await Promise.all([page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/logout'), confirmation.getByRole('button', { name: '确定', exact: true }).click()])
+      if (!logout.ok()) throw new Error('Retained session normal sign-out failed')
+    } else {
+      await page.goto(new URL('/login', page.url()).href, { waitUntil: 'domcontentloaded' })
+    }
     await expect(page.locator('#lv-username')).toBeVisible({ timeout: 60000 })
     await page.locator('#lv-username').fill(process.env.XCAGI_TEST_USER || '')
     await page.locator('#lv-password').fill(process.env.XCAGI_TEST_PASS || '')
-    const waiting = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/auth/login')
+    const waiting = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/auth/login', { timeout: 60000 })
     await page.locator('.login-form button[type=submit]').click()
     const response = await waiting
     const body = await response.json()
@@ -126,9 +135,18 @@ async function main() {
   })
   await step('tenant_identity', async () => {
     if (login.account_kind !== 'enterprise' || !login.tenant_id) throw new Error('UI login did not bind an enterprise tenant')
+    let identity = login
+    if (process.env.XCAGI_ACCEPTANCE_ACCOUNT_MODE === 'isolated-parallel') {
+      const response = await page.request.get(new URL('/api/auth/me', page.url()).href, { timeout: 15000, maxRedirects: 0 })
+      const body = await response.json()
+      if (!response.ok() || body.success !== true) throw new Error('Business identity probe rejected')
+      identity = body.data
+    }
+    login.market_user_sha256 = assertIdentity(identity)
     await expect.poll(() => workspaceOwners.at(-1), { timeout: 30000 }).toBe(`tenant:${login.tenant_id}`)
     return { ...login, workspace_owner_id: workspaceOwners.at(-1) }
   })
+  if (phase === 'identity') { evidence.result = 'identity_verified'; return }
   if (seed) await step('old_ui_readback', async () => {
     const originalLogin = seed.cases.find(c => c.id === 'normal_login').actual
     if (login.account_sha256 !== originalLogin.account_sha256 || login.tenant_id !== originalLogin.tenant_id || login.workspace_id !== originalLogin.workspace_id || workspaceOwners.at(-1) !== seed.cases.find(c => c.id === 'tenant_identity').actual.workspace_owner_id) throw new Error('Upgrade changed the original account, enterprise or workspace')
@@ -137,16 +155,22 @@ async function main() {
       const view = kind === 'customer' ? 'customers' : 'products'
       await nav(view, `#view-${view}`)
       const row = page.locator(`#view-${view} tbody tr`).filter({ hasText: name })
-      for (const value of kind === 'customer' ? Object.values(seed.cases.find(c => c.id === kind).actual.original_fields).filter(Boolean) : [seed.marker, '¥12.50']) await expect(row).toContainText(value)
+      for (const value of kind === 'customer' ? Object.entries(seed.cases.find(c => c.id === kind).actual.original_fields).filter(([key, value]) => value && !(legacyRollback && key === 'contact_address')).map(([, value]) => value) : [seed.marker, '¥12.50']) await expect(row).toContainText(value)
       if (kind === 'product') await expect(row.locator('td').nth(3)).toHaveText('10')
       await expect.poll(() => observedRows.get(name)?.id).toBe(seed.cases.find(c => c.id === kind).actual.id)
       if (kind === 'customer') for (const [key, value] of Object.entries(seed.cases.find(c => c.id === kind).actual.original_fields)) await expect.poll(() => observedRows.get(name)?.[key] ?? '').toBe(value)
+      if (kind === 'customer' && legacyRollback) {
+        await click('编辑', row); await expect(modal().locator('h3')).toHaveText('编辑客户')
+        await expect(field('地址').locator('input,textarea').first()).toHaveValue(seed.cases.find(c => c.id === kind).actual.original_fields.contact_address)
+        await page.screenshot({ path: path.join(dir, 'legacy-customer-address-readback.png'), fullPage: true, timeout: 60000, mask: [page.locator('#lv-username,#lv-password'), page.getByText(process.env.XCAGI_TEST_USER || '\0', { exact: true })] })
+        await click('取消', modal()); await expect(modal()).toHaveCount(0)
+      }
       records[kind] = observedRows.get(name)
     }
     return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, workspace_owner_id: workspaceOwners.at(-1), records }
   })
   if (phase === 'readback') { evidence.result = 'gui_readback_passed'; return }
-  if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); const expected = JSON.parse(fs.readFileSync(path.join(root, 'config/release_train.json'), 'utf8')).product_version; const label = page.locator('.settings-card--about summary .settings-row__meta'); await label.scrollIntoViewIfNeeded(); await expect(label).toHaveText(expected); return { expected_version: expected, visible_version: await label.innerText() } })
+  if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); return visibleVersion(page, expect, JSON.parse(fs.readFileSync(path.join(root, 'config/release_train.json'), 'utf8')).product_version) })
   await step('customer', async () => {
     await nav('customers', '#view-customers')
     await click('+ 新建客户')
@@ -343,11 +367,11 @@ async function main() {
   }
   evidence.result = 'business_regression_passed'
 }
-try { await main() } catch (error) { evidence.result = 'failed'; evidence.failure = String(error.message).replaceAll(process.env.XCAGI_TEST_PASS || '\0', '[REDACTED]'); process.exitCode = 1 }
+try { await main() } catch (error) { evidence.result = 'failed'; evidence.failure = redact(error.message); process.exitCode = 1 }
 finally {
   evidence.finished_at = new Date().toISOString()
   evidence.unfinished = required.filter(id => !evidence.cases.some(c => c.id === id && c.status === 'passed'))
   evidence.full_customer_acceptance = 'not_verified' // Independent A/B/C, binding, restart and recovery are separate obligations.
-  fs.writeFileSync(path.join(dir, 'gui-business.json'), JSON.stringify(evidence, null, 2))
+  writeEvidence(path.join(dir, 'gui-business.json'), evidence)
   if (browser) await browser.close().catch(() => {})
 }

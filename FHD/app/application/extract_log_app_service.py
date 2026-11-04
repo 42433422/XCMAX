@@ -7,7 +7,7 @@
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from app.application.ports.extract_log_store import ExtractLogStorePort
+    from app.domain.excel.ports import ExtractLogStorePort
 
 
 class ExtractLogApplicationService:

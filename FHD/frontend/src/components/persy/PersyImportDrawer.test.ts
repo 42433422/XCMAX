@@ -129,3 +129,32 @@ describe('PersyImportDrawer', () => {
     expect(wrapper.find('.import-drawer').exists()).toBe(false)
   })
 })
+
+it('keeps pending ingestion open, rejects empty text and reports backend validation failures without discarding input', async () => {
+  const wrapper = mountDrawer(); expose(wrapper).open('file'); await wrapper.vm.$nextTick()
+  for (const type of ['dragenter', 'dragover']) {
+    await wrapper.get('.drop-zone').trigger(type); expect(wrapper.get('.drop-zone').classes()).toContain('dragging')
+  }
+  await wrapper.get('.drop-zone').trigger('dragleave'); expect(wrapper.get('.drop-zone').classes()).not.toContain('dragging')
+  await wrapper.get('input[type="file"]').trigger('change')
+  await wrapper.get('.drop-zone').trigger('drop', { dataTransfer: { files: [] } })
+  await wrapper.findAll('[role="tab"]')[1].trigger('click')
+  await wrapper.get('.drawer-submit').trigger('click')
+  expect(wrapper.get('[role="alert"]').text()).toBe('请输入资料内容')
+  await wrapper.get('#persy-source').setValue(''); await wrapper.get('#persy-text').setValue('  合同须经审批  ')
+  let finish!: (value: unknown) => void
+  mocks.ingestDocument.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  await wrapper.get('.drawer-submit').trigger('click'); await wrapper.get('button[aria-label="关闭"]').trigger('click')
+  expect(wrapper.find('.import-drawer').exists()).toBe(true)
+  expect(wrapper.get('.drawer-submit').attributes('disabled')).toBeDefined()
+  finish({ success: false }); await flushPromises()
+  expect(wrapper.get('[role="alert"]').text()).toBe('资料入库失败')
+  expect(mocks.ingestDocument).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'Persy 手工资料', text: '合同须经审批' }))
+  await wrapper.get('input[aria-label="数据集"]').trigger('keyup.enter')
+  await wrapper.get('.advanced-settings button').trigger('click')
+  expect(wrapper.emitted('applyDataset')).toEqual([[], []])
+  await wrapper.findAll('[role="tab"]')[0].trigger('click')
+  await wrapper.get('.drawer-scrim').trigger('click')
+  expect(wrapper.find('.import-drawer').exists()).toBe(false)
+  wrapper.unmount()
+})

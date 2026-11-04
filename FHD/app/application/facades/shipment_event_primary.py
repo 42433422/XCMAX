@@ -15,7 +15,7 @@ from app.contexts.flags import is_event_primary_enabled
 from app.neuro_async_bridge import get_neuro_main_loop, run_coroutine_on_neuro_loop
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.command_gateway import get_command_gateway
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

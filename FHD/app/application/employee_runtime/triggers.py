@@ -193,7 +193,7 @@ def publish_employee_task_failed(
     """辅助：发布员工任务失败事件（供 executor / 外部调用）。"""
     try:
         from app.neuro_bus.bus import get_neuro_bus
-        from app.neuro_bus.events.base import NeuroEvent
+        from app.neuro_bus.events.events_base import NeuroEvent
 
         payload = dict(extra or {})
         payload.setdefault("origin_employee_id", employee_id)

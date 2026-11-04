@@ -26,15 +26,47 @@ PUBLIC_APPROVAL_ERROR = "approval_grant 无效、过期或与当前步骤不匹�
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
 
 
-def authenticated_runtime_context(raw: dict[str, Any], principal: AgentPrincipal) -> dict[str, Any]:
+def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
+    """Discard caller identity fields before resolving any server principal."""
     context = dict(raw)
-    context.pop("tenant_id", None)
-    context.pop("_mod_authorization", None)
+    for key in (
+        "tenant_id",
+        "user_id",
+        "actor_id",
+        "local_user_id",
+        "authenticated_local_user_id",
+        "_mod_authorization",
+        "_actor_authorization",
+        "mod_id",
+        "active_mod_id",
+        "authenticated_username",
+        "authenticated_display_name",
+        "_dataset_access_context_trusted",
+        "dataset_access_context",
+    ):
+        context.pop(key, None)
+    return context
+
+
+def authenticated_runtime_context(raw: dict[str, Any], principal: AgentPrincipal) -> dict[str, Any]:
+    context = without_runtime_identity(raw)
+    context.update(user_id=principal.user_id, actor_id=principal.user_id)
     if principal.tenant_id:
         context["tenant_id"] = principal.tenant_id
     if principal.mod_authorization:
         context["_mod_authorization"] = dict(principal.mod_authorization)
+        context["mod_id"] = str(principal.mod_authorization["mod_id"])
+    if principal.actor_authorization:
+        context["_actor_authorization"] = dict(principal.actor_authorization)
     return context
+
+
+def request_runtime_context(request: Any, raw: dict[str, Any] | None = None) -> dict[str, Any]:
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+
+    return authenticated_runtime_context(
+        dict(raw or {}), require_agent_principal(request, x_user_id=None)
+    )
 
 
 def success(data: Any, **extra: Any) -> dict[str, Any]:
@@ -62,7 +94,11 @@ def redact_internal_errors(value: Any) -> Any:
 
 
 def public_run_dict(run: Any) -> dict[str, Any]:
-    return cast("dict[str, Any]", redact_internal_errors(run.to_dict()))
+    # to_dict shares metadata with the stored run: redact only the recursive copy.
+    data = cast("dict[str, Any]", redact_internal_errors(run.to_dict()))
+    if isinstance(data.get("metadata"), dict):
+        data["metadata"].pop("_tool_approval_grants", None)
+    return data
 
 
 def public_event_dict(event: Any) -> dict[str, Any]:
@@ -104,24 +140,27 @@ def owned_run(
         return None, JSONResponse(
             {"success": False, "message": "agent run 不存在"}, status_code=404
         )
+    if not run_owned_by(run, principal):
+        return None, JSONResponse(
+            {"success": False, "message": "无权访问该 agent run"}, status_code=403
+        )
+    return run, None
+
+
+def run_owned_by(run: Any, principal: AgentPrincipal) -> bool:
     runtime_context = run.metadata.get("runtime_context") or {}
     binding = runtime_context.get("_mod_authorization") or {}
     requested_binding = principal.mod_authorization or {}
     run_mod = str(binding.get("mod_id") or "")
     requested_mod = str(requested_binding.get("mod_id") or "")
-    # 仅当 run 侧确有 Mod 绑定时才要求严格相等：legacy/compat 执行路径创建的 run
-    # 未写入 runtime_context._mod_authorization（run_mod 为空），此时若仍要求它与
-    # 请求头注入的 active-mod 相等，用户将读不到**自己创建的** run（M9/M10）。
-    # 无绑定时退化为下方的「用户 + 租户」归属校验，未放宽任何跨用户/跨租户边界。
+    # Legacy unbound runs still require the authenticated owner and tenant.
+    # Platform administration is not a grant to access customer task data.
     same_mod = (not run_mod) or run_mod == requested_mod
-    if not same_mod or (
-        not principal.is_admin
-        and (run.user_id != principal.user_id or tenant_id_of_run(run) != principal.tenant_id)
-    ):
-        return None, JSONResponse(
-            {"success": False, "message": "无权访问该 agent run"}, status_code=403
-        )
-    return run, None
+    return (
+        same_mod
+        and run.user_id == principal.user_id
+        and tenant_id_of_run(run) == principal.tenant_id
+    )
 
 
 def task_scope_matches(
@@ -140,7 +179,7 @@ def task_scope_matches(
         # 就把用户**自己**的历史任务隐藏（前端 window.fetch 补丁总会注入该头，
         # 故该分支等于让这类任务永久不可见）。此处不再据 mod 绑定额外过滤。
         return True
-    return all(owned_run(orchestrator, run.run_id, principal)[1] is None for run in runs)
+    return all(run_owned_by(run, principal) for run in runs)
 
 
 def scoped_tasks(

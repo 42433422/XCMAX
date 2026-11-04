@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_models import AgentTask, TaskControlCommand
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode, normalize_workflow_risk
+from app.application.workflow.workflow_types import (
+    Branch,
+    PlanGraph,
+    WorkflowNode,
+    normalize_workflow_risk,
+)
 
 
 class UnifiedTaskPlanMixin:

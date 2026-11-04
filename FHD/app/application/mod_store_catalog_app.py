@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.domain.shared_services.mod_zip_normalize import normalize_package_zip_path
+from app.domain.shared_services.modstore_library_sync import sync_modstore_library_to_local
 from app.infrastructure.mods.catalog_client import (
     catalog_base_url,
     catalog_download_to,
@@ -11,8 +13,6 @@ from app.infrastructure.mods.catalog_client import (
     market_item_to_package_row,
 )
 from app.infrastructure.mods.catalog_visibility import is_public_catalog_row
-from app.services.mod_zip_normalize import normalize_package_zip_path
-from app.services.modstore_library_sync import sync_modstore_library_to_local
 
 __all__ = [
     "catalog_base_url",

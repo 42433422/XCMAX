@@ -19,6 +19,16 @@ it('carries scope and decodes fragmented UTF-8 and CRLF', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/agent/tasks/events/stream', expect.objectContaining({ credentials: 'include', headers: expect.objectContaining({ 'X-XCAGI-Active-Mod-Id': 'mod-a', 'X-XCMAX-Client-Shell': 'enterprise' }) }))
   stream.close()
 })
+it('stops when the task stream is unauthorized', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })))
+  const stream = new AuthenticatedEventStream('/api/agent/tasks/events/stream')
+  const unauthorized = vi.fn()
+  stream.addEventListener('stream.unauthorized', unauthorized)
+  await vi.waitFor(() => expect(unauthorized).toHaveBeenCalledOnce())
+  expect((unauthorized.mock.calls[0][0] as CustomEvent).detail).toBe(401)
+  stream.close()
+})
+
 it('suppresses late snapshots and errors after close', async () => {
   let resolve!: (response: Response) => void
   vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((r) => { resolve = r })))

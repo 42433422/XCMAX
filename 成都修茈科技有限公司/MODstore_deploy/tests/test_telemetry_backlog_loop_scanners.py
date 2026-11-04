@@ -63,7 +63,7 @@ class TestScanAutoMergeMetrics:
     def test_no_memory_returns_empty(self, monkeypatch):
         """_load_loop_memory 返回非 dict 时返回空列表。"""
         monkeypatch.setattr(
-            "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+            "modstore_server.maintenance_loop.store._load_loop_memory",
             lambda: None,
         )
         assert tbl._scan_auto_merge_metrics() == []
@@ -71,7 +71,7 @@ class TestScanAutoMergeMetrics:
     def test_empty_recent_runs_returns_empty(self, monkeypatch):
         """recent_runs 为空时返回空列表。"""
         monkeypatch.setattr(
-            "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+            "modstore_server.maintenance_loop.store._load_loop_memory",
             lambda: {"recent_runs": []},
         )
         assert tbl._scan_auto_merge_metrics() == []
@@ -79,7 +79,7 @@ class TestScanAutoMergeMetrics:
     def test_insufficient_samples_returns_empty(self, monkeypatch):
         """样本不足 3 条时返回空列表。"""
         monkeypatch.setattr(
-            "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+            "modstore_server.maintenance_loop.store._load_loop_memory",
             lambda: {"recent_runs": [{"action": "auto_merge", "status": "completed"}]},
         )
         assert tbl._scan_auto_merge_metrics() == []
@@ -87,7 +87,7 @@ class TestScanAutoMergeMetrics:
     def test_no_auto_merge_runs_returns_empty(self, monkeypatch):
         """无 auto_merge 动作时返回空列表。"""
         monkeypatch.setattr(
-            "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+            "modstore_server.maintenance_loop.store._load_loop_memory",
             lambda: {
                 "recent_runs": [
                     {"action": "manual_review", "status": "completed"},
@@ -101,7 +101,7 @@ class TestScanAutoMergeMetrics:
     def test_low_success_rate_triggers_signal(self, monkeypatch):
         """成功率 < 80% 触发 auto_merge_degradation 信号。"""
         monkeypatch.setattr(
-            "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+            "modstore_server.maintenance_loop.store._load_loop_memory",
             lambda: {
                 "recent_runs": [
                     {"action": "auto_merge", "status": "completed"},
@@ -121,7 +121,7 @@ class TestScanAutoMergeMetrics:
     def test_high_rollback_rate_triggers_signal(self, monkeypatch):
         """回滚率 > 20% 触发 auto_merge_degradation 信号。"""
         monkeypatch.setattr(
-            "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+            "modstore_server.maintenance_loop.store._load_loop_memory",
             lambda: {
                 "recent_runs": [
                     {"action": "auto_merge", "status": "completed"},
@@ -141,7 +141,7 @@ class TestScanAutoMergeMetrics:
     def test_healthy_metrics_no_signal(self, monkeypatch):
         """成功率高且无回滚时不触发信号。"""
         monkeypatch.setattr(
-            "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+            "modstore_server.maintenance_loop.store._load_loop_memory",
             lambda: {
                 "recent_runs": [
                     {"action": "auto_merge", "status": "completed"},

@@ -12,7 +12,7 @@ import pytest
 # Direct imports — Python 3.11 runtime, no exec_module workaround needed.
 import app.application.agent_orchestrator.multimodal_planner as _planner
 import app.application.agent_orchestrator.run_models as _run_models
-import app.application.workflow.types as _workflow_types
+import app.application.workflow.workflow_types as _workflow_types
 
 AgentArtifact = _run_models.AgentArtifact
 artifact_from_dict = _run_models.artifact_from_dict

@@ -10,7 +10,6 @@ import pytest
 from fastapi import FastAPI
 
 from app.fastapi_routes import register_all_routes
-from app.legacy.routes.openapi_route_compat import iter_effective_routes
 
 GOLDEN_PATH = Path(__file__).parent / "route_golden_essential.json"
 
@@ -30,21 +29,10 @@ def essential_app() -> FastAPI:
 
 
 def _collect_paths(app: FastAPI) -> list[str]:
-    paths: set[str] = set()
-    for route in app.routes:
-        # FastAPI 0.138+ 用 _IncludedRouter 包装 include_router 的路由，
-        # 实际路径在 original_router.routes 中；旧版直接展开为 Route。
-        orig = getattr(route, "original_router", None)
-        if orig is not None:
-            for sub in getattr(orig, "routes", []):
-                p = getattr(sub, "path", None)
-                if p:
-                    paths.add(p)
-        else:
-            path = getattr(route, "path", None)
-            if path:
-                paths.add(path)
-    return sorted(paths)
+    # Use the public OpenAPI view. FastAPI's lazy _IncludedRouter wrappers can
+    # nest after modular route composition, and inspecting a single original
+    # router level silently drops registered leaf endpoints.
+    return sorted(app.openapi()["paths"])
 
 
 def test_required_paths_present(essential_app: FastAPI):

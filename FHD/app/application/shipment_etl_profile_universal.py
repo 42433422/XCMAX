@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from app.application.excel_etl_kb import get_excel_etl_kb
 from app.application.shipment_etl_profile import ShipmentEtlProfile, parse_profile_dict
+from app.domain.app_pure.excel_etl_kb import get_excel_etl_kb
 
 
 def build_universal_profile_from_kb() -> ShipmentEtlProfile:

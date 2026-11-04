@@ -1,6 +1,0 @@
-2026-09-30T04:32:13+0800 [ind-taiyangniao] 开始验收 ind-taiyangniao 太阳鸟专属 Mod；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:32:13+0800 [ind-taiyangniao] M1 passed :: HTTP 200 22ms；{"success": true, "data": {"lines": ["优先读取钉钉「每日统计」，再用「原始记录」补充打卡时间与去重。", "重复打卡按上午/下午/晚上分段去重，优先保留每段的有效边界打卡。", "目标文件会在固定模板基础上回填「明细」工作表。", "周一到周六正班固定为 08:00-12:00、13:30-17:30；周日算加班。"], "saturday_window_la
-2026-09-30T04:32:19+0800 [ind-taiyangniao] M2 passed :: HTTP 200 6046ms；['taiyangniao-pro']
-2026-09-30T04:32:23+0800 [ind-taiyangniao] M3 passed :: 导航后路径 /taiyangniao-pro；命中文本 ['考勤']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 考勤表转换 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 考勤行业包 |  | Mod ID: taiyangniao-pro — 在库项目中编辑后执行 modman push 部署到 XCAGI
-2026-09-30T04:32:24+0800 [ind-taiyangniao] screenshot result.png
-2026-09-30T04:32:29+0800 [ind-taiyangniao] video operation.webm bytes=580663

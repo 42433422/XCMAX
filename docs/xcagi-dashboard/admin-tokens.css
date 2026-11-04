@@ -1,0 +1,7 @@
+/* Shared server-admin tokens, also consumed by the same-origin policy dashboard. */
+:root, #app {
+  --admin-primary: #1677ff; --admin-text: #172033; --admin-muted: #64748b;
+  --admin-border: #d7dee9; --admin-control-radius: 8px; --admin-card-radius: 12px;
+  --admin-control-size: 13px; --admin-card-shadow: 0 1px 3px rgba(23, 32, 51, 0.08);
+  --admin-warning-bg: #fff7ef; --admin-warning-border: #d5a071; --admin-warning-text: #a65d26;
+}

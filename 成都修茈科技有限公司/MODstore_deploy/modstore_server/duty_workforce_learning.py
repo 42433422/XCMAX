@@ -26,10 +26,7 @@ from modstore_server.duty_workforce_evidence import (
     workforce_gap_path,
 )
 from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
-from modstore_server.self_evolution_knowledge import (
-    kb_root,
-    record_code_pattern,
-)
+from modstore_server.self_evolution_knowledge import kb_root, record_code_pattern
 
 _RUN_LOCK = threading.Lock()
 _ENCRYPTED_GAP_SCHEMA = "xcagi.duty_workforce.capability_gap.encrypted/v1"

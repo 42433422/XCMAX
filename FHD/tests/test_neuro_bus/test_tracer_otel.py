@@ -66,7 +66,7 @@ def test_span_delegates_to_otel_when_available(monkeypatch):
     # 创建 mock OTel 模块
     mock_span = MagicMock()
     mock_tracer = MagicMock()
-    mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+    mock_tracer.start_span.return_value = mock_span
 
     mock_trace = MagicMock()
     mock_trace.get_tracer.return_value = mock_tracer

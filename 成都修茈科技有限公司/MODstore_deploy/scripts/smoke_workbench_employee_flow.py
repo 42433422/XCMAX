@@ -133,7 +133,9 @@ def main() -> int:
         import tempfile
 
         jf = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
-        jf.write(json.dumps(minimal_document_full_json(), ensure_ascii=False).encode("utf-8"))
+        jf.write(
+            json.dumps(minimal_document_full_json(), ensure_ascii=False).encode("utf-8")
+        )
         jf.close()
         tf = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
         tf.write(minimal_docx_bytes())
@@ -160,7 +162,9 @@ def main() -> int:
 
     sess = requests.Session()
     login = sess.post(
-        f"{BASE_URL}/api/auth/login", json={"username": USERNAME, "password": PASSWORD}, timeout=30
+        f"{BASE_URL}/api/auth/login",
+        json={"username": USERNAME, "password": PASSWORD},
+        timeout=30,
     )
     if login.status_code >= 400:
         print(
@@ -233,7 +237,12 @@ def main() -> int:
     if res.status_code >= 400:
         print(
             json.dumps(
-                {"ok": False, "stage": "start", "status": res.status_code, "text": res.text[:2000]},
+                {
+                    "ok": False,
+                    "stage": "start",
+                    "status": res.status_code,
+                    "text": res.text[:2000],
+                },
                 ensure_ascii=False,
             )
         )
@@ -261,7 +270,9 @@ def main() -> int:
             break
         time.sleep(2)
     ok = bool(final and final.get("status") == "done")
-    validation_errors = _assert_employee_session(final) if final else ["no final session"]
+    validation_errors = (
+        _assert_employee_session(final) if final else ["no final session"]
+    )
     if validation_errors:
         ok = False
     sys.stdout.buffer.write(

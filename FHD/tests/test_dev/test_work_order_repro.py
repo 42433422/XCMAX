@@ -64,14 +64,14 @@ class TestGenerateRepro:
     def test_module_import_generated(self, tmp_path: Path) -> None:
         out = tmp_path / "repro"
         repro._REPRO_DIR = out
-        spec = repro.generate_repro(_diagnosis(tmp_path, "app/services/work_order_state.py"))
+        spec = repro.generate_repro(_diagnosis(tmp_path, "app/domain/shared_services/state.py"))
         assert spec is not None
         assert spec["kind"] == "module_import"
         assert spec["status"] == "generated"
-        assert spec["scenario"]["module"] == "app.services.work_order_state"
+        assert spec["scenario"]["module"] == "app.domain.shared_services.state"
         test_path = Path(spec["scenario"]["test_path"])
         assert test_path.is_file()
-        assert "app.services.work_order_state" in test_path.read_text(encoding="utf-8")
+        assert "app.domain.shared_services.state" in test_path.read_text(encoding="utf-8")
 
     def test_missing_target_needs_scenario(self, tmp_path: Path) -> None:
         out = tmp_path / "repro"
@@ -94,9 +94,9 @@ class TestGenerateRepro:
 
 class TestRunRepro:
     def test_green_when_module_importable(self, tmp_path: Path) -> None:
-        spec = _diagnosis(tmp_path, "app/services/work_order_state.py")
+        spec = _diagnosis(tmp_path, "app/domain/shared_services/state.py")
         spec["kind"] = "module_import"
-        spec["scenario"] = {"module": "app.services.work_order_state"}
+        spec["scenario"] = {"module": "app.domain.shared_services.state"}
         out = tmp_path / "repro"
         out.mkdir()
         repro._REPRO_DIR = out
@@ -149,7 +149,7 @@ class TestRelayChain:
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr(
                 "logs/xcagi.log",
-                "app/services/work_order_state.py:3:1: F401 [*] `os` imported but unused\n",
+                "app/domain/shared_services/state.py:3:1: F401 [*] `os` imported but unused\n",
             )
         blob = zip_path.read_bytes()
         ref = {

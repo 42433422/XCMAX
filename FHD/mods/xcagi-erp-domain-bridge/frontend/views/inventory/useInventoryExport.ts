@@ -9,26 +9,27 @@ export function useInventoryExport(readFilters: () => Record<string, string>) {
   const exportMessage = ref('');
   const exportError = ref('');
 
-  async function exportInventory() {
+  async function exportInventory(format: 'xlsx' | 'csv' = 'xlsx') {
     if (exporting.value) return;
     exporting.value = true;
     exportMessage.value = '正在生成全部筛选结果，请稍候…';
     exportError.value = '';
     try {
-      const response = await api.download('/api/inventory/export.xlsx', readFilters(), {
+      const response = await api.download(`/api/inventory/export.${format}`, readFilters(), {
         timeoutMs: 60000,
       });
       if (
         !response.ok ||
-        !(response.headers.get('content-type') || '').includes(XLSX_CONTENT_TYPE)
+        (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() !==
+          (format === 'csv' ? 'text/csv' : XLSX_CONTENT_TYPE)
       ) {
-        throw new Error('未收到有效的库存 Excel 文件，请稍后重试。');
+        throw new Error(`未收到有效的库存 ${format === 'csv' ? 'CSV' : 'Excel'} 文件，请稍后重试。`);
       }
       const blob = await response.blob();
       if (!blob.size) throw new Error('库存导出文件为空，请稍后重试。');
       downloadBlob(
         blob,
-        getFilenameFromDisposition(response.headers.get('content-disposition'), '库存明细.xlsx')
+        getFilenameFromDisposition(response.headers.get('content-disposition'), `库存明细.${format}`)
       );
       const count = Number(response.headers.get('x-inventory-row-count'));
       const scope =

@@ -7,9 +7,18 @@
       @control="controlWorkspaceTask"
     />
     <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
+    <div v-if="cacheError" class="chat-cache-warning chat-composer-status chat-composer-status--error" role="alert">
+      {{ cacheError }} <button type="button" class="btn btn-secondary btn-sm" @click="retryMessagesCache">重试本机保存</button>
+    </div>
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
+        :empty-intro="getIndustryPreset(currentIndustryId).scenario"
+        @fill-example="fillComposer"
+        :session-key="messageSessionKey"
+        :proactive-suggestions="proactiveSuggestionsByMessage"
+        @pick-proactive-suggestion="pickProactiveSuggestion"
         :messages="messages"
+        @retry-save="retryMessageSave"
         :is-loading="isLoading"
         :is-streaming-reply="isStreamingReply"
         :loading-progress-text="loadingProgressText"
@@ -26,6 +35,7 @@
         @shipment-download-click="handleShipmentDownloadClick"
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
+        @approve-run="approveRunFromChat"
       />
       <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
@@ -38,6 +48,9 @@
       <ChatSidePanel
         :current-task="currentTask"
         :task-list="visibleTaskList"
+        :task-control-states="taskControlStates"
+        :task-sync-state="taskSyncState"
+        @refresh-tasks="refreshTasks"
         :filtered-task-list="visibleFilteredTaskList"
         :active-task-id="visibleActiveTaskId"
         :expanded-task-ids="expandedTaskIds"
@@ -57,6 +70,9 @@
         :current-session-id="currentSessionId"
         :history-loading="historyLoading"
         :history-error="historyError"
+        :history-has-more="historyHasMore"
+        :history-loading-more="historyLoadingMore"
+        @load-more-history="loadMoreHistorySessions"
         @confirm-task="confirmTask"
         @cancel-task="cancelTask"
         @refetch-order-number="refetchTaskOrderNumber"
@@ -73,7 +89,7 @@
         @retry-task="retryTask"
         @pause-task="pauseTask"
         @resume-task="resumeTask"
-        @approve-task="approveTask"
+        @approve-task="approveTaskWithFeedback"
         @cancel-task-by-id="cancelTaskById"
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
@@ -85,20 +101,30 @@
         @delete-session="deleteSession"
       />
     </div>
-    <div class="input-area" data-tour="chat-input-area">
+    <div
+      class="input-area"
+      data-tour="chat-input-area"
+      :class="{ 'input-area--dragover': composerDragOver }"
+      @dragenter.prevent="onComposerDragEnter"
+      @dragover.prevent="onComposerDragOver"
+      @dragleave.prevent="onComposerDragLeave"
+      @drop.prevent="onComposerDrop"
+    >
+      <div v-if="composerDragOver" class="composer-drop-overlay" role="status">松开以上传附件</div>
       <ChatInputToolbar
         :excel-analyze-uploading="excelAnalyzeUploading"
         :multimodal-pending-count="multimodalPendingCount"
-        :auto-refresh-starred-wechat="autoRefreshStarredWechat"
+        :proactive-suggestions-enabled="proactiveEnabled"
         :tts-enabled="ttsEnabled"
         :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
         :office-docking-processing="officeDockingProcessing"
         @new-conversation="newConversation"
         @trigger-office-docking="triggerOfficeDocking"
         @excel-file-change="onExcelAnalyzeFileChange"
-        @auto-refresh-change="onAutoRefreshToolbarChange"
+        @proactive-suggestions-change="onProactiveSuggestionsChange"
         @toggle-tts="setTtsEnabled"
       />
+      <ChatModelRecovery :scope-key="messageSessionKey" />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <span class="sheet-link-label">关联工作表：</span>
         <button class="sheet-link-btn" :class="{ active: linkedExcelAllSheets }" @click="bindAllExcelSheetsToChat">
@@ -146,6 +172,7 @@
           <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
           <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
         </button>
+        <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply()">停止回复</button>
         <button
           class="btn btn-primary send-message-btn"
           id="sendMessageBtn"
@@ -154,7 +181,7 @@
           :title="sendButtonTitle"
           @click="sendMessage"
         >
-          发送
+          {{ isLoading ? '发送纠正' : '发送' }}
         </button>
       </div>
       <div
@@ -169,6 +196,9 @@
       </div>
     </div>
     <ChatHistoryModal
+      :history-has-more="historyHasMore"
+      :history-loading-more="historyLoadingMore"
+      @load-more="loadMoreHistorySessions"
       :show="showHistory"
       :history-sessions="historySessions"
       :history-loading="historyLoading"
@@ -199,15 +229,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onDeactivated } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import { showAppToast } from '@/composables/useAppToast'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
 import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import ChatQuickActions from '@/components/chat/ChatQuickActions.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
+import ChatModelRecovery from '@/components/chat/ChatModelRecovery.vue'
 import ChatSidePanel from '@/components/chat/ChatSidePanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
@@ -218,12 +250,14 @@ import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
+import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
-import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
-import { resolveWorkspaceSessionId, useRoutedTaskWorkspace } from '@/composables/useRoutedTaskWorkspace'
+import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from '@/composables/useRoutedTaskWorkspace'
 
 const props = withDefaults(
   defineProps<{
@@ -243,8 +277,9 @@ const taskCenterStore = useAgentTaskCenterStore()
 const industryStore = useIndustryStore()
 const { currentIndustryId } = storeToRefs(industryStore)
 
-// 主动意识：默认关闭，须用户主动勾选后才轮询星标会话
-const autoRefreshStarredWechat = ref(localStorage.getItem('xcagi_auto_refresh_starred_wechat') === '1')
+// Chat toolbar「主动意识」uses proactive suggestions storage — NOT starred WeChat polling.
+// Keep WeChat star-refresh forced off here so old checkbox events cannot misfire workflow polls.
+const autoRefreshStarredWechat = ref(false)
 const isTaskPaneResizable = ref(true)
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
@@ -253,6 +288,7 @@ function generateSessionId(): string {
 const _storedSessionId = readAiSessionIdFromStorage()
 const initialWorkspaceSessionId = resolveWorkspaceSessionId(props)
 const currentSessionId = ref(initialWorkspaceSessionId || _storedSessionId || generateSessionId())
+const messageSessionKey = computed(() => JSON.stringify([currentSessionId.value, modsStore.activeModId, productReadAccountEpoch.value]))
 if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 
 const chatViewApi = useChatView({ sessionId: currentSessionId })
@@ -263,6 +299,9 @@ const chatRefBag = {
 
 const {
   messages,
+  cacheError,
+  retryMessagesCache,
+  retryMessageSave,
   currentTask,
   orderNumberFetching,
   isLoading,
@@ -270,6 +309,9 @@ const {
   isExecuting,
   latestAssistantPush,
   taskList,
+  taskControlStates,
+  taskSyncState,
+  refreshTasks,
   activeTaskId,
   filteredTaskList,
   expandedTaskIds,
@@ -278,6 +320,9 @@ const {
   historySessions,
   historyLoading,
   historyError,
+  historyHasMore,
+  historyLoadingMore,
+  loadMoreHistorySessions,
   pushCopied,
   loadingProgressText,
   excelAnalyzeUploading,
@@ -289,13 +334,13 @@ const {
   taskTableItems,
   taskOrderNumber,
   sendMessage: chatSendMessage,
+  stopReply,
   confirmWorkflowFromCard,
   cancelWorkflowFromCard,
   confirmTask,
   refetchTaskOrderNumber,
   setCustomOrderNumber,
   cancelTask,
-  showTaskConfirm,
   onExcelAnalyzeFileChange,
   bindExcelSheetToChat,
   bindAllExcelSheetsToChat,
@@ -340,11 +385,66 @@ const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList
     markTaskRead: taskCenterStore.markTaskRead,
   })
 
-function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): void {
-  void taskCenterStore.controlTask(workspaceTaskId.value, action)
+async function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): Promise<void> {
+  await taskCenterStore.controlTask(workspaceTaskId.value, action)
+  if (taskCenterStore.error) showAppToast(taskCenterStore.error, 'error', { duration: 8000 })
 }
 
+const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback({
+  currentSessionId, approveTask, syncSessionMessages,
+})
+
 const messageInput = ref('')
+function fillComposer(text: string) {
+  messageInput.value = text
+  document.getElementById('messageInput')?.focus()
+}
+const composerDragOver = ref(false)
+let composerDragDepth = 0
+
+const COMPOSER_ACCEPT_RE = /\.(xlsx|xlsm|pdf|jpe?g|png|webp|gif)$/i
+const COMPOSER_ACCEPT_MIME = /^(image\/(jpeg|png|webp|gif)|application\/pdf)/i
+
+function filesFromDataTransfer(dt: DataTransfer | null): File[] {
+  if (!dt?.files?.length) return []
+  return Array.from(dt.files)
+}
+
+function isComposerAcceptedFile(file: File): boolean {
+  return COMPOSER_ACCEPT_RE.test(file.name) || COMPOSER_ACCEPT_MIME.test(file.type || '')
+}
+
+function onComposerDragEnter(e: DragEvent) {
+  if (!e.dataTransfer?.types?.includes('Files')) return
+  composerDragDepth += 1
+  composerDragOver.value = true
+}
+
+function onComposerDragOver(e: DragEvent) {
+  if (!e.dataTransfer?.types?.includes('Files')) return
+  e.dataTransfer.dropEffect = 'copy'
+  composerDragOver.value = true
+}
+
+function onComposerDragLeave() {
+  composerDragDepth = Math.max(0, composerDragDepth - 1)
+  if (composerDragDepth === 0) composerDragOver.value = false
+}
+
+async function onComposerDrop(e: DragEvent) {
+  composerDragDepth = 0
+  composerDragOver.value = false
+  if (isLoading.value || excelAnalyzeUploading.value) return
+  const files = filesFromDataTransfer(e.dataTransfer)
+  if (!files.length) return
+  const accepted = files.filter(isComposerAcceptedFile)
+  if (!accepted.length) {
+    await addAndSaveMessage('[附件] 不支持的文件类型，请拖入 Excel、图片或 PDF', 'ai')
+    return
+  }
+  // The picker snapshots these files and applies the existing session/identity guard.
+  await onExcelAnalyzeFileChange({ target: { files: accepted, value: '' } } as unknown as Event)
+}
 
 const {
   voiceButtonDisabled,
@@ -356,7 +456,18 @@ const {
   startVoiceRecording,
   stopVoiceRecording,
   cleanupVoiceInput,
-} = useChatVoiceInput({ messageInput, isLoading })
+  warmVoiceModel,
+} = useChatVoiceInput({ messageInput, isLoading, sessionId: currentSessionId })
+
+// Best-effort ASR warm so first push-to-talk is not a 6–7s cold load (item 4 latency).
+let voiceWarmTimer: number | undefined
+onMounted(() => {
+  voiceWarmTimer = window.setTimeout(() => {
+    void warmVoiceModel()
+  }, 2500)
+})
+onBeforeUnmount(() => window.clearTimeout(voiceWarmTimer))
+onDeactivated(() => window.clearTimeout(voiceWarmTimer))
 
 const {
   messageHeights,
@@ -370,7 +481,7 @@ const {
   toggleMessageTts,
   batchCalculateHeights,
   stopMessageTts,
-} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef })
+} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef, sessionKey: messageSessionKey })
 
 const {
   paneStyle: chatPaneStyle,
@@ -398,15 +509,15 @@ const inputPlaceholder = computed(() => {
   return preset.placeholderNormal
 })
 
-const canSendMessage = computed(() => !!messageInput.value.trim() && !isLoading.value)
+const canSendMessage = computed(() => !!messageInput.value.trim())
 const sendButtonTitle = computed(() => {
-  if (isLoading.value) return '正在发送，请稍候'
+  if (isLoading.value) return '可停止回复或发送纠正；已执行的工具不会撤销'
   if (!messageInput.value.trim()) return '请先输入内容'
   return '发送消息'
 })
 const composerStatusText = computed(() => {
   if (voiceFeedbackText.value) return voiceFeedbackText.value
-  if (isLoading.value) return '正在发送，请稍候'
+  if (isLoading.value) return '可停止回复或发送纠正；已执行的工具不会撤销'
   if (!messageInput.value.trim()) return '请输入内容后再发送'
   return ''
 })
@@ -415,7 +526,7 @@ const sendMessage = async () => {
   const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null
   const raw = messageInput.value || (domInput && domInput.value) || ''
   const message = raw.trim()
-  if (!message || isLoading.value) return
+  if (!message) return
   messageInput.value = ''
   await chatSendMessage(message)
 }
@@ -451,7 +562,8 @@ const handleKeyDown = (e: KeyboardEvent) => {
   }
 }
 
-const { onAutoRefreshToolbarChange } = useChatViewHost({
+const { onAutoRefreshToolbarChange: _legacyWechatToolbarChange } = useChatViewHost({
+  pageScopeKey: () => messageSessionKey.value,
   modsStore,
   modsFromStore,
   autoRefreshStarredWechat,
@@ -466,6 +578,24 @@ const { onAutoRefreshToolbarChange } = useChatViewHost({
   cleanupVoiceInput,
   stopTaskPaneResize,
 })
+void _legacyWechatToolbarChange
+
+const {
+  proactiveEnabled,
+  proactiveSuggestionsByMessage,
+  persistProactiveEnabled,
+  pickProactiveSuggestion,
+} = useProactiveReplySuggestions({
+  messages,
+  messageInput,
+  isLoading,
+  scopeKey: messageSessionKey,
+  isStreamingReply,
+})
+
+function onProactiveSuggestionsChange(enabled: boolean) {
+  persistProactiveEnabled(enabled)
+}
 
 function openShipmentRecordsFromAuditTask() {
   window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: 'shipment-records' } }))
@@ -487,5 +617,27 @@ function emitSwitchView(view: string) {
 
 .chat-composer-status--error {
   color: #b42318;
+}
+
+.input-area {
+  position: relative;
+}
+.input-area--dragover {
+  outline: 2px dashed var(--xc-color-primary, #0d47a1);
+  outline-offset: -2px;
+  background: rgba(13, 71, 161, 0.04);
+}
+.composer-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--xc-color-primary, #0d47a1);
+  font-size: var(--app-font-size-caption, 13px);
+  font-weight: 600;
 }
 </style>

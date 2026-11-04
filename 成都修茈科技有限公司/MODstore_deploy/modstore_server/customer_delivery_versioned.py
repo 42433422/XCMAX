@@ -20,6 +20,18 @@ MOD_ID = "sunbird-attendance-custom"
 LEGACY_ID = "taiyangniao-pro"
 
 
+def select_main_rework_source(evidence: dict[str, Any], user_id: int, action: str) -> None:
+    if (
+        action != "rework"
+        or evidence.get("kind") != "module"
+        or evidence.get("suggested_id") != MOD_ID
+    ):
+        raise ValueError("只有太阳鸟模块原单返工可选择主线源码")
+    assert_owner_source(user_id, MOD_ID)
+    release_source()
+    evidence["source_mode"] = "versioned_main"
+
+
 def source_fingerprints(root: Path) -> tuple[dict[str, str], str]:
     """Hash every file and the ordered tree; reject links and special members."""
     if not root.is_dir() or root.is_symlink():
@@ -143,15 +155,28 @@ async def start_versioned_main_run(
     assert_owner_source(user_id, str(evidence.get("suggested_id") or ""))
     _, provenance = release_source()
     session_id = uuid.uuid4().hex[:24]
+    from modstore_server.customer_delivery_build import (
+        versioned_sunbird_probe_runtime_identity,
+    )
+
+    runtime_identity = versioned_sunbird_probe_runtime_identity(provenance)
     scope = create_private_source_scope(user_id, session_id, ticket_id)
     steps = [
         {"id": "source", "label": "核验主线源码", "status": "pending"},
-        {"id": "mod_sandbox", "label": "校验并签署私有 Mod", "status": "pending"},
+        {"id": "mod_sandbox", "label": "编译私有 Mod", "status": "pending"},
+        {
+            "id": "signed_probe",
+            "label": "隔离运行正式签名包业务探针",
+            "status": "pending",
+        },
     ]
     async with workbench._SESSION_LOCK:
         workbench.WORKBENCH_SESSIONS[session_id] = {
             "id": session_id,
             "user_id": user_id,
+            "ticket_id": ticket_id,
+            "delivery_source_mode": "versioned_main",
+            "delivery_runtime_identity": runtime_identity,
             "intent": "mod",
             "status": "running",
             "steps": steps,
@@ -184,7 +209,7 @@ async def start_versioned_main_run(
                 raise ValueError("私有生产源在签包前发生变化")
             artifact = {
                 "mod_id": MOD_ID,
-                "validation_summary": {"ok": True, "python_warnings": []},
+                "validation_summary": {"ok": False, "probe_pending": True},
                 "source_provenance": provenance,
             }
             await workbench._set_step(
@@ -209,8 +234,31 @@ async def start_versioned_main_run(
                 },
                 snapshot,
             )
+            step = "signed_probe"
+            await workbench._set_step(session_id, "signed_probe", "running")
+            from modstore_server.customer_delivery_build import (
+                run_versioned_sunbird_probe,
+            )
+
+            probe_report = await asyncio.to_thread(
+                run_versioned_sunbird_probe, signed, runtime_identity
+            )
+            signed["sandbox_probe"] = probe_report
+            artifact["validation_summary"] = {
+                "ok": True,
+                "python_warnings": [],
+                "signed_probe_sha256": probe_report["report_sha256"],
+            }
+            await workbench._set_step(
+                session_id,
+                "signed_probe",
+                "done",
+                "正式签名包摘要绑定的真实业务探针通过",
+            )
             async with workbench._SESSION_LOCK:
-                workbench.WORKBENCH_SESSIONS[session_id]["verified_artifacts"] = [signed]
+                current = workbench.WORKBENCH_SESSIONS[session_id]
+                current["artifact"] = artifact
+                current["verified_artifacts"] = [signed]
                 workbench._persist_workbench_session_unlocked(session_id)
         except asyncio.CancelledError:
             await workbench._fail_session(session_id, step, "主线私有生产任务已中断")

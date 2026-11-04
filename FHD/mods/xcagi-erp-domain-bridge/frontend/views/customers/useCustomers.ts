@@ -1,8 +1,9 @@
-import { ref, onMounted, onActivated, watch } from 'vue'
+import { computed, ref, onMounted, onActivated, watch } from 'vue'
 import customersApi from '@/api/customers'
 import ordersApi from '@/api/orders'
 import templatePreviewApi from '@/api/templatePreview'
 import { appAlert } from '@/utils/appDialog'
+import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema'
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel'
 import type { CustomerCreateDTO, CustomerUpdateDTO } from '@/types/customer'
 import type { ApiResponse } from '@/types/api'
@@ -63,6 +64,8 @@ interface ExportTemplatesResponse {
 
 export function useCustomers() {
   const pageNavTitle = useCoreNavLabel('customers');
+  const schema = useIndustryFieldSchema('customers');
+  const entityName = computed(() => schema.entity.value || '客户');
   const productsNavLabel = useCoreNavLabel('products');
   const shipmentNavLabel = useCoreNavLabel('shipment-records');
 
@@ -93,12 +96,12 @@ export function useCustomers() {
     address: ''
   });
 
-  const columns = [
-    { key: 'customer_name', label: '客户名称' },
+  const columns = computed(() => [
+    { key: 'customer_name', label: `${entityName.value}名称` },
     { key: 'contact_person', label: '联系人' },
     { key: 'contact_phone', label: '电话' },
     { key: 'contact_address', label: '地址' }
-  ];
+  ]);
 
   function normalizeUnitsPayload(data: UnitsPayload) {
     const list = data?.data || data?.units || [];
@@ -245,7 +248,7 @@ export function useCustomers() {
 
   const saveAdd = async () => {
     if (!addForm.value.customer_name?.trim()) {
-      await appAlert('客户名称不能为空');
+      await appAlert(`${entityName.value}名称不能为空`);
       return;
     }
     try {
@@ -255,7 +258,7 @@ export function useCustomers() {
         contact_phone: addForm.value.contact_phone,
         contact_address: addForm.value.address,
       } as unknown as CustomerCreateDTO);
-      await appAlert('客户创建成功');
+      await appAlert(`${entityName.value}创建成功`);
       closeAddModal();
       await loadCustomers({ reset: true });
     } catch (e) {
@@ -266,7 +269,7 @@ export function useCustomers() {
   const saveEdit = async () => {
     if (!editForm.value.id) return;
     if (!editForm.value.customer_name?.trim()) {
-      await appAlert('客户名称不能为空');
+      await appAlert(`${entityName.value}名称不能为空`);
       return;
     }
     try {
@@ -364,7 +367,7 @@ export function useCustomers() {
   onActivated(refreshCustomersView);
 
   return {
-    pageNavTitle,
+    pageNavTitle, entityName,
     productsNavLabel,
     shipmentNavLabel,
     customers,

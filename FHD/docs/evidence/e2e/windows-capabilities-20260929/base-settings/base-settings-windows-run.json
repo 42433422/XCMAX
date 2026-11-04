@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "base-settings",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 base-settings 对应的 Windows 客户端页面 /settings",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「设置 - XCAGI」，主标题「系统设置」，地址 /settings。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 系统设置 SUNBIRD 副窗 ◈ 工作区 S 更换 SUNBIRD SUNBIRD 退出登录 系统设置 个人主页 SUNBIRD · 头像与资料 展示名称 邮箱 登录名 SUNB",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=216743 mp4=192429 title=设置 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-settings/base-settings.log",
+    "sha256": "17b3d9135c549753c326d523d8ea3952c3b687385c8f44bceb6463b5e27dee19",
+    "bytes": 3340
+  },
+  "media": [
+    {
+      "feature": "base-settings",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-settings/base-settings.png",
+      "sha256": "0c54b67b9b4cfefc3147906382ddb8237910d29ac7019613224cf4c75d017d26",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「设置 - XCAGI」，主标题「系统设置」，地址 /settings。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 系统设置 SUNBIRD 副窗 ◈ 工作区 S 更换 SUNBIRD SUNBIRD 退出登录 系统设置 个人主页 SUNBIRD · 头像与资料 展示名称 邮箱 登录名 SUNB",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "base-settings",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-settings/base-settings.mp4",
+      "sha256": "2374dc714f7e1a1c484beae2ccb69324a8eb90314e10671053e5fc85c24194d6",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「设置 - XCAGI」，主标题「系统设置」，地址 /settings。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 系统设置 SUNBIRD 副窗 ◈ 工作区 S 更换 SUNBIRD SUNBIRD 退出登录 系统设置 个人主页 SUNBIRD · 头像与资料 展示名称 邮箱 登录名 SUNB",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

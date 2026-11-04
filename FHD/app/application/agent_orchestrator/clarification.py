@@ -13,6 +13,20 @@ class ClarificationAnswerError(ValueError):
     """The answer does not resolve the currently pending input request."""
 
 
+def find_waiting_step(run: AgentRun, *, approved_step_id: str = "") -> AgentStep | None:
+    """Select the pending interaction, optionally constrained to an approved step."""
+    wanted = str(approved_step_id or "").strip()
+    return next(
+        (
+            step
+            for step in run.steps
+            if step.status == "waiting_user"
+            and (not wanted or wanted in {step.step_id, step.node_id})
+        ),
+        None,
+    )
+
+
 def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[str, Any]) -> None:
     """Fill missing required inputs without approving the resulting business action."""
     step = next((item for item in run.steps if item.step_id == step_id), None)
@@ -38,7 +52,7 @@ def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[
 
         missing = set(missing_quote_fields(target.params))
     if (target.tool_id, target.action) == ("inventory", "stock_in"):
-        from app.application.inventory_inputs import missing_stock_in_fields
+        from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
 
         missing = set(missing_stock_in_fields(target.params))
     if not parameters or not set(parameters) <= missing:
@@ -128,7 +142,7 @@ def pause_for_clarification(run: AgentRun, step: AgentStep, outputs: dict | None
 
         required_fields = missing_quote_fields(target.params)
     if target and (target.tool_id, target.action) == ("inventory", "stock_in"):
-        from app.application.inventory_inputs import missing_stock_in_fields
+        from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
 
         required_fields = missing_stock_in_fields(target.params)
     step.output["fields"] = [

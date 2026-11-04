@@ -7,11 +7,14 @@ import type { useModsStore } from '@/stores/mods'
 import { buildLoginLocation } from '@/utils/startupRedirect'
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate'
 import { asRecord, asString } from '@/utils/typeGuards'
+import { getAuthSessionEpoch, readValid } from '@/utils/authSessionCache'
 
 export type StartupAuthResult = {
   ok: boolean
   entitledModIds: string[]
   accountUsername?: string
+  /** The session could not be checked (timeout, dropped connection, 5xx); not a logout. */
+  unavailable?: boolean
 }
 
 export function useStartupAuth(options: {
@@ -21,30 +24,35 @@ export function useStartupAuth(options: {
 }) {
   const { router, modsStore, dismissStartupSplashImmediate } = options
 
-  async function syncMarketTokensFromSession() {
+  async function syncMarketTokensFromSession(current: () => boolean = () => true) {
     try {
       const handoff = await fetchSessionMarketHandoff()
-      persistMarketTokensFromHandoff(handoff)
+      if (current()) persistMarketTokensFromHandoff(handoff)
     } catch (error) {
       console.debug('[useStartupAuth] session-handoff skipped:', error instanceof Error ? error.message : error)
     }
   }
 
-  async function ensureStartupAuthenticated(): Promise<StartupAuthResult> {
+  async function ensureStartupAuthenticated(isAttemptCurrent: () => boolean = () => true): Promise<StartupAuthResult> {
+    const epoch = getAuthSessionEpoch()
+    const current = () => epoch === getAuthSessionEpoch() && isAttemptCurrent()
     try {
       const res = await authApi.validateSession()
+      if (!current()) return { ok: false, entitledModIds: [] }
       const resRow = asRecord(res)
-      const dataRow = asRecord(res?.data)
-      if (res?.success === true || resRow.valid === true || dataRow.valid === true) {
+      let valid = false
+      try { valid = readValid(res) } catch { valid = false }
+      if (valid) {
         clearHostPackSkippedSession()
-        // P0 优化3：Market token 同步与账户资料刷新彼此无依赖，并行执行节省 ~1RT
-        const marketPromise = syncMarketTokensFromSession()
-        const profilePromise = import('@/stores/accountProfile')
+        // Establish the trusted owner before taking a market credential snapshot.
+        await import('@/stores/accountProfile')
           .then((m) => m.useAccountProfileStore().refreshFromServer())
           .catch(() => {
             /* ignore */
           })
-        await Promise.all([marketPromise, profilePromise])
+        if (!current()) return { ok: false, entitledModIds: [] }
+        // Optional token synchronization must not block the authenticated workspace.
+        void syncMarketTokensFromSession(current)
         let entitledModIds: string[] = []
         let accountUsername = ''
         try {
@@ -57,9 +65,13 @@ export function useStartupAuth(options: {
         }
         return { ok: true, entitledModIds, accountUsername }
       }
-    } catch {
-      // Fall through to the local login page.
+    } catch (error) {
+      if (!current()) return { ok: false, entitledModIds: [] }
+      const status = Number((error as { status?: unknown } | null)?.status)
+      // Timeout, abort, or a dropped connection is not a logged-out session.
+      if (status !== 401 && status !== 403) return { ok: false, entitledModIds: [], unavailable: true }
     }
+    if (!current()) return { ok: false, entitledModIds: [] }
     dismissStartupSplashImmediate()
     const loc =
       typeof window !== 'undefined'
@@ -69,17 +81,18 @@ export function useStartupAuth(options: {
             hash: window.location.hash,
           }
         : {}
-    void router.replace(buildLoginLocation(loc))
+    void router.replace(buildLoginLocation(loc, import.meta.env.BASE_URL))
     return { ok: false, entitledModIds: [] }
   }
 
   async function runEnterpriseStartupAuth(isPublicEntryRoute: () => boolean): Promise<boolean> {
     if (isPublicEntryRoute()) return true
+    const epoch = getAuthSessionEpoch()
     // P0 优化3：fetchProductSku 与 auth 校验互相无依赖，并行执行节省 ~1RT
     const skuPromise = fetchProductSku().catch(() => 'generic' as string)
     const authPromise = ensureStartupAuthenticated()
     const [sku, authResult] = await Promise.all([skuPromise, authPromise])
-    if (!authResult.ok) return false
+    if (!authResult.ok || epoch !== getAuthSessionEpoch()) return false
     if (!isEnterpriseEdition(sku)) return true
     try {
       await modsStore.initialize(true, {

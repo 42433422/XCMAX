@@ -6,7 +6,7 @@
 
 from typing import Any, cast
 
-from app.services.product_import_service import ProductImportService
+from app.domain.shared_services.product_import_service import ProductImportService
 
 # get_product_import_service is in services/__init__.py - use direct import to avoid circular deps during init
 

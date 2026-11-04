@@ -236,7 +236,7 @@ export const adminEndpoints = {
       body: JSON.stringify(body || {}),
     }),
   /** 管理员：yuangon employee.yaml 与商城 employee_pack 上架对齐状态 */
-  // ─── AI 员工账号池（QQ / 邮箱 / 微信等外部账号 → 一等公民入站渠道） ─────
+  // ─── AI 员工账号池（邮箱 / 微信等外部账号 → 一等公民入站渠道；QQ Bot 已下线） ─────
   /** 列出所有 AI 员工账号（带 channel.paths：webhook URL 候选） */
   adminListAiAccounts: (params: { platform?: string; employee_id?: string; status?: string; limit?: number; offset?: number } = {}) => {
     const p = new URLSearchParams()
@@ -248,7 +248,7 @@ export const adminEndpoints = {
     const qs = p.toString()
     return req(`/api/admin/ai-accounts${qs ? `?${qs}` : ''}`)
   },
-  /** 新建账号 + 落地密钥；secret 是平台对应的 schema（QQ：app_id/app_secret/bot_token） */
+  /** 新建账号 + 落地密钥；secret 是平台对应的 JSON schema */
   adminCreateAiAccount: (body: {
     platform: string
     external_id: string
@@ -276,8 +276,6 @@ export const adminEndpoints = {
   /** 删除账号 + 销毁密钥文件 */
   adminDeleteAiAccount: (id: number | string) =>
     req(`/api/admin/ai-accounts/${encodeURIComponent(String(id))}`, { method: 'DELETE' }),
-  /** 查询 QQ 桥接当前状态（凭证来源、配齐与否、一等公民员工列表） */
-  butlerQqStatus: () => req('/api/agent/butler/qq/status'),
 
   adminYuangonOnboardStatus: () => req('/api/admin/yuangon-onboard/status'),
   /** 管理员：运行 onboard_yuangon_employees.py（dry_run / force / pkg_ids） */

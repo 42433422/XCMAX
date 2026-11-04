@@ -12,9 +12,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.eskill_adapter import (
-    RuleBasedESkillAdapter,
-)
+from modstore_server.eskill_adapter import RuleBasedESkillAdapter
 from modstore_server.eskill_adapter import dumps as _dumps
 from modstore_server.eskill_adapter import loads as _loads
 from modstore_server.eskill_adapter import render_template as _render_template

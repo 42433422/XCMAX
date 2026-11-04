@@ -5,4 +5,4 @@
 
 **当前账号与交付 SSOT**：[`FHD/docs/guides/AUTH_MARKET_CONTRACT.md`](../docs/guides/AUTH_MARKET_CONTRACT.md)
 
-历史 spec 见 `XCAGI/spec.md`（仅作归档参考，勿按任务清单实施）。
+历史规格已仓外归档，恢复位置见 [`ARCHIVE_POINTER.md`](../../ARCHIVE_POINTER.md)「2026-10-12 #2300」；勿按历史任务清单实施。

@@ -330,7 +330,7 @@ async def mod_employee_complete(
     # 全部直连候选失败 → 落到下方宿主 AIConversationService 通道。
 
     try:
-        from app.services.ai_conversation_service import get_ai_conversation_service
+        from app.domain.shared_services.ai_conversation_service import get_ai_conversation_service
     except ImportError:
         logger.warning("mod_employee_complete: get_ai_conversation_service 不可用", exc_info=True)
         return {

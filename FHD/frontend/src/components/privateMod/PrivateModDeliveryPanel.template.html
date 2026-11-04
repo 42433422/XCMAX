@@ -131,6 +131,9 @@
         </button>
       </div>
       <div v-if="customOf(item).stage === 'rework' || reworkRequestId === item.id" class="private-mod-request__rework">
+        <label v-if="versionedMainAvailable && customOf(item).kind === 'module' && customOf(item).suggested_id === 'sunbird-attendance-custom'">
+          <input v-model="requestMainSource[item.id]" type="checkbox" />使用已入主线的太阳鸟考勤转换 Mod 在本工单返工
+        </label>
         <textarea
           v-model="requestReworkNotes[item.id]"
           rows="3"

@@ -14,25 +14,13 @@
         </button>
       </div>
     </div>
-    <p v-if="error" class="banner-error">{{ error }}</p>
+    <p v-if="error" class="banner-error" role="alert">{{ error }}</p>
+    <p class="muted" role="status">运营总览：{{ overviewReady ? '已读取' : loading ? '读取中' : '待核实' }} · 跨端门禁：{{ gateReady ? '已读取' : loading ? '读取中' : '待核实' }} · GitHub：{{ githubReady ? '已读取' : loading ? '读取中' : '待核实' }} · 总览数据时间：{{ overview?.generated_at || overview?.operating_metrics?.generated_at || '未提供' }}</p>
     <p v-if="forceMsg" class="banner-ok">{{ forceMsg }}</p>
 
     <div class="kpi-grid">
-      <div class="kpi">
-        <div class="kpi-label">待办</div>
-        <div class="kpi-value">{{ pendingCount }}</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">30 天动作</div>
-        <div class="kpi-value">{{ window30.action_count ?? '—' }}</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">30 天否决</div>
-        <div class="kpi-value">{{ window30.blocked_count ?? '—' }}</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">30 天 veto rate</div>
-        <div class="kpi-value">{{ formatRate(window30.veto_rate) }}</div>
+      <div v-for="[label, value] in kpis" :key="label" class="kpi">
+        <div class="kpi-label">{{ label }}</div><div class="kpi-value">{{ value }}</div>
       </div>
     </div>
 
@@ -50,65 +38,27 @@
     </section>
 
     <div class="split">
-      <section class="card">
-        <h3>最近部署事件</h3>
-        <table v-if="deployEvents.length" class="data-table">
-          <thead>
-            <tr>
-              <th>deploy_id</th>
-              <th>时间</th>
-              <th>状态</th>
-              <th>分支</th>
-              <th>workflow</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in deployEvents" :key="String(row.deploy_id)">
-              <td class="mono">{{ row.deploy_id }}</td>
-              <td>{{ row.deployed_at || '—' }}</td>
-              <td>{{ row.status || '—' }}</td>
-              <td>{{ row.head_branch || '—' }}</td>
-              <td>{{ row.source_workflow || '—' }}</td>
-            </tr>
-          </tbody>
+      <section v-for="section in recentSections" :key="section.title" class="card">
+        <h3>{{ section.title }}</h3>
+        <table v-if="section.rows.length" class="data-table">
+          <thead><tr><th v-for="column in section.columns" :key="column">{{ column }}</th></tr></thead>
+          <tbody><tr v-for="(row, idx) in section.rows" :key="idx">
+            <td v-for="(value, col) in row" :key="col">{{ value ?? '—' }}</td>
+          </tr></tbody>
         </table>
-        <div v-else class="empty">暂无部署事件</div>
-      </section>
-
-      <section class="card">
-        <h3>最近审计日志</h3>
-        <table v-if="auditItems.length" class="data-table">
-          <thead>
-            <tr>
-              <th>action</th>
-              <th>risk</th>
-              <th>decision</th>
-              <th>actor</th>
-              <th>time</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, idx) in auditItems" :key="String(row.id || idx)">
-              <td>{{ row.action || '—' }}</td>
-              <td>{{ row.risk_level || '—' }}</td>
-              <td>{{ row.decision || '—' }}</td>
-              <td>{{ row.actor || row.approver || row.source || '—' }}</td>
-              <td>{{ row.timestamp || row.created_at || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-else class="empty">暂无审计日志</div>
+        <div v-else class="empty">{{ section.empty }}</div>
       </section>
     </div>
 
     <div class="split">
       <section class="card">
         <h3>跨端门禁</h3>
-        <ul class="gate-list">
+        <p v-if="!gateRules.length" class="empty">{{ gateReady ? '当前未返回适用规则，动作许可仍待核实。' : '门禁规则尚未读取成功，请重新读取。' }}</p>
+        <ul v-else class="gate-list">
           <li v-for="rule in gateRules" :key="rule.tier + rule.action_type">
-            <span class="badge" :class="rule.allow ? 'ok' : 'err'">{{ rule.allow ? '通过' : '阻断' }}</span>
+            <span class="badge" :class="rule.allow === true ? 'ok' : rule.allow === false ? 'err' : ''">{{ rule.allow === true ? '允许' : rule.allow === false ? '阻断' : '待核实' }}</span>
             <div>
-              <strong>{{ rule.label }}</strong>
+              <strong>{{ rule.label || rule.action_type || '未标明动作' }}</strong>
               <div class="muted">{{ (rule.reasons || []).join('；') || '—' }}</div>
             </div>
           </li>
@@ -127,7 +77,7 @@
             </a>
           </li>
         </ul>
-        <div v-else class="empty">{{ githubError || '暂无 needs-human / ai-self-heal 条目' }}</div>
+        <div v-else class="empty">{{ githubError || (githubReady ? '暂无需要人工处理的条目' : 'GitHub 条目尚未核实，请重新读取。') }}</div>
       </section>
     </div>
 
@@ -142,25 +92,26 @@
             :class="{ active: auditTier === t }"
             @click="switchTier(t)"
           >
-            {{ t }}
+            {{ tierLabels[t] }}
           </button>
         </div>
       </div>
-      <div class="muted">{{ auditPath || '—' }}</div>
-      <ul class="audit-mini">
-        <li v-for="(row, idx) in crossAudit" :key="idx">
-          <code>{{ row.action || row.event || row.type || 'entry' }}</code>
-          <span>{{ row.timestamp || row.ts || '' }}</span>
-        </li>
-      </ul>
-      <div v-if="!crossAudit.length" class="empty">该端暂无可读 audit.jsonl</div>
+      <p role="status">{{ auditLoading ? '正在加载审计记录…' : auditMessage }}</p>
+      <p class="muted">{{ crossAudit.length }} 条记录 · 最新事件 {{ auditLatest || '未知' }} · 超过 24 小时提示过期，不代表服务故障</p>
+      <button type="button" class="btn" :disabled="auditLoading" @click="switchTier(auditTier)">重新读取</button>
+      <table v-if="crossAudit.length" class="data-table">
+        <thead><tr><th>动作</th><th>说明</th><th>时间</th><th>详情</th></tr></thead>
+        <tbody><tr v-for="(row, idx) in crossAudit" :key="idx">
+          <td>{{ auditAction(row).type || auditAction(row).action || row.event || row.type || '未标注动作' }}</td>
+          <td>{{ auditSummary(row) }}</td>
+          <td>{{ row.timestamp || row.ts || '未知' }}</td>
+          <td><details><summary>原始记录</summary><pre>{{ JSON.stringify(row, null, 2) }}</pre></details></td>
+        </tr></tbody>
+      </table>
+      <details><summary>数据来源</summary><p class="mono">{{ auditPath || '尚未取得来源' }}</p><p>读取服务端可见的该端审计文件，不代表已实时连接其他设备。</p></details>
     </section>
   </div>
 </template>
-
-<script lang="ts">
-export default { name: 'XCmaxAdminAutonomyTab' }
-</script>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
@@ -175,7 +126,8 @@ const loading = ref(false)
 const forcing = ref(false)
 const error = ref('')
 const forceMsg = ref('')
-const overview = ref<Record<string, any>>({})
+const overview = ref<Record<string, any> | null>(null)
+const overviewReady = ref(false), gateReady = ref(false), githubReady = ref(false)
 const deployEvents = ref<AutonomyDeployEvent[]>([])
 const auditItems = ref<Record<string, any>[]>([])
 const githubItems = ref<AutonomyGithubItem[]>([])
@@ -184,15 +136,50 @@ const gateRules = ref<Array<Record<string, any>>>([])
 const auditTier = ref('server')
 const crossAudit = ref<Record<string, any>[]>([])
 const auditPath = ref('')
+const auditLoading = ref(false)
+const auditStatus = ref('')
+const auditLatest = ref('')
+let auditRequest = 0
+const tierLabels: Record<string, string> = { desktop: '桌面端', server: '服务器', ci: '持续集成' }
+const auditMessages: Record<string, string> = {
+  ready: '已加载审计记录。', stale: '数据已过期：请检查该端审计采集与同步，再重新读取。',
+  not_connected: '数据源未接入：未找到该端审计文件，请检查采集路径和同步配置。',
+  empty: '数据源已接入，但尚无审计记录。',
+  error: '加载失败：请检查网络、登录状态及审计文件权限或格式，再重新读取。',
+  unknown_freshness: '已加载记录，但无法核实数据时效，请检查记录时间。',
+}
+const auditMessage = computed(() => auditMessages[auditStatus.value] || '尚未读取审计数据。')
+function auditSummary(row: Record<string, any>): string {
+  const action = auditAction(row)
+  const reasons = Array.isArray(action.reasons) ? action.reasons.filter((item: unknown) => typeof item === 'string').join('；') : ''
+  const detail = action.params?.reason || reasons || row.reason || row.diagnosis?.detail || row.result?.detail || row.decision || '查看原始记录'
+  const result = row.result?.ok === true ? '成功' : row.result?.ok === false ? '失败' : ''
+  return [result, typeof detail === 'string' ? detail : '查看原始记录'].filter(Boolean).join('：')
+}
+function auditAction(row: Record<string, any>): Record<string, any> {
+  return row.action && typeof row.action === 'object' ? row.action : { type: row.action }
+}
+function recordsKnown(value: unknown): value is Array<Record<string, any>> {
+  return Array.isArray(value) && value.every(row => row && typeof row === 'object' && !Array.isArray(row))
+}
 
-const pendingCount = computed(() => Number(overview.value?.pending?.count || 0))
 const window30 = computed(() => overview.value?.operating_metrics?.windows?.['30'] || {})
-const trend = computed(() => overview.value?.operating_metrics?.veto_rate_trend_30d || [])
+const kpis = computed(() => [
+  ['待办', String(overview.value?.pending?.count ?? '待核实')], ['30 天动作', String(window30.value.action_count ?? '待核实')],
+  ['30 天否决', String(window30.value.blocked_count ?? '—')], ['30 天 veto rate', formatRate(window30.value.veto_rate)],
+])
+const recentSections = computed(() => [
+  { title: '最近部署事件', empty: recordsKnown(overview.value?.deploy_events?.items) ? '暂无部署事件' : '部署记录尚未核实，请重新读取总览。', columns: ['发布编号', '时间', '状态', '分支', '工作流'],
+    rows: deployEvents.value.map(r => [r.deploy_id, r.deployed_at, r.status, r.head_branch, r.source_workflow]) },
+  { title: '最近审计日志', empty: recordsKnown(overview.value?.audit?.items) ? '暂无审计日志' : '审计记录尚未核实，请重新读取总览。', columns: ['动作', '说明', '风险', '结果', '操作方', '时间'],
+    rows: auditItems.value.map(r => [auditAction(r).type || auditAction(r).action || '未标注动作', auditSummary(r), r.risk_level, r.decision, r.actor || r.approver || r.source, r.timestamp || r.created_at]) },
+])
 
 const trendPoints = computed(() => {
-  const rows = Array.isArray(trend.value) ? trend.value : []
-  if (rows.length < 2) return []
-  const rates = rows.map((r: any) => Number(r.veto_rate || 0))
+  const rows = overview.value?.operating_metrics?.veto_rate_trend_30d || []
+  if (!Array.isArray(rows) || rows.length < 2) return []
+  const rates = rows.filter((r: any) => typeof r?.veto_rate === 'number' && Number.isFinite(r.veto_rate)).map((r: any) => r.veto_rate)
+  if (rates.length < 2) return []
   const max = Math.max(...rates, 1)
   const min = Math.min(...rates, 0)
   const span = Math.max(max - min, 0.01)
@@ -203,43 +190,70 @@ const trendPoints = computed(() => {
 })
 
 function formatRate(value: unknown) {
-  if (value == null || value === '') return '—'
-  const n = Number(value)
-  if (Number.isNaN(n)) return String(value)
-  return `${n.toFixed(2)}%`
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}%` : '待核实'
 }
 
 async function loadAll() {
   loading.value = true
   error.value = ''
+  overview.value = null; overviewReady.value = gateReady.value = githubReady.value = false
+  deployEvents.value = []; auditItems.value = []; gateRules.value = []; githubItems.value = []; githubError.value = ''
   try {
-    const [ov, gh, gate] = await Promise.all([
+    const results = await Promise.allSettled([
       xcmaxAdminApi.fetchAutonomyOverview(),
       xcmaxAdminApi.fetchAutonomyGithubItems(30),
       xcmaxAdminApi.fetchAutonomyCrossTierGate(),
     ])
-    overview.value = ov || {}
-    deployEvents.value = Array.isArray(ov?.deploy_events?.items) ? ov.deploy_events.items : []
-    auditItems.value = Array.isArray(ov?.audit?.items) ? ov.audit.items : []
-    githubItems.value = Array.isArray(gh?.items) ? gh.items : []
-    githubError.value = Array.isArray(gh?.errors) && gh.errors.length ? String(gh.errors[0]) : ''
-    gateRules.value = Array.isArray((gate as any)?.rules) ? (gate as any).rules : []
-    await switchTier(auditTier.value)
+    const failures: string[] = []
+    const labels = ['运营总览', 'GitHub 条目', '跨端门禁']
+    results.forEach((result, index) => {
+      try {
+        if (result.status === 'rejected') throw result.reason
+        const data = result.value as Record<string, any>
+        if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('返回数据无法识别')
+        if (index === 0) {
+          if (!data.pending || typeof data.pending.count !== 'number' || !Number.isInteger(data.pending.count) || data.pending.count < 0) throw new Error('未返回可核实的待办状态')
+          overview.value = data; overviewReady.value = true
+          deployEvents.value = recordsKnown(data.deploy_events?.items) ? data.deploy_events.items : []
+          auditItems.value = recordsKnown(data.audit?.items) ? data.audit.items : []
+        } else if (index === 1) {
+          if (!recordsKnown(data.items)) throw new Error('未返回有效条目清单')
+          githubItems.value = data.items
+          githubError.value = Array.isArray(data.errors) && data.errors.length ? String(data.errors[0]) : ''
+          githubReady.value = !githubError.value
+        } else {
+          if (!recordsKnown(data.rules)) throw new Error('未返回有效门禁规则')
+          gateRules.value = data.rules; gateReady.value = true
+        }
+      } catch (cause) { failures.push(`${labels[index]}读取失败：${cause instanceof Error ? cause.message : '暂时无法核实'}`) }
+    })
+    error.value = failures.join('；')
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
+    await switchTier(auditTier.value)
     loading.value = false
   }
 }
 
 async function switchTier(tier: string) {
+  const request = ++auditRequest
   auditTier.value = tier
+  auditLoading.value = true
+  crossAudit.value = []
+  auditPath.value = auditLatest.value = ''
   try {
     const res = await xcmaxAdminApi.fetchAutonomyAuditCrossTier({ tier, limit: 30 })
+    if (request !== auditRequest) return
+    if (!res || typeof res !== 'object' || res.ok === false || !Array.isArray(res.items) || res.items.some((item: unknown) => !item || typeof item !== 'object' || Array.isArray(item)) || (res.status && !Object.hasOwn(auditMessages, res.status))) throw new Error('audit_load_failed')
     crossAudit.value = Array.isArray(res?.items) ? res.items : []
-    auditPath.value = String((res as any)?.path || '')
+    auditPath.value = res?.path || ''
+    auditLatest.value = res?.last_event_at || ''
+    auditStatus.value = res?.status || (res?.exists === false ? 'not_connected' : crossAudit.value.length ? 'unknown_freshness' : 'empty')
   } catch {
-    crossAudit.value = []
+    if (request === auditRequest) auditStatus.value = 'error'
+  } finally {
+    if (request === auditRequest) auditLoading.value = false
   }
 }
 
@@ -276,12 +290,7 @@ onMounted(() => {
 }
 .page-header h2 { margin: 0 0 4px; font-size: 20px; }
 .page-header p { margin: 0; color: #64748b; font-size: 13px; }
-.header-actions { display: flex; gap: 8px; }
-.btn {
-  border: 1px solid #d0d7e2; background: #fff; border-radius: 8px;
-  padding: 8px 12px; cursor: pointer; font-size: 13px;
-}
-.btn-primary { background: #1890ff; border-color: #1890ff; color: #fff; }
+.header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .banner-error, .banner-ok {
   border-radius: 8px; padding: 10px 12px; margin: 0; font-size: 13px;
@@ -293,37 +302,35 @@ onMounted(() => {
 }
 @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 .kpi, .card {
-  background: rgba(255,255,255,0.92);
-  border: 1px solid rgba(15,76,129,0.1);
-  border-radius: 14px;
-  padding: 14px;
+  padding: 14px; min-width: 0; overflow-x: auto;
 }
-.kpi-label { color: #64748b; font-size: 12px; }
-.kpi-value { font-size: 24px; font-weight: 700; color: #172033; margin-top: 4px; }
+.kpi-label { color: var(--admin-muted, #64748b); font-size: 12px; }
+.kpi-value { font-size: 24px; font-weight: 700; color: var(--admin-text, #172033); margin-top: 4px; }
 .card h3 { margin: 0 0 10px; font-size: 15px; }
 .chart { width: 100%; height: 120px; background: #f8fafc; border-radius: 8px; }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 960px) { .split { grid-template-columns: 1fr; } }
-.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 12px; }
 .data-table th, .data-table td {
-  text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef2f7; vertical-align: top;
+  text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--admin-border, #eef2f7); vertical-align: top; overflow-wrap: anywhere;
 }
+.data-table pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 480px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
 .empty { color: #94a3b8; text-align: center; padding: 18px; }
-.gate-list, .gh-list, .audit-mini { list-style: none; margin: 0; padding: 0; }
-.gate-list li, .gh-list li, .audit-mini li {
+.gate-list, .gh-list { list-style: none; margin: 0; padding: 0; }
+.gate-list li, .gh-list li {
   display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eef2f7;
 }
 .badge {
   display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
-  border-radius: 999px; font-size: 11px; font-weight: 700;
+  border-radius: 999px; font-size: 11px; font-weight: 700; flex-shrink: 0;
 }
 .badge.ok { background: #e6f9f0; color: #10b759; }
 .badge.err { background: #fff1f0; color: #e53e3e; }
-.muted { color: #94a3b8; font-size: 12px; }
-.card-head-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.muted { color: var(--admin-muted, #94a3b8); font-size: 12px; }
+.card-head-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .card-head-row h3 { margin: 0; }
-.tabs { display: flex; gap: 6px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .tabs button {
   border: 1px solid #d0d7e2; background: #fff; border-radius: 999px;
   padding: 4px 10px; cursor: pointer; font-size: 12px;

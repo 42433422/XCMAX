@@ -2,7 +2,7 @@
   <section class="enterprise-roster" aria-label="购买账户标准交付台账">
     <header class="enterprise-roster__head">
       <div>
-        <p>{{ isTrial ? 'TRIAL ACCOUNT DELIVERY SSOT' : 'PURCHASED ACCOUNT DELIVERY SSOT' }}</p>
+        <p>{{ isTrial ? '试用账号交付台账' : '已购账号交付台账' }}</p>
         <h3>{{ isTrial ? '¥99 体验账户交付台账' : '购买账户标准交付台账' }}</h3>
         <span>
           {{
@@ -193,7 +193,7 @@ function formatDate(value: string): string {
 </script>
 
 <style scoped>
-.enterprise-roster { margin-bottom: 18px; padding: 17px; border: 1px solid #cbddee; border-radius: 17px; background: rgba(255,255,255,.92); box-shadow: 0 10px 28px rgba(24,58,94,.06); }
+.enterprise-roster { margin-bottom: 18px; padding: 17px; border: 1px solid; }
 .enterprise-roster__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .enterprise-roster__head p { margin: 0 0 4px; color: #3d78bc; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
 .enterprise-roster__head h3 { margin: 0; color: #254663; font-size: 18px; }
@@ -230,7 +230,6 @@ function formatDate(value: string): string {
 .delivery-state.is-pending-install { color: #b26225; }
 .delivery-state.is-pending-first-login { color: #6c50a7; }
 .enterprise-roster__state small { color: #7a8b9c; font-size: 8px; }
-.enterprise-roster__state button { border: 1px solid #d5a071; border-radius: 8px; background: #fff7ef; color: #a65d26; padding: 6px 8px; font-size: 9px; font-weight: 700; cursor: pointer; }
 .enterprise-roster__empty { padding: 22px; border: 1px dashed #c7d8e8; border-radius: 11px; color: #718399; text-align: center; }
 @media (max-width: 1100px) { .enterprise-roster__grid article { grid-template-columns: 38px 1fr 1fr; } .enterprise-roster__proof,.enterprise-roster__state { grid-column: 2 / -1; justify-items: start; text-align: left; } }
 @media (max-width: 760px) { .enterprise-roster__toolbar { align-items: stretch; flex-direction: column; } .enterprise-roster__grid article { grid-template-columns: 38px 1fr; } .enterprise-roster__plan,.enterprise-roster__proof,.enterprise-roster__state { grid-column: 2; } }

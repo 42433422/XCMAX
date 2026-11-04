@@ -43,7 +43,7 @@ def _shanghai_day_and_time(value: Any) -> tuple[str, str]:
 def verified_strategic_goal_items(*, limit: int = 100) -> list[dict[str, Any]]:
     """Expose only DB Goals linked by a verified council hash chain."""
 
-    from modstore_server.db.base import get_session_factory
+    from modstore_server.db.db_base import get_session_factory
     from modstore_server.db.strategic import StrategicDecision
     from modstore_server.strategic_council import strategic_council_status
 

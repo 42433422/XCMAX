@@ -30,7 +30,7 @@ from alembic.config import Config
 
 from alembic import command
 from app.desktop_runtime import migrate
-from app.desktop_runtime.paths import ensure_desktop_dirs
+from app.desktop_runtime.desktop_runtime_paths import ensure_desktop_dirs
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _PROJECT_ROOT / "alembic.ini"

@@ -255,6 +255,9 @@ class ShipmentDocumentGenerator:
             if purchase_unit is None and parsed_data.get("purchase_unit"):
                 purchase_unit = self._get_purchase_unit_info(parsed_data["purchase_unit"])
 
+            from app.domain.shipment.shipment_quantities import validate_shipment_products
+
+            validate_shipment_products(parsed_data.get("products") or [parsed_data])
             # 2. 生成订单编号
             order_number = (custom_order_number or "").strip() or self._generate_order_number()
 
@@ -452,9 +455,7 @@ class ShipmentDocumentGenerator:
                 self._write_cell(worksheet, row, 9, round(kg_value * unit_price, 2))
 
         # 第15行：合计行的数量/件 (E15公式保持SUM(E4:E14))
-        if total_quantity_tins > 0 and not self._write_cell(
-            worksheet, 15, 5, total_quantity_tins
-        ):
+        if total_quantity_tins > 0 and not self._write_cell(worksheet, 15, 5, total_quantity_tins):
             self._write_total_by_header(worksheet, ("数量/件", "数量"), 15, total_quantity_tins)
 
         # 第15行：数量/KG 合计与「合计」标签——模板行被清空后按表头列补回，
@@ -616,53 +617,14 @@ class ShipmentDocumentGenerator:
         return unit
 
     def _generate_order_number(self) -> str:
-        """生成订单编号 - 格式: 26-010003A (年-月-日(00)-序号)"""
-        now = datetime.now()
+        from app.infrastructure.database.shipment_order_numbers import reserve_order_number
 
-        # 格式: 26-月日序号+数量编号
-        # 例如: 26-010003A = 2026年1月第3个订单数量A
-        year = now.strftime("%y")  # 26
-        month = now.strftime("%m")  # 01
-        day = "00"  # 日固定为00
-
-        # 获取当天订单数量作为序号基数
-        sequence = self._get_daily_sequence(now)
-
-        # 根据订单数量确定数量编号
-        quantity_code = self._get_quantity_code()
-
-        return f"{year}-{month}{day}{sequence:03d}{quantity_code}"
-
-    def _get_daily_sequence(self, date: datetime) -> int:
-        """获取当天订单序号"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-
-            date_str = date.strftime("%Y-%m-%d")
-            cursor.execute(
-                """
-                SELECT COUNT(*) FROM shipment_records
-                WHERE DATE(created_at) = ?
-            """,
-                (date_str,),
-            )
-
-            count = cursor.fetchone()[0]
-            conn.close()
-
-            return count + 1
-
-        except BOUNDARY_ERRORS as e:
-            logger.error(f"获取订单序号失败: {e}")
-            return 1
-
-    def _get_quantity_code(self) -> str:
-        """获取数量编号 (A=小, B=中, C=大, D=特大)"""
-        return "A"  # 默认A，后续可根据实际数量调整
+        return reserve_order_number(output_dir=self.OUTPUT_FOLDER)["order_number"]
 
     def _prepare_products(self, parsed_data: Dict, order_number: str) -> List[Dict]:
         """准备产品数据 - 支持多产品"""
+        from app.domain.shipment.shipment_quantities import resolve_shipment_quantity
+
         products = []
 
         # 从parsed_data中获取产品列表
@@ -670,14 +632,15 @@ class ShipmentDocumentGenerator:
 
         # 如果有products列表，遍历处理
         if product_list:
-            for p in product_list:
+            for index, p in enumerate(product_list, 1):
+                tins, kg, spec = resolve_shipment_quantity(p, row_index=index)
                 product = {
                     "order_number": order_number,
                     "model_number": p.get("model_number", ""),
                     "name": p.get("name", ""),
-                    "quantity_kg": p.get("quantity_kg", 0),
-                    "quantity_tins": p.get("quantity_tins", 0),
-                    "tin_spec": p.get("tin_spec", 10.0),
+                    "quantity_kg": kg,
+                    "quantity_tins": tins,
+                    "tin_spec": spec,
                     "unit_price": p.get("unit_price", 0),
                     "amount": p.get("amount", 0),
                 }
@@ -685,13 +648,14 @@ class ShipmentDocumentGenerator:
                     products.append(product)
         else:
             # 兼容单产品旧逻辑
+            tins, kg, spec = resolve_shipment_quantity(parsed_data, row_index=1)
             product = {
                 "order_number": order_number,
                 "model_number": parsed_data.get("model_number", ""),
                 "name": parsed_data.get("product_name", ""),
-                "quantity_kg": parsed_data.get("quantity_kg", 0),
-                "quantity_tins": parsed_data.get("quantity_tins", 0),
-                "tin_spec": parsed_data.get("tin_spec", 10.0),
+                "quantity_kg": kg,
+                "quantity_tins": tins,
+                "tin_spec": spec,
                 "unit_price": parsed_data.get("unit_price", 0),
                 "amount": parsed_data.get("amount", 0),
             }

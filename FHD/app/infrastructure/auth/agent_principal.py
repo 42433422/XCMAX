@@ -19,6 +19,7 @@ class AgentPrincipal:
     tenant_id: str = ""
     is_admin: bool = False
     mod_authorization: dict[str, Any] | None = None
+    actor_authorization: dict[str, Any] | None = None
 
 
 def _bind_mod(
@@ -26,14 +27,13 @@ def _bind_mod(
 ) -> AgentPrincipal:
     from app.infrastructure.auth.agent_mod_scope import (
         AgentModAuthorizationError,
+        bind_agent_actor_scope,
         bind_agent_mod_scope,
     )
     from app.infrastructure.auth.dependencies import session_id_from_request
     from app.request_active_mod_ctx import parse_active_mod_header
 
     mod_id = parse_active_mod_header(request.headers)
-    if not mod_id:
-        return principal
     session_id = (
         verified_session_id if verified_session_id is not None else session_id_from_request(request)
     )
@@ -49,16 +49,30 @@ def _bind_mod(
             ):
                 session_id = str(payload.get("session_id") or "")
     try:
-        binding = bind_agent_mod_scope(
+        actor = bind_agent_actor_scope(
             session_id=session_id,
             user_id=principal.user_id,
             mod_id=mod_id,
+            execution_tenant_id=principal.tenant_id
+            if getattr(request.state, "tutorial_active", False) is True
+            else None,
+        )
+        binding = (
+            bind_agent_mod_scope(session_id=session_id, user_id=principal.user_id, mod_id=mod_id)
+            if mod_id
+            else None
         )
     except AgentModAuthorizationError as exc:
         raise HTTPException(
-            status_code=403, detail={"code": "MOD_NOT_ENTITLED", "message": str(exc)}
+            status_code=403 if mod_id else 401,
+            detail={"code": "MOD_NOT_ENTITLED" if mod_id else "UNAUTHORIZED", "message": str(exc)},
         ) from exc
-    return replace(principal, mod_authorization=binding)
+    return replace(
+        principal,
+        tenant_id=actor["execution_tenant_id"],
+        mod_authorization=binding,
+        actor_authorization=actor,
+    )
 
 
 def _from_user(user: Any) -> AgentPrincipal | None:
@@ -131,11 +145,9 @@ def require_agent_principal(
             if tutorial_tenant is not None:
                 return _bind_mod(
                     request,
-                    AgentPrincipal(
-                        user_id=principal.user_id,
-                        username=principal.username,
+                    replace(
+                        principal,
                         tenant_id=str(int(tutorial_tenant)),
-                        is_admin=principal.is_admin,
                     ),
                 )
         return _bind_mod(request, principal)

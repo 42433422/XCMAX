@@ -81,7 +81,7 @@ def _produce_upgrade_ops(db_url: str):
     from sqlalchemy import create_engine
 
     import app.db.models  # noqa: F401  (populates Base.metadata)
-    from app.db.base import Base
+    from app.db.db_base import Base
 
     engine = create_engine(db_url)
     with engine.connect() as conn:

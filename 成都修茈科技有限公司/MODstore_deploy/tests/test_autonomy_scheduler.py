@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,7 +17,9 @@ from modstore_server.autonomy_scheduler import (  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def _disable_real_memory_reconciliation(monkeypatch: pytest.MonkeyPatch) -> None:
+def _disable_real_memory_reconciliation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(tmp_path / "ledger.jsonl"))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "memory.json"))
     monkeypatch.setattr(
         "modstore_server.autonomy_scheduler._reconcile_completed_loop_memory_safely",
         lambda: None,
@@ -65,7 +68,7 @@ def test_pending_remediation_requires_executable_branch_and_task(
         ]
     }
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
 
@@ -109,7 +112,7 @@ def test_pending_remediation_normalizes_legacy_target_ref_verdict_hold(
         ],
     }
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
 
@@ -144,7 +147,7 @@ def test_pending_remediation_prefers_latest_executable_failed_review(
         ]
     }
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
 
@@ -180,7 +183,7 @@ def test_pending_remediation_prioritizes_incident_lineage(
         ]
     }
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
     monkeypatch.setattr(
@@ -204,8 +207,9 @@ def test_pending_remediation_prioritizes_incident_lineage(
     }
 
 
-def test_pending_remediation_skips_exhausted_failed_step(
+def test_pending_remediation_keeps_exhausted_failed_step_explicitly_blocked(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     memory = {
         "open_items": [
@@ -221,11 +225,20 @@ def test_pending_remediation_skips_exhausted_failed_step(
     }
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
 
-    assert pending_automated_remediation() is None
+    pending = pending_automated_remediation()
+    assert pending is not None and pending["task_id"] == "task-42"
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner.ledger_path",
+        lambda: tmp_path / "ledger.jsonl",
+    )
+    from modstore_server.autonomy_scheduler import RemediationBlocked
+
+    with pytest.raises(RemediationBlocked, match="retry_limit"):
+        run_pending_automated_remediation()
 
 
 def test_pending_remediation_resumes_without_force(
@@ -247,7 +260,7 @@ def test_pending_remediation_resumes_without_force(
         return {"status": "completed_merge_requested", "run_id": "run-43"}
 
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
         _run_self_maintenance_loop,
     )
 
@@ -280,7 +293,7 @@ def test_pending_retort_clarification_is_deferred_for_scheduler(
         },
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
         lambda **_kwargs: {
             "status": "failed",
             "error": "retort_clarification_pending",
@@ -307,15 +320,38 @@ def test_pending_unexpected_remediation_failure_still_raises(
         },
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
         lambda **_kwargs: {"status": "failed", "error": "execution_timeout"},
     )
 
     with pytest.raises(
         RuntimeError,
-        match="automated self-maintenance remediation failed: execution_timeout",
+        match="automated_self_maintenance_remediation_failed:execution_timeout",
     ):
         run_pending_automated_remediation()
+
+
+def test_remediation_failure_does_not_embed_raw_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "modstore_server.autonomy_scheduler.pending_automated_remediation",
+        lambda: {
+            "branch": "devfleet/trae/broken",
+            "reason": "structured_review_blocking_findings",
+            "run_id": "run-broken",
+            "task_id": "task-broken",
+        },
+    )
+    monkeypatch.setattr(
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
+        lambda **_kwargs: {"status": "failed", "error": "api_key=must-not-leak"},
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="automated_self_maintenance_remediation_failed:unclassified",
+    ) as raised:
+        run_pending_automated_remediation()
+    assert "must-not-leak" not in str(raised.value)
 
 
 def test_remediation_scheduler_records_retort_hold_as_deferred(
@@ -358,7 +394,7 @@ def test_no_pending_remediation_does_not_start_loop(
     )
     started = MagicMock()
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        "modstore_server.maintenance_loop.coordinator.run_self_maintenance_loop",
         started,
     )
 

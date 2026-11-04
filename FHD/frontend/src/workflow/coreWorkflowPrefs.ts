@@ -1,3 +1,9 @@
+/**
+ * Starred-WeChat auto-refresh for core workflow employees only.
+ * Isolated from chat toolbar「主动意识启用」, which uses
+ * `xcagi_proactive_suggestions` (see useProactiveReplySuggestions.ts).
+ * Do NOT bind the chat checkbox to this key — that caused misfires.
+ */
 export const STAR_REFRESH_STORAGE_KEY = 'xcagi_auto_refresh_starred_wechat'
 
 export function isStarredChatAutoRefreshOn(): boolean {

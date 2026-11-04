@@ -52,14 +52,13 @@ def _read_manifest() -> dict[str, Any]:
 
 
 def is_neuro_bus_mod_installed() -> bool:
+    # Runs on every traced service call (including session resolution), so it must
+    # not rebuild the full Mod catalog; a registry lookup plus one stat is enough.
     try:
-        from app.infrastructure.mods.mod_manager import get_mod_manager, is_mods_disabled
+        from app.infrastructure.mods.mod_manager import is_mods_disabled
 
         if is_mods_disabled():
             return False
-        for row in get_mod_manager().list_all_mods():
-            if str(row.get("id") or "").strip() == NEURO_BUS_BRIDGE_MOD_ID:
-                return True
     except RECOVERABLE_ERRORS:
         pass
     return _resolve_mod_dir() is not None

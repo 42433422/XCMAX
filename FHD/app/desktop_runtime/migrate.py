@@ -21,7 +21,7 @@ from app.utils.time import utc_now_naive
 from .backup_retention import cleanup_local_backups
 from .db import integrity_check_ok as _integrity_check_ok
 from .db import quick_check_ok as _quick_check_ok
-from .paths import configure_desktop_environment, ensure_desktop_dirs
+from .desktop_runtime_paths import configure_desktop_environment, ensure_desktop_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,10 @@ def backup_database(
     db = dirs["data"] / "xcagi.db"
     if not db.exists():
         return None
+    if version in {"", "unknown", "startup"}:
+        from app.build_identity import build_identity
+
+        version = build_identity().get("product_version") or version or "unknown"
     stamp = utc_now_naive().strftime("%Y%m%d%H%M%S")
     target = dirs["backups"] / f"xcagi-{version}-{stamp}.db"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -149,6 +153,12 @@ def recover_if_corrupt(
     logger.error("database corrupt: %s, attempting recovery from backups", db)
     stamp = utc_now_naive().strftime("%Y%m%d%H%M%S")
     corrupt_path = db.with_name(f"xcagi.db.corrupt-{stamp}")
+    # Windows rename refuses an existing target; a second corruption within the
+    # same second must keep both copies as evidence instead of aborting recovery.
+    suffix = 1
+    while corrupt_path.exists():
+        corrupt_path = db.with_name(f"xcagi.db.corrupt-{stamp}-{suffix}")
+        suffix += 1
     try:
         db.rename(corrupt_path)
         logger.warning("renamed corrupt db to %s", corrupt_path)
@@ -439,7 +449,7 @@ def bootstrap_sqlite_schema(data_dir: str | os.PathLike[str] | None = None) -> N
     # Import model modules so Base.metadata contains the full schema.
     import app.db.models  # noqa: F401
     from app.db import dispose_and_recreate_engine, get_runtime_engine
-    from app.db.base import Base
+    from app.db.db_base import Base
 
     dispose_and_recreate_engine()
     Base.metadata.create_all(bind=get_runtime_engine())

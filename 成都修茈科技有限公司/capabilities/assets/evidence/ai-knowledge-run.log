@@ -1,8 +1,0 @@
-2026-09-30T04:19:34+0800 [ai-knowledge] 开始验收 ai-knowledge 知识库与向量检索；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:19:34+0800 [ai-knowledge] M1 passed :: HTTP 200 53ms；dataset=persy-knowledge 文档 3 片段 3 retriever=hybrid_bm25_vector
-2026-09-30T04:19:34+0800 [ai-knowledge] M2 passed :: HTTP 200 87ms；doc=doc_3a4949ad7abb2b40 chunks=1 tenant=1
-2026-09-30T04:19:34+0800 [ai-knowledge] M3 passed :: HTTP 200 25ms；documents=4 chunk=4 latest=doc_3a4949ad7abb2b40
-2026-09-30T04:19:34+0800 [ai-knowledge] M4 passed :: HTTP 200 86ms；{"success": true, "query": "迟到", "chunks": [], "citations": [], "rag_enabled": false}
-2026-09-30T04:19:38+0800 [ai-knowledge] M5 passed :: 导航后路径 /persy/knowledge；命中文本 ['知识']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 知识库 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | PERSY COGNITIVE MAP | 企业知识网络 | 图谱 | 记忆 | 卡片 | 来源 | 关键词召回 | 导入 |  | 当前显示 6 个知识节点与 6 条关
-2026-09-30T04:19:39+0800 [ai-knowledge] screenshot result.png
-2026-09-30T04:19:42+0800 [ai-knowledge] video operation.webm bytes=426761

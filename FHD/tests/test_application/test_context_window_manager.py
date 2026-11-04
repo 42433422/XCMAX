@@ -66,7 +66,8 @@ def _make_messages(count: int, *, system: bool = False) -> list[dict[str, str]]:
         msgs.append(
             {
                 "role": "user",
-                "content": f"这是第 {i} 条测试消息，包含足够长的内容用于触发上下文压缩和摘要功能验证。",
+                "content": f"这是第 {i} 条测试消息，包含足够长的内容用于触发上下文压缩和摘要功能验证。"
+                * 3,
             }
         )
     return msgs
@@ -155,8 +156,8 @@ class TestCompressSummarize:
     """``compress`` summarize 策略测试。"""
 
     @pytest.mark.asyncio
-    async def test_compress_over_threshold_triggers_summarize(self) -> None:
-        """超阈值 → 触发摘要。"""
+    async def test_compress_message_count_alone_never_triggers_paid_summary(self) -> None:
+        """Many messages below the token budget remain unchanged without extra I/O."""
         from app.application.agent_orchestrator.context_window_manager import (
             ContextWindowManager,
         )
@@ -169,13 +170,10 @@ class TestCompressSummarize:
             return_value=provider,
         ):
             r = await m.compress(msgs, user_id="u1", provider=provider)
-        assert r.strategy == "summarize"
-        assert r.pre_message_count == 6
-        # system? + summary + 2 recent = 3 (no system in input) or 4 (with system)
-        assert r.post_message_count == 3  # 1 summary + 2 recent
-        assert r.tokens_saved > 0
-        assert r.summary_llm_call is not None
-        assert r.summary_llm_call.status == "completed"
+        assert r.strategy == "noop"
+        assert r.messages == msgs
+        assert r.summary_llm_call is None
+        provider.chat_completion.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_compress_over_token_budget_triggers_summarize(self) -> None:
@@ -184,7 +182,7 @@ class TestCompressSummarize:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=100)
+        m = ContextWindowManager(token_budget=700, recent_keep=2, summarize_threshold=100)
         provider = _make_provider()
         # 5 条消息，每条 ~3 token，总 ~15 token > budget 10
         msgs = _make_messages(5)
@@ -203,7 +201,7 @@ class TestCompressSummarize:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = _make_provider()
         msgs = [
             {"role": "system", "content": "你是助手"},
@@ -230,7 +228,7 @@ class TestCompressSummarize:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=3, summarize_threshold=5)
+        m = ContextWindowManager(token_budget=800, recent_keep=3, summarize_threshold=5)
         provider = _make_provider()
         msgs = _make_messages(10)
         with patch(
@@ -251,7 +249,7 @@ class TestCompressSummarize:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = _make_provider(model="xcauto-summarizer")
         msgs = _make_messages(6)
         with patch(
@@ -290,7 +288,7 @@ class TestCompressSummarize:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = _make_provider()
         msgs = _make_messages(6)
         with patch(
@@ -311,7 +309,7 @@ class TestCompressSummarize:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = _make_provider()
         msgs = _make_messages(6)
         with patch(
@@ -328,9 +326,12 @@ class TestCompressSummarize:
         from app.application.agent_orchestrator.context_window_manager import (
             ContextWindowManager,
         )
-        from app.infrastructure.billing.model_usage import model_usage_ledger_path
+        from app.infrastructure.billing.model_usage import (
+            list_model_usage_entries,
+            model_usage_database_path,
+        )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = _make_provider()
         msgs = _make_messages(6)
         with patch(
@@ -339,12 +340,8 @@ class TestCompressSummarize:
         ):
             await m.compress(msgs, user_id="u1", provider=provider)
 
-        ledger_path = model_usage_ledger_path()
-        assert ledger_path.exists()
-        import json
-
-        data = json.loads(ledger_path.read_text())
-        entries = data.get("entries", []) if isinstance(data, dict) else data
+        assert model_usage_database_path().exists()
+        entries = list_model_usage_entries()
         summary_entries = [
             e for e in entries if e.get("source") == "context_window_manager.summarize"
         ]
@@ -364,7 +361,7 @@ class TestCompressTruncateFallback:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = MagicMock()
         provider.provider_id = "openai_compatible"
         provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto")
@@ -387,7 +384,7 @@ class TestCompressTruncateFallback:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         msgs = _make_messages(6)
         with patch(
             "app.infrastructure.llm.providers.registry.get_active_provider",
@@ -406,7 +403,7 @@ class TestCompressTruncateFallback:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = MagicMock()
         provider.provider_id = "openai_compatible"
         provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto")
@@ -424,7 +421,7 @@ class TestCompressTruncateFallback:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = MagicMock()
         provider.provider_id = "openai_compatible"
         provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto")
@@ -442,7 +439,7 @@ class TestCompressTruncateFallback:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = MagicMock()
         provider.provider_id = "openai_compatible"
         provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto")
@@ -466,7 +463,7 @@ class TestCompressConcurrency:
             ContextWindowManager,
         )
 
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = _make_provider()
 
         async def run_one(user_id: str) -> str:
@@ -546,7 +543,7 @@ class TestSingleton:
         )
 
         monkeypatch.setenv("FHD_CONTEXT_WINDOW_MANAGER_ENABLED", "0")
-        m = ContextWindowManager(token_budget=10, recent_keep=2, summarize_threshold=3)
+        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         msgs = _make_messages(20)
         r = await m.compress(msgs, user_id="u1")
         assert r.strategy == "noop"

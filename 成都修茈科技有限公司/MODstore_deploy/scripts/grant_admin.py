@@ -30,7 +30,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--username", required=True, help="用户名（登录用）")
     p.add_argument("--password", required=True, help="登录密码")
     p.add_argument("--email", default="", help="邮箱（可选，用于邮箱登录）")
-    p.add_argument("--plan", default="plan_pro", help="会员档 id，默认 plan_pro（VIP+）")
+    p.add_argument(
+        "--plan", default="plan_pro", help="会员档 id，默认 plan_pro（VIP+）"
+    )
     p.add_argument("--days", type=int, default=365, help="有效期天数；0 表示永久")
     p.add_argument("--no-admin", action="store_true", help="不提权管理员")
     p.add_argument("--reset-password", action="store_true", help="账号已存在时重置密码")
@@ -68,7 +70,9 @@ def main() -> int:
             print(f"plan_id 不存在：{plan_id}\n可用：{available}", file=sys.stderr)
             return 3
 
-        user: Optional[User] = session.query(User).filter(User.username == username).first()
+        user: Optional[User] = (
+            session.query(User).filter(User.username == username).first()
+        )
         created = False
         if user is None:
             session.close()

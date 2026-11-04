@@ -38,8 +38,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -48,17 +48,47 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 IRRELEVANT = {
     "backend": {
         "prefixes": [
-            "docs/", "FHD/docs/", "FHD/frontend/", "FHD/admin-console/",
-            "成都修茈科技有限公司/", "FHD/mobile-flutter-poc/",
+            "docs/",
+            "FHD/docs/",
+            "FHD/frontend/",
+            "FHD/admin-console/",
+            "成都修茈科技有限公司/",
+            "FHD/mobile-flutter-poc/",
+            "FHD/desktop/",
+            "FHD/desktop-shell/",
+            "FHD/tools/",
+            "FHD/package/",
+            "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
+        # 只放行经命名规则约束的只读历史快照；其他 metrics 文件仍触发完整测试。
+        "regexes": [
+            r"FHD/metrics/dora-[0-9]{8}\.json",
+            r"FHD/metrics/slo-production/[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]+\.json",
+        ],
     },
     "frontend": {
         "prefixes": [
-            "docs/", "FHD/docs/", "FHD/app/", "FHD/tests/", "FHD/alembic/",
-            "FHD/config/", "成都修茈科技有限公司/", "FHD/mobile-flutter-poc/",
+            "docs/",
+            "FHD/docs/",
+            "FHD/app/",
+            "FHD/tests/",
+            "FHD/alembic/",
+            "FHD/config/",
+            "成都修茈科技有限公司/",
+            "FHD/mobile-flutter-poc/",
+            "FHD/desktop/",
+            "FHD/desktop-shell/",
+            "FHD/tools/",
+            "FHD/package/",
+            "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
+        # 只放行经命名规则约束的只读历史快照；其他 metrics 文件仍触发完整测试。
+        "regexes": [
+            r"FHD/metrics/dora-[0-9]{8}\.json",
+            r"FHD/metrics/slo-production/[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]+\.json",
+        ],
     },
 }
 # release-gate 与 backend 同域（都是 FHD 后端发布契约）。
@@ -81,8 +111,13 @@ RELEVANT = {
     # exclude_*：Windows 专属产物（.ps1、windows/win32 命名、Authenticode）不算 macOS 改动。
     "macos": {
         "prefixes": [
-            "FHD/desktop/", "FHD/desktop-shell/", "FHD/package/",
-            "FHD/scripts/package/", "FHD/scripts/deploy/", "FHD/scripts/autonomy/",
+            "FHD/desktop/",
+            "FHD/desktop-shell/",
+            "FHD/package/",
+            "FHD/scripts/package/",
+            "FHD/scripts/deploy/",
+            "FHD/scripts/autonomy/",
+            "FHD/tools/",
         ],
         "suffixes": [".entitlements", ".plist"],
         "exact": [
@@ -122,7 +157,11 @@ RELEVANT = {
         "contains": [],
     },
     "runtime_contract": {
-        "prefixes": ["FHD/scripts/autonomy/runtime_tools/"],
+        "prefixes": [
+            "FHD/scripts/autonomy/runtime_tools/",
+            "FHD/app/application/shipment_excel_etl_security.py",
+            "FHD/tests/test_application/test_shipment_excel_etl_production_ready.py",
+        ],
         "suffixes": [],
         "exact": [".github/workflows/fhd-mac-control-contract.yml"],
         "contains": [],
@@ -145,9 +184,12 @@ CATEGORY_MODE = {
 
 def _changed_files(base: str, head: str) -> list[str]:
     """返回 base..head 间改动文件（仓库根相对路径）。取不到则返回 []。"""
+    # 保留重命名的旧路径删除，避免业务文件移入快照白名单后漏跑原所属检查。
     proc = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "diff", "--name-only", base, head],
-        capture_output=True, text=True, check=False,
+        ["git", "-C", str(REPO_ROOT), "diff", "--no-renames", "--name-only", base, head],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if proc.returncode != 0:
         return []
@@ -160,6 +202,8 @@ def _matches(path: str, spec: dict) -> bool:
     if any(path.startswith(p) for p in spec.get("prefixes", ())):
         return True
     if any(path.endswith(s) for s in spec.get("suffixes", ())):
+        return True
+    if any(re.fullmatch(pattern, path) for pattern in spec.get("regexes", ())):
         return True
     return any(c in path for c in spec.get("contains", ()))
 
@@ -189,27 +233,65 @@ def decide(category: str, changed: list[str]) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--category", required=True, choices=sorted(CATEGORY_MODE))
+    scope = parser.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--category", choices=sorted(CATEGORY_MODE))
+    scope.add_argument(
+        "--all", action="store_true", help="一次读取 diff 并输出全部分类"
+    )
     parser.add_argument("--base", default="", help="base SHA/ref（PR 用 base.sha）")
     parser.add_argument("--head", default="", help="head SHA/ref（PR 用 head.sha）")
     parser.add_argument("--json", action="store_true", help="打印机器可读结果")
+    parser.add_argument("--source-sha", default="", help="核对实际 checkout 的源码 SHA")
+    parser.add_argument("--report", type=Path, help="保存分类及源码身份 JSON")
     args = parser.parse_args(argv)
+    if args.source_sha and not args.all:
+        parser.error("--source-sha requires --all")
 
     changed = _changed_files(args.base, args.head) if args.base and args.head else []
-    run = decide(args.category, changed)
+    if args.all:
+        source = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        if args.source_sha and source != args.source_sha:
+            parser.error("classification source SHA differs from the tested checkout")
+        decisions = {category: decide(category, changed) for category in CATEGORY_MODE}
+        report = {
+            "schema": 1,
+            "source_sha": source,
+            "base_sha": args.base,
+            "pr_head_sha": args.head,
+            "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+            "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+            "changed_count": len(changed),
+            "decisions": decisions,
+            "reason": "changed_paths"
+            if changed
+            else "empty_or_unavailable_diff_run_all",
+        }
+        outputs = {"valid": "true", "source_sha": source}
+        for category, run in decisions.items():
+            outputs[category] = str(run).lower()
+            outputs[f"{category}_skip"] = str(not run).lower()
+    else:
+        run = decide(args.category, changed)
+        report = {"category": args.category, "run": run, "changed_count": len(changed)}
+        outputs = {"run": str(run).lower(), "skip": str(not run).lower()}
 
-    if args.json:
-        print(json.dumps(
-            {"category": args.category, "run": run, "changed_count": len(changed)},
-            ensure_ascii=False,
-        ))
+    encoded = json.dumps(report, ensure_ascii=False, sort_keys=True)
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(encoded + "\n", encoding="utf-8")
+    if args.json or args.all:
+        print(encoded)
 
     out = os.environ.get("GITHUB_OUTPUT")
     if out:
         with open(out, "a", encoding="utf-8") as fh:
-            # 同时输出 run/skip 两种语义，workflow 守卫可直接用任一口径。
-            fh.write(f"run={'true' if run else 'false'}\n")
-            fh.write(f"skip={'false' if run else 'true'}\n")
+            for key, value in outputs.items():
+                fh.write(f"{key}={value}\n")
     return 0
 
 

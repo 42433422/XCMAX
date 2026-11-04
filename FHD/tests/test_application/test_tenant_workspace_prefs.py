@@ -56,7 +56,7 @@ def fake_pref_service(monkeypatch):
     """Install an in-memory preference service singleton."""
     svc = _FakePrefService()
     monkeypatch.setattr(
-        "app.services.user_preference_service.get_user_preference_service",
+        "app.domain.shared_services.user_preference_service.get_user_preference_service",
         lambda: svc,
     )
     return svc
@@ -354,7 +354,7 @@ class TestGetWorkspacePrefs:
                 raise ValueError("db down")
 
         monkeypatch.setattr(
-            "app.services.user_preference_service.get_user_preference_service",
+            "app.domain.shared_services.user_preference_service.get_user_preference_service",
             lambda: FailingService(),
         )
         assert get_workspace_prefs("tenant:1") == {}
@@ -365,7 +365,7 @@ class TestGetWorkspacePrefs:
                 raise KeyError("missing key")
 
         monkeypatch.setattr(
-            "app.services.user_preference_service.get_user_preference_service",
+            "app.domain.shared_services.user_preference_service.get_user_preference_service",
             lambda: FailingService(),
         )
         assert get_workspace_prefs("tenant:1") == {}
@@ -376,7 +376,7 @@ class TestGetWorkspacePrefs:
                 raise RuntimeError("unexpected")
 
         monkeypatch.setattr(
-            "app.services.user_preference_service.get_user_preference_service",
+            "app.domain.shared_services.user_preference_service.get_user_preference_service",
             lambda: FailingService(),
         )
         assert get_workspace_prefs("tenant:1") == {}

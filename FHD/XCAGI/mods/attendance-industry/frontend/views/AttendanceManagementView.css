@@ -227,6 +227,35 @@ h2 {
   overflow: auto;
 }
 
+.roster-drag-active {
+  user-select: none;
+}
+
+.roster-row-placeholder {
+  background: #fff2df;
+  outline: 2px dashed #c96b16;
+  outline-offset: -2px;
+}
+
+.roster-row-placeholder > td {
+  visibility: hidden;
+}
+
+.roster-drag-ghost {
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(30, 42, 67, 0.24);
+  border: 1px solid #c96b16;
+  opacity: 0.96;
+}
+
+.roster-move {
+  transition: transform 140ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .roster-move { transition: none; }
+}
+
 table {
   width: 100%;
   min-width: 860px;

@@ -1,6 +1,0 @@
-2026-09-30T04:23:02+0800 [base-edition-pack] 开始验收 base-edition-pack 三档部署形态（minimal / generic / full）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:23:02+0800 [base-edition-pack] M1 passed :: HTTP 200 8ms；edition=full generic_pack_installed=True bridge_mods=8
-2026-09-30T04:23:02+0800 [base-edition-pack] M2 passed :: HTTP 200 39ms；{"schema_version": 1, "deliverable": true, "host_foundation_employee_installed": false, "host_foundation_bridges_ready": true, "host_foundation_materialize": null, "product_flow": {"recommended_step":
-2026-09-30T04:23:05+0800 [base-edition-pack] M3 passed :: 导航后路径 /mod-store；命中文本 ['能力']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后
-2026-09-30T04:23:06+0800 [base-edition-pack] screenshot result.png
-2026-09-30T04:23:09+0800 [base-edition-pack] video operation.webm bytes=264004

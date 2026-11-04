@@ -17,7 +17,17 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
-from modstore_server.db.base import Base
+from modstore_server.db.db_base import Base
+
+
+class PaymentFulfilmentReceipt(Base):
+    """Committed with the financial effects, never with the JSON projection."""
+
+    __tablename__ = "payment_fulfilment_receipts"
+
+    order_no = Column(String(128), primary_key=True)
+    payload_sha256 = Column(String(64), nullable=False)
+    completed_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
 
 class PlanTemplate(Base):

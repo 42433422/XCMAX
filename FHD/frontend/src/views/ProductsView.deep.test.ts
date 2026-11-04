@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProductsView from './ProductsView.vue'
+import { api } from '@/api/index'
+import { appAlert } from '@/utils/appDialog'
 
 const mockFetchProducts = vi.fn().mockResolvedValue({
   success: true,
@@ -50,7 +52,7 @@ vi.mock('@/api/templatePreview', () => ({
   },
 }))
 vi.mock('@/api/index', () => ({
-  api: { get: vi.fn().mockResolvedValue({ success: true }) },
+  api: { get: vi.fn().mockResolvedValue({ success: true }), post: vi.fn() },
 }))
 vi.mock('@/utils/appDialog', () => ({
   appAlert: vi.fn(),
@@ -120,10 +122,38 @@ describe('ProductsView deep', () => {
     await exportBtn!.trigger('click')
   })
 
-  it('toggles attendance detail import checkbox', async () => {
+  it('imports selected Excel rows as products without attendance options', async () => {
+    const rows = [{ model_number: 'A1', name: 'P1', price: 10 }]
+    vi.mocked(api.post)
+      .mockResolvedValueOnce({ success: true, rows, headers: [{ value: 'name' }] })
+      .mockResolvedValueOnce({ success: true, imported: 1, skipped: 0 })
     const wrapper = await mountProducts()
-    const checkbox = wrapper.find('input[type="checkbox"]')
-    expect(checkbox.exists()).toBe(true)
-    await checkbox.setValue(true)
+    await flushPromises()
+    const initialFetches = mockFetchProducts.mock.calls.length
+    expect(wrapper.find('.page-header input[type="checkbox"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('导入人员')
+
+    const input = wrapper.get<HTMLInputElement>('input[type="file"]')
+    const file = new File(['product data'], 'products.xlsx')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(api.post).toHaveBeenCalledTimes(2)
+    const [extractUrl, form] = vi.mocked(api.post).mock.calls[0]
+    expect(extractUrl).toBe('/api/excel/data/extract/upload')
+    expect(form).toBeInstanceOf(FormData)
+    expect((form as FormData).get('excel_file')).toBe(file)
+    expect((form as FormData).has('parse_mode')).toBe(false)
+    expect(api.post).toHaveBeenNthCalledWith(2, '/api/excel/data/import/products', {
+      file_name: 'products.xlsx',
+      data: rows,
+      field_mapping: { name: 'name' },
+      options: { skip_duplicates: true, validate_before_import: true, clean_data: true },
+    })
+    expect(appAlert).toHaveBeenCalledWith('导入成功！共导入 1 条产品')
+    expect(mockFetchProducts.mock.calls.length).toBeGreaterThan(initialFetches)
+    expect(input.element.value).toBe('')
+    wrapper.unmount()
   })
 })

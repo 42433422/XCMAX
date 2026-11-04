@@ -30,6 +30,24 @@ describe('authSessionCache', () => {
     expect(authApi.validateSession).toHaveBeenCalledTimes(1)
   })
 
+  it('reuses a valid session after the short TTL and refreshes behind the click', async () => {
+    const now = 1_700_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    vi.mocked(authApi.validateSession).mockResolvedValue({ valid: true })
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
+    vi.spyOn(Date, 'now').mockReturnValue(now + 6 * 60_000)
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
+    await vi.waitFor(() => expect(authApi.validateSession).toHaveBeenCalledTimes(2))
+    vi.restoreAllMocks()
+  })
+
+  it('reuses a definitive invalid session inside the short TTL', async () => {
+    vi.mocked(authApi.validateSession).mockResolvedValue({ valid: false })
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(false)
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(false)
+    expect(authApi.validateSession).toHaveBeenCalledTimes(1)
+  })
+
   it('forces refresh when requested', async () => {
     vi.mocked(authApi.validateSession).mockResolvedValue({ valid: true })
     await validateEnterpriseSessionCached()
@@ -82,4 +100,54 @@ describe('authSessionCache', () => {
     Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: undefined })
     await expect(consumeDesktopSessionBootstrapHint()).resolves.toBe(false)
   })
+  it.each([new Error('network'), Object.assign(new Error('timeout'), { name: 'AbortError' }), Object.assign(new Error('unavailable'), { status: 503 })])('keeps an outage unknown rather than caching an authenticated or invalid session', async error => {
+    markEnterpriseSessionValid()
+    vi.mocked(authApi.validateSession).mockRejectedValue(error)
+    await expect(validateEnterpriseSessionCached(true)).rejects.toBe(error)
+    expect(hasRecentEnterpriseSessionHint()).toBe(true)
+    await expect(validateEnterpriseSessionCached(true)).rejects.toBe(error)
+    expect(authApi.validateSession).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([{ valid: false }, { success: true, valid: false }, { status: 401 }, { status: 403 }])('honors definitive invalidity: %s', async response => {
+    markEnterpriseSessionValid()
+    if ('status' in response) vi.mocked(authApi.validateSession).mockRejectedValue(response)
+    else vi.mocked(authApi.validateSession).mockResolvedValue(response)
+    await expect(validateEnterpriseSessionCached(true)).resolves.toBe(false)
+    expect(hasRecentEnterpriseSessionHint()).toBe(false)
+  })
+
+  it('coalesces concurrent validation and ignores its result after a new login', async () => {
+    let finish!: (value: unknown) => void
+    vi.mocked(authApi.validateSession).mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const first = validateEnterpriseSessionCached()
+    const second = validateEnterpriseSessionCached()
+    expect(authApi.validateSession).toHaveBeenCalledOnce()
+    markEnterpriseSessionValid()
+    finish({ valid: false })
+    await expect(first).resolves.toBe(true)
+    await expect(second).resolves.toBe(true)
+    expect(hasRecentEnterpriseSessionHint()).toBe(true)
+  })
+
 })
+
+ it('retains the desktop shell when profile refresh is temporarily unavailable', async () => {
+  const { refreshDesktopSessionInBackground } = await import('./desktopSessionRestore')
+  vi.mocked(authApi.validateSession).mockResolvedValue({ valid: true })
+  const replace = vi.fn()
+  const profile = { loaded: false, sessionCheckUnavailable: true, refreshFromServer: vi.fn().mockResolvedValue(undefined) }
+  refreshDesktopSessionInBackground({ replace }, profile, '/settings')
+  await vi.waitFor(() => expect(profile.refreshFromServer).toHaveBeenCalledOnce())
+  expect(replace).not.toHaveBeenCalled()
+ })
+
+ it('does not log out a valid session whose workspace hydration has not published yet', async () => {
+  const { refreshDesktopSessionInBackground } = await import('./desktopSessionRestore')
+  vi.mocked(authApi.validateSession).mockResolvedValue({ success: true, data: { valid: true } })
+  const replace = vi.fn()
+  const profile = { loaded: false, sessionCheckUnavailable: false, refreshFromServer: vi.fn().mockResolvedValue(undefined) }
+  refreshDesktopSessionInBackground({ replace }, profile, '/')
+  await vi.waitFor(() => expect(profile.refreshFromServer).toHaveBeenCalledOnce())
+  expect(replace).not.toHaveBeenCalled()
+ })

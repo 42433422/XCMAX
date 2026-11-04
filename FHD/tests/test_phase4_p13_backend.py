@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.db.models import PurchaseOrder, Supplier
-from app.services.purchase_service import PurchaseService
+from app.domain.shared_services.purchase_service import PurchaseService
 
 
 def _fluent(*, all_=None, first=None, count=0) -> MagicMock:
@@ -33,7 +33,7 @@ def _fake_db(session):
 
 
 def _patched_db(session):
-    return patch("app.services.purchase_service.get_db", lambda: _fake_db(session))
+    return patch("app.domain.shared_services.purchase_service.get_db", lambda: _fake_db(session))
 
 
 @pytest.fixture

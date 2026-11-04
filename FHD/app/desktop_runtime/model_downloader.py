@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .paths import ensure_desktop_dirs
+from .desktop_runtime_paths import ensure_desktop_dirs
 
 ProgressCallback = Callable[[str, int, int], None]
 

@@ -10,7 +10,7 @@ from typing import Any, cast
 from .approval_service import ApprovalService, get_approval_service
 from .engine import WorkflowEngine
 from .risk_gate import HybridRiskGate, RiskDecision
-from .types import ApprovalStatus, PlanGraph, WorkflowRunResult
+from .workflow_types import ApprovalStatus, PlanGraph, WorkflowRunResult
 
 logger = logging.getLogger(__name__)
 

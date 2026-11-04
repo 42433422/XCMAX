@@ -139,7 +139,7 @@ def test_admin_duty_graph_capability_and_run(tmp_path, monkeypatch):
         )
         assert run1.status_code == 200, run1.text
         b1 = run1.json()
-        assert b1["status"] == "completed"
+        assert b1["status"] == "blocked"
         node_map1 = {n["employee_id"]: n for n in b1["nodes"]}
         assert node_map1["dep-a"]["status"] == "success"
         assert node_map1["target"]["status"] == "skipped"
@@ -161,6 +161,27 @@ def test_admin_duty_graph_capability_and_run(tmp_path, monkeypatch):
         assert node_map2["dep-a"]["status"] == "success"
         assert node_map2["target"]["status"] == "success"
         assert fake_runtime.calls == ["dep-a", "dep-a", "target"]
+
+        def failed_task(**kwargs):
+            fake_runtime.calls.append(kwargs["employee_id"])
+            return {
+                "result": {"outputs": [{"handler": "echo", "ok": False, "error": "handler_failed"}]}
+            }
+
+        fake_runtime.execute_task = failed_task
+        failed = client.post(
+            "/api/admin/duty-graph/runs",
+            json={
+                "target_employee_id": "target",
+                "task": "失败依赖",
+                "allow_high_risk_real_run": True,
+            },
+        ).json()
+        failed_nodes = {n["employee_id"]: n for n in failed["nodes"]}
+        assert failed["status"] == "failed"
+        assert failed_nodes["dep-a"]["status"] == "failed"
+        assert failed_nodes["target"]["status"] == "skipped"
+        assert fake_runtime.calls[-1] == "dep-a"
 
         rid = b2["id"]
         rd = client.get(f"/api/admin/duty-graph/runs/{rid}")

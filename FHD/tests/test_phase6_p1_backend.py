@@ -2,9 +2,9 @@
 
 Targets:
 - ``app.infrastructure.persistence.shipment_record_command_impl`` (~15.8% line coverage)
-- ``app.services.conversation_service`` (~22.9% line coverage)
+- ``app.domain.shared_services.conversation_service`` (~22.9% line coverage)
 
-注：原 ``app.utils.database_service`` 已被 ``app.services.database_service``
+注：原 ``app.utils.database_service`` 已被 ``app.domain.shared_services.database_service``
 取代（用 ``sqlite3.backup()`` API 替代 ``shutil.copy2``，避免 WAL 模式下
 备份不一致）。DatabaseService 的测试统一在 ``tests/test_services/test_database_service.py``
 中维护，本文件不再重复覆盖。
@@ -22,12 +22,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.infrastructure.persistence.shipment_record_command_impl import (
-    SQLAlchemyShipmentRecordCommand,
-)
-from app.services.conversation_service import (
+from app.domain.shared_services.conversation_service import (
     ConversationService,
     get_conversation_service,
+)
+from app.infrastructure.persistence.shipment_record_command_impl import (
+    SQLAlchemyShipmentRecordCommand,
 )
 
 # ---------------------------------------------------------------------------
@@ -596,7 +596,7 @@ class TestConversationSaveMessage:
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(
@@ -604,7 +604,7 @@ class TestConversationSaveMessage:
                 "_normalize_user_id",
                 return_value=123,
             ),
-            patch("app.services.conversation_service.AIConversation") as mock_cls,
+            patch("app.domain.shared_services.conversation_service.AIConversation") as mock_cls,
         ):
             mock_cls.return_value = conversation
             msg_id = svc.save_message("sess-1", "123", "user", "hello")
@@ -619,6 +619,7 @@ class TestConversationSaveMessage:
         mock_query = MagicMock()
         existing_session = MagicMock()
         existing_session.message_count = 5
+        existing_session.user_id = 123
         mock_query.filter.return_value.first.return_value = existing_session
         mock_db.query.return_value = mock_query
 
@@ -627,11 +628,14 @@ class TestConversationSaveMessage:
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=123),
-            patch("app.services.conversation_service.AIConversation", return_value=conversation),
+            patch(
+                "app.domain.shared_services.conversation_service.AIConversation",
+                return_value=conversation,
+            ),
         ):
             msg_id = svc.save_message("sess-1", "123", "assistant", "hi")
 
@@ -643,14 +647,15 @@ class TestConversationSaveMessage:
         svc = ConversationService()
         mock_db = MagicMock()
         mock_db.commit.side_effect = RuntimeError("commit failed")
+        mock_db.query.return_value.filter.return_value.first.return_value.user_id = 123
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=123),
-            patch("app.services.conversation_service.AIConversation"),
+            patch("app.domain.shared_services.conversation_service.AIConversation"),
         ):
             with pytest.raises(RuntimeError, match="commit failed"):
                 svc.save_message("sess-1", "123", "user", "hello")
@@ -679,7 +684,7 @@ class TestConversationGetSessionMessages:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.get_session_messages("s1", limit=10)
@@ -709,7 +714,7 @@ class TestConversationGetSessionMessages:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.get_session_messages("s1")
@@ -725,7 +730,7 @@ class TestConversationGetSessionMessages:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.get_session_messages("missing")
@@ -735,7 +740,7 @@ class TestConversationGetSessionMessages:
     def test_db_error_propagates(self) -> None:
         svc = ConversationService()
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             side_effect=RuntimeError("db down"),
         ):
             with pytest.raises(RuntimeError, match="db down"):
@@ -762,7 +767,7 @@ class TestConversationGetSessions:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.get_sessions(limit=5)
@@ -780,7 +785,7 @@ class TestConversationGetSessions:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.get_sessions(user_id="42", limit=5)
@@ -791,7 +796,7 @@ class TestConversationGetSessions:
     def test_db_error_propagates(self) -> None:
         svc = ConversationService()
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             side_effect=RuntimeError("db down"),
         ):
             with pytest.raises(RuntimeError, match="db down"):
@@ -810,7 +815,7 @@ class TestConversationUpdateSessionTitle:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.update_session_title("s1", "New Title")
@@ -827,7 +832,7 @@ class TestConversationUpdateSessionTitle:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.update_session_title("missing", "Title")
@@ -845,7 +850,7 @@ class TestConversationUpdateSessionTitle:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             with pytest.raises(RuntimeError, match="commit failed"):
@@ -860,18 +865,17 @@ class TestConversationDeleteSession:
         svc = ConversationService()
         mock_db = MagicMock()
         mock_query = MagicMock()
-        mock_query.filter.return_value.delete.return_value = 1
+        session = mock_query.filter.return_value.first.return_value
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.delete_session("s1")
 
         assert result is True
-        # Two queries: AIConversation + AIConversationSession
-        assert mock_db.query.call_count == 2
+        mock_db.delete.assert_called_once_with(session)
         mock_db.commit.assert_called_once()
 
     def test_db_error_propagates_and_rolls_back(self) -> None:
@@ -883,7 +887,7 @@ class TestConversationDeleteSession:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             with pytest.raises(RuntimeError, match="commit failed"):
@@ -904,7 +908,7 @@ class TestConversationCreateSession:
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=5),
@@ -922,7 +926,7 @@ class TestConversationCreateSession:
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=None),
@@ -939,7 +943,7 @@ class TestConversationCreateSession:
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=None),
@@ -954,7 +958,7 @@ class TestGetConversationService:
 
     def test_returns_conversation_service_instance(self) -> None:
         # Reset module-level singleton to ensure deterministic behavior.
-        import app.services.conversation_service as mod
+        import app.domain.shared_services.conversation_service as mod
 
         with patch.object(mod, "_conversation_service", None):
             svc = get_conversation_service()

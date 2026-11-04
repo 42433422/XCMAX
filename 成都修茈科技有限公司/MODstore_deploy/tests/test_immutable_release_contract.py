@@ -22,6 +22,56 @@ UPGRADE_DATABASE_SCRIPT = ROOT / "scripts/upgrade_database.py"
 PYPROJECT = ROOT / "pyproject.toml"
 
 
+def test_private_delivery_migration_uses_persistent_library_and_stopped_window():
+    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    assert 'LIBRARY_DIR="${MODMAN_LIBRARY:-${RUNTIME_DIR%/}/library}"' in script
+    assert "MODMAN_LIBRARY=%s" in script
+    preflight = script.index("migrate_delivery_state true")
+    stop = script.index("systemctl stop modstore.service modstore-scheduler.service", preflight)
+    copied = script.index("migrate_delivery_state false", stop)
+    promote = script.index('ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"')
+    final_verify = script.rindex("verify_fixed_release_approval", 0, stop)
+    assert preflight < final_verify < stop < copied < promote
+    assert "verify_fixed_release_approval" not in script[stop:promote]
+    assert (
+        'TARGET_SHA="$PREVIOUS_SHA" LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units'
+        in script
+    )
+    assert 'if [[ "$status" != 0 && "$CATALOG_SERVICES_STOPPED" == 1 ]]' in script
+    helper = script[script.index("migrate_delivery_state() {") : preflight]
+    assert "systemctl stop" not in helper
+    assert 'dry_run=mode == "true"' in helper
+    assert "legacy_library=Path(previous_library)" in helper
+
+
+@pytest.mark.parametrize("external", [False, True], ids=["release-library", "stable-library"])
+def test_delivery_library_selector_preserves_existing_stable_root(tmp_path, external):
+    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    start = script.index("select_library_target() {")
+    end = script.index("\n}\n", start) + 3
+    releases = tmp_path / "releases"
+    previous = releases / ("a" * 40)
+    wanted = tmp_path / "runtime/library"
+    active = tmp_path / "existing/library" if external else previous / "library"
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            script[start:end] + '\nselect_library_target "$1" "$2" "$3" "$4"\n',
+            "library-probe",
+            str(wanted),
+            str(active),
+            str(previous),
+            str(releases),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(active if external else wanted)
+    assert not wanted.exists() and not active.exists()
+
+
 def _compiler_probe(release: Path, node: str) -> subprocess.CompletedProcess[str]:
     script = RELEASE_SCRIPT.read_text(encoding="utf-8")
     start = script.index("verify_runtime_mod_compiler() {")
@@ -156,7 +206,12 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
-    assert ".[web,knowledge,evolution-metrics]" in script
+    assert ".[web,knowledge,evolution-metrics,governance]" in script
+    assert '"$BUILD_ROOT/packages/retort_engine"' in script
+    assert '"$BUILD_ROOT/packages/xcagi_common"' in script
+    assert (
+        "retort-engine>=0.4.0,<0.5" in pyproject["project"]["optional-dependencies"]["governance"]
+    )
     assert "alembic>=1.16,<2" in pyproject["project"]["optional-dependencies"]["web"]
     assert "pandas>=2.0" in pyproject["project"]["optional-dependencies"]["evolution-metrics"]
     assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script
@@ -164,6 +219,11 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
     assert "node scripts/install-native-bindings.mjs" in script
     assert script.index("--ignore-scripts") < script.index("npm run build")
+    media = script.index(
+        '"$RUNTIME_NODE_BIN" "$BUILD_ROOT/scripts/dev/materialize_media_assets.mjs" marketing'
+    )
+    assert script.index("npm run build") < media < script.index('chmod -R a-w "$BUILD_ROOT"')
+    assert '|| fail "cannot reconstruct checksum-pinned public site media"' in script
     assert (
         'MODSTORE_DATABASE_URL="$BUILD_DATABASE_URL" .venv/bin/python scripts/upgrade_database.py'
         in script
@@ -278,7 +338,10 @@ def test_stopped_service_resolves_current_release_catalog(tmp_path: Path) -> Non
     assert stale.stdout.strip() == str(fallback)
 
 
-def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) -> None:
+@pytest.mark.parametrize("preserve", ["0", "1"])
+def test_release_retention_prunes_only_verified_sha_directories(
+    tmp_path: Path, preserve: str
+) -> None:
     source_root = tmp_path / "source"
     release_base = tmp_path / "xcmax"
     releases = release_base / "releases"
@@ -330,6 +393,7 @@ def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) 
             "XCMAX_RELEASE_BASE": str(release_base),
             "XCMAX_RELEASE_LOCK": str(tmp_path / "release.lock"),
             "XCMAX_RELEASE_PRUNE_ONLY": "1",
+            "XCMAX_PRESERVE_RELEASE_HISTORY": preserve,
             "XCMAX_RELEASES_TO_KEEP": "3",
             "XCMAX_SOURCE_ROOT": str(source_root),
             "XCMAX_TARGET_SHA": shas[1],
@@ -340,11 +404,15 @@ def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) 
 
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     remaining = {item.name for item in releases.iterdir()}
-    assert remaining.intersection(shas) == {shas[0], shas[1], shas[-1]}
+    expected = set(shas) if preserve == "1" else {shas[0], shas[1], shas[-1]}
+    assert remaining.intersection(shas) == expected
     assert malformed_sha in remaining
     assert unrelated.name in remaining
-    assert "release retention complete kept=3 removed=3 limit=3" in result.stdout
-    assert "skipping unverified release directory" in result.stdout
+    if preserve == "1":
+        assert "preserving all release history" in result.stdout
+    else:
+        assert "release retention complete kept=3 removed=3 limit=3" in result.stdout
+        assert "skipping unverified release directory" in result.stdout
 
 
 def test_release_retention_rejects_unsafe_limit(tmp_path: Path) -> None:
@@ -379,6 +447,9 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         trigger = workflow[True]
         assert "workflow_run" not in trigger
         assert trigger["workflow_dispatch"]["inputs"]["git_sha"]["required"] is True
+        assert (
+            trigger["workflow_dispatch"]["inputs"]["preserve_release_history"]["default"] is False
+        )
         assert trigger["workflow_dispatch"]["inputs"]["security_scan_run_id"]["required"] is True
         assert (
             trigger["workflow_dispatch"]["inputs"]["previous_security_scan_run_id"]["required"]
@@ -391,58 +462,117 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "XCMAX_GITHUB_REPOSITORY" in rendered
         assert "XCMAX_PRODUCT_VERSION" in rendered
         assert "xcmax-immutable-release.sh" in rendered
+        assert "export XCMAX_PRESERVE_RELEASE_HISTORY=" in rendered
+        assert "${CONTROLLER_SHA}:ops/dr/$file" in rendered
         assert "modstore-deployment-correlation" in rendered
         assert "actions/upload-artifact@v4" in rendered
         assert "verify_security_scan_pair.py" in rendered
-        assert "actions/download-artifact@v4" in rendered
+        assert "actions/download-artifact@v8" in rendered
         assert "reset --hard" not in rendered
 
 
-def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_callback() -> None:
-    source_path = ROOT / ".github/workflows/prod-deploy-receipt.yml"
-    published_path = REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml"
-    source = yaml.safe_load(source_path.read_text())
-    published = yaml.safe_load(published_path.read_text())
-
-    for workflow in (source, published):
-        trigger = workflow[True]
-        assert trigger["workflow_run"]["workflows"] == ["Deploy MODstore Production"]
-        assert trigger["workflow_dispatch"]["inputs"]["source_deploy_run_id"]["required"] is True
-        assert "package_source_sha" in trigger["workflow_dispatch"]["inputs"]
-        receipt = workflow["jobs"]["receipt"]
-        assert "workflow_run.conclusion == 'success'" in receipt["if"]
-        assert "github.event_name == 'workflow_dispatch'" in receipt["if"]
-        rendered = str(receipt)
-        assert workflow["permissions"]["pull-requests"] == "read"
-        assert "actions/download-artifact@v4" in rendered
-        assert "source deployment run id must be numeric" in rendered
-        assert '.name == "Deploy MODstore Production"' in rendered
-        assert ".head_sha == $merge_sha" in rendered
-        assert "package source SHA is not an ancestor of deployed SHA" in rendered
-        assert "steps.source.outputs.package_source_sha" in rendered
-        assert "steps.source.outputs.merge_sha" in rendered
-        assert "fetch-depth': 0" in rendered or "fetch-depth: 0" in rendered
-        assert "/commits/${merge_sha}/pulls" in rendered
-        assert "attested_branch_head_sha" in rendered
-        assert "MODSTORE_OPS_INGEST_TOKEN" in rendered
-        assert "/api/ops/self-maintenance/deployment-receipt" in rendered
-        assert ".recorded == true or .idempotent == true" in rendered
-        assert "/api/ops/self-maintenance/evolution-deployment-receipt" in rendered
-        assert "evolution-packages.json" in rendered
-        assert "catalog_data/files/" in rendered
-        assert "stored_filename" in rendered
-        assert "MODSTORE_AUTO_PUBLISH_TOKEN" in rendered
-        assert "FHD/scripts/dev/publish_modstore.py" in rendered
-        assert "modstore-evolution-publication-receipts" in rendered
-        assert 'git show "${PACKAGE_SOURCE_SHA}:${archive}"' in rendered
-        assert 'cmp --silent "$source_archive" "$archive"' in rendered
-        assert "workflow_status" in rendered
-        assert "completed" in rendered
-    for workflow_path in (source_path, published_path):
-        workflow_text = workflow_path.read_text(encoding="utf-8")
-        assert '"-z"' in workflow_text
-        assert 'split(b"\\0")' in workflow_text
-        assert "os.fsdecode" in workflow_text
+def test_receipt_source_attestation_executes_strict_identity_checks(
+    tmp_path: Path,
+) -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/prod-deploy-receipt.yml").read_text())
+    published = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml").read_text()
+    )
+    assert workflow == published
+    rendered = str(workflow)
+    for marker in (
+        "MODSTORE_OPS_INGEST_TOKEN",
+        "/api/ops/self-maintenance/deployment-receipt",
+        ".recorded == true or .idempotent == true",
+        "/api/ops/self-maintenance/evolution-deployment-receipt",
+        'cmp --silent "$source_archive" "$archive"',
+        "FHD/scripts/dev/publish_modstore.py",
+    ):
+        assert marker in rendered
+    script = next(s["run"] for s in workflow["jobs"]["receipt"]["steps"] if s.get("id") == "source")
+    product, controller = "a" * 40, "b" * 40
+    canonical = {"id": 12, "path": ".github/workflows/modstore-prod-deploy.yml"}
+    source = dict(
+        canonical,
+        id=34,
+        workflow_id=12,
+        head_sha=controller,
+        head_branch="main",
+        event="workflow_dispatch",
+        status="completed",
+        conclusion="success",
+        repository={"full_name": "owner/repo"},
+        name=f"Deploy MODstore {product}",
+    )
+    correlation = dict(
+        merge_sha=product,
+        git_sha=product,
+        controller_sha=controller,
+        environment="production",
+        approval_reference="existing approval",
+    )
+    directory = tmp_path / "modstore-deployment-correlation"
+    directory.mkdir()
+    stub = tmp_path / "gh"
+    stub.write_text(
+        '#!/bin/bash\ncase "$2" in\n*/workflows/*) cat "$RUNNER_TEMP/workflow.json";;\n*/runs/*) cat "$RUNNER_TEMP/source.json";;\n*/compare/*) cat "$RUNNER_TEMP/compare.json";;\n*) exit 99;;\nesac\n'
+    )
+    stub.chmod(0o755)
+    (tmp_path / "workflow.json").write_text(json.dumps(canonical))
+    for field, value in [
+        (None, None),
+        ("legacy", None),
+        ("id", 35),
+        ("workflow_id", 13),
+        ("path", "other.yml"),
+        ("head_sha", product),
+        ("head_branch", "other"),
+        ("event", "push"),
+        ("conclusion", "failure"),
+        ("status", "in_progress"),
+        ("repository", {"full_name": "other/repo"}),
+        ("git_sha", controller),
+        ("ancestry", controller),
+        ("controller_sha", "invalid"),
+    ]:
+        run, corr = source.copy(), correlation.copy()
+        comparison = {"status": "ahead", "merge_base_commit": {"sha": product}}
+        if field == "legacy":
+            corr.pop("controller_sha")
+            run["head_sha"] = product
+        elif field == "ancestry":
+            comparison["merge_base_commit"]["sha"] = value
+        elif field in corr:
+            corr[field] = value
+        elif field:
+            run[field] = value
+        for path, data in [
+            (directory / "modstore-deployment-correlation.json", corr),
+            (tmp_path / "source.json", run),
+            (tmp_path / "compare.json", comparison),
+        ]:
+            path.write_text(json.dumps(data))
+        output = tmp_path / "output"
+        output.write_text("")
+        result = subprocess.run(
+            ["bash", "-c", script],
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "PATH": f"{tmp_path}:{os.environ['PATH']}",
+                "RUNNER_TEMP": str(tmp_path),
+                "GITHUB_OUTPUT": str(output),
+                "GITHUB_REPOSITORY": "owner/repo",
+                "SOURCE_WORKFLOW_ID": "34",
+            },
+        )
+        assert (result.returncode == 0) == (field in (None, "legacy")), (
+            field,
+            result.stderr,
+        )
+        if result.returncode == 0:
+            assert f"merge_sha={product}\n" in output.read_text()
 
 
 def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> None:
@@ -483,3 +613,88 @@ def test_corp_site_deploy_publishes_and_verifies_world_will_ticker() -> None:
     for page in (homepage, visualization):
         assert 'href="/world-will-ticker.css?v=20260729a"' in page
         assert 'src="/world-will-ticker.js?v=20260729a"' in page
+
+
+def test_fixed_release_guard_rejects_production_advance(tmp_path: Path) -> None:
+    repo = tmp_path / "source"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.check_output(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.name=release-test",
+                "-c",
+                "user.email=release-test@example.invalid",
+                *args,
+            ],
+            text=True,
+        ).strip()
+
+    git("init", "-q")
+
+    def commit(value: str) -> str:
+        (repo / "change").write_text(value)
+        git("add", ".")
+        git("commit", "-qm", value)
+        return git("rev-parse", "HEAD")
+
+    previous = commit("previous")
+    target = commit("target")
+    approvals = repo / "ops/releases"
+    approvals.mkdir(parents=True)
+    (approvals / f"{target}.json").write_text(
+        json.dumps(
+            dict(
+                git_sha=target,
+                expected_production_sha=previous,
+                product_version="1.0.0.6",
+                approval_reference="human",
+                approval_scope="modstore",
+            )
+        )
+    )
+    controller = commit("approved-controller")
+    git("update-ref", "refs/remotes/origin/main", controller)
+    current = tmp_path / "current"
+    current.mkdir()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "curl").write_text('#!/bin/sh\ncat "$CURRENT_LINK/health.json"\n')
+    (fake_bin / "curl").chmod(0o755)
+    script = RELEASE_SCRIPT.read_text()
+    start = script.index("verify_fixed_release_approval() {")
+    guard = script[start : script.index('\nif [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA', start)]
+    for deployed, running, expected in [
+        (previous, previous, 0),
+        (target, target, 0),
+        (controller, controller, 1),
+        (previous, controller, 1),
+    ]:
+        (current / ".xcmax-release.json").write_text(json.dumps({"git_sha": deployed}))
+        (current / "health.json").write_text(json.dumps({"ok": True, "git_sha": running}))
+        result = subprocess.run(
+            [
+                "bash",
+                "-ec",
+                'fail() { echo "$*" >&2; return 1; };\n'
+                + guard
+                + "\nverify_fixed_release_approval",
+            ],
+            env={
+                **os.environ,
+                "SOURCE_ROOT": str(repo),
+                "TARGET_SHA": target,
+                "PRODUCT_VERSION": "1.0.0.6",
+                "CURRENT_LINK": str(current),
+                "HEALTH_URL": "http://test.invalid/api/health",
+                "PATH": str(fake_bin) + os.pathsep + os.environ["PATH"],
+                "XCMAX_RELEASE_CONTROLLER_SHA": controller,
+            },
+            capture_output=True,
+            text=True,
+        )
+        assert (result.returncode == 0) == (expected == 0), result.stderr

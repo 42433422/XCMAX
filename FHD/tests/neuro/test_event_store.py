@@ -20,7 +20,7 @@ from app.neuro_bus.event_store import (
 
 
 def _make_event(event_type: str = "test_event", payload: dict | None = None, source: str = "test"):
-    from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+    from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 
     meta = EventMetadata(
         event_id=f"evt-{event_type}",

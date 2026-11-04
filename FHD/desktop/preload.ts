@@ -56,18 +56,60 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
 
 // 渲染进程错误遥测：全局捕获 window.onerror / unhandledrejection，失败静默。
 // 通过 ipcRenderer 直连上报通道，避免依赖页面上下文注入的时序问题。
-const reportRendererError = (payload: { type: string; error: string; stack?: string }) => {
+const reportRendererError = (payload: { type: string; error: string; stack?: string; source?: string }) => {
   void ipcRenderer.invoke('xcagi:report-error', payload).catch(() => undefined)
+}
+
+function usableText(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text && text !== 'unknown' ? text : ''
+}
+
+function stackLine(stack?: string): string {
+  if (!stack) return ''
+  const line = stack.split('\n').map(part => part.trim()).find(Boolean) || ''
+  return line.replace(/^Error:\s*/, '')
+}
+
+function describeFault(value: unknown): { error: string; stack?: string } {
+  if (value instanceof Error) {
+    const stack = value.stack
+    return { error: usableText(value.message) || usableText(value.name) || stackLine(stack), stack }
+  }
+  if (value && typeof value === 'object') {
+    const record = value as { message?: unknown; name?: unknown; stack?: unknown }
+    const stack = typeof record.stack === 'string' ? record.stack : undefined
+    const error = usableText(record.message) || usableText(record.name) || stackLine(stack)
+    if (error || stack) return { error, stack }
+  }
+  if (typeof value === 'string') return { error: usableText(value) }
+  if (value == null) return { error: '' }
+  try {
+    return { error: JSON.stringify(value) }
+  } catch {
+    return { error: String(value) }
+  }
+}
+
+function resourceTarget(event: Event): string {
+  const target = event.target
+  if (!target || target === window) return ''
+  const element = target as { tagName?: string; src?: string; href?: string }
+  const tag = element.tagName || target.constructor?.name || 'resource'
+  const url = element.src || element.href || ''
+  return url ? `${tag} ${url}` : tag
 }
 
 window.addEventListener(
   'error',
   (event) => {
-    const err = event.error
+    const described = describeFault(event.error)
+    const location = [event.filename, event.lineno, event.colno].filter((part) => part !== undefined && part !== '').join(':')
     reportRendererError({
       type: 'renderer:error',
-      error: err instanceof Error ? err.message : String(event.message || 'unknown'),
-      stack: err instanceof Error ? err.stack : undefined,
+      error: described.error || usableText(event.message) || resourceTarget(event) || 'renderer error without message',
+      stack: described.stack,
+      source: location || undefined,
     })
   },
   true,
@@ -76,11 +118,11 @@ window.addEventListener(
 window.addEventListener(
   'unhandledrejection',
   (event) => {
-    const reason = event.reason
+    const described = describeFault(event.reason)
     reportRendererError({
       type: 'renderer:unhandledrejection',
-      error: reason instanceof Error ? reason.message : String(reason),
-      stack: reason instanceof Error ? reason.stack : undefined,
+      error: described.error || 'unhandled rejection without reason',
+      stack: described.stack,
     })
   },
   true,

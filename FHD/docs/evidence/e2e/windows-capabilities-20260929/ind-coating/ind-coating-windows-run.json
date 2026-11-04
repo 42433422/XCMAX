@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "ind-coating",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 ind-coating 对应的 Windows 客户端页面 /ai-ecosystem",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「智能生态 - XCAGI」，主标题「智能生态」，地址 /ai-ecosystem。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 智能生态 SUNBIRD 副窗 ◈ 工作区 AI生态应用 智慧分析 接入可视化 AI 员工，上传表格、对话洞察、生成 ECharts 图表与报告 AIOPEN 开放智控 ",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/mods=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=232412 mp4=162744 title=智能生态 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-coating/ind-coating.log",
+    "sha256": "5720b05b679d71f1d7400a474c2db38df02e21a1f8df464b8ec779afdabf0e64",
+    "bytes": 1558
+  },
+  "media": [
+    {
+      "feature": "ind-coating",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-coating/ind-coating.png",
+      "sha256": "cfdea6de46f5c8b2546c502afafdf63b545828ddfabe4f7441ce931c2c8186dc",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「智能生态 - XCAGI」，主标题「智能生态」，地址 /ai-ecosystem。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 智能生态 SUNBIRD 副窗 ◈ 工作区 AI生态应用 智慧分析 接入可视化 AI 员工，上传表格、对话洞察、生成 ECharts 图表与报告 AIOPEN 开放智控 ",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-coating",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-coating/ind-coating.mp4",
+      "sha256": "51a3c2c0782dc61d80cdbed004314d6bfa507a708d7d4f32010c90abf16dab84",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「智能生态 - XCAGI」，主标题「智能生态」，地址 /ai-ecosystem。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 智能生态 SUNBIRD 副窗 ◈ 工作区 AI生态应用 智慧分析 接入可视化 AI 员工，上传表格、对话洞察、生成 ECharts 图表与报告 AIOPEN 开放智控 ",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

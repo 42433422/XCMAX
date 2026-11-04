@@ -1,0 +1,10 @@
+feature=mods-loader
+at=2026-09-29T11:09:18.612Z
+route=/mod-store
+landed=/mod-store
+title=能力库 - XCAGI
+heading=能力库
+redirected=false
+navError=
+apis=[{"api":"/api/mods","status":200,"body":"{\"success\":true,\"data\":[{\"id\":\"accessories-packaging-industry\",\"name\":\"饰品包装行业包\",\"version\":\"1.0.0\",\"author\":\"成都修茈科技有限公司\",\"description\":\"饰品与包装制品行业壳：提供产品、订单、库存、客户与标签业务语义；考勤由通用 attendance-industry 模块提供。\",\"primary\":false,\"artifact\":\"mod\",\"scope\":\"global\",\"industry\":{\"id\":\"饰品包装\",\"name\":\"饰品包装行业\",\"description\":\"适用于饰品、展示包装与包装制品的产品、订单、库存和标签管理\",\"units\":{\"primary\":\"件\",\"secondary\":\"箱\",\"primary_label\":\"件数\",\"sec"},{"api":"/api/mods/loading-status","status":200,"body":"{\"success\":true,\"data\":{\"mods_root\":\"C:\\\\Users\\\\97088\\\\AppData\\\\Roaming\\\\XCAGI\\\\mods\",\"mods_search_roots\":[\"C:\\\\Users\\\\97088\\\\AppData\\\\Roaming\\\\XCAGI\\\\mods\",\"C:\\\\XCAGI-r2\\\\resources\\\\backend\\\\_internal\\\\mods\"],\"discovered_mod_ids\":[\"accessories-packaging-industry\",\"attendance-industry\",\"lan-gate-ai-employee\",\"xcagi-approval-bridge\",\"xcagi-core-workflow-employees\",\"xcagi-customer-service-bridge\",\"x"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 能力库 SUNBIRD 副窗 ◈ 工作区 返回 AI 生态 XCAGI · 能力库 AI 员工市场 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至企业四部门编制。 搜索 完成入驻 打开工作台 修茈市场首页 刷新目录 全部商品 宿主基础员工 办公员工包 办公员工附属包1 工作流员工 AI 员工 行业扩展 已安装 仅显示已安装 按名称 按下载量 按评分 最新上架 宿主基础能力（预装员工） 加载中… 正在拉取修茈 AI 市场目录；若已有本地目录会先显示，后台继续同步。 小C助理

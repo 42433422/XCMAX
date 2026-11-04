@@ -137,15 +137,15 @@ class TestPngHttpResponse:
     def test_cacheable_view(self):
         resp = _png_http_response(b"png_data", view="thumb")
         assert resp.media_type == "image/png"
-        assert "max-age=86400" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
     def test_non_cacheable_view(self):
         resp = _png_http_response(b"png_data", view="full")
-        assert "no-cache" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
     def test_empty_view_cacheable(self):
         resp = _png_http_response(b"png_data", view="")
-        assert "max-age=86400" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
 
 # ---------------------------------------------------------------------------

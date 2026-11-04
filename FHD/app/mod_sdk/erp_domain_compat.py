@@ -222,6 +222,19 @@ def register_tenant_shipment_routes(router) -> None:
         with tenant_scope(user.tenant_id):
             return shipment_orders.shipment_generate(request, body)
 
+    @router.post("/shipment/print")
+    def mod_shipment_print(
+        request: Request,
+        body: dict = Body(default_factory=dict),
+        user=Depends(require_permission("shipment.edit")),
+    ):
+        # 文件只在当前租户的 shipment_outputs 下解析；order_id 经租户 ORM 过滤，
+        # 其他租户的文件或记录一律视为不存在。
+        if user.tenant_id is None:
+            raise HTTPException(status_code=403, detail="企业归属缺失")
+        with tenant_scope(user.tenant_id):
+            return shipment_orders.shipment_print(request, body)
+
     @router.get("/shipment/download/{filename:path}")
     def mod_shipment_download(filename: str, user=Depends(require_permission("shipment.view"))):
         if user.tenant_id is None:

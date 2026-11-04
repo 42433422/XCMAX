@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Branch-coverage tests for app.services.mobile_relay_desktop_client."""
+"""Branch-coverage tests for app.domain.shared_services.mobile_relay_desktop_client."""
 
 import json
 import os
@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import app.services.mobile_relay_desktop_client as _module
-from app.services.mobile_relay_desktop_client import (
+import app.domain.shared_services.mobile_relay_desktop_client as _module
+from app.domain.shared_services.mobile_relay_desktop_client import (
     _api_url,
     _execute_task,
     _poll_once,
@@ -372,7 +372,7 @@ class TestExecuteTask:
         mock_svc = MagicMock()
         mock_svc.invoke.return_value = {"dispatch": {"status": "completed"}}
         with patch(
-            "app.services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)
@@ -387,7 +387,7 @@ class TestExecuteTask:
         mock_svc = MagicMock()
         mock_svc.invoke.return_value = {"dispatch": {"accepted": False, "reason": "busy"}}
         with patch(
-            "app.services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)
@@ -408,7 +408,7 @@ class TestExecuteTask:
 
         with (
             patch(
-                "app.services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+                "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
                 return_value=mock_svc,
             ),
             patch.dict(
@@ -430,7 +430,7 @@ class TestExecuteTask:
         mock_svc = MagicMock()
         mock_svc.invoke.side_effect = RuntimeError("boom")
         with patch(
-            "app.services.mobile_relay_desktop_client.CodexSuperEmployeeService",
+            "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
             return_value=mock_svc,
         ):
             result = _execute_task(task)

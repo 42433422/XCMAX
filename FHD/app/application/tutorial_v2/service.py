@@ -29,7 +29,7 @@ from app.application.tutorial_v2.common import (
 )
 from app.application.tutorial_v2.master_task_verifiers import TutorialMasterTaskVerifierMixin
 from app.application.tutorial_v2.workspace import TutorialWorkspaceMixin
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.tenant import Tenant
 from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
 from app.utils.path_io.path_utils import get_app_data_dir

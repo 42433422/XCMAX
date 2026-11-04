@@ -14,7 +14,7 @@ import threading
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:

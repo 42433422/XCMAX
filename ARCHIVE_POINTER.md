@@ -1,5 +1,11 @@
 # XCMAX 历史与大文件归档指针
 
+2026-10-24 工单交付整理：未登记且已被 v10 指南替代的 `成都修茈科技有限公司/docs/modstore/MOD_AUTHORING_GUIDE.md`（942 行）逐字节校验外置到 `~/XCMAX-archives/docs-20261024-ticket-mod-authoring/`，原文与 SHA256 见 `MANIFEST.json`；现行入口为 `FHD/docs/guides/MOD_AUTHORING_GUIDE.md`。
+
+同轮未登记的六月修复快照 `docs/reports/FIXES.md` 与旧评分路线图 `docs/roadmap/AI_PLATFORM_9_SCORE_ROADMAP.md`（共 1,076 行）校验外置到 `~/XCMAX-archives/docs-20261024-ticket-history/`；完整原文、SHA256 及来源提交见 `MANIFEST.json`。归档保留历史未完事项，不构成修复完成声明；现行合同与评分口径以 SSOT 目录和 `FHD/config/audit_benchmark_ssot.json` 为准。
+
+同目录保留未登记、零消费者的六月分支纳入快照 `docs/reports/git_hygiene_intake_2026-06-29.json`（1,622 行）及其校验记录；旧分支待办完整保留，该快照不是当前合入队列。
+
 尽调 **工作区**（`Desktop/XCMAX`）不含下列实体目录；仅保留 `ARCHIVE_POINTER.md` 占位与恢复说明。
 
 ## 离线包（本机默认）
@@ -40,7 +46,13 @@
 | **MODstore 旧部署指引归档（2026-09-27）** | `~/XCMAX-archives/docs-20260927-modstore-immutable/` | `local-to-remote-push-flow.md` 和 `remote-server-operations.md` 仍推荐 Docker/tar 覆盖生产，与当前 immutable release systemd 链冲突；原文及 SHA256 见 `MANIFEST.txt`。 |
 | **Mac 发布旧部署指引归档（2026-09-27）** | `~/XCMAX-archives/docs-20260927-mac-release-obsolete/` | 旧版 `FHD/docs/guides/DEPLOYMENT_GUIDE.md` 和 MODstore 的 `xcagi-software-download.md` 已失效；原文及 SHA256 见 `MANIFEST.txt`。 |
 
+本轮 Mac 发布旧状态快照：`~/XCMAX-archives/mac-release-status-20261008/MACOS_RELEASE_SSOT.edf274051.md`；原文校验和见同目录 `MANIFEST-edf274051.txt`。当前交付以 FHD/docs/MACOS_RELEASE_SSOT.md 为准。
+
 ## 恢复示例
+
+2026-10-12 #2300：XCAGI 退役小程序规格、旧 Alembic/变更/安全说明及两个重复贡献政策（6 文件 / 1,519 行）已归档至 `~/XCMAX-archives/docs-20261012-pr2300-net-deletion/`；`MANIFEST.json` 记录原提交 `5f8de62c`、逐文件 SHA256 与行数，复制后逐项校验一致再删除。现行迁移公约见 `FHD/docs/guides/ALEMBIC_MIGRATION_GUIDE.md`，其余现行政策见 `FHD/CHANGELOG.md`、`FHD/SECURITY.md` 和 `FHD/.github/`。
+
+2026-10-07 Windows 闭环整理：未登记 SSOT 的 2026-03-17 Excel 迁移快照 `FHD/docs/migration_report.md` 已外置至 `~/XCMAX-archives/docs-20261007-windows-closeout/`；原文与 SHA256 见该目录的 `MANIFEST.txt`，当前迁移入口以 `FHD/docs/MIGRATION_REGISTRY.md` 为准。
 
 ```bash
 export VR="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-venv-20260605"
@@ -63,3 +75,22 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 校验和：`~/XCMAX-archives/MANIFEST.txt`
 
 **体积说明**（2026-06-05）：`du -sh Desktop/XCMAX` 约 **9.7G**（清 frontend 与归档重复的 `node_modules` 残留 ~2.6G 后；`FHD/.venv` **ln -s** `m0-venv-20260605`；含 `FHD/.git` ~**9.4G**）；尽调交付树（不含 `.git`）约 **~0.3G**。可重建依赖在 `m0-venv-20260605`（`npm ci` / rsync 恢复）。详见 `FHD/docs/CLAIMED_VS_ACTUAL.md`。
+
+2026-10-09 原工单支持指引归并：未登记的 `FHD/docs/customer/CUSTOMER_SUPPORT.md` 与 `FHD/docs/guides/DESKTOP_DATABASE_DELIVERY.md` 外置至 `~/XCMAX-archives/docs-20261009-original-ticket-support/`，原文及 SHA256 见 `MANIFEST.json`；当前入口为数据安全、双端发布与客服工单总线 SSOT。
+
+2026-10-11 发布断点收口：未登记的旧 `FHD/docs/DEPLOYMENT.md`、`deploy/RELEASE_CHECKLIST.md` 和 2026-06-05 已结束的 `ai-agent-v1-plan.md` 外置至 `~/XCMAX-archives/docs-20261011-delivery-breakpoints/`；原文与 SHA256 见 `MANIFEST.json`。旧仓库、K8s 与 demo 完成声明不作为本轮发布依据；当前入口为双端发布和客服工单 SSOT，历史 demo 与证据仍保留。 同轮将未登记旧 `FHD/tools/XcagiInstaller/README.md` 外置到 `~/XCMAX-archives/docs-20261011-delivery-breakpoints/windows-installer-readme/README.md`；原文 SHA256 `dadea781b3b40fe9cd8273bb03cf1f7e64f48cdc3531c863187a1c9e992de5dc`，逐字节校验与恢复指引见同目录 `MANIFEST.json`。
+
+同轮将未登记且仍含旧版安装与首启规则的 `FHD/docs/guides/PRODUCT_USER_FLOW.md` 校验外置到上述归档；唯一设置顺序与权益边界并入既有 `DELIVERABLE_PRODUCT.md`，交付判定统一指向发布与工单 SSOT，原文保留于 `MANIFEST.json`。
+
+## 证据与根目录杂物外置（2026-10-25）
+
+| 包 | 路径 | 说明 |
+|----|------|------|
+| **证据 bulk（非 materialization）** | `~/XCMAX-archives/evidence-bulk-20261025/` | 未登记进 `evidence-materialization.json` 的 `FHD/docs/evidence` 媒体、能力中心 generated 公开副本、`appstore-screenshots/`、`宣传资料/`、成都 ≥512KiB 营销媒体（含 `public/hero-video.mp4`）。已 git rm；校验见 `MANIFEST.json`。 |
+| 临时 symlink | （已删除） | 根目录 `.codex_modstore_archfix` 已从 git 树移除。 |
+
+**与 #2544 共存**：`evidence-materialization.json` 登记的 FHD 源媒体（约 289MB）与 `retained_sources` 仍留在 git，供 `evidence_assets.materialize` 校验/生成公开别名；能力中心运行时仍优先 COS 预签名。
+
+**保留（有意）**：根目录 `XCAGI-*.html`；`太阳鸟/` 说明；`成都修茈科技有限公司/` 活代码；materialization 源媒体。
+
+2026-10-26 交接整改：`成都修茈科技有限公司/docs/planning/腾讯云Pages部署指南.md` 为根目录同名文件的逐字重复副本（342 行），无该路径消费者；校验外置至 `~/XCMAX-archives/docs-20261026-duplicate-pages-guide/`。保留员工清单所用根目录原件，原文、来源提交及 SHA256 见 `MANIFEST.json`；未删除测试或改变部署流程。

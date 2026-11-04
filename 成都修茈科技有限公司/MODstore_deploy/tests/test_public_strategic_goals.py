@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from modstore_server.db.base import Base
+from modstore_server.db.db_base import Base
 from modstore_server.db.strategic import StrategicDecision
 from modstore_server.models import get_engine, get_session_factory
 from modstore_server.public_strategic_goals import verified_strategic_goal_items

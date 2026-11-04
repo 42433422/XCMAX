@@ -1,4 +1,4 @@
-"""Deep coverage tests for app.domain.services.conversation.context.chat_context.
+"""Deep coverage tests for app.domain.conversation.services.context.chat_context.
 
 Targets remaining uncovered branches:
 - ChatTurn edge cases (whitespace-only messages, slots with whitespace-only values)
@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.domain.services.conversation.context.chat_context import (
+from app.domain.conversation.services.context.chat_context import (
     ChatContext,
     ChatContextContainer,
     ChatTurn,

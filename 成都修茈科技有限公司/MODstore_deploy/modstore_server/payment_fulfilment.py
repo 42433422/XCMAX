@@ -15,15 +15,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Dict
+from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
 from modstore_server.account_license_plans import (
     account_license_plan,
@@ -33,6 +36,7 @@ from modstore_server.models import (
     AuthorEarning,
     CatalogItem,
     Entitlement,
+    PaymentFulfilmentReceipt,
     PlanTemplate,
     Purchase,
     Quota,
@@ -63,7 +67,7 @@ class FulfilContext:
     item_id: int
     plan_id: str
     kind: str
-    order: Dict[str, Any]
+    order: dict[str, Any]
 
 
 # ---------------------------------------------------------------- base
@@ -112,7 +116,11 @@ class ItemFulfilStrategy(FulfilStrategy):
     def is_already_fulfilled(self, session: Session, ctx: FulfilContext) -> bool:
         return (
             session.query(Entitlement)
-            .filter(Entitlement.source_order_id == ctx.out_trade_no)
+            .filter(
+                Entitlement.source_order_id == ctx.out_trade_no,
+                Entitlement.user_id == ctx.user_id,
+                Entitlement.catalog_id == ctx.item_id,
+            )
             .first()
             is not None
         )
@@ -128,7 +136,7 @@ class ItemFulfilStrategy(FulfilStrategy):
     ) -> None:
         item = session.query(CatalogItem).filter(CatalogItem.id == ctx.item_id).first()
         if not item:
-            return
+            raise ValueError("payment catalog item no longer exists")
         exists = (
             session.query(Purchase)
             .filter(Purchase.user_id == ctx.user_id, Purchase.catalog_id == ctx.item_id)
@@ -220,6 +228,7 @@ class PlanFulfilStrategy(FulfilStrategy):
             .filter(
                 Entitlement.source_order_id == ctx.out_trade_no,
                 Entitlement.entitlement_type == "plan",
+                Entitlement.user_id == ctx.user_id,
             )
             .first()
             is not None
@@ -236,16 +245,16 @@ class PlanFulfilStrategy(FulfilStrategy):
     ) -> None:
         plan = session.query(PlanTemplate).filter(PlanTemplate.id == ctx.plan_id).first()
         if not plan:
-            return
+            raise ValueError("payment plan no longer exists")
 
         user = session.query(User).filter(User.id == ctx.user_id).first()
         if user is None:
-            return
+            raise ValueError("payment owner no longer exists")
 
         is_license = is_account_license_plan_id(plan.id)
         active_rows = (
             session.query(UserPlan)
-            .filter(UserPlan.user_id == ctx.user_id, UserPlan.is_active == True)  # noqa: E712
+            .filter(UserPlan.user_id == ctx.user_id, UserPlan.is_active == True)
             .all()
         )
         for active_row in active_rows:
@@ -304,10 +313,10 @@ class PlanFulfilStrategy(FulfilStrategy):
                 int(license_meta.get("quota_cents") or 0) // 100
                 if is_license
                 else int(
-                    Decimal(str(ctx.total_amount)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                    Decimal(str(ctx.total_amount)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
                 )
             )
-        except BOUNDARY_ERRORS:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             grant_yuan = int(round(float(ctx.total_amount or 0)))
         if grant_yuan > 0:
             w = (
@@ -351,16 +360,25 @@ class WalletFulfilStrategy(FulfilStrategy):
         return f"支付宝入账 ({ctx.out_trade_no})", "alipay_recharge"
 
     def is_already_fulfilled(self, session: Session, ctx: FulfilContext) -> bool:
-        txn_marker = f"({ctx.out_trade_no})"
-        return (
+        descriptions = (
+            f"钱包充值 (订单 {ctx.out_trade_no})",
+            f"支付宝入账 ({ctx.out_trade_no})",
+        )
+        rows = (
             session.query(Transaction)
             .filter(
                 Transaction.user_id == ctx.user_id,
-                Transaction.description.contains(txn_marker),
+                Transaction.description.in_(descriptions),
+                Transaction.txn_type.in_(("alipay_wallet", "alipay_recharge")),
+                Transaction.status == "completed",
             )
-            .first()
-            is not None
+            .all()
         )
+        if len(rows) > 1 or (
+            rows and Decimal(str(rows[0].amount)) != Decimal(str(ctx.total_amount))
+        ):
+            raise ValueError("legacy payment ledger requires reconciliation")
+        return bool(rows)
 
     def fulfill(
         self,
@@ -377,7 +395,7 @@ class WalletFulfilStrategy(FulfilStrategy):
             session.query(Wallet).filter(Wallet.user_id == ctx.user_id).with_for_update().first()
         )
         if not wallet:
-            wallet = Wallet(user_id=ctx.user_id, balance=Decimal("0"))
+            wallet = Wallet(user_id=ctx.user_id, balance=Decimal(0))
             session.add(wallet)
             session.flush()
         amount = Decimal(str(ctx.total_amount))
@@ -406,6 +424,78 @@ def select_strategy(ctx: FulfilContext) -> FulfilStrategy:
     return WalletFulfilStrategy()
 
 
+def fulfill_order_atomic(
+    order_no: str, order: dict[str, Any], factory: sessionmaker[Session]
+) -> None:
+    """Claim and fulfil in one SQL transaction; JSON is only a repairable view.
+
+    A committed receipt is the durable idempotency boundary. A legacy JSON-only
+    success without ledger proof is held for reconciliation, not silently passed
+    or blindly credited a second time. Unique-key contention is resolved only
+    against a committed receipt with the exact same owner and financial payload.
+    """
+    if not order_no or len(order_no) > 128:
+        raise ValueError("invalid payment order identity")
+    if order.get("status") != "paid":
+        raise ValueError("only a verified paid order may be fulfilled")
+    amount = Decimal(str(order.get("total_amount")))
+    if (
+        not amount.is_finite()
+        or amount < 0
+        or amount > Decimal("9999999999.99")
+        or amount != amount.quantize(Decimal("0.01"))
+    ):
+        raise ValueError("invalid payment amount")
+    ctx = FulfilContext(
+        out_trade_no=order_no,
+        user_id=int(order.get("user_id") or 0),
+        total_amount=float(amount),
+        item_id=int(order.get("item_id") or 0),
+        plan_id=str(order.get("plan_id") or "").strip(),
+        kind=str(order.get("order_kind") or "").strip(),
+        order=dict(order),
+    )
+    identity = [
+        ctx.user_id,
+        str(amount.quantize(Decimal("0.01"))),
+        ctx.item_id,
+        ctx.plan_id,
+        ctx.kind,
+    ]
+    fingerprint = hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
+    strategy = select_strategy(ctx)
+    with factory() as session:
+        try:
+            receipt = session.get(PaymentFulfilmentReceipt, order_no)
+            if receipt is not None:
+                if receipt.payload_sha256 != fingerprint:
+                    raise ValueError("payment identity reused with a different payload")
+                return
+            session.add(PaymentFulfilmentReceipt(order_no=order_no, payload_sha256=fingerprint))
+            session.flush()  # Unique key arbitration precedes any financial effect.
+            owner = session.query(User).filter(User.id == ctx.user_id).with_for_update().first()
+            if owner is None:
+                raise ValueError("payment owner no longer exists")
+            already = strategy.is_already_fulfilled(session, ctx)
+            if order.get("fulfilled") and not already:
+                raise ValueError("legacy JSON success has no ledger proof; reconciliation required")
+            if not already:
+                description, txn_type = strategy.description_and_txn_type(ctx)
+                strategy.fulfill(
+                    session,
+                    ctx,
+                    now=datetime.now(UTC),
+                    description=description,
+                    txn_type=txn_type,
+                )
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            receipt = session.get(PaymentFulfilmentReceipt, order_no)
+            if receipt is None or receipt.payload_sha256 != fingerprint:
+                raise
+
+
 __all__ = [
     "FulfilContext",
     "FulfilStrategy",
@@ -413,4 +503,5 @@ __all__ = [
     "PlanFulfilStrategy",
     "WalletFulfilStrategy",
     "select_strategy",
+    "fulfill_order_atomic",
 ]

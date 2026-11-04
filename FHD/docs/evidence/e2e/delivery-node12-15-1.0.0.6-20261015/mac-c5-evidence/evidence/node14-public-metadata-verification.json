@@ -1,0 +1,25 @@
+{
+  "result": "PASS",
+  "time": "2026-10-15T22:09:44.890138+08:00",
+  "scope": "Actual anonymous public download of version-specific metadata/page/checksums only; installer full downloads still separate",
+  "files": [
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/index.html",
+      "bytes": 1211,
+      "sha256": "79038bfe84e2207778e67faae896cb76fa3bf6d78f9599c9c8a1dd9e7b1409ea",
+      "result": "PASS"
+    },
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/manual-download-manifest.json",
+      "bytes": 2108,
+      "sha256": "4a38156308f542c692f3730c2a6bb4985bf16e9b6a479abeed5cb386ef4855ff",
+      "result": "PASS"
+    },
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/SHA256SUMS.txt",
+      "bytes": 315,
+      "sha256": "23ae26605f5a0d9faaca8405bc634bbe10ca912ee4427d2ec13e6f73a57a2b19",
+      "result": "PASS"
+    }
+  ]
+}

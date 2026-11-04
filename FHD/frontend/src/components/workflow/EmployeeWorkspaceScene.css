@@ -710,3 +710,7 @@
   font-weight: 900;
   letter-spacing: 0.04em;
 }
+
+.ews-entry--admin { min-height: 0; }
+.ews-entry--admin .ews-entry-ui { min-height: 0; padding: 12px 18px; max-width: none; }
+.ews-diagnostics > summary { cursor: pointer; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; }

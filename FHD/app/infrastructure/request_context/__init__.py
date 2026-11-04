@@ -1,4 +1,4 @@
-"""Request-scoped ContextVar helpers (Phase 3 from app.legacy)."""
+"""Request-scoped ContextVar helpers (Phase 3 from legacy-layer)."""
 
 from app.infrastructure.request_context.client_mods import (
     get_request_client_mods_ui_off,

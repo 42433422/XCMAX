@@ -162,6 +162,10 @@ def looks_like_tracked_runtime(path: str) -> bool:
     many of those are useful source assets in this repo.
     """
 
+    if "/employee_draft_assets/" in path or path.startswith(("outputs/", "FHD/dataset_rag/")):
+        return True
+    if path.startswith("FHD/delivery/sunbird-seed/") and not path.endswith("/README.md"):
+        return True
     if path.startswith(("packages/retort_engine/.retort/", ".retort/")):
         return True
     if path.startswith((".hvigor/outputs/", ".pytest_cache/", "playwright-report/")):
@@ -170,7 +174,6 @@ def looks_like_tracked_runtime(path: str) -> bool:
         return True
     if path.endswith(".db") or path.endswith(".db)"):
         seed_allowlist = (
-            "FHD/delivery/sunbird-seed/",
             "成都修茈科技有限公司/MODstore_deploy/modstore_server/data/",
         )
         return not path.startswith(seed_allowlist)

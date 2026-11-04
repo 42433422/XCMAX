@@ -267,6 +267,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _login() async {
+    final requestedRemember = _mode == AuthLoginMode.password && _rememberPass;
     setState(() {
       _loggingIn = true;
       _error = null;
@@ -287,6 +288,19 @@ class _AuthScreenState extends State<AuthScreen> {
         );
       }
       if (!mounted) return;
+      if (requestedRemember) {
+        final session = await _repository.client.loadSession();
+        if (!mounted) return;
+        if (!session.rememberPassword) {
+          setState(() {
+            _rememberPass = false;
+            _autoLogin = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('已登录，但当前设备无法安全保存密码，下次请手动输入。'),
+          ));
+        }
+      }
       widget.onDone?.call();
     } catch (error) {
       if (!mounted) return;

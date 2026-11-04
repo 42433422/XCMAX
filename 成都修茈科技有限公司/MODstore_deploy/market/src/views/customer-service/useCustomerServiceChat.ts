@@ -156,7 +156,12 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
       }
       await scrollMessagesToEnd()
     } catch (e: unknown) {
-      error.value = errorMessage(e, 'AI 客服处理失败')
+      const detail = errorMessage(e, 'AI 客服处理失败')
+      const uncertain = /internal server error|\b5\d\d\b|timeout|timed out|failed to fetch|networkerror/i.test(detail)
+      error.value = uncertain
+        ? '暂无法确认工单是否受理。请先查看右侧工单列表，勿重复提交；没有回执不代表未落单。'
+        : detail
+      if (uncertain) void ctx.loadTickets()
       loading.value = false
     }
   }

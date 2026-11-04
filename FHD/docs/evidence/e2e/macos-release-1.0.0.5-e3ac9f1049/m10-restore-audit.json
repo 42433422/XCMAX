@@ -1,0 +1,103 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M10.restore-audit-identity",
+ "platform": "macos",
+ "architecture": "arm64",
+ "release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "product_version": "1.0.0.5",
+ "note": "新版实机。旧版 c46f938 证据不引用。判定要求：备份后的业务行被回滚，且备份后的审批/审计行（含恢复自身）仍在。",
+ "baseline_products": {
+  "http": 200,
+  "message": null,
+  "rows": [
+   {
+    "id": 1,
+    "name": "M07确认品",
+    "price": 8.8
+   }
+  ]
+ },
+ "products_after_delta": {
+  "http": 200,
+  "message": null,
+  "rows": [
+   {
+    "id": 2,
+    "name": "M09增量品",
+    "price": 1.5
+   },
+   {
+    "id": 1,
+    "name": "M07确认品",
+    "price": 8.8
+   }
+  ]
+ },
+ "products_after_restore": {
+  "http": 200,
+  "message": null,
+  "rows": [
+   {
+    "id": 1,
+    "name": "M07确认品",
+    "price": 8.8
+   }
+  ]
+ },
+ "delta_was_visible": true,
+ "delta_rolled_back": true,
+ "audit_not_wiped": true,
+ "users_unchanged": true,
+ "session_identity_consistent": true,
+ "session_after": {
+  "username": "xcagi-enterprise-demo",
+  "tenant_id": 1
+ },
+ "runtime_sha_ok": true,
+ "health_status": "healthy",
+ "counts_before": {
+  "agent_runs": 23,
+  "agent_tasks": 23,
+  "approval_requests": 2,
+  "ai_action_audit": 6
+ },
+ "counts_after_delta": {
+  "agent_runs": 27,
+  "agent_tasks": 27,
+  "approval_requests": 3,
+  "ai_action_audit": 9
+ },
+ "counts_after_restore": {
+  "agent_runs": 30,
+  "agent_tasks": 30,
+  "approval_requests": 4,
+  "ai_action_audit": 12
+ },
+ "approval_ids_after_delta": [
+  1,
+  2,
+  3
+ ],
+ "approval_ids_after_restore": [
+  1,
+  2,
+  3,
+  4
+ ],
+ "audit_tail_after_restore": [
+  "1 approval.submit_ai_workflow",
+  "2 approval.approve_ai_workflow",
+  "3 approval.execute_ai_workflow",
+  "4 approval.submit_ai_workflow",
+  "5 approval.approve_ai_workflow",
+  "6 approval.execute_ai_workflow",
+  "7 approval.submit_ai_workflow",
+  "8 approval.approve_ai_workflow",
+  "9 approval.execute_ai_workflow",
+  "10 approval.submit_ai_workflow",
+  "11 approval.approve_ai_workflow",
+  "12 approval.execute_ai_workflow"
+ ],
+ "verdict": "PASS",
+ "captured_at_utc": "2026-10-12T11:13:23Z"
+}

@@ -97,7 +97,7 @@ def _local_employee_execute_session_patches():
             return_value={"tenant_id": 1, "account_kind": "admin"},
         ),
         patch(
-            "app.application.auth_permission_resolver.require_allowed",
+            "app.domain.app_pure.auth_permission_resolver.require_allowed",
             return_value=None,
         ),
     ]
@@ -173,7 +173,7 @@ class TestDigestLocalOrProxyQueryParseContinue:
     """Cover the continue branches in query string parsing loops."""
 
     @pytest.mark.asyncio
-    async def test_daily_digests_query_with_unknown_params_continues(self):
+    async def test_daily_digests_query_with_unknown_params_continues(self, digest_admin_branch):
         """Lines 185->182: query parts that don't start with limit= or offset= are skipped."""
         req = _mock_request()
         svc_result = {"items": []}
@@ -199,7 +199,9 @@ class TestDigestLocalOrProxyQueryParseContinue:
         assert result == svc_result
 
     @pytest.mark.asyncio
-    async def test_action_items_stats_query_with_unknown_params_continues(self):
+    async def test_action_items_stats_query_with_unknown_params_continues(
+        self, digest_admin_branch
+    ):
         """Lines 200->197: query parts that don't start with kind= or day= are skipped."""
         req = _mock_request()
         stats_result = {"total": 10}
@@ -221,7 +223,7 @@ class TestDigestLocalOrProxyQueryParseContinue:
         assert result == stats_result
 
     @pytest.mark.asyncio
-    async def test_action_items_list_query_with_unknown_params_continues(self):
+    async def test_action_items_list_query_with_unknown_params_continues(self, digest_admin_branch):
         """Lines 209->206: query parts that don't start with kind= or day= are skipped."""
         req = _mock_request()
         list_result = {"items": []}
@@ -929,8 +931,8 @@ class TestLocalEmployeeExecuteBranches:
             )
         assert resp.status_code == 200
 
-    def test_invalid_user_id_defaults_to_zero(self, client: TestClient):
-        """Lines 1213-1214: invalid user_id → 0."""
+    def test_invalid_body_user_id_keeps_authenticated_owner(self, client: TestClient):
+        """Untrusted request identity never overrides the authenticated owner."""
         with ExitStack() as stack:
             for cm in _local_employee_execute_session_patches():
                 stack.enter_context(cm)
@@ -964,7 +966,7 @@ class TestLocalEmployeeExecuteBranches:
             )
         assert resp.status_code == 200
         args, kwargs = mock_exec.call_args
-        assert kwargs["user_id"] == 0
+        assert kwargs["user_id"] == 1
 
     def test_approved_write_propagated_to_payload(self, client: TestClient):
         """Lines 1207-1209: approved_write/allow_write/write_token/approval_token propagated."""

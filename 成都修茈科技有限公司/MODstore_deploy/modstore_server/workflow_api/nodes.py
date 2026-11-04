@@ -8,12 +8,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import (
-    User,
-    Workflow,
-    WorkflowEdge,
-    WorkflowNode,
-)
+from modstore_server.models import User, Workflow, WorkflowEdge, WorkflowNode
 from modstore_server.workflow_api.schemas import (
     AddWorkflowEdgeBody,
     AddWorkflowNodeBody,

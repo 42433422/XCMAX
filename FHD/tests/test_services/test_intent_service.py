@@ -4,7 +4,7 @@
 
 import pytest
 
-from app.services.intent_service import (
+from app.domain.shared_services.intent_service import (
     is_confirmation,
     is_goodbye,
     is_greeting,

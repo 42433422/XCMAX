@@ -1,6 +1,8 @@
 vi.mock('@/utils/authenticatedEventStream', () => ({ AuthenticatedEventStream: class { constructor(url: string) { return new EventSource(url) } } }))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { defineComponent, h, ref } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+import AgentTaskRuntimePanel from '@/components/chat/AgentTaskRuntimePanel.vue'
 import type { AgentRun } from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
 import { bindPendingFirstAiTaskRun, isFirstAiTaskPending, queueFirstAiTaskPrompt, readProductFlowCompleted } from '@/constants/productFlow'
@@ -265,6 +267,66 @@ describe('useAgentTaskWorkspace', () => {
     resolve({ success: true, approval: { grant: 'old-grant' } })
     await pending
     expect(apiMock.continueRun).not.toHaveBeenCalled()
+  })
+
+  it('locks conflicting controls in the mounted panel and unlocks only after authoritative readback', async () => {
+    const state = setup()
+    await state.workspace.refreshTasks()
+    const id = state.taskList.value[0].id
+    let release!: (value: unknown) => void
+    apiMock.pauseRun.mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+    apiMock.listTasks.mockResolvedValue({ success: true, data: [serverTask('paused')] })
+    const wrapper = mount(defineComponent({ setup: () => () => h(AgentTaskRuntimePanel, {
+      task: state.taskList.value[0], controlState: state.workspace.taskControlStates.value[id],
+      onPause: () => { void state.workspace.controlTask(id, 'pause') },
+    }) }), { global: { mocks: { $t: (key: string) => key } } })
+    const pause = wrapper.findAll('button').find(button => button.text() === 'chat.pauseTask')!
+    await pause.trigger('click')
+    expect(pause.attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('正在暂停')
+    await pause.trigger('click')
+    await state.workspace.controlTask(id, 'cancel')
+    expect(apiMock.pauseRun).toHaveBeenCalledTimes(1)
+    expect(apiMock.cancelRun).not.toHaveBeenCalled()
+    release({ success: true })
+    await flushPromises()
+    expect(state.taskList.value[0].status).toBe('paused')
+    expect(wrapper.text()).not.toContain('正在暂停')
+    expect(wrapper.findAll('button').find(button => button.text() === 'chat.resumeTask')!.attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('shows uncertain control failures and blocks another mutation until a successful status check', async () => {
+    const state = setup()
+    await state.workspace.refreshTasks()
+    const id = state.taskList.value[0].id
+    apiMock.cancelRun.mockRejectedValueOnce(new Error('503'))
+    await state.workspace.controlTask(id, 'cancel')
+    expect(state.workspace.taskControlStates.value[id]).toMatchObject({ needsVerification: true, error: expect.stringContaining('取消未确认成功') })
+    expect(state.workspace.taskSyncState.value.stale).toBe(true)
+    await state.workspace.controlTask(id, 'retry')
+    expect(apiMock.retryRun).not.toHaveBeenCalled()
+    await state.workspace.refreshTasks()
+    expect(state.workspace.taskControlStates.value[id].needsVerification).toBe(false)
+    expect(state.workspace.taskControlStates.value[id].error).toBe('')
+    expect(state.workspace.taskControlStates.value[id].message).toContain('已重新核对')
+  })
+
+  it('preserves the last verified snapshot on outage and does not label acknowledged control as applied', async () => {
+    const state = setup()
+    await state.workspace.refreshTasks()
+    const id = state.taskList.value[0].id
+    const lastVerifiedAt = state.workspace.taskSyncState.value.lastVerifiedAt
+    apiMock.listTasks.mockRejectedValue(new Error('503'))
+    apiMock.listRuns.mockRejectedValue(new Error('offline'))
+    await state.workspace.controlTask(id, 'pause')
+    expect(state.taskList.value[0].status).toBe('running')
+    expect(state.workspace.taskSyncState.value).toMatchObject({ stale: true, lastVerifiedAt, checking: false })
+    expect(state.workspace.taskControlStates.value[id].error).toContain('请求已提交，但当前结果无法核实')
+    expect(state.workspace.taskControlStates.value[id].message).toBeUndefined()
+    state.workspace.stop()
+    expect(state.workspace.taskControlStates.value).toEqual({})
+    expect(state.workspace.taskSyncState.value.lastVerifiedAt).toBe(0)
   })
 
 })

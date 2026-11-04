@@ -51,8 +51,12 @@ def complete_delivery_if_ready(ticket: CustomerServiceTicket, evidence: dict[str
         setattr(ticket, "decision_status", "approved")
         setattr(ticket, "closed_at", closed_at)
         evidence["delivered_at"] = closed_at.isoformat()
-        from modstore_server.customer_issue_delivery_contract import issue_resolution
+        from modstore_server.customer_issue_delivery_contract import (
+            issue_resolution,
+            repair_verification,
+        )
 
         resolution = issue_resolution(ticket, evidence)
         resolution.update(state="resolved", resolved_at=closed_at.isoformat())
+        resolution.update(repair_verification("delivery_runtime_receipt"))
         evidence["resolution"] = resolution

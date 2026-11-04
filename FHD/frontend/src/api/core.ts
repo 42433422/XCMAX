@@ -57,25 +57,40 @@ export function buildFullApiUrl(url: string): string {
  * 冷启动后首个变更请求（如登录 POST）前，须先有一次安全方法请求，后端 ``CSRFMiddleware``
  * 才会下发可读 ``csrf_token`` Cookie；否则 ``X-CSRF-Token`` 无法对齐 → 403「CSRF token missing」。
  */
-export async function primeCsrfCookie(): Promise<void> {
-  if (typeof window === 'undefined') return
-  const paths = ['/health', '/api/health']
-  for (let attempt = 0; attempt < 3; attempt++) {
-    for (const p of paths) {
-      try {
-        const r = await fetch(buildFullApiUrl(p), { method: 'GET', credentials: 'include' })
-        if (r.ok && readCsrfTokenFromCookie()) return
-      } catch {
-        /* 下一路径或重试 */
+export async function primeCsrfCookie(options: Pick<RequestOptions, 'signal' | 'timeoutMs'> = {}): Promise<void> {
+  options.signal?.throwIfAborted()
+  if (typeof window === 'undefined' || readCsrfTokenFromCookie()) return
+  const controller = new AbortController()
+  const timeoutMs = options.timeoutMs ?? 3_000
+  const abortFromCaller = () => controller.abort(options.signal?.reason)
+  options.signal?.addEventListener('abort', abortFromCaller, { once: true })
+  const timer = setTimeout(() => controller.abort(new ApiError(`请求超时（>${Math.ceil(timeoutMs / 1000)}s）`, 0, null)), timeoutMs)
+  let rejectOnAbort!: () => void
+  const aborted = new Promise<never>((_, reject) => {
+    rejectOnAbort = () => reject(controller.signal.reason)
+    controller.signal.addEventListener('abort', rejectOnAbort, { once: true })
+  })
+  try {
+    await Promise.race([aborted, (async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        for (const p of ['/health', '/api/health']) {
+          controller.signal.throwIfAborted()
+          try {
+            const response = await fetch(buildFullApiUrl(p), { method: 'GET', credentials: 'include', signal: controller.signal })
+            if (response.ok && readCsrfTokenFromCookie()) return
+          } catch (error) {
+            if (controller.signal.aborted) throw error
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 80))
+        controller.signal.throwIfAborted()
+        if (readCsrfTokenFromCookie()) return
       }
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 80))
-    if (readCsrfTokenFromCookie()) return
-  }
-  // Vite 代理时 Set-Cookie 常不落进当前页的 document.cookie，readCsrfTokenFromCookie 仍为空属常见现象。
-  // 登录/登出已由后端 CSRF 豁免；其它变更请求仍可能依赖 Cookie，需排查时再开 VITE_DEBUG_CSRF=1。
-  if (import.meta.env.DEV && import.meta.env.VITE_DEBUG_CSRF === '1') {
-    console.debug('[primeCsrfCookie] 无 csrf_token Cookie（可忽略若仅登录）。API_BASE=', getApiBase() || '(空)')
+    })()])
+  } finally {
+    clearTimeout(timer)
+    controller.signal.removeEventListener('abort', rejectOnAbort)
+    options.signal?.removeEventListener('abort', abortFromCaller)
   }
 }
 

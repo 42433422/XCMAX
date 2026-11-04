@@ -23,7 +23,7 @@ def test_business_db_specs_expose_read_and_write_contracts() -> None:
 
 def test_business_db_aliases_route_to_registered_service() -> None:
     with patch(
-        "app.services.tools_workflow_registered.execute_registered_workflow_tool",
+        "app.domain.shared_services.tools_workflow_registered.execute_registered_workflow_tool",
         return_value={"success": True},
     ) as execute:
         read_result = try_execute_business_db_tool("business_db_read", {"entity": "products"})

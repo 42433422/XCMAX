@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,9 @@ class Span:
             from opentelemetry import trace as _otel_trace
 
             tracer = _otel_trace.get_tracer("xcagi.neurobus")
-            self._otel_span = tracer.start_as_current_span(self.name).__enter__()
+            # start_span does not push a current-span context. start_as_current_span().__enter__
+            # without __exit__ retained every span on the context stack for the process lifetime.
+            self._otel_span = tracer.start_span(self.name)
         except ImportError:
             pass
 

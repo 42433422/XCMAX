@@ -56,6 +56,20 @@ describe('ValueStatsBar', () => {
     wrapper.unmount()
   })
 
+  it('登录失效后停止刷新并回到 —', async () => {
+    vi.useFakeTimers()
+    apiMock.getTaskRuntime.mockResolvedValueOnce(runtimeResponse(2))
+    const wrapper = mount(ValueStatsBar)
+    await vi.advanceTimersByTimeAsync(0)
+    apiMock.getTaskRuntime.mockRejectedValueOnce({ status: 401 })
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
+    expect(wrapper.text()).toContain('—')
+    const calls = apiMock.getTaskRuntime.mock.calls.length
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
+    expect(apiMock.getTaskRuntime).toHaveBeenCalledTimes(calls)
+    wrapper.unmount()
+  })
+
   it('接口失败静默降级为 —', async () => {
     apiMock.getTaskRuntime.mockRejectedValue(new Error('network down'))
     const wrapper = mount(ValueStatsBar)

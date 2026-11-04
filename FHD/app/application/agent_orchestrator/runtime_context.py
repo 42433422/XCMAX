@@ -12,13 +12,25 @@ class RuntimeContextOwnershipError(ValueError):
 def merge_runtime_context(run: AgentRun, updates: dict[str, Any] | None) -> dict[str, Any]:
     context = dict(run.metadata.get("runtime_context") or {})
     updates = dict(updates or {})
-    if "_mod_authorization" in updates:
-        if updates["_mod_authorization"] != context.get("_mod_authorization"):
-            raise RuntimeContextOwnershipError("不能更改任务的 Mod 授权范围")
-        updates.pop("_mod_authorization")
-    if "tenant_id" in updates:
-        if str(updates["tenant_id"] or "") != str(context.get("tenant_id") or ""):
-            raise RuntimeContextOwnershipError("不能更改任务的租户范围")
-        # Preserve the authenticated original's representation as well as value.
-        updates.pop("tenant_id")
+    for key in (
+        "_mod_authorization",
+        "_actor_authorization",
+        "mod_id",
+        "active_mod_id",
+        "user_id",
+        "actor_id",
+        "tenant_id",
+        "business_action_id",
+        "task_id",
+    ):
+        if key not in updates:
+            continue
+        original, requested = context.get(key), updates.pop(key)
+        matches = (
+            original == requested
+            if key.startswith("_")
+            else str(original or "") == str(requested or "")
+        )
+        if not matches:
+            raise RuntimeContextOwnershipError("不能更改任务的身份、租户或 Mod 授权范围")
     return {**context, **updates}

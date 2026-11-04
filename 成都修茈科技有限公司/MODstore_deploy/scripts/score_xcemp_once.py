@@ -36,8 +36,12 @@ def main() -> int:
             return 1
 
         mf = json.loads((pack / "manifest.json").read_text(encoding="utf-8"))
-        handlers = (mf.get("employee_config_v2") or {}).get("actions", {}).get("handlers") or []
-        vendor_convert = pack / "backend" / "vendor" / "word_full_extract" / "convert.py"
+        handlers = (mf.get("employee_config_v2") or {}).get("actions", {}).get(
+            "handlers"
+        ) or []
+        vendor_convert = (
+            pack / "backend" / "vendor" / "word_full_extract" / "convert.py"
+        )
         checks = [
             {"id": "manifest", "ok": True, "message": "manifest 可读"},
             {
@@ -81,7 +85,9 @@ def main() -> int:
         for p in sorted(pack.rglob("*")):
             if p.is_file():
                 print(f"  - {p.relative_to(pack).as_posix()}")
-        print(f"rule_spec.json: {'有' if (pack / 'rule_spec.json').is_file() else '无'}")
+        print(
+            f"rule_spec.json: {'有' if (pack / 'rule_spec.json').is_file() else '无'}"
+        )
         print(f"vendor convert: {'有' if vendor_convert.is_file() else '无'}")
         print(f"handlers 契约检查: {h_ok} — {h_msg[:200] if h_msg else ''}")
         print()

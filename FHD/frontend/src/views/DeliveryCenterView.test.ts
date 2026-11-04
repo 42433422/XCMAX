@@ -133,12 +133,43 @@ describe('DeliveryCenterView', () => {
     appConfirm.mockResolvedValue(true)
   })
 
+  it.each(['rework', 'delivered', 'future_stage', ''])('explains the current stage and next step without inventing progress (%s)', async stage => {
+    const ticket = structuredClone(delivery)
+    ticket.custom_delivery.stage = stage; ticket.custom_delivery.stage_label = ''
+    listCustomDeliveries.mockResolvedValue({ items: [ticket] })
+    const wrapper = mount(DeliveryCenterView); await flushPromises()
+    expect(wrapper.get('.delivery-next-step').text()).toContain('下一步：')
+    if (stage === 'rework') expect(wrapper.get('.delivery-next-step').text()).toContain('核对本轮失败原因')
+    else if (stage === 'delivered') expect(wrapper.get('.delivery-next-step').text()).toContain('客户验收回执')
+    else { expect(wrapper.get('.delivery-next-step').text()).toContain('阶段待核实'); expect(wrapper.find('[aria-current="step"]').exists()).toBe(false) }
+    wrapper.unmount()
+  })
+
+  it.each([[true, true, true], [true, true, false], [false, false, true]])(
+    'separates commerce %s, acceptance %s and artifacts %s', async (commerce, accepted, artifacts) => {
+      const ticket = structuredClone(delivery)
+      ticket.custom_delivery.commerce_ready = commerce
+      ticket.custom_delivery.gate_ok = accepted
+      if (!artifacts) ticket.custom_delivery.artifacts = []
+      listCustomDeliveries.mockResolvedValue({ items: [ticket] })
+      const wrapper = mount(DeliveryCenterView)
+      await flushPromises()
+      const panel = wrapper.get('.delivery-commerce')
+      expect(panel.text()).toContain(commerce ? '商务已就绪' : '商务未就绪')
+      expect(panel.text()).toContain(accepted && artifacts ? '验收通过且已有产物' : '待验收或缺少产物，不可安装')
+      expect(panel.text()).not.toContain('可进入客户安装')
+    },
+  )
+
   it('renders the real customer, quality gate, artifact, and receipt state', async () => {
+    const ticket = structuredClone(delivery)
+    ticket.custom_delivery.pricing_mode = 'post_delivery_addon'
+    ticket.custom_delivery.pricing_label = '新增报价与付款'
+    listCustomDeliveries.mockResolvedValue({ items: [ticket] })
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
     expect(wrapper.text()).toContain('客户交付中心')
     expect(wrapper.text()).toContain('企业客户交付台账')
-    expect(wrapper.text()).toContain('无套餐企业')
     expect(wrapper.text()).toContain('未绑定购买套餐，不冒充已购买')
     expect(wrapper.findAll('.enterprise-customer-roster__grid article')).toHaveLength(3)
     const enterpriseCard = wrapper.findAll('.delivery-stats article').find((card) => card.text().includes('企业用户'))
@@ -149,19 +180,20 @@ describe('DeliveryCenterView', () => {
     expect(wrapper.text()).toContain('0/1 已安装')
     expect(wrapper.text()).toContain('待客户安装回执')
     expect(wrapper.text()).toContain('购买账户标准交付台账')
-    expect(wrapper.text()).toContain('标准交付企业')
+    const timeline = wrapper.findAll('.delivery-timeline li')
+    expect(timeline).toHaveLength(5)
+    expect(timeline[0].text()).toContain('需求受理新增报价与付款')
+    expect(wrapper.text()).toContain('本次执行步骤1 项')
     expect(wrapper.text()).toContain('企业成长版')
     expect(wrapper.text()).toContain('安装并首次登录完成')
     expect(wrapper.text()).toContain('当前版本 1.0.0.1')
     expect(wrapper.text()).toContain('Windows')
     expect(wrapper.text()).not.toContain('当前版本 1.0.0.2')
     expect(wrapper.get('.proof-pill.is-version').attributes('title')).toContain('构建 customer-build-sha')
-    expect(wrapper.text()).toContain('首次交付内含，交付前开发免费')
+    expect(wrapper.text()).toContain('新增报价与付款')
     expect(wrapper.text()).not.toContain('权益快速通道')
     expect(wrapper.text()).not.toContain('终端同源快捷模式')
     expect(wrapper.text()).toContain('¥99 体验账户交付台账')
-    expect(wrapper.text()).toContain('体验测试用户')
-    expect(wrapper.text()).toContain('30 天全功能体验')
     expect(wrapper.text()).toContain('30 天体验')
     expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
     expect(listTrialDeliveries).toHaveBeenCalledTimes(1)
@@ -233,4 +265,17 @@ describe('DeliveryCenterView', () => {
     expect(decideCustomDelivery).toHaveBeenCalledWith(9, 'rework', '颜色比对用例缺失')
   })
 
+})
+
+it('explicitly selects the repaired main source on the original Sunbird delivery', async () => {
+  listCustomDeliveries.mockResolvedValue({ items: [{ ...delivery, id: 34, user_id: 29,
+    custom_delivery: { ...delivery.custom_delivery, kind: 'module', suggested_id: 'sunbird-attendance-custom', stage: 'rework' },
+  }] })
+  const wrapper = mount(DeliveryCenterView)
+  await flushPromises()
+  await wrapper.get('.delivery-actions__controls input[type="checkbox"]').setValue(true)
+  await wrapper.get('.delivery-actions__controls input[type="text"]').setValue('原单使用主线已修复的SDK前端与业务探针返工')
+  await wrapper.findAll('button').find(button => button.text().includes('发起返工'))!.trigger('click')
+  await flushPromises()
+  expect(decideCustomDelivery).toHaveBeenCalledWith(34, 'rework', '原单使用主线已修复的SDK前端与业务探针返工', 'versioned_main')
 })

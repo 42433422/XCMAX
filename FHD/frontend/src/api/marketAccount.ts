@@ -1,9 +1,45 @@
 import { apiFetch } from '@/utils/apiBase'
+import { captureAuthSession } from '@/utils/authSessionCache'
+import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
 /** 与 ModelPaymentView 共用：修茈市场访问令牌（勿提交到版本库）。 */
 export const LS_MARKET_ACCESS_TOKEN = 'xcagi_market_access_token'
 export const LS_MARKET_REFRESH_TOKEN = 'xcagi_market_refresh_token'
 export const LS_MARKET_USER_JSON = 'xcagi_market_user_json'
+const LS_MARKET_TOKEN_OWNER = 'xcagi_market_token_owner'
+export const MARKET_ACCOUNT_CACHE_KEYS = ['xcagi_market_overview_cache', 'xcagi_market_llm_catalog_cache'] as const
+
+/** The runtime profile is authoritative; a tenant alone cannot identify a wallet. */
+export function marketAccountOwner(): string | null {
+  const identity = getRuntimeTenantStorageScopeInput()
+  if (!identity) return null
+  const ids = [identity.marketUserId, identity.localUserId].map(id => id == null ? null : String(id).trim() || null)
+  const username = String(identity.marketUsername || '').trim()
+  return ids.some(Boolean) || username
+    ? JSON.stringify([identity.accountKind, identity.tenantId, ...ids, username]) : null
+}
+
+export function readCurrentMarketAccessToken(): string {
+  try {
+    const owner = marketAccountOwner()
+    return owner && window.localStorage.getItem(LS_MARKET_TOKEN_OWNER) === owner
+      ? (window.localStorage.getItem(LS_MARKET_ACCESS_TOKEN) || '').trim() : ''
+  } catch { return '' }
+}
+
+/** Explicit account transitions discard credentials and account-owned wallet snapshots. */
+export function clearMarketCredentials(): void {
+  if (typeof window === 'undefined') return
+  try {
+    for (const key of [LS_MARKET_ACCESS_TOKEN, LS_MARKET_REFRESH_TOKEN, LS_MARKET_USER_JSON, LS_MARKET_TOKEN_OWNER]) window.localStorage.removeItem(key)
+    for (let index = window.localStorage.length - 1; index >= 0; index--) {
+      const key = window.localStorage.key(index)
+      if (key && MARKET_ACCOUNT_CACHE_KEYS.some(base => key === base || key.startsWith(`${base}:`))) window.localStorage.removeItem(key)
+    }
+  } catch { /* Storage may be unavailable; never log credentials. */ }
+}
+
+const handoffOwners = new WeakMap<MarketAuthResult, () => boolean>()
 
 export type MarketUserProfile = {
   id?: number | string
@@ -230,38 +266,52 @@ export async function fetchMarketLlmCatalog(authorization = '', refresh = false)
   return j.data
 }
 
-/** 从当前 FHD 会话取出服务端绑定的修茈 JWT（登录时已写入进程内映射），仅用于写入本地 localStorage。跨站跳转一律走一次性 handoff code（见 createMarketBrowserHandoff），禁止在 URL 中携带可复用令牌。 */
-export async function fetchSessionMarketHandoff(): Promise<MarketAuthResult | null> {
-  const res = await apiFetch('/api/market/session-handoff', { timeoutMs: 8_000 })
-  const j = (await res.json()) as {
-    success?: boolean
-    message?: string
-    data?: {
-      market_access_token?: string
-      market_refresh_token?: string
-      market_base_url?: string
+/** Read a session-owned credential handoff; callers must explicitly commit it after their own lifecycle check. */
+export async function fetchSessionMarketHandoff(options: { signal?: AbortSignal } = {}): Promise<MarketAuthResult | null> {
+  const sessionCurrent = captureAuthSession()
+  const current = () => sessionCurrent() && !options.signal?.aborted
+  if (!current()) return null
+  try {
+    const res = await apiFetch('/api/market/session-handoff', { timeoutMs: 8_000, ...options })
+    if (!current()) return null
+    const j = (await res.json()) as {
+      success?: boolean
+      message?: string
+      data?: {
+        market_access_token?: string
+        market_refresh_token?: string
+        market_base_url?: string
+      }
     }
-  }
-  if (!res.ok || !j.success || !j.data?.market_access_token) {
-    return null
-  }
-  const refresh = typeof j.data.market_refresh_token === 'string' ? j.data.market_refresh_token.trim() : ''
-  if (refresh && typeof window !== 'undefined') {
-    window.localStorage.setItem(LS_MARKET_REFRESH_TOKEN, refresh)
-  }
-  return {
-    token: j.data.market_access_token.trim(),
-    market_base_url: String(j.data.market_base_url || ''),
-    refresh_token: refresh || undefined,
+    if (!current() || !res.ok || !j.success || !j.data?.market_access_token) return null
+    const refresh = typeof j.data.market_refresh_token === 'string' ? j.data.market_refresh_token.trim() : ''
+    const handoff = {
+      token: j.data.market_access_token.trim(),
+      market_base_url: String(j.data.market_base_url || ''),
+      refresh_token: refresh || undefined,
+    }
+    handoffOwners.set(handoff, current)
+    return handoff
+  } catch (error) {
+    if (!current()) return null
+    throw error
   }
 }
 
 /** 将服务端会话绑定的修茈令牌写入 localStorage（启动时与登录后调用）。 */
-export function persistMarketTokensFromHandoff(handoff: MarketAuthResult | null): void {
-  if (typeof window === 'undefined' || !handoff?.token) return
-  window.localStorage.setItem(LS_MARKET_ACCESS_TOKEN, handoff.token)
-  if (handoff.refresh_token) {
-    window.localStorage.setItem(LS_MARKET_REFRESH_TOKEN, handoff.refresh_token)
+export function persistMarketTokensFromHandoff(handoff: MarketAuthResult | null): boolean {
+  if (typeof window === 'undefined' || !handoff?.token || handoffOwners.get(handoff)?.() === false) return false
+  try {
+    window.localStorage.setItem(LS_MARKET_ACCESS_TOKEN, handoff.token)
+    const owner = marketAccountOwner()
+    if (owner) window.localStorage.setItem(LS_MARKET_TOKEN_OWNER, owner)
+    else window.localStorage.removeItem(LS_MARKET_TOKEN_OWNER)
+    if (handoff.refresh_token) window.localStorage.setItem(LS_MARKET_REFRESH_TOKEN, handoff.refresh_token)
+    else window.localStorage.removeItem(LS_MARKET_REFRESH_TOKEN)
+    return true
+  } catch {
+    clearMarketCredentials()
+    return false
   }
 }
 
@@ -281,10 +331,7 @@ export async function applyMarketTokensAfterFhdLogin(raw: Record<string, unknown
   const access = readTokenField(raw, 'market_access_token') || readTokenField(data, 'market_access_token')
   const refresh = readTokenField(raw, 'market_refresh_token') || readTokenField(data, 'market_refresh_token')
   if (access) {
-    window.localStorage.setItem(LS_MARKET_ACCESS_TOKEN, access)
-    if (refresh) {
-      window.localStorage.setItem(LS_MARKET_REFRESH_TOKEN, refresh)
-    }
+    persistMarketTokensFromHandoff({ token: access, refresh_token: refresh || undefined, market_base_url: '' })
     return
   }
   const handoff = await fetchSessionMarketHandoff()

@@ -235,11 +235,19 @@ class TestAcceptanceEndpoint:
             _report("darwin", other_sha, "failed")
 
             accepted = get_release_acceptance(
-                version=version, channel="stable", build_sha=released_sha, db=db, user=admin
+                version=version,
+                channel="stable",
+                build_sha=released_sha,
+                db=db,
+                user=admin,
             )
             assert accepted["verdict"] == "accepted", "其它构建的失败不得污染发布构建"
 
             only_other = get_release_acceptance(
-                version=version, channel="stable", build_sha=other_sha, db=db, user=admin
+                version=version,
+                channel="stable",
+                build_sha=other_sha,
+                db=db,
+                user=admin,
             )
             assert only_other["verdict"] == "rejected"

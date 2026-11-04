@@ -20,7 +20,7 @@ async def neuro_migration_smoke() -> dict[str, Any]:
     返回 Neuro 栈与 Domain 注册、反射弧、Application 挂钩等自检信息。
     """
     from app.neuro_bus.bus import get_neuro_bus
-    from app.neuro_bus.domains.base import get_domain_registry
+    from app.neuro_bus.domains.domains_base import get_domain_registry
     from app.neuro_bus.integrations.intent_integration import (
         is_neuro_stack_enabled,
         try_neuro_reflex_intent,

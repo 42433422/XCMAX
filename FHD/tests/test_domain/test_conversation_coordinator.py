@@ -1,4 +1,4 @@
-"""Tests for app.domain.services.conversation.coordinator — UnifiedConversationCoordinator + SlotValidator."""
+"""Tests for app.domain.conversation.services.coordinator — UnifiedConversationCoordinator + SlotValidator."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.domain.services.conversation.chat_tool_intent import tiered_confidence
-from app.domain.services.conversation.coordinator import (
+from app.domain.conversation.services.chat_tool_intent import tiered_confidence
+from app.domain.conversation.services.coordinator import (
     IntentResult,
     PendingIntent,
     ProcessingAction,
@@ -320,7 +320,7 @@ class TestTieredConfidence:
     def test_recognize_intent_end_to_end_rule_hit(self):
         """_recognize_intent 用真实规则管道：高优先级命中 → 0.85"""
         coord = UnifiedConversationCoordinator()
-        with patch("app.services.intent_service.recognize_intents") as mock_rule:
+        with patch("app.domain.shared_services.intent_service.recognize_intents") as mock_rule:
             mock_rule.return_value = {
                 "primary_intent": "shipment_generate",
                 "tool_key": "shipment_generate",
@@ -336,7 +336,7 @@ class TestTieredConfidence:
     def test_recognize_intent_end_to_end_no_hit(self):
         """未命中且非反射 → 置信度 0.0（不再硬编码 0.8）"""
         coord = UnifiedConversationCoordinator()
-        with patch("app.services.intent_service.recognize_intents") as mock_rule:
+        with patch("app.domain.shared_services.intent_service.recognize_intents") as mock_rule:
             mock_rule.return_value = {
                 "primary_intent": None,
                 "tool_key": None,
@@ -449,14 +449,14 @@ class TestNegationWriteGuard:
 
 class TestGetConversationCoordinator:
     def test_returns_instance(self):
-        with patch("app.domain.services.conversation.coordinator._coordinator", None):
+        with patch("app.domain.conversation.services.coordinator._coordinator", None):
             with patch(
-                "app.domain.services.conversation.coordinator.UnifiedConversationCoordinator"
+                "app.domain.conversation.services.coordinator.UnifiedConversationCoordinator"
             ) as MockCls:
                 mock_inst = MagicMock()
                 MockCls.return_value = mock_inst
                 # Reset module-level singleton
-                import app.domain.services.conversation.coordinator as mod
+                import app.domain.conversation.services.coordinator as mod
 
                 mod._coordinator = None
                 result = get_conversation_coordinator()

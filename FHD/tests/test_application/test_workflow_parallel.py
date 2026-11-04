@@ -8,7 +8,7 @@ import time
 import pytest
 
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 
 

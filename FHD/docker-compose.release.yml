@@ -1,3 +1,4 @@
+# experimental — 非签约部署主路径（主路径=桌面私有化 + 现网单 CVM 滚动；见 FHD/docs/architecture/DEPLOY_PATH_SSOT.md / ADR-route-a）。本文件保留供容器实验；阶段三前不删、不强制迁 extras。
 # Production release images — requires .env: SECRET_KEY, REDIS_PASSWORD
 
 services:

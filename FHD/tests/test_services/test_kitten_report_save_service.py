@@ -1,4 +1,4 @@
-"""Tests for app.services.kitten_report.save_service."""
+"""Tests for app.domain.shared_services.kitten_report.save_service."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.kitten_report.save_service import AnalysisSaveService
+from app.domain.shared_services.kitten_report.save_service import AnalysisSaveService
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""Branch-coverage tests (round 2) for app.services.tools_workflow_registered.
+"""Branch-coverage tests (round 2) for app.domain.shared_services.tools_workflow_registered.
 
 Targets the missing branches not covered by the existing test_tools_workflow_registered*.py
 files. Focuses on:
@@ -33,7 +33,7 @@ import pytest
 # app.services.get_products_service (circular).
 # Importing app.application first ensures the chain resolves cleanly.
 import app.application  # noqa: F401
-from app.services.tools_workflow_registered import (
+from app.domain.shared_services.tools_workflow_registered import (
     _execute_excel_import_records,
     _normalize_business_db_entity,
     _ocr_artifact_payload,
@@ -114,7 +114,7 @@ class TestBusinessEventRouter:
         ):
             result = _registered_router_business_event(
                 "shipment_create",
-                {"unit_name": "Co", "items": [{"id": 1}]},
+                {"unit_name": "Co", "items": [{"id": 1, "quantity_kg": 2}]},
                 {},
                 "admin",
                 "",
@@ -127,7 +127,9 @@ class TestBusinessEventRouter:
             "app.neuro_bus.application_neuro_bridge.publish_neuro_event",
             return_value=False,
         ):
-            result = _registered_router_business_event("shipment_create", {}, {}, "admin", "")
+            result = _registered_router_business_event(
+                "shipment_create", {"items": [{"quantity_kg": 2}]}, {}, "admin", ""
+            )
         assert result["success"] is False
         assert result["published"] is False
 
@@ -714,9 +716,17 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_write_customers_ensure_exists(self):
-        with patch("app.application.get_customer_app_service") as mock_get:
-            mock_get.return_value.match_purchase_unit.return_value = None
-            mock_get.return_value.create.return_value = {"success": True}
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with tenant_scope(1), patch("app.application.get_customer_app_service") as mock_get:
+            mock_get.return_value.lookup_purchase_unit_for_ensure.return_value = {
+                "status": "absent"
+            }
+            mock_get.return_value.create.return_value = {"success": True, "data": {"id": 9}}
+            mock_get.return_value.get_by_id.return_value = {
+                "success": True,
+                "data": {"id": 9, "customer_name": "X"},
+            }
             result = _registered_router_business_db(
                 "write",
                 {
@@ -728,13 +738,13 @@ class TestBusinessDbRouter:
                 "admin",
                 "",
             )
-        assert result["success"] is True
+        assert result["success"] is True, result
 
     def test_write_customers_upsert(self):
         with (
             patch("app.application.get_customer_app_service") as mock_get,
             patch(
-                "app.services.tools_workflow_registered._business_db_target_candidates",
+                "app.domain.shared_services.tools_workflow_registered._business_db_target_candidates",
                 return_value=([{"id": 9, "customer_name": "X"}], "customer_name"),
             ),
         ):
@@ -771,7 +781,7 @@ class TestBusinessDbRouter:
         with (
             patch("app.application.get_customer_app_service") as mock_get,
             patch(
-                "app.services.tools_workflow_registered._business_db_target_candidates",
+                "app.domain.shared_services.tools_workflow_registered._business_db_target_candidates",
                 return_value=([], "customer_name"),
             ),
         ):
@@ -867,7 +877,7 @@ class TestBusinessDbRouter:
             patch("app.bootstrap.get_shipment_app_service") as mock_get,
             patch("app.infrastructure.tenant_scope.tenant_id_for_write", return_value=1),
             patch(
-                "app.services.tools_workflow_registered.prepare_business_db_write_target",
+                "app.domain.shared_services.tools_workflow_registered.prepare_business_db_write_target",
                 return_value={
                     "success": True,
                     "payload": {"id": 1, "changes": {"status": "pending"}},
@@ -1104,7 +1114,7 @@ class TestMemoryV2Router:
         assert "user_id" in result["message"]
 
     def test_propose_candidate_missing_key(self):
-        with patch("app.services.user_memory_service.get_user_memory_service"):
+        with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
                 "propose_candidate", {"user_id": "u1", "value": "v"}, {}, "admin", ""
             )
@@ -1112,7 +1122,7 @@ class TestMemoryV2Router:
         assert "key" in result["message"]
 
     def test_propose_candidate_missing_value(self):
-        with patch("app.services.user_memory_service.get_user_memory_service"):
+        with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
                 "propose_candidate", {"user_id": "u1", "key": "k"}, {}, "admin", ""
             )
@@ -1120,7 +1130,7 @@ class TestMemoryV2Router:
         assert "value" in result["message"]
 
     def test_propose_candidate_bad_confidence(self):
-        with patch("app.services.user_memory_service.get_user_memory_service"):
+        with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
                 "propose_candidate",
                 {"user_id": "u1", "key": "k", "value": "v", "confidence": "abc"},
@@ -1135,7 +1145,7 @@ class TestMemoryV2Router:
         mock_svc = MagicMock()
         mock_svc.propose_memory_candidate.side_effect = ValueError("bad type")
         with patch(
-            "app.services.user_memory_service.get_user_memory_service",
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
             return_value=mock_svc,
         ):
             result = _registered_router_memory_v2(
@@ -1152,7 +1162,7 @@ class TestMemoryV2Router:
         mock_svc = MagicMock()
         mock_svc.propose_memory_candidate.return_value = {"success": True}
         with patch(
-            "app.services.user_memory_service.get_user_memory_service",
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
             return_value=mock_svc,
         ):
             result = _registered_router_memory_v2(
@@ -1165,7 +1175,7 @@ class TestMemoryV2Router:
         assert result["success"] is True
 
     def test_missing_memory_id(self):
-        with patch("app.services.user_memory_service.get_user_memory_service"):
+        with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2("confirm", {"user_id": "u1"}, {}, "admin", "")
         assert result["success"] is False
         assert "memory_id" in result["message"]
@@ -1174,7 +1184,7 @@ class TestMemoryV2Router:
         mock_svc = MagicMock()
         mock_svc.confirm_memory_candidate.return_value = {"success": True}
         with patch(
-            "app.services.user_memory_service.get_user_memory_service",
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
             return_value=mock_svc,
         ):
             result = _registered_router_memory_v2(
@@ -1190,7 +1200,7 @@ class TestMemoryV2Router:
         mock_svc = MagicMock()
         mock_svc.reject_memory_candidate.return_value = {"success": True}
         with patch(
-            "app.services.user_memory_service.get_user_memory_service",
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
             return_value=mock_svc,
         ):
             result = _registered_router_memory_v2(
@@ -1206,7 +1216,7 @@ class TestMemoryV2Router:
         mock_svc = MagicMock()
         mock_svc.correct_memory.return_value = {"success": True}
         with patch(
-            "app.services.user_memory_service.get_user_memory_service",
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
             return_value=mock_svc,
         ):
             result = _registered_router_memory_v2(
@@ -1222,7 +1232,7 @@ class TestMemoryV2Router:
         mock_svc = MagicMock()
         mock_svc.delete_memory.return_value = {"success": True}
         with patch(
-            "app.services.user_memory_service.get_user_memory_service",
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
             return_value=mock_svc,
         ):
             result = _registered_router_memory_v2(
@@ -1235,7 +1245,7 @@ class TestMemoryV2Router:
         assert result["success"] is True
 
     def test_unknown_action(self):
-        with patch("app.services.user_memory_service.get_user_memory_service"):
+        with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
                 "fly", {"user_id": "u1", "memory_id": "m1"}, {}, "admin", ""
             )
@@ -1864,7 +1874,7 @@ class TestExcelImportRouter:
         with (
             patch("app.application.get_ai_chat_app_service") as mock_get,
             patch(
-                "app.services.tools_workflow_registered._execute_excel_import_records",
+                "app.domain.shared_services.tools_workflow_excel_ocr_ops._execute_excel_import_records",
                 return_value={"success": True},
             ) as mock_exec,
         ):
@@ -1877,6 +1887,7 @@ class TestExcelImportRouter:
                 "execute_import", {"pending_import_id": "x1"}, {}, "admin", ""
             )
         assert result["success"] is True
+        mock_exec.assert_called_once_with([{"unit_name": "Co"}])
         # The pending import should have been popped
         assert "x1" not in pending
 
@@ -1888,13 +1899,14 @@ class TestExcelImportRouter:
 
     def test_import_records_success(self):
         with patch(
-            "app.services.tools_workflow_registered._execute_excel_import_records",
+            "app.domain.shared_services.tools_workflow_excel_ocr_ops._execute_excel_import_records",
             return_value={"success": True},
-        ):
+        ) as mock_exec:
             result = _registered_router_excel_import(
                 "import_records", {"records": [{"unit_name": "Co"}]}, {}, "admin", ""
             )
         assert result["success"] is True
+        mock_exec.assert_called_once_with([{"unit_name": "Co"}])
 
     def test_unknown_action(self):
         result = _registered_router_excel_import("fly", {}, {}, "admin", "")
@@ -1954,7 +1966,9 @@ class TestExecuteExcelImportRecords:
             result = _execute_excel_import_records(
                 [{"unit_name": "Co", "product_name": "P1", "model_number": "M1", "unit_price": 1.0}]
             )
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["imported_count"] == 0
+        mock_products.return_value.create_product.assert_not_called()
 
     def test_import_exception(self):
         with patch("app.bootstrap.get_products_service", side_effect=RuntimeError("boom")):

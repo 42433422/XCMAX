@@ -1,4 +1,4 @@
-"""Extended tests for app.services.intent_trainer — data loading, splitting, dataset, compute_metrics."""
+"""Extended tests for app.domain.shared_services.intent_trainer — data loading, splitting, dataset, compute_metrics."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.intent_trainer import (
+from app.domain.shared_services.intent_trainer import (
     HAS_YAML,
     ID_TO_LABEL,
     INTENT_LABELS,

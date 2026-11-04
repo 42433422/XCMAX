@@ -23,8 +23,9 @@ from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._exception_policy import BOUNDARY_ERRORS
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk._sync.http import SyncHttpClient
-from langgraph_sdk.schema import QueryParamTypes
+from langgraph_sdk.schema import LangSmithTracing, QueryParamTypes
 from langgraph_sdk.stream.decoders import (
     DataDecoder,
     Decoder,
@@ -195,7 +196,7 @@ class _SyncAgentModule:
             query_params.update(dict(params))
         request_headers = {**self._owner._headers, **dict(headers or {})}
         return self._owner._http.get(
-            f"/assistants/{self._owner.assistant_id}/graph",
+            f"/assistants/{_quote_path_param(self._owner.assistant_id)}/graph",
             params=query_params,
             headers=request_headers or None,
         )
@@ -216,6 +217,7 @@ class SyncRunModule:
         input: Any = None,
         config: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
     ) -> dict[str, Any]:
         """Send `run.start` to the server. Returns the result (`{"run_id": ...}`)."""
         params: dict[str, Any] = {"assistant_id": self._owner.assistant_id}
@@ -225,6 +227,8 @@ class SyncRunModule:
             params["config"] = config
         if metadata is not None:
             params["metadata"] = metadata
+        if langsmith_tracing is not None:
+            params["langsmith_tracer"] = langsmith_tracing
         result = self._owner._send_command("run.start", params)
         self._owner._run_seen = True
         controller = self._owner._controller
@@ -1550,7 +1554,7 @@ class SyncThreadStream:
     def _fetch_state(self) -> dict[str, Any]:
         """Fetch the current thread state from the REST endpoint."""
         return self._http.get(
-            f"/threads/{self.thread_id}/state",
+            f"/threads/{_quote_path_param(self.thread_id)}/state",
             headers=self._headers or None,
         )
 

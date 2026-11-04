@@ -6,7 +6,7 @@
 
 from typing import Any, cast
 
-from app.services.printer_service import PrinterService
+from app.domain.shared_services.printer_service import PrinterService
 
 # Avoid importing from services.__init__ to prevent circular imports
 # get_printer_service is defined in services/__init__.py

@@ -717,7 +717,7 @@ def test_execute_planner_workflow_tool_employee_pack_hit() -> None:
             return_value=(None, None),
         ),
         patch(
-            "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+            "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
             return_value=emp_raw,
         ),
         patch(
@@ -737,7 +737,7 @@ def test_execute_planner_workflow_tool_employee_pack_raises_skips_to_host() -> N
             return_value=(None, None),
         ),
         patch(
-            "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+            "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
             side_effect=RuntimeError("emp runner down"),
         ),
         patch(
@@ -761,7 +761,7 @@ def test_execute_planner_workflow_tool_falls_to_host_workflow() -> None:
             return_value=(None, None),
         ),
         patch(
-            "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+            "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
             return_value=None,
         ),
         patch(

@@ -2,15 +2,22 @@ import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import agentRunsApi from '@/api/agentRuns'
+import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import type { AgentRun, AgentTaskRuntime, AgentTaskSummary } from '@/api/agentRuns'
 import { buildFullApiUrl } from '@/api/core'
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled'])
+let sessionUnauthorizedBound = false
 type TaskControlAction = 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
   return '工作区列表暂时不可用'
+}
+
+function isUnauthorized(error: unknown): boolean {
+  const status = Number((error as { status?: number } | null)?.status || 0)
+  return status === 401 || status === 403
 }
 
 export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
@@ -27,6 +34,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   let reconnectTimer: number | null = null
   let fallbackTimer: number | null = null
   let started = false
+  let authPaused = false
   let scopeVersion = 0
   let detailRequestVersion = 0
 
@@ -66,6 +74,10 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
       error.value = ''
     } catch (reason) {
       if (requestedScopeVersion !== scopeVersion) return
+      if (isUnauthorized(reason)) {
+        pauseForLoggedOutSession()
+        return
+      }
       error.value = errorMessage(reason)
     } finally {
       if (requestedScopeVersion === scopeVersion) loading.value = false
@@ -135,13 +147,8 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     if (requestedScopeVersion !== scopeVersion) return
     const runId = activeRunOf(task)?.run_id || task.active_run_id
     if (!runId) throw new Error('工作区当前没有可控制的运行')
-    if (action === 'approve') {
-      const snapshot = await agentRunsApi.getRun(runId)
-      if (requestedScopeVersion !== scopeVersion) return
-      const grant = snapshot.approval?.grant
-      if (!grant) throw new Error('任务当前没有可用的审批凭证')
-      await agentRunsApi.continueRun(runId, { approval_grant: grant })
-    } else if (action === 'pause') await agentRunsApi.pauseRun(runId)
+    if (action === 'approve') await approveRunWithFreshGrant(runId, { isCurrent: () => requestedScopeVersion === scopeVersion })
+    else if (action === 'pause') await agentRunsApi.pauseRun(runId)
     else if (action === 'cancel') await agentRunsApi.cancelRun(runId)
     else if (action === 'resume') await agentRunsApi.resumeRun(runId)
     else await agentRunsApi.retryRun(runId)
@@ -152,6 +159,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     if (!id || actionPending.value) return
     const requestedScopeVersion = scopeVersion
     actionPending.value = action
+    error.value = ''
     try {
       const response = await agentRunsApi.getTask(id)
       if (requestedScopeVersion !== scopeVersion) return
@@ -225,6 +233,10 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
         error.value = '任务快照格式无效'
       }
     })
+    stream.addEventListener('stream.unauthorized', () => {
+      if (!isCurrent()) return
+      pauseForLoggedOutSession()
+    })
     stream.addEventListener('stream.closed', () => {
       if (!isCurrent()) return
       connected.value = false
@@ -238,16 +250,32 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     }
   }
 
+  function pauseForLoggedOutSession(): void {
+    if (authPaused) return
+    authPaused = true
+    error.value = ''
+    tasks.value = []
+    stop()
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('xcagi:session-unauthorized'))
+    }
+  }
+
   function scheduleReconnect(): void {
-    if (!started || reconnectTimer !== null || typeof window === 'undefined') return
+    if (!started || authPaused || reconnectTimer !== null || typeof window === 'undefined') return
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = null
       connectStream()
     }, 1500)
   }
 
+  function resumeAfterLogin(): void {
+    authPaused = false
+    start()
+  }
+
   function start(): void {
-    if (started) return
+    if (started || authPaused) return
     started = true
     void refresh()
     connectStream()
@@ -281,6 +309,11 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     if (shouldRestart) start()
   }
 
+  if (typeof window !== 'undefined' && !sessionUnauthorizedBound) {
+    sessionUnauthorizedBound = true
+    window.addEventListener('xcagi:session-unauthorized', () => pauseForLoggedOutSession())
+  }
+
   return {
     tasks,
     selectedTask,
@@ -304,6 +337,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     refresh,
     refreshDetail,
     restartForScope,
+    resumeAfterLogin,
     showTaskList,
     start,
     stop,

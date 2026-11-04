@@ -144,7 +144,7 @@ class TestSessionMetaForResponse:
         # module load, so patch the binding in routes, not the origin module;
         # otherwise the real fn runs and hits the DB with a MagicMock sid.
         with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value=None
+            "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request", return_value=None
         ):
             result = auth_mod._session_meta_for_response(req)
         assert result == {}
@@ -154,7 +154,7 @@ class TestSessionMetaForResponse:
         user = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid1",
             ),
             patch(
@@ -169,7 +169,7 @@ class TestSessionMetaForResponse:
         req = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid1",
             ),
             patch(
@@ -184,7 +184,7 @@ class TestSessionMetaForResponse:
         req = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid1",
             ),
             patch(

@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 from sqlalchemy.exc import IntegrityError
 
+from modstore_server.cred_vault import get_credential
 from modstore_server.db.mac_control import MacControlObservation
 from modstore_server.deploy_context import health_payload
 from modstore_server.mac_control_handoff import source_receipt
@@ -20,8 +21,11 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 
 class GitHubEvidence:
     def __init__(self):
-        token = os.environ.get("MODSTORE_MAC_CONTROL_GITHUB_TOKEN") or os.environ.get(
-            "GITHUB_TOKEN"
+        token = get_credential(
+            "MODSTORE_MAC_CONTROL_GITHUB_TOKEN",
+            task_id="mac-control",
+            purpose="github_delivery_evidence",
+            aliases=("GITHUB_TOKEN",),
         )
         self.client = httpx.Client(
             base_url=f"https://api.github.com/repos/{REPOSITORY}/",
@@ -183,12 +187,23 @@ def delivery_trace(db, task, customer=None):
         try:
             observed = release_facts(receipt, github, health_payload())
             error = observed.get("error", "")
-        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        except (
+            httpx.HTTPError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+        ) as exc:
             observed = {
                 "source_commit": receipt["commit_sha"],
                 "error": type(exc).__name__,
                 "stages": [
-                    stage("code", "recorded", "executor_git_readback", receipt["commit_sha"])
+                    stage(
+                        "code",
+                        "recorded",
+                        "executor_git_readback",
+                        receipt["commit_sha"],
+                    )
                 ]
                 + [stage(k) for k in ("tests", "approval", "merged", "deployed")],
             }
@@ -220,7 +235,8 @@ def delivery_trace(db, task, customer=None):
         )
     )
     result.setdefault(
-        "stages", [stage(k) for k in ("code", "tests", "approval", "merged", "deployed")]
+        "stages",
+        [stage(k) for k in ("code", "tests", "approval", "merged", "deployed")],
     )
     tickets = (customer or {}).get("tickets") or []
     verified = [

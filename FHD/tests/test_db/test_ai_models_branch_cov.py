@@ -317,7 +317,7 @@ class TestCleanupOldRecords:
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy.pool import StaticPool
 
-        from app.db.base import Base
+        from app.db.db_base import Base
 
         engine = create_engine(
             "sqlite:///:memory:",
@@ -357,7 +357,7 @@ class TestCleanupOldRecords:
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy.pool import StaticPool
 
-        from app.db.base import Base
+        from app.db.db_base import Base
 
         engine = create_engine(
             "sqlite:///:memory:",

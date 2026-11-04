@@ -1,48 +1,25 @@
 # SDK 示例
 
-目前 MODstore 还没有官方 SDK。下面这些是直接拼 HTTP 的最小示例，覆盖最常见 3 个场景。
+目前 MODstore 还没有官方 SDK。下面这些是直接拼 HTTP 的最小示例，只演示已明确支持的能力与 Webhook 验签。
 
-## 场景 1：触发员工执行
+> 本页派生自[账号体系 SSOT](https://github.com/42433422/XCMAX/blob/main/FHD/docs/account_system_ssot.md#04-modstore-pat-能力边界)，不能将 scope 名称当作所有接口已开放。
 
-### Python
+## 场景 1：读取获授权的 Mod 列表
 
 ```python
 import os
 import httpx
 
-PAT = os.environ["MODSTORE_PAT"]
-BASE = os.environ.get("MODSTORE_BASE", "https://your-host")
-
-def execute_employee(employee_id: str, task: str, input_data: dict) -> dict:
-    with httpx.Client(timeout=30) as client:
-        resp = client.post(
-            f"{BASE}/api/employees/{employee_id}/execute",
-            params={"task": task},
-            json={"input_data": input_data},
-            headers={"Authorization": f"Bearer {PAT}"},
-        )
-        resp.raise_for_status()
-        return resp.json()
+with httpx.Client(timeout=30) as client:
+    response = client.get(
+        os.environ["MODSTORE_BASE"].rstrip("/") + "/v1/mod-sync/mods",
+        headers={"Authorization": "Bearer " + os.environ["MODSTORE_PAT"]},
+    )
+    response.raise_for_status()
+    print(response.json())
 ```
 
-### TypeScript (Node 18+)
-
-```ts
-const PAT = process.env.MODSTORE_PAT!
-const BASE = process.env.MODSTORE_BASE ?? 'https://your-host'
-
-export async function executeEmployee(employeeId: string, task: string, inputData: Record<string, unknown>) {
-  const url = new URL(`${BASE}/api/employees/${encodeURIComponent(employeeId)}/execute`)
-  url.searchParams.set('task', task)
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${PAT}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input_data: inputData }),
-  })
-  if (!r.ok) throw new Error(`MODstore ${r.status} ${await r.text()}`)
-  return r.json()
-}
-```
+PAT 必须含 `mod:sync`，资源归属继续校验。通用员工、工作流、凭证管理及登录交接入口不接受 PAT；不能用更高权限账号的 PAT 替代路由级授权。
 
 ## 场景 2：接收 webhook 并校验签名
 
@@ -117,23 +94,6 @@ app.post('/hooks/modstore', express.raw({ type: 'application/json', limit: '1mb'
 app.listen(4000)
 ```
 
-## 场景 3：用工作流模板批量初始化
+## 接入前检查
 
-```bash
-PAT=pat_xxx
-
-# 1. 找到合适的模板
-curl "https://your-host/api/templates?category=客服&difficulty=intermediate" \
-  -H "Authorization: Bearer $PAT"
-
-# 2. 一键安装
-curl -X POST https://your-host/api/templates/<template_id>/install \
-  -H "Authorization: Bearer $PAT"
-# 返回 { workflow_id: 42, ... }
-
-# 3. 立即执行
-curl -X POST https://your-host/api/workflow/42/execute \
-  -H "Authorization: Bearer $PAT" \
-  -H "Content-Type: application/json" \
-  -d '{"input_data":{"ticket_id":"T001"}}'
-```
+未迁移接口返回 403 不是重试或扩权信号。需要员工/工作流机器接入时，先完成对应接口的 scope 合同和正反验收；本页不提供绕过方案。

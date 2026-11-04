@@ -11,6 +11,7 @@
 | verify_import.py | `scripts/archive/2026-08/verify_import.py` | verify | no | stdlib |
 | check_coverage_ssot.py | `scripts/ci/check_coverage_ssot.py` | ssot | no | stdlib |
 | check_operational_errors_gate.py | `scripts/ci/check_operational_errors_gate.py` | guard | no | stdlib |
+| check_structure_gates.py | `scripts/ci/check_structure_gates.py` | guard | yes | stdlib |
 | guard_temp_scripts.py | `scripts/ci/guard_temp_scripts.py` | guard | no | stdlib |
 | verify_admin_console.py | `scripts/deploy/lib/verify_admin_console.py` | verify | no | stdlib |
 | verify_release_archive.py | `scripts/deploy/lib/verify_release_archive.py` | verify | no | stdlib |
@@ -55,9 +56,12 @@
 | verify_surface_audit_demo_market.py | `scripts/dev/verify_surface_audit_demo_market.py` | verify | no | stdlib |
 | verify_version_anchors.py | `scripts/dev/verify_version_anchors.py` | verify | yes | stdlib |
 | version_sync.py | `scripts/dev/version_sync.py` | normative | yes | stdlib |
+| validate_evidence.py | `scripts/loadtest/validate_evidence.py` | guard | no | stdlib |
 | slo_endpoint_ratchet.py | `scripts/observability/slo_endpoint_ratchet.py` | ratchet | no | stdlib |
 | verify_production_slo_window.py | `scripts/observability/verify_production_slo_window.py` | verify | no | stdlib |
+| verify_release_ready_chain.py | `scripts/release/verify_release_ready_chain.py` | verify | no | stdlib |
 | verify_upgrade_rollback_evidence.py | `scripts/release/verify_upgrade_rollback_evidence.py` | verify | no | stdlib |
+| check_plaintext_credentials.py | `scripts/security/check_plaintext_credentials.py` | guard | no | stdlib |
 | verify_security_scan_pair.py | `scripts/security/verify_security_scan_pair.py` | verify | no | stdlib |
 | check_openapi_consistency.py | `scripts/tools/check_openapi_consistency.py` | guard | no | stdlib |
 | validate_migration.py | `scripts/validate_migration.py` | guard | no | stdlib |
@@ -67,4 +71,4 @@
 | verify_sales_contract_template_env.py | `scripts/verify_sales_contract_template_env.py` | verify | no | stdlib |
 | verify_six_line_event_rail.py | `scripts/verify_six_line_event_rail.py` | verify | no | stdlib |
 
-合计：14 已纳入 ssot / 46 已登记清单 / 0 新游离
+合计：15 已纳入 ssot / 49 已登记清单 / 0 新游离

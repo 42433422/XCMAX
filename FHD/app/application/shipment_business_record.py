@@ -4,6 +4,10 @@ from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.bootstrap import get_shipment_application_service_core
+from app.domain.shipment.shipment_quantities import (
+    ShipmentQuantityValidationError,
+    validate_shipment_products,
+)
 from app.infrastructure.persistence.compat_db.writes import _customer_pg_insert
 from app.infrastructure.tenant_scope import TenantScopeError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -15,6 +19,13 @@ def remember_business_shipment(payload: dict) -> dict:
     unit = str(payload.get("unit_name") or "").strip()
     if not unit:
         return {"success": False}
+    items = list(payload.get("items") or [])
+    if not items:
+        return {"success": False, "error_code": "PRODUCTS_REQUIRED", "message": "产品列表不能为空"}
+    try:
+        validate_shipment_products(items)
+    except ShipmentQuantityValidationError as exc:
+        return exc.result()
     try:
         _customer_pg_insert(
             unit,
@@ -27,7 +38,7 @@ def remember_business_shipment(payload: dict) -> dict:
     try:
         saved = get_shipment_application_service_core().record_created_shipment(
             unit_name=unit,
-            items=list(payload.get("items") or []),
+            items=items,
             contact_person=str(payload.get("contact_person") or ""),
             contact_phone=str(payload.get("contact_phone") or ""),
         )

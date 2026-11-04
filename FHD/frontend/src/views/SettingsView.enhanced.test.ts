@@ -14,7 +14,7 @@ import { ref, type Ref, nextTick } from 'vue'
 const mockApiGet = vi.fn().mockResolvedValue({ data: {}, success: false })
 const mockApiPost = vi.fn().mockResolvedValue({ success: true })
 const mockApiPut = vi.fn().mockResolvedValue({ success: true })
-const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: false })
+const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: true, valid: false })
 const mockAuthApiGetCurrentUser = vi.fn().mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
 const mockAuthApiLogout = vi.fn().mockResolvedValue({})
 const mockAuthApiUpdateCompanyBrand = vi.fn().mockResolvedValue({ success: true })
@@ -159,7 +159,7 @@ const mockAccountProfileStore = {
   isImpersonating: false,
   refresh: vi.fn().mockResolvedValue(undefined),
   refreshFromServer: vi.fn().mockResolvedValue(undefined),
-  applyFromMeData: vi.fn(),
+  applyFromMeData: vi.fn().mockResolvedValue(undefined),
   clear: vi.fn(),
 }
 
@@ -217,10 +217,6 @@ vi.mock('@/api', () => ({
     put: (...args: unknown[]) => mockApiPut(...args),
   },
   ApiError: class ApiError extends Error {},
-}))
-
-vi.mock('../../package.json', () => ({
-  default: { version: '1.0.0' },
 }))
 
 /* ── global stubs ── */
@@ -290,16 +286,17 @@ describe('SettingsView.vue – component structure', () => {
 describe('SettingsView.vue – profile section', () => {
   beforeEach(resetSettingsMocks)
 
-  it('shows login link when not logged in', async () => {
+  it('offers account retry when the required profile cannot be verified', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: false,
       data: { user: null, permissions: [] },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
-    // When not logged in, should show login link (router-link with primary btn class)
-    const loginBtn = wrapper.find('.settings-profile__btn--primary')
-    expect(loginBtn.exists()).toBe(true)
+    await flushPromises()
+    expect((wrapper.vm as any).accountError).toBe(true)
+    expect(wrapper.find('.settings-profile__actions button.settings-profile__btn').exists()).toBe(true)
+    expect(wrapper.find('.settings-profile__btn--primary').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -630,7 +627,7 @@ describe('SettingsView.vue – computed properties', () => {
   })
 
   it.each([
-    [undefined, '1.0.0'],
+    [undefined, '—'],
     [{ getAppIdentity: async () => ({ version: '1.0.0.5' }) }, '1.0.0.5'],
     [{ getAppIdentity: async () => ({}) }, '—'],
     [{ getAppIdentity: async () => { throw new Error('IPC unavailable') } }, '—'],
@@ -651,7 +648,7 @@ describe('SettingsView.vue – computed properties', () => {
       success: false,
       data: { user: null, permissions: [] },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as Record<string, unknown>
     expect(vm.isLoggedIn).toBe(false)
@@ -720,22 +717,25 @@ describe('SettingsView.vue – API error handling', () => {
 })
 
 describe('SettingsView.vue – industry loading', () => {
-  beforeEach(resetSettingsMocks)
+  beforeEach(() => {
+    resetSettingsMocks()
+    mockAuthApiGetCurrentUser.mockReset().mockResolvedValue({ success: true, data: { user: {
+      id: 1, username: 'synthetic-settings-user', display_name: 'Settings User', role: 'user',
+    } } })
+    mockSystemApiGetIndustries.mockReset().mockResolvedValue({ success: true, data: [] })
+    mockSystemApiGetCurrentIndustry.mockReset().mockResolvedValue({ success: true, data: { id: 'default' } })
+  })
 
-  it('calls industryStore.initialize on mount', async () => {
+  it('loads verified current industry details on mount', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 100))
-    expect(mockIndustryStore.initialize).toHaveBeenCalled()
+    await flushPromises()
+    expect(mockSystemApiGetCurrentIndustry).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
 
   it('calls systemApi.getIndustries on mount', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     expect(mockSystemApiGetIndustries).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -749,9 +749,8 @@ describe('SettingsView.vue – industry loading', () => {
       },
     })
     const wrapper = await mountSettings()
-    // Wait for async operations
-    await new Promise((r) => setTimeout(r, 50))
-    expect(wrapper.exists()).toBe(true)
+    await flushPromises()
+    expect((wrapper.vm as any).industries).toEqual([{ id: 'manufacturing', name: '制造业', code: 'mfg' }])
     wrapper.unmount()
   })
 })
@@ -764,7 +763,7 @@ describe('SettingsView.vue – audit logs', () => {
       success: false,
       data: { user: null, permissions: [] },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
     expect(wrapper.find('[data-tutorial-id="settings-audit-logs"]').exists()).toBe(false)
     wrapper.unmount()

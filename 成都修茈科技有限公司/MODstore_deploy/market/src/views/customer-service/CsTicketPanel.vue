@@ -27,6 +27,13 @@ defineEmits<{
   (e: 'open', ticket: CustomerTicket): void
   (e: 'toggle', id: number | string): void
 }>()
+
+function formatExpectedCompletion(value: unknown): string {
+  const date = new Date(String(value || ''))
+  return Number.isNaN(date.getTime())
+    ? ''
+    : date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+}
 </script>
 
 <template>
@@ -68,6 +75,7 @@ defineEmits<{
           <div v-if="expandedIds.has(Number(ticket.id))" class="cs-ticket__body">
             <span class="cs-ticket__meta">{{ shortTicketRef(ticket) }}</span>
             <p class="cs-ticket__hint">{{ ticketLifecycleHint(ticket) }}</p>
+            <p v-if="ticket.expected_completion_at" class="cs-ticket__hint">预期完成时间：{{ formatExpectedCompletion(ticket.expected_completion_at) }}</p>
             <ol class="cs-life" aria-label="工单进度">
               <li
                 v-for="step in ticketLifecycleSteps(ticket)"

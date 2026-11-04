@@ -16,7 +16,7 @@ def writable_policies_dir() -> Path:
     override = (os.environ.get(ENV_DIR) or "").strip()
     if override:
         return Path(override).expanduser()
-    from app.desktop_runtime.paths import get_desktop_data_dir, is_desktop_mode
+    from app.desktop_runtime.desktop_runtime_paths import get_desktop_data_dir, is_desktop_mode
 
     if is_desktop_mode():
         return get_desktop_data_dir() / "data" / "routing_policies"

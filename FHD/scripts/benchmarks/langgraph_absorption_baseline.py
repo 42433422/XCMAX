@@ -131,7 +131,7 @@ def _load_legacy_contract_assumptions() -> dict:
 
 
 def _legacy_seq_plan(n: int, plan_id: str = "bl"):
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     nodes = [
         WorkflowNode(
@@ -149,7 +149,7 @@ def _legacy_seq_plan(n: int, plan_id: str = "bl"):
 
 
 def _legacy_fanout_plan(degree: int) -> object:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     nodes = [
         WorkflowNode(node_id=f"f{i}", tool_id="t", action="a", risk="low", idempotent=True)
@@ -165,7 +165,7 @@ def _legacy_dispatch(*, tool_id, action, params):  # noqa: ANN001,ANN202
 def benchmark_legacy() -> dict:
     from app.application.workflow.checkpointer import WorkflowCheckpointer
     from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.types import validate_plan_graph
+    from app.application.workflow.workflow_types import validate_plan_graph
 
     engine = WorkflowEngine(_legacy_dispatch)
     results: dict[str, dict] = {}
@@ -214,7 +214,7 @@ def benchmark_legacy() -> dict:
 def legacy_contract_gate() -> dict:
     """用 W0-06 fixture 作为 legacy 契约 smoke gate。"""
     from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     assumptions = _load_legacy_contract_assumptions()
     plan = PlanGraph(

@@ -235,7 +235,7 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     welcomeBullets: ['查看运维总览', '管理服务器功能'],
     quickButtons: [
       { text: '打开服务器后台总览', label: '运维总览' },
-      { text: '查看自动化方针', label: '自动化方针' },
+      { text: '打开服务器后台总览并查看自动化方针页签', label: '自动化方针（总览内）' },
       { text: '服务器功能模块', label: '功能模块' },
       { text: '员工可视化图谱', label: '员工图谱' },
       { text: '测试预览', label: '测试预览' },

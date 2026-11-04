@@ -1,4 +1,4 @@
-"""Tests for app.services.inventory_service — coverage ramp."""
+"""Tests for app.domain.shared_services.inventory_service — coverage ramp."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
-from app.services.inventory_service import InventoryService
+from app.domain.shared_services.inventory_service import InventoryService
 
 
 def _mock_get_db(mock_db):
@@ -76,7 +76,7 @@ class TestModelToDict:
 # get_warehouses
 # ---------------------------------------------------------------------------
 class TestGetWarehouses:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_list_warehouses(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -92,7 +92,7 @@ class TestGetWarehouses:
         assert result["success"] is True
         assert result["count"] == 1
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_list_warehouses_with_status_filter(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -109,7 +109,7 @@ class TestGetWarehouses:
 # get_warehouse
 # ---------------------------------------------------------------------------
 class TestGetWarehouse:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_warehouse_found(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -124,7 +124,7 @@ class TestGetWarehouse:
         result = svc.get_warehouse(1)
         assert result["success"] is True
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_warehouse_not_found(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -142,7 +142,7 @@ class TestGetWarehouse:
 # create_warehouse
 # ---------------------------------------------------------------------------
 class TestCreateWarehouse:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_create_success(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -154,12 +154,14 @@ class TestCreateWarehouse:
         mock_db.commit.return_value = None
         mock_db.refresh.return_value = None
         # Make the Warehouse constructor return our mock
-        with patch("app.services.inventory_service.Warehouse", return_value=mock_warehouse):
+        with patch(
+            "app.domain.shared_services.inventory_service.Warehouse", return_value=mock_warehouse
+        ):
             svc = InventoryService()
             result = svc.create_warehouse({"code": "WH01", "name": "Main"})
         assert result["success"] is True
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_create_error(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -170,7 +172,9 @@ class TestCreateWarehouse:
         mock_warehouse = MagicMock()
         mock_warehouse.__table__ = MagicMock()
         mock_warehouse.__table__.columns = []
-        with patch("app.services.inventory_service.Warehouse", return_value=mock_warehouse):
+        with patch(
+            "app.domain.shared_services.inventory_service.Warehouse", return_value=mock_warehouse
+        ):
             svc = InventoryService()
             result = svc.create_warehouse({"code": "WH01"})
         assert result["success"] is False
@@ -180,7 +184,7 @@ class TestCreateWarehouse:
 # update_warehouse
 # ---------------------------------------------------------------------------
 class TestUpdateWarehouse:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_update_success(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -197,7 +201,7 @@ class TestUpdateWarehouse:
         result = svc.update_warehouse(1, {"name": "Updated"})
         assert result["success"] is True
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_update_not_found(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -209,7 +213,7 @@ class TestUpdateWarehouse:
         result = svc.update_warehouse(999, {"name": "Updated"})
         assert result["success"] is False
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_update_error(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -229,7 +233,7 @@ class TestUpdateWarehouse:
 # delete_warehouse
 # ---------------------------------------------------------------------------
 class TestDeleteWarehouse:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_delete_success(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -243,7 +247,7 @@ class TestDeleteWarehouse:
         result = svc.delete_warehouse(1)
         assert result["success"] is True
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_delete_not_found(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -260,7 +264,7 @@ class TestDeleteWarehouse:
 # get_storage_locations
 # ---------------------------------------------------------------------------
 class TestGetStorageLocations:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_list_locations(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -277,7 +281,7 @@ class TestGetStorageLocations:
         result = svc.get_storage_locations(warehouse_id=1)
         assert result["success"] is True
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_list_locations_with_status(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -294,7 +298,7 @@ class TestGetStorageLocations:
 # create_storage_location
 # ---------------------------------------------------------------------------
 class TestCreateStorageLocation:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_create_success(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -305,7 +309,9 @@ class TestCreateStorageLocation:
         mock_db.add.return_value = None
         mock_db.commit.return_value = None
         mock_db.refresh.return_value = None
-        with patch("app.services.inventory_service.StorageLocation", return_value=mock_loc):
+        with patch(
+            "app.domain.shared_services.inventory_service.StorageLocation", return_value=mock_loc
+        ):
             svc = InventoryService()
             result = svc.create_storage_location(
                 {"warehouse_id": 1, "code": "LOC01", "name": "A-1"}
@@ -317,7 +323,7 @@ class TestCreateStorageLocation:
 # update_storage_location
 # ---------------------------------------------------------------------------
 class TestUpdateStorageLocation:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_update_success(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -334,7 +340,7 @@ class TestUpdateStorageLocation:
         result = svc.update_storage_location(1, {"code": "LOC02"})
         assert result["success"] is True
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_update_not_found(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -351,7 +357,7 @@ class TestUpdateStorageLocation:
 # get_inventory
 # ---------------------------------------------------------------------------
 class TestGetInventory:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_list_inventory(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -378,7 +384,7 @@ class TestGetInventory:
 # get_inventory_summary
 # ---------------------------------------------------------------------------
 class TestGetInventorySummary:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_summary(self, mock_get_db):
         mock_item = MagicMock()
         mock_item.product_id = 1
@@ -426,7 +432,7 @@ def test_invalid_movement_quantity_preserves_stock(test_session, operation, quan
     )
     db.commit()
     service = InventoryService()
-    with patch("app.services.inventory_service.get_db", _mock_get_db(db)) as get_db:
+    with patch("app.domain.shared_services.inventory_service.get_db", _mock_get_db(db)) as get_db:
         if operation == "in":
             result = service.inventory_in(product.id, source.id, quantity)
         elif operation == "out":
@@ -469,7 +475,7 @@ class TestInventoryIn:
             params.update(product_id=product.id, model_number="wrong")
         if problem == "wrong_warehouse":
             params.update(warehouse_id=warehouse.id, warehouse_name="wrong")
-        with patch("app.services.inventory_service.get_db", _mock_get_db(db)):
+        with patch("app.domain.shared_services.inventory_service.get_db", _mock_get_db(db)):
             result = InventoryService().inventory_in(**params)
         db.commit()
         assert result["success"] is (problem is None)
@@ -485,7 +491,7 @@ class TestInventoryIn:
 
     @pytest.mark.parametrize("quantity", [0, -1, float("nan"), float("inf"), True, "bad", None])
     def test_invalid_quantity_never_opens_write_session(self, quantity):
-        with patch("app.services.inventory_service.get_db") as get_db:
+        with patch("app.domain.shared_services.inventory_service.get_db") as get_db:
             assert (
                 InventoryService().inventory_in(product_id=1, warehouse_id=1, quantity=quantity)[
                     "success"
@@ -504,7 +510,7 @@ class TestInventoryIn:
             warehouse = Warehouse(code="IN-WH", name="入库仓库", status=warehouse_status)
             db.add(warehouse)
         db.commit()
-        with patch("app.services.inventory_service.get_db", _mock_get_db(db)):
+        with patch("app.domain.shared_services.inventory_service.get_db", _mock_get_db(db)):
             result = InventoryService().inventory_in(
                 product_id=product.id, warehouse_id=warehouse.id if warehouse else 999, quantity=50
             )
@@ -517,7 +523,7 @@ class TestInventoryIn:
             assert float(db.query(InventoryLedger).one().quantity) == 50
             assert float(db.query(InventoryTransaction).one().after_quantity) == 50
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_product_not_found(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -535,7 +541,7 @@ class TestInventoryIn:
 # inventory_out
 # ---------------------------------------------------------------------------
 class TestInventoryOut:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_insufficient_stock(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -553,7 +559,7 @@ class TestInventoryOut:
 # inventory_transfer
 # ---------------------------------------------------------------------------
 class TestInventoryTransfer:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_source_insufficient(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -573,7 +579,7 @@ class TestInventoryTransfer:
 # get_inventory_transactions
 # ---------------------------------------------------------------------------
 class TestGetInventoryTransactions:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_list_transactions(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -599,7 +605,7 @@ class TestGetInventoryTransactions:
 # get_inventory_alert
 # ---------------------------------------------------------------------------
 class TestGetInventoryAlert:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_alert_list(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -623,7 +629,7 @@ class TestGetInventoryAlert:
 # inventory_count — Mock 风格（未确认）
 # ---------------------------------------------------------------------------
 class TestInventoryCountUnconfirmed:
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_unconfirmed_returns_diff_without_changing_stock(self, mock_get_db):
         """盘点未确认：库存不变，返回差异供对话层反问确认。"""
         mock_ledger = MagicMock()
@@ -651,7 +657,7 @@ class TestInventoryCountUnconfirmed:
         mock_db.commit.assert_not_called()
         mock_db.add.assert_not_called()
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_ledger_not_found(self, mock_get_db):
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -708,7 +714,7 @@ class TestInventoryCountConfirmed:
                 db.close()
 
         svc = InventoryService()
-        with patch("app.services.inventory_service.get_db", _get_db):
+        with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
             result = svc.inventory_count(
                 product_id=prod.id,
                 warehouse_id=wh.id,
@@ -766,7 +772,7 @@ class TestInventoryCountConfirmed:
                 db.close()
 
         svc = InventoryService()
-        with patch("app.services.inventory_service.get_db", _get_db):
+        with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
             result = svc.inventory_count(
                 product_id=prod.id,
                 warehouse_id=wh.id,
@@ -816,7 +822,7 @@ class TestQueryTransactions:
         mock_get.assert_called_once_with(product_id=1, warehouse_id=2)
         assert result["total"] == 0
 
-    @patch("app.services.inventory_service.get_db")
+    @patch("app.domain.shared_services.inventory_service.get_db")
     def test_filters_by_warehouse_id(self, mock_get_db):
         """多仓库场景下按 warehouse_id 过滤流水。"""
         mock_item = MagicMock()

@@ -11,6 +11,6 @@ def notify_mobile_user(
     body: str,
     data: dict[str, Any] | None = None,
 ) -> dict[str, bool]:
-    from app.services.mobile_push import notify_user
+    from app.domain.shared_services.mobile_push import notify_user
 
     return notify_user(user_id, title=title, body=body, data=data)

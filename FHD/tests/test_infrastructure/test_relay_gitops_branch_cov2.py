@@ -1,4 +1,4 @@
-"""测试 app.services.relay_gitops 的分支覆盖。
+"""测试 app.infrastructure.relay.gitops 的分支覆盖。
 
 覆盖目标：
 - _git / _repo_root / _merge_base_branch / _branch_from_payload
@@ -20,7 +20,7 @@ import pytest
 
 
 def _load_relay_gitops_module():
-    path = Path(__file__).resolve().parents[2] / "app" / "services" / "relay_gitops.py"
+    path = Path(__file__).resolve().parents[2] / "app" / "infrastructure" / "relay" / "gitops.py"
     spec = importlib.util.spec_from_file_location("relay_gitops_under_test", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -51,7 +51,7 @@ class TestGitHelper:
 
     def test_repo_root_finds_fhd_parent(self) -> None:
         with patch.object(
-            Path, "resolve", return_value=Path("/x/FHD/app/services/relay_gitops.py")
+            Path, "resolve", return_value=Path("/x/FHD/app/infrastructure/relay/gitops.py")
         ):
             root = relay_gitops._repo_root()
             assert root == "/x"
@@ -146,6 +146,8 @@ class TestVerifyMerged:
                 ok, msg = relay_gitops._verify_merged(str(tmp_path), "main")
                 assert ok is True
                 assert "通过" in msg
+                assert mock_run.call_args.args[0] == ["true"]
+                assert mock_run.call_args.kwargs["shell"] is False
 
     def test_custom_verify_command_failure(self, tmp_path: Path) -> None:
         with patch.dict("os.environ", {"XCMAX_CLAUDE_VERIFY_CMD": "false"}):

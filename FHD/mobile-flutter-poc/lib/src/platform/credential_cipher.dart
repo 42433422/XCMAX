@@ -12,7 +12,13 @@ class PlatformCredentialCipher {
     final value = await _channel.invokeMethod<String>('encrypt', {
       'plain': plain,
     });
-    return value ?? plain;
+    if (value == null ||
+        !value.startsWith('enc:v1:') ||
+        value.length <= 'enc:v1:'.length ||
+        value == plain) {
+      throw StateError('当前设备无法安全保存密码');
+    }
+    return value;
   }
 
   Future<String> decrypt(String stored) async {

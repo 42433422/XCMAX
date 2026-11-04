@@ -226,3 +226,81 @@ describe('modStore api full surface', () => {
     expect(onProgress).toHaveBeenCalled()
   })
 })
+
+describe('modStore request contracts and error fallbacks', () => {
+  beforeEach(() => { mockFetch.mockReset() })
+  const file = new File(['package'], 'test.zip')
+  it.each([
+    ['catalog', () => modStore.getModCatalog(), '获取 MOD 目录失败'],
+    ['market', () => modStore.fetchMarketCatalog(), '获取 AI 市场目录失败'],
+    ['search', () => modStore.searchMods(), '搜索失败'],
+    ['popular', () => modStore.getPopularMods(), '获取热门 MOD 失败'],
+    ['recent', () => modStore.getRecentMods(), '获取最新 MOD 失败'],
+    ['details', () => modStore.getModDetails('mod'), '获取 MOD 详情失败'],
+    ['upload', () => modStore.uploadModPackage(file), '上传失败'],
+    ['install', () => modStore.installMod('mod.zip'), '安装失败'],
+    ['uninstall', () => modStore.uninstallMod('mod'), '卸载失败'],
+    ['update', () => modStore.updateMod('mod', 'new.zip'), '更新失败'],
+    ['updates', () => modStore.checkUpdates(), '检查更新失败'],
+    ['dependencies', () => modStore.resolveDependencies('mod.zip'), '依赖解析失败'],
+    ['rate', () => modStore.rateMod('mod', 4), '评分失败'],
+    ['delete', () => modStore.deleteModPackage('mod.zip'), '删除失败'],
+    ['index', () => modStore.rebuildIndex(), '重建索引失败'],
+  ] as const)('%s surfaces server errors and provides an action-specific fallback', async (_label, request, fallback) => {
+    mockFetch.mockResolvedValueOnce(failJson('server denied')).mockResolvedValueOnce(failJson(''))
+    await expect(request()).rejects.toThrow('server denied')
+    await expect(request()).rejects.toThrow(fallback)
+  })
+  it('encodes all marketplace filters and respects zero-valued pagination', async () => {
+    const data = { items: [], total: 0, collection: 'office' }
+    mockFetch.mockResolvedValueOnce(okJson(data))
+    expect(await modStore.fetchMarketCatalog({ q: 'a & b', collection: 'office', artifact: 'employee', material_category: 'csv', limit: 0, offset: 0 })).toEqual(data)
+    expect(mockFetch).toHaveBeenCalledWith('/api/mod-store/market-catalog?limit=0&offset=0&q=a+%26+b&collection=office&artifact=employee&material_category=csv', { timeoutMs: 120_000 })
+    mockFetch.mockResolvedValueOnce({ ok: false, json: async () => ({ message: 'market unavailable' }) } as Response)
+    await expect(modStore.fetchMarketCatalog()).rejects.toThrow('market unavailable')
+  })
+  it.each(['', 'retail'])('installs a customer delivery seed with industry %s', async (industry) => {
+    mockFetch.mockResolvedValueOnce(okJson({ id: 'seed' }))
+    expect((await modStore.installCustomerDeliverySeed('customer', industry)).data).toEqual({ id: 'seed' })
+    expect(mockFetch).toHaveBeenCalledWith('/api/mod-store/install-customer-delivery-seed', expect.objectContaining({ body: JSON.stringify({ mod_id: 'customer', industry_id: industry }) }))
+  })
+  it('encodes deletion paths, forms upload/rating requests and keeps their responses', async () => {
+    mockFetch.mockResolvedValue(okJson({ id: 'mod' }, { message: 'saved' }))
+    await modStore.uploadModPackage(file)
+    const upload = mockFetch.mock.calls.at(-1)![1]!.body as FormData
+    expect(upload.get('file')).toBe(file); expect(upload.get('activate')).toBe('false')
+    expect((await modStore.rateMod('mod', 5, 'great', 'user')).message).toBe('saved')
+    const rating = mockFetch.mock.calls.at(-1)![1]!.body as FormData
+    expect(Object.fromEntries(rating)).toEqual({ rating: '5', comment: 'great', user_id: 'user' })
+    await modStore.deleteModPackage('a/b c.zip')
+    expect(mockFetch).toHaveBeenLastCalledWith('/api/mod-store/package/a%2Fb%20c.zip', { method: 'DELETE' })
+  })
+  it.each([
+    ['sync', () => modStore.syncModstoreLibraryFromRemote({ token: 'test-token' })],
+    ['bootstrap', () => modStore.bootstrapEditionPack()],
+    ['reload', () => modStore.reloadEmployeePacks()],
+  ] as const)('%s preserves structured detail and status-text fallback errors', async (_label, request) => {
+    mockFetch.mockResolvedValueOnce(notOk({ detail: { reason: 'denied' } })).mockResolvedValueOnce(notOk())
+    await expect(request()).rejects.toThrow('{"reason":"denied"}')
+    await expect(request()).rejects.toThrow('Server Error')
+  })
+  it('keeps installing other office packages after an install error and reports reload errors', async () => {
+    const progress = vi.fn()
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ available: [
+      { id: 'office-1', name: 'Ready', is_installed: true }, { id: 'office-2', package_file: 'two.zip' },
+    ] }) } as Response)
+    mockFetch.mockRejectedValueOnce('install transport failure').mockRejectedValueOnce('reload transport failure')
+    expect(await modStore.installOfficeEmployeePack({ onProgress: progress })).toEqual({ success: false, errors: ['office-2：安装失败', '刷新员工工具注册表失败'] })
+    expect(progress.mock.calls).toEqual([['正在安装办公员工 1/2：Ready'], ['正在安装办公员工 2/2：office-2']])
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(JSON.parse(mockFetch.mock.calls[1][1]!.body as string).pkg_id).toBe('office-2')
+  })
+  it('reports precise office install and reload failures while tolerating an empty catalog', async () => {
+    mockFetch.mockResolvedValueOnce(okJson({ available: [{ id: 'office-1', name: 'Writer' }] }))
+    mockFetch.mockRejectedValueOnce(new Error('install denied')).mockRejectedValueOnce(new Error('reload denied'))
+    expect(await modStore.installOfficeEmployeePack()).toEqual({ success: false, errors: ['Writer：install denied', 'reload denied'] })
+    mockFetch.mockResolvedValueOnce(okJson({})).mockResolvedValueOnce(okJson({}))
+    expect(await modStore.installOfficeEmployeePack()).toEqual({ success: true, errors: [] })
+    expect(JSON.parse(mockFetch.mock.calls.at(-1)![1]!.body as string)).toEqual({})
+  })
+})

@@ -20,7 +20,7 @@ import pytest
 
 from app.neuro_bus import command_gateway as cg
 from app.neuro_bus.command_gateway import CommandGateway, try_complete_command_reply
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 
 # ---------------------------------------------------------------------------
 # prepare_command_event

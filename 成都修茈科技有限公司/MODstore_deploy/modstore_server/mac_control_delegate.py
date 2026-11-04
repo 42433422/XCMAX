@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from modstore_server.db.base import get_session_factory
+from modstore_server.db.db_base import get_session_factory
 from modstore_server.mac_control_store import accept, digest, view
 from modstore_server.models_cs import CustomerServiceTicket
 

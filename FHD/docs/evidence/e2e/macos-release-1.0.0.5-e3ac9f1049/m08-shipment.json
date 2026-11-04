@@ -1,0 +1,268 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M08.shipment-xlsx-readback",
+ "platform": "macos",
+ "architecture": "arm64",
+ "release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "product_version": "1.0.0.5",
+ "path": "租户作用域 POST /api/shipment/shipment-records/record + GET export。旧 /api/shipment/generate 对租户会话 403。",
+ "create": {
+  "http": 200,
+  "body": {
+   "success": true,
+   "message": "发货单创建成功",
+   "shipment": {
+    "id": 1,
+    "order_number": "20261012191340",
+    "purchase_unit": "M08验收客户",
+    "contact_person": null,
+    "contact_phone": null,
+    "contact_address": null,
+    "items": [
+     {
+      "id": null,
+      "product_name": "M08验收商品",
+      "model_number": "",
+      "quantity_tins": 6,
+      "quantity_kg": 150.0,
+      "spec_per_tin": 25.0,
+      "unit_price": 4.5,
+      "amount": 27.0
+     }
+    ],
+    "status": "pending",
+    "created_at": "2026-10-12T19:13:40.618948",
+    "updated_at": "2026-10-12T19:13:40.619865",
+    "printed_at": null,
+    "printer_name": null,
+    "total_amount": 27.0,
+    "total_quantity_tins": 6,
+    "total_quantity_kg": 150.0
+   },
+   "run_id": "run_fac715b2fd0f4733a54a33428bfdec40",
+   "agent_run_id": "run_fac715b2fd0f4733a54a33428bfdec40",
+   "agent_status": "completed"
+  }
+ },
+ "export": {
+  "http": 200,
+  "bytes": 5166,
+  "xlsx_magic": true,
+  "sha256": "9757307304f9996f0b38fc759567fbe5267293ab3ede4ef8e5a645887e527a72",
+  "content_disposition": "attachment; filename*=utf-8''shipment_records_M08%E9%AA%8C%E6%94%B6%E5%AE%A2%E6%88%B7_86468a30258f4bc3bde1589c288c752d_20261012_191340.xlsx"
+ },
+ "readback": {
+  "sheet": "出货记录",
+  "rows": [
+   [
+    "ID",
+    "购买单位",
+    "产品名称",
+    "型号",
+    "数量 (KG)",
+    "数量 (桶)",
+    "规格",
+    "单价",
+    "金额",
+    "状态"
+   ],
+   [
+    1,
+    "M08验收客户",
+    "M08验收商品",
+    null,
+    150,
+    6,
+    25,
+    4.5,
+    27,
+    "pending"
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  ]
+ },
+ "list": {
+  "success": true,
+  "data": [
+   {
+    "purchase_unit": "M08验收客户",
+    "unit_id": null,
+    "product_name": "M08验收商品",
+    "model_number": "",
+    "quantity_kg": 150.0,
+    "quantity_tins": 6,
+    "tin_spec": 25.0,
+    "unit_price": 4.5,
+    "amount": 27.0,
+    "status": "pending",
+    "printed_at": null,
+    "printer_name": null,
+    "raw_text": "source=shipment_excel_etl",
+    "parsed_data": "{\"id\": null, \"order_number\": \"20261012191340\", \"purchase_unit\": \"M08验收客户\", \"contact_person\": null, \"contact_phone\": null, \"contact_address\": null, \"items\": [{\"id\": null, \"product_name\": \"M08验收商品\", \"model_number\": \"\", \"quantity_tins\": 6, \"quantity_kg\": 150.0, \"spec_per_tin\": 25.0, \"unit_price\": 4.5, \"amount\": 27.0}], \"status\": \"pending\", \"created_at\": \"2026-10-12T19:13:40.618948\", \"updated_at\": \"2026-10-12T19:13:40.619865\", \"printed_at\": null, \"printer_name\": null, \"total_amount\": 27.0, \"total_quantity_tins\": 6, \"total_quantity_kg\": 150.0}",
+    "id": 1,
+    "created_at": "2026-10-12T19:13:40.618948",
+    "updated_at": "2026-10-12T19:13:40.619865",
+    "tenant_id": 1
+   }
+  ],
+  "source": "mod:xcagi-erp-domain-bridge",
+  "execution_path": "mod_domain_handler"
+ },
+ "verdict": "PASS",
+ "captured_at_utc": "2026-10-12T11:13:40Z"
+}

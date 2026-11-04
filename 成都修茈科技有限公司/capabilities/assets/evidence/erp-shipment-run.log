@@ -1,8 +1,0 @@
-2026-09-30T04:17:51+0800 [erp-shipment] 开始验收 erp-shipment 发货单与出货管理；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:17:51+0800 [erp-shipment] M1 passed :: HTTP 200 127ms；event=shipment.created run=run_bcedbfb7dcd74101985114c9cdce8fdc status=completed
-2026-09-30T04:17:51+0800 [erp-shipment] M2 passed :: HTTP 200 40ms；{"success": false, "error_code": "schema_validation_failed", "message": "参数 缺少字段：unit_name", "tool_id": "business_event", "action": "shipment_create", "run_id":
-2026-09-30T04:17:51+0800 [erp-shipment] M3 passed :: HTTP 200 15ms；单位 7 个，示例 ['MAC验收0929出货客户13071', 'MAC验收0929客户', 'MAC验收0929客户35507', 'MAC验收0929客户58099']
-2026-09-30T04:17:51+0800 [erp-shipment] M4 passed :: HTTP 200 15ms；记录 1 条
-2026-09-30T04:17:55+0800 [erp-shipment] M5 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/shipment-records；命中文本 ['出货记录管理']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 业务记录 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 出货记录管理 | 请选择购买单位 | MAC验收0929出货客户13071 | MAC验收0929客户 | MAC验收0929客户35507 | MAC
-2026-09-30T04:17:56+0800 [erp-shipment] screenshot result.png
-2026-09-30T04:17:58+0800 [erp-shipment] video operation.webm bytes=239297

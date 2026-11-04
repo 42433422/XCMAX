@@ -225,7 +225,7 @@ def _register_scheduler_phase_02():
         try:
 
             def _run() -> None:
-                from modstore_server.self_maintenance_loop_runner import (
+                from modstore_server.maintenance_loop.coordinator import (
                     run_self_maintenance_loop,
                 )
 
@@ -237,7 +237,7 @@ def _register_scheduler_phase_02():
             _facade().logger.exception("self-maintenance loop job failed")
 
     try:
-        from modstore_server.self_maintenance_loop_runner import (
+        from modstore_server.maintenance_loop.schedule import (
             cron_trigger_for_self_maintenance,
         )
 
@@ -258,7 +258,7 @@ def _register_scheduler_phase_02():
         try:
 
             def _run() -> None:
-                from modstore_server.self_maintenance_loop_runner import (
+                from modstore_server.maintenance_loop.schedule import (
                     record_self_maintenance_heartbeat,
                 )
 

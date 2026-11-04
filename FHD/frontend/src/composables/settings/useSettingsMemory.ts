@@ -1,4 +1,4 @@
-import { ref, computed, watch, reactive, type Ref } from 'vue'
+import { ref, computed, watch, reactive, onBeforeUnmount, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { User } from '@/api/auth'
 import { memoryV2Api, type MemoryV2Record, type MemoryV2Status, type MemoryV2Summary, type MemoryV2Type } from '@/api/memoryV2'
@@ -6,6 +6,7 @@ import { butlerProfileApi, type ButlerProfileView } from '@/api/butlerProfile'
 import { resolveModeScopedChatUserId } from '@/composables/useChatDbTokenGate'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 import { errorMessage } from './utils'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 export function useSettingsMemory(localUser: Ref<User | null>) {
   const { t, locale } = useI18n()
@@ -48,8 +49,10 @@ export function useSettingsMemory(localUser: Ref<User | null>) {
   const persyLoading = ref(false)
   const persyInferring = ref(false)
   const persyLastReason = ref('')
+  const persyError = ref('')
+  let profileRequest = 0
 
-  const persyUserId = computed(() => resolveModeScopedChatUserId())
+  const persyUserId = computed(() => { void productReadAccountEpoch.value; return resolveModeScopedChatUserId() })
 
   const persyFoldMeta = computed(() => {
     if (!persyProfile.value) return t('settings.persyFoldMetaEmpty')
@@ -59,32 +62,40 @@ export function useSettingsMemory(localUser: Ref<User | null>) {
   })
 
   async function loadPersyProfile() {
+    const request = ++profileRequest
+    const account = productReadAccountEpoch.value
     persyLoading.value = true
+    persyError.value = ''
     try {
       const result = await butlerProfileApi.get(persyUserId.value)
+      if (request !== profileRequest || account !== productReadAccountEpoch.value) return
       if (result.success === false) throw new Error(result.message || t('settings.persyLoadFailed'))
       persyProfile.value = result.profile || null
     } catch {
-      persyProfile.value = null
+      if (request === profileRequest && account === productReadAccountEpoch.value) persyError.value = t('settings.persyReadRetry')
     } finally {
-      persyLoading.value = false
+      if (request === profileRequest) persyLoading.value = false
     }
   }
 
   async function runPersyInfer() {
+    if (persyInferring.value) return
+    const account = productReadAccountEpoch.value
+    const userId = persyUserId.value
     persyInferring.value = true
     persyLastReason.value = ''
     try {
       const result = await butlerProfileApi.infer({ userId: persyUserId.value })
+      if (account !== productReadAccountEpoch.value || userId !== persyUserId.value) return
       if (result.success === false) throw new Error(result.message || t('settings.persyInferFailed'))
-      if (result.profile) persyProfile.value = result.profile
+      if (result.profile) { persyProfile.value = result.profile; persyError.value = '' }
       if (result.inference?.reasons?.length) {
         persyLastReason.value = result.inference.reasons[result.inference.reasons.length - 1]
       }
     } catch (e: unknown) {
-      persyLastReason.value = e instanceof Error ? e.message : t('settings.persyInferFailed')
+      if (account === productReadAccountEpoch.value && userId === persyUserId.value) persyLastReason.value = e instanceof Error ? e.message : t('settings.persyInferFailed')
     } finally {
-      persyInferring.value = false
+      if (account === productReadAccountEpoch.value && userId === persyUserId.value) persyInferring.value = false
     }
   }
 
@@ -292,9 +303,15 @@ export function useSettingsMemory(localUser: Ref<User | null>) {
     void loadMemoryV2()
   })
 
-  watch(persyUserId, () => {
+  watch([persyUserId, productReadAccountEpoch], () => {
+    profileRequest++
+    persyProfile.value = null
+    persyError.value = ''
+    persyLastReason.value = ''
+    persyInferring.value = false
     void loadPersyProfile()
-  })
+  }, { flush: 'sync' })
+  onBeforeUnmount(() => { profileRequest++ })
 
   return {
     memoryV2TypeOptions,
@@ -312,6 +329,7 @@ export function useSettingsMemory(localUser: Ref<User | null>) {
     memoryV2Edit,
     persyProfile,
     persyLoading,
+    persyError,
     persyInferring,
     persyLastReason,
     persyUserId,

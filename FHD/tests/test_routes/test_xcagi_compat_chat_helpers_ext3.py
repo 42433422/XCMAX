@@ -29,11 +29,32 @@ from __future__ import annotations
 import json
 import os
 import time
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
 from app.fastapi_routes import xcagi_compat_chat_helpers as ch
+
+
+def _patch_chat(name, *args, **kwargs):
+    """Keep patches on the compatibility facade, not its implementation module."""
+    return patch(f"app.fastapi_routes.xcagi_compat_chat_helpers.{name}", *args, **kwargs)
+
+
+@contextmanager
+def _planner_stream_context(**stream_options):
+    """Isolate a permitted planner stream while preserving patch entry/exit order."""
+    with (
+        _patch_chat("_ensure_chat_db_read_authorized", return_value=(True, None)),
+        _patch_chat("planner_workflow_interrupt_reply", return_value=None),
+        _patch_chat("_ensure_vector_index_if_needed", return_value=None),
+        _patch_chat("create_modstore_openai_client_from_request"),
+        _patch_chat("_xcagi_guarded_planner_stream_events", **stream_options) as planner,
+        _patch_chat("runtime_context_with_tier", side_effect=lambda ctx, tier: ctx) as tier,
+    ):
+        yield planner, tier
+
 
 # ---------------------------------------------------------------------------
 # _chat_request_subject — client.host fallback
@@ -681,8 +702,8 @@ class TestEnsureVectorIndexIfNeededAdditional:
                 "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
                 side_effect=ImportError("module not found"),
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.RECOVERABLE_ERRORS",
+            _patch_chat(
+                "RECOVERABLE_ERRORS",
                 (RuntimeError, ImportError, ValueError),
             ),
         ):
@@ -712,30 +733,8 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(mode="online")
         with (
-            patch("app.fastapi_routes.xcagi_compat_chat_helpers.set_llm_mode") as mock_set,
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
-                return_value=iter([{"type": "token", "text": "hello"}]),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
-            ),
+            _patch_chat("set_llm_mode") as mock_set,
+            _planner_stream_context(return_value=iter([{"type": "token", "text": "hello"}])),
         ):
             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         mock_set.assert_called_once_with("online")
@@ -744,30 +743,8 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(mode="OFFLINE")
         with (
-            patch("app.fastapi_routes.xcagi_compat_chat_helpers.set_llm_mode") as mock_set,
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
-                return_value=iter([{"type": "token", "text": "hello"}]),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
-            ),
+            _patch_chat("set_llm_mode") as mock_set,
+            _planner_stream_context(return_value=iter([{"type": "token", "text": "hello"}])),
         ):
             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         mock_set.assert_called_once_with("offline")
@@ -776,30 +753,8 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(mode="custom")
         with (
-            patch("app.fastapi_routes.xcagi_compat_chat_helpers.set_llm_mode") as mock_set,
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
-                return_value=iter([{"type": "token", "text": "hello"}]),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
-            ),
+            _patch_chat("set_llm_mode") as mock_set,
+            _planner_stream_context(return_value=iter([{"type": "token", "text": "hello"}])),
         ):
             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         mock_set.assert_not_called()
@@ -814,12 +769,12 @@ class TestXcagiPlannerStreamBytesAdditional:
             "message": "需要令牌",
         }
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+            _patch_chat(
+                "_ensure_chat_db_read_authorized",
                 return_value=(False, read_req),
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+            _patch_chat(
+                "runtime_context_with_tier",
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
@@ -839,20 +794,20 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+            _patch_chat(
+                "_ensure_chat_db_read_authorized",
                 return_value=(True, None),
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+            _patch_chat(
+                "planner_workflow_interrupt_reply",
                 return_value="interrupt reply",
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_after_workflow_interrupt",
+            _patch_chat(
+                "runtime_context_after_workflow_interrupt",
                 return_value={"cleared": True},
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+            _patch_chat(
+                "runtime_context_with_tier",
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
@@ -870,20 +825,20 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="建立向量索引")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+            _patch_chat(
+                "_ensure_chat_db_read_authorized",
                 return_value=(True, None),
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+            _patch_chat(
+                "planner_workflow_interrupt_reply",
                 return_value=None,
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+            _patch_chat(
+                "_ensure_vector_index_if_needed",
                 return_value="vector index error",
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+            _patch_chat(
+                "runtime_context_with_tier",
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
@@ -897,29 +852,7 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
-                return_value=iter([{"type": "token", "text": ""}]),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
-            ),
+            _planner_stream_context(return_value=iter([{"type": "token", "text": ""}])),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         assert len(results) == 3
@@ -932,33 +865,13 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+            _planner_stream_context(
                 return_value=iter(
                     [
                         {"type": "token", "text": "[正在调用工具:查询]"},
                         {"type": "token", "text": "result"},
                     ]
-                ),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
+                )
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
@@ -972,33 +885,13 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+            _planner_stream_context(
                 return_value=iter(
                     [
                         {"type": "token", "text": "partial"},
                         {"type": "error", "message": "stream error"},
                     ]
-                ),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
+                )
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
@@ -1011,34 +904,14 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+            _planner_stream_context(
                 return_value=iter(
                     [
                         {"type": "token", "text": "partial"},
                         {"type": "requires_token", "token_name": "WRITE_TOKEN"},
                     ]
-                ),
-            ) as planner,
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
-            ),
+                )
+            ) as (planner, _tier),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         assert planner.call_args.kwargs["runtime_context"]["message"] == body.message
@@ -1052,33 +925,13 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+            _planner_stream_context(
                 return_value=iter(
                     [
                         {"type": "done"},
                         {"type": "token", "text": "after done"},
                     ]
-                ),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
+                )
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
@@ -1089,33 +942,13 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+            _planner_stream_context(
                 return_value=iter(
                     [
                         {"type": "custom", "data": "value"},
                         {"type": "token", "text": "result"},
                     ]
-                ),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
+                )
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
@@ -1126,29 +959,7 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
-                side_effect=RuntimeError("stream failed"),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
-            ),
+            _planner_stream_context(side_effect=RuntimeError("stream failed")),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         assert len(results) == 2
@@ -1159,33 +970,13 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="hello")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+            _planner_stream_context(
                 return_value=iter(
                     [
                         {"type": "token", "text": "ephemeral", "ephemeral": True},
                         {"type": "token", "text": "real"},
                     ]
-                ),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
+                )
             ),
         ):
             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
@@ -1198,29 +989,10 @@ class TestXcagiPlannerStreamBytesAdditional:
         request = self._make_request()
         body = self._make_body(message="查询数据库", db_read_token="valid")
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
-                return_value=(True, None),
+            _planner_stream_context(return_value=iter([{"type": "token", "text": "result"}])) as (
+                _planner,
+                mock_tier,
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
-                return_value=None,
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
-                return_value=iter([{"type": "token", "text": "result"}]),
-            ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
-                side_effect=lambda ctx, tier: ctx,
-            ) as mock_tier,
         ):
             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # runtime_context_with_tier should be called with context that has chat_db_read_authorized
@@ -1246,8 +1018,8 @@ class TestXcagiPlannerStreamBytesAsyncAdditional:
             yield b"chunk1"
             yield b"chunk2"
 
-        with patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_planner_stream_bytes",
+        with _patch_chat(
+            "_xcagi_planner_stream_bytes",
             side_effect=mock_sync_gen,
         ):
             results = []
@@ -1269,8 +1041,8 @@ class TestXcagiPlannerStreamBytesAsyncAdditional:
             yield b"chunk1"
             raise RuntimeError("async error")
 
-        with patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_planner_stream_bytes",
+        with _patch_chat(
+            "_xcagi_planner_stream_bytes",
             side_effect=mock_sync_gen,
         ):
             results = []
@@ -1295,8 +1067,8 @@ class TestXcagiPlannerStreamBytesAsyncAdditional:
             return
             yield  # never reached
 
-        with patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_planner_stream_bytes",
+        with _patch_chat(
+            "_xcagi_planner_stream_bytes",
             side_effect=mock_sync_gen,
         ):
             results = []
@@ -1322,20 +1094,20 @@ class TestXcagiGuardedPlannerStreamEventsAdditional:
             yield {"type": "token", "text": " world"}
 
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.chat_stream_sse_events",
+            _patch_chat(
+                "chat_stream_sse_events",
                 side_effect=mock_chat_stream,
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_chat_timeout_seconds",
+            _patch_chat(
+                "_xcagi_chat_timeout_seconds",
                 return_value=600.0,
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_first_token_timeout_seconds",
+            _patch_chat(
+                "_xcagi_stream_first_token_timeout_seconds",
                 return_value=120.0,
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_idle_notice_seconds",
+            _patch_chat(
+                "_xcagi_stream_idle_notice_seconds",
                 return_value=60.0,
             ),
         ):
@@ -1361,20 +1133,20 @@ class TestXcagiGuardedPlannerStreamEventsAdditional:
             yield  # never reached
 
         with (
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers.chat_stream_sse_events",
+            _patch_chat(
+                "chat_stream_sse_events",
                 side_effect=mock_chat_stream,
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_chat_timeout_seconds",
+            _patch_chat(
+                "_xcagi_chat_timeout_seconds",
                 return_value=600.0,
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_first_token_timeout_seconds",
+            _patch_chat(
+                "_xcagi_stream_first_token_timeout_seconds",
                 return_value=120.0,
             ),
-            patch(
-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_idle_notice_seconds",
+            _patch_chat(
+                "_xcagi_stream_idle_notice_seconds",
                 return_value=60.0,
             ),
         ):
@@ -1498,8 +1270,8 @@ class TestChatDbReadGraceSecondsLeftAdditional:
         request.headers = {"x-forwarded-for": "1.2.3.4", "user-agent": "ua"}
         now = time.time()
         key = ch._chat_request_subject(request)
-        with patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._chat_db_read_grace_until",
+        with _patch_chat(
+            "_chat_db_read_grace_until",
             {key: now},
         ):
             result = ch._chat_db_read_grace_seconds_left(request)
@@ -1512,8 +1284,8 @@ class TestChatDbReadGraceSecondsLeftAdditional:
         past_time = time.time() - 1
         key = ch._chat_request_subject(request)
         grace_dict = {key: past_time}
-        with patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._chat_db_read_grace_until",
+        with _patch_chat(
+            "_chat_db_read_grace_until",
             grace_dict,
         ):
             result = ch._chat_db_read_grace_seconds_left(request)
@@ -1532,8 +1304,8 @@ class TestTouchChatDbReadGraceAdditional:
         request.headers = {"x-forwarded-for": "1.2.3.4", "user-agent": "ua"}
         key = ch._chat_request_subject(request)
         # Clear any existing grace
-        with patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._chat_db_read_grace_until",
+        with _patch_chat(
+            "_chat_db_read_grace_until",
             {},
         ) as grace_dict:
             result = ch._touch_chat_db_read_grace(request)

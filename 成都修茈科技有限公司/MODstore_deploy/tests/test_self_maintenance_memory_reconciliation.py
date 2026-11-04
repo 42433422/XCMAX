@@ -61,15 +61,15 @@ def test_verified_merge_closes_resumed_failures_and_updates_recent_run(monkeypat
     ]
     writes = []
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._read_ledger",
+        "modstore_server.maintenance_loop.store._read_ledger",
         lambda limit: rows,
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._write_loop_memory",
+        "modstore_server.maintenance_loop.store._write_loop_memory",
         lambda value: writes.append(value),
     )
 
@@ -107,15 +107,15 @@ def test_reconciliation_is_idempotent(monkeypatch):
     ]
     writes = []
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._read_ledger",
+        "modstore_server.maintenance_loop.store._read_ledger",
         lambda limit: rows,
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._write_loop_memory",
+        "modstore_server.maintenance_loop.store._write_loop_memory",
         lambda value: writes.append(value),
     )
 
@@ -158,15 +158,15 @@ def test_fresh_completed_run_reconciles_without_resume_candidate(monkeypatch):
     ]
     writes = []
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._read_ledger",
+        "modstore_server.maintenance_loop.store._read_ledger",
         lambda limit: rows,
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        "modstore_server.maintenance_loop.store._load_loop_memory",
         lambda: memory,
     )
     monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._write_loop_memory",
+        "modstore_server.maintenance_loop.store._write_loop_memory",
         lambda value: writes.append(value),
     )
 

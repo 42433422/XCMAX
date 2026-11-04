@@ -1,4 +1,4 @@
-"""Extended tests for ``app.services.deepseek_intent_service`` covering low-coverage branches."""
+"""Extended tests for ``app.domain.shared_services.deepseek_intent_service`` covering low-coverage branches."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import app.services.deepseek_intent_service as ds
-from app.services.deepseek_intent_service import (
+import app.domain.shared_services.deepseek_intent_service as ds
+from app.domain.shared_services.deepseek_intent_service import (
     DeepSeekIntentRecognizer,
     HybridIntentWithDeepSeek,
     cn_to_number,
@@ -303,7 +303,10 @@ class TestHybridRecognizeExtended:
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -328,7 +331,10 @@ class TestHybridRecognizeExtended:
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -358,7 +364,10 @@ class TestHybridRecognizeExtended:
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -378,7 +387,10 @@ class TestHybridRecognizeExtended:
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -392,7 +404,10 @@ class TestHybridRecognizeExtended:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "goodbye", "is_goodbye": True, "tool_key": "goodbye"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -406,7 +421,10 @@ class TestHybridRecognizeExtended:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "help", "is_help": True, "tool_key": "help"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -505,7 +523,7 @@ class TestRecognizeSyncExtended:
         with (
             patch.object(h, "recognize", new=AsyncMock(side_effect=RuntimeError("sync fail"))),
             patch(
-                "app.services.intent_service.recognize_intents",
+                "app.domain.shared_services.intent_service.recognize_intents",
                 return_value={"primary_intent": "fallback"},
             ),
             patch(
@@ -520,7 +538,10 @@ class TestRecognizeSyncExtended:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "greet", "is_greeting": True}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -535,7 +556,7 @@ class TestHybridInitExtended:
         mock_distilled = MagicMock()
         mock_distilled.is_available.return_value = True
         with patch(
-            "app.services.distilled_intent_service.get_distilled_recognizer",
+            "app.domain.shared_services.distilled_intent_service.get_distilled_recognizer",
             return_value=mock_distilled,
         ):
             h = HybridIntentWithDeepSeek(use_distilled=True, use_deepseek=False)
@@ -546,7 +567,7 @@ class TestHybridInitExtended:
         mock_distilled = MagicMock()
         mock_distilled.is_available.return_value = False
         with patch(
-            "app.services.distilled_intent_service.get_distilled_recognizer",
+            "app.domain.shared_services.distilled_intent_service.get_distilled_recognizer",
             return_value=mock_distilled,
         ):
             h = HybridIntentWithDeepSeek(use_distilled=True, use_deepseek=False)
@@ -554,7 +575,7 @@ class TestHybridInitExtended:
 
     def test_init_distilled_load_error(self) -> None:
         with patch(
-            "app.services.distilled_intent_service.get_distilled_recognizer",
+            "app.domain.shared_services.distilled_intent_service.get_distilled_recognizer",
             side_effect=RuntimeError("load fail"),
         ):
             h = HybridIntentWithDeepSeek(use_distilled=True, use_deepseek=False)
@@ -572,7 +593,7 @@ class TestSingletonsExtended:
     def test_get_hybrid_with_distilled(self) -> None:
         reset_deepseek_intent_services()
         with patch(
-            "app.services.distilled_intent_service.get_distilled_recognizer",
+            "app.domain.shared_services.distilled_intent_service.get_distilled_recognizer",
             side_effect=RuntimeError("no distilled"),
         ):
             h = get_hybrid_intent_with_deepseek(use_deepseek=False, use_distilled=True)

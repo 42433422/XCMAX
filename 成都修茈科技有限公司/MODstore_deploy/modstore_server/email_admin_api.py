@@ -19,10 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from modstore_server.api.deps import _get_current_user, _require_admin
-from modstore_server.email_service import (
-    email_status,
-    send_test_email,
-)
+from modstore_server.email_service import email_status, send_test_email
 from modstore_server.models import User
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 

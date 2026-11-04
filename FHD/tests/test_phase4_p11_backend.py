@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-import app.services.deepseek_intent_service as ds
-from app.services.deepseek_intent_service import (
+import app.domain.shared_services.deepseek_intent_service as ds
+from app.domain.shared_services.deepseek_intent_service import (
     DeepSeekIntentRecognizer,
     _make_intent_cache_key,
 )

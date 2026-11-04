@@ -59,8 +59,10 @@ class VitestAdapter:
         if cmd is None:
             return ToolReport(
                 tool=self.name,
-                passed=True,
-                error="vitest not available; skipped",
+                passed=False,
+                executed=False,
+                exit_code=-1,
+                error="vitest not available; verification not executed",
             )
         res = sandbox.execute(
             SandboxJob(

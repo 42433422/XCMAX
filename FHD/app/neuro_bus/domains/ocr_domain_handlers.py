@@ -8,7 +8,7 @@ import logging
 from typing import Any
 
 from app.neuro_bus import bus as neuro_bus
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.neuro_bus.events.ocr_events import (
     OCRBatchProcessingCompletedEvent,
     OCRTaskCompletedEvent,

@@ -24,7 +24,8 @@ PROVIDER = os.environ.get("SMOKE_LLM_PROVIDER") or "xiaomi"
 MODEL = os.environ.get("SMOKE_LLM_MODEL") or "mimo-v2.5-pro"
 PACK_ID = os.environ.get("LAB_PACK_ID") or "word-full-read-employee-llm-lab"
 OUT_JSON = Path(
-    os.environ.get("LAB_RESULT_JSON") or ROOT / "artifacts" / "word_read_employee_lab_result.json"
+    os.environ.get("LAB_RESULT_JSON")
+    or ROOT / "artifacts" / "word_read_employee_lab_result.json"
 )
 
 BRIEF = f"""员工包 ID：{PACK_ID}
@@ -105,19 +106,36 @@ def main() -> int:
         body={"username": USERNAME, "password": PASSWORD},
         timeout=30,
     )
-    if code >= 400 or not isinstance(login_body, dict) or not login_body.get("access_token"):
-        print(json.dumps({"ok": False, "stage": "login", "status": code}, ensure_ascii=False))
+    if (
+        code >= 400
+        or not isinstance(login_body, dict)
+        or not login_body.get("access_token")
+    ):
+        print(
+            json.dumps(
+                {"ok": False, "stage": "login", "status": code}, ensure_ascii=False
+            )
+        )
         return 2
     token = str(login_body["access_token"])
 
     started = time.time()
     code, start_body = _http_json(
-        "POST", f"{BASE_URL}/api/workbench/sessions", token=token, body=metadata, timeout=120
+        "POST",
+        f"{BASE_URL}/api/workbench/sessions",
+        token=token,
+        body=metadata,
+        timeout=120,
     )
     if code >= 400 or not isinstance(start_body, dict):
         print(
             json.dumps(
-                {"ok": False, "stage": "start", "status": code, "text": str(start_body)[:2000]},
+                {
+                    "ok": False,
+                    "stage": "start",
+                    "status": code,
+                    "text": str(start_body)[:2000],
+                },
                 ensure_ascii=False,
             )
         )
@@ -131,13 +149,19 @@ def main() -> int:
             "GET", f"{BASE_URL}/api/workbench/sessions/{sid}", token=token, timeout=60
         )
         if code >= 400 or not isinstance(poll_body, dict):
-            print(json.dumps({"ok": False, "stage": "poll", "status": code}, ensure_ascii=False))
+            print(
+                json.dumps(
+                    {"ok": False, "stage": "poll", "status": code}, ensure_ascii=False
+                )
+            )
             return 1
         final = poll_body
         st = final.get("status")
         if time.time() - last_log >= 15:
             steps = _step_summary(final)
-            active = [s for s in steps if s["status"] not in ("done", "skipped", "error")]
+            active = [
+                s for s in steps if s["status"] not in ("done", "skipped", "error")
+            ]
             print(
                 json.dumps(
                     {
@@ -155,8 +179,14 @@ def main() -> int:
             break
         time.sleep(3)
 
-    art = (final or {}).get("artifact") if isinstance((final or {}).get("artifact"), dict) else {}
-    qr = art.get("quality_report") if isinstance(art.get("quality_report"), dict) else {}
+    art = (
+        (final or {}).get("artifact")
+        if isinstance((final or {}).get("artifact"), dict)
+        else {}
+    )
+    qr = (
+        art.get("quality_report") if isinstance(art.get("quality_report"), dict) else {}
+    )
     pack_dir = ROOT / "library" / PACK_ID
     convert_py = pack_dir / "backend" / "vendor" / "word_full_read" / "convert.py"
     employee_py = (
@@ -169,7 +199,9 @@ def main() -> int:
     try:
         from modstore_server.employee_pack_cleanup import cleanup_experimental_pack
 
-        cleanup_result = cleanup_experimental_pack(PACK_ID, metadata={"experimental_pack": True})
+        cleanup_result = cleanup_experimental_pack(
+            PACK_ID, metadata={"experimental_pack": True}
+        )
     except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         cleanup_result = {"error": str(exc)[:300]}
 
@@ -187,7 +219,9 @@ def main() -> int:
         "golden_comparison": art.get("golden_comparison"),
         "cleanup": cleanup_result,
         "rule_spec_runtime_kind": (
-            (((final or {}).get("artifact") or {}).get("rule_spec") or {}).get("runtime_kind")
+            (((final or {}).get("artifact") or {}).get("rule_spec") or {}).get(
+                "runtime_kind"
+            )
             if isinstance((final or {}).get("artifact"), dict)
             else None
         ),
@@ -200,7 +234,12 @@ def main() -> int:
         "error": (final or {}).get("error"),
     }
     OUT_JSON.write_text(
-        json.dumps({"report": report, "final": final}, ensure_ascii=False, indent=2, default=str),
+        json.dumps(
+            {"report": report, "final": final},
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        ),
         encoding="utf-8",
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))

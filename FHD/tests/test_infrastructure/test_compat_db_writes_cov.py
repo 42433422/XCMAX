@@ -18,8 +18,8 @@ from fastapi import HTTPException
 
 
 def _make_excel_imports_stub(norm_model_return: str = "STUB-MODEL"):
-    """Return a fake app.application.excel_imports module with _norm_model."""
-    mod = types.ModuleType("app.application.excel_imports")
+    """Return a fake app.domain.app_pure.excel_imports module with _norm_model."""
+    mod = types.ModuleType("app.domain.app_pure.excel_imports")
     mod._norm_model = MagicMock(return_value=norm_model_return)  # type: ignore[attr-defined]
     return mod
 
@@ -855,7 +855,7 @@ def test_products_pg_insert_row_empty_model_number_calls_norm_model():
     col_names = {"model_number", "name"}
 
     fake_excel = _make_excel_imports_stub("AUTO-MODEL")
-    with patch.dict(sys.modules, {"app.application.excel_imports": fake_excel}):
+    with patch.dict(sys.modules, {"app.domain.app_pure.excel_imports": fake_excel}):
         with (
             patch(f"{MODULE}.get_sync_engine", return_value=eng),
             patch(f"{MODULE}._products_pg_col_names", return_value=col_names),
@@ -893,7 +893,7 @@ def test_products_pg_insert_row_xcagi_mod_id_appended():
     col_names = {"model_number", "name", "xcagi_mod_id"}
 
     fake_excel = _make_excel_imports_stub("NM")
-    with patch.dict(sys.modules, {"app.application.excel_imports": fake_excel}):
+    with patch.dict(sys.modules, {"app.domain.app_pure.excel_imports": fake_excel}):
         with (
             patch(f"{MODULE}.get_sync_engine", return_value=eng),
             patch(f"{MODULE}._products_pg_col_names", return_value=col_names),
@@ -960,7 +960,7 @@ def test_products_pg_insert_row_icols_empty_raises_500():
     eng2 = MagicMock()
 
     fake_excel = _make_excel_imports_stub("NM")
-    with patch.dict(sys.modules, {"app.application.excel_imports": fake_excel}):
+    with patch.dict(sys.modules, {"app.domain.app_pure.excel_imports": fake_excel}):
         with (
             patch(f"{MODULE}.get_sync_engine", return_value=eng2),
             patch(f"{MODULE}._products_pg_col_names", side_effect=fake_col_names),

@@ -108,7 +108,7 @@ class DatabaseWorkflowCheckpointer:
         if self._schema_ensured:
             return
         try:
-            from app.db.base import Base
+            from app.db.db_base import Base
             from app.db.models.workflow import WorkflowCheckpoint
 
             Base.metadata.create_all(

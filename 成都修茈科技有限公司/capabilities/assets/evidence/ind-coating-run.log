@@ -1,5 +1,0 @@
-2026-09-29T20:25:43+0800 [ind-coating] 开始验收 ind-coating 涂装行业包；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
-2026-09-29T20:25:43+0800 [ind-coating] M1 failed :: 受阻：该行业包需涂装行业企业账号授权；SUNBIRD 为饰品包装行业账号，已加载 Mod 与行业清单中均无涂装包
-2026-09-29T20:25:43+0800 [ind-coating] M2 failed :: 受阻：同上：未授权涂装行业包，无法在本账号打开涂装字段页
-2026-09-29T20:25:44+0800 [ind-coating] screenshot result.png
-2026-09-29T20:25:45+0800 [ind-coating] video operation.webm bytes=121242

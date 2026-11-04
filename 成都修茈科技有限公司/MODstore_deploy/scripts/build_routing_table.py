@@ -30,7 +30,9 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 YUANGON_DIR = REPO_ROOT / "yuangon"
 DOCS_OUT = REPO_ROOT / "MODstore_deploy" / "docs" / "routing-table.md"
-JSON_OUT = REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "routing_table.json"
+JSON_OUT = (
+    REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "routing_table.json"
+)
 
 
 def _without_generated_timestamp(text: str) -> str:
@@ -67,10 +69,14 @@ def _collect() -> list[dict[str, Any]]:
                 "domain": str(d.get("domain") or "").strip().splitlines()[:1]
                 and " ".join(str(d.get("domain") or "").split())[:200],
                 "scope_globs": [
-                    s for s in (d.get("scope_globs") or []) if isinstance(s, str) and s.strip()
+                    s
+                    for s in (d.get("scope_globs") or [])
+                    if isinstance(s, str) and s.strip()
                 ],
                 "forbidden_globs": [
-                    s for s in (d.get("forbidden_globs") or []) if isinstance(s, str) and s.strip()
+                    s
+                    for s in (d.get("forbidden_globs") or [])
+                    if isinstance(s, str) and s.strip()
                 ],
                 "depends_on": list(d.get("depends_on") or []),
                 "subscribes": list((d.get("triggers") or {}).get("subscribes") or []),
@@ -101,7 +107,9 @@ def _render_md(rows: list[dict[str, Any]]) -> str:
     for r in rows:
         scope = "<br>".join(f"`{g}`" for g in r["scope_globs"][:3]) or "—"
         subs = ", ".join(f"`{s}`" for s in r["subscribes"]) or "—"
-        lines.append(f"| {r['area']} | **{r['id']}** ({r['name']}) | {scope} | {subs} |")
+        lines.append(
+            f"| {r['area']} | **{r['id']}** ({r['name']}) | {scope} | {subs} |"
+        )
     lines.append("")
     lines.append("## Detail")
     for r in rows:
@@ -114,9 +122,13 @@ def _render_md(rows: list[dict[str, Any]]) -> str:
         if r["domain"]:
             lines.append(f"- domain: {r['domain']}")
         if r["depends_on"]:
-            lines.append(f"- depends_on: {', '.join(f'`{x}`' for x in r['depends_on'])}")
+            lines.append(
+                f"- depends_on: {', '.join(f'`{x}`' for x in r['depends_on'])}"
+            )
         if r["subscribes"]:
-            lines.append(f"- subscribes: {', '.join(f'`{x}`' for x in r['subscribes'])}")
+            lines.append(
+                f"- subscribes: {', '.join(f'`{x}`' for x in r['subscribes'])}"
+            )
         lines.append("- scope_globs:")
         for g in r["scope_globs"]:
             lines.append(f"  - `{g}`")
@@ -146,8 +158,12 @@ def _render_json(rows: list[dict[str, Any]]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else "")
-    parser.add_argument("--check", action="store_true", help="Fail if outputs would change.")
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0] if __doc__ else ""
+    )
+    parser.add_argument(
+        "--check", action="store_true", help="Fail if outputs would change."
+    )
     args = parser.parse_args()
 
     rows = _collect()
@@ -167,7 +183,8 @@ def main() -> int:
             != _without_generated_timestamp(json_text).strip()
         ):
             print(
-                "[CHECK] routing table is stale; run without --check to regenerate", file=sys.stderr
+                "[CHECK] routing table is stale; run without --check to regenerate",
+                file=sys.stderr,
             )
             return 1
         print("[CHECK] routing table is up-to-date")

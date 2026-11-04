@@ -1,7 +1,0 @@
-2026-09-30T04:27:58+0800 [erp-inventory-warehouse] 开始验收 erp-inventory-warehouse 仓库 / 库位 / 调拨 / 预警；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:27:58+0800 [erp-inventory-warehouse] M1 passed :: HTTP 200 99ms；仓库 id=4
-2026-09-30T04:27:58+0800 [erp-inventory-warehouse] M2 passed :: HTTP 200 68ms；{"id": 3, "warehouse_id": 4, "code": "A-01", "name": "A区01位", "max_capacity": null, "current_capacity": 0, "status": "active", "created_at": "2026-09-30 04:27:5
-2026-09-30T04:27:58+0800 [erp-inventory-warehouse] M3 passed :: HTTP 200 34ms；仓库 4 个
-2026-09-30T04:28:02+0800 [erp-inventory-warehouse] M4 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/inventory；命中文本 ['库存']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 库存管理 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 库存管理 | 导出 Excel入库出库 |  | 按当前筛选导出全部库存明细，单次最多 50,000 条。 |  | 全部仓库 | MAC验收0929仓 | M
-2026-09-30T04:28:03+0800 [erp-inventory-warehouse] screenshot result.png
-2026-09-30T04:28:05+0800 [erp-inventory-warehouse] video operation.webm bytes=290814

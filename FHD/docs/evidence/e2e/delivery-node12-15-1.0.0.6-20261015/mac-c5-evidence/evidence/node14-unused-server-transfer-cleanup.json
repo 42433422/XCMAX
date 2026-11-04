@@ -1,0 +1,8 @@
+{
+  "stoppedOwnAlternatePullPids": [],
+  "removedOwnUnusedPartial": "/var/tmp/xcagi-publish-c5-20261015/artifact-11973806197.zip.part",
+  "bytes": 16777216,
+  "retained": "Three final accepted packages in version-specific public directory",
+  "time": "2026-10-15T22:18:10.062382+08:00",
+  "priorAttemptCorrection": "Initial cleanup matched its own process before deleting any file; this attempt excludes its own PID and matches original pull script prefix."
+}

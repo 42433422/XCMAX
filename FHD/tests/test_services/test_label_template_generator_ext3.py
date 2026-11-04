@@ -755,7 +755,7 @@ class TestExtractTextWithOcrGridDetectionDeep:
             ) as MockImage,
         ):
             MockImage.open.return_value = img
-            with patch("app.services.ocr_service.get_ocr_service") as mock_get_svc:
+            with patch("app.domain.shared_services.ocr_service.get_ocr_service") as mock_get_svc:
                 mock_svc = MagicMock()
                 mock_svc.recognize_text_blocks.return_value = [
                     {
@@ -832,7 +832,7 @@ class TestExtractTextWithOcrGridDetectionDeep:
             ) as MockImage,
         ):
             MockImage.open.return_value = img
-            with patch("app.services.ocr_service.get_ocr_service") as mock_get_svc:
+            with patch("app.domain.shared_services.ocr_service.get_ocr_service") as mock_get_svc:
                 mock_svc = MagicMock()
                 mock_svc.recognize_text_blocks.return_value = []
                 mock_svc.get_active_ocr_backend.return_value = "mock"

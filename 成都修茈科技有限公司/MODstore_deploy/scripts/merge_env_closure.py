@@ -36,7 +36,10 @@ def dump(data: dict[str, str], header: str = "") -> str:
 
 def main() -> int:
     if len(sys.argv) < 4:
-        print("usage: merge_env_closure.py <base.env> <overlay.env> <out.env>", file=sys.stderr)
+        print(
+            "usage: merge_env_closure.py <base.env> <overlay.env> <out.env>",
+            file=sys.stderr,
+        )
         return 2
     base = parse(Path(sys.argv[1]))
     overlay = parse(Path(sys.argv[2]))

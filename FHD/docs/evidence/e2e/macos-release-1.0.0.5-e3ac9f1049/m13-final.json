@@ -1,0 +1,26 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M13.two-arch-final",
+ "product_version": "1.0.0.5",
+ "candidate_release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "origin_main_tip": "bd29251969a1544be7207aa3eb6a1f81d10fb47c",
+ "old_evidence_not_reused": "c46f93821b 及更早审计失败记录不作为本轮结论",
+ "arm64": {
+  "M02": "PASS",
+  "M03_M04": "PASS 公证包 run 38231964156",
+  "M05_M06": "PASS 干净安装与 Mod/租户隔离（本轮早些时候同 SHA）",
+  "M07": "PASS 取消 + 确认审批写入 M07确认品",
+  "M08": "PASS 发货单 20261012191340，XLSX 读回",
+  "M09": "PASS 备份 xcagi.db.20261012_191321.bak 后真实恢复",
+  "M10": "PASS 增量商品回滚，审批 1,2,3 保留并新增 4，审计 6→9→12",
+  "M11": "PASS 退出重开后商品、单号、审计计数不变",
+  "M12": "PASS 从 c46f938 应用内升级，ShipIt 完成并拉起，公证仍有效，验收数据仍在"
+ },
+ "x64": {
+  "package": "PASS run 38231975504 签名公证哈希",
+  "runtime": "Rosetta 2，无原生 Intel 机",
+  "M09_M10": "PASS 备份 xcagi.db.20261012_192624.bak，X64增量品写入后被恢复去掉，审批 1 保留并新增 2，审计 3→6"
+ },
+ "verdict": "PASS",
+ "captured_at_utc": "2026-10-12T11:26:49Z"
+}

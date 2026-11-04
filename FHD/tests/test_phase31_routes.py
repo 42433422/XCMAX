@@ -83,7 +83,9 @@ def test_compat_customers_match_mod_block(
     assert r.json()["matched"] is None
 
 
-def test_compat_customer_get_one_and_create(compat_customer_client: TestClient) -> None:
+def test_compat_customer_get_one_and_create(
+    compat_customer_client: TestClient, local_tools
+) -> None:
     row = MagicMock()
     row.id = 2
     with (
@@ -113,7 +115,7 @@ def test_compat_customer_get_one_and_create(compat_customer_client: TestClient) 
         assert created.json()["data"]["id"] == 3
 
 
-def test_compat_customer_batch_delete(compat_customer_client: TestClient) -> None:
+def test_compat_customer_batch_delete(compat_customer_client: TestClient, local_tools) -> None:
     with (
         patch.object(customer_routes, "_customers_write_raise"),
         patch.object(customer_routes, "_customer_delete_unified"),

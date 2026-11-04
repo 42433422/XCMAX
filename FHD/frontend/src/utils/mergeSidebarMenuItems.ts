@@ -100,7 +100,7 @@ function withoutRetiredBrainMenuItems(items: ResolvedSidebarMenuItem[]): Resolve
 
 /**
  * Model service stays in Settings. Mod 里的旧「业务对接」页已退役，勿再进侧栏；
- * 宿主「数据对接中心」(key=business-docking → EtlCenter) 仍由 core/industry 槽位展示。
+ * 宿主「数据对接中心」(key=business-docking → EltCenter) 仍由 core/industry 槽位展示。
  */
 function isConsolidatedCapabilityMenuItem(item: ResolvedSidebarMenuItem): boolean {
   const key = normalizeModSidebarNavKey(String(item.key || '').trim())

@@ -59,6 +59,7 @@ const submittingRequest = ref(false)
 const requestBusy = ref('')
 const reworkRequestId = ref(0)
 const requestReworkNotes = ref({})
+const requestMainSource = ref({})
 const requestKinds = [
   { id: 'module', label: '业务模块', summary: '生成可安装的私有 Mod 模块' },
   { id: 'employee', label: 'AI 员工', summary: '生成员工包、Skill 组和运行校验' },
@@ -180,7 +181,7 @@ async function decideRequest(item, action) {
     const response = await apiFetch(`/api/mod-store/private-delivery/requests/${item.id}/decision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, note: note || undefined }),
+      body: JSON.stringify({ action, note: note || undefined, source_mode: action === 'rework' && requestMainSource.value[item.id] ? 'versioned_main' : undefined }),
       timeoutMs: 60_000,
     })
     const body = await response.json().catch(() => ({}))
@@ -190,6 +191,7 @@ async function decideRequest(item, action) {
     }
     reworkRequestId.value = 0
     delete requestReworkNotes.value[item.id]
+    delete requestMainSource.value[item.id]
     await loadDelivery()
   } catch (cause) {
     if (generation === accountGeneration) error.value = cause instanceof Error ? cause.message : '定制交付操作失败'
@@ -445,6 +447,7 @@ watch(() => [account.tenantId, account.marketUserId, account.localUserId, accoun
   submittingRequest.value = false
   loading.value = false
   requestReworkNotes.value = {}
+  requestMainSource.value = {}
   reworkRequestId.value = 0
   closeReworkDialog()
   error.value = remoteError.value = requestError.value = ''

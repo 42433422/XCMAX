@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+import pytest
+
 from modstore_server.employee_orchestrator import _topo_layers
 
 
@@ -27,13 +29,11 @@ def test_topo_layers_orders_dependencies_then_priority():
     assert [s.employee_id for s in layers[1]] == ["c"]
 
 
-def test_topo_layers_handles_cycles_by_putting_remaining_last():
+def test_topo_layers_rejects_cycles():
     a = _SubTaskStub(employee_id="a", depends_on=["b"])
     b = _SubTaskStub(employee_id="b", depends_on=["a"])
-    layers = _topo_layers([a, b])
-
-    flattened = [s.employee_id for layer in layers for s in layer]
-    assert sorted(flattened) == ["a", "b"]
+    with pytest.raises(ValueError, match="cycle"):
+        _topo_layers([a, b])
 
 
 def test_plan_and_dispatch_no_user(monkeypatch):
@@ -42,3 +42,23 @@ def test_plan_and_dispatch_no_user(monkeypatch):
     monkeypatch.setattr(eo, "_resolve_uid", lambda _uid: 0)
     out = eo.plan_and_dispatch("brief", {"k": "v"}, created_by_user_id=0)
     assert out == {"ok": False, "error": "no user in DB for duty graph"}
+
+
+def test_failed_dependency_does_not_dispatch_downstream(monkeypatch):
+    from modstore_server import employee_orchestrator as eo
+
+    calls = []
+    monkeypatch.setattr(eo, "_resolve_uid", lambda uid: 1)
+    monkeypatch.setattr(eo, "_record_dispatch_metric", lambda **kw: None)
+
+    def execute(employee, *args, **kwargs):
+        calls.append(employee)
+        return {"result": {"outputs": [{"handler": "echo", "ok": False, "error": "failed"}]}}
+
+    monkeypatch.setattr("modstore_server.employee_executor.execute_employee_task", execute)
+    result = eo.dispatch_subtasks(
+        [_SubTaskStub("first"), _SubTaskStub("next", depends_on=["first"])]
+    )
+    assert calls == ["first"]
+    assert result["ok"] is False
+    assert result["results"][1]["status"] == "skipped"

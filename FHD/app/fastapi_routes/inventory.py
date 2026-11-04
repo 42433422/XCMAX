@@ -4,20 +4,14 @@
 
 from __future__ import annotations
 
-import logging
-from datetime import datetime
 from typing import Any
-from urllib.parse import quote
 
-from fastapi import APIRouter, Body, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi import Body, Query, Request
 
-from app.application.workflow.types import normalize_workflow_risk
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.application.workflow.workflow_types import normalize_workflow_risk
+from app.fastapi_routes.inventory_exports import router as export_router
 
-logger = logging.getLogger(__name__)
-
-router = APIRouter(tags=["inventory"])
+router = export_router
 
 
 def _svc():
@@ -50,7 +44,6 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
 def _inventory_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
     return str(
         request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
         or payload.get("user_id")
         or payload.get("userId")
         or "inventory-route"
@@ -65,7 +58,7 @@ def _run_inventory_agent(
     route_path: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
@@ -102,6 +95,7 @@ def _run_inventory_agent(
         "route": route_path,
         "request_path": str(request.url.path),
         "user_id": user_id,
+        "tenant_id": getattr(request.state, "tenant_id", None),
         "route_confirmed": True,
         "service_source": "fastapi_inventory_route",
     }
@@ -147,63 +141,6 @@ def inventory_list(
         per_page=per_page,
         keyword=keyword,
     )
-
-
-@router.get(
-    "/api/inventory/export.xlsx",
-    response_class=Response,
-    summary="Export the complete filtered inventory workbook",
-    description="Returns a tenant-scoped Excel snapshot; empty or over-limit results are rejected.",
-    responses={
-        200: {
-            "content": {
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
-                    "schema": {"type": "string", "format": "binary"}
-                }
-            }
-        },
-        404: {"description": "No inventory matches the filters"},
-        413: {"description": "More than 50,000 rows; narrow the filters"},
-        500: {"description": "Workbook generation failed"},
-    },
-)
-def inventory_export(
-    warehouse_id: int | None = Query(default=None, ge=1),
-    product_id: int | None = Query(default=None, ge=1),
-    batch_no: str | None = Query(default=None, max_length=50),
-    keyword: str | None = Query(default=None, max_length=200),
-):
-    try:
-        result = _svc().export_inventory(
-            warehouse_id=warehouse_id,
-            product_id=product_id,
-            batch_no=batch_no,
-            keyword=keyword,
-        )
-        if not result.get("success"):
-            status = 413 if result.get("error_code") == "INVENTORY_EXPORT_LIMIT" else 404
-            return JSONResponse(result, status_code=status, headers={"Cache-Control": "no-store"})
-        filename = f"库存明细-{datetime.now():%Y%m%d-%H%M%S}.xlsx"
-        return Response(
-            result["content"],
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={
-                "Content-Disposition": f"attachment; filename=inventory.xlsx; filename*=UTF-8''{quote(filename)}",
-                "X-Inventory-Row-Count": str(result["total"]),
-                "Cache-Control": "no-store",
-            },
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("Inventory workbook export failed")
-        return JSONResponse(
-            {
-                "success": False,
-                "error_code": "INVENTORY_EXPORT_FAILED",
-                "message": "库存导出失败，请稍后重试。",
-            },
-            status_code=500,
-            headers={"Cache-Control": "no-store"},
-        )
 
 
 @router.get("/api/inventory/summary")
@@ -280,6 +217,56 @@ def inventory_locations_put(
         params={"location_id": location_id, **dict(body or {})},
         route_path="/api/inventory/locations/{location_id}",
     )
+
+
+def _warehouse_setup_user(request: Request, permission_code: str) -> Any:
+    """仓库初始化只对已登录且有企业归属的会话开放，并按企业 SKU 做 RBAC。"""
+    from fastapi import HTTPException
+
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+    from app.mod_sdk.product_skus import resolve_product_sku
+
+    user = get_logged_in_user(request)
+    if getattr(user, "tenant_id", None) is None:
+        raise HTTPException(status_code=403, detail="企业归属缺失")
+    if resolve_product_sku() == "enterprise":
+        from app.application.facades.session_facade import get_auth_service
+
+        if not get_auth_service().has_permission(user, permission_code):
+            raise HTTPException(status_code=403, detail="权限不足")
+    return user
+
+
+@router.get("/api/inventory/setup/warehouse")
+def inventory_warehouse_setup_status(request: Request):
+    """当前企业是否已有可用仓库（新装或旧版升级后没有仓库时，前端据此显示引导）。"""
+    from app.application.inventory_default_warehouse import warehouse_setup_status
+    from app.db.session import get_db
+
+    user = _warehouse_setup_user(request, "shipment.view")
+    with get_db() as db:
+        status = warehouse_setup_status(db, int(user.tenant_id))
+    return {"success": True, "data": status}
+
+
+@router.post("/api/inventory/setup/warehouse")
+def inventory_warehouse_setup_init(request: Request):
+    """幂等初始化当前企业的默认仓库；已有可用仓库时不新建。"""
+    from app.application.inventory_default_warehouse import ensure_default_warehouse
+    from app.db.session import get_db
+
+    user = _warehouse_setup_user(request, "shipment.edit")
+    with get_db() as db:
+        warehouse, created = ensure_default_warehouse(db, int(user.tenant_id))
+        data = {
+            "id": warehouse.id,
+            "code": warehouse.code,
+            "name": warehouse.name,
+            "status": warehouse.status,
+            "created": bool(created),
+        }
+    message = "已创建默认仓库，请先入库再销售发货" if created else "已有可用仓库，无需初始化"
+    return {"success": True, "data": data, "message": message}
 
 
 @router.get("/api/inventory/warehouses")

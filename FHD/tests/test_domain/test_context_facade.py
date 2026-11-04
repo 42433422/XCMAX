@@ -1,4 +1,4 @@
-"""Comprehensive tests for app.domain.services.conversation.context.context_facade.
+"""Comprehensive tests for app.domain.conversation.services.context.context_facade.
 
 Covers: ContextFacade.process, _make_decision, all handler methods,
 update_pending_with_slots, confirm_pending, cancel_pending, get_context_summary,
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.domain.services.conversation.context.context_facade import (
+from app.domain.conversation.services.context.context_facade import (
     ContextDecision,
     ContextFacade,
     ContextFacadeContainer,
@@ -20,7 +20,7 @@ from app.domain.services.conversation.context.context_facade import (
     ProcessingResult,
     get_context_facade,
 )
-from app.domain.services.conversation.context.intent_context import (
+from app.domain.conversation.services.context.intent_context import (
     AdoptionReason,
     PendingIntent,
 )

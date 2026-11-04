@@ -45,14 +45,6 @@ def secret_path_for(platform: str, account_id: int) -> Path:
     return _secrets_root() / normalized_platform / f"{normalized_account_id}.json"
 
 
-def validate_qq_secret(secret: Mapping[str, Any]) -> None:
-    """Validate the three credentials required by QQ bot APIs."""
-    required = ("app_id", "app_secret", "bot_token")
-    missing = [name for name in required if not str(secret.get(name) or "").strip()]
-    if missing:
-        raise ValueError(f"QQ secret missing required field(s): {', '.join(missing)}")
-
-
 def write_secret(
     *,
     platform: str,
@@ -123,6 +115,5 @@ __all__ = [
     "delete_secret",
     "read_secret",
     "secret_path_for",
-    "validate_qq_secret",
     "write_secret",
 ]

@@ -229,7 +229,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -251,7 +251,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -307,7 +307,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -333,7 +333,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -355,7 +355,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -377,12 +377,12 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.services.tools_workflow_registered.execute_registered_workflow_tool",
+                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
                 return_value={"result": "ok"},
-                create=True,
-            ),
+            ) as dispatch,
         ):
             result = self._call("template_preview", {"action": "view"})
+            dispatch.assert_called_once_with("template_preview", "view", {"action": "view"})
         data = json.loads(result)
         assert "result" in data
 
@@ -527,7 +527,11 @@ class TestImportProductsPreview:
 
         df = self._make_df()
         mock_svc = MagicMock()
-        mock_svc.batch_add_products.return_value = {"success_count": 1, "failed_count": 0}
+        mock_svc.batch_add_products.return_value = {
+            "success": True,
+            "success_count": 1,
+            "failed_count": 0,
+        }
         mock_customer_svc = MagicMock()
         mock_customer_svc.create.return_value = {"success": True}
         mock_find_pu = MagicMock(return_value=MagicMock())  # unit already exists
@@ -539,7 +543,7 @@ class TestImportProductsPreview:
                 create=True,
             ),
             patch(
-                "app.services.unified_query_service.find_purchase_unit",
+                "app.domain.shared_services.unified_query_service.find_purchase_unit",
                 return_value=mock_find_pu(),
                 create=True,
             ),

@@ -8,7 +8,7 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
-from .types import Branch, PlanGraph, WorkflowNode
+from .workflow_types import Branch, PlanGraph, WorkflowNode
 
 DEFAULT_TTL_SECONDS = 1800
 

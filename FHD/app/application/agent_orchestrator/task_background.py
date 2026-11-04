@@ -26,6 +26,12 @@ def task_execution_context(run: AgentRun, step: Any) -> dict[str, Any]:
         "task_id": str(task_context.get("task_id") or ""),
         "task_attempt": int(task_context.get("attempt") or 1),
         "idempotency_key": f"agent:{run.run_id}:{step.step_id}",
+        **(
+            {"business_action_id": f"agent:{run.run_id}:{step.step_id}"}
+            if step.tool_id == "catalog_products_v1"
+            and step.action in {"append_price", "correct_price"}
+            else {}
+        ),
     }
 
 
@@ -204,6 +210,8 @@ class BackgroundTaskExecutionMixin:
         run = self._repo.get(run_id)
         if run is None:
             return None
+        if requires_retry_reconciliation(run):
+            return cast("AgentRun | None", run)
         if run.status not in {"queued", "running", "retrying"}:
             return cast("AgentRun | None", run)
         if recovered and not self._prepare_expired_execution_recovery(run):
@@ -246,6 +254,8 @@ class BackgroundTaskExecutionMixin:
         return cast("AgentRun | None", self._repo.save(run))
 
     def _prepare_expired_execution_recovery(self, run: AgentRun) -> bool:
+        if requires_retry_reconciliation(run):
+            return False
         from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
         running_steps = [step for step in run.steps if step.status == "running"]

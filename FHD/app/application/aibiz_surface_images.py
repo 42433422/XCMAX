@@ -94,15 +94,10 @@ def png_http_response(raw: bytes, *, view: str = "") -> Response:
     from app.application import aibiz_web_terminal_service as facade
 
     body = facade._transform_png_view(raw, view)
-    cacheable = view in ("thumb", "viewport", "")
     return Response(
         content=body,
         media_type="image/png",
-        headers={
-            "Cache-Control": (
-                "public, max-age=86400, immutable" if cacheable else "no-cache, must-revalidate"
-            )
-        },
+        headers={"Cache-Control": "private, no-store"},
     )
 
 

@@ -64,16 +64,34 @@ def _add_col(table: str, column: str, col_type: sa.Column) -> None:
 
 def upgrade() -> None:
     for col_name, col_def in [
-        ("embedding_provider", sa.Column("embedding_provider", sa.String(64), server_default="")),
-        ("embedding_source", sa.Column("embedding_source", sa.String(64), server_default="")),
+        (
+            "embedding_provider",
+            sa.Column("embedding_provider", sa.String(64), server_default=""),
+        ),
+        (
+            "embedding_source",
+            sa.Column("embedding_source", sa.String(64), server_default=""),
+        ),
     ]:
         _add_col("knowledge_collections", col_name, col_def)
 
     for col_name, col_def in [
-        ("material_category", sa.Column("material_category", sa.String(64), server_default="")),
-        ("license_scope", sa.Column("license_scope", sa.String(32), server_default="personal")),
-        ("origin_type", sa.Column("origin_type", sa.String(32), server_default="original")),
-        ("ip_risk_level", sa.Column("ip_risk_level", sa.String(16), server_default="low")),
+        (
+            "material_category",
+            sa.Column("material_category", sa.String(64), server_default=""),
+        ),
+        (
+            "license_scope",
+            sa.Column("license_scope", sa.String(32), server_default="personal"),
+        ),
+        (
+            "origin_type",
+            sa.Column("origin_type", sa.String(32), server_default="original"),
+        ),
+        (
+            "ip_risk_level",
+            sa.Column("ip_risk_level", sa.String(16), server_default="low"),
+        ),
         (
             "compliance_status",
             sa.Column("compliance_status", sa.String(32), server_default="approved"),
@@ -81,29 +99,55 @@ def upgrade() -> None:
         ("rank_score", sa.Column("rank_score", sa.Float(), server_default="100.0")),
         ("delist_reason", sa.Column("delist_reason", sa.Text(), server_default="")),
         ("industry", sa.Column("industry", sa.Text(), server_default="通用")),
-        ("security_level", sa.Column("security_level", sa.Text(), server_default="personal")),
+        (
+            "security_level",
+            sa.Column("security_level", sa.Text(), server_default="personal"),
+        ),
         ("industry_code", sa.Column("industry_code", sa.Text(), server_default="")),
-        ("industry_secondary", sa.Column("industry_secondary", sa.Text(), server_default="")),
-        ("description_embedding", sa.Column("description_embedding", sa.Text(), server_default="")),
-        ("template_category", sa.Column("template_category", sa.Text(), server_default="")),
-        ("template_difficulty", sa.Column("template_difficulty", sa.Text(), server_default="")),
+        (
+            "industry_secondary",
+            sa.Column("industry_secondary", sa.Text(), server_default=""),
+        ),
+        (
+            "description_embedding",
+            sa.Column("description_embedding", sa.Text(), server_default=""),
+        ),
+        (
+            "template_category",
+            sa.Column("template_category", sa.Text(), server_default=""),
+        ),
+        (
+            "template_difficulty",
+            sa.Column("template_difficulty", sa.Text(), server_default=""),
+        ),
         (
             "install_count",
-            sa.Column("install_count", sa.Integer(), server_default="0", nullable=False),
+            sa.Column(
+                "install_count", sa.Integer(), server_default="0", nullable=False
+            ),
         ),
         ("graph_snapshot", sa.Column("graph_snapshot", sa.Text(), server_default="")),
     ]:
         _add_col("catalog_items", col_name, col_def)
 
     for col_name, col_def in [
-        ("default_llm_json", sa.Column("default_llm_json", sa.Text(), server_default="")),
+        (
+            "default_llm_json",
+            sa.Column("default_llm_json", sa.Text(), server_default=""),
+        ),
         ("phone", sa.Column("phone", sa.Text())),
-        ("experience", sa.Column("experience", sa.Integer(), server_default="0", nullable=False)),
+        (
+            "experience",
+            sa.Column("experience", sa.Integer(), server_default="0", nullable=False),
+        ),
     ]:
         _add_col("users", col_name, col_def)
 
     for col_name, col_def in [
-        ("migration_status", sa.Column("migration_status", sa.Text(), server_default="")),
+        (
+            "migration_status",
+            sa.Column("migration_status", sa.Text(), server_default=""),
+        ),
         ("migrated_to_id", sa.Column("migrated_to_id", sa.Integer())),
         ("kind", sa.Column("kind", sa.Text(), server_default="")),
     ]:
@@ -112,16 +156,27 @@ def upgrade() -> None:
     for col_name, col_def in [
         (
             "auto_renew",
-            sa.Column("auto_renew", sa.Boolean(), server_default=sa.text("1"), nullable=False),
+            sa.Column(
+                "auto_renew", sa.Boolean(), server_default=sa.text("1"), nullable=False
+            ),
         ),
-        ("renewal_fail_reason", sa.Column("renewal_fail_reason", sa.Text(), server_default="")),
+        (
+            "renewal_fail_reason",
+            sa.Column("renewal_fail_reason", sa.Text(), server_default=""),
+        ),
     ]:
         _add_col("user_plans", col_name, col_def)
 
     for col_name, col_def in [
         ("git_branch", sa.Column("git_branch", sa.String(256), server_default="")),
-        ("base_commit_sha", sa.Column("base_commit_sha", sa.String(64), server_default="")),
-        ("staged_commit_sha", sa.Column("staged_commit_sha", sa.String(64), server_default="")),
+        (
+            "base_commit_sha",
+            sa.Column("base_commit_sha", sa.String(64), server_default=""),
+        ),
+        (
+            "staged_commit_sha",
+            sa.Column("staged_commit_sha", sa.String(64), server_default=""),
+        ),
         (
             "approval_required_globs_json",
             sa.Column("approval_required_globs_json", sa.Text(), server_default="[]"),

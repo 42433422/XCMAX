@@ -61,8 +61,6 @@ OPENAPI_TAGS = [
     {"name": "openapi-connectors", "description": "第三方 OpenAPI 连接器导入与调用"},
     {"name": "customer-service", "description": "客服编排与工具链"},
     {"name": "butler", "description": "数字管家（Butler）编排 API"},
-    {"name": "butler-qq", "description": "Butler ↔ QQ 官方机器人 HTTP 桥"},
-    {"name": "butler-qqbot", "description": "Butler QQ botpy 网关与 Webhook"},
     {"name": "developer", "description": "开发者门户与密钥"},
     {"name": "key-export", "description": "开发者密钥导出"},
     {"name": "sandbox", "description": "沙箱执行与校验"},

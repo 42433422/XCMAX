@@ -1,5 +1,11 @@
 {
   "_comment": "版本时间线的展示注解（era/shift/tags），仅作历史里程碑标注，不承载会漂移的事实；发布事实唯一来源是 /download-release.json 的 release_history。由 download-releases.html 运行时拉取。",
+  "phases": [
+    {"range": "v1 – v3", "title": "效率工具智能化", "description": "从 Excel 解析与标签打印，走向 AI 对话、OCR 与任务 Agent。"},
+    {"range": "v4 – v5", "title": "AI 员工平台化", "description": "多模态、角色化 AI 员工与 Neuro-DDD 架构成为主线。"},
+    {"range": "v6 – v8", "title": "生态与多端交付", "description": "Mod 商业生态、桌面与 Web 双端、行业化工作台逐步成型。"},
+    {"range": "v9 – 稳定版", "title": "企业级稳定发布", "description": "工程硬门禁、单轨生产线与多端交付持续收敛。"}
+  ],
   "presentationByVersion": {
     "1.0.0.1": { "era": "stable", "shift": "安装完成 → 客户版本可见且可持续追踪", "tags": ["交付可见", "回执 SSOT", "发布闭环"] },
     "1.0.0.0": { "era": "stable", "shift": "研发版本线 → 企业稳定发布线", "tags": ["三端交付", "稳定更新", "版本治理"] },

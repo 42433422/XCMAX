@@ -1,4 +1,7 @@
+import { installDesktopRendererErrorReporting, reportDesktopRendererFault } from '@/utils/desktopRendererErrors'
 import { createApp } from 'vue'
+
+installDesktopRendererErrorReporting()
 import { createPinia } from 'pinia'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import './fhd/installFetchDbReadToken'
@@ -25,6 +28,9 @@ import { applySidebarThemeFromStorage } from './utils/sidebarTheme'
 import { installClientConsoleBridge } from './utils/clientDebugLog'
 import { initServiceWorker, unregisterStaleServiceWorkers } from './utils/serviceWorker'
 import { bootstrapHostConfig } from '@/stores/hostConfig'
+import { waitForInitialBootstrapDependencies } from './bootstrapDependencies'
+import { prefetchRouteChunks } from './utils/routePrefetch'
+import { prefetchShellRouteChunks } from './utils/shellRoutePrefetch'
 
 import './styles/tokens.css'
 import './styles/css/base.css'
@@ -86,7 +92,7 @@ function scheduleRouterAddressSync(reason: string): void {
 
 /**
  * 后台分批预取静态路由的懒加载 chunk，使侧栏切换页面时无需等待 JS 拉取，消除「卡顿」。
- * 每次预取 4 个，交还主线程避免启动瞬间雪崩；仅预取非公开、非裸壳的业务/核心页面。
+ * 最多 4 个在途加载，完成后在空闲时继续；仅预取非公开、非裸壳的业务/核心页面。
  */
 function prefetchStaticRouteChunks(): void {
   const routes = router.getRoutes()
@@ -102,15 +108,7 @@ function prefetchStaticRouteChunks(): void {
     if (win.requestIdleCallback) win.requestIdleCallback(cb)
     else window.setTimeout(cb, 60)
   }
-  let index = 0
-  const step = (): void => {
-    const end = Math.min(index + 4, jobs.length)
-    for (; index < end; index++) {
-      jobs[index]().catch(() => {})
-    }
-    if (index < jobs.length) idle(step)
-  }
-  step()
+  void prefetchRouteChunks(jobs, idle)
 }
 
 /**
@@ -145,15 +143,14 @@ async function bootstrap() {
   const pinia = createPinia()
 
   app.config.errorHandler = (err, _instance, info) => {
-    console.error('[Vue]', info || 'unknown hook', err)
+    console.error('[Vue]', info || 'vue', err)
+    reportDesktopRendererFault(err, typeof info === 'string' ? info : undefined)
   }
   window.addEventListener('unhandledrejection', (event) => {
     console.error('[unhandledrejection]', event.reason)
   })
 
   app.use(pinia)
-  const { default: i18n } = await import('./i18n')
-  app.use(i18n)
   try {
     const shell = useAppShellStore()
     shell.setAppActive(true)
@@ -176,20 +173,25 @@ async function bootstrap() {
   // 等待首个路由守卫（含会话校验与登录重定向）完成后再挂载全局组件。
   // 否则未登录直达受保护页时，任务中心、教程和 SSE 会抢先请求受保护接口，
   // 在登录页留下成组 401，并可能短暂渲染不该出现的管理端壳。
-  await router.isReady()
+  // Router guards still finish before mount so session checks and deep-link redirects
+  // remain authoritative. Load the i18n chunk while that first navigation is pending.
+  const i18n = await waitForInitialBootstrapDependencies(
+    () => import('./i18n').then(module => module.default),
+    () => router.isReady(),
+  )
+  app.use(i18n)
+  // Speculative chunks must not compete with the current workspace's critical resources.
+  window.addEventListener('xcagi:startup-ready', () => {
+    prefetchShellRouteChunks(router)
+    const host = window.location.hostname
+    if (import.meta.env.DEV || host === '127.0.0.1' || host === 'localhost') prefetchStaticRouteChunks()
+  }, { once: true })
   app.mount('#app')
+  const startupRoot = document.getElementById('app')
+  if (startupRoot) startupRoot.dataset.startupMounted = 'true'
 
   if (typeof performance !== 'undefined' && performance.mark) {
     performance.mark('bootstrap_mount')
-  }
-
-  // 侧栏切换页面「卡顿」根因之一：路由组件均为懒加载 chunk，首次进入某页需现拉 JS。
-  // 桌面壳（localhost）下后台分批预取静态路由 chunk，让点击即切、无首访拉取等待。
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname
-    if (import.meta.env.DEV || host === '127.0.0.1' || host === 'localhost') {
-      prefetchStaticRouteChunks()
-    }
   }
 
   if (!readVanillaNoModUi()) {

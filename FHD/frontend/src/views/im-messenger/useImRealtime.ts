@@ -1,6 +1,7 @@
 import { nextTick } from 'vue'
 import type { Ref } from 'vue'
 import { imWebSocketUrl, markImRead, type ImConversationSummary, type ImMessage } from '@/api/im'
+import { captureMessageScroll } from '@/composables/messenger/useChatSession'
 
 /** ImMessengerView 实时通道依赖（与拆分前闭包引用一一对应） */
 export interface ImRealtimeDeps {
@@ -10,7 +11,7 @@ export interface ImRealtimeDeps {
   messages: Ref<ImMessage[]>
   wsConnected: Ref<boolean>
   wsConnecting: Ref<boolean>
-  scrollToBottom: () => void
+  scrollEl: Ref<HTMLElement | null>
   loadConversations: () => Promise<void>
   playIncoming: (body: string) => unknown
   /** 企业客服会话判定（来自 useEnterpriseCsBridge 返回值，拆分前为闭包引用） */
@@ -26,7 +27,7 @@ export function useImRealtime(deps: ImRealtimeDeps) {
     messages,
     wsConnected,
     wsConnecting,
-    scrollToBottom,
+    scrollEl,
     loadConversations,
     playIncoming,
     isCustomerEnterpriseCs,
@@ -41,8 +42,9 @@ export function useImRealtime(deps: ImRealtimeDeps) {
     if (isCustomerEnterpriseCs(cid)) return
     if (cid === activeConversationId.value) {
       if (!messages.value.some((m) => m.id === msg.id)) {
+        const restoreScroll = captureMessageScroll(scrollEl)
         messages.value.push(msg)
-        void nextTick().then(scrollToBottom)
+        void nextTick().then(() => { if (cid === activeConversationId.value) restoreScroll() })
         void markImRead(cid, msg.id)
       }
     }

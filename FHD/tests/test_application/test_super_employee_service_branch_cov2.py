@@ -38,7 +38,6 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from app.application.execution_scope import CapabilityGrant, ExecutionScope
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -53,6 +52,7 @@ from app.application.super_employee_service import (
     _safe_json_line,
     _utc_now,
 )
+from app.domain.app_pure.execution_scope import CapabilityGrant, ExecutionScope
 
 # ───────────────────── helpers ─────────────────────
 
@@ -1178,6 +1178,21 @@ class TestVerifyWorkspace:
         ok, msg = svc._verify_workspace(str(tmp_path))
         assert ok is True
         assert "自定义验证命令通过" in msg
+
+    def test_custom_command_does_not_interpret_shell_operators(self, tmp_path, monkeypatch) -> None:
+        import sys
+
+        monkeypatch.setenv(
+            "XCMAX_CLAUDE_VERIFY_CMD",
+            f'{sys.executable} -c \'from pathlib import Path; Path("ran.py").write_text("ok")\' '
+            "; touch shell-command-ran",
+        )
+        svc = _make_svc(tmp_path, cli_runner=_null_runner)
+        ok, msg = svc._verify_workspace(str(tmp_path))
+        assert ok is True
+        assert "自定义验证命令通过" in msg
+        assert (tmp_path / "ran.py").read_text(encoding="utf-8") == "ok"
+        assert not (tmp_path / "shell-command-ran").exists()
 
     def test_custom_command_fails(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCMAX_CLAUDE_VERIFY_CMD", "false")

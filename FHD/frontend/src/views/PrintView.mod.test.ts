@@ -140,7 +140,7 @@ describe('actual Mod label output flow', () => {
   })
   it('keeps shared ERP bridge page titles industry-neutral', () => {
     const titleOf = (name: string) => modRoutes.find((route: { name?: string }) => route.name === name)?.meta?.title
-    expect(titleOf('mod-erp-products')).toBe('业务对象')
+    expect(titleOf('mod-erp-products')).toBe('产品管理')
     expect(titleOf('mod-erp-orders-create')).toBe('新建业务单据')
     expect(titleOf('mod-erp-shipment-records')).toBe('业务记录')
     expect(titleOf('mod-erp-purchase')).toBe('采购管理')

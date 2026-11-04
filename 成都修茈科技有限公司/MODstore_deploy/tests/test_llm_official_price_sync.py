@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from modstore_server.db.base import Base
+from modstore_server.db.db_base import Base
 from modstore_server.llm_billing import (
     billing_settings_dict,
     get_or_create_billing_settings,

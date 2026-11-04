@@ -19,7 +19,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any, Generator, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -174,6 +174,39 @@ class SyncDb:
 
     def __init__(self) -> None:
         _initialize_database()
+
+    @staticmethod
+    def read_meta(key: str) -> dict[str, Any]:
+        """Read JSON metadata without invoking the constructor's corruption recovery."""
+        with _get_conn() as conn:
+            _ensure_schema(conn)
+            row = conn.execute("SELECT value FROM sync_meta WHERE key=?", (key,)).fetchone()
+        if not row:
+            return {}
+        try:
+            return cast("dict[str, Any]", json.loads(row[0] or "{}"))
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    @staticmethod
+    def write_meta(key: str, value: dict[str, Any]) -> None:
+        """Commit metadata using the existing sidecar connection and writer lock."""
+        with _lock, _get_conn() as conn:
+            _ensure_schema(conn)
+            conn.execute(
+                "INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
+                (key, json.dumps(value, ensure_ascii=False, default=str)),
+            )
+            conn.commit()
+
+    def get_pending_inbox(self, limit: int = 200) -> list[dict[str, Any]]:
+        with _get_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, entity_type, entity_id, operation, payload_json "
+                "FROM sync_inbox WHERE status='pending' LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------
     # 变更写入

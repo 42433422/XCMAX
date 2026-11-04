@@ -38,7 +38,7 @@ from app.neuro_bus.event_store import (
     store_event,
     validate_event_schema,
 )
-from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 

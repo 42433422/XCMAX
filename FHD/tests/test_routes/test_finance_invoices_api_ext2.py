@@ -120,7 +120,7 @@ class TestFinanceCrmInvoicesList:
         ):
             # We need to patch the lazy import inside the route
             with patch(
-                "app.services.user_cs_crm_store.list_crm_invoices",
+                "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
                 return_value={"invoices": [], "total": 0},
             ):
                 resp = client.get("/api/finance/invoices/crm")
@@ -149,7 +149,7 @@ class TestFinanceCrmInvoiceDetail:
         with (
             _admin_session(),
             patch(
-                "app.services.user_cs_crm_store.get_crm_invoice_by_id",
+                "app.domain.shared_services.user_cs_crm_store.get_crm_invoice_by_id",
                 return_value=None,
             ),
         ):
@@ -162,7 +162,7 @@ class TestFinanceCrmInvoiceDetail:
         with (
             _admin_session(),
             patch(
-                "app.services.user_cs_crm_store.get_crm_invoice_by_id",
+                "app.domain.shared_services.user_cs_crm_store.get_crm_invoice_by_id",
                 return_value={"id": 1, "amount": 100},
             ),
         ):
@@ -199,15 +199,15 @@ class TestFinanceCrmInvoiceIssue:
         with (
             _admin_session(),
             patch(
-                "app.services.user_cs_pipeline.load_pipeline",
+                "app.domain.shared_services.user_cs_pipeline.load_pipeline",
                 return_value={"crm_opportunity_id": 10},
             ) as mock_load,
             patch(
-                "app.services.tax_invoice_provider.issue_crm_invoice_for_pipeline",
+                "app.domain.shared_services.tax_invoice_provider.issue_crm_invoice_for_pipeline",
                 return_value=pipeline_doc,
             ) as mock_issue,
             patch(
-                "app.services.user_cs_pipeline.save_pipeline",
+                "app.domain.shared_services.user_cs_pipeline.save_pipeline",
                 return_value=pipeline_doc,
             ) as mock_save,
         ):
@@ -225,11 +225,11 @@ class TestFinanceCrmInvoiceIssue:
         with (
             _admin_session(),
             patch(
-                "app.services.user_cs_pipeline.load_pipeline",
+                "app.domain.shared_services.user_cs_pipeline.load_pipeline",
                 return_value={},
             ),
             patch(
-                "app.services.user_cs_crm_store.get_opportunity_by_market_user",
+                "app.domain.shared_services.user_cs_crm_store.get_opportunity_by_market_user",
                 return_value=None,
             ),
         ):
@@ -252,7 +252,7 @@ class TestFinanceCrmInvoiceArchive:
         with (
             _admin_session(),
             patch(
-                "app.services.user_cs_crm_store.get_crm_invoice_by_id",
+                "app.domain.shared_services.user_cs_crm_store.get_crm_invoice_by_id",
                 return_value=None,
             ),
         ):
@@ -266,11 +266,11 @@ class TestFinanceCrmInvoiceArchive:
         with (
             _admin_session(),
             patch(
-                "app.services.user_cs_crm_store.get_crm_invoice_by_id",
+                "app.domain.shared_services.user_cs_crm_store.get_crm_invoice_by_id",
                 return_value=inv,
             ),
             patch(
-                "app.services.finance_unified_archive.archive_from_crm_invoice",
+                "app.domain.shared_services.finance_unified_archive.archive_from_crm_invoice",
                 return_value={"archive_id": "A1"},
             ),
         ):

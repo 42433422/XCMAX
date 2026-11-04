@@ -3,8 +3,15 @@
     <div class="page-content">
       <div class="page-header">
         <h2>模板预览</h2>
-        <p class="muted" style="margin:0;font-size:13px;">展示导出用 Excel 与 Word 模板：可按业务分组管理，也可选「自定义」自由新建任意模板；Word 若有「适用业务」或可从文件名推断则归入对应分组，否则在各分组中均显示。</p>
+        <p class="muted" style="margin:0;font-size:13px;">浏览并管理已保存的 Excel / Word 导出模板：可按业务分组，也可「自定义」新建。</p>
       </div>
+
+      <section class="template-library-intake-note" aria-label="模板库说明">
+        <p class="muted" style="margin:0 0 12px;font-size:13px;line-height:1.5;">
+          模板库只浏览管理已保存模板。从 Excel 原件导入并生成模板，请到
+          <a href="/business-docking">数据对接中心</a>。
+        </p>
+      </section>
 
       <div class="template-preview-toolbar" style="display:flex;gap:8px;align-items:center;margin:12px 0 16px;flex-wrap:wrap;">
         <button
@@ -28,7 +35,9 @@
       <div class="grid-tool-card">
         <div class="grid-tool-title">Excel 网格映射工具</div>
         <div class="grid-tool-actions">
-          <input ref="gridToolFileInput" type="file" accept=".xlsx,.xls" @change="onGridToolFileSelected">
+          <input ref="gridToolFileInput" class="grid-tool-file-input" type="file" accept=".xlsx,.xls" aria-label="选择 Excel 文件" tabindex="-1" :disabled="extractingGrid" @change="onGridToolFileSelected">
+          <button type="button" class="btn btn-sm btn-secondary" aria-describedby="grid-tool-file-name" :disabled="extractingGrid" @click="gridToolFileInput?.click()">选择文件</button>
+          <span id="grid-tool-file-name" class="grid-tool-file-name muted" role="status" :title="gridToolFile?.name">{{ gridToolFile?.name || '未选择文件' }}</span>
           <button type="button" class="btn btn-sm btn-primary" :disabled="!gridToolFile || extractingGrid" @click="extractGridFromExcel">
             {{ extractingGrid ? '提取中...' : '上传提取模板网格' }}
           </button>
@@ -66,8 +75,7 @@
 </template>
 
 <script setup lang="ts">
-// 原超大 SFC 已拆分至 ./template-preview/（子组件 + composables + 独立 CSS）；
-// 入口保持对外路径/默认导出不变，仅做组装。
+import { ref } from 'vue'
 import TpTemplateCard from './template-preview/TpTemplateCard.vue'
 import TpCreateModal from './template-preview/TpCreateModal.vue'
 import TpPreviewModal from './template-preview/TpPreviewModal.vue'
@@ -79,6 +87,7 @@ import { assembleTemplatePreview } from './template-preview/assemble'
 defineOptions({ name: 'TemplatePreviewView' })
 
 const tp = assembleTemplatePreview()
+const gridToolFileInput = ref<HTMLInputElement | null>(null)
 
 const {
   scopeTabs, activeScopeTab, refreshTemplates, openCreateModal,
@@ -89,3 +98,12 @@ const {
 </script>
 
 <style scoped src="./template-preview/template-preview.css"></style>
+<style scoped>
+.template-preview-toolbar {
+  position: relative;
+  z-index: 1;
+}
+.template-library-intake-note a {
+  color: #235d8c;
+}
+</style>

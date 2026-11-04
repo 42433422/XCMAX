@@ -19,8 +19,7 @@ if [[ "${XCAGI_ALLOW_WINDOWS_THIN_SHELL:-0}" != "1" ]]; then
 [err] Windows Electron-only thin shell is disabled for release builds.
       It produces an installer without resources/backend/xcagi-backend.exe,
       so the installed Windows app cannot start the embedded backend.
-      Use scripts/package/build-windows-installer.sh on macOS/Linux,
-      or scripts/package/build-installer.ps1 on Windows.
+      Use scripts/package/build-installer.ps1 on Windows for the WPF installer.
       For a diagnostic shell-only build, set XCAGI_ALLOW_WINDOWS_THIN_SHELL=1.
 EOF
   exit 2
@@ -42,7 +41,7 @@ sku_update_url() {
 }
 
 LABEL="$(sku_label "${SKU}")"
-OUT_DIR="${ROOT}/release/xcagi-v${VERSION}/${SKU}"
+OUT_DIR="${ROOT}/release/_windows-payload/${VERSION}/${SKU}-thin"
 mkdir -p "${OUT_DIR}"
 
 echo "========== Windows Electron-only SKU: ${SKU} =========="

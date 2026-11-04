@@ -14,7 +14,7 @@ from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.shipment_app_service import ShipmentApplicationService
-from app.db.base import Base
+from app.db.db_base import Base
 from app.fastapi_routes import shipment_orders
 from app.infrastructure.auth import business_scope_gate as gate
 from app.infrastructure.persistence.shipment_record_command_impl import (
@@ -23,10 +23,16 @@ from app.infrastructure.persistence.shipment_record_command_impl import (
 from app.infrastructure.persistence.shipment_record_query_impl import SQLAlchemyShipmentRecordQuery
 from app.infrastructure.repositories.shipment_repository_impl import SQLAlchemyShipmentRepository
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(tmp_path, monkeypatch):
+def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
+    tmp_path, monkeypatch, trusted_actor
+):
+    actor7 = trusted_actor(user_id=11, tenant_id=7)
+    actor8 = trusted_actor(user_id=22, tenant_id=8)
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'shipments.db'}")
     engine = create_engine(f"sqlite:///{tmp_path / 'shipments.db'}")
     Base.metadata.create_all(engine)
     monkeypatch.setattr("app.db.session.SessionLocal", sessionmaker(bind=engine))
@@ -38,10 +44,6 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(tmp_
     )
     user = [SimpleNamespace(id=11, is_active=True, role="user", tier="enterprise", tenant_id=7)]
     monkeypatch.setattr(shipment_orders, "_svc", lambda: service)
-    monkeypatch.setattr(
-        "app.infrastructure.auth.agent_principal.resolve_session_user", lambda _r: user[0]
-    )
-    monkeypatch.setattr(gate, "resolve_session_user", lambda _r: user[0])
     monkeypatch.setattr(gate, "resolve_product_sku", lambda: "enterprise")
     allowed = [True]
     monkeypatch.setattr(
@@ -67,7 +69,7 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(tmp_
         with tenant_scope(user[0].tenant_id if user[0] else None):
             return await call_next(request)
 
-    client = TestClient(app)
+    client = TestClient(app, headers=actor7.headers)
     path = "/api/shipment/shipment-records/record"
     params = {
         "unit_name": "同名客户",
@@ -133,6 +135,7 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(tmp_
         user[0] = SimpleNamespace(
             id=22, is_active=True, role="user", tier="enterprise", tenant_id=8
         )
+        client.headers.update(actor8.headers)
         assert client.get(path + "s").json()["data"] == []
         assert client.patch(path, json={"id": record_id, "status": "cancelled"}).status_code == 404
         assert client.request("DELETE", path, json={"id": record_id}).status_code == 404
@@ -180,10 +183,12 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(tmp_
                 != service.export_shipment_records()["file_path"]
             )
         user[0] = None
+        del client.headers["X-Session-ID"]
         assert client.post(path, json=params, headers={"X-User-ID": "11"}).status_code == 401
         user[0] = SimpleNamespace(
             id=11, is_active=True, role="user", tier="enterprise", tenant_id=7
         )
+        client.headers.update(actor7.headers)
         assert client.request("DELETE", path, json={"id": record_id}).status_code == 200
         with tenant_scope(7):
             assert service.get_shipment_records() == []

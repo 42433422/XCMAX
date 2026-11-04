@@ -52,7 +52,13 @@ const routes: RouteRecordRaw[] = [
     path: '/repository/mod/:modId',
     redirect: (to) => ({ name: 'mod-authoring', params: { modId: to.params.modId } }),
   },
-  { path: '/admin', redirect: '/admin/database', meta: { auth: true, admin: true } },
+  { path: '/admin', redirect: '/admin/overview', meta: { auth: true, admin: true } },
+  {
+    path: '/admin/overview',
+    name: 'admin-overview',
+    component: () => import('../views/AdminView.vue'),
+    meta: { auth: true, admin: true },
+  },
   {
     path: '/admin/database',
     name: 'admin-database',

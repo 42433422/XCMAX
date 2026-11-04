@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pandas as pd
 
-from app.application.ports.vector_store import VectorStorePort
+from app.domain.excel.ports import VectorStorePort
 from app.domain.ports.embedder import EmbedderPort, HashEmbedder
 from app.infrastructure.persistence.pg_vector_store import PgVectorStore
 from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore

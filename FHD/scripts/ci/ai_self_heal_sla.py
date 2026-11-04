@@ -44,10 +44,10 @@ Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
 - update-branch 必须使用独立 `BRANCH_UPDATE_TOKEN`，避免 `GITHUB_TOKEN`
   触发的 PR 更新进入需要人工批准的 workflow 状态
 
-合并后发布闭环（2026-07-26）：
+合并后主干验证：
 - `GITHUB_TOKEN` 合并不会触发普通 `push` workflow；合并成功后必须用
   独立 `WORKFLOW_DISPATCH_TOKEN` 显式 workflow_dispatch FHD CI/CD 与
-  MODstore 主干 CI，确保下游 `workflow_run` CD 事件不会被递归触发保护吞掉
+  MODstore 主干 CI；FHD 绑定实际合并 SHA，不代替携带安全证据的正式发布编排
 - 任一派发失败都记为 `post_merge_dispatch_failed`、标记 `needs-human`，
   并让本次 SLA workflow 失败，禁止把“已合并”冒充“已发布”
 
@@ -108,17 +108,7 @@ NEEDS_HUMAN_LABEL = "needs-human"
 MERGE_FAIL_COMMENT_MARKER = "❌ 自动合并失败"
 POST_MERGE_DISPATCH_FAIL_MARKER = "❌ 自动合并后发布派发失败"
 
-POST_MERGE_WORKFLOWS: tuple[tuple[str, dict[str, str]], ...] = (
-    (
-        "fhd-ci-cd.yml",
-        {
-            "release_channel": "stable",
-            "push_to_cvm": "true",
-            "push_image_tar": "false",
-        },
-    ),
-    ("modstore-ci-backend-python.yml", {}),
-)
+POST_MERGE_WORKFLOWS = ("fhd-ci-cd.yml", "modstore-ci-backend-python.yml")
 
 # ai-self-heal / ai-generated 标签（用于区分普通 PR）
 AI_PR_LABELS = ("ai-self-heal", "ai-generated")
@@ -672,11 +662,11 @@ def _try_auto_merge(
         if not merge_sha:
             dispatch_failures.append(f"merge_sha:{reason}")
         else:
-            for workflow_file, inputs in POST_MERGE_WORKFLOWS:
+            for workflow_file in POST_MERGE_WORKFLOWS:
                 dispatched, dispatch_reason = client.dispatch_workflow(
                     workflow_file,
                     ref="main",
-                    inputs=inputs,
+                    inputs={"release_sha": merge_sha} if workflow_file == "fhd-ci-cd.yml" else {},
                 )
                 if not dispatched:
                     dispatch_failures.append(f"{workflow_file}:{dispatch_reason}")
@@ -711,7 +701,7 @@ def _try_auto_merge(
                 "author": pr.author,
                 "action": success_action,
                 "merge_sha": merge_sha,
-                "dispatched_workflows": [item[0] for item in POST_MERGE_WORKFLOWS],
+                "dispatched_workflows": list(POST_MERGE_WORKFLOWS),
                 **(metric_extra or {}),
             }
         )

@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 UTC = timezone.utc  # noqa: UP017 - production runtime still supports Python 3.10
 
@@ -63,5 +63,5 @@ def failed_merge_request_attempt(
             and str(record.get("para_task_id") or "").strip()
             and str(record.get("branch") or "").strip()
         ):
-            return record
+            return cast(dict[str, Any], record)
     return None

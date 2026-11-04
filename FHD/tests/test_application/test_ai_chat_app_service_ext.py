@@ -10,20 +10,13 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-
+from tests.test_application.ai_chat_test_helpers import (
+    _make_svc as _make_service,
+)
 
 # ---------------------------------------------------------------------------
 # Helper: create service with all heavy deps mocked
 # ---------------------------------------------------------------------------
-def _make_service():
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
 
 
 # ========================= _skip_pro_excel_deterministic_import =============
@@ -67,45 +60,13 @@ class TestSkipProExcelDeterministicImport:
         assert _skip_pro_excel_deterministic_import(ctx) is False
 
 
-# ========================= _is_pro_source ================================
-
-
-class TestIsProSource:
-    def test_pro(self):
-        assert AIChatApplicationService._is_pro_source("pro") is True
-
-    def test_pro_mode(self):
-        assert AIChatApplicationService._is_pro_source("pro_mode") is True
-
-    def test_promode(self):
-        assert AIChatApplicationService._is_pro_source("promode") is True
-
-    def test_professional(self):
-        assert AIChatApplicationService._is_pro_source("professional") is True
-
-    def test_xcagi_pro(self):
-        assert AIChatApplicationService._is_pro_source("xcagi_pro") is True
-
-    def test_pro_dash_mode(self):
-        assert AIChatApplicationService._is_pro_source("pro-mode") is True
-
-    def test_normal(self):
-        assert AIChatApplicationService._is_pro_source("normal") is False
-
-    def test_none(self):
-        assert AIChatApplicationService._is_pro_source(None) is False
-
-    def test_empty(self):
-        assert AIChatApplicationService._is_pro_source("") is False
-
-
 # ========================= _merge_tool_runtime_context ===================
 
 
 class TestMergeToolRuntimeContext:
     def test_basic_merge(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello")
-        assert result["user_id"] == "u1"
+        assert result["conversation_id"] == "u1"
         assert result["message"] == "hello"
 
     def test_context_ui_surface(self):
@@ -129,7 +90,7 @@ class TestMergeToolRuntimeContext:
 
     def test_none_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hi", None)
-        assert result == {"user_id": "u1", "message": "hi", "tenant_id": "1"}
+        assert result == {"conversation_id": "u1", "message": "hi", "tenant_id": "1"}
 
 
 # ========================= _build_fallback_response ======================
@@ -350,10 +311,6 @@ class TestResolveExcelPathForImport:
             {"file_path": "/tmp/a.xlsx"}, {"file_path": "/tmp/b.xlsx"}
         )
         assert result == "/tmp/a.xlsx"
-
-    def test_empty(self):
-        result = AIChatApplicationService._resolve_excel_path_for_import({}, {})
-        assert result == ""
 
 
 # ========================= _resolve_force_header_row_1based ===============

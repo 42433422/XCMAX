@@ -7,7 +7,7 @@ import json
 import os
 import threading
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import Context, ContextVar, copy_context
 from typing import Any, cast
 
@@ -35,9 +35,8 @@ from app.infrastructure.llm.client import (
 from app.infrastructure.llm.client import (
     resolve_chat_model,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
-# 流式 SSE 里展示给用户的中文说明（避免裸 snake_case +「...]」像截断 bug）
-# generate_office_document 的展示文案由 _tool_stream_call_label 按 output_format 细分
 _PLANNER_TOOL_STREAM_LABELS: dict[str, str] = {
     "generate_office_document": "生成可下载文档（Word 或 Excel）",
     "import_excel_to_database": "导入 Excel 到数据库",
@@ -175,6 +174,9 @@ def _append_last_tool_record(
         }
     )
     _LAST_TOOL_TRACE.records = records
+    from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
+
+    publish_stream_tool_record(copy.deepcopy(records[-1]))
 
 
 def reset_last_tool_result() -> None:
@@ -331,12 +333,7 @@ def append_tool_messages(
     execute_tool=None,
     db_write_token: str | None = None,
 ) -> dict[str, Any] | None:
-    """执行工具调用并添加消息;如果需要令牌则返回令牌请求信息。
-
-    同一轮次多个独立工具默认线程并行执行以缩短总耗时;含可能首轮即
-    requires_token 的写入类工具时保持串行,避免破坏「未到令牌则不应执行
-    后续工具」的语义。
-    """
+    """执行工具并记录消息；独立调用并行，令牌敏感调用串行且遇授权请求立即返回。"""
     if not tool_calls:
         return None
 
@@ -373,6 +370,7 @@ def append_tool_messages(
                     dedup_state.add(key)
             if is_dup:
                 payload = {
+                    "success": False,
                     "error": "duplicate_tool_call",
                     "hint": "same tool+arguments already executed",
                 }
@@ -406,12 +404,18 @@ def append_tool_messages(
         for i, (_tc, name, raw_eff, key) in enumerate(parsed):
             if key in dedup_state:
                 payloads[i] = {
+                    "success": False,
                     "error": "duplicate_tool_call",
                     "hint": "same tool+arguments already executed",
                 }
             else:
                 dedup_state.add(key)
                 to_run.append((i, name, raw_eff))
+
+    for i, (tc, name, raw_eff, _key) in enumerate(parsed):
+        duplicate_payload = payloads[i]
+        if duplicate_payload is not None:
+            _append_last_tool_record(tc, name, raw_eff, duplicate_payload)
 
     def _execute_idx(idx: int, name: str, raw_eff: str) -> tuple[int, dict[str, Any]]:
         raw = execute_tool(
@@ -428,19 +432,28 @@ def append_tool_messages(
     ) -> tuple[int, dict[str, Any]]:
         return context.run(_execute_idx, *item)
 
+    first_error = None
     if to_run:
         workers = min(max_workers, len(to_run))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(_execute_in_context, copy_context(), t) for t in to_run]
-            for future in futures:
-                idx, mapped_payload = future.result()
-                payloads[idx] = mapped_payload
+            for future in as_completed(futures):
+                try:
+                    idx, mapped_payload = future.result()
+                    payloads[idx] = mapped_payload
+                    tc, name, raw_eff, _key = parsed[idx]
+                    _append_last_tool_record(tc, name, raw_eff, mapped_payload)
+                except BOUNDARY_ERRORS as exc:  # adapter boundary drains receipts then re-raises
+                    if first_error is None:
+                        first_error = exc
+
+    if first_error is not None:
+        raise first_error
 
     for i, (tc, _name, _raw_eff, _key) in enumerate(parsed):
         parallel_payload = payloads[i]
         if parallel_payload is None:
             continue
-        _append_last_tool_record(tc, _name, _raw_eff, parallel_payload)
         if parallel_payload.get("requires_token"):
             return parallel_payload
         messages.append(

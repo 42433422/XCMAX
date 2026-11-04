@@ -61,7 +61,7 @@ def _probe_rasa() -> dict:
 
 
 def _probe_intent_engines() -> dict:
-    from app.domain.services.unified_intent_recognizer import (
+    from app.domain.conversation.unified_intent_recognizer import (
         get_unified_intent_recognizer,
     )
 

@@ -31,14 +31,16 @@ concurrency:
 jobs:
   dispatch-nightly:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
+      - uses: actions/checkout@v4
       - name: Resolve latest main SHA
         id: target
         run: |
           set -euo pipefail
           ref="${{ inputs.ref || 'main' }}"
           sha="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/${ref}" | cut -f1)"
-          if [ -z "${sha}" ]; then
+          if [[ ! "${sha}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::无法解析 ${ref} 的 SHA"
             exit 1
           fi
@@ -46,29 +48,9 @@ jobs:
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           echo "Nightly 目标：${ref} @ ${sha}"
 
-      - name: Fan out heavy suites on latest main
+      - name: Fan out and aggregate heavy suites on latest main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ steps.target.outputs.ref }}
-        run: |
-          set -uo pipefail
-          failed=""
-          for wf in \
-            fhd-release-gate-ci.yml \
-            fhd-mutation-smoke.yml \
-            codeql.yml \
-            fhd-security-full-scan.yml \
-            fhd-alembic-ssot.yml \
-            desktop-macos-smoke.yml \
-            fhd-ci-mobile-flutter.yml \
-          ; do
-            echo "==> dispatch ${wf} @ ${REF}"
-            if ! gh workflow run "${wf}" --ref "${REF}"; then
-              failed="${failed} ${wf}"
-            fi
-          done
-          if [ -n "${failed}" ]; then
-            echo "::error::Nightly 派发失败:${failed}"
-            exit 1
-          fi
-          echo "✅ Nightly 已派发 ${REF}：各套件结果见对应 workflow 运行。"
+          RELEASE_SHA: ${{ steps.target.outputs.sha }}
+        run: bash FHD/scripts/ci/aggregate_nightly_results.sh

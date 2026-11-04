@@ -47,6 +47,8 @@ export interface DeliverableStatus {
 export interface IndustryBaselineItem {
   mod_id: string
   runtime_mod_id?: string
+  delivery_status?: string
+  delivery_deferred?: boolean
   label: string
   tier: 'core' | 'host' | 'optional' | 'custom' | 'industry_package' | 'account_custom'
   required: boolean
@@ -113,6 +115,7 @@ export interface IndustryBaselinePlan {
   missing_industry_mod_ids: string[]
   account_custom_mod_ids?: string[]
   missing_account_custom_mod_ids?: string[]
+  deferred_account_custom_mod_ids?: string[]
   account_delivery_seed_packages?: AccountDeliverySeedPackage[]
   custom_employee_extension_mod_ids?: string[]
   host_baseline_ready?: boolean

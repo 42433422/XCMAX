@@ -14,7 +14,6 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     }
   }
 
-
   List<ConversationItem> fallbackConversations({
     bool adminMode = true,
     bool enterpriseMode = true,
@@ -33,6 +32,7 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
   }
 
   Future<String> _relayIdForSuperEmployeeDispatch() async {
+    final generation = _client.authGeneration;
     final session = await _client.loadSession();
     final storedRelayId = session.relayDesktopId.trim();
     try {
@@ -70,7 +70,8 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
       final latestRelayId = _stringField(latest, 'relay_id');
       if (latestRelayId.isEmpty) return '';
       if (latestRelayId != storedRelayId) {
-        await _client.persistRelayBindingMeta(latestRelayId, latest);
+        await _client.persistRelayBindingMeta(latestRelayId, latest,
+            authGeneration: generation);
       }
       return latestRelayId;
     } on MobileRepositoryException {
@@ -89,6 +90,7 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     String conversationId,
     String taskId,
   ) async {
+    final generation = _client.authGeneration;
     final id = conversationId.trim();
     if (id.isEmpty) return;
     final session = await _client.loadSession();
@@ -99,7 +101,8 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     } else {
       tasks[id] = cleanTaskId;
     }
-    await _client.saveSession(session.copyWith(inflightRelayTasks: tasks));
+    await _client.saveSession(session.copyWith(inflightRelayTasks: tasks),
+        authGeneration: generation);
   }
 
   Future<bool> _clearInflightIfRelayChanged(
@@ -133,6 +136,7 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     required ChatRole role,
     required String body,
   }) async {
+    final generation = _client.authGeneration;
     final id = conversationId.trim();
     final text = body.trim();
     if (id.isEmpty || text.isEmpty) return;
@@ -168,6 +172,7 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
         cachedChatMessages: cache,
         conversationListStates: states,
       ),
+      authGeneration: generation,
     );
   }
 }

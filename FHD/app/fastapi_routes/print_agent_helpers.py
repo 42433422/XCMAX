@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app.application.workflow.types import normalize_workflow_risk
+from app.application.workflow.workflow_types import normalize_workflow_risk
 
 
 def print_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
@@ -56,7 +56,7 @@ def run_print_agent(
     route_path: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()

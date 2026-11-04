@@ -2,9 +2,18 @@
 <template>
   <div class="chat-view page-view active" id="view-chat">
     <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
+    <div v-if="cacheError" class="chat-cache-warning chat-composer-status chat-composer-status--error" role="alert">
+      {{ cacheError }} <button type="button" class="btn btn-secondary btn-sm" @click="retryMessagesCache">重试本机保存</button>
+    </div>
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
+        :empty-intro="getIndustryPreset(currentIndustryId).scenario"
+        @fill-example="fillComposer"
+        :session-key="messageSessionKey"
+        :proactive-suggestions="proactiveSuggestionsByMessage"
+        @pick-proactive-suggestion="pickProactiveSuggestion"
         :messages="messages"
+        @retry-save="retryMessageSave"
         :is-loading="isLoading"
         :is-streaming-reply="isStreamingReply"
         :loading-progress-text="loadingProgressText"
@@ -34,6 +43,9 @@
         v-if="hasTaskPanelContent"
         :current-task="currentTask"
         :task-list="taskList"
+        :task-control-states="taskControlStates"
+        :task-sync-state="taskSyncState"
+        @refresh-tasks="refreshTasks"
         :filtered-task-list="filteredTaskList"
         :active-task-id="activeTaskId"
         :expanded-task-ids="expandedTaskIds"
@@ -74,7 +86,7 @@
       <ChatInputToolbar
         :excel-analyze-uploading="excelAnalyzeUploading"
         :multimodal-pending-count="multimodalPendingCount"
-        :auto-refresh-starred-wechat="autoRefreshStarredWechat"
+        :proactive-suggestions-enabled="proactiveEnabled"
         :tts-enabled="ttsEnabled"
         :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
         :office-docking-processing="officeDockingProcessing"
@@ -82,9 +94,10 @@
         @show-history="showHistoryPanel"
         @trigger-office-docking="triggerOfficeDocking"
         @excel-file-change="onExcelAnalyzeFileChange"
-        @auto-refresh-change="onAutoRefreshToolbarChange"
+        @proactive-suggestions-change="persistProactiveEnabled"
         @toggle-tts="setTtsEnabled"
       />
+      <ChatModelRecovery :scope-key="messageSessionKey" />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <span class="sheet-link-label">关联工作表：</span>
         <button
@@ -153,6 +166,9 @@
       </div>
     </div>
     <ChatHistoryModal
+      :history-has-more="historyHasMore"
+      :history-loading-more="historyLoadingMore"
+      @load-more="loadMoreHistorySessions"
       :show="showHistory"
       :history-sessions="historySessions"
       :history-loading="historyLoading"
@@ -191,6 +207,7 @@ import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import ChatQuickActions from '@/components/chat/ChatQuickActions.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
+import ChatModelRecovery from '@/components/chat/ChatModelRecovery.vue'
 import ChatTaskPanel from '@/components/chat/ChatTaskPanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
@@ -202,6 +219,8 @@ import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { useChatViewHost } from '@/composables/useChatViewHost'
+import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
@@ -212,8 +231,8 @@ const { mods: modsFromStore } = storeToRefs(modsStore)
 const industryStore = useIndustryStore()
 const { currentIndustryId } = storeToRefs(industryStore)
 
-// 主动意识：默认关闭，须用户主动勾选后才轮询星标会话
-const autoRefreshStarredWechat = ref(localStorage.getItem('xcagi_auto_refresh_starred_wechat') === '1')
+// The suggestions toggle must never activate WeChat polling.
+const autoRefreshStarredWechat = ref(false)
 const isTaskPaneResizable = ref(true)
 
 function generateSessionId(): string {
@@ -222,6 +241,7 @@ function generateSessionId(): string {
 
 const _storedSessionId = readAiSessionIdFromStorage()
 const currentSessionId = ref(_storedSessionId || generateSessionId())
+const messageSessionKey = computed(() => JSON.stringify([currentSessionId.value, modsStore.activeModId, productReadAccountEpoch.value]))
 if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 
 const chatViewApi = useChatView({ sessionId: currentSessionId })
@@ -232,6 +252,9 @@ const chatRefBag = {
 
 const {
   messages,
+  cacheError,
+  retryMessagesCache,
+  retryMessageSave,
   currentTask,
   orderNumberFetching,
   isLoading,
@@ -239,6 +262,9 @@ const {
   isExecuting,
   latestAssistantPush,
   taskList,
+  taskControlStates,
+  taskSyncState,
+  refreshTasks,
   filteredTaskList,
   activeTaskId,
   expandedTaskIds,
@@ -247,6 +273,9 @@ const {
   historySessions,
   historyLoading,
   historyError,
+  historyHasMore,
+  historyLoadingMore,
+  loadMoreHistorySessions,
   pushCopied,
   loadingProgressText,
   excelAnalyzeUploading,
@@ -294,6 +323,10 @@ const {
 } = chatViewApi
 
 const messageInput = ref('')
+function fillComposer(text: string) {
+  messageInput.value = text
+  document.getElementById('messageInput')?.focus()
+}
 
 const {
   voiceButtonDisabled,
@@ -305,7 +338,7 @@ const {
   startVoiceRecording,
   stopVoiceRecording,
   cleanupVoiceInput,
-} = useChatVoiceInput({ messageInput, isLoading })
+} = useChatVoiceInput({ messageInput, isLoading, sessionId: currentSessionId })
 
 const {
   messageHeights,
@@ -319,7 +352,7 @@ const {
   toggleMessageTts,
   batchCalculateHeights,
   stopMessageTts,
-} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef })
+} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef, sessionKey: messageSessionKey })
 
 const {
   paneStyle: chatPaneStyle,
@@ -406,7 +439,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
   }
 }
 
-const { onAutoRefreshToolbarChange } = useChatViewHost({
+useChatViewHost({
   modsStore,
   modsFromStore,
   autoRefreshStarredWechat,
@@ -421,6 +454,13 @@ const { onAutoRefreshToolbarChange } = useChatViewHost({
   cleanupVoiceInput,
   stopTaskPaneResize,
 })
+
+const {
+  proactiveEnabled,
+  proactiveSuggestionsByMessage,
+  persistProactiveEnabled,
+  pickProactiveSuggestion,
+} = useProactiveReplySuggestions({ messages, messageInput, isLoading, isStreamingReply, scopeKey: messageSessionKey })
 
 function openShipmentRecordsFromAuditTask() {
   window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: 'shipment-records' } }))

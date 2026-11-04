@@ -133,6 +133,7 @@ export type CustomDeliveryTicket = {
   created_at?: string;
   updated_at?: string;
   custom_delivery?: {
+    suggested_id?: string;
     kind?: string;
     requirements?: string;
     acceptance_criteria?: string;
@@ -346,10 +347,10 @@ export const xcmaxAdminApi = {
       ssot?: string;
     }>('/api/xcmax/admin/customer-deliveries/trial');
   },
-  decideCustomDelivery(ticketId: number, action: 'accept' | 'rework', note = '') {
+  decideCustomDelivery(ticketId: number, action: 'accept' | 'rework', note = '', sourceMode?: 'versioned_main') {
     return api.post<CustomDeliveryTicket>(
       `/api/xcmax/market-proxy/customer-service/custom-deliveries/${ticketId}/decision`,
-      { action, note },
+      { action, note, ...(sourceMode ? { source_mode: sourceMode } : {}) },
     );
   },
   updateCustomDeliveryCrm(ticketId: number, payload: Record<string, unknown>) {
@@ -467,6 +468,24 @@ export const xcmaxAdminApi = {
       '/api/ops/autonomy/work-orders', { limit },
     );
   },
+  fetchCustomerTickets(search = '', offset = 0, submitterType = '', intent = '', status = '') {
+    return api.get<{ items: Record<string, unknown>[]; total: number }>(
+      '/api/xcmax/admin/customer-service/tickets', {
+        search, submitter_type: submitterType, intent, status, offset, limit: 50,
+      },
+    );
+  },
+  fetchCustomerTicket(ticketId: number) {
+    return api.get<{ ticket?: Record<string, unknown>; audit_logs?: Record<string, unknown>[]; actions?: Record<string, unknown>[]; decisions?: Record<string, unknown>[]; execution_overview?: Record<string, unknown> }>(
+      `/api/xcmax/admin/customer-service/tickets/${ticketId}`,
+    );
+  },
+  updateCustomerTicketExpectedCompletion(ticketId: number, expectedCompletionAt: string | null) {
+    return api.patch<{ ticket?: Record<string, unknown> }>(
+      `/api/xcmax/admin/customer-service/tickets/${ticketId}/expected-completion`,
+      { expected_completion_at: expectedCompletionAt },
+    );
+  },
   decideOwnerWorkOrder(woId: string, decision: 'approved' | 'rejected' | 'held', note = '') {
     return api.post<{ ok: boolean; wo_id: string; decision: string; actor: string }>(
       `/api/ops/autonomy/work-orders/${encodeURIComponent(woId)}/owner-decision`,
@@ -498,7 +517,8 @@ export const xcmaxAdminApi = {
     return api.get<Record<string, unknown>>('/api/xcmax/admin/autonomy/cross-tier-gate');
   },
   fetchAutonomyAuditCrossTier(params: { tier?: string; limit?: number } = {}) {
-    return api.get<{ ok: boolean; items?: Record<string, unknown>[]; tier?: string }>(
+    return api.get<{ ok: boolean; items?: Record<string, unknown>[]; tier?: string; path?: string;
+      exists?: boolean; status?: string; last_event_at?: string | null }>(
       '/api/xcmax/admin/autonomy/audit-cross-tier',
       params,
     );

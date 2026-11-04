@@ -236,4 +236,24 @@ describe('useChatTaskList', () => {
     taskList.upsertTask({ id: 't3', title: 'T3', type: 'test', source: 'user', status: 'failed' })
     expect(taskList.taskList.value[0].status).toBe('running')
   })
+
+  it('retains a new result when older failures fill the history limit', () => {
+    const state = useChatTaskList({ onPersist })
+    const task = { title: 'Task', type: 'test', source: 'agent' as const, startedAt: 1, updatedAt: 1 }
+    state.taskList.value = Array.from({ length: 100 }, (_, i) => ({ ...task, id: `old-${i}`, status: 'failed' as const }))
+    state.taskList.value.push({ ...task, id: 'new-result', status: 'success', updatedAt: 1000 })
+    state.sortTaskList()
+    expect(state.taskList.value).toHaveLength(100)
+    expect(state.taskList.value.some((item) => item.id === 'new-result')).toBe(true)
+  })
+
+  it('keeps every ongoing task even when they exceed the history limit', () => {
+    const state = useChatTaskList({ onPersist })
+    state.taskList.value = Array.from({ length: 101 }, (_, i) => ({
+      id: `active-${i}`, title: 'Task', type: 'test', source: 'agent', status: 'running', startedAt: i, updatedAt: i,
+    }))
+    state.sortTaskList()
+    expect(state.taskList.value).toHaveLength(101)
+    expect(state.taskList.value[0].id).toBe('active-100')
+  })
 })

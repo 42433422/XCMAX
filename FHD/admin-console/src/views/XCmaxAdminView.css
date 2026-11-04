@@ -38,11 +38,12 @@
 
 .admin-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 18px;
 }
 
 .admin-card {
+  min-width: 0;
   background: rgba(255, 255, 255, 0.92);
   border-radius: 16px;
   border: 1px solid rgba(15, 76, 129, 0.1);
@@ -91,7 +92,7 @@
 }
 
 .card-info dt {
-  color: rgba(23, 32, 51, 0.55);
+  color: #64748b;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -101,6 +102,19 @@
   color: #172033;
   word-break: break-all;
 }
+
+.card-state {
+  margin: 0;
+  padding: 14px 12px;
+  border-radius: 10px;
+  background: #f5f8fc;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.card-state.is-loading { color: #0f6fc6; }
+.card-state.is-error { color: #b42318; background: #fef3f2; }
 
 .card-actions {
   display: flex;
@@ -133,6 +147,8 @@
 .badge-err { background: #fff1f0; color: #e53e3e; }
 .badge-info { background: #e8f3ff; color: #1890ff; }
 .badge-dim { background: #f0f0f0; color: #888; }
+
+.module-table-scroll { overflow-x: auto; }
 
 .module-table {
   width: 100%;
@@ -203,7 +219,7 @@
 
 .empty-hint {
   text-align: center;
-  color: rgba(23, 32, 51, 0.45);
+  color: #64748b;
   font-size: 13px;
   padding: 20px 0;
   margin: 0;

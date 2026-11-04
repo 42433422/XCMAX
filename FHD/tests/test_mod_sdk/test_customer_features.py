@@ -235,7 +235,7 @@ def test_shared_runtime_conversion_routes_are_all_guarded(monkeypatch, tmp_path)
     [
         "XCAGI/mods/attendance-industry/backend/attendance_routes.py",
         "mods/taiyangniao-pro/backend/attendance_routes.py",
-        "XCAGI/mods/taiyangniao-pro/backend/attendance_routes.py",
+        "mods/taiyangniao-pro/backend/attendance_routes.py",
     ],
 )
 def test_attendance_download_is_limited_to_current_user_outputs(

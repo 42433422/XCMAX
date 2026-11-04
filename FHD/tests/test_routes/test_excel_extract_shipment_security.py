@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.fastapi_routes import excel_extract as _excel_extract  # noqa: F401
-from app.fastapi_routes.excel_extract_shipment import (
+from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     _safe_failed_etl_result,
     _temporary_upload_path,
 )

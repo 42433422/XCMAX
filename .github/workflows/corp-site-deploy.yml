@@ -16,6 +16,10 @@ on:
         description: Git branch to deploy on server
         required: false
         default: main
+  # Cursor 云代理 token 没有 actions:write，不能 workflow_dispatch。
+  # 合入 main 后用 repository_dispatch（event_type=corp-site-deploy）触发同一套发布。
+  repository_dispatch:
+    types: [corp-site-deploy]
   # push 事件在 main 上曾整体未投递（#1952/#1953 合并后无任何 push 事件 run），
   # 且服务器 cron 自动更新被 hotfix hold 冻结，静态站会静默停留在旧版本；小时级巡检兜底。
   schedule: [{cron: '23 * * * *'}]
@@ -30,6 +34,11 @@ on:
       - '成都修茈科技有限公司/site/**'
       - '成都修茈科技有限公司/data/**'
       - '成都修茈科技有限公司/scripts/build_public_site.py'
+      - '成都修茈科技有限公司/scripts/evidence_assets.py'
+      - 'scripts/dev/materialize_media_assets.mjs'
+      - 'config/media-aliases.json'
+      - 'FHD/frontend/public/**'
+      - 'FHD/docs/evidence/**'
       - '成都修茈科技有限公司/scripts/site_acceptance.py'
       # 下列两条被 test_immutable_release_contract 明确断言，保留显式声明。
       - '成都修茈科技有限公司/world-will-ticker.js'
@@ -53,10 +62,11 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' || vars.XCMAX_AUTO_SITE_DEPLOY == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: SSH — git sync + xcmax-site-auto-update + nginx reload
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.FHD_PUSH_HOST }}
           username: root
@@ -64,7 +74,7 @@ jobs:
           command_timeout: 25m
           script: |
             set -euo pipefail
-            BRANCH="${{ github.event.inputs.branch }}"
+            BRANCH="${{ github.event.inputs.branch || github.event.client_payload.branch }}"
             if [ -z "${BRANCH}" ]; then BRANCH="${{ vars.XCMAX_GIT_BRANCH }}"; fi
             if [ -z "${BRANCH}" ]; then BRANCH="main"; fi
             REMOTE_ROOT="${{ vars.XCMAX_REMOTE_ROOT }}"
@@ -81,12 +91,20 @@ jobs:
             export XCMAX_ROOT="${REMOTE_ROOT}"
             export XCMAX_GIT_BRANCH="${BRANCH}"
             export XCMAX_GIT_RESET_HARD=1
-            # Bootstrap from the requested remote branch before invoking the
-            # repository-owned updater.  Otherwise an old updater can decide
-            # that its stale worktree is current and republish stale nginx
-            # snippets before it ever refreshes itself.
-            git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
-            git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
+            # Bound each bootstrap command; retain configured SSH identity and host checks.
+            if [ "$(readlink -f "${REMOTE_ROOT}/成都修茈科技有限公司")" = "$(readlink -f /root/成都修茈科技有限公司)" ]; then
+              echo "[err] live site must be separate from the Git tree before reset" >&2
+              exit 1
+            fi
+            SYNC_STAGE=fetch
+            trap 'rc=$?; echo "[err] site stage=${SYNC_STAGE} exit=${rc}; stopped before further publication" >&2; exit "$rc"' ERR
+            echo "[stage] fetch begin (900s limit)"
+            timeout --kill-after=15s 900s env GIT_TERMINAL_PROMPT=0 \
+              git -C "${REMOTE_ROOT}" -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30 fetch --progress origin "${BRANCH}"
+            SYNC_STAGE=reset
+            echo "[stage] fetch complete; reset begin (120s limit)"
+            timeout --kill-after=15s 120s git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
+            SYNC_STAGE=identity
             DEPLOY_SHA="$(git -C "${REMOTE_ROOT}" rev-parse HEAD)"
             REMOTE_SHA="$(git -C "${REMOTE_ROOT}" rev-parse "origin/${BRANCH}")"
             if [ "${DEPLOY_SHA}" != "${REMOTE_SHA}" ]; then
@@ -94,17 +112,21 @@ jobs:
               exit 1
             fi
             echo "[info] exact server worktree sha=${DEPLOY_SHA}"
-            # Always republish static chrome into the nginx live root (immutable
-            # release symlink). Git sync alone only updates /root/XCMAX.
-            export XCMAX_FORCE_SITE_PUBLISH=1
-            AUTO_SCRIPT="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh"
-            bash "${AUTO_SCRIPT}"
+            # This job publishes static content only; the general updater also rebuilds
+            # market/runtime dependencies and restarts services, outside this scope.
+            SYNC_STAGE=publish
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
+            GIT_SITE="${SITE_ROOT}"
+            python3 "${GIT_SITE}/scripts/evidence_assets.py" materialize
+            node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" marketing
+            PUBLICATION_LOCK="${XCMAX_PUBLICATION_LOCK:-/run/lock/xcmax-publication.lock}"
+            mkdir -p "$(dirname "$PUBLICATION_LOCK")"
+            exec 8>"$PUBLICATION_LOCK"
+            flock -w 60 8
             # Publish git-tree site chrome into nginx live root. Production serves
             # /root/成都修茈科技有限公司 (immutable-release symlink), not /root/XCMAX/...
             LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司 2>/dev/null || true)"
             if [ -z "${LIVE_SITE}" ]; then LIVE_SITE="/root/成都修茈科技有限公司"; fi
-            GIT_SITE="${SITE_ROOT}"
             if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
               echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
@@ -114,7 +136,7 @@ jobs:
               # git snapshots.  `fhd-release-desktop.yml` publishes the latter only
               # after both platform artifacts pass verification.
               for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" \
-                       "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" \
+                       "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" "${GIT_SITE}/release-data.js" \
                        "${GIT_SITE}/world-will.js" "${GIT_SITE}/world-will-ticker.js" \
                        "${GIT_SITE}/world-will-ticker.css" \
                        "${GIT_SITE}/download-action-board.js"; do
@@ -123,13 +145,8 @@ jobs:
                 chmod u+w "${LIVE_SITE}/${base}" 2>/dev/null || true
                 cp -f "$f" "${LIVE_SITE}/${base}"
               done
-              # Bootstrap an empty site once, but never roll a verified release back
-              # to the repository's historical fallback pointer on a later web deploy.
-              if [ ! -e "${LIVE_SITE}/download-release.json" ] && [ -f "${GIT_SITE}/download-release.json" ]; then
-                cp -f "${GIT_SITE}/download-release.json" "${LIVE_SITE}/download-release.json"
-              else
-                echo "[info] preserving release-managed download-release.json"
-              fi
+              # Only the desktop publisher may create or replace download pointers.
+              echo "[info] preserving release-managed download-release.json; no Git bootstrap"
               if [ -e "${LIVE_SITE}/download-windows-hotfix.json" ]; then
                 echo "[info] preserving release-managed download-windows-hotfix.json"
               fi
@@ -138,6 +155,12 @@ jobs:
               fi
               if [ -d "${GIT_SITE}/assets" ]; then
                 cp -af "${GIT_SITE}/assets/." "${LIVE_SITE}/assets/"
+              fi
+              if [ -d "${GIT_SITE}/corp-butler" ]; then
+                mkdir -p "${LIVE_SITE}/corp-butler"
+                find "${GIT_SITE}/corp-butler" -mindepth 1 -maxdepth 1 \
+                  ! -name download-release.json ! -name download-windows-hotfix.json \
+                  -exec cp -af {} "${LIVE_SITE}/corp-butler/" \;
               fi
               # 产品能力中心（#1951）：整目录发布，漏发即线上 404。
               if [ -d "${GIT_SITE}/capabilities" ]; then
@@ -162,6 +185,8 @@ jobs:
             else
               echo "[info] live site root coincides with git tree or missing; skip publish copy"
             fi
+            exec 8>&-
+            SYNC_STAGE=nginx
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
               echo "[info] canonical xiu-ci.com.conf exists; skip conflicting standalone corp vhost"
@@ -208,11 +233,16 @@ jobs:
               done
               return 1
             }
+            SYNC_STAGE=public-verification
             echo "[verify] public corp/download/market surfaces:"
             xc_curl https://xiu-ci.com/ >/dev/null
             xc_curl https://xiu-ci.com/developer.html >/dev/null
             xc_curl https://xiu-ci.com/download >/dev/null
             xc_curl https://xiu-ci.com/download/releases >/dev/null
+            xc_curl -o /tmp/xc-release-history.json https://xiu-ci.com/data/release-history.json
+            cmp "${GIT_SITE}/data/release-history.json" /tmp/xc-release-history.json
+            xc_curl -o /tmp/xc-release-data.js https://xiu-ci.com/release-data.js
+            cmp "${GIT_SITE}/release-data.js" /tmp/xc-release-data.js
             xc_curl -L https://xiu-ci.com/market/download >/dev/null
             xc_curl https://xiu-ci.com/market/ >/dev/null
             echo "[verify] homepage nav present:"

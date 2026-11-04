@@ -350,9 +350,13 @@ class TestEnsureImCustomerServiceColumns:
         eng.begin.assert_not_called()
 
     def test_adds_columns_postgresql(self):
+        from sqlalchemy.dialects.postgresql import dialect
+
         from app.db.init_db import ensure_im_customer_service_columns
 
         eng = _make_mock_engine("postgresql")
+        # The shared migration binds a real SQLAlchemy dialect on the connection.
+        eng.begin.return_value.__enter__.return_value.dialect = dialect()
         with patch(
             "sqlalchemy.inspect",
             return_value=_make_inspector(["im_messages"], {"im_messages": ["id"]}),
@@ -559,7 +563,7 @@ class TestInitApprovalTables:
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
-            patch("app.db.base.Base.metadata.create_all"),
+            patch("app.db.db_base.Base.metadata.create_all"),
             patch(
                 "sqlalchemy.inspect",
                 return_value=_make_inspector(
@@ -576,7 +580,7 @@ class TestInitApprovalTables:
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("app.db.base.Base.metadata.create_all"),
+            patch("app.db.db_base.Base.metadata.create_all"),
             patch(
                 "sqlalchemy.inspect",
                 return_value=_make_inspector(["approval_flows"], {"approval_flows": []}),
@@ -590,7 +594,7 @@ class TestInitApprovalTables:
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
-            patch("app.db.base.Base.metadata.create_all"),
+            patch("app.db.db_base.Base.metadata.create_all"),
             patch(
                 "sqlalchemy.inspect",
                 return_value=_make_inspector(
@@ -608,7 +612,7 @@ class TestInitApprovalTables:
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("app.db.base.Base.metadata.create_all", side_effect=OSError("fail")),
+            patch("app.db.db_base.Base.metadata.create_all", side_effect=OSError("fail")),
             patch(
                 "sqlalchemy.inspect",
                 return_value=_make_inspector(["approval_flows"], {"approval_flows": []}),

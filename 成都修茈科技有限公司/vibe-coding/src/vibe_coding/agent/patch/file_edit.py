@@ -19,7 +19,7 @@ from pathlib import PurePosixPath
 from typing import Any, Literal
 from uuid import uuid4
 
-from ..security.paths import PathSafetyError, safe_relative_path
+from ..security.path_policy import PathSafetyError, safe_relative_path
 from .hunk import Hunk
 
 Operation = Literal["modify", "create", "delete", "rename"]

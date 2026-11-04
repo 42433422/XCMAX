@@ -1,4 +1,4 @@
-"""Tests for app.services.kitten_ai_document.pickup — document pickup store/pop."""
+"""Tests for app.domain.shared_services.kitten_ai_document.pickup — document pickup store/pop."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.kitten_ai_document.pickup import (
+from app.domain.shared_services.kitten_ai_document.pickup import (
     _pickup_base_dir,
     _prune_disk,
     _sanitize_token,
@@ -60,23 +60,32 @@ class TestSanitizeToken:
 
 
 class TestPickupBaseDir:
-    def test_returns_writable_path(self):
+    @pytest.mark.parametrize("env_name", ["KITTEN_PICKUP_DIR", "WORKSPACE_ROOT"])
+    def test_returns_writable_path(self, monkeypatch, env_name):
+        monkeypatch.delenv("KITTEN_PICKUP_DIR", raising=False)
+        monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
+            with patch.dict(os.environ, {env_name: tmp}):
                 # Reset cached value
-                import app.services.kitten_ai_document.pickup as mod
+                import app.domain.shared_services.kitten_ai_document.pickup as mod
 
-                mod._CACHED_BASE = None
+                monkeypatch.setattr(mod, "_CACHED_BASE", None)
                 result = _pickup_base_dir()
             assert isinstance(result, Path)
             assert result.exists()
+            expected = (
+                Path(tmp)
+                if env_name == "KITTEN_PICKUP_DIR"
+                else Path(tmp) / ".runtime/kitten_document_pickup"
+            )
+            assert result == expected
             mod._CACHED_BASE = None
 
     def test_fallback_to_temp(self):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("KITTEN_PICKUP_DIR", None)
             os.environ.pop("WORKSPACE_ROOT", None)
-            import app.services.kitten_ai_document.pickup as mod
+            import app.domain.shared_services.kitten_ai_document.pickup as mod
 
             mod._CACHED_BASE = None
             result = _pickup_base_dir()
@@ -125,7 +134,7 @@ class TestStoreAndPopDocumentPickup:
     def test_store_and_pop_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
-                import app.services.kitten_ai_document.pickup as mod
+                import app.domain.shared_services.kitten_ai_document.pickup as mod
 
                 mod._CACHED_BASE = None
 
@@ -146,7 +155,7 @@ class TestStoreAndPopDocumentPickup:
     def test_pop_nonexistent_token_returns_none(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
-                import app.services.kitten_ai_document.pickup as mod
+                import app.domain.shared_services.kitten_ai_document.pickup as mod
 
                 mod._CACHED_BASE = None
 
@@ -166,7 +175,7 @@ class TestStoreAndPopDocumentPickup:
     def test_pop_twice_returns_none(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
-                import app.services.kitten_ai_document.pickup as mod
+                import app.domain.shared_services.kitten_ai_document.pickup as mod
 
                 mod._CACHED_BASE = None
 
@@ -181,7 +190,7 @@ class TestStoreAndPopDocumentPickup:
     def test_store_large_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
-                import app.services.kitten_ai_document.pickup as mod
+                import app.domain.shared_services.kitten_ai_document.pickup as mod
 
                 mod._CACHED_BASE = None
 

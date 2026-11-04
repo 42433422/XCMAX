@@ -1,0 +1,22 @@
+{
+  "observed_at": "2026-10-06T01:22:27.1965353+08:00",
+  "candidate": "f16373d1eb7f59a5e27b289e72c8df9329cacb02",
+  "account": "SUNBIRD",
+  "entry": "员工平台 > 员工空间",
+  "action": "正常界面开启考勤 AI 助手",
+  "actual": {
+    "hosted": 1,
+    "working": 0,
+    "idle": 1,
+    "toggle": "已开",
+    "task": "暂无安排",
+    "enterprise_l1": "暂无员工Mod",
+    "enterprise_l2": "暂无员工Mod"
+  },
+  "scope": "启用开关成功，不证明承诺 Mod 就绪或 AI 执行成功",
+  "evidence": [
+    "normal-employee-space-not-ready.png",
+    "normal-employee-space-enabled-idle.png",
+    "normal-enterprise-panorama-enabled-mod-not-ready.png"
+  ]
+}

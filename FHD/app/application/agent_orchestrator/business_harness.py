@@ -8,11 +8,20 @@ all execution entry points can share the same contract.
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
+from app.application.agent_orchestrator.public_step_errors import public_run_error
+
 BUSINESS_HARNESS_PROTOCOL = "xcagi.business-harness.v1"
 TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
+ERP_ORDER_TOOL_NAME = "execute_erp_capability"
+UNEXECUTED_ORDER_ERROR = "业务动作未执行：没有工具调用，订单、审批和单据都未生成"
+_ORDER_WRITE_RE = re.compile(r"开单|开一张|创建销售订单|新建订单|生成.{0,12}单据")
+_ORDER_NEGATED_RE = re.compile(
+    r"(?:不要|别|勿|无需|不用).{0,6}(?:开单|开一张|创建销售订单|新建订单|生成单据)"
+)
 
 _FACT_KEYS = (
     "id",
@@ -112,10 +121,79 @@ def _iter_result_payloads(run: Any) -> list[dict[str, Any]]:
     return payloads
 
 
+def _catalog_historical_summary(run: Any) -> str:
+    steps = list(getattr(run, "steps", []) or [])
+    if len(steps) != 1 or getattr(steps[0], "tool_id", "") != "catalog_products_v1":
+        return ""
+    output = getattr(steps[0], "output", {}) or {}
+    projected = ((getattr(run, "final_output", {}) or {}).get("node_outputs") or {}).get(
+        steps[0].node_id
+    )
+    if (
+        isinstance(projected, dict)
+        and projected.get("outcome") == "historical_saved"
+        and projected.get("business_action_id") == f"agent:{run.run_id}:{steps[0].step_id}"
+        and projected.get("data") == output.get("data")
+        and projected.get("business_verification") == output.get("business_verification")
+    ):
+        output = projected
+    if (
+        output.get("outcome") == "historical_saved"
+        and output.get("success") is False
+        and output.get("historical_effect_verified") is True
+        and output.get("current_matches") is False
+        and output.get("fresh_save") is False
+        and not output.get("reconciliation_required")
+        and (output.get("business_verification") or {}).get("verified") is True
+        and (output.get("business_verification") or {}).get("method") == "catalog_price_receipt_v1"
+    ):
+        return "原修改已核验，但当前已有后续变更；本次未保存"
+    return ""
+
+
+def _catalog_rejection_summary(run: Any) -> str:
+    steps = list(getattr(run, "steps", []) or [])
+    if len(steps) != 1 or getattr(steps[0], "tool_id", "") != "catalog_products_v1":
+        return ""
+    step = steps[0]
+    output = getattr(step, "output", {}) or {}
+    verification = output.get("business_verification")
+    if (
+        getattr(run, "status", "") == "completed"
+        and step.action in {"append_price", "correct_price"}
+        and output.get("outcome") == "rejected_no_effect"
+        and output.get("operation_outcome") == "rejected_no_effect"
+        and output.get("success") is False
+        and output.get("historical_effect_verified") is False
+        and output.get("current_matches") is False
+        and output.get("fresh_save") is False
+        and output.get("retryable") is False
+        and not output.get("reconciliation_required")
+        and output.get("business_action_id") == f"agent:{run.run_id}:{step.step_id}"
+        and isinstance(verification, dict)
+        and verification.get("verified") is True
+        and verification.get("source_binding_verified") is True
+        and verification.get("method") == "catalog_price_receipt_v1"
+    ):
+        return "未保存：审核前态已变化；原操作已核验无副作用"
+    return ""
+
+
 def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
     status = _text(getattr(run, "status", ""), limit=32)
+    metadata = getattr(run, "metadata", {}) or {}
+    terminal_catalog = _catalog_historical_summary(run) or _catalog_rejection_summary(run)
+    if terminal_catalog:
+        return terminal_catalog
+    if status in {"failed", "cancelled", "blocked", "paused"} and (
+        metadata.get("non_retryable")
+        or (metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+    ):
+        warning = "任务已停止后续执行；已有调用的结果待核对，请勿重复提交"
+        error = public_run_error(run) if status == "failed" else ""
+        return f"{error}\n{warning}" if error else warning
     if status == "failed":
-        return "业务任务执行失败，详细信息已记录"
+        return public_run_error(run) or "业务任务执行失败，详细信息已记录"
     if status == "cancelled":
         return "业务任务已取消，未继续执行"
     for payload in reversed(payloads):
@@ -175,6 +253,45 @@ def _pending_approval_summary(pending: dict[str, Any]) -> str:
     )
 
 
+def order_write_requested(message: str) -> bool:
+    """True when the user asked to create an order or a downloadable document."""
+    text = str(message or "")
+    if _ORDER_NEGATED_RE.search(text):
+        return False
+    return _ORDER_WRITE_RE.search(text) is not None
+
+
+def forced_order_tool_choice(message: str, tools: list[Any] | None) -> dict[str, Any] | None:
+    """Force the registered ERP tool so an order request cannot end as plain text."""
+    if not order_write_requested(message):
+        return None
+    names = {
+        str((tool.get("function") or {}).get("name") or "").strip()
+        for tool in tools or []
+        if isinstance(tool, dict)
+    }
+    if ERP_ORDER_TOOL_NAME not in names:
+        return None
+    return {"type": "function", "function": {"name": ERP_ORDER_TOOL_NAME}}
+
+
+def mark_unexecuted_order_run(run: Any, message: str) -> bool:
+    """Downgrade a text-only order turn so the task is not shown as completed."""
+    if str(getattr(run, "status", "")) != "completed":
+        return False
+    if not order_write_requested(message):
+        return False
+    if list(getattr(run, "tool_calls", []) or []):
+        return False
+    if list(getattr(run, "artifacts", []) or []):
+        return False
+    if _pending_approval_signal(_iter_result_payloads(run)):
+        return False
+    run.status = "failed"
+    run.error = UNEXECUTED_ORDER_ERROR
+    return True
+
+
 def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     """Attach a bounded, user-readable terminal result to a completed run."""
     status = _text(getattr(run, "status", ""), limit=32)
@@ -182,8 +299,15 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         return {}
     final_output = getattr(run, "final_output", {})
     final_output = dict(final_output) if isinstance(final_output, dict) else {}
+    terminal_catalog = _catalog_historical_summary(run) or _catalog_rejection_summary(run)
+    if terminal_catalog:
+        status = "failed"  # Workflow completion is not success of a rejected/historical save.
     existing = final_output.get("business_result")
-    if isinstance(existing, dict) and existing.get("protocol") == BUSINESS_HARNESS_PROTOCOL:
+    if (
+        not terminal_catalog
+        and isinstance(existing, dict)
+        and existing.get("protocol") == BUSINESS_HARNESS_PROTOCOL
+    ):
         return dict(existing)
     payloads = _iter_result_payloads(run)
     identity = harness_event_context(run)
@@ -191,15 +315,25 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     pending = _pending_approval_signal(payloads)
     # 审批门后的业务动作**未执行**：此处报 success=true 正是界面谎称
     # 「智能任务执行完成」的来源。终态以审批事实为准，而非外层对话是否正常结束。
+    unexecuted = (
+        mark_unexecuted_order_run(run, str(getattr(run, "message", "") or ""))
+        or str(getattr(run, "error", "") or "") == UNEXECUTED_ORDER_ERROR
+    )
+    if unexecuted:
+        status = "failed"
     result_status = "pending_approval" if pending else status
+    if pending:
+        summary = _pending_approval_summary(pending)
+    elif unexecuted:
+        summary = UNEXECUTED_ORDER_ERROR
+    else:
+        summary = _result_summary(run, payloads)
     result = {
         "protocol": BUSINESS_HARNESS_PROTOCOL,
         "status": result_status,
         "success": result_status == "completed",
         "pending_approval": bool(pending),
-        "summary": (
-            _pending_approval_summary(pending) if pending else _result_summary(run, payloads)
-        ),
+        "summary": summary,
         "facts": _result_facts(payloads),
         "task_id": identity["task_id"],
         "turn_id": identity["turn_id"],
@@ -230,7 +364,12 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
 __all__ = [
     "BUSINESS_HARNESS_PROTOCOL",
     "TERMINAL_RUN_STATUSES",
+    "ERP_ORDER_TOOL_NAME",
+    "UNEXECUTED_ORDER_ERROR",
     "ensure_business_harness_context",
     "ensure_terminal_business_result",
+    "forced_order_tool_choice",
     "harness_event_context",
+    "mark_unexecuted_order_run",
+    "order_write_requested",
 ]

@@ -80,8 +80,7 @@ class DeveloperToken(Base):
     用于 UI 上做 "pat_abcdef…" 这种部分掩码展示。
 
     ``scopes_json`` 是 JSON 字符串数组，例如 ``["workflow:read", "workflow:execute"]``。
-    当前 PR-C 暂不强制路由级 scope 校验，由 PR-D / 后续逐步落地，
-    避免一次改动击穿太多现有接口。
+    通用用户入口拒绝 PAT；只在明确校验 scope 和资源归属的接口中使用。
     """
 
     __tablename__ = "developer_tokens"

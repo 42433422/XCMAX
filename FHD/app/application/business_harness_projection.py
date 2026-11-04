@@ -61,6 +61,106 @@ def _message_for_result(result: dict[str, Any], approval_request_id: str) -> str
     return "。".join(part.rstrip("。") for part in parts if part).strip() + "。"
 
 
+def _owns_original_plan(
+    saved: dict[str, Any], run: Any, session_id: str, result: dict[str, Any]
+) -> bool:
+    stored = saved.get("runtime_context") or {}
+    runtime = run.metadata.get("runtime_context") or {}
+    user_id = str(run.user_id or "")
+    owner = str(saved.get("user_id") or "")
+    alias = owner == f"web_normal_{session_id}"
+    if not user_id or saved.get("session_id") != session_id:
+        return False
+    if alias and (stored.get("user_id") != owner or not stored.get("local_user_id")):
+        return False
+    actors = {
+        str(value)
+        for value in (
+            None if alias else owner,
+            stored.get("local_user_id"),
+            stored.get("actor_id"),
+            runtime.get("local_user_id"),
+            runtime.get("actor_id"),
+        )
+        if value not in (None, "")
+    }
+    if actors != {user_id}:
+        return False
+    if any(
+        value and value != session_id
+        for context in (stored, runtime)
+        for value in (context.get("session_id"), context.get("conversation_id"))
+    ):
+        return False
+    if str(stored.get("tenant_id") or "") != str(runtime.get("tenant_id") or ""):
+        return False
+    task_id = str(stored.get("task_id") or "")
+    if task_id and task_id != str(result.get("task_id") or ""):
+        return False
+    return not alias or bool(stored.get("tenant_id") and task_id)
+
+
+def _original_plan_terminal(
+    store: Any, orchestrator: Any, run: Any, session_id: str, result: dict[str, Any]
+) -> tuple[str, str] | None:
+    metadata = (run.metadata.get("plan") or {}).get("metadata") or {}
+    parent_id = str(metadata.get("approval_parent_plan_id") or "")
+    plan_id = parent_id or run.plan_id
+    saved = store.load(plan_id)
+    if not saved or not _owns_original_plan(saved, run, session_id, result):
+        return None
+    terminal = {"completed": "succeeded", "failed": "failed", "cancelled": "cancelled"}
+    if not parent_id:
+        return (plan_id, terminal[result["status"]])
+    nodes = (saved.get("plan") or {}).get("nodes") or []
+    if not nodes or len({node["node_id"] for node in nodes}) != len(nodes):
+        return None
+    candidates = {run.run_id: run}
+    if len(nodes) > 1:
+        candidates.update(
+            {
+                item.run_id: item
+                for item in orchestrator.list_task_runs(
+                    user_id=str(run.user_id), task_id=str(result.get("task_id") or "")
+                )
+            }
+        )
+    outcomes = []
+    for node in nodes:
+        matches = []
+        for candidate in candidates.values():
+            link = (candidate.metadata.get("plan") or {}).get("metadata") or {}
+            if (
+                link.get("approval_parent_plan_id") != parent_id
+                or link.get("approval_parent_node_id") != node["node_id"]
+                or candidate.plan_id != f"{parent_id}:{node['node_id']}"
+                or len(candidate.steps) != 1
+            ):
+                continue
+            step = candidate.steps[0]
+            if (step.node_id, step.tool_id, step.action, step.params) != (
+                node["node_id"],
+                node["tool_id"],
+                node["action"],
+                node.get("params") or {},
+            ):
+                continue
+            outcome = ensure_terminal_business_result(candidate)
+            if outcome and _owns_original_plan(saved, candidate, session_id, outcome):
+                matches.append(outcome.get("status"))
+        if len(matches) != 1 or matches[0] not in terminal:
+            return None
+        outcomes.extend(matches)
+    status = (
+        "failed"
+        if "failed" in outcomes
+        else "cancelled"
+        if "cancelled" in outcomes
+        else "completed"
+    )
+    return plan_id, terminal[status]
+
+
 def project_terminal_run_to_conversation(
     run_id: str,
     *,
@@ -74,7 +174,8 @@ def project_terminal_run_to_conversation(
         from app.application.agent_orchestrator import AgentOrchestrator
         from app.services import get_conversation_service
 
-        run = AgentOrchestrator().get_run(normalized_run_id)
+        orchestrator = AgentOrchestrator()
+        run = orchestrator.get_run(normalized_run_id)
         if run is None:
             return None
         result = ensure_terminal_business_result(run)
@@ -90,6 +191,26 @@ def project_terminal_run_to_conversation(
         ).strip()
         if not session_id:
             return None
+        plan_status = {"completed": "succeeded", "failed": "failed", "cancelled": "cancelled"}.get(
+            str(result.get("status") or "")
+        )
+        if run.plan_id and plan_status:
+            from app.application.workflow.plan_store import WorkflowPlanStore
+
+            store = WorkflowPlanStore()
+            original = _original_plan_terminal(store, orchestrator, run, session_id, result)
+            saved = store.load(original[0]) if original else None
+            if (
+                original
+                and saved
+                and str(saved.get("status") or "")
+                in {
+                    "running",
+                    "pending_awaiting",
+                }
+            ):
+                # Approval handlers call this after commit; never execute a tool here.
+                store.update_status(original[0], original[1], str(result.get("summary") or ""))
         projection_key = str(result.get("projection_key") or "").strip()
         metadata = json.dumps(
             {

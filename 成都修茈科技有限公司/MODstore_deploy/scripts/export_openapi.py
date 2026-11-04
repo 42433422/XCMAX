@@ -48,7 +48,9 @@ def export(check_only: bool = False) -> int:
     rendered = json.dumps(spec, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    payload = rendered.encode("utf-8")  # bytes 模式避免 Windows CRLF 转换让 CI 拿到假 diff
+    payload = rendered.encode(
+        "utf-8"
+    )  # bytes 模式避免 Windows CRLF 转换让 CI 拿到假 diff
     if check_only and out_path.is_file():
         existing = out_path.read_bytes()
         if existing != payload:

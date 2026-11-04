@@ -4,7 +4,10 @@
 用法: python3 data_digest_10003.py <输出.json>
 路径: ~/Library/Application Support/XCAGI/（正式包 userData）
 """
-import glob, json, os, sys
+import glob
+import json
+import os
+import sys
 
 USER_DATA = os.path.expanduser("~/Library/Application Support/XCAGI")
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "digest.json")

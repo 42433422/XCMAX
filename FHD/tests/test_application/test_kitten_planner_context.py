@@ -67,7 +67,7 @@ class TestEnrichKittenAnalyzerRuntime:
         ) as mock_snapshot:
             # We need to mock the import inside the function
             with patch(
-                "app.services.kitten_business_snapshot.build_kitten_business_snapshot",
+                "app.domain.shared_services.kitten_business_snapshot.build_kitten_business_snapshot",
                 return_value={"success": True, "text": "snapshot", "stats": {}},
                 create=True,
             ):

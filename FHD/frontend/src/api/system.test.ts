@@ -16,13 +16,13 @@ describe('systemApi', () => {
   it('getIndustries calls GET /api/system/industries', async () => {
     await systemApi.getIndustries()
     const { api } = await import('./core')
-    expect(api.get).toHaveBeenCalledWith('/api/system/industries')
+    expect(api.get).toHaveBeenCalledWith('/api/system/industries', {}, { timeoutMs: 8_000 })
   })
 
   it('getCurrentIndustry calls GET /api/system/industry', async () => {
     await systemApi.getCurrentIndustry()
     const { api } = await import('./core')
-    expect(api.get).toHaveBeenCalledWith('/api/system/industry')
+    expect(api.get).toHaveBeenCalledWith('/api/system/industry', {}, { timeoutMs: 8_000 })
   })
 
   it('setIndustry calls POST /api/system/industry', async () => {

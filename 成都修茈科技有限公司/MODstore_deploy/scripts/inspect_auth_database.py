@@ -30,7 +30,9 @@ def _redact_database_url(url: str) -> str:
         return url
     try:
         parsed = urlparse(
-            url if url.startswith("postgresql") else "postgresql" + url[len("postgres") :]
+            url
+            if url.startswith("postgresql")
+            else "postgresql" + url[len("postgres") :]
         )
         if parsed.password:
             netloc = re.sub(r":([^:@]+)@", r":***@", parsed.netloc, count=1)
@@ -48,12 +50,21 @@ def main() -> int:
         help="可选：用户名或邮箱子串（不区分大小写），列出最多 20 条匹配",
     )
     p.add_argument(
-        "--limit", type=int, default=10, help="无 --match 时列出的用户行数上限（默认 10）"
+        "--limit",
+        type=int,
+        default=10,
+        help="无 --match 时列出的用户行数上限（默认 10）",
     )
     args = p.parse_args()
     lim = max(1, min(args.limit, 100))
 
-    from modstore_server.models import User, database_url, get_engine, get_session_factory, init_db
+    from modstore_server.models import (
+        User,
+        database_url,
+        get_engine,
+        get_session_factory,
+        init_db,
+    )
 
     raw_url = database_url()
     print("resolved_engine_url:", _redact_database_url(raw_url))
@@ -81,7 +92,9 @@ def main() -> int:
             print("users_total:", total)
             needle = (args.match or "").strip().lower()
             if needle:
-                safe = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                safe = (
+                    needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                )
                 pat = f"%{safe}%"
                 rows = (
                     session.query(User)
@@ -98,13 +111,17 @@ def main() -> int:
                 print(f"match({needle!r}) count (capped 20):", len(rows))
                 for u in rows:
                     em = u.email or ""
-                    print(f"  id={u.id} username={u.username!r} email={em!r} is_admin={u.is_admin}")
+                    print(
+                        f"  id={u.id} username={u.username!r} email={em!r} is_admin={u.is_admin}"
+                    )
             else:
                 rows = session.query(User).order_by(User.id.asc()).limit(lim).all()
                 print(f"sample_first_{lim}:")
                 for u in rows:
                     em = u.email or ""
-                    print(f"  id={u.id} username={u.username!r} email={em!r} is_admin={u.is_admin}")
+                    print(
+                        f"  id={u.id} username={u.username!r} email={em!r} is_admin={u.is_admin}"
+                    )
     except RECOVERABLE_ERRORS as e:
         print("query_users: FAILED", str(e), file=sys.stderr)
         return 1

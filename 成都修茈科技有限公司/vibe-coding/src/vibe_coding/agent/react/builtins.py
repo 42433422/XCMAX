@@ -17,7 +17,7 @@ Categories:
   because they require network access.
 
 All tools enforce a project-rooted sandbox: paths are normalised via
-:func:`vibe_coding.agent.security.paths.resolve_safe_path` so the LLM
+:func:`vibe_coding.agent.security.path_policy.resolve_safe_path` so the LLM
 can't ``../../etc/passwd`` its way out. Sets of allowed roots can be
 configured at registration time.
 """
@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from ..sandbox import SandboxDriver, SandboxJob, SandboxPolicy, SubprocessSandboxDriver
-from ..security.paths import PathSafetyError, resolve_within_root
+from ..security.path_policy import PathSafetyError, resolve_within_root
 from .tools import Tool, ToolError, ToolRegistry, ToolResult, render_observation, tool
 
 # ----------------------------------------------------------------- helpers

@@ -25,8 +25,8 @@ MAPPER_EMPLOYEE = (
     / "mods/_employees/excel-rules-map-employee/backend/employees/excel_rules_map_employee.py"
 )
 
-SUNBIRD_TEMPLATE = Path(
-    "/workspace/成都修茈科技有限公司/MODstore_deploy/var/employee_draft_assets/9/real-files-smoke/00_考勤-2026-3月份考勤统计表.xlsx"
+SUNBIRD_TEMPLATE = (
+    FHD_ROOT / "tests/fixtures/synthetic_attendance/synthetic-attendance-template.xlsx"
 )
 
 
@@ -82,7 +82,11 @@ def _synthetic_template(path: Path) -> None:
 
 def _reader_json(reader, xlsx: Path, out: Path) -> dict:
     reader.convert_file(
-        xlsx, out, payload={}, ctx={}, rule_spec={"default_output_relpath": "workbook.json"}
+        xlsx,
+        out,
+        payload={},
+        ctx={},
+        rule_spec={"default_output_relpath": "workbook.json"},
     )
     return json.loads(out.read_text(encoding="utf-8"))
 
@@ -161,12 +165,37 @@ def test_compile_plan_coordinates_and_expected(tmp_path: Path) -> None:
     rules = _rules_for_compile(infer_mod, reader, tmp_path)
 
     records = [
-        {"key": "甲", "day": 1, "band": "am", "entries": [{"symbol": "√", "value": 2.0}]},
-        {"key": "乙", "day": 3, "band": "pm", "entries": [{"symbol": "☆", "value": 1.5}]},
+        {
+            "key": "甲",
+            "day": 1,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 2.0}],
+        },
+        {
+            "key": "乙",
+            "day": 3,
+            "band": "pm",
+            "entries": [{"symbol": "☆", "value": 1.5}],
+        },
         {"key": "甲", "cells": [{"col": "C", "row_offset": 2, "value": "手工备注"}]},
-        {"key": "路人", "day": 2, "band": "am", "entries": [{"symbol": "√", "value": 1}]},
-        {"key": "丙", "day": 99, "band": "am", "entries": [{"symbol": "√", "value": 1}]},
-        {"key": "丁", "day": 2, "band": "夜班", "entries": [{"symbol": "★", "value": 1}]},
+        {
+            "key": "路人",
+            "day": 2,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 1}],
+        },
+        {
+            "key": "丙",
+            "day": 99,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 1}],
+        },
+        {
+            "key": "丁",
+            "day": 2,
+            "band": "夜班",
+            "entries": [{"symbol": "★", "value": 1}],
+        },
     ]
     plan = compile_mod.compile_plan(rules, records, month_label="2026-07")
 
@@ -249,8 +278,18 @@ def test_full_chain_read_infer_compile_write_reread(tmp_path: Path) -> None:
 
     rules = _rules_for_compile(infer_mod, reader, tmp_path)
     records = [
-        {"key": "甲", "day": 1, "band": "am", "entries": [{"symbol": "√", "value": 2.0}]},
-        {"key": "丁", "day": 15, "band": "pm", "entries": [{"symbol": "★", "value": 3.0}]},
+        {
+            "key": "甲",
+            "day": 1,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 2.0}],
+        },
+        {
+            "key": "丁",
+            "day": 15,
+            "band": "pm",
+            "entries": [{"symbol": "★", "value": 3.0}],
+        },
     ]
     plan = compile_mod.compile_plan(rules, records, month_label="2026-07")
     plan_path = tmp_path / "plan.json"
@@ -289,7 +328,14 @@ def test_calendar_slot_cannot_enter_formula_zone(tmp_path: Path) -> None:
     rules["template_map"]["formula_zones"] = [{"col_start": 33, "col_end": 36}]
     plan = compile_mod.compile_plan(
         rules,
-        [{"key": "丁", "day": 15, "band": "pm", "entries": [{"symbol": "★", "value": 3.0}]}],
+        [
+            {
+                "key": "丁",
+                "day": 15,
+                "band": "pm",
+                "entries": [{"symbol": "★", "value": 3.0}],
+            }
+        ],
     )
     expected = plan["expected"]
     assert expected["cells_planned"] == 0
@@ -330,7 +376,12 @@ def test_employee_run_infer_and_compile(tmp_path: Path) -> None:
             {
                 "rules": rules,
                 "records": [
-                    {"key": "甲", "day": 1, "band": "am", "entries": [{"symbol": "√", "value": 2}]}
+                    {
+                        "key": "甲",
+                        "day": 1,
+                        "band": "am",
+                        "entries": [{"symbol": "√", "value": 2}],
+                    }
                 ],
                 "workspace_root": str(tmp_path),
                 "output_relpath": "outputs/plan.json",
@@ -346,12 +397,11 @@ def test_employee_run_infer_and_compile(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 真实太阳鸟模板（金样级：公式实例化与模板原文一致）
+# 合成考勤模板（金样级：公式实例化与模板原文一致）
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not SUNBIRD_TEMPLATE.is_file(), reason="真实太阳鸟模板不在本机")
-def test_infer_on_real_sunbird_template(tmp_path: Path) -> None:
+def test_infer_on_synthetic_attendance_template(tmp_path: Path) -> None:
     infer_mod, compile_mod, _ = _load_mapper()
     reader = _load_module("reader_real_sunbird", READER_CONVERT)
     workbook = _reader_json(reader, SUNBIRD_TEMPLATE, tmp_path / "sunbird_wb.json")
@@ -362,7 +412,7 @@ def test_infer_on_real_sunbird_template(tmp_path: Path) -> None:
     assert tm["block"] == {"rows": 6, "first_top": 4, "count": 151}
     assert tm["header_rows"] == 3
     assert tm["key_col"] == 3  # C 列姓名
-    assert tm["blocks"][0]["key"] == "胡超"
+    assert tm["blocks"][0]["key"] == "SYNTHETIC-001"
 
     cal = tm["calendar"]
     assert cal == {
@@ -387,7 +437,12 @@ def test_infer_on_real_sunbird_template(tmp_path: Path) -> None:
     src_wb = load_workbook(SUNBIRD_TEMPLATE)
     ws = src_wb["明细"]
     by_col = {t["col"]: t for t in rules["formula_templates"]}
-    for col_letter, block_index, row in (("BR", 0, 4), ("BR", 1, 10), ("CD", 2, 16), ("CC", 3, 22)):
+    for col_letter, block_index, row in (
+        ("BR", 0, 4),
+        ("BR", 1, 10),
+        ("CD", 2, 16),
+        ("CC", 3, 22),
+    ):
         got = infer_mod.instantiate_formula(by_col[col_letter], block_index)
         assert got == ws[f"{col_letter}{row}"].value, f"{col_letter}{row} 公式实例化不一致"
     src_wb.close()
@@ -401,19 +456,29 @@ def test_infer_on_real_sunbird_template(tmp_path: Path) -> None:
     plan = compile_mod.compile_plan(
         rules,
         [
-            {"key": "胡超", "day": 1, "band": "morning", "entries": [{"symbol": "√", "value": 2}]},
-            {"key": "胡超", "day": 1, "band": "night", "entries": [{"symbol": "☆", "value": 1.5}]},
+            {
+                "key": "SYNTHETIC-001",
+                "day": 1,
+                "band": "morning",
+                "entries": [{"symbol": "√", "value": 2}],
+            },
+            {
+                "key": "SYNTHETIC-001",
+                "day": 1,
+                "band": "night",
+                "entries": [{"symbol": "☆", "value": 1.5}],
+            },
         ],
         month_label="2026-03",
     )
     phases = {p["phase"]: p for p in plan["phases"]}
     writes = {(w["row"], w["col"]): w for w in phases["cell_writes"]["writes"]}
-    assert writes[(4, 5)]["value"] == "√"  # 胡超块 top=4，day1 符号列=5
+    assert writes[(4, 5)]["value"] == "√"  # SYNTHETIC-001块 top=4，day1 符号列=5
     assert writes[(4, 6)]["value"] == 2
     assert writes[(8, 5)]["value"] == "☆"  # night row_offset=4
     formulas = {w["ref"]: w["formula"] for w in phases["formula_writes"]["writes"]}
     assert formulas["BR4"].startswith("=SUMIF(OFFSET($E$4:$BM$9,ROWS($1:1)*6-6,)")
     assert formulas["BR10"].startswith("=SUMIF(OFFSET($E$4:$BM$9,ROWS($1:7)*6-6,)")
     assert plan["expected"]["keys_matched"] == 1
-    # 151 块中 80 块有姓名，其中胡超有记录 → 79 个在住块无记录
+    # 151 块中 80 块有姓名，其中SYNTHETIC-001有记录 → 79 个在住块无记录
     assert len(plan["expected"]["blocks_without_records"]) == 79

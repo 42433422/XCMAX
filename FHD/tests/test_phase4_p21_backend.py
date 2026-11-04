@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from app.application.workflow import v1_builtin_nodes as vb
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 # ---------------------------------------------------------------------------
 # template resolution + runtime ctx

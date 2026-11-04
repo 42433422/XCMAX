@@ -490,5 +490,3 @@ const selectedEmp = computed({
                 </div>
               </transition>
 </template>
-
-<style scoped src="../DutyRosterGraphPanel.css"></style>

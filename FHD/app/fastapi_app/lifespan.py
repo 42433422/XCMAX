@@ -66,6 +66,12 @@ def _stop_agent_tasks(app: FastAPI) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理"""
+    if getattr(app.state, "catalog_admission", None) is not None:
+        from .guarded_catalog import lifespan as guarded_lifespan
+
+        async with guarded_lifespan(app):
+            yield
+        return
     logger.info("🚀 FastAPI 应用启动中...")
 
     from app.fastapi_app.startup_timing import mark_startup
@@ -141,10 +147,22 @@ async def lifespan(app: FastAPI):
 
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成%s", "（重服务后台加载）" if fast_start else "")
+    try:
+        from app.desktop_runtime.process_memory import start_process_memory_guard
+
+        start_process_memory_guard()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("desktop memory guard skipped: %s", exc)
 
     try:
         yield
     finally:
+        try:
+            from app.desktop_runtime.process_memory import stop_process_memory_guard
+
+            stop_process_memory_guard()
+        except RECOVERABLE_ERRORS:
+            logger.debug("desktop memory guard stop skipped", exc_info=True)
         # 无论正常关闭还是被注入异常（如 CancelledError）终止，都在 finally 中
         # 完成全部清理，避免神经总线、监控循环与各调度线程在异常关闭路径下泄漏。
         from app.fastapi_app.mod_startup import wait_for_background_mod_load
@@ -182,7 +200,9 @@ async def lifespan(app: FastAPI):
         except RECOVERABLE_ERRORS as e:
             logger.warning("⚠️ 员工本地调度器关闭失败: %s", e)
         try:
-            from app.services.mobile_relay_desktop_client import stop_desktop_relay_poller
+            from app.domain.shared_services.mobile_relay_desktop_client import (
+                stop_desktop_relay_poller,
+            )
 
             stop_desktop_relay_poller()
             logger.info("✅ 移动端云中继轮询已关闭")
@@ -224,7 +244,7 @@ async def _initialize_databases_async(app: FastAPI):
 
 def _run_ensure_ai_action_audit_table() -> None:
     """Initialize audit DDL through a normal import that also works when frozen."""
-    from app.services.ai_action_audit_service import ensure_ai_action_audit_table
+    from app.domain.shared_services.ai_action_audit_service import ensure_ai_action_audit_table
 
     ensure_ai_action_audit_table()
 
@@ -433,7 +453,7 @@ async def _init_mobile_relay_desktop_async(app: FastAPI):
         logger.info("被动应用节点：跳过移动端云中继轮询")
         return
     try:
-        from app.services.mobile_relay_desktop_client import (
+        from app.domain.shared_services.mobile_relay_desktop_client import (
             _migrate_legacy_config_once,
             start_desktop_relay_poller,
         )

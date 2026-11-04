@@ -1,25 +1,9 @@
-"""测试 legacy_chat_adapter 的补充分支覆盖。
-
-覆盖目标（test_legacy_chat_adapter.py 未覆盖的方法与分支）：
-- _should_replace_tool_result: 各分支（previous None / new None / success 组合 / download_url）
-- _record_tool_result: 各分支（payload None / requires_token / download_url / replace）
-- _tool_action_from_payload: 各分支（action 存在 / excel 工具 / 默认）
-- _append_last_tool_record: 各分支（JSON 解析失败 / 非 dict / 正常）
-- _attach_last_tool_records: 各分支（有记录 / 无记录）
-- clear_last_tool_result: 清空记录
-- get_last_tool_records: 各分支（无记录 / 有记录 / 非列表）
-- get_last_tool_result: 各分支（无记录 / 有记录 / output 非 dict）
-- reset_last_tool_result: 重置 ContextVar
-- _call_model_completion: 各分支（client None / client 提供）
-- append_tool_messages: 补充分支（并行重复 / 并行 requires_token / 无 execute_tool）
-- chat: 补充分支（system_prompt / runtime_context / 无 tool_calls / tool_outputs 累积）
-- chat_stream_text: 补充分支（delta None / tool_calls 跨 chunk 累积 / finish_reason / post_tool_round_hint）
-- chat_stream_sse_events: 补充分支（token_description / message fallback）
-"""
+"""legacy_chat_adapter 工具轨迹、并行去重、聊天和流式审批等待的分支回归。"""
 
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -45,9 +29,50 @@ from app.legacy.chat.legacy_chat_adapter import (
     reset_planner_tool_dedup_state,
 )
 
-# ---------------------------------------------------------------------------
 # helpers
-# ---------------------------------------------------------------------------
+
+
+_ADAPTER = "app.legacy.chat.legacy_chat_adapter"
+
+
+@contextmanager
+def _planner_registry(tools):
+    with patch(f"{_ADAPTER}._get_workflow_tool_registry", return_value=tools):
+        yield
+
+
+@contextmanager
+def _planner_tools(execute_tool):
+    with (
+        _planner_registry([{"type": "function"}]),
+        patch(f"{_ADAPTER}._resolve_chat_execute_tool", return_value=execute_tool),
+    ):
+        yield
+
+
+def _client(response, *, side_effect=False):
+    client = MagicMock(is_modstore_openai_compatible=False)
+    setattr(
+        client.chat.completions.create, "side_effect" if side_effect else "return_value", response
+    )
+    return client
+
+
+def _response(content, calls=None):
+    return MagicMock(choices=[MagicMock(message=MagicMock(content=content, tool_calls=calls))])
+
+
+def _text_chunk(content, finish="stop"):
+    return MagicMock(choices=[MagicMock(delta=MagicMock(content=content), finish_reason=finish)])
+
+
+def _tool_chunk(name, arguments, *, index=0, tc_id="tc1", finish="tool_calls"):
+    fn = MagicMock()
+    fn.name, fn.arguments = name, arguments
+    tc = MagicMock(index=index, id=tc_id, function=fn)
+    return MagicMock(
+        choices=[MagicMock(delta=MagicMock(content=None, tool_calls=[tc]), finish_reason=finish)]
+    )
 
 
 class _Fn:
@@ -72,9 +97,7 @@ def _reset_state():
     reset_last_tool_result()
 
 
-# ---------------------------------------------------------------------------
 # _should_replace_tool_result
-# ---------------------------------------------------------------------------
 
 
 class TestShouldReplaceToolResultEdge:
@@ -136,9 +159,7 @@ class TestShouldReplaceToolResultEdge:
         assert _should_replace_tool_result(previous, new) is False
 
 
-# ---------------------------------------------------------------------------
 # _record_tool_result
-# ---------------------------------------------------------------------------
 
 
 class TestRecordToolResultEdge:
@@ -190,9 +211,7 @@ class TestRecordToolResultEdge:
         assert result["success"] is None
 
 
-# ---------------------------------------------------------------------------
 # _tool_action_from_payload
-# ---------------------------------------------------------------------------
 
 
 class TestToolActionFromPayloadEdge:
@@ -226,9 +245,7 @@ class TestToolActionFromPayloadEdge:
         assert _tool_action_from_payload("any_tool", {}) == "execute"
 
 
-# ---------------------------------------------------------------------------
 # _append_last_tool_record
-# ---------------------------------------------------------------------------
 
 
 class TestAppendLastToolRecordEdge:
@@ -316,9 +333,7 @@ class TestAppendLastToolRecordEdge:
         assert len(records) == 1
 
 
-# ---------------------------------------------------------------------------
 # _attach_last_tool_records
-# ---------------------------------------------------------------------------
 
 
 class TestAttachLastToolRecordsEdge:
@@ -344,9 +359,7 @@ class TestAttachLastToolRecordsEdge:
         assert result is payload
 
 
-# ---------------------------------------------------------------------------
 # clear_last_tool_result / get_last_tool_records / get_last_tool_result
-# ---------------------------------------------------------------------------
 
 
 class TestClearAndGetLastToolEdge:
@@ -417,27 +430,23 @@ class TestClearAndGetLastToolEdge:
         assert records == []
 
 
-# ---------------------------------------------------------------------------
 # _call_model_completion
-# ---------------------------------------------------------------------------
 
 
 class TestCallModelCompletionEdge:
     """_call_model_completion 的分支覆盖。"""
 
     def test_call_with_explicit_client(self):
-        mock_client = MagicMock()
         mock_msg = MagicMock()
         mock_msg.content = "  response text  "
         mock_choice = MagicMock()
         mock_choice.message = mock_msg
         mock_resp = MagicMock()
         mock_resp.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(mock_resp)
 
         with patch(
-            "app.legacy.chat.legacy_chat_adapter._resolve_chat_model_for_client",
+            f"{_ADAPTER}._resolve_chat_model_for_client",
             return_value="test-model",
         ):
             result = _call_model_completion(
@@ -449,26 +458,24 @@ class TestCallModelCompletionEdge:
         mock_client.chat.completions.create.assert_called_once()
 
     def test_call_without_client_uses_default(self):
-        mock_client = MagicMock()
         mock_msg = MagicMock()
         mock_msg.content = "default response"
         mock_choice = MagicMock()
         mock_choice.message = mock_msg
         mock_resp = MagicMock()
         mock_resp.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(mock_resp)
 
         with (
             patch(
-                "app.legacy.chat.legacy_chat_adapter.require_api_key",
+                f"{_ADAPTER}.require_api_key",
             ),
             patch(
-                "app.legacy.chat.legacy_chat_adapter.get_openai_compatible_client",
+                f"{_ADAPTER}.get_openai_compatible_client",
                 return_value=mock_client,
             ),
             patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_model_for_client",
+                f"{_ADAPTER}._resolve_chat_model_for_client",
                 return_value="default-model",
             ),
         ):
@@ -476,18 +483,16 @@ class TestCallModelCompletionEdge:
         assert result == "default response"
 
     def test_call_with_none_content(self):
-        mock_client = MagicMock()
         mock_msg = MagicMock()
         mock_msg.content = None
         mock_choice = MagicMock()
         mock_choice.message = mock_msg
         mock_resp = MagicMock()
         mock_resp.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(mock_resp)
 
         with patch(
-            "app.legacy.chat.legacy_chat_adapter._resolve_chat_model_for_client",
+            f"{_ADAPTER}._resolve_chat_model_for_client",
             return_value="test-model",
         ):
             result = _call_model_completion(
@@ -497,9 +502,7 @@ class TestCallModelCompletionEdge:
         assert result == ""
 
 
-# ---------------------------------------------------------------------------
 # append_tool_messages 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestAppendToolMessagesExtraEdge:
@@ -539,7 +542,7 @@ class TestAppendToolMessagesExtraEdge:
         messages: list = []
         mock_execute = MagicMock(return_value='{"success": true}')
         with patch(
-            "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
+            f"{_ADAPTER}._resolve_chat_execute_tool",
             return_value=mock_execute,
         ):
             result = append_tool_messages(messages, tcs, workspace_root="/tmp")
@@ -552,7 +555,7 @@ class TestAppendToolMessagesExtraEdge:
         tcs = [_Tc("tc1", "excel_schema_understand", '{"query":"test"}')]
         messages: list = []
         with patch(
-            "app.legacy.chat.legacy_chat_adapter.enrich_excel_tool_arguments",
+            f"{_ADAPTER}.enrich_excel_tool_arguments",
             return_value={"query": "enriched"},
         ) as mock_enrich:
             append_tool_messages(messages, tcs, workspace_root="/tmp", execute_tool=execute_tool)
@@ -601,30 +604,17 @@ class TestAppendToolMessagesExtraEdge:
         assert messages[0]["role"] == "tool"
 
 
-# ---------------------------------------------------------------------------
 # chat 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestChatExtraEdge:
     """chat 的补充分支覆盖。"""
 
     def test_chat_with_system_prompt(self):
-        mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = "Hello!"
-        mock_msg.tool_calls = None
-        mock_choice = MagicMock()
-        mock_choice.message = mock_msg
-        mock_resp = MagicMock()
-        mock_resp.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_resp = _response("Hello!", None)
+        mock_client = _client(mock_resp)
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             result = chat(
                 "hi", system_prompt="You are helpful", client=mock_client, model="test-model"
             )
@@ -632,21 +622,10 @@ class TestChatExtraEdge:
         assert result["text"] == "Hello!"
 
     def test_chat_with_runtime_context(self):
-        mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = "Hello!"
-        mock_msg.tool_calls = None
-        mock_choice = MagicMock()
-        mock_choice.message = mock_msg
-        mock_resp = MagicMock()
-        mock_resp.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_resp = _response("Hello!", None)
+        mock_client = _client(mock_resp)
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             result = chat(
                 "hi",
                 runtime_context={"key": "value"},
@@ -657,7 +636,6 @@ class TestChatExtraEdge:
         assert result["text"] == "Hello!"
 
     def test_chat_with_tool_outputs_accumulation(self):
-        mock_client = MagicMock()
         # First call: returns tool call
         mock_msg1 = MagicMock()
         mock_msg1.content = ""
@@ -669,29 +647,13 @@ class TestChatExtraEdge:
         mock_resp1.choices = [mock_choice1]
 
         # Second call: returns text
-        mock_msg2 = MagicMock()
-        mock_msg2.content = "Final response"
-        mock_msg2.tool_calls = None
-        mock_choice2 = MagicMock()
-        mock_choice2.message = mock_msg2
-        mock_resp2 = MagicMock()
-        mock_resp2.choices = [mock_choice2]
+        mock_resp2 = _response("Final response", None)
 
-        mock_client.chat.completions.create.side_effect = [mock_resp1, mock_resp2]
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client([mock_resp1, mock_resp2], side_effect=True)
 
         execute_tool = MagicMock(return_value='{"success": true}')
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             result = chat("analyze", client=mock_client, model="test-model")
         assert isinstance(result, dict)
         assert "调用工具" in result["thinking_steps"]
@@ -699,21 +661,10 @@ class TestChatExtraEdge:
         assert result["text"] == "Final response"
 
     def test_chat_no_tool_calls_no_tool_outputs(self):
-        mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = "Direct response"
-        mock_msg.tool_calls = None
-        mock_choice = MagicMock()
-        mock_choice.message = mock_msg
-        mock_resp = MagicMock()
-        mock_resp.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_resp = _response("Direct response", None)
+        mock_client = _client(mock_resp)
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             result = chat("hi", client=mock_client, model="test-model")
         assert isinstance(result, dict)
         assert result["text"] == "Direct response"
@@ -721,80 +672,45 @@ class TestChatExtraEdge:
         assert result["response"] == "Direct response"
 
     def test_chat_with_none_content(self):
-        mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = None
-        mock_msg.tool_calls = None
-        mock_choice = MagicMock()
-        mock_choice.message = mock_msg
-        mock_resp = MagicMock()
-        mock_resp.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_resp = _response(None, None)
+        mock_client = _client(mock_resp)
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             result = chat("hi", client=mock_client, model="test-model")
         assert isinstance(result, dict)
-        assert result["text"] == ""
+        assert result["success"] is False
+        assert result["error"] == "planner_empty_response"
+        assert mock_client.chat.completions.create.call_count == 1
 
     def test_chat_max_iterations_default(self):
-        mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = ""
         tc = _Tc("tc1", "excel_analysis", '{"query":"test"}')
-        mock_msg.tool_calls = [tc]
-        mock_choice = MagicMock()
-        mock_choice.message = mock_msg
-        mock_resp = MagicMock()
-        mock_resp.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_resp = _response("", [tc])
+        mock_client = _client(mock_resp)
 
         execute_tool = MagicMock(return_value='{"success": true}')
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
-            result = chat("analyze", client=mock_client, model="test-model", max_iterations=2)
+        with _planner_tools(execute_tool):
+            result = chat("analyze", client=mock_client, model="test-model", max_iterations=8)
         assert isinstance(result, dict)
-        assert "最大迭代" in result["text"]
+        assert result["error"] == "planner_no_progress"
+        assert mock_client.chat.completions.create.call_count == 2
+        execute_tool.assert_called_once()
 
     def test_chat_without_client_uses_default(self):
-        mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = "Default client response"
-        mock_msg.tool_calls = None
-        mock_choice = MagicMock()
-        mock_choice.message = mock_msg
-        mock_resp = MagicMock()
-        mock_resp.choices = [mock_choice]
-        mock_client.chat.completions.create.return_value = mock_resp
-        mock_client.is_modstore_openai_compatible = False
+        mock_resp = _response("Default client response", None)
+        mock_client = _client(mock_resp)
 
         with (
             patch(
-                "app.legacy.chat.legacy_chat_adapter.require_api_key",
+                f"{_ADAPTER}.require_api_key",
             ),
             patch(
-                "app.legacy.chat.legacy_chat_adapter.get_openai_compatible_client",
+                f"{_ADAPTER}.get_openai_compatible_client",
                 return_value=mock_client,
             ),
+            _planner_registry([]),
             patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_model_for_client",
+                f"{_ADAPTER}._resolve_chat_model_for_client",
                 return_value="default-model",
             ),
         ):
@@ -803,83 +719,38 @@ class TestChatExtraEdge:
         assert result["text"] == "Default client response"
 
 
-# ---------------------------------------------------------------------------
 # chat_stream_text 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestChatStreamTextExtraEdge:
     """chat_stream_text 的补充分支覆盖。"""
 
     def test_delta_none_skipped(self):
-        mock_client = MagicMock()
         chunk1 = MagicMock()
         chunk1.choices = [MagicMock()]
         chunk1.choices[0].delta = None  # delta 为 None
         chunk1.choices[0].finish_reason = None
 
-        chunk2 = MagicMock()
-        chunk2.choices = [MagicMock()]
-        chunk2.choices[0].delta = MagicMock(content="Hello")
-        chunk2.choices[0].finish_reason = "stop"
+        chunk2 = _text_chunk("Hello", "stop")
 
-        mock_client.chat.completions.create.return_value = iter([chunk1, chunk2])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk1, chunk2]))
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             parts = list(chat_stream_text("hi", client=mock_client, model="test-model"))
         assert "Hello" in parts
 
     def test_tool_calls_accumulated_across_chunks(self):
-        mock_client = MagicMock()
         # First chunk: tool call start
-        chunk1 = MagicMock()
-        chunk1.choices = [MagicMock()]
-        delta1 = MagicMock()
-        delta1.content = None
-        delta1.tool_calls = [MagicMock()]
-        delta1.tool_calls[0].index = 0
-        delta1.tool_calls[0].id = "tc1"
-        fn1 = MagicMock()
-        fn1.name = "excel_analysis"
-        fn1.arguments = '{"query":"'
-        delta1.tool_calls[0].function = fn1
-        chunk1.choices[0].delta = delta1
-        chunk1.choices[0].finish_reason = None
+        chunk1 = _tool_chunk("excel_analysis", '{"query":"', finish=None)
 
         # Second chunk: tool call continuation
-        chunk2 = MagicMock()
-        chunk2.choices = [MagicMock()]
-        delta2 = MagicMock()
-        delta2.content = None
-        delta2.tool_calls = [MagicMock()]
-        delta2.tool_calls[0].index = 0
-        delta2.tool_calls[0].id = None
-        fn2 = MagicMock()
-        fn2.name = None
-        fn2.arguments = 'test"}'
-        delta2.tool_calls[0].function = fn2
-        chunk2.choices[0].delta = delta2
-        chunk2.choices[0].finish_reason = "tool_calls"
+        chunk2 = _tool_chunk(None, 'test"}', tc_id=None)
 
-        mock_client.chat.completions.create.return_value = iter([chunk1, chunk2])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk1, chunk2]))
 
         execute_tool = MagicMock(return_value='{"success": true}')
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             parts = list(
                 chat_stream_text(
                     "analyze", client=mock_client, model="test-model", max_iterations=1
@@ -889,53 +760,22 @@ class TestChatStreamTextExtraEdge:
         assert any("调用工具" in p for p in text_parts)
 
     def test_finish_reason_stop_returns(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        chunk.choices[0].delta = MagicMock(content="Hello")
-        chunk.choices[0].finish_reason = "stop"
+        chunk = _text_chunk("Hello", "stop")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             parts = list(chat_stream_text("hi", client=mock_client, model="test-model"))
         assert "Hello" in parts
 
     def test_post_tool_round_hint_yielded(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        delta = MagicMock()
-        delta.content = None
-        delta.tool_calls = [MagicMock()]
-        delta.tool_calls[0].index = 0
-        delta.tool_calls[0].id = "tc1"
-        fn = MagicMock()
-        fn.name = "excel_analysis"
-        fn.arguments = '{"query":"test"}'
-        delta.tool_calls[0].function = fn
-        chunk.choices[0].delta = delta
-        chunk.choices[0].finish_reason = "tool_calls"
+        chunk = _tool_chunk("excel_analysis", '{"query":"test"}')
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         execute_tool = MagicMock(return_value='{"success": true}')
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             parts = list(
                 chat_stream_text(
                     "analyze", client=mock_client, model="test-model", max_iterations=1
@@ -946,36 +786,13 @@ class TestChatStreamTextExtraEdge:
         assert any("工具已返回" in p for p in text_parts)
 
     def test_slow_tool_wait_message_yielded(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        delta = MagicMock()
-        delta.content = None
-        delta.tool_calls = [MagicMock()]
-        delta.tool_calls[0].index = 0
-        delta.tool_calls[0].id = "tc1"
-        fn = MagicMock()
-        fn.name = "import_excel_to_database"
-        fn.arguments = "{}"
-        delta.tool_calls[0].function = fn
-        chunk.choices[0].delta = delta
-        chunk.choices[0].finish_reason = "tool_calls"
+        chunk = _tool_chunk("import_excel_to_database", "{}")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         execute_tool = MagicMock(return_value='{"success": true}')
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             parts = list(
                 chat_stream_text("import", client=mock_client, model="test-model", max_iterations=1)
             )
@@ -984,19 +801,11 @@ class TestChatStreamTextExtraEdge:
         assert any("导入数据库" in p for p in text_parts)
 
     def test_with_system_prompt(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        chunk.choices[0].delta = MagicMock(content="Hello")
-        chunk.choices[0].finish_reason = "stop"
+        chunk = _text_chunk("Hello", "stop")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             parts = list(
                 chat_stream_text(
                     "hi",
@@ -1008,19 +817,11 @@ class TestChatStreamTextExtraEdge:
         assert "Hello" in parts
 
     def test_with_runtime_context(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        chunk.choices[0].delta = MagicMock(content="Hello")
-        chunk.choices[0].finish_reason = "stop"
+        chunk = _text_chunk("Hello", "stop")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             parts = list(
                 chat_stream_text(
                     "hi",
@@ -1032,116 +833,72 @@ class TestChatStreamTextExtraEdge:
         assert "Hello" in parts
 
     def test_without_client_uses_default(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        chunk.choices[0].delta = MagicMock(content="Hello")
-        chunk.choices[0].finish_reason = "stop"
+        chunk = _text_chunk("Hello", "stop")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         with (
             patch(
-                "app.legacy.chat.legacy_chat_adapter.require_api_key",
+                f"{_ADAPTER}.require_api_key",
             ),
             patch(
-                "app.legacy.chat.legacy_chat_adapter.get_openai_compatible_client",
+                f"{_ADAPTER}.get_openai_compatible_client",
                 return_value=mock_client,
             ),
+            _planner_registry([]),
             patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_model_for_client",
+                f"{_ADAPTER}._resolve_chat_model_for_client",
                 return_value="default-model",
             ),
         ):
             parts = list(chat_stream_text("hi"))
         assert "Hello" in parts
 
-    def test_max_iterations_reached(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        delta = MagicMock()
-        delta.content = None
-        delta.tool_calls = [MagicMock()]
-        delta.tool_calls[0].index = 0
-        delta.tool_calls[0].id = "tc1"
-        fn = MagicMock()
-        fn.name = "excel_analysis"
-        fn.arguments = '{"query":"test"}'
-        delta.tool_calls[0].function = fn
-        chunk.choices[0].delta = delta
-        chunk.choices[0].finish_reason = "tool_calls"
+    @pytest.mark.parametrize("pending", [False, True])
+    @pytest.mark.parametrize("entry", [chat_stream_text, chat_stream_sse_events])
+    @pytest.mark.parametrize("iterations", [1, 2])
+    def test_max_iterations_reached(self, pending, entry, iterations):
+        chunk = _tool_chunk("excel_analysis", '{"query":"test"}')
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(lambda **kwargs: iter([chunk]), side_effect=True)
 
-        execute_tool = MagicMock(return_value='{"success": true}')
+        execute_tool = MagicMock(
+            return_value=json.dumps({"success": not pending, "pending_approval": pending})
+        )
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             parts = list(
-                chat_stream_text(
-                    "analyze", client=mock_client, model="test-model", max_iterations=1
-                )
+                entry("analyze", client=mock_client, model="test-model", max_iterations=iterations)
             )
-        # 应该有内容产出
         assert len(parts) > 0
+        if not pending:
+            error = "planner_iteration_limit" if iterations == 1 else "planner_no_progress"
+            assert error in json.dumps(parts, ensure_ascii=False)
+        assert mock_client.chat.completions.create.call_count == (1 if pending else iterations)
+        if pending:
+            assert "审批请求已创建" in json.dumps(parts, ensure_ascii=False)
+            assert not any(
+                isinstance(part, dict) and "error" in (part.get("type"), part.get("_planner_sse"))
+                for part in parts
+            )
 
 
-# ---------------------------------------------------------------------------
 # chat_stream_sse_events 补充分支
-# ---------------------------------------------------------------------------
 
 
 class TestChatStreamSseEventsExtraEdge:
     """chat_stream_sse_events 的补充分支覆盖。"""
 
     def test_token_description_from_message(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        delta = MagicMock()
-        delta.content = None
-        delta.tool_calls = [MagicMock()]
-        delta.tool_calls[0].index = 0
-        delta.tool_calls[0].id = "tc1"
-        fn = MagicMock()
-        fn.name = "import_excel_to_database"
-        fn.arguments = "{}"
-        delta.tool_calls[0].function = fn
-        chunk.choices[0].delta = delta
-        chunk.choices[0].finish_reason = "tool_calls"
+        chunk = _tool_chunk("import_excel_to_database", "{}")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         execute_tool = MagicMock(
             return_value='{"requires_token": true, "token_name": "DB_WRITE_TOKEN", "message": "需要数据库写入权限"}'
         )
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             events = list(chat_stream_sse_events("import", client=mock_client, model="test-model"))
         types = [e["type"] for e in events]
         assert "requires_token" in types
@@ -1149,38 +906,15 @@ class TestChatStreamSseEventsExtraEdge:
         assert "需要数据库写入权限" in token_event["token_description"]
 
     def test_token_description_fallback(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        delta = MagicMock()
-        delta.content = None
-        delta.tool_calls = [MagicMock()]
-        delta.tool_calls[0].index = 0
-        delta.tool_calls[0].id = "tc1"
-        fn = MagicMock()
-        fn.name = "import_excel_to_database"
-        fn.arguments = "{}"
-        delta.tool_calls[0].function = fn
-        chunk.choices[0].delta = delta
-        chunk.choices[0].finish_reason = "tool_calls"
+        chunk = _tool_chunk("import_excel_to_database", "{}")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         execute_tool = MagicMock(
             return_value='{"requires_token": true, "token_name": "CUSTOM_TOKEN"}'
         )
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             events = list(chat_stream_sse_events("import", client=mock_client, model="test-model"))
         types = [e["type"] for e in events]
         assert "requires_token" in types
@@ -1189,38 +923,15 @@ class TestChatStreamSseEventsExtraEdge:
         assert "数据库写入授权令牌" in token_event["token_description"]
 
     def test_token_event_before_done(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        delta = MagicMock()
-        delta.content = None
-        delta.tool_calls = [MagicMock()]
-        delta.tool_calls[0].index = 0
-        delta.tool_calls[0].id = "tc1"
-        fn = MagicMock()
-        fn.name = "import_excel_to_database"
-        fn.arguments = "{}"
-        delta.tool_calls[0].function = fn
-        chunk.choices[0].delta = delta
-        chunk.choices[0].finish_reason = "tool_calls"
+        chunk = _tool_chunk("import_excel_to_database", "{}")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
         execute_tool = MagicMock(
             return_value='{"requires_token": true, "token_name": "DB_WRITE_TOKEN"}'
         )
 
-        with (
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-                return_value=[{"type": "function"}],
-            ),
-            patch(
-                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
-                return_value=execute_tool,
-            ),
-        ):
+        with _planner_tools(execute_tool):
             events = list(chat_stream_sse_events("import", client=mock_client, model="test-model"))
         # requires_token 事件后不应该有 done 事件
         types = [e["type"] for e in events]
@@ -1228,19 +939,11 @@ class TestChatStreamSseEventsExtraEdge:
         assert "done" not in types
 
     def test_normal_text_yields_token_and_done(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        chunk.choices[0].delta = MagicMock(content="Hello world")
-        chunk.choices[0].finish_reason = "stop"
+        chunk = _text_chunk("Hello world", "stop")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             events = list(chat_stream_sse_events("hi", client=mock_client, model="test-model"))
         types = [e["type"] for e in events]
         assert "token" in types
@@ -1249,19 +952,11 @@ class TestChatStreamSseEventsExtraEdge:
         assert any("Hello world" in e["text"] for e in token_events)
 
     def test_with_system_prompt(self):
-        mock_client = MagicMock()
-        chunk = MagicMock()
-        chunk.choices = [MagicMock()]
-        chunk.choices[0].delta = MagicMock(content="Hello")
-        chunk.choices[0].finish_reason = "stop"
+        chunk = _text_chunk("Hello", "stop")
 
-        mock_client.chat.completions.create.return_value = iter([chunk])
-        mock_client.is_modstore_openai_compatible = False
+        mock_client = _client(iter([chunk]))
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
-            return_value=[],
-        ):
+        with _planner_registry([]):
             events = list(
                 chat_stream_sse_events(
                     "hi",

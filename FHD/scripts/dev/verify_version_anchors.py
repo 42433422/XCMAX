@@ -55,6 +55,16 @@ ANCHORS: list[tuple[str, str, str]] = [
     # Windows 走 scripts/package/product-version.ps1，均运行时从 FHD/VERSION.md 解析；
     # 写死默认值即回归缺陷，由 product-lines 域的 script_version_scan 按 error 阻断。
     ("release/VERSION", r"(?m)^([\d.]+)$", PRODUCT_VERSION),
+    (
+        ".github/workflows/release-orchestrator.yml",
+        r'product_version:[\s\S]*?default:\s*"([\d.]+)"',
+        PRODUCT_VERSION,
+    ),
+    (
+        ".github/workflows/release-orchestrator.yml",
+        r'product_version:[\s\S]*?options:\s*\["([\d.]+)"\]',
+        PRODUCT_VERSION,
+    ),
 ]
 
 

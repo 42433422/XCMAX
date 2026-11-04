@@ -1,9 +1,5 @@
-# 太阳鸟 PRO · 客户交付
+# 太阳鸟客户交付入口
 
-| 文件 | 说明 |
-|------|------|
-| `太阳鸟-Setup-10.0.0-x64.exe` | Windows 定制安装包（企业宿主 + 考勤行业 + 太阳鸟 PRO） |
-| `manifest.json` | 版本、SHA256、CI 构建记录 |
-| `安装说明.txt` | 安装与首次启动说明 |
+太阳鸟定制安装包已退役。客户使用主线通用 Enterprise 安装包，定制功能通过账号授权的独立私有 Mod 交付。
 
-构建：GitHub Actions [run #27644528052](https://github.com/42433422/XCMAX/actions/runs/27644528052)
+交付范围与流程以 [客户交付 SSOT](../FHD/config/customer_delivery.json) 为准；安装步骤见 [安装说明](安装说明.txt)。历史构建或本地测试通过不能代替客户验收。

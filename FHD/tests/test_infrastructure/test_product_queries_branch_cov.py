@@ -847,7 +847,7 @@ class TestLoadProductsAllForExport:
         args = mock_impl.call_args[0]
         assert args[0] == 1
         # args[1] is per_page which should be _EXPORT_MAX_ROWS (50000)
-        from app.infrastructure.persistence.compat_db.base import _EXPORT_MAX_ROWS
+        from app.infrastructure.persistence.compat_db.compat_db_base import _EXPORT_MAX_ROWS
 
         assert args[1] == _EXPORT_MAX_ROWS
 

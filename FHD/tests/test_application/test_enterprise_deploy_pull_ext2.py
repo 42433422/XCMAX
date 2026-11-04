@@ -1,4 +1,4 @@
-"""Tests for app.application.enterprise_deploy_pull — coverage ramp ext2.
+"""Tests for app.domain.app_pure.enterprise_deploy_pull — coverage ramp ext2.
 
 Covers ``_run_shell``, ``_build_pull_steps``, ``_execute_pull_job`` (force
 path, apply_backend skip, apply_frontend skip, restart skip, verify failure),
@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.application import enterprise_deploy_pull as edp
-from app.application.enterprise_deploy_pull import (
+from app.domain.app_pure.enterprise_deploy_pull import (
     PullJob,
     PullStep,
     _build_pull_steps,
@@ -40,7 +40,7 @@ class TestRunShell:
         mock_proc.wait = AsyncMock(return_value=0)
 
         with patch(
-            "app.application.enterprise_deploy_pull.asyncio.create_subprocess_exec",
+            "app.domain.app_pure.enterprise_deploy_pull.asyncio.create_subprocess_exec",
             return_value=mock_proc,
         ):
             await _run_shell(step, ["echo", "hi"])
@@ -58,7 +58,7 @@ class TestRunShell:
         mock_proc.wait = AsyncMock(return_value=1)
 
         with patch(
-            "app.application.enterprise_deploy_pull.asyncio.create_subprocess_exec",
+            "app.domain.app_pure.enterprise_deploy_pull.asyncio.create_subprocess_exec",
             return_value=mock_proc,
         ):
             with pytest.raises(RuntimeError):
@@ -70,7 +70,7 @@ class TestRunShell:
     async def test_subprocess_error(self):
         step = PullStep(id="test", label="test")
         with patch(
-            "app.application.enterprise_deploy_pull.asyncio.create_subprocess_exec",
+            "app.domain.app_pure.enterprise_deploy_pull.asyncio.create_subprocess_exec",
             side_effect=OSError("spawn fail"),
         ):
             with pytest.raises(OSError):
@@ -88,7 +88,7 @@ class TestRunShell:
         mock_proc.wait = AsyncMock(return_value=0)
 
         with patch(
-            "app.application.enterprise_deploy_pull.asyncio.create_subprocess_exec",
+            "app.domain.app_pure.enterprise_deploy_pull.asyncio.create_subprocess_exec",
             return_value=mock_proc,
         ):
             await _run_shell(step, ["echo"])
@@ -139,7 +139,7 @@ class TestExecutePullJob:
     async def test_force_when_up_to_date(self, tmp_path, monkeypatch):
         # Force "up to date" by mocking check_enterprise_updates
         with patch(
-            "app.application.enterprise_deploy_pull.check_enterprise_updates",
+            "app.domain.app_pure.enterprise_deploy_pull.check_enterprise_updates",
             return_value={
                 "flags": {"needs_update": False, "up_to_date": True},
                 "update_hub": {"git_sha": "abc"},
@@ -160,7 +160,7 @@ class TestExecutePullJob:
     @pytest.mark.asyncio
     async def test_force_pull_even_when_up_to_date(self, tmp_path, monkeypatch):
         with patch(
-            "app.application.enterprise_deploy_pull.check_enterprise_updates",
+            "app.domain.app_pure.enterprise_deploy_pull.check_enterprise_updates",
             return_value={
                 "flags": {"needs_update": False, "up_to_date": True},
                 "update_hub": {"git_sha": "abc"},
@@ -181,10 +181,10 @@ class TestExecutePullJob:
 
             with (
                 patch(
-                    "app.application.enterprise_deploy_pull._run_shell",
+                    "app.domain.app_pure.enterprise_deploy_pull._run_shell",
                     new=fake_run_shell,
                 ),
-                patch("app.application.enterprise_deploy_pull.Path") as mock_path_cls,
+                patch("app.domain.app_pure.enterprise_deploy_pull.Path") as mock_path_cls,
             ):
                 # Make Path(...).is_file() / is_dir() return True
                 mock_path = MagicMock()
@@ -201,13 +201,13 @@ class TestExecutePullJob:
     async def test_apply_backend_skipped_when_no_script(self, tmp_path, monkeypatch):
         with (
             patch(
-                "app.application.enterprise_deploy_pull.check_enterprise_updates",
+                "app.domain.app_pure.enterprise_deploy_pull.check_enterprise_updates",
                 return_value={
                     "flags": {"needs_update": True, "up_to_date": False},
                     "update_hub": {"git_sha": "abc"},
                 },
             ),
-            patch("app.application.enterprise_deploy_pull.Path") as mock_path_cls,
+            patch("app.domain.app_pure.enterprise_deploy_pull.Path") as mock_path_cls,
         ):
             mock_path = MagicMock()
             mock_path.is_file.return_value = False  # No script
@@ -236,13 +236,13 @@ class TestExecutePullJob:
     async def test_apply_frontend_skipped_when_no_vue_dist(self, monkeypatch):
         with (
             patch(
-                "app.application.enterprise_deploy_pull.check_enterprise_updates",
+                "app.domain.app_pure.enterprise_deploy_pull.check_enterprise_updates",
                 return_value={
                     "flags": {"needs_update": True, "up_to_date": False},
                     "update_hub": {"git_sha": "abc"},
                 },
             ),
-            patch("app.application.enterprise_deploy_pull.Path") as mock_path_cls,
+            patch("app.domain.app_pure.enterprise_deploy_pull.Path") as mock_path_cls,
         ):
             mock_path = MagicMock()
             mock_path.is_file.return_value = False
@@ -270,13 +270,13 @@ class TestExecutePullJob:
     async def test_restart_skipped_in_dev_env(self, monkeypatch):
         with (
             patch(
-                "app.application.enterprise_deploy_pull.check_enterprise_updates",
+                "app.domain.app_pure.enterprise_deploy_pull.check_enterprise_updates",
                 return_value={
                     "flags": {"needs_update": True, "up_to_date": False},
                     "update_hub": {"git_sha": "abc"},
                 },
             ),
-            patch("app.application.enterprise_deploy_pull.Path") as mock_path_cls,
+            patch("app.domain.app_pure.enterprise_deploy_pull.Path") as mock_path_cls,
         ):
             mock_path = MagicMock()
             mock_path.is_file.return_value = False
@@ -324,14 +324,14 @@ class TestExecutePullJob:
 
         with (
             patch(
-                "app.application.enterprise_deploy_pull.check_enterprise_updates",
+                "app.domain.app_pure.enterprise_deploy_pull.check_enterprise_updates",
                 side_effect=fake_check,
             ),
             patch(
-                "app.application.enterprise_deploy_pull._run_shell",
+                "app.domain.app_pure.enterprise_deploy_pull._run_shell",
                 side_effect=fake_run_shell,
             ),
-            patch("app.application.enterprise_deploy_pull.Path") as mock_path_cls,
+            patch("app.domain.app_pure.enterprise_deploy_pull.Path") as mock_path_cls,
         ):
             mock_path = MagicMock()
             mock_path.is_file.return_value = True
@@ -376,7 +376,7 @@ class TestStartEnterprisePull:
             job.finished_at = time.time()
 
         with patch(
-            "app.application.enterprise_deploy_pull._execute_pull_job",
+            "app.domain.app_pure.enterprise_deploy_pull._execute_pull_job",
             new=fake_execute,
         ):
             job = await start_enterprise_pull({"force": False})
@@ -395,7 +395,7 @@ class TestStartEnterprisePull:
             job.finished_at = time.time()
 
         with patch(
-            "app.application.enterprise_deploy_pull._execute_pull_job",
+            "app.domain.app_pure.enterprise_deploy_pull._execute_pull_job",
             new=fake_execute,
         ):
             job = await start_enterprise_pull(None)
@@ -431,7 +431,7 @@ class TestStartEnterprisePull:
             edp._ACTIVE_PULL = None
 
         with patch(
-            "app.application.enterprise_deploy_pull._execute_pull_job",
+            "app.domain.app_pure.enterprise_deploy_pull._execute_pull_job",
             new=fake_execute,
         ):
             await start_enterprise_pull({})

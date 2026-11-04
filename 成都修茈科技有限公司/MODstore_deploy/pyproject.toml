@@ -6,14 +6,16 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
+governance = ["retort-engine>=0.4.0,<0.5", "xcagi-common>=0.1.0,<0.2"]
 web = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.27",
+    "websockets>=15,<17",
     "python-multipart>=0.0.6",
     "httpx[socks]>=0.27",
-    # Starlette 1.6 still imports anyio.abc.BlockingPortal; AnyIO 4.15 turns
-    # that compatibility alias into a deprecation failure under our strict tests.
-    "anyio>=4.4,<4.15",
+    # Starlette 1.7 removes deprecated portal imports required by AnyIO 4.15.
+    "starlette>=1.7,<2",
+    "anyio>=4.15.1,<4.16",
     "socksio>=1.0",
     # 上界不可去掉：sqlalchemy 2.1.0 收紧 Query 类型推断，使 ~30 个既有模块在
     # mypy 门禁下被判 56 条错误（2026-09-25 事故 WO-0f1b3d12bab4，代码零变更）。
@@ -26,16 +28,16 @@ web = [
     "python-dotenv>=1.0",
     "python-alipay-sdk>=3.4",
     "python-pptx>=0.6.23",
+    # Signed private deliveries execute FHD's Mod SDK in a fresh interpreter.
+    "pandas>=2.0",
     "PyYAML>=6.0",
     "paramiko>=3.4",
-    "cryptography>=42.0",
+    "cryptography>=50.0.2",
     "prometheus-client>=0.20",
     "pika>=1.3",
     "edge-tts>=6.1",
-    # 数字管家 QQ 官方机器人桥接：Ed25519 验签 + op=13 回调握手。
-    # 仅在配置了 BUTLER_QQ_* env 后真正启用；未安装则 butler_qq_bridge 路由跳过注册。
-    "pynacl>=1.5",
-    "qq-botpy>=1.2.1",
+    # Was previously pulled in transitively by qq-botpy; keep explicit after QQ Bot retirement.
+    "APScheduler>=3.10,<4",
 ]
 knowledge = [
     "chromadb>=0.5",
@@ -57,9 +59,9 @@ evolution-metrics = [
     # operating-metrics module uses pandas.  Keep the runtime extra complete
     # so daily 30/90-day snapshots cannot silently degrade to stale evidence.
     "pandas>=2.0",
-    "pytest>=7.4",
+    "pytest>=9.1.1",
     "pytest-cov>=4.1",
-    "pytest-asyncio>=0.23",
+    "pytest-asyncio>=1.4.0",
 ]
 aliyun-tts = [
     "dashscope>=1.14",
@@ -73,17 +75,15 @@ vibe = [
     "vibe-coding[web]>=0.1.0",
 ]
 dev = [
-  "pytest>=7.4",
+  "pytest>=9.1.1",
   "pytest-cov>=4.1",
-  "pytest-asyncio>=0.23",
+  "pytest-asyncio>=1.4.0",
   "PyYAML>=6.0",
-  "black==26.3.1",
+  "black==26.10.1",
   "isort==6.1.0",
   "jsonschema>=4.21",
-  # 与 black/isort 同规则精确固定，取 2026-09-24 绿灯 run 实测版本。
-  # 不要降到 1.x：1.19.1 会对 modstore_server/rag_service.py:287 报 arg-type，
-  # 在零代码变更下把门禁打红（2026-09-25 事故 WO-0f1b3d12bab4 实测）。
-  "mypy==2.3.1",
+  # 工具精确固定；升级必须同时验证格式和类型检查。
+  "mypy==2.4.0",
   "openpyxl>=3.1",
   "pypdf>=4.0",
   # test_cache_extra imports RedisError directly; keep the release-gate
@@ -153,6 +153,8 @@ packages = ["modstore_server", "modman"]
 # 动态产物与沙箱跑一次脚本目录：不参与类型门禁（与 coverage.omit 对齐）。
 exclude = [
     "(?x)^modstore_server/workbench_script_runs/",
+    # debt24 mechanical merges (runtime _facade().T annotations)
+    "(?x)^modstore_server/.+_merged[.]py$",
 ]
 # 全仓默认检查；以下为当前仍有大量推断债的遗留模块列表（可随时从列表移除以恢复检查）。
 # 重新生成：`python scripts/export_mypy_ignore_modules.py --toml-fragment`
@@ -174,7 +176,6 @@ disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = [
-    "botpy.*",
     "fastapi.*",
     "chromadb.*",
     "redis.*",
@@ -211,3 +212,52 @@ module = [
     "retort_engine.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "modstore_server.admin_duty_graph_api_merged",
+    "modstore_server.agent_butler_api_merged",
+    "modstore_server.api.app_factory_merged",
+    "modstore_server.api.authoring_merged",
+    "modstore_server.api.market_routes_merged",
+    "modstore_server.craft_steps_merged",
+    "modstore_server.customer_service_orchestrator_merged",
+    "modstore_server.daily_digest_merged",
+    "modstore_server.daily_digest_surface_audit_merged",
+    "modstore_server.employee_ai_pipeline_merged",
+    "modstore_server.employee_ai_scaffold_merged",
+    "modstore_server.employee_executor_merged",
+    "modstore_server.employee_executor_merged_mod1",
+    "modstore_server.employee_executor_merged_mod2",
+    "modstore_server.employee_asset_pipeline_merged",
+    "modstore_server.employee_asset_pipeline_merged_mod1",
+    "modstore_server.employee_asset_pipeline_merged_mod1_r1",
+    "modstore_server.employee_asset_pipeline_merged_mod1_r2",
+    "modstore_server.employee_asset_pipeline_merged_mod2",
+    "modstore_server.mod_scaffold_runner_merged",
+    "modstore_server.mod_scaffold_runner_merged_mod1",
+    "modstore_server.mod_scaffold_runner_merged_mod2",
+    "modstore_server.employee_autonomy_service_merged",
+    "modstore_server.employee_bench_merged",
+    "modstore_server.llm_api_merged",
+    "modstore_server.llm_catalog_merged",
+    "modstore_server.llm_runtime_autopilot_merged",
+    "modstore_server.market_auth_api_merged",
+    "modstore_server.market_catalog_browse_routes_merged",
+    "modstore_server.mod_ai_scaffold_merged",
+    "modstore_server.mod_employee_agent_runner_merged",
+    "modstore_server.openapi_connector_runtime_merged",
+    "modstore_server.para_delegate_handler_merged",
+    "modstore_server.production_line_orchestrator_merged",
+    "modstore_server.public_visualization_api_merged",
+    "modstore_server.release_train_merged",
+    "modstore_server.research_tools_merged",
+    "modstore_server.retort_clarification_operations_merged",
+    "modstore_server.routes_registry_merged",
+    "modstore_server.self_evolution_operations_merged",
+    "modstore_server.strategic_layer_api_merged",
+    "modstore_server.time_rail_workflow_merged",
+    "modstore_server.workflow_scheduler_merged",
+]
+ignore_errors = true
+

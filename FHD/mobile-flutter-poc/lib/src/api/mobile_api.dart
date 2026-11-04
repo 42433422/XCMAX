@@ -56,6 +56,8 @@ abstract class _ApiRootBase {
   final StreamController<MobileSessionData> _sessionChanges =
       StreamController<MobileSessionData>.broadcast();
   MobileSessionData _lastSession = MobileSessionData.empty;
+  int _authGeneration = 0;
+  Future<void> _sessionWrites = Future<void>.value();
   Future<bool>? _refreshInFlight;
   DateTime? _lastLanProbeAt;
   bool? _lastLanProbeOk;

@@ -100,10 +100,6 @@ def _gather_artifact_paths(obj: Any, acc: List[str]) -> None:
             _gather_artifact_paths(it, acc)
 
 
-def _gather_spreadsheet_paths(obj: Any, acc: List[str]) -> None:
-    _gather_artifact_paths(obj, acc)
-
-
 def _list_session_output_files(session_dir: Path) -> List[Path]:
     out_dir = session_dir / "outputs"
     if not out_dir.is_dir():

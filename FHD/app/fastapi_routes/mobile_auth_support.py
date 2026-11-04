@@ -55,7 +55,7 @@ def user_public_dict(user: Any) -> dict[str, Any]:
 
 
 def mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
-    """Build a relay/admin fallback user when the local user row is stale."""
+    """Legacy enterprise relay only; never synthesize an administrator."""
     if not payload or payload.get("typ") not in (None, "access"):
         return None
     uid = int(payload.get("user_id") or 0)
@@ -64,10 +64,10 @@ def mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
     is_relay = session_id.startswith("mobile-relay-")
     if uid <= 0 and not is_relay:
         return None
-    if account_kind not in {"admin", "admin_portal"} and not is_relay:
+    if account_kind in {"admin", "admin_portal"} or not is_relay:
         return None
     username = str(payload.get("username") or "").strip() or "mobile"
-    role = "admin" if account_kind in {"admin", "admin_portal"} else "enterprise"
+    role = "enterprise"
     return SimpleNamespace(
         id=uid if uid > 0 else 0,
         username=username,

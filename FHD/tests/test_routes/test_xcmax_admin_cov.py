@@ -14,6 +14,7 @@ import json
 import os
 import tempfile
 from contextlib import ExitStack
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -266,7 +267,7 @@ class TestDigestLocalOrProxyBranches:
     """Hit the missing branches in _digest_local_or_proxy."""
 
     @pytest.mark.asyncio
-    async def test_prefer_local_post_falls_through_to_proxy(self):
+    async def test_prefer_local_post_falls_through_to_proxy(self, digest_admin_branch):
         """Lines 175: prefer_local=True but method POST → skips local, goes to proxy."""
         req = _mock_request()
         proxy_result = {"proxied": True}
@@ -284,7 +285,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == proxy_result
 
     @pytest.mark.asyncio
-    async def test_prefer_local_false_uses_proxy_with_admin_session(self):
+    async def test_prefer_local_false_uses_proxy_with_admin_session(self, digest_admin_branch):
         """Lines 216-222: prefer_local=False → require_admin_session=True."""
         req = _mock_request()
         proxy_result = {"ok": True}
@@ -304,7 +305,7 @@ class TestDigestLocalOrProxyBranches:
         assert kwargs.get("require_admin_session") is True
 
     @pytest.mark.asyncio
-    async def test_daily_digests_with_limit_offset_params(self):
+    async def test_daily_digests_with_limit_offset_params(self, digest_admin_branch):
         """Lines 183-187: path has limit= and offset= query params parsed correctly."""
         req = _mock_request()
         svc_result = {"items": []}
@@ -328,7 +329,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == svc_result
 
     @pytest.mark.asyncio
-    async def test_daily_digests_artifacts_path(self):
+    async def test_daily_digests_artifacts_path(self, digest_admin_branch):
         """Lines 188-190: path ends with /artifacts."""
         req = _mock_request()
         arts_result = {"artifacts": []}
@@ -348,7 +349,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == arts_result
 
     @pytest.mark.asyncio
-    async def test_action_items_stats_with_params(self):
+    async def test_action_items_stats_with_params(self, digest_admin_branch):
         """Lines 194-202: action-items/stats path with kind and day."""
         req = _mock_request()
         stats_result = {"total": 10}
@@ -368,7 +369,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == stats_result
 
     @pytest.mark.asyncio
-    async def test_action_items_list_with_params(self):
+    async def test_action_items_list_with_params(self, digest_admin_branch):
         """Lines 203-211: action-items list path with kind and day."""
         req = _mock_request()
         list_result = {"items": []}
@@ -388,7 +389,7 @@ class TestDigestLocalOrProxyBranches:
         assert result == list_result
 
     @pytest.mark.asyncio
-    async def test_local_digest_raises_returns_502(self):
+    async def test_local_digest_raises_returns_502(self, digest_admin_branch):
         """Lines 212-214: RECOVERABLE_ERRORS in local path → 502."""
         req = _mock_request()
         with (
@@ -670,7 +671,7 @@ def _local_employee_execute_session_patches():
             return_value={"tenant_id": 1, "account_kind": "admin"},
         ),
         patch(
-            "app.application.auth_permission_resolver.require_allowed",
+            "app.domain.app_pure.auth_permission_resolver.require_allowed",
             return_value=None,
         ),
     ]
@@ -702,11 +703,11 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro", "max", "ultra"},
             ),
         ):
@@ -729,23 +730,23 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value="pro",
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro", "max", "ultra"},
             ),
             patch(
-                "app.application.account_tier_derivation.should_have_account_tier",
+                "app.domain.app_pure.account_tier_derivation.should_have_account_tier",
                 return_value=False,
             ),
             patch(
-                "app.application.entitled_industries_init.merge_entitled_industries",
+                "app.domain.app_pure.entitled_industries_init.merge_entitled_industries",
                 return_value=["通用"],
             ),
             patch(
-                "app.application.entitled_industries_init.validate_industry_in_entitled",
+                "app.domain.app_pure.entitled_industries_init.validate_industry_in_entitled",
                 return_value=True,
             ),
             patch("app.db.session.get_db", return_value=mock_db),
@@ -769,23 +770,23 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro", "max", "ultra"},
             ),
             patch(
-                "app.application.account_tier_derivation.should_have_account_tier",
+                "app.domain.app_pure.account_tier_derivation.should_have_account_tier",
                 return_value=True,
             ),
             patch(
-                "app.application.entitled_industries_init.merge_entitled_industries",
+                "app.domain.app_pure.entitled_industries_init.merge_entitled_industries",
                 return_value=["行业A"],
             ),
             patch(
-                "app.application.entitled_industries_init.validate_industry_in_entitled",
+                "app.domain.app_pure.entitled_industries_init.validate_industry_in_entitled",
                 return_value=False,
             ),
             patch("app.db.session.get_db", return_value=mock_db),
@@ -816,12 +817,15 @@ class TestAdminSetUserProfile:
 
     def test_entitled_industries_list_passed(self, client: TestClient):
         """Lines 684-689: entitled_raw is list → merge_entitled_industries called."""
-        mock_user = MagicMock()
-        mock_user.tier = "enterprise"
-        mock_user.entitled_industries = ["通用"]
-        mock_user.industry_id = ""
-        mock_user.account_tier = None
-        mock_user.budget_range = ""
+        mock_user = SimpleNamespace(
+            username="frank",
+            market_user_id=1,
+            tier="enterprise",
+            entitled_industries=["通用"],
+            industry_id="",
+            account_tier=None,
+            budget_range="",
+        )
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
@@ -830,23 +834,23 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro"},
             ),
             patch(
-                "app.application.account_tier_derivation.should_have_account_tier",
+                "app.domain.app_pure.account_tier_derivation.should_have_account_tier",
                 return_value=True,
             ),
             patch(
-                "app.application.entitled_industries_init.merge_entitled_industries",
+                "app.domain.app_pure.entitled_industries_init.merge_entitled_industries",
                 return_value=["通用", "行业A"],
             ),
             patch(
-                "app.application.entitled_industries_init.validate_industry_in_entitled",
+                "app.domain.app_pure.entitled_industries_init.validate_industry_in_entitled",
                 return_value=True,
             ),
             patch("app.db.session.get_db", return_value=mock_db),
@@ -855,31 +859,45 @@ class TestAdminSetUserProfile:
                 "/api/xcmax/admin/users/1/profile",
                 json={"username": "frank", "entitled_industries": ["通用", "行业A"]},
             )
-        # Either 200 (success) or 500 depending on DB mock completeness
-        assert resp.status_code in (200, 500)
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {
+            "success": True,
+            "data": {
+                "market_user_id": 1,
+                "username": "frank",
+                "tier": "enterprise",
+                "entitled_industries": ["通用", "行业A"],
+                "industry_id": "",
+                "account_tier": None,
+                "budget_range": "",
+            },
+        }
+        assert mock_user.entitled_industries == ["通用", "行业A"]
+        mock_db.commit.assert_called_once()
+        mock_db.add.assert_not_called()
 
     def test_db_error_returns_500(self, client: TestClient):
         """Lines 771-773: RECOVERABLE_ERRORS from DB → 500."""
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal"},
             ),
             patch(
-                "app.application.account_tier_derivation.should_have_account_tier",
+                "app.domain.app_pure.account_tier_derivation.should_have_account_tier",
                 return_value=True,
             ),
             patch(
-                "app.application.entitled_industries_init.merge_entitled_industries",
+                "app.domain.app_pure.entitled_industries_init.merge_entitled_industries",
                 return_value=[],
             ),
             patch(
-                "app.application.entitled_industries_init.validate_industry_in_entitled",
+                "app.domain.app_pure.entitled_industries_init.validate_industry_in_entitled",
                 return_value=True,
             ),
             patch("app.db.session.get_db", side_effect=RuntimeError("db down")),
@@ -1510,7 +1528,7 @@ class TestSyncEndpoints:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.fetch_inbox_row",
+                "app.domain.shared_services.admin_sync_service.fetch_inbox_row",
                 return_value={"entity_type": "product", "id": 1},
             ),
             patch(
@@ -1529,7 +1547,7 @@ class TestSyncEndpoints:
 
     def test_sync_resolve_conflict_skip_action(self, client: TestClient):
         """Lines 1807-1810: action='skip' → mark_inbox_skipped called."""
-        with patch("app.services.admin_sync_service.mark_inbox_skipped") as mock_skip:
+        with patch("app.domain.shared_services.admin_sync_service.mark_inbox_skipped") as mock_skip:
             resp = client.post(
                 "/api/xcmax/sync/conflicts/5/resolve",
                 json={"action": "skip"},

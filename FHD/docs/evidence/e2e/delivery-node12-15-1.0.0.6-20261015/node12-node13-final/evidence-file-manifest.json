@@ -1,0 +1,480 @@
+{
+  "scope": "Final node12/node13 evidence only; node14/node15 progress excluded; no databases or profiles",
+  "createdAt": "2026-10-15T22:23:22.989279+08:00",
+  "files": [
+    {
+      "relativePath": "evidence/c5-dmg-vs-zip-app-content-comparison.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/c5-dmg-vs-zip-app-content-comparison.json",
+      "bytes": 421,
+      "sha256": "0c7f83be05e5d27ea0f4e4380e5ef7881143139e8e158c58dd13e9b925ba1c02"
+    },
+    {
+      "relativePath": "evidence/c5-package-verification.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/c5-package-verification.json",
+      "bytes": 2375,
+      "sha256": "77032c56f2c641379b2acc101644fc5f3e26614fc56b29403defe81264b7fe5e"
+    },
+    {
+      "relativePath": "evidence/c5-preupdate-baseline.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/c5-preupdate-baseline.json",
+      "bytes": 820,
+      "sha256": "af5d76496151e4b644fcd89d3305e792b789b86aeecd57879c6b18f018208806"
+    },
+    {
+      "relativePath": "evidence/c5-preupdate-snapshot.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/c5-preupdate-snapshot.json",
+      "bytes": 177252,
+      "sha256": "3c00e1f4f6e42634b0317f23da5dbcc13207fb78e8dab7d6c214f1a2be304638"
+    },
+    {
+      "relativePath": "evidence/c5-synthetic-attachment-upload.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/c5-synthetic-attachment-upload.json",
+      "bytes": 842,
+      "sha256": "1fcaa2cc66f9b1495203d9b86d1273b3f9aee6bd0aabfd415a89ebd3437c3717"
+    },
+    {
+      "relativePath": "evidence/candidate-cache-cleanup.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/candidate-cache-cleanup.json",
+      "bytes": 1016,
+      "sha256": "0e9f6b73c47c31e489f059a017cffaf9f9c695d76bd583447636887209ddb33f"
+    },
+    {
+      "relativePath": "evidence/clean-install-final-pass-timestamp-correction.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/clean-install-final-pass-timestamp-correction.json",
+      "bytes": 1686,
+      "sha256": "a7b6bdcb01962fcc0a38940b8b5d1a3ac7f3e40d8be3d2d3efde4c67aa68d6c0"
+    },
+    {
+      "relativePath": "evidence/clean-install-first-launch.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/clean-install-first-launch.json",
+      "bytes": 1003,
+      "sha256": "5fd886effe9d4f258d9d4a6dfd59d11a66bafa897ede51e0121fe78aea43ec14"
+    },
+    {
+      "relativePath": "evidence/final-environment-and-restoration.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/final-environment-and-restoration.json",
+      "bytes": 1084,
+      "sha256": "415591f97f91247563bbbf138b688a59f53c6c4b1b0e7e55a7abbebd3645df76"
+    },
+    {
+      "relativePath": "evidence/final-process-space-proof.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/final-process-space-proof.json",
+      "bytes": 672,
+      "sha256": "005a34609f5a2b0880302d67e82733cb6172c80f7230255740104babbc55d0e3"
+    },
+    {
+      "relativePath": "evidence/final-report-reference-consistency.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/final-report-reference-consistency.json",
+      "bytes": 2383,
+      "sha256": "3711c909d90afdcef61589294ab2251471b2476acd06ead55166d4b08f936ce9"
+    },
+    {
+      "relativePath": "evidence/history/node12-node13-candidate-reconciliation-before-reference-correction-5bf6f767954a.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/history/node12-node13-candidate-reconciliation-before-reference-correction-5bf6f767954a.json",
+      "bytes": 7598,
+      "sha256": "5bf6f767954ae5dc2c375004e8b761a86c152592dd7f797dfcaa9208214b40f3"
+    },
+    {
+      "relativePath": "evidence/history/node13-joint-verification-final-before-reference-correction-ffa2c3645c6f.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/history/node13-joint-verification-final-before-reference-correction-ffa2c3645c6f.json",
+      "bytes": 22718,
+      "sha256": "ffa2c3645c6f8ec8bd6669fba268f6b29416d07d41ac2b0d413950f2df4df61e"
+    },
+    {
+      "relativePath": "evidence/lifecycle_snapshot.py",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/lifecycle_snapshot.py",
+      "bytes": 1801,
+      "sha256": "09718cd878de8b6fd18de7c3d9d7bb8f9b9e600c4ef3781d6671cc1f93444d2d"
+    },
+    {
+      "relativePath": "evidence/mac-c5-completion-audit.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/mac-c5-completion-audit.json",
+      "bytes": 19097,
+      "sha256": "9afa16034ff41eeb0e73d7a58ac1bb5be687cc1c2d91137986b2e112de8eecef"
+    },
+    {
+      "relativePath": "evidence/mac-c5-lifecycle-final.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/mac-c5-lifecycle-final.json",
+      "bytes": 16193,
+      "sha256": "bf473b6bc8368011eb4458f1c936d90962b5a90d672b538b6f56969885bed2f6"
+    },
+    {
+      "relativePath": "evidence/node12-node13-candidate-reconciliation.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node12-node13-candidate-reconciliation.json",
+      "bytes": 7599,
+      "sha256": "8957f5f62646b0924d848465e54751d03af3f73428bef8bb02b965dea4b705d1"
+    },
+    {
+      "relativePath": "evidence/node12-node13-joint-conclusion.md",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node12-node13-joint-conclusion.md",
+      "bytes": 1863,
+      "sha256": "e35baf1c0d5c605b8fe2e3d9e8eaec8d745bd5da80efd9039ad4379ad54c737b"
+    },
+    {
+      "relativePath": "evidence/node13-joint-verification-final.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/node13-joint-verification-final.json",
+      "bytes": 22719,
+      "sha256": "ab40b1c8d0fcc054ad411620f7eef5fc3c1e584a38acbb359aeb73e55fd10257"
+    },
+    {
+      "relativePath": "evidence/ota-attempt-misconfigured-target.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/ota-attempt-misconfigured-target.json",
+      "bytes": 925,
+      "sha256": "9a59e2b5ec7f9fdd88cd7108548dfd01702d3546047758864b439b4f563628f1"
+    },
+    {
+      "relativePath": "evidence/ota-r2-operator-interruption.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/ota-r2-operator-interruption.json",
+      "bytes": 1364,
+      "sha256": "f3eb13689f5abe796312cd7caebacadbe36099c635dd278671d899c3862a5c5d"
+    },
+    {
+      "relativePath": "evidence/recovery_port_guard.py",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/recovery_port_guard.py",
+      "bytes": 14013,
+      "sha256": "cdec07ae6cca2965057fe0be49d3c65866caf3508f5b23d8c3c68f78b28c6756"
+    },
+    {
+      "relativePath": "evidence/recovery_port_guard_r1_no_reuse.py",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/recovery_port_guard_r1_no_reuse.py",
+      "bytes": 14013,
+      "sha256": "cdec07ae6cca2965057fe0be49d3c65866caf3508f5b23d8c3c68f78b28c6756"
+    },
+    {
+      "relativePath": "evidence/shipit-through-r2-original.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/shipit-through-r2-original.log",
+      "bytes": 23020,
+      "sha256": "11099e1ee869ec13cf40b5d23c75333683977d5b4a3b73d93b9c10db31ec6ad3"
+    },
+    {
+      "relativePath": "evidence/source-alignment-current.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/source-alignment-current.json",
+      "bytes": 1171,
+      "sha256": "6c320d04195ad85674b3755ab22e965215ce9fd18ec9b1299acf97089047042d"
+    },
+    {
+      "relativePath": "evidence/storage-location.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/storage-location.json",
+      "bytes": 147,
+      "sha256": "4f5c28eaa387be98bc19d70c90a58f37a7560ddbcf888d43e8dce9c15169f958"
+    },
+    {
+      "relativePath": "evidence/ui-screenshots/2026-10-15T130854-015Z-1.jpg",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T130854-015Z-1.jpg",
+      "bytes": 143100,
+      "sha256": "09967b84af9613450f8ab138300d01fd5f0fd3f512cc5b9f68f909d9f191e028"
+    },
+    {
+      "relativePath": "evidence/ui-screenshots/2026-10-15T131202-546Z-1.jpg",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T131202-546Z-1.jpg",
+      "bytes": 169984,
+      "sha256": "b91e5292cdcac91cdf9709186b762ea071af446c69f25254849c2a96e7ef99f9"
+    },
+    {
+      "relativePath": "evidence/ui-screenshots/2026-10-15T132325-584Z-1.jpg",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T132325-584Z-1.jpg",
+      "bytes": 20023,
+      "sha256": "2151399b186d97700a7dc29685ffc1a527d3c7a5d8a16107aaa740c001012dea"
+    },
+    {
+      "relativePath": "evidence/ui-screenshots/2026-10-15T132549-172Z-1.jpg",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/2026-10-15T132549-172Z-1.jpg",
+      "bytes": 171127,
+      "sha256": "9a97b3e5ca1af592a9f95d9c823021a8b140c859f9744dde9bd5394a64b6841a"
+    },
+    {
+      "relativePath": "evidence/ui-screenshots/original-image-index.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/ui-screenshots/original-image-index.json",
+      "bytes": 1973,
+      "sha256": "eee026c48cefa6e5a87ea9312d2f0ef946d4d839d45387ef3fe63fb468628b15"
+    },
+    {
+      "relativePath": "evidence/user-acceptance-policy-confirmation.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/user-acceptance-policy-confirmation.json",
+      "bytes": 774,
+      "sha256": "adc4495b3691954a2ea4710a73664b392739060ac1b3d161d59ce76ecbb88187"
+    },
+    {
+      "relativePath": "evidence/windows-c5-existing-artifact-identity.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-c5-existing-artifact-identity.json",
+      "bytes": 6651,
+      "sha256": "97b448b9990efbda49624456a58dbba83ed569e98b49628e1faec5965a4e1fe0"
+    },
+    {
+      "relativePath": "evidence/windows-existing-acceptance-joint-audit.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-existing-acceptance-joint-audit.json",
+      "bytes": 30516,
+      "sha256": "1264f2a5c6a1539ed7d2fe77886c2effb2c8aa8e1c5bc6f594304bc16470c2c6"
+    },
+    {
+      "relativePath": "evidence/windows-published-receipt-6190996826.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6190996826.json",
+      "bytes": 6955,
+      "sha256": "1873eee6727cb123cecd4f18a0b0761c7d6df9f5b6c7d72ada89f595f4a07b0a"
+    },
+    {
+      "relativePath": "evidence/windows-published-receipt-6191186660.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6191186660.json",
+      "bytes": 3471,
+      "sha256": "1be544a5bee4c780b02ea78af5be71d1b200c3a0eee4069507f128836d16c39a"
+    },
+    {
+      "relativePath": "evidence/workspace-cleanup-original.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/workspace-cleanup-original.log",
+      "bytes": 6687,
+      "sha256": "813633073be933e1e2b6cebd41213074e3fb842f13ab42d71930f36e2cfb46c7"
+    },
+    {
+      "relativePath": "evidence/workspace-cleanup-result.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/evidence/workspace-cleanup-result.json",
+      "bytes": 7740,
+      "sha256": "bcc9e312a29d2ae1d73078b78f463214956cf8c5a2afc0803a6bc1942d3c8239"
+    },
+    {
+      "relativePath": "ota-r3/evidence/launchctl-original-values.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/launchctl-original-values.json",
+      "bytes": 207,
+      "sha256": "f697772cb950f15275b9f405700a61fa99333f93baa32c1702ce4f4c87577b2a"
+    },
+    {
+      "relativePath": "ota-r3/evidence/launchctl-test-values.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/launchctl-test-values.json",
+      "bytes": 212,
+      "sha256": "7a76d0b99dce58bdf5b9370a9cebfde1e1d50f9318994e3beb95cce50d7c4d44"
+    },
+    {
+      "relativePath": "ota-r3/evidence/normal-quit.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-quit.json",
+      "bytes": 353,
+      "sha256": "49f647564140686dac89799f69e66bed9cc2031004477efca04f115074b0c05b"
+    },
+    {
+      "relativePath": "ota-r3/evidence/normal-reopen-acceptance.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-reopen-acceptance.json",
+      "bytes": 528,
+      "sha256": "969ffe0fe1ea5065317f0d16df8ec21e48631469ea7f96ee81cc6a4cd958423b"
+    },
+    {
+      "relativePath": "ota-r3/evidence/normal-reopen-health.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-reopen-health.json",
+      "bytes": 702,
+      "sha256": "65c67d2ceca6bf5212c3f75c375585442fcf1b51dc77682439366c7e8bc4c930"
+    },
+    {
+      "relativePath": "ota-r3/evidence/normal-uninstall-acceptance.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/normal-uninstall-acceptance.json",
+      "bytes": 415,
+      "sha256": "0f1f137a7db79fe00831b1f5fda8c7bc2cab6ab4ccb64fe63c4d4eb8a0d04e64"
+    },
+    {
+      "relativePath": "ota-r3/evidence/old-baseline.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/old-baseline.json",
+      "bytes": 513,
+      "sha256": "f8db5a89cb9c6adaa1691d61080fcdc8f44d8b17e9b0295747659793f4dd9fb5"
+    },
+    {
+      "relativePath": "ota-r3/evidence/old-runtime-health.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/old-runtime-health.json",
+      "bytes": 662,
+      "sha256": "af71c33c556cae328bcf34737ebf9649747c56b59cee06bc3c6cb46d25774e34"
+    },
+    {
+      "relativePath": "ota-r3/evidence/ota-install-observer.jsonl",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/ota-install-observer.jsonl",
+      "bytes": 20437,
+      "sha256": "31b7935b7d959a03ed61599ea3d55a26bc0da4dc1b7c6450a36729600fc96f93"
+    },
+    {
+      "relativePath": "ota-r3/evidence/postupdate-snapshot.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/postupdate-snapshot.json",
+      "bytes": 187452,
+      "sha256": "6ac7051ead127ae9f6be55159f362135daf30756db74b10b18a728d75480115e"
+    },
+    {
+      "relativePath": "ota-r3/evidence/pre-uninstall.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/pre-uninstall.json",
+      "bytes": 242,
+      "sha256": "9ed12e75d5cf7db194d6b4166f0ff2bedf6ba16fe022a6d7795286163663b260"
+    },
+    {
+      "relativePath": "ota-r3/evidence/preupdate-snapshot.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/preupdate-snapshot.json",
+      "bytes": 187452,
+      "sha256": "28055ac0ca67b250bf60454876ba227b8d7908bfbf16b1caa58667dfd4b0ad81"
+    },
+    {
+      "relativePath": "ota-r3/evidence/profile-copy.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/profile-copy.json",
+      "bytes": 930,
+      "sha256": "447cc88870b5ff73bc15809a81b08efe49f61e6514976c5af13ad99d51ae0660"
+    },
+    {
+      "relativePath": "ota-r3/evidence/reinstall-readback-acceptance.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstall-readback-acceptance.json",
+      "bytes": 470,
+      "sha256": "ce06d6adb6e39cca32dc143b0b5f3d845ed107685fdb9901fb351f590d7cf256"
+    },
+    {
+      "relativePath": "ota-r3/evidence/reinstalled-app-identity.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstalled-app-identity.json",
+      "bytes": 627,
+      "sha256": "4f62c5c229446ee710f7fa7baf7c9c495d469dbba4c261d2fcb9cbc07fb7a0ea"
+    },
+    {
+      "relativePath": "ota-r3/evidence/reinstalled-health.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstalled-health.json",
+      "bytes": 702,
+      "sha256": "57ed8d2e8c360ea1bfb33c858680e107d5f99bb28932a4ec520379aa056f69c9"
+    },
+    {
+      "relativePath": "ota-r3/evidence/reinstalled-snapshot.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reinstalled-snapshot.json",
+      "bytes": 187452,
+      "sha256": "737e3b8c28a5fbaa1d1226d06912f0df02aa253e7f91004afe565d52a6cc074a"
+    },
+    {
+      "relativePath": "ota-r3/evidence/reopen-snapshot.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/reopen-snapshot.json",
+      "bytes": 187452,
+      "sha256": "0d5ea23706362947982db1ab93e6e4a51f6dc7e97b82a84c210bda5899c42a3b"
+    },
+    {
+      "relativePath": "ota-r3/evidence/shipit-success-original.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/shipit-success-original.log",
+      "bytes": 26273,
+      "sha256": "b2822c176ac139e7eab11c171ad68e29d7dcc82296a76251e26fad29106c6483"
+    },
+    {
+      "relativePath": "ota-r3/evidence/successful-upgrade-health.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/successful-upgrade-health.json",
+      "bytes": 662,
+      "sha256": "3524eb056332748ca7e280bf798c8b9024bfe907c670ab5990e11353c5843d14"
+    },
+    {
+      "relativePath": "ota-r3/evidence/successful-upgrade-readback.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/evidence/successful-upgrade-readback.json",
+      "bytes": 771,
+      "sha256": "f790efd110ceddfa056c80eb8d78861b8b7b83271f0a37e5ccce9d95214e09c8"
+    },
+    {
+      "relativePath": "ota-r3/userData/logs/updater-events.jsonl",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/ota-r3/userData/logs/updater-events.jsonl",
+      "bytes": 397,
+      "sha256": "194fafd78991b80758b3816146a895a82c75ddef7581025b4196c47670690b3a"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/automatic-rollback-acceptance.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/automatic-rollback-acceptance.json",
+      "bytes": 990,
+      "sha256": "ad977dca5991c82dfcf0db893443d1947e4ab9802c8669bd2ef3f9d004944232"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/corrupt-backup-rejection.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/corrupt-backup-rejection.json",
+      "bytes": 783,
+      "sha256": "3aae503487f91246afebf5f6f9c73e514a38dbccf1db700f51a0614b3d786a08"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/failed-update-and-automatic-rollback-original.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/failed-update-and-automatic-rollback-original.log",
+      "bytes": 237261,
+      "sha256": "9113ef4ef1bff8bcc993e6a2182cfd46b975fa511369239084e5dfff571a7921"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/old-backend-process.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/old-backend-process.json",
+      "bytes": 300,
+      "sha256": "b6c0c20d6bb6d5e8d8af7f29c06d7dcb330a5ff6daa35de0e5d11ca327f48362"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/old-baseline-readback.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/old-baseline-readback.json",
+      "bytes": 437,
+      "sha256": "aa66c1da7e43458f21d8dc2efcc1461c804a7a5401f03f084dd2271ebe905234"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/old-health.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/old-health.json",
+      "bytes": 702,
+      "sha256": "1575947374194d1c7f8018699343726785021915406be36da73b2109c5d37dda"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/post-rollback-old-health.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/post-rollback-old-health.json",
+      "bytes": 702,
+      "sha256": "3cf093ddfc5d2f7132f2d3d4681a641a14c1c787fbd40bdf521801fc65f5f37d"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/post-rollback-snapshot.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/post-rollback-snapshot.json",
+      "bytes": 187457,
+      "sha256": "82058361069e952e2644a5b13cf0e99e0d20717fba1764b3667b75f87d71211f"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/pre-failure-snapshot.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/pre-failure-snapshot.json",
+      "bytes": 187457,
+      "sha256": "4ece4494594fb3b3a2765cf3dd184b82b2ae42dbf0083dabcca5861fb979a728"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/pre-failure-test-setup.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/pre-failure-test-setup.json",
+      "bytes": 913,
+      "sha256": "dbc57eef4cdf644bfb1e4131c0a002d888bb9dd612f4ed5010f1107fa589cb04"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250-natural-rollback-marker.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250-natural-rollback-marker.json",
+      "bytes": 601,
+      "sha256": "845d6d7101aa3c8600fbc1681d0884c21d1ce88e5b599b2e388878f54e32fe11"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250-result.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250-result.json",
+      "bytes": 1553,
+      "sha256": "e4385faaed5aa15f36cb05e4ddc285e6383ffe3b0b6b7251929356bc604d0fe2"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250-rollback-applied.json",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250-rollback-applied.json",
+      "bytes": 189,
+      "sha256": "6eeaa5a9049633d05dbbb63aebb9859f680db0da9fc21345a6facf6822150ea2"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250.jsonl",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/recovery-port-guard-20261015T132115274694Z-57250.jsonl",
+      "bytes": 4308,
+      "sha256": "5d8f33689d243b92e40213e3dabc420a3e7669ed52dafa20f0008b8aab9552b8"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/rollback-helper-completed-original.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/rollback-helper-completed-original.log",
+      "bytes": 70,
+      "sha256": "0c08e5e11152b31190981b1210bfb6093927d5bda6798cad57c0e5d02dbbabb5"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/shipit-failed-start-automatic-recovery-original.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/shipit-failed-start-automatic-recovery-original.log",
+      "bytes": 29526,
+      "sha256": "2dcb25164a7a47be4386272c211387ed4378d4eedba8841efa2add5a52cc06b9"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/verify-backup-corrupted-copy.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/verify-backup-corrupted-copy.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "recovery-r1/evidence/verify-backup-natural-good.log",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/evidence/verify-backup-natural-good.log",
+      "bytes": 115,
+      "sha256": "8a84b1581c80159343d4584e00ece18a749ac924569654e40da773740653b4a1"
+    },
+    {
+      "relativePath": "recovery-r1/userData/logs/updater-events.jsonl",
+      "originalAbsolutePath": "/private/tmp/xcagi-mac-c5-20261015/recovery-r1/userData/logs/updater-events.jsonl",
+      "bytes": 571,
+      "sha256": "32efcea2f868b6fdc8edbc4694d0790323d54521a56571ef13b49a2ee5642a4e"
+    }
+  ]
+}

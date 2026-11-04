@@ -8,6 +8,7 @@ from typing import Any
 
 DEFAULT_SCOPE_GLOBS = [
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_*.py",
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/maintenance_loop/*.py",
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_workforce_learning.py",
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_metrics_job.py",
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_knowledge.py",

@@ -1,0 +1,29 @@
+name: evidence-media-hygiene
+
+# Block re-introduction of evidence/promo binary media into the git tree.
+# Complements .gitignore (tracked files ignore ignore rules).
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-media-hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  no-evidence-media:
+    name: Forbid tracked evidence/promo media
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Scan tracked media under evidence/promo paths
+        run: python3 scripts/ci/check_no_large_evidence_media.py

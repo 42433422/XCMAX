@@ -7,8 +7,8 @@ OCR识别事件：请求、识别完成、失败
 import logging
 from typing import Any
 
-from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
-from app.neuro_bus.events.base import EventPriority
+from app.neuro_bus.domains.domains_base import DomainChannel, NeuroDomain, get_domain_registry
+from app.neuro_bus.events.events_base import EventPriority
 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
 logger = logging.getLogger(__name__)

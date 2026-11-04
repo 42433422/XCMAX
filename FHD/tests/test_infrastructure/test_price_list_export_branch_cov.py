@@ -52,6 +52,7 @@ import pytest
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from lxml import etree
 
 from app.infrastructure.documents.price_list_export import (
     _append_tr_clone_from_last,
@@ -160,9 +161,9 @@ class TestReplacePlaceholdersBranches:
     def test_empty_text_skipped(self):
         doc = Document()
         doc.add_paragraph("")
-        # Should not raise; nothing to replace
+        before = doc.element.xml
         _replace_placeholders_in_paragraphs(doc, {"{{x}}": "y"})
-        assert True
+        assert doc.element.xml == before
 
     def test_no_keys_present_skipped(self):
         doc = Document()
@@ -366,9 +367,9 @@ class TestTcGetTcBordersSnapshotBranches:
 class TestTcApplyTcBordersSnapshotBranches:
     def test_none_snapshot_returns_early(self):
         cell = _make_cell_with_tcpr(with_tcb=False)
-        # Should not raise
+        before = cell._tc.xml
         _tc_apply_tc_borders_snapshot(cell, None)
-        assert True
+        assert cell._tc.xml == before
 
     def test_replaces_existing_tcb(self):
         cell = _make_cell_with_tcpr(with_tcb=True, with_bottom=True)
@@ -437,19 +438,31 @@ class TestPickBorderTemplateRowIndexBranches:
 class TestApplyTcBordersToAllBodyRowsBranches:
     def test_empty_snaps_returns_early(self):
         table = _make_table_with_rows(3, 4)
-        # Should not raise
+        before = table._tbl.xml
         _apply_tc_borders_to_all_body_rows(table, header_rows=1, per_cell_snaps=[])
-        assert True
+        assert table._tbl.xml == before
 
     def test_i_exceeds_snaps_length_uses_last(self):
         table = _make_table_with_rows(3, 4)
         # Only 2 snaps but 4 columns -> i >= len uses snaps[-1]
-        snap = OxmlElement("w:tcBorders")
-        snap.append(OxmlElement("w:bottom"))
-        snaps = [snap, snap]  # 2 snaps for 4 columns
+        snaps = []
+        for style in ("single", "double"):
+            snap = OxmlElement("w:tcBorders")
+            bottom = OxmlElement("w:bottom")
+            bottom.set(qn("w:val"), style)
+            snap.append(bottom)
+            snaps.append(snap)
         _apply_tc_borders_to_all_body_rows(table, header_rows=1, per_cell_snaps=snaps)
-        # Verify borders applied to all body rows
-        assert True
+        assert all(_tc_get_tc_borders_snapshot(cell) is None for cell in table.rows[0].cells)
+        for row in table.rows[1:]:
+            for index, cell in enumerate(row.cells):
+                actual = _tc_get_tc_borders_snapshot(cell)
+                expected = snaps[min(index, 1)]
+                assert actual is not None
+                assert etree.tostring(actual, method="c14n", exclusive=True) == etree.tostring(
+                    expected, method="c14n", exclusive=True
+                )
+                assert actual is not expected
 
 
 # ---------------------------------------------------------------------------
@@ -699,7 +712,7 @@ class TestWriteProductRowBranches:
             with_serial=True,
             col_map=col_map,
         )
-        assert True
+        assert cells == []
 
 
 # ---------------------------------------------------------------------------
@@ -772,9 +785,9 @@ class TestSnapshotRestoreTblBordersBranches:
 
     def test_restore_none_does_nothing(self):
         table = _make_table_with_rows(1, 1)
-        # Should not raise
+        before = table._tbl.xml
         _restore_tbl_borders(table, None)
-        assert True
+        assert table._tbl.xml == before
 
     def test_restore_replaces_existing_tblborders(self):
         table = _make_table_with_rows(1, 1)
@@ -1015,13 +1028,15 @@ class TestCellBottomEffectiveBranches:
 class TestEnsureRowTcBottomFromTemplateBranches:
     def test_negative_index_returns_early(self):
         table = _make_table_with_rows(3, 4)
+        before = table._tbl.xml
         _ensure_row_tc_bottom_from_template(table, -1, force=True)
-        assert True
+        assert table._tbl.xml == before
 
     def test_index_out_of_range_returns_early(self):
         table = _make_table_with_rows(3, 4)
+        before = table._tbl.xml
         _ensure_row_tc_bottom_from_template(table, 99, force=True)
-        assert True
+        assert table._tbl.xml == before
 
     def test_force_false_skips_effective_cells(self):
         table = _make_table_with_rows(3, 4)
@@ -1067,8 +1082,9 @@ class TestEnsureRowTcBottomFromTemplateBranches:
 class TestEnsureLastRowCellBottomsMatchAboveBranches:
     def test_less_than_2_rows_returns_early(self):
         table = _make_table_with_rows(1, 4)
+        before = table._tbl.xml
         _ensure_last_row_cell_bottoms_match_above(table)
-        assert True
+        assert table._tbl.xml == before
 
     def test_no_sample_continues(self):
         table = _make_table_with_rows(2, 4)
@@ -1111,9 +1127,10 @@ class TestFillFirstTableWithProductsBranches:
         table = MagicMock()
         table.rows = []
         table._tbl = MagicMock()
-        # Should not raise
         _fill_first_table_with_products(table, [])
-        assert True
+        table._tbl.assert_not_called()
+        assert table.rows == []
+        assert table.mock_calls == []
 
     def test_zero_products_with_existing_table(self):
         table = _make_table_with_rows(2, 4)
@@ -1124,8 +1141,9 @@ class TestFillFirstTableWithProductsBranches:
         hdr[2].text = "规格"
         hdr[3].text = "单价"
         _fill_first_table_with_products(table, [])
-        # Should complete without error
-        assert True
+        assert [[cell.text for cell in row.cells] for row in table.rows] == [
+            ["型号", "名称", "规格", "单价"]
+        ]
 
     def test_multiple_products_with_borders(self):
         table = _make_table_with_rows(2, 4)
@@ -1147,9 +1165,20 @@ class TestFillFirstTableWithProductsBranches:
             {"model_number": "M2", "name": "W2", "specification": "S2", "price": 20},
             {"model_number": "M3", "name": "W3", "specification": "S3", "price": 30},
         ]
+        border_xml = etree.tostring(tb, method="c14n", exclusive=True)
         _fill_first_table_with_products(table, products)
-        # Verify rows were added
-        assert True
+        assert [[cell.text for cell in row.cells] for row in table.rows] == [
+            ["型号", "名称", "规格", "单价"],
+            ["M1", "W1", "S1", "10"],
+            ["M2", "W2", "S2", "20"],
+            ["M3", "W3", "S3", "30"],
+            ["", "", "", ""],
+        ]
+        assert (
+            etree.tostring(_snapshot_tbl_borders(table), method="c14n", exclusive=True)
+            == border_xml
+        )
+        assert all(_cell_bottom_effective(cell) for row in table.rows[-2:] for cell in row.cells)
 
 
 # ---------------------------------------------------------------------------

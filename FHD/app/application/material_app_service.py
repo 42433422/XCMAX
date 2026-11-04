@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from app.application.ports.material_repository import MaterialRepository
+    from app.domain.product.ports import MaterialRepository
 
 
 class MaterialApplicationService:

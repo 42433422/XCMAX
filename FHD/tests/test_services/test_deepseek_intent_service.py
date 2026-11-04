@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import app.services.deepseek_intent_service as ds
-from app.services.deepseek_intent_service import (
+import app.domain.shared_services.deepseek_intent_service as ds
+from app.domain.shared_services.deepseek_intent_service import (
     DeepSeekIntentRecognizer,
     HybridIntentWithDeepSeek,
     cn_to_number,
@@ -41,6 +41,31 @@ class TestDeepSeekIntentRecognizer:
     def test_recognizer_has_required_methods(self, recognizer):
         assert hasattr(recognizer, "recognize")
         assert callable(getattr(recognizer, "recognize", None))
+
+    @pytest.mark.asyncio
+    async def test_oversized_message_uses_local_fallback_without_llm(self, recognizer, monkeypatch):
+        from app.infrastructure.llm import structured_output
+
+        complete = AsyncMock(side_effect=AssertionError("LLM must not be called"))
+        monkeypatch.setattr(structured_output, "complete_structured", complete)
+        monkeypatch.setattr(
+            ds, "_make_intent_cache_key", lambda _message: pytest.fail("cache key should not run")
+        )
+
+        result = await recognizer.recognize("型号 " + "0" * 100_000)
+
+        assert result["intent"] is None
+        complete.assert_not_awaited()
+
+    def test_oversized_model_response_is_rejected_before_regex_parsing(self, recognizer):
+        result = recognizer._parse_response("{" * 100_000, "ordinary request")
+
+        assert result["intent"] is None
+
+    def test_hybrid_slot_extractor_declines_oversized_message(self):
+        hybrid = HybridIntentWithDeepSeek(use_deepseek=False)
+
+        assert hybrid._extract_slots_from_rule("编号 " + "0" * 100_000, {}) == {}
 
 
 # --------------------------------------------------------------------------- #
@@ -312,7 +337,9 @@ class TestHybridRecognize:
     async def test_greeting_returns_rule_directly(self):
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "greet", "is_greeting": True, "tool_key": "greet"}
-        with patch("app.services.intent_service.recognize_intents", return_value=dict(rule)):
+        with patch(
+            "app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)
+        ):
             out = await h.recognize("你好")
         assert out["intent_source"] == "rule"
         assert out["final_intent"] == "greet"
@@ -325,7 +352,10 @@ class TestHybridRecognize:
         h.deepseek_recognizer = MagicMock()
         h.deepseek_recognizer.recognize = AsyncMock(side_effect=AssertionError("不应调用"))
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -339,7 +369,10 @@ class TestHybridRecognize:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -355,7 +388,9 @@ class TestHybridRecognize:
         h.deepseek_recognizer.recognize = AsyncMock(
             return_value={"intent": "products", "confidence": 0.9, "slots": {"keyword": "雨衣"}}
         )
-        with patch("app.services.intent_service.recognize_intents", return_value=dict(rule)):
+        with patch(
+            "app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)
+        ):
             out = await h.recognize("帮我找点东西")
         assert out["final_intent"] == "products"
         assert out["intent_source"] == "deepseek"
@@ -368,7 +403,9 @@ class TestHybridRecognize:
         h.deepseek_recognizer.recognize = AsyncMock(
             return_value={"intent": "products", "confidence": 0.3, "slots": {}}
         )
-        with patch("app.services.intent_service.recognize_intents", return_value=dict(rule)):
+        with patch(
+            "app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)
+        ):
             out = await h.recognize("模糊消息")
         # 置信度纪律：低置信不采纳 LLM 结果，标记 unclear + 澄清
         assert out["intent_source"] == "deepseek_low_confidence"
@@ -387,7 +424,10 @@ class TestHybridRecognize:
             return_value={"intent": "products", "confidence": 0.2, "slots": {"keyword": "x"}}
         )
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -407,7 +447,10 @@ class TestHybridRecognize:
         h.deepseek_recognizer = MagicMock()
         h.deepseek_recognizer.recognize = AsyncMock(side_effect=RuntimeError("boom"))
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -489,6 +532,8 @@ class TestRecognizeSync:
     def test_recognize_sync_greeting_via_rule(self):
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "greet", "is_greeting": True}
-        with patch("app.services.intent_service.recognize_intents", return_value=dict(rule)):
+        with patch(
+            "app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)
+        ):
             out = h.recognize_sync("你好")
         assert out.get("final_intent") == "greet" or out.get("primary_intent") == "greet"

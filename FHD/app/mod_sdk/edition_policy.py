@@ -263,16 +263,14 @@ def bundled_mods_dir() -> Path | None:
             p = base / name
             if p.is_dir():
                 return p
+    source = Path(__file__).resolve().parents[2] / "mods"
+    if source.is_dir():
+        return source
     cwd = Path.cwd()
     for rel in ("mods", "XCAGI/mods", "FHD/mods"):
         p = (cwd / rel).resolve()
         if p.is_dir():
             return p
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        trial = parent / "mods"
-        if trial.is_dir() and (trial / "xcagi-planner-bridge").is_dir():
-            return trial
     return None
 
 

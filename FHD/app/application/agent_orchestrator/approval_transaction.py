@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.application.agent_orchestrator.approval_grant import (
+    _EVIDENCE_KEY,
     ApprovalGrantError,
     ApprovalGrantStorageError,
     validate_approval_grant,
@@ -70,6 +71,13 @@ def approve_and_enqueue(
             )
             if changed != 1:
                 raise ApprovalGrantError("审批任务已变化")
+            if claims["tool_id"] == "catalog_products_v1":
+                evidence = dict(run.metadata.get(_EVIDENCE_KEY) or {})
+                step_id = str(claims["step_id"])
+                if step_id in evidence and evidence[step_id] != token:
+                    raise ApprovalGrantError("目录审批原始凭据不可替换")
+                evidence[step_id] = token
+                run.metadata[_EVIDENCE_KEY] = evidence
             apply_approved_step(
                 run, waiting_step(run), approved_by=principal_id, runtime_context=runtime_context
             )

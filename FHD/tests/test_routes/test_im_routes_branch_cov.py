@@ -350,7 +350,7 @@ class TestNotifyOfflineImMembersAdditional:
                 "app.infrastructure.im.ws_hub.im_ws_hub",
                 create=True,
             ) as mock_hub,
-            patch("app.services.mobile_push.notify_user") as mock_notify,
+            patch("app.domain.shared_services.mobile_push.notify_user") as mock_notify,
         ):
             mock_hub.connected_user_ids.return_value = [1]
             # Simulate ImportError when importing ws_hub_module
@@ -376,7 +376,7 @@ class TestNotifyOfflineImMembersAdditional:
         mock_hub.connected_user_ids.return_value = [1]
         with (
             patch("app.fastapi_routes.im_routes.im_ws_hub", mock_hub),
-            patch("app.services.mobile_push.notify_user") as mock_notify,
+            patch("app.domain.shared_services.mobile_push.notify_user") as mock_notify,
         ):
             await _notify_offline_im_members([1, 2], 1, "hello")
             assert mock_notify.call_count >= 1
@@ -390,7 +390,7 @@ class TestNotifyOfflineImMembersAdditional:
         local_hub.connected_user_ids.return_value = [1]
         with (
             patch("app.fastapi_routes.im_routes.im_ws_hub", local_hub),
-            patch("app.services.mobile_push.notify_user") as mock_notify,
+            patch("app.domain.shared_services.mobile_push.notify_user") as mock_notify,
         ):
             await _notify_offline_im_members([1, 2], 1, "hello")
             assert mock_notify.call_count >= 1
@@ -400,7 +400,7 @@ class TestNotifyOfflineImMembersAdditional:
         """When all members are online, return early without push."""
         with (
             patch("app.fastapi_routes.im_routes.im_ws_hub") as mock_hub,
-            patch("app.services.mobile_push.notify_user") as mock_notify,
+            patch("app.domain.shared_services.mobile_push.notify_user") as mock_notify,
         ):
             mock_hub.connected_user_ids.return_value = [1, 2, 3]
             await _notify_offline_im_members([1, 2, 3], 1, "hello")
@@ -411,7 +411,7 @@ class TestNotifyOfflineImMembersAdditional:
         """Sender should not be notified even if not in online list."""
         with (
             patch("app.fastapi_routes.im_routes.im_ws_hub") as mock_hub,
-            patch("app.services.mobile_push.notify_user") as mock_notify,
+            patch("app.domain.shared_services.mobile_push.notify_user") as mock_notify,
         ):
             mock_hub.connected_user_ids.return_value = []
             await _notify_offline_im_members([1, 2], 1, "hello")
@@ -426,7 +426,7 @@ class TestNotifyOfflineImMembersAdditional:
         long_body = "x" * 200
         with (
             patch("app.fastapi_routes.im_routes.im_ws_hub") as mock_hub,
-            patch("app.services.mobile_push.notify_user") as mock_notify,
+            patch("app.domain.shared_services.mobile_push.notify_user") as mock_notify,
         ):
             mock_hub.connected_user_ids.return_value = [1]
             await _notify_offline_im_members([1, 2], 1, long_body)
@@ -438,7 +438,7 @@ class TestNotifyOfflineImMembersAdditional:
         """Whitespace-only body should use default '新消息'."""
         with (
             patch("app.fastapi_routes.im_routes.im_ws_hub") as mock_hub,
-            patch("app.services.mobile_push.notify_user") as mock_notify,
+            patch("app.domain.shared_services.mobile_push.notify_user") as mock_notify,
         ):
             mock_hub.connected_user_ids.return_value = [1]
             await _notify_offline_im_members([1, 2], 1, "   ")

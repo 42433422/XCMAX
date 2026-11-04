@@ -13,6 +13,34 @@ def _market_base_url() -> str:
     return (os.environ.get("XCAGI_MARKET_BASE_URL") or "").strip().rstrip("/")
 
 
+def checkout_session_token(session_id: str, user_id: int) -> str:
+    """Read the live host binding, never a Mod database or process token cache."""
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.db.models.user import Session, User
+    from app.db.session import get_host_db
+    from app.utils.time import utc_now_naive
+
+    if not session_id:
+        return ""
+    try:
+        with get_host_db() as db:
+            row = (
+                db.query(Session)
+                .join(User, User.id == Session.user_id)
+                .filter(
+                    Session.session_id == session_id,
+                    Session.user_id == user_id,
+                    Session.expires_at > utc_now_naive(),
+                    User.is_active.is_(True),
+                )
+                .first()
+            )
+            return str(row.market_access_token or "").strip() if row is not None else ""
+    except SQLAlchemyError:
+        return ""
+
+
 def _auth_token(market_user_id: int = 0) -> str:
     raw = (
         os.environ.get("XCAGI_MARKET_AUTH_TOKEN") or os.environ.get("MODSTORE_AUTH_TOKEN") or ""
@@ -34,11 +62,12 @@ def _post_json(
     *,
     payload: dict[str, Any],
     market_user_id: int = 0,
+    auth_token: str | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     base = _market_base_url()
     if not base:
         return None, "XCAGI_MARKET_BASE_URL 未配置"
-    token = _auth_token(market_user_id)
+    token = _auth_token(market_user_id) if auth_token is None else auth_token.strip()
     if not token:
         return None, "市场账号未登录或授权令牌不可用"
     timeout = max(float(os.environ.get("MODSTORE_PAYMENT_TIMEOUT") or "10"), 1.0)
@@ -78,16 +107,18 @@ def proxy_checkout(
     *,
     plan_id: str,
     channel: str = "alipay",
-    market_user_id: int = 0,
+    auth_token: str = "",
 ) -> dict[str, Any]:
     """Sign then create a checkout using the market's authenticated payment contract."""
     normalized_plan = str(plan_id or "").strip()
     if not normalized_plan:
         return {"success": False, "error": "plan_id 不能为空"}
+    if not auth_token.strip():
+        return {"success": False, "error": "市场账号未登录或授权令牌不可用"}
     sign_payload, error = _post_json(
         "/api/payment/sign-checkout",
         payload={"plan_id": normalized_plan},
-        market_user_id=market_user_id,
+        auth_token=auth_token,
     )
     if error or sign_payload is None:
         return {"success": False, "error": error or "支付签名失败"}
@@ -98,7 +129,7 @@ def proxy_checkout(
     checkout, error = _post_json(
         "/api/payment/checkout",
         payload=checkout_payload,
-        market_user_id=market_user_id,
+        auth_token=auth_token,
     )
     if error or checkout is None:
         return {"success": False, "error": error or "市场下单失败"}

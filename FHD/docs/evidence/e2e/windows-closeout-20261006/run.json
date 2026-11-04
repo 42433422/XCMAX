@@ -1,0 +1,41 @@
+{
+  "run_id": "WIN-VM-REGRESSION-F16373D-20261006-001",
+  "created_at": "2026-10-06T00:20:47.6820504+08:00",
+  "scope": "pre-freeze installed repair regression",
+  "final_acceptance": false,
+  "release_frozen": false,
+  "published": false,
+  "stable_ota": false,
+  "source_sha": "f16373d1eb7f59a5e27b289e72c8df9329cacb02",
+  "build_run_id": 37336952721,
+  "installer_sha256": "3d2ecb78b96304db89f1384d7d8c8187828a2d55b21fe14988f1d7154c8291a7",
+  "installer_size": 250233484,
+  "signature": "NotSigned",
+  "guest_mounted_hash_matches": true,
+  "old_instance_exit": {
+    "listeners_17500": 0,
+    "observed_at": "2026-10-06T00:17:22.5481722+08:00",
+    "processes": 0
+  },
+  "installation": "normal UI completed; installed runtime health verified 2026-10-06T00:23:19.9119754+08:00",
+  "approval_regression": {
+    "pending_after_rejection": 0,
+    "rejected_count": 1,
+    "entry": "visible",
+    "wrong_product_request": "rejected through normal UI",
+    "inventory_after_rejection": 20
+  },
+  "sales_order_regression": {
+    "product_id": null,
+    "input": "SALES ORDER 2 P006 A006 10",
+    "result": "FAIL: persisted order line lost product reference",
+    "order_no": "SO20261006004727",
+    "approval": "normal UI approved",
+    "candidate_frozen": false,
+    "tenant_id": 1,
+    "customer_name": "A006",
+    "order_id": 1,
+    "amount": 20,
+    "product_name": null
+  }
+}

@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers(disabledWithoutDocker = true)
 class FlywayPostgresMigrationTest {
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(System.getProperty("payment.test.postgres.image", "postgres:16-alpine"));
 
     @Test
     void runsAndValidatesPackagedMigrationsOnPostgres() {

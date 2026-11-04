@@ -1905,16 +1905,14 @@ def test_uninstall_mod_empty_id_returns_400() -> None:
 
 def test_uninstall_mod_failure_returns_400() -> None:
     app = _build_mods_app()
-    mock_mm = MagicMock()
-    mock_mm.uninstall_mod.return_value = (False, "mod not installed")
     with (
         patch(
             "app.infrastructure.mods.mod_manager.is_mods_disabled",
             return_value=False,
         ),
         patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=mock_mm,
+            "app.application.mod_uninstall.uninstall_mod_for_request",
+            return_value=(False, "mod not installed"),
         ),
     ):
         client = TestClient(app)
@@ -1925,16 +1923,14 @@ def test_uninstall_mod_failure_returns_400() -> None:
 
 def test_uninstall_mod_happy_path() -> None:
     app = _build_mods_app()
-    mock_mm = MagicMock()
-    mock_mm.uninstall_mod.return_value = (True, "uninstalled")
     with (
         patch(
             "app.infrastructure.mods.mod_manager.is_mods_disabled",
             return_value=False,
         ),
         patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=mock_mm,
+            "app.application.mod_uninstall.uninstall_mod_for_request",
+            return_value=(True, "uninstalled"),
         ),
     ):
         client = TestClient(app)
@@ -1947,17 +1943,14 @@ def test_uninstall_mod_happy_path() -> None:
 def test_uninstall_mod_recoverable_error() -> None:
     app = _build_mods_app()
 
-    def _fail() -> None:
-        raise RuntimeError("uninstall boom")
-
     with (
         patch(
             "app.infrastructure.mods.mod_manager.is_mods_disabled",
             return_value=False,
         ),
         patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=_fail,
+            "app.application.mod_uninstall.uninstall_mod_for_request",
+            side_effect=RuntimeError("uninstall boom"),
         ),
     ):
         client = TestClient(app)

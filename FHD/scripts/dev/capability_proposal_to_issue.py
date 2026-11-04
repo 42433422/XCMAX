@@ -30,16 +30,16 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# 通过 sys.path 注入让脚本能 import app.services.capability_proposal_recorder
+# 通过 sys.path 注入让脚本能 import app.domain.shared_services.capability_proposal_recorder
 _FHD_ROOT = Path(__file__).resolve().parents[2]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
 
-from app.services.capability_proposal_recorder import (  # noqa: E402  pylint: disable=wrong-import-position
+from app.domain.shared_services.capability_proposal_recorder import (  # noqa: E402  pylint: disable=wrong-import-position
     list_pending_proposals,
     mark_proposals_processed,
 )
-from app.services.work_order_ssot import (
+from app.domain.shared_services.ssot import (
     classify_track,  # noqa: E402  pylint: disable=wrong-import-position
     derive_wo_id,  # noqa: E402  pylint: disable=wrong-import-position
 )
@@ -397,7 +397,7 @@ def _link_work_order(
     source = str(proposal.get("source") or "intent_confirmation_service")
     number = int(issue_number or 0) or _parse_issue_number(issue_url)
     try:
-        from app.services.work_order_ssot import link_issue, upsert_candidate
+        from app.domain.shared_services.ssot import link_issue, upsert_candidate
 
         upsert_candidate(
             source=source,

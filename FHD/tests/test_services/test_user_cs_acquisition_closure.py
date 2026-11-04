@@ -10,8 +10,8 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.services.user_cs_landing_crm import apply_landing_submission_to_funnel
-from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+from app.domain.shared_services.user_cs_landing_crm import apply_landing_submission_to_funnel
+from app.domain.shared_services.user_cs_pipeline import load_pipeline, save_pipeline
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 

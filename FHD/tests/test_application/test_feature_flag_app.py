@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.application.feature_flag_app import FeatureFlagName, is_enabled
+from app.domain.app_pure.feature_flag_app import FeatureFlagName, is_enabled
 
 
 def test_feature_flag_reads_canonical_environment_name(monkeypatch):

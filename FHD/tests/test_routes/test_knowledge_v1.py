@@ -1,41 +1,21 @@
 # mypy: disable-error-code="attr-defined"
-"""Tests for app.fastapi_routes.knowledge_v1 — using mock for unavailable RAG imports."""
+"""Knowledge routes with real RAG imports and test-scoped service mocks."""
 
 from __future__ import annotations
 
-import sys
-import types
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Mock the missing RAG imports before importing the module
-rag_mock = types.ModuleType("app.infrastructure.rag")
-rag_mock.HybridRetriever = MagicMock
-rag_mock.SemanticChunker = MagicMock
-rag_mock.RetrievedChunk = MagicMock
-rag_mock.get_default_embedder = MagicMock(return_value=None)
-rag_mock.is_rag_enabled = MagicMock(return_value=False)
-rag_mock.RagService = MagicMock
-# Force override in case another test already loaded a partial mock
-_original_rag = sys.modules.get("app.infrastructure.rag")
-sys.modules["app.infrastructure.rag"] = rag_mock
-
-try:
-    from app.fastapi_routes.knowledge_v1 import (
-        IngestRequest,
-        QueryRequest,
-        _KnowledgeIndex,
-        health,
-        ingest,
-        query,
-        status,
-    )
-finally:
-    if _original_rag is not None:
-        sys.modules["app.infrastructure.rag"] = _original_rag
-    else:
-        del sys.modules["app.infrastructure.rag"]
+from app.fastapi_routes.knowledge_v1 import (
+    IngestRequest,
+    QueryRequest,
+    _KnowledgeIndex,
+    health,
+    ingest,
+    query,
+    status,
+)
 
 
 class TestIngestRequest:

@@ -108,6 +108,8 @@ jobs:
           grep -q 'rsync -az --ignore-existing' ops/dr/xcmax_wal_ship_pg16.sh
           grep -q 'xcmax-dr-storage-retention' ops/dr/xcmax_dr_install.sh
           bash ops/tests/test_bounded_transfer.sh
+          bash ops/tests/test_backup_manifest.sh
+          bash ops/tests/test_modstore_release_backup.sh
           bash ops/tests/test_dr_storage_retention.sh
           bash ops/tests/test_wal_transfer_frontier.sh
           bash ops/tests/test_wal_archive_command.sh

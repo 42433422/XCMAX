@@ -36,6 +36,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
+from modstore_server.api.xss_sanitizer import _sanitize_value
 from modstore_server.models import OnDemandOrchestrateJob, User, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -253,7 +254,7 @@ async def receive_github_webhook(
     if not _verify_github_signature(secret, body, x_hub_signature_256):
         raise HTTPException(401, "GitHub 签名校验失败")
     try:
-        payload = json.loads(body or b"{}")
+        payload = _sanitize_value(json.loads(body or b"{}"))
     except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     event = (x_github_event or "").strip().lower() or "unknown"
@@ -311,10 +312,12 @@ async def receive_feishu_webhook(request: Request):
     if payload.get("type") == "url_verification":
         if (payload.get("token") or "") != expected_token:
             raise HTTPException(401, "verify token 不匹配")
-        return {"challenge": payload.get("challenge")}
+        return {"challenge": _sanitize_value(payload.get("challenge"))}
     header = payload.get("header") or {}
     if (header.get("token") or payload.get("token") or "") != expected_token:
         raise HTTPException(401, "飞书 token 校验失败")
+    payload = _sanitize_value(payload)
+    header = payload.get("header") or {}
     desc = _summarize_feishu_payload(payload)
     uid = _resolve_actor_user_id()
     if uid <= 0:
@@ -349,21 +352,28 @@ async def receive_dingtalk_webhook(
     secret = _env_secret("MODSTORE_DINGTALK_WEBHOOK_SECRET")
     if not secret:
         raise HTTPException(503, "未配置 MODSTORE_DINGTALK_WEBHOOK_SECRET，入口已禁用")
-    if timestamp and sign:
-        import base64
+    if not timestamp or not sign:
+        raise HTTPException(401, "缺少钉钉 timestamp 或 sign")
+    try:
+        timestamp_ms = int(timestamp)
+    except ValueError:
+        raise HTTPException(401, "钉钉时间戳无效") from None
+    # Bound signed timestamps; this is not a durable duplicate-delivery ledger.
+    if abs(int(datetime.now(UTC).timestamp() * 1000) - timestamp_ms) > 3_600_000:
+        raise HTTPException(401, "钉钉时间戳已过期或超前")
+    import base64
 
-        string_to_sign = f"{timestamp}\n{secret}"
-        digest = hmac.new(
-            secret.encode("utf-8"),
-            string_to_sign.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()
-        expected = base64.b64encode(digest).decode("utf-8")
-        if expected != sign:
-            raise HTTPException(401, "钉钉签名校验失败")
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        f"{timestamp}\n{secret}".encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    expected = base64.b64encode(digest).decode("utf-8")
+    if not sign.isascii() or not hmac.compare_digest(expected, sign):
+        raise HTTPException(401, "钉钉签名校验失败")
     body = await request.body()
     try:
-        payload = json.loads(body or b"{}")
+        payload = _sanitize_value(json.loads(body or b"{}"))
     except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     desc = _summarize_dingtalk_payload(payload)
@@ -404,7 +414,7 @@ async def receive_generic_webhook(
         raise HTTPException(401, "token 不匹配")
     body = await request.body()
     try:
-        payload = json.loads(body or b"{}")
+        payload = _sanitize_value(json.loads(body or b"{}"))
     except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     desc = (

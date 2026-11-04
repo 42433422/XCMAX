@@ -291,6 +291,7 @@ vi.mock('./useChatRequest', () => ({
     loadingProgressText: ref(''),
     chatBatchQueue: ref([]),
     enqueueChatBatchMessage: mockEnqueueChatBatchMessage,
+    cancelPendingChatBatch: vi.fn(),
     buildPlannerChatRequestPayload: mockBuildPlannerChatRequestPayload,
     requestChatByMode: vi.fn(),
     requestChatByModeBatch: vi.fn(),
@@ -1305,7 +1306,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
     const api = createApi()
     await api.sendMessage('批量')
     await vi.waitFor(() => {
-      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('part-2 失败'), 'ai', undefined, expect.any(Object))
+      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('part-2 失败'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
     })
   })
 
@@ -1319,7 +1320,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
     const api = createApi()
     await api.sendMessage('批量')
     await vi.waitFor(() => {
-      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('批量请求失败'), 'ai', undefined, expect.any(Object))
+      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('批量请求失败'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
     })
   })
 
@@ -1413,14 +1414,14 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     })
     const api = createApi()
     await api.sendMessage('普通')
-    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('处理出错'), 'ai', undefined, expect.any(Object))
+    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('处理出错'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
   })
 
   it('单条请求抛出异常', async () => {
     mockRequestChatByModeWithTimeout.mockRejectedValue(new Error('请求超时'))
     const api = createApi()
     await api.sendMessage('普通')
-    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('请求超时'), 'ai', undefined, expect.any(Object))
+    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('请求超时'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
   })
 
   it('单条请求抛出非 Error 类型', async () => {
@@ -1428,7 +1429,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     const api = createApi()
     await api.sendMessage('普通')
     await vi.waitFor(() => {
-      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('字符串错误'), 'ai', undefined, expect.any(Object))
+      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('字符串错误'), 'ai', { turnId: expect.any(String), workflowAction: 'failed' }, expect.any(Object))
     })
   })
 
@@ -1593,6 +1594,7 @@ describe('useChatOrchestration coverage – maybePrefetchProductAssistantFloat',
 
 describe('useChatOrchestration coverage – copyAssistantPushContent', () => {
   beforeEach(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } })
     setActivePinia(createPinia())
     localStorage.clear()
     resetMockState()

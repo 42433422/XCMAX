@@ -2,7 +2,7 @@
   <section class="enterprise-customer-roster" aria-label="企业客户交付台账">
     <header class="enterprise-customer-roster__head">
       <div>
-        <p>ENTERPRISE CUSTOMER ROSTER</p>
+        <p>企业客户名册</p>
         <h3>企业客户交付台账</h3>
         <span>所有企业用户都在这里；企业身份决定是否进入台账，购买权益与定制需求分别展示。</span>
       </div>
@@ -156,7 +156,7 @@ function stageLabel(stage: string): string {
 </script>
 
 <style scoped>
-.enterprise-customer-roster { margin-bottom: 18px; padding: 17px; border: 1px solid #cbddee; border-radius: 17px; background: rgba(255,255,255,.92); box-shadow: 0 10px 28px rgba(24,58,94,.06); }
+.enterprise-customer-roster { margin-bottom: 18px; padding: 17px; border: 1px solid; }
 .enterprise-customer-roster__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .enterprise-customer-roster__head p { margin: 0 0 4px; color: #3d78bc; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
 .enterprise-customer-roster__head h3 { margin: 0; color: #254663; font-size: 18px; }
@@ -175,7 +175,6 @@ function stageLabel(stage: string): string {
 .enterprise-customer-roster__identity strong { color: #294a68; font-size: 12px; }
 .enterprise-customer-roster__identity span,.enterprise-customer-roster__path span,.enterprise-customer-roster__entitlement span { margin-top: 3px; color: #718399; font-size: 10px; }
 .enterprise-customer-roster__path strong,.enterprise-customer-roster__entitlement strong { color: #3d5d7b; font-size: 11px; }
-.enterprise-customer-roster__grid button { border: 1px solid #d5a071; border-radius: 8px; background: #fff7ef; color: #a65d26; padding: 7px 9px; font-size: 10px; font-weight: 700; cursor: pointer; }
 .enterprise-customer-roster__standard-mark { color: #2b8061; font-size: 10px; white-space: nowrap; }
 .enterprise-customer-roster__empty { padding: 22px; border: 1px dashed #c7d8e8; border-radius: 11px; color: #718399; text-align: center; }
 @media (max-width: 1100px) { .enterprise-customer-roster__grid article { grid-template-columns: 38px 1fr 1fr; } .enterprise-customer-roster__entitlement,.enterprise-customer-roster__grid button,.enterprise-customer-roster__standard-mark { grid-column: 2 / -1; } }

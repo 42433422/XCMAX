@@ -33,6 +33,15 @@ class ShipmentDocumentWorkflowMixin:
         _ = contact_person or contact_phone
         if self._record_store is None:
             return {"success": False, "message": "record_store 未配置"}
+        from app.domain.shipment.shipment_quantities import (
+            ShipmentQuantityValidationError,
+            validate_shipment_products,
+        )
+
+        try:
+            validate_shipment_products(items)
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
         return self._record_store.record_document_generation(
             unit_name=unit_name,
             unit_id=None,
@@ -310,6 +319,16 @@ class ShipmentDocumentWorkflowMixin:
                 "doc_name": None,
                 "file_path": None,
             }
+
+        from app.domain.shipment.shipment_quantities import (
+            ShipmentQuantityValidationError,
+            validate_shipment_products,
+        )
+
+        try:
+            validate_shipment_products(product_rows)
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
 
         from app.application.shipment_template_resolve import (
             resolve_shipment_template,

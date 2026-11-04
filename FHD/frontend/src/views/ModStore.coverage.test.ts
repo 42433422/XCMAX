@@ -710,18 +710,18 @@ describe('ModStore.coverage – installMod', () => {
     wrapper.unmount()
   })
 
-  it('installMod：data.success=false 提示失败', async () => {
+  it.each(['error', 'detail', 'message'])('installMod：%s 返回失败原因且不标记已安装', async (field) => {
     mockApiFetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ success: false, error: 'pkg not found' }),
+      json: async () => ({ success: false, [field]: '签名验证失败：包缺少签名' }),
     })
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
     const mod = makeMod({ is_installed: false })
-    const vm: any = wrapper.vm
-    await vm.installMod(mod)
-    await flushPromises()
-    expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('pkg not found'))
+    await (wrapper.vm as any).installMod(mod)
+    expect(mockAppAlert).toHaveBeenCalledWith('安装失败：签名验证失败：包缺少签名')
+    expect(mod.is_installed).toBe(false)
+    expect(mockAutoOnboardInstalledMarketItem).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

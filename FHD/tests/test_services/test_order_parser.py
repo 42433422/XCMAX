@@ -129,22 +129,73 @@ class TestParseOrderTextCustomerSlot2067:
 
     def test_keyed_customer_name_not_filler(self):
         result = _parse_order_text("生成发货单 客户=客户闭环验收客户 商品=测试商品A")
-        assert result.get("unit_name") != "生成"
+        assert result.get("unit_name") == "客户闭环验收客户"
+
+    def test_verb_residue_is_not_customer_name(self):
+        """回归：「开发货单」不得残留「开」被当成客户名。"""
+        result = _parse_order_text("开发货单 太阳鸟 5桶")
+        assert result.get("unit_name") == "太阳鸟"
+
+    def test_spoken_keyed_customer_name_extracted(self):
+        """口语键值写法「客户 X」应取 X，而不是把动词残片「开」当客户。"""
+        result = _parse_order_text("开发货单，客户 验收客户，产品 验收产品，数量 1")
+        assert result.get("unit_name") == "验收客户"
 
     def test_assistant_reply_is_not_an_order(self):
         for text in (
             "已识别订单，请确认执行",
             "好的，正在执行【shipment_generate】，请稍候",
             "好的",
+            "已识别订单，正在生成发货单…",
+            '已识别订单，请点击"确认执行"生成发货单。',
         ):
             result = _parse_order_text(text)
             assert result["success"] is False, text
             assert not result.get("unit_name"), text
 
-    def test_plain_two_token_fallback_still_works(self):
-        result = _parse_order_text("张三 产品A")
+
+class TestParseOrderTextQuantityPrice2067:
+    """WO-26b0cfd509b8：「数量N 单价P」不得落入兜底被当成 1 桶、单价丢失。"""
+
+    def test_issue_sentence_keeps_quantity_and_unit_price(self):
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
+            result = _parse_order_text("客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5")
+        assert result["success"] is True
+        assert result["unit_name"] == "客户闭环验收客户"
+        product = result["products"][0]
+        assert product["name"] == "客户闭环测试商品A"
+        assert product["quantity"] == 24
+        assert "quantity_kg" not in product
+        assert "tin_spec" not in product
+        assert product["unit"] == ""
+        assert product["unit_price"] == 3.5
+        assert product["amount"] == 84.0
+
+    def test_quantity_unit_word_and_ascii_colon(self):
+        result = _parse_order_text("张三 送货单: 白色乳胶漆 数量3个 单价12.50")
         assert result["success"] is True
         assert result["unit_name"] == "张三"
+        assert result["products"][0]["name"] == "白色乳胶漆"
+        assert result["products"][0]["quantity"] == 3
+        assert result["products"][0]["unit"] == "个"
+        assert result["products"][0]["amount"] == 37.5
+
+    def test_filler_customer_is_rejected(self):
+        result = _parse_order_text("好的 发货单：客户闭环测试商品A 数量24 单价3.5")
+        assert result.get("unit_name") != "好的"
+
+    def test_zero_quantity_is_not_retail_order(self):
+        result = _parse_order_text("张三 发货单：商品A 数量0 单价3.5")
+        assert result.get("products", [{}])[0].get("unit_price") is None
+
+    def test_industrial_bucket_order_unchanged(self):
+        result = _parse_order_text("张三 发货单 编号ABC-123 规格20 5桶")
+        assert result["success"] is True
+        product = result["products"][0]
+        assert product["model_number"] == "ABC-123"
+        assert product["quantity_tins"] == 5
+        assert product["tin_spec"] == 20.0
+        assert "unit_price" not in product
 
 
 class TestParseOrderTextAI:

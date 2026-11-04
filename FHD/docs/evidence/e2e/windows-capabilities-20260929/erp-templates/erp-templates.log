@@ -1,0 +1,10 @@
+feature=erp-templates
+at=2026-09-29T11:22:46.437Z
+route=/mod/xcagi-erp-domain-bridge/print
+landed=/mod/xcagi-erp-domain-bridge/print
+title=标签输出与打印 - XCAGI
+heading=标签输出与打印
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 标签输出与打印 SUNBIRD 副窗 ◈ 工作区 标签输出与打印 1. 选择产品与标签模板 该旧业务接口尚未提供安全的租户数据隔离 重新加载 暂无已保存的标签模板，请先在标签编辑器中创建。 重新加载模板 查找业务产品 搜索产品 选择业务产品 请选择产品 已显示 0 / 0 个产品，可按名称或型号搜索。 标签模板 请选择已保存的标签模板 使用所选模板的字段与位置。动态字段需绑定产品名称、型号、规格、单价等真实产品数据。 创建标签模板 标签张数（每页一张） 纸张宽度（mm） 纸张高度（mm） 模板未指定纸张尺寸，请输入实际标签宽度；高度按模板比例计算。打印前请在打印机驱动中选择相同纸张规格。 生成标签 PDF 小C助理

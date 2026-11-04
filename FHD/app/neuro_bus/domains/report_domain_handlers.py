@@ -25,7 +25,7 @@ from app.neuro_bus.domains.report_domain import (
     REPORT_MONTHLY_SUMMARY_FAILED,
     REPORT_MONTHLY_SUMMARY_GENERATED,
 )
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

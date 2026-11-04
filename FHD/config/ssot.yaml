@@ -67,6 +67,7 @@ domains:
       - FHD/tools/XcagiDownloader/Models/AppSettings.cs#fallback-version
       - FHD/scripts/package/build-installer.ps1#default-version
       - FHD/release/VERSION
+      - FHD/.github/workflows/release-orchestrator.yml#product_version
     mode: sync+verify
     check: python scripts/dev/verify_version_anchors.py
     # --apply 真写；ssot sync version 默认 dry-run，--apply 透传给脚本
@@ -78,6 +79,7 @@ domains:
     ssot: FHD/docs/SSOT_INDEX.md
     derived:
       - FHD/CHANGELOG.md
+      - FHD/docs/security/CREDENTIAL_INCIDENT_CLOSEOUT.md
     mode: lint
     check: python scripts/dev/docs_ssot_lint.py
     sync: null
@@ -96,6 +98,13 @@ domains:
       - FHD/frontend/src/api/modelPayment.ts
       - FHD/frontend/src/views/RegisterView.vue
       - FHD/frontend/src/views/AdminEntitlementsView.vue
+      - 成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md
+      - 成都修茈科技有限公司/MODstore_deploy/docs/developer/01-quickstart.md
+      - 成都修茈科技有限公司/MODstore_deploy/docs/developer/02-authentication.md
+      - 成都修茈科技有限公司/MODstore_deploy/docs/developer/05-sdk-examples.md
+      - 成都修茈科技有限公司/MODstore_deploy/docs/developer/08-key-export-desktop.md
+      - 成都修茈科技有限公司/MODstore_deploy/market/src/views/developer/DeveloperTokensPanel.vue
+      - 成都修茈科技有限公司/MODstore_deploy/market/src/views/developer/DeveloperDocsPanel.vue
     mode: lint
     check: python scripts/dev/ssot_plugins/account_system.py check
     sync: null
@@ -318,9 +327,11 @@ domains:
     owner: desktop-platform
     enabled: true
     # Windows 发布交付事实快照（人工维护）：版本/产物/SHA256/下载与更新地址/测试机/Gate 状态/阻断登记/实机任务/runbook。
-    # check 只校验文档结构与 Gate 状态值合法性；真机证据无法自动校验，按 §8 runbook 回填。
+    # check 同时约束新版 WPF 出包入口；真机证据按 §8 runbook 回填。
     ssot: FHD/docs/WINDOWS_RELEASE_SSOT.md
-    derived: []
+    derived:
+      - FHD/scripts/package/build-installer.ps1
+      - FHD/scripts/package/build-all-skus.ps1
     mode: lint
     check: python scripts/dev/ssot_plugins/windows_release.py check
     sync: null
@@ -336,6 +347,17 @@ domains:
       - FHD/app/application/ports/
     mode: lint
     check: python scripts/dev/ssot_plugins/repository_ssot.py check
+    sync: null
+
+  - name: structure-gates
+    owner: platform-governance
+    enabled: true
+    # Neuro-DDD 结构门禁 G1–G6（阶段二列车 A）：棘轮恶化即失败。
+    ssot: FHD/scripts/ci/check_structure_gates.py
+    derived:
+      - FHD/scripts/ci/structure-gate-exemptions.yml
+    mode: lint
+    check: python scripts/ci/check_structure_gates.py --repo ../ --fail-on-warn
     sync: null
 
   - name: dev-inventory
@@ -403,6 +425,7 @@ domains:
     # 全部从各自权威源现算；阻断硬编码版本、未声明副本与生成物漂移。
     ssot: FHD/config/product_lines.yaml
     derived:
+      - 成都修茈科技有限公司/data/release-history.json
       - FHD/metrics/product_lines_status.generated.json
       - FHD/docs/PRODUCT_LINES_STATUS.md
     mode: generate

@@ -176,7 +176,7 @@ def test_real_logout_route_boolean_contract(deleted, monkeypatch):
 
     from app.application import auth_app_service
     from app.fastapi_routes import market_account
-    from app.fastapi_routes.domains.auth.routes import auth_logout
+    from app.fastapi_routes.domains.auth.auth_routes import auth_logout
 
     seen = []
 

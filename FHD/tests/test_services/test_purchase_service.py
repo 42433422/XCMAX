@@ -1,4 +1,4 @@
-"""Tests for app.services.purchase_service — purchase service coverage ramp."""
+"""Tests for app.domain.shared_services.purchase_service — purchase service coverage ramp."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import pytest
 from sqlalchemy.dialects import sqlite as sqlite_dialect
 
 from app.db.models.purchase import PurchaseOrder
-from app.services.purchase_service import PurchaseService
-from app.services.purchase_service_supplier_mixin import as_date
+from app.domain.shared_services.purchase_service import PurchaseService
+from app.domain.shared_services.purchase_service_supplier_mixin import as_date
 
 
 def _mock_get_db(mock_db):
@@ -80,7 +80,7 @@ class TestGetSuppliers:
         mock_supplier = _make_mock_model(id=1, name="测试供应商")
         mock_db = MagicMock()
         mock_db.query.return_value.order_by.return_value.all.return_value = [mock_supplier]
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_suppliers()
         assert result["success"] is True
         assert result["count"] == 1
@@ -88,14 +88,14 @@ class TestGetSuppliers:
     def test_filters_by_status(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_suppliers(status="active")
         assert result["success"] is True
 
     def test_filters_by_keyword(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_suppliers(keyword="测试")
         assert result["success"] is True
 
@@ -105,14 +105,14 @@ class TestGetSupplier:
         mock_supplier = _make_mock_model(id=1, name="测试供应商")
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_supplier
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_supplier(1)
         assert result["success"] is True
 
     def test_returns_failure_when_not_found(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_supplier(999)
         assert result["success"] is False
         assert "不存在" in result["message"]
@@ -121,20 +121,20 @@ class TestGetSupplier:
 class TestCreateSupplier:
     def test_creates_supplier_successfully(self, svc):
         mock_db = MagicMock()
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_supplier({"code": "S001", "name": "测试供应商"})
         assert result["success"] is True
 
     def test_returns_failure_on_db_error(self, svc):
         mock_db = MagicMock()
         mock_db.add.side_effect = OSError("db error")
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_supplier({"code": "S001", "name": "测试供应商"})
         assert result["success"] is False
 
     def test_uses_default_values(self, svc):
         mock_db = MagicMock()
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             svc.create_supplier({"name": "默认值供应商"})
         call_args = mock_db.add.call_args[0][0]
         assert call_args.code.startswith("SUP")
@@ -144,7 +144,7 @@ class TestCreateSupplier:
 
     def test_rejects_missing_name_without_touching_db(self, svc):
         mock_db = MagicMock()
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_supplier({"code": "S002"})
         assert result == {"success": False, "message": "供应商名称不能为空"}
         mock_db.add.assert_not_called()
@@ -154,7 +154,7 @@ class TestCreateSupplier:
 
         mock_db = MagicMock()
         mock_db.commit.side_effect = IntegrityError("INSERT", {}, Exception("UNIQUE"))
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_supplier({"code": "S001", "name": "重复"})
         assert result["success"] is False and "S001" in result["message"]
         mock_db.rollback.assert_called_once()
@@ -165,14 +165,14 @@ class TestUpdateSupplier:
         mock_supplier = _make_mock_model(id=1, name="旧名称")
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_supplier
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_supplier(1, {"name": "新名称"})
         assert result["success"] is True
 
     def test_returns_failure_when_not_found(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_supplier(999, {"name": "新名称"})
         assert result["success"] is False
 
@@ -181,7 +181,7 @@ class TestUpdateSupplier:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_supplier
         mock_db.commit.side_effect = OSError("db error")
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_supplier(1, {"name": "新名称"})
         assert result["success"] is False
 
@@ -191,7 +191,7 @@ class TestDeleteSupplier:
         mock_supplier = MagicMock()
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_supplier
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.delete_supplier(1)
         assert result["success"] is True
         assert mock_supplier.status == "deleted"
@@ -199,7 +199,7 @@ class TestDeleteSupplier:
     def test_returns_failure_when_not_found(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.delete_supplier(999)
         assert result["success"] is False
 
@@ -208,7 +208,7 @@ class TestDeleteSupplier:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_supplier
         mock_db.commit.side_effect = OSError("db error")
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.delete_supplier(1)
         assert result["success"] is False
 
@@ -229,7 +229,7 @@ class TestGetPurchaseOrders:
             mock_order
         ]
         mock_db.query.return_value.join.return_value.count.return_value = 1
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_orders(page=1, per_page=10)
         assert result["success"] is True
         assert result["total"] == 1
@@ -239,7 +239,7 @@ class TestGetPurchaseOrders:
         mock_db = MagicMock()
         mock_db.query.return_value.join.return_value.filter.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
         mock_db.query.return_value.join.return_value.filter.return_value.count.return_value = 0
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_orders(supplier_id=1)
         assert result["success"] is True
 
@@ -247,7 +247,7 @@ class TestGetPurchaseOrders:
         mock_db = MagicMock()
         mock_db.query.return_value.join.return_value.filter.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
         mock_db.query.return_value.join.return_value.filter.return_value.count.return_value = 0
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_orders(status="draft")
         assert result["success"] is True
 
@@ -255,7 +255,7 @@ class TestGetPurchaseOrders:
         mock_db = MagicMock()
         mock_db.query.return_value.join.return_value.filter.return_value.filter.return_value.filter.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
         mock_db.query.return_value.join.return_value.filter.return_value.filter.return_value.filter.return_value.count.return_value = 0
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_orders(
                 start_date=datetime(2026, 1, 1),
                 end_date=datetime(2026, 12, 31),
@@ -276,7 +276,7 @@ class TestGetPurchaseOrder:
         mock_order.items = [mock_item]
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_order(1)
         assert result["success"] is True
         assert "items" in result["data"]
@@ -284,7 +284,7 @@ class TestGetPurchaseOrder:
     def test_returns_failure_when_not_found(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_order(999)
         assert result["success"] is False
 
@@ -295,7 +295,7 @@ class TestCreatePurchaseOrder:
         mock_product.name = "产品A"
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_product
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_purchase_order(
                 {
                     "supplier_id": 1,
@@ -311,26 +311,26 @@ class TestCreatePurchaseOrder:
 
     def test_creates_order_without_items(self, svc):
         mock_db = MagicMock()
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_purchase_order({"supplier_id": 1})
         assert result["success"] is True
 
     def test_generates_order_no_when_not_provided(self, svc):
         mock_db = MagicMock()
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_purchase_order({})
         assert result["success"] is True
 
     def test_returns_failure_on_db_error(self, svc):
         mock_db = MagicMock()
         mock_db.add.side_effect = OSError("db error")
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_purchase_order({"supplier_id": 1})
         assert result["success"] is False
 
     def test_rejects_item_without_product_before_db(self, svc):
         mock_db = MagicMock()
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             items = [{"product_id": 1, "quantity": 1}, {"product_id": "", "quantity": 2}]
             result = svc.create_purchase_order({"supplier_id": 1, "items": items})
         assert result == {"success": False, "message": "第 2 行明细未选择产品"}
@@ -338,7 +338,7 @@ class TestCreatePurchaseOrder:
 
     def test_inbound_rejects_item_without_product(self, svc):
         mock_db = MagicMock()
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             items = [{"product_name": "散料", "quantity": 1}]
             result = svc.create_purchase_inbound({"items": items})
         assert result["success"] is False and "第 1 行" in result["message"]
@@ -384,7 +384,7 @@ class TestCreatePurchaseOrderDateCoercion:
 
         mock_db.add.side_effect = _capture
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_purchase_order(
                 {
                     "supplier_id": 1,
@@ -404,7 +404,7 @@ class TestUpdatePurchaseOrder:
         mock_order.items = []
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_purchase_order(1, {"remark": "updated"})
         assert result["success"] is True
 
@@ -413,7 +413,7 @@ class TestUpdatePurchaseOrder:
         mock_order.status = "approved"
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_purchase_order(1, {"remark": "updated"})
         assert result["success"] is False
         assert "草稿" in result["message"]
@@ -423,14 +423,14 @@ class TestUpdatePurchaseOrder:
         mock_order.items = []
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_purchase_order(1, {"remark": "updated"})
         assert result["success"] is True
 
     def test_returns_failure_when_order_not_found(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_purchase_order(999, {"remark": "updated"})
         assert result["success"] is False
 
@@ -450,7 +450,7 @@ class TestUpdatePurchaseOrder:
                 filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=mock_product)))
             ),
         ]
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_purchase_order(
                 1,
                 {
@@ -468,7 +468,7 @@ class TestApprovePurchaseOrder:
         mock_order.items = [mock_item]
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.approve_purchase_order(1, "admin")
         assert result["success"] is True
         assert mock_order.status == "approved"
@@ -479,7 +479,7 @@ class TestApprovePurchaseOrder:
         mock_order.status = "approved"
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.approve_purchase_order(1, "admin")
         assert result["success"] is False
         assert "草稿" in result["message"]
@@ -487,7 +487,7 @@ class TestApprovePurchaseOrder:
     def test_returns_failure_when_order_not_found(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.approve_purchase_order(999, "admin")
         assert result["success"] is False
 
@@ -500,7 +500,7 @@ class TestCancelPurchaseOrder:
         mock_order.items = [mock_item]
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.cancel_purchase_order(1)
         assert result["success"] is True
         assert mock_order.status == "cancelled"
@@ -511,7 +511,7 @@ class TestCancelPurchaseOrder:
         mock_order.status = "completed"
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.cancel_purchase_order(1)
         assert result["success"] is False
         assert "无法取消" in result["message"]
@@ -521,14 +521,14 @@ class TestCancelPurchaseOrder:
         mock_order.status = "cancelled"
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.cancel_purchase_order(1)
         assert result["success"] is False
 
     def test_returns_failure_when_order_not_found(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.cancel_purchase_order(999)
         assert result["success"] is False
 
@@ -541,7 +541,7 @@ class TestCreatePurchaseInbound:
         from sqlalchemy import create_engine
         from sqlalchemy.orm import Session
 
-        from app.db.base import Base
+        from app.db.db_base import Base
         from app.db.models import (
             InventoryLedger,
             InventoryTransaction,
@@ -588,10 +588,10 @@ class TestCreatePurchaseInbound:
                 yield db
 
         with (
-            patch("app.services.purchase_service.get_db", database),
-            patch("app.services.inventory_service.get_db", database),
+            patch("app.domain.shared_services.purchase_service.get_db", database),
+            patch("app.domain.shared_services.inventory_service.get_db", database),
             patch(
-                "app.services.accounting_services.create_journal_entry",
+                "app.domain.shared_services.accounting_services.create_journal_entry",
                 return_value={"success": True},
             ),
             patch.object(svc, "_publish_event"),
@@ -638,14 +638,14 @@ class TestCreatePurchaseInbound:
         mock_db.refresh.side_effect = lambda obj: obj
 
         with (
-            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
-            patch("app.services.purchase_service.InventoryService") as MockInvSvc,
+            patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)),
+            patch("app.domain.shared_services.purchase_service.InventoryService") as MockInvSvc,
             patch(
-                "app.services.purchase_service.PurchaseInbound",
+                "app.domain.shared_services.purchase_service.PurchaseInbound",
                 return_value=mock_inbound,
             ),
             patch(
-                "app.services.accounting_services.create_journal_entry",
+                "app.domain.shared_services.accounting_services.create_journal_entry",
                 return_value={"success": journal_success, "data": {"entry_no": "JE-001"}},
             ) as MockCreateEntry,
         ):
@@ -684,10 +684,10 @@ class TestCreatePurchaseInbound:
         """total_amount 为 0 时不触发应付记账。"""
         mock_db = MagicMock()
         with (
-            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
-            patch("app.services.purchase_service.InventoryService"),
+            patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)),
+            patch("app.domain.shared_services.purchase_service.InventoryService"),
             patch(
-                "app.services.accounting_services.create_journal_entry",
+                "app.domain.shared_services.accounting_services.create_journal_entry",
             ) as MockCreateEntry,
         ):
             result = svc.create_purchase_inbound({"supplier_id": 1})
@@ -747,7 +747,7 @@ class TestGetPurchaseInbounds:
             mock_inbound
         ]
         mock_db.query.return_value.count.return_value = 1
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_inbounds(page=1, per_page=10)
         assert result["success"] is True
         assert result["total"] == 1
@@ -756,7 +756,7 @@ class TestGetPurchaseInbounds:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
         mock_db.query.return_value.filter.return_value.filter.return_value.count.return_value = 0
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_inbounds(supplier_id=1, order_id=2)
         assert result["success"] is True
 
@@ -764,7 +764,7 @@ class TestGetPurchaseInbounds:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.filter.return_value.filter.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
         mock_db.query.return_value.filter.return_value.filter.return_value.filter.return_value.count.return_value = 0
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_inbounds(
                 start_date=datetime(2026, 1, 1),
                 end_date=datetime(2026, 12, 31),
@@ -784,7 +784,7 @@ class TestGetSupplierSummary:
             ("active", 5),
             ("deleted", 1),
         ]
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_supplier_summary()
         assert result["success"] is True
         assert result["data"]["active"] == 5
@@ -794,7 +794,7 @@ class TestGetSupplierSummary:
         mock_db.query.return_value.group_by.return_value.all.return_value = [
             (None, 2),
         ]
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_supplier_summary()
         assert result["success"] is True
         assert result["data"]["unknown"] == 2
@@ -807,7 +807,7 @@ class TestGetPurchaseSummary:
             ("draft", 3, Decimal("1000.00")),
             ("approved", 2, Decimal("5000.00")),
         ]
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_summary()
         assert result["success"] is True
         assert result["data"]["draft"]["count"] == 3
@@ -816,7 +816,7 @@ class TestGetPurchaseSummary:
     def test_filters_by_date_range(self, svc):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.filter.return_value.group_by.return_value.all.return_value = []
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_summary(
                 start_date=datetime(2026, 1, 1),
                 end_date=datetime(2026, 12, 31),
@@ -828,7 +828,7 @@ class TestGetPurchaseSummary:
         mock_db.query.return_value.group_by.return_value.all.return_value = [
             ("draft", 1, None),
         ]
-        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_summary()
         assert result["success"] is True
 

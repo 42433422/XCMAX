@@ -70,7 +70,7 @@ def main() -> int:
                     "DATASET_RAG_VECTOR_INDEX_PATH": f"{td}/vectors.sqlite",
                     "XCAGI_DATA_DIR": f"{td}/data",
                     "XCAGI_SKIP_INTENT_LLM": "1",
-                    "ETL_TEST_POSTGRES_URL": "",
+                    "ELT_TEST_POSTGRES_URL": "",
                     "TMPDIR": td,
                     "XCMAX_TEST_BLOAT_METRICS_PATH": f"{td}/bloat.jsonl",
                 }

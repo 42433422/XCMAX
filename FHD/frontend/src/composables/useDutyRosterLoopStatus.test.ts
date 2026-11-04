@@ -11,6 +11,30 @@ vi.mock('@/api/xcmaxMarketProxy', () => ({
 import { useDutyRosterLoopStatus, normalizeDutyRosterLoopStatus } from './useDutyRosterLoopStatus'
 
 describe('normalizeDutyRosterLoopStatus', () => {
+  it('does not manufacture installed packages when inventory is absent', () => {
+    const status = normalizeDutyRosterLoopStatus({ ok: true, staffing: { planned_count: 10 } })
+    expect(status.localKnown).toBe(false)
+    expect(status.catalogKnown).toBe(false)
+    expect(status.localInstalledCount).toBe(0)
+    expect(status.catalogRegisteredCount).toBe(0)
+    expect(normalizeDutyRosterLoopStatus({ ok: false, success: true }).ok).toBe(false)
+  })
+
+  it('reads the operations fallback inventory and deduplicates package IDs', () => {
+    const status = normalizeDutyRosterLoopStatus({ success: true, staffing: { planned_count: 5, missing_employees: [] }, missing_local_employee_packs: ['e1', ' e1 '], extra_local_employee_pack_ids: ['extra'] })
+    expect(status.localKnown).toBe(true)
+    expect(status.missingLocalIds).toEqual(['e1'])
+    expect(status.localInstalledCount).toBe(4)
+    expect(status.extraIds).toEqual(['extra'])
+  })
+
+  it('uses the complete local inventory even when the catalog also has a gap', () => {
+    const status = normalizeDutyRosterLoopStatus({ success: true, planned_employee_ids: ['e1', 'e2', 'e3'], local_employee_pack_ids: ['e3'], staffing: { planned_count: 3, missing_employees: ['e2'] }, missing_local_employee_packs: ['e1'] })
+    expect(status.missingLocalIds).toEqual(['e1', 'e2'])
+    expect(status.localInstalledCount).toBe(1)
+    expect(normalizeDutyRosterLoopStatus({ ok: true, staffing: { missing_employees: [null], missing_local_employee_packs: 'unknown' } }).catalogKnown).toBe(false)
+  })
+
   it('returns empty status for null payload', () => {
     const s = normalizeDutyRosterLoopStatus(null)
     expect(s.ok).toBe(false)
@@ -293,10 +317,9 @@ describe('useDutyRosterLoopStatus', () => {
     expect(hook.error.value).toBe('')
   })
 
-  it('healthLabel is 异常 initially (ok=false, not loading)', () => {
+  it('keeps initial package inventory unverified', () => {
     const hook = useDutyRosterLoopStatus()
-    // 初始 status.ok=false, loading=false, checkedAt=null → '异常'
-    expect(hook.healthLabel.value).toBe('异常')
+    expect(hook.healthLabel.value).toBe('待核实')
   })
 
   it('healthLabel is 读取中 when loading and no checkedAt', () => {
@@ -309,6 +332,21 @@ describe('useDutyRosterLoopStatus', () => {
   it('ready is false initially', () => {
     const hook = useDutyRosterLoopStatus()
     expect(hook.ready.value).toBe(false)
+  })
+
+  it('invalidates stale inventory after a failed refresh and rejects incomplete healthy replies', async () => {
+    adminDutyGraphHealthMock.mockResolvedValueOnce({ ok: true, staffing: { planned_count: 2, missing_employees: [], missing_local_employee_packs: [] } })
+    const hook = useDutyRosterLoopStatus()
+    await hook.refresh()
+    expect(hook.ready.value).toBe(true)
+    adminDutyGraphHealthMock.mockRejectedValueOnce(new Error('读取失败'))
+    await hook.refresh()
+    expect(hook.status.value.localKnown).toBe(false)
+    expect(hook.ready.value).toBe(false)
+    adminDutyGraphHealthMock.mockResolvedValueOnce({ ok: true })
+    await hook.refresh()
+    expect(hook.ready.value).toBe(false)
+    expect(hook.detailLine.value).toContain('待核实')
   })
 
   it('refresh fetches health and updates status', async () => {
@@ -367,7 +405,7 @@ describe('useDutyRosterLoopStatus', () => {
     const hook = useDutyRosterLoopStatus()
     await hook.refresh()
     expect(hook.ready.value).toBe(true)
-    expect(hook.healthLabel.value).toBe('编制已对齐')
+    expect(hook.healthLabel.value).toBe('编制包已对齐')
   })
 
   it('healthLabel is 本机缺包 when missingLocalCount > 0', async () => {
@@ -398,12 +436,12 @@ describe('useDutyRosterLoopStatus', () => {
     expect(hook.healthLabel.value).toBe('Catalog 缺岗')
   })
 
-  it('healthLabel is 异常 when status.ok is false', async () => {
+  it('does not infer package health from an empty failed response', async () => {
     const payload = { ok: false }
     adminDutyGraphHealthMock.mockResolvedValue(payload)
     const hook = useDutyRosterLoopStatus()
     await hook.refresh()
-    expect(hook.healthLabel.value).toBe('异常')
+    expect(hook.healthLabel.value).toBe('待核实')
   })
 
   it('healthLabel is 接口异常 when error is set', async () => {
@@ -423,7 +461,7 @@ describe('useDutyRosterLoopStatus', () => {
     adminDutyGraphHealthMock.mockResolvedValue(payload)
     const hook = useDutyRosterLoopStatus()
     await hook.refresh()
-    expect(hook.healthLabel.value).toBe('待校验')
+    expect(hook.healthLabel.value).toBe('待核实')
   })
 
   it('detailLine returns error when set', async () => {
@@ -451,6 +489,8 @@ describe('useDutyRosterLoopStatus', () => {
         planned_count: 10,
         registered_count: 8,
         local_installed_count: 9,
+        missing_employees: ['missing-a', 'missing-b'],
+        missing_local_employee_packs: ['missing-c'],
       },
     }
     adminDutyGraphHealthMock.mockResolvedValue(payload)

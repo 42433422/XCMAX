@@ -19,7 +19,7 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page.locator('#app')).toBeVisible()
 
-    // 与 App.vue STARTUP_FAILSAFE_MS 对齐：最坏约 12s 也应 is-ready
+    // Readiness is earned by required resources; timeouts retain an actionable error.
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 20_000 })
     await expect(page.locator('.sidebar')).toBeVisible()
     await expect(page.locator('.sidebar .menu-item').first()).toBeVisible()
@@ -28,7 +28,7 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
     if (!apiProbe || !apiProbe.ok()) {
       test.info().annotations.push({
         type: 'notice',
-        description: '经 Vite 代理的 /api/health 未成功：多为 5000 后端未启动或仍初始化。页面应仍能出壳，但聊天等功能会失效。',
+        description: '经 Vite 代理的 /api/health 未成功：多为 5000 后端未启动或仍初始化。本用例使用合成就绪资源，真实后端状态不能由 mock 页面证明。',
       })
     }
 
@@ -72,7 +72,7 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
     const jobs: Promise<any>[] = []
     for (let i = 0; i < 10; i += 1) {
       jobs.push(
-        page.request.get('/api/etl/capabilities', { timeout: 20_000 }),
+        page.request.get('/api/elt/capabilities', { timeout: 20_000 }),
       )
       jobs.push(page.request.get('/api/system/industries', { timeout: 20_000 }))
     }

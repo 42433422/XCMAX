@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError } from '@/api'
 import { authApi } from '@/api/auth'
+import ConnectionRecovery from '@/components/login/ConnectionRecovery.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,7 +17,10 @@ const loading = ref(false)
 const errorMessage = ref('')
 const infoMessage = ref('')
 const cooldown = ref(0)
+const sentEmail = ref('')
+const emailInput = ref<HTMLInputElement | null>(null)
 let tick: ReturnType<typeof setInterval> | null = null
+let redirectTimer: ReturnType<typeof setTimeout> | null = null
 
 const loginBackRoute = computed(() => ({
   name: 'login' as const,
@@ -26,10 +30,25 @@ const loginBackRoute = computed(() => ({
 const canReset = computed(
   () => code.value.trim().length >= 4 && newPassword.value.length >= 6 && newPassword.value === confirmPassword.value,
 )
+const passwordMismatch = computed(() => confirmPassword.value.length > 0 && newPassword.value !== confirmPassword.value)
+const validationMessage = computed(() => passwordMismatch.value ? '两次输入的密码不一致，请重新核对。'
+  : newPassword.value.length > 0 && newPassword.value.length < 6 ? '新密码至少需要 6 位。'
+    : code.value.trim().length > 0 && code.value.trim().length < 4 ? '请输入完整的邮箱验证码。' : '')
+const emailCooldown = computed(() => sentEmail.value === email.value.trim().toLowerCase() ? cooldown.value : 0)
 
 onBeforeUnmount(() => {
   if (tick) clearInterval(tick)
+  if (redirectTimer) clearTimeout(redirectTimer)
 })
+
+async function editEmail() {
+  if (loading.value) return
+  step.value = 1
+  code.value = ''; newPassword.value = ''; confirmPassword.value = ''
+  errorMessage.value = ''; infoMessage.value = ''
+  await nextTick()
+  emailInput.value?.focus()
+}
 
 function startCooldown(sec: number) {
   cooldown.value = sec
@@ -44,6 +63,7 @@ function startCooldown(sec: number) {
 }
 
 async function sendCode() {
+  if (loading.value || emailCooldown.value > 0) return
   const em = email.value.trim().toLowerCase()
   if (!em || !em.includes('@')) {
     errorMessage.value = '请填写有效邮箱'
@@ -57,6 +77,7 @@ async function sendCode() {
     const raw = res as unknown as Record<string, unknown>
     infoMessage.value = (typeof raw.message === 'string' && raw.message) || '若该邮箱已注册，将收到验证码'
     step.value = 2
+    sentEmail.value = em
     startCooldown(60)
   } catch (error: unknown) {
     if (error instanceof ApiError) {
@@ -67,7 +88,7 @@ async function sendCode() {
         (typeof errObj?.message === 'string' && (errObj.message as string)) ||
         error.message
     } else {
-      errorMessage.value = '发送失败，请确认本机 API 能访问修茈市场（XCAGI_MARKET_BASE_URL）'
+      errorMessage.value = '验证码发送失败。请先检查连接，再点击获取验证码重试；邮箱填写错误可直接修改。'
     }
   } finally {
     loading.value = false
@@ -75,6 +96,7 @@ async function sendCode() {
 }
 
 async function resetPassword() {
+  if (loading.value) return
   if (newPassword.value !== confirmPassword.value) {
     errorMessage.value = '两次输入的密码不一致'
     return
@@ -86,7 +108,7 @@ async function resetPassword() {
   try {
     await authApi.resetForgotPassword(email.value.trim().toLowerCase(), code.value.trim(), newPassword.value)
     infoMessage.value = '密码已重置，正在返回登录…'
-    setTimeout(() => router.push(loginBackRoute.value), 1200)
+    redirectTimer = setTimeout(() => router.push(loginBackRoute.value), 1200)
   } catch (error: unknown) {
     if (error instanceof ApiError) {
       const d = error.data as Record<string, unknown> | undefined
@@ -110,36 +132,38 @@ async function resetPassword() {
       <router-link class="login-register-corner" :to="loginBackRoute"> 登录 </router-link>
 
       <h1 id="forgot-password-title" class="login-heading">忘记密码</h1>
-      <p class="page-hint">通过本机 API 连接修茈市场发送验证码，并重置市场与本机 PostgreSQL 中的密码。</p>
+      <p class="page-hint">输入注册邮箱，收到验证码后设置新密码。请检查收件箱和垃圾邮件；未收到时可重发或修改邮箱。</p>
 
       <form v-if="step === 1" class="login-form" @submit.prevent="sendCode">
         <div class="login-field-line">
-          <input v-model="email" type="email" name="email" autocomplete="email" placeholder="注册邮箱" :disabled="loading" autofocus />
+          <input ref="emailInput" v-model="email" type="email" name="email" aria-label="注册邮箱" autocomplete="email" placeholder="注册邮箱" :disabled="loading" autofocus />
         </div>
         <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
         <p v-if="infoMessage" class="login-success" role="status">{{ infoMessage }}</p>
-        <button class="login-submit" type="submit" :disabled="loading || !email.trim()">
-          <span>{{ loading ? '发送中...' : '获取验证码' }}</span>
+        <button class="login-submit" type="submit" :disabled="loading || !email.trim() || emailCooldown > 0">
+          <span>{{ loading ? '发送中...' : emailCooldown > 0 ? `${emailCooldown}s 后可重发` : '获取验证码' }}</span>
           <i class="fa fa-long-arrow-right" aria-hidden="true"></i>
         </button>
       </form>
 
       <form v-else class="login-form" @submit.prevent="resetPassword">
         <div class="login-field-line">
-          <input v-model="email" type="email" disabled />
+          <input v-model="email" type="email" aria-label="接收验证码的邮箱" disabled />
         </div>
+        <button type="button" class="btn-edit-email" :disabled="loading" @click="editEmail">修改邮箱</button>
         <div class="login-field-line code-row">
-          <input v-model="code" type="text" maxlength="8" autocomplete="one-time-code" placeholder="邮箱验证码" :disabled="loading" />
+          <input v-model="code" type="text" maxlength="8" aria-label="邮箱验证码" aria-describedby="password-validation" autocomplete="one-time-code" placeholder="邮箱验证码" :disabled="loading" />
           <button type="button" class="btn-resend" :disabled="loading || cooldown > 0" @click="sendCode">
             {{ cooldown > 0 ? `${cooldown}s` : '重发' }}
           </button>
         </div>
         <div class="login-field-line">
-          <input v-model="newPassword" type="password" autocomplete="new-password" placeholder="新密码（至少 6 位）" :disabled="loading" />
+          <input v-model="newPassword" type="password" aria-label="新密码" aria-describedby="password-validation" :aria-invalid="newPassword.length > 0 && newPassword.length < 6" autocomplete="new-password" placeholder="新密码（至少 6 位）" :disabled="loading" />
         </div>
         <div class="login-field-line">
-          <input v-model="confirmPassword" type="password" autocomplete="new-password" placeholder="确认新密码" :disabled="loading" />
+          <input v-model="confirmPassword" type="password" aria-label="确认新密码" aria-describedby="password-validation" :aria-invalid="passwordMismatch" autocomplete="new-password" placeholder="确认新密码" :disabled="loading" />
         </div>
+        <p id="password-validation" role="status" :class="{ 'login-error': validationMessage }">{{ validationMessage }}</p>
         <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
         <p v-if="infoMessage" class="login-success" role="status">{{ infoMessage }}</p>
         <button class="login-submit" type="submit" :disabled="loading || !canReset">
@@ -147,6 +171,8 @@ async function resetPassword() {
           <i class="fa fa-long-arrow-right" aria-hidden="true"></i>
         </button>
       </form>
+
+      <ConnectionRecovery v-if="errorMessage" :code="step === 1 ? 'AUTH_SEND_CODE' : 'AUTH_PASSWORD_RESET'" />
 
       <p class="page-footer-link">
         <router-link :to="{ name: 'login-forgot-account', query: route.query }">忘记账号</router-link>
@@ -230,7 +256,7 @@ async function resetPassword() {
   flex: 1;
 }
 
-.btn-resend {
+.btn-resend, .btn-edit-email {
   flex-shrink: 0;
   border: 1px solid #0052d9;
   background: #fff;

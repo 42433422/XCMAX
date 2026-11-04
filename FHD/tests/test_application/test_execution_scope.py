@@ -1,4 +1,4 @@
-"""执行信任域 :mod:`app.application.execution_scope` 的安全不变量守卫。
+"""执行信任域 :mod:`app.domain.app_pure.execution_scope` 的安全不变量守卫。
 
 把"deny-by-default + 令牌不可伪造 + 闸门硬拒"钉死成回归门。
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.application.execution_scope import (
+from app.domain.app_pure.execution_scope import (
     FACTORY_TOKEN_ENV,
     CapabilityGrant,
     ExecutionScope,

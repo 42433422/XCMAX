@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "time": "2026-10-15T22:16:30.824973+08:00",
+  "node": 14,
+  "platform": "Windows x64",
+  "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+  "bytes": 331819335,
+  "sha256": "9d7025e9367bb934868adb79be7a99bbb8dae728727aa7ace00c492c45f40100",
+  "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+  "version": "1.0.0.6",
+  "signatureRequired": false,
+  "savedFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+  "httpHeadersFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/windows-public-response-headers.txt",
+  "resumedBytesFromSameAnonymousUrl": 14680064,
+  "elapsedSecondsAfterDirectResume": 666.3,
+  "scope": "Actual anonymous public full-file download and checksum; no application retest"
+}

@@ -20,11 +20,12 @@ from app.application.rbac_app_service import get_rbac_app_service
 from app.db.models.permission import Permission
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
-from app.db.session import get_db, get_host_db
+from app.db.session import get_host_db
 from app.fastapi_routes import rbac as rbac_routes
 from app.fastapi_routes.domains.static import routes as static_routes
 from app.infrastructure.auth import tenant_context
 from app.utils.time import utc_now_naive
+from tests.fixtures.backend_ci_isolation import isolated_login_host_db  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -37,7 +38,8 @@ def admin_user() -> SimpleNamespace:
 
 
 @pytest.fixture
-def rbac_client(admin_user: SimpleNamespace) -> TestClient:
+def rbac_client(admin_user: SimpleNamespace, request) -> TestClient:
+    request.getfixturevalue("isolated_login_host_db")
     app = FastAPI()
     app.include_router(rbac_routes.router)
     app.dependency_overrides[rbac_routes._require_rbac_manager] = lambda: admin_user
@@ -92,7 +94,7 @@ def test_rbac_list_roles(rbac_client: TestClient) -> None:
 
 def test_rbac_create_role(rbac_client: TestClient) -> None:
     code = f"test.{uuid4().hex}"
-    with get_db() as db:
+    with get_host_db() as db:
         db.add(Permission(code=code, name="Test read", module="test"))
     name = f"editor-{uuid4().hex}"
     r = rbac_client.post(
@@ -104,7 +106,7 @@ def test_rbac_create_role(rbac_client: TestClient) -> None:
     assert data["name"] == name
     assert [permission["code"] for permission in data["permissions"]] == [code]
     get_rbac_app_service().delete_role(data["id"])
-    with get_db() as db:
+    with get_host_db() as db:
         db.query(Permission).filter(Permission.code == code).delete()
 
 

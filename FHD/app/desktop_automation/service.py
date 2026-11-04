@@ -26,7 +26,7 @@ _SYSTEM_APPS = {
 
 
 def desktop_action_request(text: str) -> dict[str, str] | None:
-    from app.domain.services.conversation.chat_tool_intent import is_negated_action_request
+    from app.domain.conversation.services.chat_tool_intent import is_negated_action_request
 
     if is_negated_action_request(text):
         return None

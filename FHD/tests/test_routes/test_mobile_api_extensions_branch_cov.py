@@ -14,24 +14,17 @@ Focuses on REMAINING uncovered branches not addressed by ext/cov/ext2/ext3:
 
 from __future__ import annotations
 
+import importlib
 import json
-import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _load_ext_module():
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401
-    yield
-
-
 @pytest.fixture
 def m():
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 def _user(uid: int = 1, role: str = "admin"):
@@ -317,7 +310,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_recoverable_error_returns_none(self, m):
         """branch: RECOVERABLE_ERRORS → None."""
         with patch(
-            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             side_effect=ValueError("boom"),
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -326,7 +319,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_none_returns_none(self, m):
         """branch: relay is None → None."""
         with patch(
-            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value=None,
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -335,7 +328,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_empty_returns_none(self, m):
         """branch: relay is empty dict → None."""
         with patch(
-            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={},
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -344,7 +337,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_no_relay_id_returns_none(self, m):
         """branch: relay has no relay_id → None."""
         with patch(
-            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={"relay_base_url": "http://x"},
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -353,7 +346,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_empty_relay_id_returns_none(self, m):
         """branch: relay_id is whitespace → None."""
         with patch(
-            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={"relay_id": "   "},
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -362,7 +355,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_without_code_returns_none(self, m):
         """A cached relay without a valid code cannot be used to bind."""
         with patch(
-            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={
                 "relay_id": "pending-r1",
                 "relay_base_url": "http://relay",
@@ -377,7 +370,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_valid_returns_dict(self, m):
         """branch: paired relay has relay_id → return dict."""
         with patch(
-            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={
                 "relay_id": "r1",
                 "pairing_code": "123456",
@@ -396,7 +389,7 @@ class TestCachedDesktopRelayForAccountBinding:
     def test_relay_valid_with_empty_fields(self, m):
         """branch: paired relay has relay_id but other fields empty."""
         with patch(
-            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            "app.domain.shared_services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={
                 "relay_id": "r2",
                 "pairing_code": "654321",
@@ -3074,8 +3067,14 @@ class TestMobileServiceBridgeRequestRespondHttpEx:
 
 
 class TestMobileAiCirclePostsBranchCov:
+    @pytest.fixture
+    def report_sync(self, monkeypatch):
+        sync = AsyncMock(return_value={})
+        monkeypatch.setattr("app.domain.app_pure.employee_circle_sync.sync_modstore_reports", sync)
+        return sync
+
     @pytest.mark.asyncio
-    async def test_success_without_profile_match(self, m):
+    async def test_success_without_profile_match(self, m, report_sync):
         """branch: post has employee_id but no matching profile."""
         post = {"employee_id": "unknown", "author_name": "default", "author_avatar": None}
         with (
@@ -3085,9 +3084,10 @@ class TestMobileAiCirclePostsBranchCov:
         ):
             result = await m.mobile_ai_circle_posts(limit=50, user=_user())
         assert result is not None
+        report_sync.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_success_with_profile_match_and_avatar(self, m):
+    async def test_success_with_profile_match_and_avatar(self, m, report_sync):
         """branch: profile found, avatar set on post."""
         post = {"employee_id": "emp1", "author_name": "default", "author_avatar": None}
         profiles = {"emp1": {"name": "Alice", "avatar": "http://x/a.png"}}
@@ -3098,6 +3098,7 @@ class TestMobileAiCirclePostsBranchCov:
         ):
             result = await m.mobile_ai_circle_posts(limit=50, user=_user())
         assert result is not None
+        report_sync.assert_awaited_once()
 
 
 class TestMobileAiCircleCreatePostSuccess:

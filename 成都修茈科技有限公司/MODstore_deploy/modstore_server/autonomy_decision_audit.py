@@ -19,9 +19,7 @@ from typing import Any, Callable, Iterable
 
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from modstore_server.autonomy_decision_evidence import (
-    build_autonomy_decision_evidence,
-)
+from modstore_server.autonomy_decision_evidence import build_autonomy_decision_evidence
 from modstore_server.models import AutonomyDecisionAudit, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 

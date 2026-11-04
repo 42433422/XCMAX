@@ -271,22 +271,25 @@ async def stream_agent_tasks(
     principal: AgentPrincipal = Depends(require_agent_principal),
     authorize: StreamAuthorizer = Depends(require_stream_authorizer),
 ) -> StreamingResponse:
+    def encode_snapshot() -> str:
+        tasks = scoped_tasks(
+            AgentOrchestrator(),
+            principal=principal,
+            limit=200,
+            include_archived=False,
+        )
+        executions = _execution_map(tasks)
+        snapshot = [_task_stream_envelope(task, executions) for task in tasks]
+        return json.dumps(json_safe(snapshot), ensure_ascii=False, sort_keys=True)
+
     async def event_stream():
         previous = ""
         deadline = time.monotonic() + 60.0
         while time.monotonic() < deadline:
             if not await authorize():
                 break
-            orchestrator = AgentOrchestrator()
-            tasks = scoped_tasks(
-                orchestrator,
-                principal=principal,
-                limit=200,
-                include_archived=False,
-            )
-            executions = _execution_map(tasks)
-            snapshot = [_task_stream_envelope(task, executions) for task in tasks]
-            encoded = json.dumps(json_safe(snapshot), ensure_ascii=False, sort_keys=True)
+            # Blocking store reads must stay off the event loop that serves every other request.
+            encoded = await asyncio.to_thread(encode_snapshot)
             if encoded != previous:
                 if not await authorize():
                     break

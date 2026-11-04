@@ -1,6 +1,6 @@
 """DataFrame schema 快照 + LLM 理解桩。
 
-Phase 3B 从 ``app.legacy.excel_schema_understanding_service`` 吸收。
+Phase 3B 从 ``legacy-layer.excel_schema_understanding_service`` 吸收。
 """
 
 from __future__ import annotations

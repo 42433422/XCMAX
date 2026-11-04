@@ -3,14 +3,10 @@ import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { xcmaxOpsApi } from '@/api/xcmaxOps'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 
-/**
- * 自治健康卡片：审批服务存活、最近 loop 与闭环缺口。
- * 从 XCmaxAdminView.vue 逐字迁移，行为零变更。
- */
 export function useXcmaxAutonomyHealth() {
   const autonomyHealthLoading = ref(false)
   const autonomyHealth = ref({
-    alive: false,
+    alive: null,
     service: '',
     loopStatus: '',
     loopRunId: '',
@@ -19,8 +15,9 @@ export function useXcmaxAutonomyHealth() {
   })
 
   async function loadAutonomyHealth() {
+    if (autonomyHealthLoading.value) return
     autonomyHealthLoading.value = true
-    autonomyHealth.value = { ...autonomyHealth.value, error: '' }
+    autonomyHealth.value = { alive: null, error: '' }
     try {
       const [health, runtime, closure] = await Promise.all([
         xcmaxAdminApi.fetchAutonomyHealth().catch(() => null),
@@ -38,17 +35,17 @@ export function useXcmaxAutonomyHealth() {
         gapCount = closureData.missing_remote.length
       }
       autonomyHealth.value = {
-        alive: Boolean(health?.ok),
+        alive: typeof health?.ok === 'boolean' ? health.ok : null,
         service: health?.service || '',
         loopStatus: last.status || latest.status || runtime?.status || 'unknown',
         loopRunId: last.run_id || latest.run_id || '',
         gapCount,
-        error: '',
+        error: health == null || runtime == null || closure == null ? '部分状态读取失败，未返回的数据不可用' : '',
       }
     } catch (e) {
       autonomyHealth.value = {
         ...autonomyHealth.value,
-        alive: false,
+        alive: null,
         error: e?.message || String(e),
       }
     } finally {

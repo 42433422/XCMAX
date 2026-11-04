@@ -47,6 +47,16 @@ def _relay_employee_answer(boss_user_id: int, employee_id: str, answer: str) -> 
     relay_boss_reply_to_employee(boss_user_id, employee_id, answer)
 
 
+async def _push_mobile_im_message(sender_id: int, conversation_id: int, result: dict) -> None:
+    """手机端发出的消息实时推给会话其他成员（best-effort）。"""
+    try:
+        from app.infrastructure.im.message_fanout import push_im_message_to_members
+
+        await push_im_message_to_members(sender_id, conversation_id, result)
+    except RECOVERABLE_ERRORS:
+        logger.debug("mobile im_post_message ws push skipped", exc_info=True)
+
+
 def _internal_api_key() -> str:
     return (
         os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
@@ -237,6 +247,10 @@ def im_post_message(
     # 入站回流：老板在某员工聊天页回复 → 回流成该员工最新 pending 问题的答案，解阻塞员工。
     if emp_id:
         _relay_employee_answer(uid, emp_id, text)
+    if background_tasks is not None:
+        # 实时推送给会话其他成员（与网页端 im_routes.im_send_message 共用同一扇出逻辑）。
+        # 放在后台任务里：响应先返回，WS 推送失败不影响已落库的消息。
+        background_tasks.add_task(_push_mobile_im_message, uid, conversation_id, result)
     if is_enterprise_cs and background_tasks is not None:
         background_tasks.add_task(
             process_enterprise_cs_customer_message,

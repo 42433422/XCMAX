@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -109,6 +110,24 @@ class TestWechatRedirect:
 
 
 class TestCheckout:
+    @pytest.fixture(autouse=True)
+    def authenticated_business_branch(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.fastapi_routes.model_payment.require_local_payment_backend", lambda: None
+        )
+        # Business response contracts; real identity boundaries live in checkout_identity.
+        with (
+            patch(
+                "app.infrastructure.auth.dependencies.get_logged_in_user",
+                return_value=SimpleNamespace(id=71, tenant_id=None),
+            ),
+            patch(
+                "app.infrastructure.payment.modstore_payment_proxy.checkout_session_token",
+                return_value="synthetic-market-71",
+            ),
+        ):
+            yield
+
     def test_checkout_modstore_sot_with_plan_success(self, client_mp):
         mock_proxy = MagicMock()
         mock_proxy.proxy_checkout.return_value = {"success": True, "data": {"order_id": "x1"}}
@@ -158,6 +177,8 @@ class TestCheckout:
         ):
             r = client_mp.post("/api/model-payment/checkout", json={"plan_id": "demo-starter"})
             assert r.status_code == 409
+            assert r.json()["data"]["postgres_order_store_available"] is False
+            assert "migrate_script" not in r.json()["data"]
 
     def test_checkout_invalid_channel_returns_400(self, client_mp):
         with (
@@ -521,7 +542,7 @@ class TestDiagnostics:
             assert body["success"] is True
             assert "data" in body
 
-    def test_diagnostics_postgres_sot_includes_order_count(self, client_mp):
+    def test_diagnostics_postgres_sot_reports_unimplemented(self, client_mp):
         with (
             patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
             patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
@@ -539,10 +560,12 @@ class TestDiagnostics:
             r = client_mp.get("/api/model-payment/diagnostics")
             assert r.status_code == 200
             data = r.json()["data"]
-            assert data["order_count"] == 42
-            assert data["db_table"] == "model_payment_orders"
+            assert data["backend_available"] is False
+            assert data["db_table"] is None
+            assert "order_count" not in data
+            mock_orders.count_orders.assert_not_called()
 
-    def test_diagnostics_postgres_sot_order_count_error(self, client_mp):
+    def test_diagnostics_postgres_does_not_query_json_as_database(self, client_mp):
         with (
             patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
             patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
@@ -559,7 +582,8 @@ class TestDiagnostics:
             r = client_mp.get("/api/model-payment/diagnostics")
             assert r.status_code == 200
             data = r.json()["data"]
-            assert "order_count_error" in data
+            assert data["backend_error"] == "postgres_order_store_not_implemented"
+            mock_orders.count_orders.assert_not_called()
 
 
 # ========================= GET /api/model-payment/entitlements ===========
@@ -588,9 +612,20 @@ class TestEntitlements:
             assert len(body["data"]["entitlements"]) == 1
 
 
+@pytest.fixture
+def owned_order_business_branch():
+    # Provider result contracts only; real object/RBAC rejection is tested separately.
+    with patch(
+        "app.fastapi_routes.model_payment.owned_payment_order",
+        return_value={"status": "paid", "trade_no": "T123"},
+    ):
+        yield
+
+
 # ========================= GET /api/model-payment/query/{out_trade_no} ===
 
 
+@pytest.mark.usefixtures("owned_order_business_branch")
 class TestQueryTrade:
     def test_query_trade_success(self, client_mp):
         with (
@@ -624,6 +659,7 @@ class TestQueryTrade:
 # ========================= POST /api/model-payment/refund ================
 
 
+@pytest.mark.usefixtures("owned_order_business_branch")
 class TestRefund:
     def test_refund_missing_out_trade_no(self, client_mp):
         r = client_mp.post("/api/model-payment/refund", json={"refund_amount": "9.90"})
@@ -681,11 +717,12 @@ class TestRefund:
 # ========================= POST /api/model-payment/close =================
 
 
+@pytest.mark.usefixtures("owned_order_business_branch")
 class TestClose:
     def test_close_missing_both_ids(self, client_mp):
         r = client_mp.post("/api/model-payment/close", json={})
         assert r.status_code == 400
-        assert "至少提供一个" in r.json()["message"]
+        assert "out_trade_no 必填" in r.json()["message"]
 
     def test_close_success_with_out_trade_no(self, client_mp):
         with (
@@ -698,12 +735,13 @@ class TestClose:
             assert r.status_code == 200
             assert r.json()["success"] is True
 
-    def test_close_success_with_trade_no_only(self, client_mp):
+    def test_close_rejects_trade_no_only(self, client_mp):
         with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
             mock_ali.close_order.return_value = {"success": True, "raw": {}}
             r = client_mp.post("/api/model-payment/close", json={"trade_no": "T123"})
-            assert r.status_code == 200
-            assert r.json()["success"] is True
+            assert r.status_code == 400
+            assert r.json()["success"] is False
+            mock_ali.close_order.assert_not_called()
 
     def test_close_alipay_failure(self, client_mp):
         with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
@@ -727,6 +765,7 @@ class TestClose:
 # ========================= GET /api/model-payment/refund/query ===========
 
 
+@pytest.mark.usefixtures("owned_order_business_branch")
 class TestRefundQuery:
     def test_refund_query_success(self, client_mp):
         with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:

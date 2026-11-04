@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any
+
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
@@ -54,6 +57,7 @@ def _message_row(message: AIConversation) -> dict[str, Any]:
         "role": message.role,
         "content": message.content,
         "intent": message.intent or "",
+        "metadata": message.conversation_metadata or "",
         "timestamp": message.created_at.isoformat() if message.created_at else None,
     }
 
@@ -70,25 +74,72 @@ class TaskConversationStore:
         content: str,
         intent: str = "",
         metadata: str = "",
+        client_message_id: str = "",
     ) -> int:
         now = datetime.now()
         with get_db() as db:
+            if db.get_bind().dialect.name == "sqlite":
+                db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+            session_query = db.query(AIConversationSession).filter(
+                AIConversationSession.session_id == session_id
+            )
             session = (
                 db.query(AIConversationSession)
                 .filter(AIConversationSession.session_id == session_id)
+                .with_for_update()
                 .first()
             )
             if session is not None and int(session.user_id or 0) != user_id:
                 raise PermissionError("conversation session belongs to another user")
             if session is None:
-                session = AIConversationSession(
-                    session_id=session_id,
-                    user_id=user_id,
-                    message_count=0,
-                    created_at=now,
+                try:
+                    with db.begin_nested():
+                        session = AIConversationSession(
+                            session_id=session_id,
+                            user_id=user_id,
+                            message_count=0,
+                            created_at=now,
+                        )
+                        db.add(session)
+                        db.flush()
+                except IntegrityError:
+                    session = session_query.with_for_update().one()
+                    if int(session.user_id or 0) != user_id:
+                        raise PermissionError(
+                            "conversation session belongs to another user"
+                        ) from None
+
+            if client_message_id:
+                marker = json.dumps({"client_message_id": client_message_id})[1:-1]
+                candidates = (
+                    db.query(AIConversation)
+                    .filter(
+                        AIConversation.session_id == session_id,
+                        AIConversation.user_id == str(user_id),
+                        AIConversation.conversation_metadata.contains(marker, autoescape=True),
+                    )
+                    .all()
                 )
-                db.add(session)
-                db.flush()
+                for candidate in candidates:
+                    try:
+                        prior = json.loads(candidate.conversation_metadata or "{}")
+                    except (TypeError, ValueError):
+                        continue
+                    if (
+                        isinstance(prior, dict)
+                        and prior.get("client_message_id") == client_message_id
+                    ):
+                        if candidate.role != role or candidate.content != content:
+                            raise ValueError("message retry does not match the original content")
+                        return int(candidate.id)
+                try:
+                    payload = json.loads(metadata or "{}")
+                except (TypeError, ValueError):
+                    payload = {}
+                if not isinstance(payload, dict):
+                    payload = {}
+                payload["client_message_id"] = client_message_id
+                metadata = json.dumps(payload, ensure_ascii=False)
 
             message = AIConversation(
                 session_id=session_id,
@@ -124,7 +175,9 @@ class TaskConversationStore:
                 return {"session": None, "messages": []}
             messages = (
                 db.query(AIConversation)
-                .filter(AIConversation.session_id == session_id)
+                .filter(
+                    AIConversation.session_id == session_id, AIConversation.user_id == str(user_id)
+                )
                 .order_by(AIConversation.created_at.asc(), AIConversation.id.asc())
                 .all()
             )
@@ -133,7 +186,20 @@ class TaskConversationStore:
                 "messages": [_message_row(message) for message in messages],
             }
 
-    def list_sessions(self, *, user_id: int, limit: int) -> list[dict[str, Any]]:
+    def get_history(self, *, session_id: str, user_id: int, mod_id: str = "") -> dict[str, Any]:
+        durable = self.get_conversation(session_id=session_id, user_id=user_id)
+        session = durable.get("session")
+        return {
+            "success": True,
+            "id": session_id,
+            "title": session.get("title") if isinstance(session, dict) else None,
+            "mod_id": mod_id,
+            "messages": durable.get("messages") or [],
+            "metadata": {},
+            "durable": True,
+        }
+
+    def list_sessions(self, *, user_id: int, limit: int, offset: int = 0) -> list[dict[str, Any]]:
         with get_db() as db:
             sessions = (
                 db.query(AIConversationSession)
@@ -142,6 +208,7 @@ class TaskConversationStore:
                     AIConversationSession.last_message_at.desc(),
                     AIConversationSession.id.desc(),
                 )
+                .offset(offset)
                 .limit(limit)
                 .all()
             )

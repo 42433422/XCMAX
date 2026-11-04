@@ -340,46 +340,11 @@ def resolve_pat_identity(raw_token: str) -> Optional[PatIdentity]:
         if not isinstance(scopes_raw, list):
             scopes_raw = []
         scopes = tuple(str(s) for s in scopes_raw if s)
+        # The last-used audit commit must not expire the returned principal.
+        session.expunge(user)
         try:
             row.last_used_at = datetime.now(UTC)
             session.commit()
         except RECOVERABLE_ERRORS:
             session.rollback()
         return PatIdentity(user=user, scopes=scopes)
-
-
-def resolve_user_from_pat(raw_token: str) -> Optional[User]:
-    """按 PAT 反查用户；非 ``pat_`` 前缀直接返回 None。
-
-    命中后异步更新 ``last_used_at``。已吊销 / 已过期的 token 视为无效。
-    """
-    raw = (raw_token or "").strip()
-    if not raw.startswith(PAT_PREFIX):
-        return None
-    digest = hash_pat(raw)
-
-    sf = get_session_factory()
-    with sf() as session:
-        row = (
-            session.query(DeveloperToken)
-            .filter(
-                DeveloperToken.token_hash == digest,
-                DeveloperToken.revoked_at.is_(None),
-            )
-            .first()
-        )
-        if not row:
-            return None
-        exp = as_utc_aware(row.expires_at)
-        if exp and exp < datetime.now(UTC):
-            return None
-        user = session.query(User).filter(User.id == row.user_id).first()
-        if not user or user.deleted_at is not None:
-            return None
-        # 写一次 last_used_at（容忍并发竞态：单字段 UPDATE 安全）
-        try:
-            row.last_used_at = datetime.now(UTC)
-            session.commit()
-        except RECOVERABLE_ERRORS:
-            session.rollback()
-        return user

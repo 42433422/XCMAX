@@ -1,0 +1,45 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M05.x64-runtime-smoke",
+ "platform": "macos",
+ "round": "M04-M16-2026-10-12",
+ "release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "architecture": "x64",
+ "execution": "Rosetta 2 x86_64 translation on Apple Silicon host (uname -m=arm64); native Intel hardware not available",
+ "launch": {
+  "app": "runtime/x64/XCAGI.app (ditto from notarized DMG, quarantine removed)",
+  "port": 17510,
+  "data_dir": "runtime/x64-userdata (isolated)",
+  "backend_spawn_ok": true,
+  "desktop_status_ok": true
+ },
+ "health": {
+  "status": "degraded",
+  "runtime_status": "healthy",
+  "degraded_reasons": [
+   "LLM_RUNTIME_UNAVAILABLE"
+  ],
+  "version": "1.0.0.5",
+  "git_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+  "note": "required desktop/platform routes OK; LLM runtime degraded on fresh isolated data dir without model config — re-checked on arm64 chain"
+ },
+ "login": {
+  "api": "/api/auth/login",
+  "account": "xcagi-enterprise-demo",
+  "account_kind": "enterprise",
+  "success": true,
+  "market_base_url": "https://xiu-ci.com",
+  "market_is_enterprise": true
+ },
+ "binding": {
+  "user_id": 2,
+  "market_user_id": 33,
+  "local_user_id": 2,
+  "tenant_id": 1,
+  "tenant_name": "xcagi-enterprise-demo",
+  "tier": "enterprise"
+ },
+ "sunbird_note": "SUNBIRD 客户账号口令不在本机（钥匙串条目 codex-mac-acceptance-20260927-02 校验 MARKET_AUTH_FAILED），本轮以产品预置合法企业账号完成实机链，最终报告如实标注",
+ "captured_at_utc": "2026-10-12T10:28:24Z",
+ "verdict": "PASS"
+}

@@ -5,13 +5,63 @@ import {
   extractSessionIdForActiveMod,
   CHAT_MESSAGES_STORAGE_PREFIX,
 } from './chatStorageKeys'
-import { writeActiveExtensionModIdToStorage } from './xcagiStorageKeys'
+import { writeActiveExtensionModIdToStorage, readAiSessionIdFromStorage, writeAiSessionIdToStorage } from './xcagiStorageKeys'
 import { setTenantStorageScopeCache } from './tenantStorageScope'
+import { setRuntimeTenantStorageScopeInput } from './tenantStorageScopeRuntime'
+import { persistExcelAnalysisContext, readPersistedExcelAnalysisContext } from '@/composables/useChatPersistence'
 
 describe('chatStorageKeys tenant isolation', () => {
   beforeEach(() => {
+    localStorage.clear()
+    setRuntimeTenantStorageScopeInput({ tenantId: 9 })
     setTenantStorageScopeCache('tenant:9')
     writeActiveExtensionModIdToStorage('taiyangniao-pro', 'tenant:9')
+  })
+
+  it('restores current sessions only for their owner and Mod after reopening', () => {
+    const cases = [[1, 'a', 'owner-a'], [2, 'a', 'owner-b'], [1, 'b', 'mod-b']] as const
+    for (const [owner, mod, sid] of cases) {
+      setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: owner })
+      writeActiveExtensionModIdToStorage(mod)
+      expect(readAiSessionIdFromStorage()).toBe('')
+      writeAiSessionIdToStorage(' ' + sid + ' ')
+    }
+    for (const [owner, mod, sid] of cases) {
+      setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: owner })
+      writeActiveExtensionModIdToStorage(mod)
+      expect(readAiSessionIdFromStorage()).toBe(sid)
+    }
+    writeAiSessionIdToStorage(null)
+    expect(readAiSessionIdFromStorage()).toBe('')
+  })
+
+  it('does not recover tenant-only history while the authenticated owner is unresolved', () => {
+    const legacy = buildChatMessagesKey('legacy-session', 'taiyangniao-pro', 'tenant:9')
+    const legacyCurrent = legacy.replace('xcagi_chat_messages_', 'ai_session_id_').replace('legacy-session', 'current') + ':local'
+    localStorage.setItem(legacy, JSON.stringify([{ content: 'unowned legacy message' }]))
+    localStorage.setItem(legacyCurrent, 'legacy-session')
+    expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, legacy)).toBeNull()
+    expect(readAiSessionIdFromStorage()).toBe('')
+    expect(localStorage.getItem(legacy)).toContain('unowned legacy message')
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
+    expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, legacy)).toBeNull()
+  })
+
+  it('isolates the same session and Excel context between users within one tenant', () => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
+    const key = buildChatMessagesKey('same-session', 'm')
+    persistExcelAnalysisContext('same-session', { file_path: '/owner-a/test.xlsx' })
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 2 })
+    expect(buildChatMessagesKey('same-session', 'm')).not.toBe(key)
+    expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, key, 'm')).toBeNull()
+    expect(readPersistedExcelAnalysisContext('same-session')).toBeNull()
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
+    expect(readPersistedExcelAnalysisContext('same-session')).toEqual({ file_path: '/owner-a/test.xlsx' })
+    setRuntimeTenantStorageScopeInput(null)
+    expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, key, '', 'local')).toBeNull()
+    for (const scope of ['tenant:9', 'user:1', 'session:1', 'platform:admin']) {
+      expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, `${CHAT_MESSAGES_STORAGE_PREFIX}${scope}:s`, '', 'local')).toBeNull()
+    }
   })
 
   it('embeds tenant and mod in chat message key', () => {
@@ -78,8 +128,9 @@ describe('chatStorageKeys tenant isolation', () => {
   })
 
   it('resolves runtime scope when no scope argument is provided', () => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
     writeActiveExtensionModIdToStorage('', 'tenant:9')
-    const key = `${CHAT_MESSAGES_STORAGE_PREFIX}tenant:9:sess-noscope`
+    const key = `${CHAT_MESSAGES_STORAGE_PREFIX}tenant:9:owner:1:sess-noscope`
     expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, key, undefined)).toBe('sess-noscope')
   })
 

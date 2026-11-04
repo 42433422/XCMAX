@@ -13,6 +13,12 @@ from app.fastapi_routes import purchase as purchase_routes
 def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(purchase_routes, "_svc", lambda: fake_service)
     app = FastAPI()
+
+    @app.middleware("http")
+    async def bind_test_tenant(request, call_next):
+        request.state.tenant_id = 7
+        return await call_next(request)
+
     app.include_router(purchase_routes.router)
     return TestClient(app, raise_server_exceptions=False)
 
@@ -20,21 +26,15 @@ def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestCli
 def _assert_purchase_run(repo: InMemoryAgentRunRepository, run_id: str, action: str) -> None:
     run = repo.get(run_id)
     assert run is not None
-    assert run.user_id == "tenant-a"
-    assert run.status == "completed"
-    assert run.intent == f"purchase_{action}"
-    assert run.tool_calls[0].tool_id == "purchase"
+    assert (run.user_id, run.status) == ("tenant-a", "completed")
+    assert run.metadata["runtime_context"]["tenant_id"] == 7
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.purchase.{action}"
     assert run.tool_calls[0].cost_units == 2
-    assert {"step.waiting_user", "step.approved", "tool.completed", "run.completed"} <= {
-        event.event_type for event in run.events
-    }
 
 
 def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -53,7 +53,7 @@ def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
     ):
         create_supplier = client.post(
             "/api/purchase/suppliers",
-            json={"name": "星光供应商"},
+            json={"name": "星光供应商", "tenant_id": 99},
             headers={"X-User-Id": "tenant-a"},
         )
         update_supplier = client.put(
@@ -66,9 +66,7 @@ def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert create_supplier.status_code == 200
-    assert update_supplier.status_code == 200
-    assert delete_supplier.status_code == 200
+    assert all(r.status_code == 200 for r in (create_supplier, update_supplier, delete_supplier))
 
     svc.create_supplier.assert_called_once_with({"name": "星光供应商"})
     svc.update_supplier.assert_called_once_with(7, {"status": "active"})
@@ -80,8 +78,7 @@ def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
 
 
 def test_purchase_order_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()

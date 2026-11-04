@@ -78,6 +78,68 @@ def test_frozen_provenance_is_read_from_packaged_audit_root(
     langgraph_assert._assert_provenance(package_dir)
 
 
+def test_frozen_postgres_provenance_accepts_only_recorded_backport(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_frozen(monkeypatch, tmp_path)
+    package_dir = "xcagi_langgraph_checkpoint_backends/checkpoint-postgres"
+    provenance_dir = tmp_path / "vendored-provenance" / package_dir
+    provenance_dir.mkdir(parents=True)
+    backport = langgraph_assert.EXPECTED_SECURITY_BACKPORTS[package_dir]
+    (provenance_dir / "PROVENANCE.json").write_text(
+        json.dumps(
+            {
+                "upstream_tag": None,
+                "upstream_commit_sha": "fcdf520938469c8e0992ca2075d6a9582c33260f",
+                "license": "MIT",
+                "version": "3.1.1",
+                "local_version": "3.1.1+xcagi.1",
+                "security_backport": backport,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    langgraph_assert._assert_provenance(package_dir)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("version", "3.1.3"),
+        ("local_version", "3.1.3"),
+        ("merged_commit", "bfcfea5"),
+    ],
+)
+def test_frozen_postgres_provenance_rejects_version_or_backport_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: str,
+) -> None:
+    _set_frozen(monkeypatch, tmp_path)
+    package_dir = "xcagi_langgraph_checkpoint_backends/checkpoint-postgres"
+    provenance_dir = tmp_path / "vendored-provenance" / package_dir
+    provenance_dir.mkdir(parents=True)
+    backport = langgraph_assert.EXPECTED_SECURITY_BACKPORTS[package_dir].copy()
+    provenance = {
+        "upstream_tag": None,
+        "upstream_commit_sha": "fcdf520938469c8e0992ca2075d6a9582c33260f",
+        "license": "MIT",
+        "version": "3.1.1",
+        "local_version": "3.1.1+xcagi.1",
+        "security_backport": backport,
+    }
+    if field == "merged_commit":
+        backport[field] = value
+    else:
+        provenance[field] = value
+    (provenance_dir / "PROVENANCE.json").write_text(json.dumps(provenance), encoding="utf-8")
+
+    with pytest.raises(AssertionError):
+        langgraph_assert._assert_provenance(package_dir)
+
+
 def test_frozen_runtime_without_meipass_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.delattr(sys, "_MEIPASS", raising=False)

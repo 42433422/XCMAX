@@ -66,6 +66,7 @@ function createTestRouter() {
       { path: '/login', name: 'login', component: Stub },
       { path: '/register', name: 'register', component: Stub },
       { path: '/admin/database', name: 'admin-database', component: Stub },
+      { path: '/admin/overview', name: 'admin-overview', component: Stub },
       { path: '/admin/customer-service', name: 'admin-customer-service', component: Stub },
       { path: '/admin/butler-skills', name: 'admin-butler-skills', component: Stub },
       { path: '/admin/duty-employees', name: 'admin-duty-employees', component: Stub },
@@ -170,7 +171,7 @@ describe('App shell', () => {
     await adminTab!.trigger('click')
     await flushPromises()
 
-    expect(router.currentRoute.value.name).toBe('admin-database')
+    expect(router.currentRoute.value.name).toBe('admin-overview')
     expect(wrapper.text()).toContain('AI 客服后台')
   })
 

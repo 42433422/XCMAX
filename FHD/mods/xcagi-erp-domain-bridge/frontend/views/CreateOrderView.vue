@@ -119,10 +119,10 @@
       <div class="card">
         <h3>操作</h3>
         <div style="text-align: center;">
-          <button class="btn btn-success" @click="generateShipment" style="padding: 15px 40px; font-size: 18px;">
-            <i class="fa fa-rocket" aria-hidden="true"></i> 生成发货单
+          <button class="btn btn-success" :disabled="generatingShipment" :aria-busy="generatingShipment" @click="generateShipment" style="padding: 15px 40px; font-size: 18px;">
+            <i class="fa fa-rocket" aria-hidden="true"></i> {{ generatingShipment ? '正在生成...' : '生成发货单' }}
           </button>
-          <button class="btn btn-secondary" @click="resetForm" style="padding: 15px 40px; font-size: 18px;">
+          <button class="btn btn-secondary" :disabled="generatingShipment" @click="resetForm" style="padding: 15px 40px; font-size: 18px;">
             <i class="fa fa-refresh" aria-hidden="true"></i> 重置
           </button>
           <button class="btn" @click="goTemplatePreview" style="padding: 15px 40px; font-size: 18px;">
@@ -138,7 +138,7 @@
           <button @click="downloadShipment" class="btn btn-success" style="padding: 15px 30px; font-size: 16px;">
             <i class="fa fa-download" aria-hidden="true"></i> 下载发货单
           </button>
-          <button class="btn" @click="resetForm" style="padding: 15px 30px; font-size: 16px;">
+          <button class="btn" :disabled="generatingShipment" @click="resetForm" style="padding: 15px 30px; font-size: 16px;">
             <i class="fa fa-plus-square-o" aria-hidden="true"></i> 新建发货单
           </button>
         </div>
@@ -186,7 +186,7 @@ import { useCreateOrder } from './create-order/useCreateOrder'
 
 const {
   status, form, templates, purchaseUnits, allProducts, products,
-  result, showProductSelector, productSearchQuery, searchingProducts,
+  result, generatingShipment, showProductSelector, productSearchQuery, searchingProducts,
   filteredProductsForSelection,
   goOrdersList, goTemplatePreview, loadTemplates,
   onPurchaseUnitChange, onDateChange,

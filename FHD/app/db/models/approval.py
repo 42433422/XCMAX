@@ -17,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func as sql_func
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.mixins import TenantScopedMixin
 from app.domain.approval.safe_dsl import should_trigger_condition
 

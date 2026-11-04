@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.domain.services.conversation.chinese_number import (
+from app.domain.conversation.services.chinese_number import (
     cn_to_number,
     extract_number_from_text,
     parse_quantity_with_unit,

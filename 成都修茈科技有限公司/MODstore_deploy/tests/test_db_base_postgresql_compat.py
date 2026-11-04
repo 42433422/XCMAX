@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from modstore_server.db.base import _add_column_if_missing
+from modstore_server.db.db_base import _add_column_if_missing
 
 
 class _MissingColumnResult:

@@ -126,8 +126,7 @@ PY
     return 1
   fi
   echo "[notarize] DMG accepted"
-  xcrun stapler staple "${dmg}"
-  xcrun stapler validate "${dmg}"
+  python3 "${ROOT}/scripts/package/staple-macos-dmg.py" "${dmg}"
 }
 
 DMG_PATH="$(cd "$(dirname "${DMG_PATH}")" && pwd)/$(basename "${DMG_PATH}")"

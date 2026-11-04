@@ -208,43 +208,44 @@ class TestConfigureEditionDefaults:
 
 
 class TestBundledModsDir:
-    def test_env_bundled_mods_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("XCAGI_BUNDLED_MODS_DIR", str(tmp_path))
-        result = bundled_mods_dir()
-        assert result == tmp_path
-
-    def test_env_seed_mods_dir(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("XCAGI_BUNDLED_MODS_DIR", raising=False)
-        monkeypatch.setenv("XCAGI_SEED_MODS_DIR", str(tmp_path))
-        result = bundled_mods_dir()
-        assert result == tmp_path
-
-    def test_env_missing_dir_not_found(self, monkeypatch):
+    @pytest.mark.parametrize("name", ["XCAGI_BUNDLED_MODS_DIR", "XCAGI_SEED_MODS_DIR"])
+    def test_env_mods_dir(self, tmp_path, monkeypatch, name):
         monkeypatch.delenv("XCAGI_BUNDLED_MODS_DIR", raising=False)
         monkeypatch.delenv("XCAGI_SEED_MODS_DIR", raising=False)
-        # Override cwd search by mocking Path.cwd to somewhere with no mods
-        with patch("app.mod_sdk.edition_policy.Path") as mock_path_cls:
-            # Let real Path work except cwd
-            real_path = Path
-            mock_path_cls.side_effect = real_path
-            mock_path_cls.cwd.return_value = real_path("/tmp")
-            # Will not find mods dir in /tmp normally -> may return None
-            result = bundled_mods_dir()
-        # result is either None or a Path
-        assert result is None or isinstance(result, real_path)
+        monkeypatch.setenv(name, str(tmp_path))
+        assert bundled_mods_dir() == tmp_path
 
-    def test_frozen_meipass(self, tmp_path, monkeypatch):
-        """Branch: sys.frozen = True with _MEIPASS."""
-        mods_dir = tmp_path / "mods"
-        mods_dir.mkdir()
+    def test_source_core_mods_are_found_from_legacy_launch_cwd(self, tmp_path, monkeypatch):
+        from app.mod_sdk import edition_policy as policy
+
+        root = tmp_path / "FHD"
+        canonical = root / "mods"
+        for mid in policy.GENERIC_HOST_MOD_IDS:
+            mod = canonical / mid
+            mod.mkdir(parents=True)
+            (mod / "manifest.json").write_text("{}")
+        (root / "XCAGI" / "mods" / "attendance-industry").mkdir(parents=True)
+        monkeypatch.chdir(root / "XCAGI")
+        monkeypatch.setattr(policy, "__file__", str(root / "app" / "mod_sdk" / "edition_policy.py"))
+        monkeypatch.setattr(sys, "frozen", False, raising=False)
+        monkeypatch.delenv("XCAGI_BUNDLED_MODS_DIR", raising=False)
+        monkeypatch.delenv("XCAGI_SEED_MODS_DIR", raising=False)
+        assert bundled_mods_dir() == canonical
+        assert len(policy.GENERIC_HOST_MOD_IDS) == 9
+        assert all(
+            _resolve_mod_seed_source(mid, canonical) == canonical / mid
+            for mid in policy.GENERIC_HOST_MOD_IDS
+        )
+
+    @pytest.mark.parametrize("layout", ["mods", "XCAGI/mods"])
+    def test_frozen_meipass(self, tmp_path, monkeypatch, layout):
+        mods_dir = tmp_path / layout
+        mods_dir.mkdir(parents=True)
         monkeypatch.delenv("XCAGI_BUNDLED_MODS_DIR", raising=False)
         monkeypatch.delenv("XCAGI_SEED_MODS_DIR", raising=False)
         monkeypatch.setattr(sys, "frozen", True, raising=False)
         monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
-        result = bundled_mods_dir()
-        assert result == mods_dir
-        monkeypatch.delattr(sys, "frozen", raising=False)
-        monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+        assert bundled_mods_dir() == mods_dir
 
 
 # ---------------------------------------------------------------------------

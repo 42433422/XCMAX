@@ -172,7 +172,8 @@ class TestHandleExcelAnalysisDeep:
                     "metrics": [],
                 }
             )
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["error"] == "missing_aggregation_metrics"
 
     def test_statistics_action(self, tmp_path):
         import pandas as pd
@@ -348,10 +349,7 @@ class TestGetWorkflowToolRegistryExtended:
         )  # At least excel_analysis, excel_schema, excel_join, excel_chart, import_excel
 
     def test_registry_caching(self):
-        from app.application.tools.workflow import (
-            _workflow_tool_registry_cache,
-            get_workflow_tool_registry,
-        )
+        from app.application.tools.workflow import get_workflow_tool_registry
 
         # First call populates cache
         with patch("app.application.tools.workflow._workflow_tool_registry_cache", None):
@@ -374,9 +372,9 @@ class TestGetWorkflowToolRegistryExtended:
 
         with patch("app.application.tools.workflow._workflow_tool_registry_cache", [{"old": True}]):
             invalidate_workflow_tool_registry()
-        from app.application.tools.workflow import _workflow_tool_registry_cache
+            from app.application.tools.workflow import _workflow_tool_registry_cache
 
-        assert _workflow_tool_registry_cache is None
+            assert _workflow_tool_registry_cache is None
 
 
 # ========================= execute_workflow_tool - extended ================
@@ -420,7 +418,7 @@ class TestExecuteWorkflowToolExtended:
                 return_value=(None, None),
             ):
                 with patch(
-                    "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                    "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                     return_value=None,
                 ):
                     result = execute_workflow_tool("unknown_tool", {})

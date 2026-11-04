@@ -26,6 +26,7 @@ from langgraph.store.base import (
     _ensure_refresh,
     _ensure_ttl,
     _validate_namespace,
+    _validate_namespace_labels,
 )
 
 F = TypeVar("F", bound=Callable)
@@ -87,6 +88,7 @@ class AsyncBatchedBaseStore(BaseStore):
         *,
         refresh_ttl: bool | None = None,
     ) -> Item | None:
+        _validate_namespace_labels(namespace)
         self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
@@ -112,6 +114,7 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
         refresh_ttl: bool | None = None,
     ) -> list[SearchItem]:
+        _validate_namespace_labels(namespace_prefix)
         self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
@@ -156,6 +159,7 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
     ) -> None:
+        _validate_namespace_labels(namespace)
         self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait((fut, PutOp(namespace, key, None)))
@@ -170,6 +174,8 @@ class AsyncBatchedBaseStore(BaseStore):
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
+        _validate_namespace_labels(prefix or ())
+        _validate_namespace_labels(suffix or ())
         self._ensure_task()
         fut = self._loop.create_future()
         match_conditions = []

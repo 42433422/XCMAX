@@ -34,19 +34,7 @@ const connectedStatus = {
 
 describe('KellaiCustomerInbox', () => {
   beforeEach(() => {
-    kellaiMocks.status.mockReset()
-    kellaiMocks.start.mockReset()
-    kellaiMocks.dataStatus.mockReset()
-    kellaiMocks.customers.mockReset()
-    kellaiMocks.conversations.mockReset()
-    kellaiMocks.latestDraft.mockReset()
-    kellaiMocks.followUpOverview.mockReset()
-    kellaiMocks.followUpTasks.mockReset()
-    kellaiMocks.generateDraft.mockReset()
-    kellaiMocks.decideDraft.mockReset()
-    kellaiMocks.createFollowUpTask.mockReset()
-    kellaiMocks.decideFollowUpTask.mockReset()
-    kellaiMocks.disconnect.mockReset()
+    Object.values(kellaiMocks).forEach(mock => mock.mockReset())
 
     kellaiMocks.status.mockResolvedValue(connectedStatus)
     kellaiMocks.dataStatus.mockResolvedValue({ customer_count: 1, unread_message_count: 2 })
@@ -134,6 +122,7 @@ describe('KellaiCustomerInbox', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     ;(window as Window & { xcagiDesktop?: unknown }).xcagiDesktop = undefined
   })
@@ -268,4 +257,104 @@ describe('KellaiCustomerInbox', () => {
     expect(img.attributes('src')).toBe('https://cdn.example.com/demo.png')
     wrapper.unmount()
   })
+  async function clickButton(wrapper: ReturnType<typeof mount>, text: string) {
+    await wrapper.findAll('button').find(button => button.text().includes(text))!.trigger('click')
+    await flushPromises()
+  }
+
+  it('polls pending authorization, loads customers once connected and stops when unmounted', async () => {
+    vi.useFakeTimers()
+    kellaiMocks.status.mockResolvedValueOnce({ state: 'pending' })
+    const wrapper = mount(KellaiCustomerInbox)
+    await flushPromises()
+    expect(wrapper.get('.kellai-inbox__status').text()).toBe('等待授权')
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(wrapper.get('.kellai-inbox__status').text()).toBe('已连接')
+    expect(kellaiMocks.status).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(kellaiMocks.status).toHaveBeenCalledTimes(2)
+    wrapper.unmount(); await vi.advanceTimersByTimeAsync(4000)
+    expect(kellaiMocks.status).toHaveBeenCalledTimes(2)
+  })
+
+  it('selects a different customer, avoids reloading an unchanged selection and clears empty history', async () => {
+    kellaiMocks.customers.mockResolvedValue([{ customer_id: 7, display_name: 'A' }, { customer_id: 8, display_name: '', channel_sources: ['wechat', 'custom'] }])
+    const wrapper = mount(KellaiCustomerInbox); await flushPromises()
+    await wrapper.findAll('.kellai-inbox__customer')[0].trigger('click'); await flushPromises()
+    expect(kellaiMocks.conversations).toHaveBeenCalledTimes(1)
+    kellaiMocks.conversations.mockRejectedValueOnce(new Error('读取会话失败'))
+    await wrapper.findAll('.kellai-inbox__customer')[1].trigger('click'); await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe('读取会话失败')
+    expect(kellaiMocks.conversations).toHaveBeenLastCalledWith(8, 100)
+    kellaiMocks.customers.mockResolvedValue([])
+    await clickButton(wrapper, '刷新')
+    expect(wrapper.text()).toContain('暂无已授权的真实客户会话')
+    expect(wrapper.find('.kellai-inbox__copilot').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['status', '刷新', '无法读取客来来客户会话'],
+    ['generateDraft', '生成摘要与草稿', 'AI 摘要与回复草稿生成失败'],
+    ['decideDraft', '拒绝草稿', '草稿审批失败'],
+    ['createFollowUpTask', '批准并创建跟进任务', '跟进任务创建失败'],
+    ['decideFollowUpTask', '取消任务', '跟进任务更新失败'],
+    ['disconnect', '解除绑定', '解除绑定失败'],
+  ] as const)('reports %s failures and leaves actions retryable', async (method, label, fallback) => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const wrapper = mount(KellaiCustomerInbox); await flushPromises()
+    if (['decideDraft', 'createFollowUpTask', 'decideFollowUpTask'].includes(method)) await clickButton(wrapper, '生成摘要与草稿')
+    if (method === 'decideFollowUpTask') await clickButton(wrapper, '批准并创建跟进任务')
+    for (const [failure, expected] of [[new Error('暂时离线'), '暂时离线'], [null, fallback]]) {
+      kellaiMocks[method].mockRejectedValueOnce(failure)
+      await clickButton(wrapper, label)
+      expect(wrapper.get('[role="alert"]').text()).toBe(expected)
+      expect(wrapper.findAll('button').find(button => button.text().includes(label))!.attributes('disabled')).toBeUndefined()
+    }
+    wrapper.unmount()
+  })
+
+  it.each([['complete', 'no_result', '完成 · 暂无结果', '暂无结果'], ['complete', 'failed', '执行失败', '失败'], ['cancel', '', '取消任务', '已取消']])(
+    'records follow-up %s %s and recalculates the visible metrics', async (decision, outcome, label, result) => {
+      const wrapper = mount(KellaiCustomerInbox); await flushPromises()
+      await clickButton(wrapper, '生成摘要与草稿'); await clickButton(wrapper, '批准并创建跟进任务')
+      await clickButton(wrapper, label)
+      expect(kellaiMocks.decideFollowUpTask).toHaveBeenCalledWith('task-1', decision, outcome)
+      expect(wrapper.get('.kellai-inbox__task-item').text()).toContain(result)
+      expect(wrapper.find('.kellai-inbox__task-actions').exists()).toBe(false)
+      expect(wrapper.get('.kellai-inbox__task-list-head').text()).toContain(outcome ? '成功率 0%' : '成功率 —')
+      wrapper.unmount()
+    })
+
+  it('copies only an approved draft and reports unavailable clipboard access', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const wrapper = mount(KellaiCustomerInbox); await flushPromises()
+    await clickButton(wrapper, '生成摘要与草稿'); await clickButton(wrapper, '批准为手动发送草稿')
+    await clickButton(wrapper, '复制草稿')
+    expect(writeText).toHaveBeenCalledWith('您好，我正在核实交付计划，确认后第一时间回复您。')
+    expect(wrapper.text()).toContain('已复制')
+    writeText.mockRejectedValueOnce(new Error('blocked')); await clickButton(wrapper, '已复制')
+    expect(wrapper.get('[role="alert"]').text()).toContain('请手动选择文本复制')
+    wrapper.unmount(); vi.unstubAllGlobals()
+  })
+
+  it('handles desktop and browser pairing failures, cancellation and rejected drafts', async () => {
+    const wrapper = mount(KellaiCustomerInbox); await flushPromises()
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await clickButton(wrapper, '解除绑定'); expect(kellaiMocks.disconnect).not.toHaveBeenCalled()
+    await clickButton(wrapper, '生成摘要与草稿'); await clickButton(wrapper, '拒绝草稿')
+    expect(wrapper.text()).toContain('此草稿已拒绝，不可用于发送')
+    kellaiMocks.status.mockResolvedValue({ state: 'offline' }); await clickButton(wrapper, '刷新')
+    expect(wrapper.get('.kellai-inbox__status').text()).toBe('客来来未运行')
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    await clickButton(wrapper, '打开客来来')
+    expect(open).toHaveBeenCalledWith('kellai://settings?tab=xcmax', '_blank', 'noopener,noreferrer')
+    expect(wrapper.get('[role="alert"]').text()).toContain('请使用 XCMAX 桌面端')
+    ;(window as any).xcagiDesktop = { openKellaiDesktop: vi.fn().mockResolvedValue({ ok: false, reason: '客来来未安装' }) }
+    await clickButton(wrapper, '绑定客来来')
+    expect(wrapper.get('[role="alert"]').text()).toBe('客来来未安装')
+    wrapper.unmount()
+  })
+
 })

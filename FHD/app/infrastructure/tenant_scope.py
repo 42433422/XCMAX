@@ -32,6 +32,11 @@ _current_tenant_id: contextvars.ContextVar[int | None] = contextvars.ContextVar(
 )
 
 
+_owned_tenant_id: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "owned_business_tenant", default=None
+)
+
+
 class TenantScopeError(RuntimeError):
     """业务数据读写缺少租户上下文。"""
 
@@ -60,6 +65,9 @@ def reset_current_tenant_id(token: contextvars.Token) -> None:
 
 def current_tenant_id() -> int | None:
     """读取当前租户：优先 ContextVar，其次当前请求 ``request.state.tenant_id``。"""
+    owned = owned_tenant_id()
+    if owned is not None:
+        return owned
     tid = _current_tenant_id.get()
     if tid is not None:
         return tid
@@ -85,6 +93,28 @@ def tenant_scope(tenant_id: int | None) -> Iterator[None]:
         reset_current_tenant_id(token)
 
 
+def owned_tenant_id() -> int | None:
+    """Internal scope, established only after server actor/permission validation."""
+    return _owned_tenant_id.get()
+
+
+@contextlib.contextmanager
+def owned_tenant_scope(tenant_id: int) -> Iterator[None]:
+    """Strict owned rows only; never exposes/adopts migration NULL rows.
+
+    This is not authorization. The caller must validate the authenticated actor.
+    ORM flush ownership is checked separately; arbitrary raw/bulk DML is not covered.
+    """
+    if type(tenant_id) is not int or tenant_id <= 0:
+        raise TenantScopeError("已授权企业范围无效")
+    token = _owned_tenant_id.set(tenant_id)
+    try:
+        with tenant_scope(tenant_id):
+            yield
+    finally:
+        _owned_tenant_id.reset(token)
+
+
 def tenant_strict_mode() -> bool:
     """是否启用严格租户过滤（默认启用）。"""
     return not tenant_legacy_null_visible()
@@ -92,7 +122,7 @@ def tenant_strict_mode() -> bool:
 
 def tenant_legacy_null_visible() -> bool:
     """是否临时允许当前租户读取 tenant_id IS NULL 的迁移期旧数据。"""
-    return _truthy_env("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE")
+    return owned_tenant_id() is None and _truthy_env("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE")
 
 
 def apply_tenant_filter(query: Any, model: Any, *, tenant_id: int | None = None) -> Any:
@@ -107,6 +137,8 @@ def apply_tenant_filter(query: Any, model: Any, *, tenant_id: int | None = None)
     column = getattr(model, "tenant_id", None)
     if column is None:
         return query
+    if owned_tenant_id() is not None and tenant_id not in (None, owned_tenant_id()):
+        raise TenantScopeError("显式租户与已授权企业不一致")
     tid = tenant_id if tenant_id is not None else current_tenant_id()
     if tid is None:
         return query.filter(false())
@@ -117,6 +149,8 @@ def apply_tenant_filter(query: Any, model: Any, *, tenant_id: int | None = None)
 
 def tenant_id_for_write(tenant_id: int | None = None) -> int:
     """写入业务数据时应打标的租户 id（当前租户；可显式覆盖）。"""
+    if owned_tenant_id() is not None and tenant_id not in (None, owned_tenant_id()):
+        raise TenantScopeError("显式租户与已授权企业不一致")
     tid = tenant_id if tenant_id is not None else current_tenant_id()
     if tid is None:
         raise TenantScopeError("写入业务数据缺少 tenant_id")

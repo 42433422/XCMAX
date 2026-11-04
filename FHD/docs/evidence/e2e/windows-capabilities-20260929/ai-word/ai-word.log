@@ -1,0 +1,10 @@
+feature=ai-word
+at=2026-09-29T11:21:47.475Z
+route=/mod/xcagi-office-employee-pack-bridge/other-tools
+landed=/mod/xcagi-office-employee-pack-bridge/other-tools
+title=员工工作流 - XCAGI
+heading=员工工作流
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 员工工作流 SUNBIRD 副窗 ◈ 工作区 员工工作流管理 流程与员工 在此查看与管理副窗中的固定六类与当前 manifest 已声明的扩展工作流员工；开关样式与侧栏「专业版」一致。各扩展的蓝图、API 与专有步骤以扩展包文档为准。 「流程可视化」以图解说明固定六类与已出现的扩展工作流执行逻辑；扩展专有细节仍以各扩展为准。 流程可视化 微信联系人能力已并入「数据来源」，副窗「微信触点管家」工作流员工由可选扩展 Mod wechat-contacts-ai-employee提供。 员工空间 像素风入口与工位实况展示（与副窗「一键托管」工作流员工、智能对话任务快照同步）。不在本页直接展开工位网格；进入独立页查看。 进入员工空间 六部门编制图 按六线六部门（O-A 获客、O-B 伙伴、P-W 网站、P-S 软件等）分组展示 52 岗 AI 员工，支持员工大会汇报与任务下达。默认打开「六部门」视图（非 MODstore 中心依赖图）。 小C助理

@@ -1,0 +1,102 @@
+{
+ "observed_at": "2026-10-11T11:17:20.261396+08:00",
+ "http": 200,
+ "request": {
+  "source": "customer_feedback",
+  "source_ref": "TLA-20261011-R2",
+  "title": "[验收测试-重开] 桌面端看不到工单处理进度说明",
+  "description": "【XCMAX 工单闭环验收测试工单（重开验证），测试租户A，非真实客户】现象：提交问题后，不清楚在哪里看 AI 处理进度和结果，也不知道『已解决/重新打开』按钮在哪。期望：给出操作方法说明即可，不需要改代码。发生时间 2026-10-11 11:20（UTC+8），模块：问题/工单入口。联系人：TEST-TICKET-LOOP-A。",
+  "issue_domain": "software",
+  "installed_version": "1.0.0.5",
+  "product_version": "1.0.0.5",
+  "git_sha": "12aa243c1750cabb40632f541b59f841309bfb44",
+  "acceptance_criteria": "给出清晰的操作说明"
+ },
+ "response": {
+  "success": true,
+  "replayed": false,
+  "ticket_id": 38,
+  "ticket_no": "CIc5eb4b108e9092ec90c0c0bfb45e1f22ae2802c9b978281d",
+  "ticket": {
+   "id": 38,
+   "user_id": 77,
+   "session_id": 62,
+   "ticket_no": "CIc5eb4b108e9092ec90c0c0bfb45e1f22ae2802c9b978281d",
+   "title": "[验收测试-重开] 桌面端看不到工单处理进度说明",
+   "intent": "product_issue",
+   "issue_domain": "software",
+   "issue_domain_label": "软件",
+   "subject_type": "host",
+   "subject_id": "",
+   "status": "processing",
+   "priority": "normal",
+   "evidence": {
+    "source": "customer_feedback",
+    "source_ref": "TLA-20261011-R2",
+    "title": "[验收测试-重开] 桌面端看不到工单处理进度说明",
+    "description": "【XCMAX 工单闭环验收测试工单（重开验证），测试租户A，非真实客户】现象：提交问题后，不清楚在哪里看 AI 处理进度和结果，也不知道『已解决/重新打开』按钮在哪。期望：给出操作方法说明即可，不需要改代码。发生时间 2026-10-11 11:20（UTC+8），模块：问题/工单入口。联系人：TEST-TICKET-LOOP-A。",
+    "issue_domain": "software",
+    "target_mod_id": "",
+    "installed_version": "1.0.0.5",
+    "acceptance_criteria": "给出清晰的操作说明",
+    "shared_core_prerequisite": "",
+    "work_order_id": "",
+    "support_bundle_sha256": "",
+    "support_bundle_base64": "",
+    "customer_instance_id": "",
+    "product_version": "1.0.0.5",
+    "git_sha": "12aa243c1750cabb40632f541b59f841309bfb44",
+    "intake_request_sha256": "13c54905bacb09c71632ba4e42cd6be4395e694a3d5b45f1f8900c37c3404c39",
+    "resolution": {
+     "schema_version": 1,
+     "ticket_id": 38,
+     "owner_user_id": 77,
+     "route": "shared_core",
+     "state": "received",
+     "source_ref": "TLA-20261011-R2",
+     "original_title": "[验收测试-重开] 桌面端看不到工单处理进度说明",
+     "original_request": "【XCMAX 工单闭环验收测试工单（重开验证），测试租户A，非真实客户】现象：提交问题后，不清楚在哪里看 AI 处理进度和结果，也不知道『已解决/重新打开』按钮在哪。期望：给出操作方法说明即可，不需要改代码。发生时间 2026-10-11 11:20（UTC+8），模块：问题/工单入口。联系人：TEST-TICKET-LOOP-A。",
+     "reported_version": "1.0.0.5"
+    }
+   },
+   "summary": "【XCMAX 工单闭环验收测试工单（重开验证），测试租户A，非真实客户】现象：提交问题后，不清楚在哪里看 AI 处理进度和结果，也不知道『已解决/重新打开』按钮在哪。期望：给出操作方法说明即可，不需要改代码。发生时间 2026-10-11 11:20（UTC+8），模块：问题/工单入口。联系人：TEST-TICKET-LOOP-A。",
+   "decision_status": "accepted",
+   "automation_level": "auto",
+   "created_at": "2026-10-11T03:17:20.127404",
+   "updated_at": "2026-10-11T03:17:20.130325",
+   "closed_at": "",
+   "lifecycle_stage": 2,
+   "lifecycle_label": "处理中",
+   "lifecycle_steps": [
+    {
+     "stage": 1,
+     "label": "已收到",
+     "state": "done"
+    },
+    {
+     "stage": 2,
+     "label": "处理中",
+     "state": "current"
+    },
+    {
+     "stage": 3,
+     "label": "有结果",
+     "state": "todo"
+    },
+    {
+     "stage": 4,
+     "label": "待补充",
+     "state": "todo"
+    },
+    {
+     "stage": 5,
+     "label": "已完成",
+     "state": "todo"
+    }
+   ]
+  },
+  "dispatch_status": "queued",
+  "support_bundle_saved": false,
+  "support_bundle_sha256": ""
+ }
+}

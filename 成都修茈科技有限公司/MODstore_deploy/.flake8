@@ -30,3 +30,5 @@ per-file-ignores =
     modstore_server/api/app_factory.py:F401
     modstore_server/models*.py:F401
     modstore_server/integrations/vibe_adapter.py:F811
+    # debt24 mechanical merges: part* concat redefines importlib/_facade/helpers
+    modstore_server/*_merged.py:F811

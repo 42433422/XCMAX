@@ -15,16 +15,16 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
 from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
 from app.db.models.agent import AgentTaskExecutionRecord
-from app.services.inventory_service import InventoryService
+from app.domain.shared_services.inventory_service import InventoryService
 
 
 def _inbound_paused_before_commit(
     owner_url, business_url, ready, release, result, crash_after_commit=False
 ):
-    import app.services.inventory_service as facade
+    import app.domain.shared_services.inventory_service as facade
     from app.infrastructure.tenant_scope import tenant_scope
 
     owner_engine = create_engine(owner_url)
@@ -217,7 +217,7 @@ def test_inventory_commit_requires_live_claim_without_rerouting_mod_data(
             yield db
             db.commit()
 
-    monkeypatch.setattr("app.services.inventory_service.get_db", business_session)
+    monkeypatch.setattr("app.domain.shared_services.inventory_service.get_db", business_session)
     try:
         with worker_claim_scope(runs, execution, "worker"):
 

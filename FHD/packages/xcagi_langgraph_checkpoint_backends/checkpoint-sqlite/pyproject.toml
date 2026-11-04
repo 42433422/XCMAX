@@ -4,17 +4,17 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-sqlite"
-version = "3.1.1"
+version = "3.1.2"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver. XCAGI vendored fork (LG-W0-04)."
 authors = []
 requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
-# 依赖声明与上游一致（langgraph-checkpoint-sqlite 3.1.1）。langgraph-checkpoint 经
+# 安全补丁依赖与上游 3.1.2 一致。langgraph-checkpoint 经
 # [tool.uv.sources] 重定向到 XCAGI vendored 兄弟包。其余依赖保持上游 registry。
 dependencies = [
-    "langgraph-checkpoint>=4.1.0,<5.0.0",
+    "langgraph-checkpoint>=4.3.0,<5.0.0",
     "aiosqlite>=0.20",
     "sqlite-vec>=0.1.6",
 ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from modman.fhd_shell_export import write_fhd_shell_mods_json
 from modman.repo_config import (
@@ -14,10 +14,11 @@ from modman.repo_config import (
     resolved_xcagi,
     resolved_xcagi_backend_url,
 )
+from modstore_server.api.deps import require_admin
 from modstore_server.api.dto import ConfigDTO, ExportFhdShellDTO
 from modstore_server.infrastructure import library_paths
 
-router = APIRouter(tags=["config"])
+router = APIRouter(tags=["config"], dependencies=[Depends(require_admin)])
 
 
 def _configured_repo_path(raw: str, *, field: str) -> str:

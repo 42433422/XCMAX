@@ -13,11 +13,11 @@ import hashlib
 import json
 import os
 import re
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
+from modstore_server.integrations.repository_packages import load_repository_module
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.strategic_council_live import live_para_evidence as _live_para_evidence
 from modstore_server.strategic_council_live import live_persy_evidence as _live_persy_evidence
@@ -57,29 +57,9 @@ def strategic_council_ledger_path() -> Path:
     return Path(configured).expanduser() if configured else _runtime_dir() / LEDGER_FILENAME
 
 
-def _retort_import_root() -> Path:
-    configured = _text(os.environ.get("MODSTORE_RETORT_ENGINE_ROOT"), 4096)
-    if configured:
-        return Path(configured).expanduser().resolve()
-    monorepo = _text(os.environ.get("XCMAX_MONOREPO_ROOT"), 4096)
-    root = (
-        Path(monorepo).expanduser().resolve() if monorepo else Path(__file__).resolve().parents[3]
-    )
-    return root / "packages" / "retort_engine"
-
-
 def _load_retort_alignment() -> Callable[..., dict[str, Any]]:
-    try:
-        from retort_engine.intent_alignment import assess_change_intent_alignment
-
-        return assess_change_intent_alignment
-    except ImportError:
-        package_root = _retort_import_root()
-        if package_root.is_dir() and str(package_root) not in sys.path:
-            sys.path.insert(0, str(package_root))
-        from retort_engine.intent_alignment import assess_change_intent_alignment
-
-        return assess_change_intent_alignment
+    module = load_repository_module("retort_engine.intent_alignment")
+    return cast(Callable[..., dict[str, Any]], module.assess_change_intent_alignment)
 
 
 def _retort_result(

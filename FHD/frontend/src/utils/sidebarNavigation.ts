@@ -94,6 +94,54 @@ async function ensureModRoutesRegistered(router: Router, getModRoutes?: () => un
   }
 }
 
+/** Race mod-route registration against generation so a newer click can abort wait early. */
+async function ensureModRoutesRegisteredUnlessStale(
+  router: Router,
+  getModRoutes: (() => unknown[] | undefined) | undefined,
+  isStale: () => boolean,
+): Promise<void> {
+  if (isStale()) return
+  const pending = ensureModRoutesRegistered(router, getModRoutes)
+  let timer: ReturnType<typeof setInterval> | undefined
+  try {
+    await Promise.race([
+      pending,
+      new Promise<void>((resolve) => {
+        timer = globalThis.setInterval(() => { if (isStale()) resolve() }, 40)
+      }),
+    ])
+  } finally {
+    globalThis.clearInterval(timer)
+  }
+}
+
+function navigationSettled(push: Promise<unknown>, isStale: () => boolean): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (succeeded: boolean, error?: unknown) => {
+      if (settled) return
+      settled = true
+      clearInterval(timer)
+      if (succeeded) resolve()
+      else reject(error)
+    }
+    const timer = setInterval(() => {
+      if (isStale()) finish(true)
+    }, 16)
+    push.then(() => finish(true), (error) => finish(isStale(), error))
+  })
+}
+
+async function pushSidebarRoute(
+  router: Router,
+  location: Parameters<Router['push']>[0],
+  isStale: () => boolean,
+): Promise<boolean> {
+  if (isStale()) return false
+  await navigationSettled(router.push(location), isStale)
+  return !isStale()
+}
+
 async function performSidebarNavigation(
   router: Router,
   viewKey: string,
@@ -111,34 +159,25 @@ async function performSidebarNavigation(
   const nameCandidate = typeof routeName === 'string' ? routeName.replace(/^mod-/, '') : routeName
 
   if (typeof nameCandidate === 'string' && preferHostSidebarRoute(router, nameCandidate)) {
-    if (isStale()) return false
-    await router.push({ name: nameCandidate })
-    return !isStale()
+    return pushSidebarRoute(router, { name: nameCandidate }, isStale)
   }
 
   if (modItem?.path) {
     if (router.resolve(modItem.path).matched.length === 0) {
       try {
-        await ensureModRoutesRegistered(router, options.getModRoutes)
+        await ensureModRoutesRegisteredUnlessStale(router, options.getModRoutes, isStale)
       } catch (e) {
         console.warn('[sidebarNavigation] 补注册 Mod 路由失败:', e)
       }
     }
     if (isStale()) return false
     if (router.resolve(modItem.path).matched.length > 0) {
-      await router.push(modItem.path)
-      return !isStale()
+      return pushSidebarRoute(router, modItem.path, isStale)
     }
     const legacy = resolveLegacyRouteFromModPath(router, modItem.path)
-    if (legacy) {
-      await router.push(legacy)
-      return !isStale()
-    }
+    if (legacy) return pushSidebarRoute(router, legacy, isStale)
     const csHost = customerServiceHostPathFromModPath(modItem.path)
-    if (csHost) {
-      await router.push(csHost)
-      return !isStale()
-    }
+    if (csHost) return pushSidebarRoute(router, csHost, isStale)
     console.warn('[sidebarNavigation] Mod 路由未注册，路径无效:', modItem.path)
   }
 
@@ -148,46 +187,31 @@ async function performSidebarNavigation(
     if (modBusinessPath) {
       if (router.resolve(modBusinessPath).matched.length === 0) {
         try {
-          await ensureModRoutesRegistered(router, options.getModRoutes)
+          await ensureModRoutesRegisteredUnlessStale(router, options.getModRoutes, isStale)
         } catch (e) {
           console.warn('[sidebarNavigation] 补注册 Mod 路由失败:', e)
         }
       }
       if (isStale()) return false
       if (router.resolve(modBusinessPath).matched.length > 0) {
-        await router.push(modBusinessPath)
-        return !isStale()
+        return pushSidebarRoute(router, modBusinessPath, isStale)
       }
       const legacy = resolveLegacyRouteFromModPath(router, modBusinessPath)
-      if (legacy) {
-        await router.push(legacy)
-        return !isStale()
-      }
+      if (legacy) return pushSidebarRoute(router, legacy, isStale)
       const csHost = customerServiceHostPathFromModPath(modBusinessPath)
-      if (csHost) {
-        await router.push(csHost)
-        return !isStale()
-      }
+      if (csHost) return pushSidebarRoute(router, csHost, isStale)
     }
   }
 
   if (typeof nameCandidate === 'string' && router.hasRoute(nameCandidate)) {
-    if (isStale()) return false
-    await router.push({ name: nameCandidate })
-    return !isStale()
+    return pushSidebarRoute(router, { name: nameCandidate }, isStale)
   }
   if (typeof routeName === 'string' && router.hasRoute(routeName)) {
-    if (isStale()) return false
-    await router.push({ name: routeName })
-    return !isStale()
+    return pushSidebarRoute(router, { name: routeName }, isStale)
   }
 
   const routePath = Object.entries(routeNameMap).find(([, name]) => name === viewKey)?.[0]
-  if (routePath) {
-    if (isStale()) return false
-    await router.push(routePath)
-    return !isStale()
-  }
+  if (routePath) return pushSidebarRoute(router, routePath, isStale)
 
   console.warn('[sidebarNavigation] 侧栏无对应路由:', viewKey)
   return false
@@ -209,12 +233,22 @@ async function drainSidebarNavigationQueue(router: Router): Promise<boolean> {
     }
   } finally {
     sidebarNavDrain = null
+    if (queuedSidebarViewKey) sidebarNavDrain = drainSidebarNavigationQueue(router)
   }
   return applied
 }
 
+export function getQueuedSidebarViewKey(): string | null {
+  return queuedSidebarViewKey
+}
+
+export function isSidebarNavigationPending(): boolean {
+  return sidebarNavDrain != null || queuedSidebarViewKey != null
+}
+
 /**
  * 侧栏 / xcagi:switch-view 统一导航：单队列 drain + 合并连点 + Enterprise 宿主路由优先。
+ * 新点击会抬升 generation，使仍在 await 的旧导航尽快判定 stale 并让出，不堵住快速连点。
  */
 export function navigateFromSidebarKey(router: Router, viewKey: string, options: NavigateFromSidebarOptions = {}): Promise<boolean> {
   const normalized = String(viewKey || '').trim()

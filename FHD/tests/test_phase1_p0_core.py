@@ -605,6 +605,53 @@ def test_error_handler_unhandled() -> None:
     assert r.json()["error_code"] == "internal_error"
 
 
+@pytest.mark.parametrize("kind", ["unexpected", "http", "validation", "app"])
+def test_reviewed_excel_failure_has_safe_stage_and_request_id(caplog, kind) -> None:
+    from app.middleware.error_handler import ReviewedExcelRoute
+
+    app = FastAPI()
+    app.router.route_class = ReviewedExcelRoute
+    register_exception_handlers(app)
+    app.add_middleware(RequestIdMiddleware)
+
+    @app.post("/api/templates/reviewed-excel/preview")
+    def failed_preview(request: Request):
+        request.state.elt_stage = "render_candidates"
+        if kind == "http":
+            raise StarletteHTTPException(status_code=409, detail="synthetic private cell")
+        if kind == "validation":
+            raise RequestValidationError(
+                [
+                    {
+                        "loc": ("body", "file"),
+                        "msg": "invalid",
+                        "type": "synthetic",
+                        "input": "synthetic private cell",
+                    }
+                ]
+            )
+        if kind == "app":
+            raise AppError(ErrorCode.FILE_READ_ERROR, "synthetic private cell", status_code=400)
+        raise RuntimeError("synthetic private cell and credential must stay out of logs")
+
+    response = TestClient(app).post(
+        "/api/templates/reviewed-excel/preview", headers={"X-Request-ID": "unsafe id"}
+    )
+    assert (
+        response.status_code
+        == {"unexpected": 500, "http": 409, "validation": 422, "app": 400}[kind]
+    )
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
+    assert len(response.json()["request_id"]) == 32
+    assert response.json()["stage"] == "render_candidates"
+    if kind == "unexpected":
+        assert response.json()["error_code"] == "elt_processing_failed"
+        assert "RuntimeError" in caplog.text
+        assert "private cell" not in response.text
+    assert response.json()["request_id"] in caplog.text
+    assert "private cell" not in caplog.text and "unsafe id" not in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # db validators + errors + misc
 # ---------------------------------------------------------------------------
@@ -678,3 +725,42 @@ def test_aibiz_png_transform_with_pil() -> None:
     assert len(cropped) <= len(raw)
     thumb = aibiz_mod._resize_png_thumb(raw, max_width=50)
     assert len(thumb) <= len(raw)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "notice_not_published",
+        "login_notice_required",
+        "model_connection_error",
+        "model_configuration_error",
+        "model_processing_failed",
+    ],
+)
+@pytest.mark.parametrize("extra", [False, True])
+def test_reviewed_excel_model_errors_keep_contract_without_provider_details(caplog, code, extra):
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.add_middleware(RequestIdMiddleware)
+
+    @app.post("/api/templates/reviewed-excel/preview")
+    def failed_preview():
+        detail = {"code": code, "message": "synthetic-private-provider-key", "retryable": True}
+        if extra:
+            detail["provider_response"] = "synthetic-private-cell"
+        raise StarletteHTTPException(status_code=503, detail=detail)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/templates/reviewed-excel/preview",
+            headers={"X-Request-ID": "synthetic-model-failure"},
+        )
+    data = response.json()
+    assert response.status_code == 503 and data["error_code"] == code
+    assert data["request_id"] == response.headers["X-Request-ID"] == "synthetic-model-failure"
+    assert data["stage"] == "preview"
+    assert data["outcome_unknown"] is (code == "model_processing_failed")
+    assert data["retryable"] is (
+        not extra and code in {"model_connection_error", "model_configuration_error"}
+    )
+    assert "synthetic-private" not in response.text + caplog.text

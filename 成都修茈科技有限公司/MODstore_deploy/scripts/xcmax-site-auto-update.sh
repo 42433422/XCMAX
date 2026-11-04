@@ -35,6 +35,16 @@ fi
 
 mkdir -p "$STATE_DIR"
 
+git_step() {
+  local dir="$1" stage="$2" limit="$3" rc=0
+  shift 3
+  echo "[stage] updater ${stage} begin (${limit} limit)" >&2
+  timeout --kill-after=15s "$limit" env GIT_TERMINAL_PROMPT=0 git -C "$dir" \
+    -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30 "$@" >>"$LOG" 2>&1 || rc=$?
+  echo "[stage] updater ${stage} exit=${rc}" >&2
+  return "$rc"
+}
+
 git_sync_repo() {
   local dir="$1"
   local label="$2"
@@ -42,24 +52,29 @@ git_sync_repo() {
     log "WARN: $label 不是 git 仓库: $dir"
     return 1
   fi
-  git -C "$dir" fetch origin "$BRANCH" >>"$LOG" 2>&1 || {
-    log "ERROR: $label git fetch 失败"
-    return 1
-  }
+  git_step "$dir" fetch 180s fetch --progress origin "$BRANCH" || return $?
   local remote_sha local_sha
-  remote_sha="$(git -C "$dir" rev-parse "origin/${BRANCH}")"
-  local_sha="$(git -C "$dir" rev-parse HEAD)"
+  remote_sha="$(git -C "$dir" rev-parse "origin/${BRANCH}")" || return $?
+  local_sha="$(git -C "$dir" rev-parse HEAD)" || return $?
+  if [[ ! "$remote_sha" =~ ^[0-9a-f]{40}$ || ! "$local_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "[err] updater identity missing or invalid; stopping sync" >&2
+    return 1
+  fi
   if [[ "$remote_sha" == "$local_sha" ]]; then
     log "$label 已是最新 sha=${local_sha:0:12}"
     echo "$local_sha"
     return 0
   fi
   log "$label 发现更新 ${local_sha:0:12} -> ${remote_sha:0:12}"
-  if git -C "$dir" merge --ff-only "origin/${BRANCH}" >>"$LOG" 2>&1; then
+  local merge_status=0
+  git_step "$dir" merge 120s merge --ff-only "origin/${BRANCH}" || merge_status=$?
+  if [[ "$merge_status" == 0 ]]; then
     log "$label fast-forward 成功"
+  elif [[ "$merge_status" == 124 || "$merge_status" == 137 ]]; then
+    return "$merge_status"  # A timed-out merge is not a reason to force-reset.
   elif [[ "${XCMAX_GIT_RESET_HARD:-0}" == "1" ]]; then
     log "$label ff-only 失败，执行 reset --hard origin/${BRANCH}"
-    git -C "$dir" reset --hard "origin/${BRANCH}" >>"$LOG" 2>&1
+    git_step "$dir" reset 120s reset --hard "origin/${BRANCH}" || return $?
   else
     log "ERROR: $label 无法 fast-forward（工作区脏？设 XCMAX_GIT_RESET_HARD=1 强制对齐）"
     return 1
@@ -69,6 +84,7 @@ git_sync_repo() {
 
 # Vite build 会把 public/ 根文件复制到 dist/；服务器常无法 npm build，需手动同步避免 SPA 回退 index.html
 sync_market_public_assets() {
+  node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" market || return $?
   local pub="${MODSTORE_ROOT}/market/public"
   local dist="${MODSTORE_ROOT}/market/dist"
   if [[ ! -d "$pub" || ! -d "$dist" ]]; then
@@ -79,6 +95,11 @@ sync_market_public_assets() {
     cp -af "$f" "$dist/"
     n=$((n + 1))
   done < <(find "$pub" -maxdepth 1 -type f -print0)
+  # The live release may carry an older public directory; shared brand files come from Git sources.
+  local brand
+  for brand in ai-butler-female-avatar-v1.png ai-butler-male-avatar-v1.jpg brand-xc-logo.jpg; do
+    cp -f "${XCMAX_ROOT}/${MODSTORE_PREFIX}/market/public/${brand}" "${dist}/${brand}"
+  done
   if [[ "$n" -gt 0 ]]; then
     log "market public 根资源已同步到 dist（${n} 个文件）"
   fi
@@ -102,7 +123,7 @@ sync_corp_pages_to_dist_fallback() {
     cp -af "$f" "${dist}/"
     n=$((n + 1))
   done
-  for f in styles.css main.js contact-intake.js contact-channels.js visualization.js; do
+  for f in styles.css main.js contact-intake.js contact-channels.js visualization.js release-data.js; do
     if [[ -f "${corp}/${f}" ]]; then
       cp -af "${corp}/${f}" "${dist}/"
       n=$((n + 1))
@@ -126,6 +147,7 @@ sync_corp_pages_to_dist_fallback() {
 
 # 官网 widget：nginx alias /corp-butler/ → 成都修茈科技有限公司/corp-butler/
 sync_corp_butler_assets() {
+  node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" market || return $?
   local corp_dir="${XCMAX_ROOT}/${SITE_SUBDIR}/corp-butler"
   # Build from the Git worktree. MODSTORE_ROOT may point at the immutable live
   # release, which is published only after this function completes.
@@ -138,9 +160,6 @@ sync_corp_butler_assets() {
     log "corp-butler brand-xc-logo.jpg 已同步"
   else
     log "WARN: 缺少 ${logo_src}，AI 管家浮球 Logo 将 404"
-  fi
-  if [[ -f "${MODSTORE_ROOT}/market/public/download-release.json" ]]; then
-    cp -af "${MODSTORE_ROOT}/market/public/download-release.json" "${corp_dir}/download-release.json"
   fi
   if [[ -f "${MODSTORE_ROOT}/market/public/download-action-board.json" ]]; then
     cp -af "${MODSTORE_ROOT}/market/public/download-action-board.json" "${corp_dir}/download-action-board.json"
@@ -293,7 +312,7 @@ sync_site_static() {
   # 注意：download-action-board.json / download-company-hall.json 由运行时 DB 投影写出，
   # 不要从 git 快照覆盖 live，否则官网会冻在旧业务日。
   local paths=(
-    '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'contact-channels.js' 'visualization.js' 'world-will.js'
+    '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'contact-channels.js' 'visualization.js' 'release-data.js' 'world-will.js'
     'world-will-ticker.js' 'world-will-ticker.css'
     'sitemap.xml' 'baidu_urls.txt' 'download-action-board.js'
     'images' 'site' 'assets' 'corp-butler' 'partials'
@@ -310,14 +329,25 @@ sync_site_static() {
 # publish step, homepage/nav fixes never become visible on xiu-ci.com.
 publish_site_static_to_live() {
   local git_site="${XCMAX_ROOT}/${SITE_SUBDIR}"
-  local live_site
-  live_site="$(readlink -f "$SITE_ROOT" 2>/dev/null || printf '%s' "$SITE_ROOT")"
-  local git_real
-  git_real="$(readlink -f "$git_site" 2>/dev/null || printf '%s' "$git_site")"
   if [[ ! -d "$git_site" ]]; then
     log "WARN: git site tree missing: $git_site"
     return 0
   fi
+  for base in release-history.json release-presentation.json; do
+    [[ -f "$git_site/data/$base" ]] || { log "ERROR: missing release projection: $base"; return 1; }
+  done
+  # Restore exact legacy URLs before exposing either the Git tree or a live copy.
+  if ! python3 "$git_site/scripts/evidence_assets.py" materialize; then
+    log "ERROR: evidence reconstruction failed; stop before publishing static pages"
+    return 1
+  fi
+  if ! node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" marketing; then
+    log "ERROR: shared media reconstruction failed; stop before publishing static pages"
+    return 1
+  fi
+  local live_site git_real
+  live_site="$(readlink -f "$SITE_ROOT" 2>/dev/null || printf '%s' "$SITE_ROOT")"
+  git_real="$(readlink -f "$git_site" 2>/dev/null || printf '%s' "$git_site")"
   if [[ -z "$live_site" || ! -d "$live_site" ]]; then
     log "WARN: live site root missing: $SITE_ROOT"
     return 0
@@ -333,7 +363,7 @@ publish_site_static_to_live() {
   local f base
   shopt -s nullglob
   for f in "$git_site"/*.html "$git_site"/styles.css "$git_site"/main.js "$git_site"/contact-intake.js \
-           "$git_site"/contact-channels.js \
+           "$git_site"/contact-channels.js "$git_site"/release-data.js \
            "$git_site"/visualization.js "$git_site"/world-will.js "$git_site"/world-will-ticker.js \
            "$git_site"/world-will-ticker.css \
            "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt \
@@ -344,25 +374,9 @@ publish_site_static_to_live() {
     cp -f "$f" "$live_site/$base"
   done
   shopt -u nullglob
-  # The desktop release workflow owns this pointer and updates it atomically only
-  # after platform artifacts and public URLs are verified.  A website refresh may
-  # seed a missing file, but must never overwrite an already verified release.
-  # Seed order matters: the newest immutable release copy is authoritative, the
-  # git copy is a historical fallback that can lag behind a published release
-  # (2026-09-05 回退事故：快照轮转后从过期 git 种子播种了 1.0.0.0).
-  if [[ ! -e "$live_site/download-release.json" ]]; then
-    local seed_src
-    seed_src="$(printf '%s\n' /var/www/xcagi-v[0-9]*.*.*.*/download-release.json 2>/dev/null | sort -V | tail -1 || true)"
-    if [[ -n "$seed_src" && -f "$seed_src" ]]; then
-      cp -f "$seed_src" "$live_site/download-release.json"
-      log "download-release.json 从不可变发布副本播种: $seed_src"
-    elif [[ -f "$git_site/download-release.json" ]]; then
-      cp -f "$git_site/download-release.json" "$live_site/download-release.json"
-      log "download-release.json 从 git 副本播种（可能滞后，待 release 校准）"
-    fi
-  else
-    log "保留发布流程管理的 download-release.json"
-  fi
+  # Static deployments never bootstrap desktop pointers from Git or newest versions.
+  # Missing publication metadata remains unavailable until the desktop release flow repairs it.
+  log "保留发布流程管理的 download-release.json（缺失时不推断发布）"
   if [[ -e "$live_site/download-windows-hotfix.json" ]]; then
     log "保留发布流程管理的 download-windows-hotfix.json"
   fi
@@ -373,8 +387,21 @@ publish_site_static_to_live() {
     cp -af "$git_site/assets/." "$live_site/assets/"
   fi
   if [[ -d "$git_site/corp-butler" ]]; then
-    cp -af "$git_site/corp-butler/." "$live_site/corp-butler/"
+    find "$git_site/corp-butler" -mindepth 1 -maxdepth 1 \
+      ! -name download-release.json ! -name download-windows-hotfix.json \
+      -exec cp -af {} "$live_site/corp-butler/" \;
   fi
+  for base in capabilities data/capabilities site/data; do
+    if [[ -d "$git_site/$base" ]]; then
+      mkdir -p "$live_site/$base"
+      cp -af "$git_site/$base/." "$live_site/$base/"
+    fi
+  done
+  mkdir -p "$live_site/data"
+  chmod u+w "$live_site/data"
+  for base in release-history.json release-presentation.json; do
+    cp -f "$git_site/data/$base" "$live_site/data/$base"
+  done
   # Keep release root traversable for unprivileged nginx after chmod u+w above.
   chmod a+rx "$live_site" 2>/dev/null || true
   log "live root 静态发布完成"
@@ -487,6 +514,10 @@ elif [[ -f "${STATE_DIR}/modstore.sha" ]]; then
   OLD_XCMAX_SHA=""
 fi
 
+if [[ "$(readlink -f "${XCMAX_ROOT}/${SITE_SUBDIR}")" == "$(readlink -f "$SITE_ROOT")" ]]; then
+  log "ERROR: live site must be separate from Git before sync; preserve public pointers"
+  exit 1
+fi
 NEW_XCMAX_SHA=""
 if NEW_XCMAX_SHA="$(git_sync_repo "$XCMAX_ROOT" "XCMAX")"; then
   :
@@ -495,6 +526,14 @@ else
   exit 1
 fi
 
+# All live copies, including first-start market rebuilds, share one lock with
+# desktop pointer promotion and immutable activation. The subshell closes fd8;
+# functions below never reacquire it or invoke another publication entry point.
+(
+PUBLICATION_LOCK="${XCMAX_PUBLICATION_LOCK:-/run/lock/xcmax-publication.lock}"
+mkdir -p "$(dirname "$PUBLICATION_LOCK")"
+exec 8>"$PUBLICATION_LOCK"
+flock -w 60 8 || { log "ERROR: public-site publication is busy"; exit 1; }
 REPO_CHANGED=false
 if [[ -z "$OLD_XCMAX_SHA" || "$OLD_XCMAX_SHA" != "$NEW_XCMAX_SHA" ]]; then
   REPO_CHANGED=true
@@ -569,6 +608,7 @@ ensure_market_dist || true
 validate_market_dist_identity || true
 
 restart_app_services
+)
 
 sync_nginx_corp_root() {
   local conf_src="${SITE_ROOT}/nginx-xiu-ci-root.conf"

@@ -74,7 +74,7 @@ export function useAdminUnlock(deps: AdminUnlockDeps) {
       authStore.setAdminDigestUnlock(String(res.expires_at || ''))
       adminUnlockOpen.value = false
       currentMode.value = 'admin'
-      const target = pendingAdminRouteName.value || 'admin-database'
+      const target = pendingAdminRouteName.value || 'admin-overview'
       pendingAdminRouteName.value = null
       void router.push({ name: target })
     } catch (e) {

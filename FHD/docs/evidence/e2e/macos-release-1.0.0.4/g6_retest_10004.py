@@ -2,7 +2,9 @@
 用法: XCAGI_TEST_USER=... XCAGI_TEST_PASS=... python3 g6_retest_10004.py
 输出: g6-post-ota-10004.json
 """
-import json, os, urllib.request
+import json
+import os
+import urllib.request
 
 BASE = "http://127.0.0.1:17500"
 USER = os.environ["XCAGI_TEST_USER"]

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     ApprovalRequest,
     ApprovalStatus,
     PlanGraph,

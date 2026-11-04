@@ -1,5 +1,10 @@
 <template>
   <div class="im-messenger">
+    <p v-if="isCustomerEnterpriseCs() && (enterpriseCsError || enterpriseCsUnconfirmed)" role="alert">
+      {{ enterpriseCsError || '发送结果待核对，请先检查会话，勿重复发送。' }} <router-link to="/settings">检查账号与连接</router-link>
+      <button v-if="enterpriseCsUnconfirmed" type="button" @click="confirmCsReconciliation">已核对会话，解除重复发送保护</button>
+      <button type="button" :disabled="busy" @click="refreshEnterpriseCsThread()">重新连接</button>
+    </p>
     <div class="im-body">
       <ConversationSidebar
         :is-admin-customer-service-console="isAdminCustomerServiceConsole"
@@ -64,7 +69,7 @@
         v-else-if="activeConversationId"
         :active-title="activeTitle"
         :has-more-history="hasMoreHistory"
-        :busy="busy"
+        :busy="busy || (isCustomerEnterpriseCs() && enterpriseCsUnconfirmed)"
         :messages="messages"
         v-model:draft="draft"
         :is-my-message="isMyMessage"
@@ -76,7 +81,9 @@
         @load-older="loadOlderMessages"
         @send="onSend"
         @change-cs-mode="onChangeCsMode"
-      />
+      >
+        <template #ticket-results><SharedIssueAcceptancePanel v-if="activeCustomerCsConversation" /></template>
+      </ConversationChat>
       <main v-else class="im-chat im-chat--empty">
         <i class="fa fa-comment-o" aria-hidden="true"></i>
         <p>选择左侧会话开始聊天</p>
@@ -97,22 +104,18 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { defineAsyncComponent, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   createDirectConversation,
   fetchCsInbox,
-  fetchCsInboxMessages,
   fetchImConversations,
   fetchImMessages,
-  markImRead,
-  replyCsInbox,
-  sendEnterpriseCsMessage,
-  sendImMessage,
   type ImContact,
   type ImConversationSummary,
   type ImMessage,
 } from '@/api/im'
 import { authApi } from '@/api/auth'
+import { useAccountProfileStore } from '@/stores/accountProfile'
 import { useImSounds } from '@/composables/useImSounds'
 import { showAppToast } from '@/composables/useAppToast'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
@@ -142,12 +145,15 @@ import {
   type ExternalAppEntry,
   type SystemEmployeeEntry,
 } from '@/composables/messenger/useMessengerEntries'
+import { useEnterpriseCsRecovery } from '@/utils/enterpriseCsRecovery'
+import SharedIssueAcceptancePanel from '@/components/SharedIssueAcceptancePanel.vue'
 import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue'
-import AiGroupChatView from '@/views/AiGroupChatView.vue'
 import MessengerContactPicker from '@/views/im/MessengerContactPicker.vue'
 import ConversationSidebar from '@/views/im/ConversationSidebar.vue'
 import SystemEmployeeChat from '@/views/im/SystemEmployeeChat.vue'
 import ConversationChat from '@/views/im/ConversationChat.vue'
+
+const AiGroupChatView = defineAsyncComponent(() => import('@/views/AiGroupChatView.vue'))
 
 type CurrentUserPayload = {
   user?: { id?: number }
@@ -174,6 +180,9 @@ const {
   activeCustomerCsConversation,
   isCustomerEnterpriseCs,
   refreshEnterpriseCsThread,
+  enterpriseCsError,
+  enterpriseCsSendError,
+  enterpriseCsUnconfirmed,
   startEnterpriseCsPolling,
   stopEnterpriseCsPolling,
 } = useEnterpriseCsBridge({
@@ -182,15 +191,22 @@ const {
   activeConversationId,
   messages,
   playIncoming,
-  scrollToBottom,
+  scrollEl,
 })
+useEnterpriseCsRecovery({ draft, error: enterpriseCsSendError, uncertain: enterpriseCsUnconfirmed,
+  conversationId: activeConversationId, active: () => isCustomerEnterpriseCs() })
+function confirmCsReconciliation(): void {
+  if (!window.confirm('请先核对会话中是否已有原消息。解除保护后再次发送可能产生重复消息；是否已核对并继续？')) return
+  enterpriseCsUnconfirmed.value = false
+  enterpriseCsSendError.value = ''
+}
 const { refreshCsInbox, startCsInboxPolling, stopCsInboxPolling } = useCsInboxBridge({
   enabled: isAdminCustomerServiceConsole,
   conversations,
   activeConversationId,
   messages,
   playIncoming,
-  scrollToBottom,
+  scrollEl,
 })
 const { onImMessage, onImReadState } = useXcmaxSync()
 
@@ -275,8 +291,9 @@ const {
   restoreOverlappingAssistantFloat,
 })
 
-// 会话选择与发送动作拆分至 ./im-messenger/useImConversationActions.ts（行为与拆分前一致）
 const { selectConversation, onSend } = useImConversationActions({
+  enterpriseCsError: enterpriseCsSendError,
+  enterpriseCsUnconfirmed,
   localUserId,
   conversations,
   activeConversationId,
@@ -350,7 +367,7 @@ const { applyIncomingMessage, applyReadState, connectWs, disconnectWs } = useImR
   messages,
   wsConnected,
   wsConnecting,
-  scrollToBottom,
+  scrollEl,
   loadConversations,
   playIncoming,
 })
@@ -394,7 +411,14 @@ async function loadConversations(): Promise<void> {
   if (!localUserId.value) return
   busy.value = true
   try {
-    const regular = await fetchImConversations()
+    const regular = await fetchImConversations({
+      firstPageOnly: true,
+      onMore: (more) => {
+        const seen = new Set(conversations.value.map((item) => item.id))
+        const extra = more.filter((item) => !seen.has(item.id))
+        if (extra.length) conversations.value = [...conversations.value, ...extra]
+      },
+    })
     if (isAdminCustomerServiceConsole.value) {
       // 运营者:把「企业客户→专属客服」收件箱会话并进侧栏(置顶),按 id 去重。
       let inbox: ImConversationSummary[] = []
@@ -430,13 +454,20 @@ const { activeCsConversation, csAutomationBusy, onChangeCsMode } = useCustomerSe
 async function loadOlderMessages(): Promise<void> {
   const id = activeConversationId.value
   if (!id || !localUserId.value || !messages.value.length || isCustomerEnterpriseCs(id)) return
+  const scrollContainer = scrollEl.value
   busy.value = true
   try {
     const beforeId = messages.value[0]?.id
     const older = await fetchImMessages(id, { limit: 50, beforeId })
     hasMoreHistory.value = older.length >= 50
     if (older.length) {
+      const previousScrollHeight = scrollContainer?.scrollHeight ?? 0
+      const previousScrollTop = scrollContainer?.scrollTop ?? 0
       messages.value = [...older, ...messages.value]
+      await nextTick()
+      if (activeConversationId.value === id && scrollEl.value === scrollContainer && scrollContainer) {
+        scrollContainer.scrollTop = previousScrollTop + scrollContainer.scrollHeight - previousScrollHeight
+      }
     }
   } catch (error) {
     showAppToast(error instanceof Error ? error.message : '加载历史失败', 'error')
@@ -450,26 +481,46 @@ function scrollToBottom(): void {
   if (el) el.scrollTop = el.scrollHeight
 }
 
-onMounted(async () => {
-  localUserId.value = await resolveLocalUserId()
-  if (!localUserId.value) {
-    showAppToast('请先登录后使用信息功能', 'warning')
-    return
+function knownLocalUserId(): number | null {
+  try {
+    const id = Number(useAccountProfileStore().localUserId)
+    return Number.isFinite(id) && id > 0 ? id : null
+  } catch {
+    return null
   }
-  offSyncMessage = onImMessage(({ conversation_id, message }) => {
-    applyIncomingMessage(message, conversation_id)
-  })
-  offSyncRead = onImReadState(({ conversation_id, user_id, last_message_id }) => {
-    applyReadState(conversation_id, user_id, last_message_id)
-  })
-  connectWs()
-  const initialLoads = [loadContacts(), loadConversations(), loadDutyEmployees()]
-  if (isAdminCustomerServiceConsole.value) {
-    closeOverlappingAssistantFloat()
-    activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY
-    initialLoads.push(loadCodexConversation())
-  }
-  await Promise.all(initialLoads)
+}
+
+onMounted(() => {
+  const knownId = knownLocalUserId()
+  if (knownId) localUserId.value = knownId
+  const contactsPromise = loadContacts()
+  const identityPromise = resolveLocalUserId()
+  void (async () => {
+    if (!localUserId.value || !isDesktopShell()) {
+      const id = await identityPromise
+      if (id) localUserId.value = id
+    } else {
+      void identityPromise.then((id) => { if (id) localUserId.value = id })
+    }
+    if (!localUserId.value) {
+      showAppToast('请先登录后使用信息功能', 'warning')
+      return
+    }
+    offSyncMessage = onImMessage(({ conversation_id, message }) => {
+      applyIncomingMessage(message, conversation_id)
+    })
+    offSyncRead = onImReadState(({ conversation_id, user_id, last_message_id }) => {
+      applyReadState(conversation_id, user_id, last_message_id)
+    })
+    connectWs()
+    const initialLoads = [contactsPromise, loadConversations(), loadDutyEmployees()]
+    if (isAdminCustomerServiceConsole.value) {
+      closeOverlappingAssistantFloat()
+      activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY
+      initialLoads.push(loadCodexConversation())
+    }
+    await Promise.all(initialLoads)
+  })()
 })
 
 onUnmounted(() => {
@@ -487,4 +538,3 @@ onUnmounted(() => {
 </script>
 
 <style scoped src="./im-messenger/im-messenger.css"></style>
-<style scoped src="./ImMessengerResponsive.css"></style>

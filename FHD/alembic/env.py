@@ -17,7 +17,7 @@ try:
 except ImportError:
     pass
 
-from app.db.base import Base
+from app.db.db_base import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -52,9 +52,13 @@ _NON_ORM_TABLES = {
 }
 
 
+# Explicitly managed, retention-only schema; NOT created by the baseline.
+_RETAINED_OPT_IN_TABLES = {"agent_business_actions"}
+
+
 def _include_name(name, type_, parent_names):
     if type_ == "table":
-        return name not in _NON_ORM_TABLES
+        return name not in _NON_ORM_TABLES | _RETAINED_OPT_IN_TABLES
     return True
 
 
@@ -103,7 +107,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    config.set_main_option("sqlalchemy.url", _database_url())
+    config.set_main_option("sqlalchemy.url", _database_url().replace("%", "%%"))
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),

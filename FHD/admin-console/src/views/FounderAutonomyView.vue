@@ -1,8 +1,8 @@
 <template>
-  <main class="founder-view" id="view-founder-autonomy">
-    <header class="founder-hero">
+  <main class="founder-view page-content" id="view-founder-autonomy">
+    <header class="founder-hero page-header">
       <div>
-        <p class="eyebrow">FOUNDER MODE · STRATEGIC ONLY</p>
+        <p class="eyebrow">创始人视角 · 只看战略</p>
         <h1>创始人自治驾驶舱</h1>
         <p class="hero-copy">日常运营交给 AI 员工与 Loops；这里只保留战略方向、少量例外与 veto。</p>
       </div>

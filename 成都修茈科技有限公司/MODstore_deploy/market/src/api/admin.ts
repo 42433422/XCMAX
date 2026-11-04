@@ -50,8 +50,14 @@ interface UserModsResponse extends Record<string, unknown> {
   mod_ids?: string[]
 }
 
+interface AdminStatusResponse extends Record<string, unknown> {
+  ok?: boolean
+  total_catalog_items?: unknown
+  total_users?: unknown
+}
+
 export const admin = {
-  adminStatus: () => req('/api/admin/status'),
+  adminStatus: () => req<AdminStatusResponse>('/api/admin/status'),
   adminResearchSettings: () => req('/api/admin/research-settings'),
   adminSaveResearchSettings: (data: Record<string, unknown>) =>
     req('/api/admin/research-settings', { method: 'PUT', body: JSON.stringify(data || {}) }),
@@ -290,7 +296,6 @@ export const admin = {
       body: JSON.stringify({ secret }),
     }),
   adminDeleteAiAccount: (id: number | string) => req(`/api/admin/ai-accounts/${encodeURIComponent(String(id))}`, { method: 'DELETE' }),
-  butlerQqStatus: () => req('/api/agent/butler/qq/status'),
   adminYuangonOnboardStatus: () => req('/api/admin/yuangon-onboard/status'),
   adminYuangonOnboardRun: (body: { dry_run?: boolean; force?: boolean; pkg_ids?: string }) =>
     req('/api/admin/yuangon-onboard/run', { method: 'POST', body: JSON.stringify(body || {}) }),

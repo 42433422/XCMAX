@@ -6,7 +6,7 @@
   2. hardcoded_fact_violations 公开页面禁止手写事实（版本/价格/Git SHA/SHA256/能力数）
   3. video_test               公开视频：时长 ≤60s、poster 存在、SHA256 与证据记录一致、原始录像可追溯
   4. broken_links             本地链接/资源不 404
-  5. runtime tests            移动端/桌面端/视频播放/HTTP Range —— 由验收运行时（Playwright）回填
+  5. runtime tests            桌面/移动/公开媒体播放与 Range；无获准媒体时须验证其未展示
 
 result 规则：
   PENDING  存在未回填的 runtime 结果
@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import runpy
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -174,6 +175,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runtime", help="Playwright 运行时结果 JSON（mobile_test/desktop_test/video_runtime_test/range_test）")
     args = ap.parse_args()
+    runpy.run_path(str(Path(__file__).with_name("evidence_assets.py")))["materialize"](REPO_ROOT)
+    subprocess.run(["node", str(REPO_ROOT / "scripts/dev/materialize_media_assets.mjs"), "marketing"], check=True)
 
     public_site_path = DATA_DIR / "public-site.json"
     if not public_site_path.exists():
@@ -200,7 +203,9 @@ def main() -> None:
         result = "BLOCKED"
     elif "pending" in (mobile_test, desktop_test, video_runtime_test, range_test):
         result = "PENDING"
-    elif all(x == "pass" for x in (mobile_test, desktop_test, video_runtime_test, range_test)):
+    elif (mobile_test == "pass" and desktop_test == "pass" and
+          (video_runtime_test == "pass" and range_test == "pass" or
+           not videos and video_runtime_test == "not_applicable" and range_test == "not_applicable")):
         result = "PASS"
     else:
         result = "BLOCKED"
@@ -213,7 +218,8 @@ def main() -> None:
         "version": public_site.get("product", {}).get("version"),
         "pricing_ssot_sha": file_sha(REPO_ROOT / "FHD" / "config" / "saas_plans.json"),
         "capability_ssot_sha": file_sha(SITE_ROOT / "data" / "capabilities.json"),
-        "release_manifest_sha": file_sha(SITE_ROOT / "download-release.json"),
+        "release_intent_sha": file_sha(REPO_ROOT / "FHD/config/download_release.json"),
+        "history_projection_sha": file_sha(SITE_ROOT / "data/release-history.json"),
         "cases_ssot_sha": file_sha(REPO_ROOT / "FHD" / "config" / "public_cases.json"),
         "page_count": len(public_pages()),
         "broken_links": broken_links,
@@ -232,6 +238,7 @@ def main() -> None:
         "mobile_test": mobile_test,
         "desktop_test": desktop_test,
         "video_runtime_test": video_runtime_test,
+        "video_runtime_scope": "published videos" if videos else "none approved for public display",
         "range_test": range_test,
         "result": result,
         "_gate": "result=PASS 才允许发布；BLOCKED 必须修复；PENDING 需回填运行时结果。禁止改断言、改结果字段或删测试来过门禁。",

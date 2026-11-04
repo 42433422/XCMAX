@@ -1,9 +1,10 @@
 import { api, buildFullApiUrl } from './core'
-import { LS_MARKET_ACCESS_TOKEN } from './marketAccount'
+import { readCurrentMarketAccessToken } from './marketAccount'
 import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 import type { RequestOptions } from './core'
 import type { ApiResponse } from '@/types/api'
 import type { ChatRequest, ChatResponse, ChatSession } from '@/types/chat'
+import type { ChatModelRoute } from '@/utils/chatModelRoute'
 import { readPlannerSseResponse, resolveChatStreamPath, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { asRecord, asString } from '@/utils/typeGuards'
 import {
@@ -29,8 +30,7 @@ export type ChatStreamRequestInit = RequestInit & {
 }
 
 function readMarketBearerHeader(): Record<string, string> {
-  if (typeof window === 'undefined') return {}
-  const token = String(window.localStorage.getItem(LS_MARKET_ACCESS_TOKEN) || '').trim()
+  const token = readCurrentMarketAccessToken()
   if (!token) return {}
   return { Authorization: token.toLowerCase().startsWith('bearer ') ? token : `Bearer ${token}` }
 }
@@ -64,12 +64,13 @@ function withMarketAuthorization(options: RequestOptions = {}): RequestOptions {
 }
 
 /** Planner SSE：非 2xx 时解析 JSON 错误文案 */
-export async function parseChatStreamErrorResponse(res: Response): Promise<string> {
+export async function parseChatStreamErrorResponse(res: Response, onRouteMetadata?: (value: unknown) => void): Promise<string> {
   let msg = `流式请求失败（${res.status}）`
   try {
     const ct = res.headers.get('content-type') || ''
     if (ct.includes('application/json')) {
       const j = asRecord(await res.json())
+      onRouteMetadata?.(j.route_metadata || asRecord(j.detail).route_metadata)
       msg = asString(j.message || j.detail) || msg
     }
   } catch {
@@ -79,6 +80,14 @@ export async function parseChatStreamErrorResponse(res: Response): Promise<strin
 }
 
 export const chatApi = {
+  getModelStatus(): Promise<{ ok: boolean; provider: string; model: string } & Partial<ChatModelRoute>> {
+    return api.get('/api/conversation/model-status', {}, { timeoutMs: 20_000, cache: 'no-store' })
+  },
+
+  followPlatformModel(): Promise<{ ok: boolean }> {
+    return api.put('/api/conversation/model-preference', { mode: 'platform' })
+  },
+
   sendChat(payload: ChatRequest, options: RequestOptions = {}): Promise<ApiResponse<ChatResponse>> {
     return api.post<ApiResponse<ChatResponse>>(resolvePlannerChatPath(), payload, withMarketAuthorization(options))
   },
@@ -157,7 +166,7 @@ export const chatApi = {
   },
 
   getConversations(params: Record<string, unknown> = {}): Promise<ApiResponse<ChatSession[]>> {
-    return api.get<ApiResponse<ChatSession[]>>('/api/conversations/sessions', params)
+    return api.get<ApiResponse<ChatSession[]>>('/api/conversations/sessions', params, { timeoutMs: 20_000 })
   },
 
   clearConversations(data: Record<string, unknown> = {}): Promise<ApiResponse<{ deleted: number }>> {
@@ -165,7 +174,7 @@ export const chatApi = {
   },
 
   getConversation(sessionId: string): Promise<ApiResponse<ChatSession>> {
-    return api.get<ApiResponse<ChatSession>>(`/api/conversations/${sessionId}`)
+    return api.get<ApiResponse<ChatSession>>(`/api/conversations/${sessionId}`, {}, { timeoutMs: 20_000 })
   },
 
   renameConversation(sessionId: string, title: string): Promise<ApiResponse<{ success: boolean }>> {
@@ -177,7 +186,7 @@ export const chatApi = {
   },
 
   saveMessage(payload: unknown): Promise<ApiResponse<unknown>> {
-    return api.post<ApiResponse<unknown>>('/api/conversations/message', payload)
+    return api.post<ApiResponse<unknown>>('/api/conversations/message', payload, { timeoutMs: 20_000 })
   },
 
   newConversation(data: Record<string, unknown> = {}): Promise<ApiResponse<{ session_id: string }>> {

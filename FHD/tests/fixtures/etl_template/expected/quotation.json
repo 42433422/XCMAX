@@ -1,0 +1,8 @@
+{
+  "sheet": "报价",
+  "merged_range": "A1:C1",
+  "instance_cells": ["B2", "B3"],
+  "formula_cell": "C3",
+  "formula": "=B3*2",
+  "fixed_cell": "A1"
+}

@@ -14,61 +14,13 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-
-
-def _make_svc() -> AIChatApplicationService:
-    """构造能正常实例化的服务（模拟所有构造依赖）。"""
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
-
-
-def _make_plan(
-    *,
-    plan_id: str = "plan_test",
-    intent: str = "test_intent",
-    nodes=None,
-    todo_steps=None,
-    risk_level: str = "low",
-    metadata=None,
-):
-    """构造一个简单的 plan 对象（避免依赖真实 PlanGraph）。"""
-    return SimpleNamespace(
-        plan_id=plan_id,
-        intent=intent,
-        nodes=nodes or [],
-        todo_steps=todo_steps or [],
-        risk_level=risk_level,
-        metadata=metadata or {},
-    )
-
-
-def _make_node(
-    *,
-    node_id: str = "n1",
-    tool_id: str = "products",
-    action: str = "query",
-    params=None,
-    risk: str = "low",
-    idempotent: bool = True,
-    depends_on=None,
-    description: str = "",
-):
-    return SimpleNamespace(
-        node_id=node_id,
-        tool_id=tool_id,
-        action=action,
-        params=params or {},
-        risk=risk,
-        idempotent=idempotent,
-        depends_on=depends_on or [],
-        description=description,
-    )
+from tests.test_application.ai_chat_test_helpers import (
+    _make_node,
+    _make_node_result,
+    _make_plan,
+    _make_run_result,
+    _make_svc,
+)
 
 
 def _make_step(
@@ -120,54 +72,6 @@ def _make_agent_run(
         intent=intent,
         message=message,
         user_id=user_id,
-    )
-
-
-def _make_node_result(
-    *,
-    node_id: str = "n1",
-    tool_id: str = "products",
-    action: str = "query",
-    success: bool = True,
-    output=None,
-    error: str = "",
-    params=None,
-    retryable: bool = True,
-    retries: int = 0,
-    recovery_hint: str = "",
-    started_at: str = "",
-    finished_at: str = "",
-    duration_ms: int = 0,
-):
-    return SimpleNamespace(
-        node_id=node_id,
-        tool_id=tool_id,
-        action=action,
-        success=success,
-        output=output or {},
-        error=error,
-        params=params or {},
-        retryable=retryable,
-        retries=retries,
-        recovery_hint=recovery_hint,
-        started_at=started_at,
-        finished_at=finished_at,
-        duration_ms=duration_ms,
-    )
-
-
-def _make_run_result(
-    *,
-    success: bool = True,
-    message: str = "",
-    node_results=None,
-    final_context=None,
-):
-    return SimpleNamespace(
-        success=success,
-        message=message,
-        node_results=node_results or [],
-        final_context=final_context or {},
     )
 
 
@@ -542,7 +446,11 @@ class TestAttachDeterministicWorkflowTrace:
         payload = {"success": True, "message": "ok"}
         import sys
 
-        saved = sys.modules.pop("app.application.agent_orchestrator.chat_trace", None)
+        module_name = "app.application.agent_orchestrator.chat_trace"
+        parent = sys.modules["app.application.agent_orchestrator"]
+        missing = object()
+        saved = sys.modules.pop(module_name, missing)
+        saved_attribute = getattr(parent, "chat_trace", missing)
         try:
             result = AIChatApplicationService._attach_deterministic_workflow_trace(
                 payload,
@@ -553,9 +461,33 @@ class TestAttachDeterministicWorkflowTrace:
                 intent="test",
             )
         finally:
-            if saved is not None:
-                sys.modules["app.application.agent_orchestrator.chat_trace"] = saved
+            if saved is missing:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = saved
+            # Re-import also writes the parent package attribute. Restore both
+            # identities so later patches target the module used by imports.
+            if saved_attribute is missing:
+                parent.__dict__.pop("chat_trace", None)
+            else:
+                parent.chat_trace = saved_attribute
         assert result is payload
+
+    @pytest.mark.parametrize("preloaded", [False, True])
+    def test_import_error_restores_module_and_parent_identity(self, monkeypatch, preloaded):
+        import importlib
+        import sys
+
+        name = "app.application.agent_orchestrator.chat_trace"
+        original = importlib.import_module(name)
+        parent = sys.modules["app.application.agent_orchestrator"]
+        monkeypatch.setattr(parent, "chat_trace", original)
+        if not preloaded:
+            monkeypatch.delitem(sys.modules, name)
+            monkeypatch.delattr(parent, "chat_trace")
+        self.test_import_error_returns_payload_unchanged()
+        assert sys.modules.get(name) is (original if preloaded else None)
+        assert getattr(parent, "chat_trace", None) is (original if preloaded else None)
 
     def test_with_file_context_attaches_trace(self):
         payload = {"success": True, "message": "ok"}
@@ -2189,7 +2121,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "sess1"},
+                {"session_id": "sess1", "local_user_id": 17},
                 {
                     "success": True,
                     "response": "reply",
@@ -2205,7 +2137,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"conversation_id": "conv1"},
+                {"conversation_id": "conv1", "local_user_id": 17},
                 {
                     "success": True,
                     "data": {"data": {"tool_key": "products"}},
@@ -2221,7 +2153,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "s1"},
+                {"session_id": "s1", "local_user_id": 17},
                 {
                     "success": True,
                     "data": {"data": {"intent": "excel_import_to_db", "result": {"imported": 5}}},
@@ -2238,7 +2170,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "s1"},
+                {"session_id": "s1", "local_user_id": 17},
                 {
                     "success": True,
                     "data": {"data": {"document": {"doc_name": "test.docx"}}},
@@ -3059,7 +2991,7 @@ class TestTryHandleDynamicWorkflow:
     ):
         from app.application.workflow.clarification_node import needs_clarification
         from app.application.workflow.planner import LLMWorkflowPlanner
-        from app.application.workflow.types import PlanGraph, WorkflowNode
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
         svc = _make_svc()
         svc.workflow_engine.run = Mock(side_effect=AssertionError("must await approval"))
@@ -3115,9 +3047,94 @@ class TestTryHandleDynamicWorkflow:
         svc.workflow_engine.run.assert_not_called()
         svc.approval_service.create_approval_request.assert_not_called()
 
+    @pytest.mark.parametrize("complete", [False, True])
+    def test_sales_missing_inputs_replan_before_approval(self, complete):
+        from app.application.workflow.clarification_node import needs_clarification
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+        svc = _make_svc()
+        original = "请创建销售订单，必须先人工审批。"
+        node = WorkflowNode(
+            node_id="sale",
+            tool_id="sales",
+            action="create_order",
+            params={},
+            risk="high",
+            idempotent=False,
+        )
+        svc._pending_workflows["u1"] = {
+            "kind": "clarification",
+            "plan": PlanGraph(plan_id="missing-sale", intent="sales_create_order", nodes=[node]),
+            "target_node_id": "sale",
+            "clarification": {"reason": "missing_required"},
+            "runtime_context": {"message": original},
+        }
+        params = {
+            "customer_name": "Mac验收客户",
+            "items": [{"product_id": 1, "quantity": 2, "unit_price": 9.9}],
+        }
+        if not complete:
+            params.pop("items")
+        svc.workflow_planner.plan.return_value = PlanGraph(
+            plan_id="continued-sale",
+            intent="sales_create_order",
+            nodes=[
+                WorkflowNode(
+                    node_id="sale",
+                    tool_id="sales",
+                    action="create_order",
+                    params=params,
+                    risk="high",
+                    idempotent=False,
+                )
+            ],
+        )
+        svc._open_clarification_gate = Mock(
+            side_effect=lambda **kw: {
+                "missing": bool(needs_clarification(kw["plan"], kw["tool_registry"]))
+            }
+        )
+        message = "客户名称 Mac验收客户，产品ID 1，数量2，单价9.90元，先人工审批。"
+        result = svc._try_handle_dynamic_workflow_after_excel(
+            "u1", message, "normal", {"tool_execution_profile": "normal"}, message, False
+        )
+        assert result == {"missing": not complete}
+        assert original in svc.workflow_planner.plan.call_args.kwargs["message"]
+        assert message in svc.workflow_planner.plan.call_args.kwargs["message"]
+        assert "u1" not in svc._pending_workflows
+        svc.workflow_engine.run.assert_not_called()
+        svc.approval_service.create_approval_request.assert_not_called()
+
+    @pytest.mark.parametrize("message", ["刚才修改的客户联系人是什么", "查询刚才那个客户"])
+    @pytest.mark.parametrize("target", [None, {"entity": "customers", "id": 42}])
+    def test_recent_record_followup_uses_only_session_target(self, message, target):
+        svc = _make_svc()
+        svc.workflow_planner.plan.return_value = None
+        with patch(
+            "app.domain.shared_services.tools_workflow_registered.get_recent_business_db_target",
+            return_value=target,
+        ) as recent:
+            result = svc._try_handle_dynamic_workflow_after_excel(
+                "owner-session",
+                message,
+                "pro",
+                {"tool_execution_profile": "pro_default"},
+                message,
+                False,
+            )
+        recent.assert_called_once_with("owner-session")
+        if target is None:
+            assert result["data"]["data"]["reason"] == "missing_recent_database_target"
+            svc.workflow_planner.plan.assert_not_called()
+        else:
+            assert (
+                svc.workflow_planner.plan.call_args.kwargs["message"]
+                == f"{message}；数据库客户 ID: 42"
+            )
+
     def test_pending_workflow_confirm(self):
         svc = _make_svc()
-        plan = _make_plan()
+        plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"message": "hello"},
@@ -3143,7 +3160,7 @@ class TestTryHandleDynamicWorkflow:
 
     def test_pending_workflow_cancel(self):
         svc = _make_svc()
-        plan = _make_plan()
+        plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"tenant_id": "42", "local_user_id": "7"},
@@ -3157,7 +3174,7 @@ class TestTryHandleDynamicWorkflow:
 
     def test_pending_workflow_confirm_with_agent_run(self):
         svc = _make_svc()
-        plan = _make_plan()
+        plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"message": "hello"},
@@ -3177,6 +3194,10 @@ class TestTryHandleDynamicWorkflow:
             ):
                 result = svc._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result["from_agent"] is True
+        mock_inst.continue_run.assert_called_once_with(
+            "run_1", approved_by="u1", runtime_context={"message": "hello"}
+        )
+        assert "u1" not in svc._pending_workflows
 
     def test_pending_workflow_confirm_with_approval(self):
         svc = _make_svc()

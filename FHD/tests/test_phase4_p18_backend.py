@@ -174,6 +174,7 @@ def test_analyze_action_sequence_and_suggestions(mem) -> None:
     memory.historical_contexts = [
         {"intent": "order"} if i % 2 == 0 else {"intent": "print"} for i in range(14)
     ]
+    mem._store.save_memory("u1", memory)
     seqs = mem._analyze_action_sequence(memory)
     assert any(s["count"] >= 2 for s in seqs)
     suggestions = mem.get_habit_suggestions("u1")

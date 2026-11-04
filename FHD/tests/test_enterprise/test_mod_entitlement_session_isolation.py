@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.enterprise import mod_entitlements as entitlements

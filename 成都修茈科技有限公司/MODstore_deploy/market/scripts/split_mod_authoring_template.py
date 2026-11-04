@@ -145,13 +145,17 @@ bindings_map = {
     "ExpertTabScan": scan_bindings,
 }
 
-out_dir = pathlib.Path(__file__).resolve().parents[1] / "src/features/mod-authoring/expert"
+out_dir = (
+    pathlib.Path(__file__).resolve().parents[1] / "src/features/mod-authoring/expert"
+)
 out_dir.mkdir(parents=True, exist_ok=True)
 
 for name, (start, end) in sections.items():
     body = slice_section(start, end)
     # remove v-show wrapper - keep inner content only
-    body = re.sub(r'^\s*<section v-show="tab === \'[^\']+\'" class="panel">\s*\n', "", body)
+    body = re.sub(
+        r'^\s*<section v-show="tab === \'[^\']+\'" class="panel">\s*\n', "", body
+    )
     body = re.sub(r"\n\s*</section>\s*$", "", body)
     content = wrapper.replace("{bindings}", bindings_map[name]).replace("{body}", body)
     (out_dir / f"{name}.vue").write_text(content, encoding="utf-8")
@@ -177,6 +181,8 @@ modals_bindings = """  empPickOpen,
   empModalSaving,
   submitEmployeeModal,
 """
-modals_content = wrapper.replace("{bindings}", modals_bindings).replace("{body}", modals.strip())
+modals_content = wrapper.replace("{bindings}", modals_bindings).replace(
+    "{body}", modals.strip()
+)
 (out_dir / "ExpertEmployeeModals.vue").write_text(modals_content, encoding="utf-8")
 print("wrote ExpertEmployeeModals")

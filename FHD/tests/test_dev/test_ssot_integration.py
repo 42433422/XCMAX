@@ -14,7 +14,7 @@ def test_ssot_list_shows_enabled_domains(capsys):
     新增 disabled 域(如 neuro-bus-events Phase A)不应破坏此测试。
     """
     from scripts.dev.ssot_cli import main
-    from scripts.dev.ssot_plugins.base import load_registry
+    from scripts.dev.ssot_plugins.plugin_base import load_registry
 
     registry_all = load_registry(ROOT / "config" / "ssot.yaml", enabled_only=False)
     registry_enabled = load_registry(ROOT / "config" / "ssot.yaml", enabled_only=True)

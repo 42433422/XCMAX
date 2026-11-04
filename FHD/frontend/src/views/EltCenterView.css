@@ -1,0 +1,109 @@
+.etl-center {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px 20px max(24px, env(safe-area-inset-bottom));
+  color: #172033;
+  background: #f5f7fb;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+.etl-center--chatlike {
+  gap: 0.75rem;
+}
+.etl-chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #16355f, #235d8c 58%, #168294);
+  color: #fff;
+  box-shadow: 0 10px 28px rgb(22 53 95 / 14%);
+  flex: 0 0 auto;
+}
+.etl-chat-header h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+.etl-chat-header p {
+  margin: 0;
+  opacity: 0.86;
+  font-size: 13px;
+}
+.etl-chat-header__link {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 13px;
+}
+.etl-workspaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.etl-workspaces button {
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #d5deea;
+  border-radius: 8px;
+  background: #fff;
+  color: #31506d;
+}
+.etl-workspaces button.active {
+  color: #fff;
+  background: #235d8c;
+  border-color: #235d8c;
+}
+.etl-intake-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.etl-workflow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+  flex: 0 0 auto;
+}
+.etl-workflow-steps--quiet {
+  opacity: 0.72;
+}
+.etl-workflow-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #5f6f7e;
+  font-size: 12px;
+}
+.etl-workflow-steps li span {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: #e4ebf3;
+  font-size: 11px;
+}
+.etl-workflow-steps li.active {
+  color: #16355f;
+  font-weight: 600;
+}
+.etl-workflow-steps li.active span {
+  background: #235d8c;
+  color: #fff;
+}
+@media (max-width: 900px) {
+  .etl-center { padding: 10px; }
+  .etl-chat-header { flex-direction: column; gap: 10px; padding: 14px; }
+}

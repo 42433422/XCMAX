@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "ind-lan-license",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 ind-lan-license 对应的 Windows 客户端页面 /lan-gate",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「局域网授权 - XCAGI」，主标题「FHD · 局域网授权」，地址 /lan-gate。 画面文字节选：FHD · 局域网授权 当前未启用局域网模式，无需授权。 进入系统 状态：未启用 本机 IP：127.0.0.1 主机管理员位",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=316266 mp4=70230 title=局域网授权 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-lan-license/ind-lan-license.log",
+    "sha256": "69f0a8319e70e4ea1169ef7fe464774ac498b66de0bf3d1cb318ca45f3efa6b9",
+    "bytes": 834
+  },
+  "media": [
+    {
+      "feature": "ind-lan-license",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-lan-license/ind-lan-license.png",
+      "sha256": "79148cf4749d120f310cdcac22ccae1e599f8f13c4ccc166e1dd00c829569bb2",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「局域网授权 - XCAGI」，主标题「FHD · 局域网授权」，地址 /lan-gate。 画面文字节选：FHD · 局域网授权 当前未启用局域网模式，无需授权。 进入系统 状态：未启用 本机 IP：127.0.0.1 主机管理员位",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-lan-license",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-lan-license/ind-lan-license.mp4",
+      "sha256": "203b034d64ec9f71f915a83d9c26301207afa8579d269f77b7eae4a0b4c80d1f",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「局域网授权 - XCAGI」，主标题「FHD · 局域网授权」，地址 /lan-gate。 画面文字节选：FHD · 局域网授权 当前未启用局域网模式，无需授权。 进入系统 状态：未启用 本机 IP：127.0.0.1 主机管理员位",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

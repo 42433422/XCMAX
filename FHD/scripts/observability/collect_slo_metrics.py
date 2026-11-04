@@ -13,6 +13,8 @@ import hashlib
 import json
 import os
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
@@ -129,26 +131,74 @@ def _canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+# Transient transport failures observed through the production SSH tunnel
+# (ConnectionResetError on 2026-10-29). Retry with backoff; never invent readings.
+_TRANSIENT_QUERY_ERRORS = (
+    ConnectionResetError,
+    TimeoutError,
+    urllib.error.URLError,
+    BrokenPipeError,
+)
+
+
 def prom_query(
     base_url: str,
     expr: str,
     bearer_token: str = "",
     query_at: datetime | None = None,
+    *,
+    attempts: int = 4,
+    backoff_seconds: float = 0.75,
 ) -> str | None:
     params = {"query": expr}
     if query_at is not None:
         params["time"] = query_at.astimezone(UTC).isoformat().replace("+00:00", "Z")
     url = f"{base_url.rstrip('/')}/api/v1/query?{urllib.parse.urlencode(params)}"
-    headers = {"Authorization": f"Bearer {bearer_token}"} if bearer_token else {}
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = json.loads(resp.read().decode())
-    if data.get("status") != "success":
-        raise RuntimeError("prometheus_query_failed")
-    results = data.get("data", {}).get("result", [])
-    if not results:
-        return None
-    return str(results[0]["value"][1])
+    headers = {
+        "Authorization": f"Bearer {bearer_token}" if bearer_token else "",
+        "Connection": "close",
+    }
+    headers = {key: value for key, value in headers.items() if value}
+    last_error: Exception | None = None
+    for attempt in range(1, max(attempts, 1) + 1):
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+            if data.get("status") != "success":
+                raise RuntimeError("prometheus_query_failed")
+            results = data.get("data", {}).get("result", [])
+            if not results:
+                return None
+            return str(results[0]["value"][1])
+        except _TRANSIENT_QUERY_ERRORS as exc:
+            last_error = exc
+            if attempt >= max(attempts, 1):
+                break
+            time.sleep(backoff_seconds * attempt)
+    assert last_error is not None
+    raise last_error
+
+
+def telemetry_admissible(payload: dict[str, Any]) -> bool:
+    """True only when every SLO has a real sample and scrape coverage is intact."""
+    if payload.get("source_status") != "available":
+        return False
+    if float(payload.get("coverage") or 0) < 1.0:
+        return False
+    if float(payload.get("scrape_coverage") or 0) < 0.99:
+        return False
+    readings = payload.get("readings") or {}
+    if not isinstance(readings, dict) or not readings:
+        return False
+    for item in readings.values():
+        if not isinstance(item, dict):
+            return False
+        if item.get("reading_numeric") is None:
+            return False
+        if item.get("sample_count") is None:
+            return False
+    return True
 
 
 def _numeric(raw: str | None) -> float | None:
@@ -394,8 +444,14 @@ def main() -> int:
         evidence_at=evidence_at,
         backfill_reason=args.backfill_reason,
     )
-    print(f"Wrote {out_path} source_status={payload['source_status']} all_pass={all_pass}")
-    if payload["source_status"] != "available":
+    print(
+        f"Wrote {out_path} source_status={payload['source_status']} "
+        f"coverage={payload['coverage']} scrape_coverage={payload['scrape_coverage']} "
+        f"all_pass={all_pass} day0_eligible={payload['day0_eligible']}"
+    )
+    # Missing / reset telemetry must fail loudly in every mode — never treat
+    # source_unavailable or empty coverage as a successful preflight.
+    if not telemetry_admissible(payload):
         return 2
     return 0 if args.mode == "preflight" or all_pass else 3
 

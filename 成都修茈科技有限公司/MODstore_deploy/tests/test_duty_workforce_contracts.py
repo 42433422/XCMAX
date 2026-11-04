@@ -56,6 +56,8 @@ def test_work_contracts_cover_the_roster_exactly() -> None:
     assert payload["schema_version"] == "xcagi.duty_employee_work_contracts/v1"
     assert set(contracts) == roster_ids
     assert len(contracts) == 55
+    shared = payload["defaults"]["acceptance"][0]
+    assert all(shared in row["acceptance"] for row in contracts.values())
     assert sum(bool(row["trigger"].get("cron")) for row in contracts.values()) == 22
     assert len(workforce_event_bindings()) == 52
 
@@ -184,7 +186,9 @@ def test_source_filtered_event_contract_builds_safe_system_input(monkeypatch) ->
     assert manifest["id"] == "employee-planner"
 
 
-def test_operational_events_supply_real_deterministic_handler_inputs(monkeypatch) -> None:
+def test_operational_events_supply_real_deterministic_handler_inputs(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("XCMAX_MONOREPO_ROOT", "/opt/xcmax/current")
     schedule = duty_event_execution_input(
         "daily-orchestrator",

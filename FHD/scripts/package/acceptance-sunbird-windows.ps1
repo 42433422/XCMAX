@@ -1,7 +1,7 @@
 ﻿param(
   [string]$BaseUrl = 'http://127.0.0.1:17500',
   [string]$Username = 'SUNBIRD',
-  [string]$Password = 'SUN123456',
+  [string]$Password = $env:SUNBIRD_ACCOUNT_PASSWORD,
   [string]$DbWriteToken = $env:FHD_DB_WRITE_TOKEN,
   [string]$DbReadToken = $env:FHD_DB_READ_TOKEN,
   [string]$TutorialExcelPath = '',
@@ -16,6 +16,7 @@
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrEmpty($Password)) { throw '缺少 SUNBIRD 密码：请从密钥库注入 SUNBIRD_ACCOUNT_PASSWORD 或传 -Password（不再内置默认值）' }
 . (Join-Path $PSScriptRoot 'product-version.ps1')
 
 $AcceptanceBaseUrl = "https://xiu-ci.com/xcagi-v$(Resolve-ProductVersion)/acceptance"

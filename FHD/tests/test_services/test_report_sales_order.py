@@ -20,11 +20,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.services.report_service as report_service
-from app.db.base import Base
+import app.domain.shared_services.report_service as report_service
+from app.db.db_base import Base
 from app.db.models import Customer, Product, SalesOrder, SalesOrderItem, ShipmentRecord
+from app.domain.shared_services.report_service import ReportService
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.report_service import ReportService
 
 
 @pytest.fixture(scope="function")

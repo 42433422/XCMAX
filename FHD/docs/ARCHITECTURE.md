@@ -869,7 +869,7 @@ DATABASE_URL = "mysql://..."
 ## 📚 十、相关文档
 
 - [快速开始指南](QUICK_START.md)
-- [部署指南](DEPLOYMENT.md)
+- [发布与部署入口](SSOT_INDEX.md)
 - [API 参考](API_REFERENCE.md)
 - [开发规范](../.github/CONTRIBUTING.md)
 

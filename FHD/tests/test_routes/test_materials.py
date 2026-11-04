@@ -80,7 +80,7 @@ def client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClie
 # ---------------------------------------------------------------------------
 
 
-def test_add_material_success(client: TestClient, sample_data_factory) -> None:
+def test_add_material_success(client: TestClient, sample_data_factory, local_tools) -> None:
     data = sample_data_factory.material()
     r = client.post("/api/materials", json=data)
     assert r.status_code == 200
@@ -104,7 +104,7 @@ def test_add_material_missing_name(client: TestClient) -> None:
 
 
 def test_add_material_propagates_min_quantity_to_min_stock(
-    client: TestClient, fake_service: MagicMock
+    client: TestClient, fake_service: MagicMock, local_tools
 ) -> None:
     client.post(
         "/api/materials",
@@ -185,7 +185,7 @@ def test_get_materials_with_sql_injection_attempt(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_update_material_success(client: TestClient, sample_data_factory) -> None:
+def test_update_material_success(client: TestClient, sample_data_factory, local_tools) -> None:
     data = sample_data_factory.material({"name": "更新后的原材料"})
     r = client.put("/api/materials/1", json=data)
     assert r.status_code == 200
@@ -197,7 +197,7 @@ def test_update_material_success(client: TestClient, sample_data_factory) -> Non
 
 
 def test_update_material_partial_applies_fields(
-    client: TestClient, fake_service: MagicMock
+    client: TestClient, fake_service: MagicMock, local_tools
 ) -> None:
     r = client.put("/api/materials/1", json={"quantity": 50.0})
     assert r.status_code == 200
@@ -216,7 +216,7 @@ def test_update_material_string_id_returns_404_or_422(client: TestClient) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_delete_material_success(client: TestClient) -> None:
+def test_delete_material_success(client: TestClient, local_tools) -> None:
     r = client.delete("/api/materials/1")
     assert r.status_code == 200
     body = r.json()
@@ -265,7 +265,7 @@ def test_batch_delete_with_non_numeric_ids_are_filtered(client: TestClient) -> N
 
 
 def test_batch_delete_prefers_material_ids_over_ids(
-    client: TestClient, fake_service: MagicMock
+    client: TestClient, fake_service: MagicMock, local_tools
 ) -> None:
     client.post(
         "/api/materials/batch-delete",

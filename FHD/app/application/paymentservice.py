@@ -2,7 +2,7 @@
 收款分配 / 退款 / 冲销模块（W1-05）
 
 吸收 Odoo 18 ``account.payment`` 能力：调用通用平衡记账 API
-``app.services.accounting_services.create_journal_entry`` 生成
+``app.domain.shared_services.accounting_services.create_journal_entry`` 生成
 ``借库存现金(1001) / 贷应收账款(1122)`` 的收款凭证，并写入
 ``receivable_allocations`` 分配（unpaid / partial / paid / refunded）。
 
@@ -31,7 +31,7 @@ from app.db.models.receivable_allocation import (
     RECEIVABLE_STATUS_UNPAID,
 )
 from app.db.session import get_db
-from app.services.accounting_services import create_journal_entry
+from app.domain.shared_services.accounting_services import create_journal_entry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

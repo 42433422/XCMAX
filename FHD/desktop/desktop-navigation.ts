@@ -5,7 +5,7 @@ export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort:
     const host = url.hostname.toLowerCase()
     const trustedHost = host === '127.0.0.1' || host === 'localhost'
     if (!trustedHost || url.protocol !== 'http:') return false
-    return url.port === String(expectedPort)
+    return (url.port || '80') === String(expectedPort)
   } catch {
     return false
   }
@@ -38,7 +38,13 @@ export function handleDesktopWindowOpen(
   expectedPort: number,
   openExternal: (url: string) => Promise<unknown>,
   warn: (message: string) => void,
+  download?: (url: string) => void,
 ): 'allow' | 'deny' {
+  if (download && isTrustedDesktopOrigin(rawUrl, expectedPort)
+    && /^\/api\/(?:ai\/kitten\/document\/pickup\/[^/]+|ai\/analyze\/export\/[^/]+|shipment\/download\/.+)$/.test(new URL(rawUrl).pathname)) {
+    download(rawUrl)
+    return 'deny'
+  }
   if (isTrustedDesktopExternalUrl(rawUrl)) {
     void openExternal(rawUrl).catch(() => {
       // Shell errors can echo the entire URL, including a one-use login code.

@@ -14,7 +14,7 @@ from app.application.agent_orchestrator.runtime_context import (
     merge_runtime_context,
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
@@ -103,6 +103,9 @@ def test_client_cannot_supply_or_replace_mod_authorization():
 def test_authenticated_request_binds_server_session_without_persisting_token(
     mod_session, monkeypatch
 ):
+    # Authorization re-reads the persisted session owner, not the resolver stub.
+    with mod_session.begin() as db:
+        db.query(User).filter_by(id=1).one().tenant_id = 7
     monkeypatch.setattr(
         "app.infrastructure.auth.agent_principal.resolve_session_user",
         lambda request: SimpleNamespace(id=1, username="mod-owner", tenant_id=7),

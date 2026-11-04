@@ -89,7 +89,15 @@ class ExcelImportAgentRunMixin:
             "approval_nodes": [],
         }
         todo_text = "\n".join(f"- {step}" for step in getattr(plan, "todo_steps", None) or [])
-        response_text = f"我已生成导入工作流计划：\n{thinking_steps}\n\n{todo_text}\n\n检测到写库步骤（{', '.join(blocking_nodes) or 'import'}），回复「确认」继续执行，回复「取消」终止。"
+        knowledge_notice = (
+            "计划执行成功后，来源附件的解析结果还会保存到知识库，用于来源追溯。"
+            if any(
+                artifact.get("metadata", {}).get("dataset_ingest_pending_step_ids")
+                for artifact in artifact_payloads
+            )
+            else ""
+        )
+        response_text = f"我已生成导入工作流计划：\n{thinking_steps}\n\n{todo_text}\n\n检测到写库步骤（{', '.join(blocking_nodes) or 'import'}）。{knowledge_notice}回复「确认」继续执行，回复「取消」终止。"
         inner = {
             "run_id": agent_run.run_id,
             "agent_run_id": agent_run.run_id,
@@ -100,7 +108,7 @@ class ExcelImportAgentRunMixin:
             "artifact_count": len(artifact_payloads),
             "artifacts": artifact_payloads,
             "blocking_nodes": blocking_nodes,
-            "reason": "导入会写入业务数据库，需确认后执行",
+            "reason": "导入会写入业务数据库，需确认后执行。" + knowledge_notice,
             "approval_required": False,
             "approval_nodes": [],
         }

@@ -23,7 +23,10 @@ META = {
 
 
 def main() -> int:
-    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+    from modstore_server.catalog_store import (
+        append_package,
+        package_manifest_alignment_errors,
+    )
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
     from modstore_server.employee_asset_pipeline import (
         build_employee_pack_zip_for_library,
@@ -38,7 +41,9 @@ def main() -> int:
     pack_dir = lib / PKG_ID
     mf_path = pack_dir / "manifest.json"
     if not mf_path.is_file():
-        print(json.dumps({"ok": False, "error": f"missing {mf_path}"}, ensure_ascii=False))
+        print(
+            json.dumps({"ok": False, "error": f"missing {mf_path}"}, ensure_ascii=False)
+        )
         return 1
 
     raw_mf = json.loads(mf_path.read_text(encoding="utf-8"))
@@ -60,7 +65,9 @@ def main() -> int:
         if not admin:
             admin = db.query(User).order_by(User.id.asc()).first()
         if not admin:
-            print(json.dumps({"ok": False, "error": "no user in db"}, ensure_ascii=False))
+            print(
+                json.dumps({"ok": False, "error": "no user in db"}, ensure_ascii=False)
+            )
             return 2
         author_id = int(admin.id)
 
@@ -70,7 +77,9 @@ def main() -> int:
         try:
             align_errs = package_manifest_alignment_errors(rec, tmp_path)
             if align_errs:
-                print(json.dumps({"ok": False, "errors": align_errs}, ensure_ascii=False))
+                print(
+                    json.dumps({"ok": False, "errors": align_errs}, ensure_ascii=False)
+                )
                 return 1
             saved = append_package(rec, tmp_path)
         finally:

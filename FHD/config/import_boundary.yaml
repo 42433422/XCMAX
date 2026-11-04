@@ -57,6 +57,24 @@
       ],
       "allow_files": [],
       "required": true
+    },
+    {
+      "name": "approval-domain-no-infrastructure",
+      "scan": [
+        "app/domain/approval"
+      ],
+      "forbid": [
+        "app.application",
+        "app.infrastructure",
+        "app.fastapi_routes",
+        "app.services",
+        "app.utils.operational_errors",
+        "sqlalchemy",
+        "httpx",
+        "redis"
+      ],
+      "allow_files": [],
+      "required": true
     }
   ]
 }

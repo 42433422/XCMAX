@@ -15,12 +15,12 @@ DO NOT use this for complex business logic that requires external function calls
 """
 
 import ast
+import io
 import logging
 import operator
+import tokenize
 from collections.abc import Callable
 from typing import Any
-
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,8 @@ ALLOWED_NODES = {
     ast.And,
     ast.Or,
     ast.Not,
+    ast.UAdd,
+    ast.USub,
     ast.Eq,
     ast.NotEq,
     ast.Lt,
@@ -75,6 +77,8 @@ OPERATORS: dict[type[Any], Callable[..., Any]] = {
     ast.And: lambda a, b: a and b,
     ast.Or: lambda a, b: a or b,
     ast.Not: operator.not_,
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
 }
 
 # Whitelisted variable names that can be used in conditions
@@ -97,6 +101,23 @@ ALLOWED_VARIABLES = {
     "false",
     "null",
 }
+
+
+def _parse_condition(expression: str) -> ast.Expression:
+    """Normalize documented operators without rewriting quoted string values."""
+    aliases = {"AND": "and", "OR": "or", "NOT": "not"}
+    try:
+        tokens = []
+        for token in tokenize.generate_tokens(io.StringIO(expression).readline):
+            value = token.string
+            if token.type == tokenize.NAME:
+                value = aliases.get(value, value)
+            elif token.type == tokenize.OP and value == "=":
+                value = "=="
+            tokens.append((token.type, value))
+        return ast.parse(tokenize.untokenize(tokens), mode="eval")
+    except (SyntaxError, tokenize.TokenError) as exc:
+        raise SafeEvaluationError("Invalid condition syntax") from exc
 
 
 class SafeExpressionEvaluator:
@@ -133,22 +154,22 @@ class SafeExpressionEvaluator:
 
         try:
             # Parse the expression to AST
-            tree = ast.parse(expression, mode="eval")
+            tree = _parse_condition(expression)
 
             # Validate the AST for safety
             self._validate_ast(tree)
 
             # Evaluate the AST safely
             result = self._eval_node(tree.body)
-            self.logger.debug("Evaluated condition '%s' -> %s", expression, result)
+            self.logger.debug("Approval condition evaluated -> %s", bool(result))
             return bool(result)
 
         except SafeEvaluationError as e:
-            self.logger.warning("Unsafe condition expression: %s - %s", expression, e)
+            self.logger.warning("Approval condition rejected (%s)", type(e).__name__)
             raise
-        except RECOVERABLE_ERRORS as e:
-            self.logger.error("Failed to evaluate condition '%s': %s", expression, e)
-            raise SafeEvaluationError(f"Invalid condition expression: {expression}") from e
+        except (ArithmeticError, TypeError, ValueError, RecursionError) as e:
+            self.logger.warning("Approval condition evaluation failed (%s)", type(e).__name__)
+            raise SafeEvaluationError("Invalid condition expression") from e
 
     def _validate_ast(self, node: ast.AST) -> None:
         """Recursively validate that all AST nodes are in the allowed set."""
@@ -207,7 +228,7 @@ class SafeExpressionEvaluator:
             return True
 
         elif isinstance(node, ast.BoolOp):
-            values = [self._eval_node(value) for value in node.values]
+            values = (self._eval_node(value) for value in node.values)
             if isinstance(node.op, ast.And):
                 return all(values)
             elif isinstance(node.op, ast.Or):
@@ -246,10 +267,5 @@ def should_trigger_condition(node, context: dict[str, Any]) -> bool:
     try:
         return evaluate_condition(node.condition_expression, context)
     except SafeEvaluationError as e:
-        logger.warning(
-            "Condition evaluation failed for node %s: %s", getattr(node, "id", "unknown"), e
-        )
+        logger.warning("Approval node condition rejected (%s)", type(e).__name__)
         return False  # Fail closed for safety
-    except RECOVERABLE_ERRORS as e:
-        logger.error("Unexpected error evaluating condition: %s", e)
-        return False

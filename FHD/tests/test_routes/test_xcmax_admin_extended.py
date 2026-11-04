@@ -710,7 +710,7 @@ class TestSyncConflictsRoute:
     def test_list_conflicts(self, client: TestClient):
         """Should return conflicts list."""
         with patch(
-            "app.services.admin_sync_service.list_sync_conflicts",
+            "app.domain.shared_services.admin_sync_service.list_sync_conflicts",
             return_value=[{"id": 1, "entity_type": "product"}],
         ):
             response = client.get("/api/xcmax/sync/conflicts")
@@ -722,7 +722,7 @@ class TestSyncConflictsRoute:
     def test_list_conflicts_unavailable(self, client: TestClient):
         """Should return empty list when service is unavailable."""
         with patch(
-            "app.services.admin_sync_service.list_sync_conflicts",
+            "app.domain.shared_services.admin_sync_service.list_sync_conflicts",
             side_effect=ImportError("no module"),
         ):
             response = client.get("/api/xcmax/sync/conflicts")
@@ -740,7 +740,7 @@ class TestResolveConflictRoute:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.fetch_inbox_row",
+                "app.domain.shared_services.admin_sync_service.fetch_inbox_row",
                 return_value={"entity_type": "product", "payload": "{}"},
             ),
             patch(
@@ -763,7 +763,7 @@ class TestResolveConflictRoute:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.mark_inbox_skipped",
+                "app.domain.shared_services.admin_sync_service.mark_inbox_skipped",
             ),
         ):
             response = client.post(

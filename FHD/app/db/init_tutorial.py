@@ -5,7 +5,7 @@ from typing import cast
 from sqlalchemy import Table
 from sqlalchemy.engine import Engine
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
 
 

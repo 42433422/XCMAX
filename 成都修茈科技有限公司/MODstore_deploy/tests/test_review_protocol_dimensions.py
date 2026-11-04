@@ -1,9 +1,7 @@
 """自审协议：业务逻辑/性能维度 + 严格打回。"""
 
-from modstore_server.self_maintenance_loop_runner import (
-    _review_task_text,
-    _validate_structured_review_protocol,
-)
+from modstore_server.maintenance_loop.prompts import _review_task_text
+from modstore_server.maintenance_loop.review import _validate_structured_review_protocol
 
 
 def _valid_review(**overrides):

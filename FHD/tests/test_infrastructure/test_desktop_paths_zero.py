@@ -1,4 +1,4 @@
-"""Tests for app.desktop_runtime.paths."""
+"""Tests for app.desktop_runtime.desktop_runtime_paths."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.desktop_runtime.paths import (
+from app.desktop_runtime.desktop_runtime_paths import (
     DATA_DIR_ENV,
     DESKTOP_ENV,
     LEGACY_DATA_DIR_ENV,

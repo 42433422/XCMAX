@@ -15,6 +15,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .artifact_constants import ARTIFACT_EMPLOYEE_PACK, normalize_artifact
 from .artifact_package import validate_employee_pack_manifest
+from .management.paths import is_package_directory_name, trusted_child_path
 from .package import (
     ModPackage,
     ModPackageError,
@@ -147,12 +148,24 @@ class EmployeeRegistry:
                 scope = str(manifest.get("scope") or "global").strip().lower()
                 if scope != "global":
                     return False, "当前仅支持 scope=global 的员工包安装"
-                pack_id = (manifest.get("id") or "").strip()
+                identity = manifest.get("id") or ""
+                if not isinstance(identity, str):
+                    return False, "非法 pack id"
+                pack_id = identity.strip()
                 if not pack_id:
                     return False, "缺少 id"
-                dest = os.path.join(self._root(), pack_id)
+                if not is_package_directory_name(pack_id):
+                    return False, "非法 pack id"
+                if os.path.islink(self._root()):
+                    return False, "员工包目录不能是符号链接"
                 os.makedirs(self._root(), exist_ok=True)
-                if os.path.exists(dest):
+                root = trusted_child_path(self.mods_root, _EMP_DIR, directory=True)
+                if root is None:
+                    return False, "员工包目录无效"
+                dest = os.path.join(root, pack_id)
+                if os.path.lexists(dest):
+                    if trusted_child_path(root, pack_id, directory=True) is None:
+                        return False, "员工包目标不是本地目录"
                     shutil.rmtree(dest)
                 shutil.copytree(extract_path, dest)
                 receipt = {
@@ -211,10 +224,11 @@ class EmployeeRegistry:
 
     def uninstall_pack(self, pack_id: str, remove_files: bool = True) -> tuple[bool, str]:
         pack_id = (pack_id or "").strip()
-        if not pack_id or "/" in pack_id or "\\" in pack_id:
+        if not is_package_directory_name(pack_id):
             return False, "非法 pack id"
-        dest = os.path.join(self._root(), pack_id)
-        if not os.path.isdir(dest):
+        root = trusted_child_path(self.mods_root, _EMP_DIR, directory=True)
+        dest = trusted_child_path(root, pack_id, directory=True) if root else None
+        if dest is None:
             return False, f"员工包未安装：{pack_id}"
         if remove_files:
             shutil.rmtree(dest, ignore_errors=True)

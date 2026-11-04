@@ -23,7 +23,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application import invoicing_service
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import Customer, JournalEntry, Product, SalesOrder, SalesOrderItem
 from app.services import accounting_services as svc
 from app.utils.operational_errors import BOUNDARY_ERRORS

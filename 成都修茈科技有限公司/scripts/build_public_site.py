@@ -6,7 +6,7 @@
   - FHD/config/saas_plans.json            价格 SSOT
   - FHD/config/public_cases.json          公开案例 SSOT
   - data/capabilities.json                能力目录（build_capability_center.py 生成）
-  - download-release.json                 发布清单（发布流程生成）
+  - FHD/config/download_release.json     发布意图与历史（不是线上指针）
   - capabilities/assets/evidence/*.json   实机验收证据（run / visual-review）
 
 输出：
@@ -25,8 +25,11 @@ import json
 import re
 import struct
 import sys
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+
+from build_capability_center import _PRIVATE_EVIDENCE_FEATURES, _contains_credentials, prepare_evidence_assets, public_projection
 
 SITE_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = SITE_ROOT.parent
@@ -50,20 +53,19 @@ def read_json(path: Path) -> dict:
 
 def resolve_media_local(name: str, feature: str | None = None) -> Path | None:
     """run.json 中的媒体名（如 03-postlogin-screen.png）→ 站点副本路径（如 base-login-03-postlogin-screen.png）。"""
-    candidates: list[Path] = []
-    direct = EVIDENCE_DIR / name
-    if direct.exists():
-        candidates.append(direct)
     if feature:
         prefixed = EVIDENCE_DIR / f"{feature}-{name}"
         if prefixed.exists():
-            candidates.append(prefixed)
-    if not candidates:
-        candidates = sorted(EVIDENCE_DIR.glob(f"*-{name}"))
-    uniq = sorted(set(candidates))
-    if len(uniq) > 1:
-        die(f"证据媒体名歧义: {name} → {[m.name for m in uniq]}")
-    return uniq[0] if uniq else None
+            return prefixed
+    direct = EVIDENCE_DIR / name
+    if direct.exists():
+        return direct
+    # Glob fallback only when uniquely resolvable; archive-backed trees often
+    # materialize many feature-prefixed twins for the same short basename.
+    matches = sorted(EVIDENCE_DIR.glob(f"*-{name}"))
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 def sha256_file(path: Path) -> str:
@@ -192,7 +194,9 @@ def build_downloads(release: dict, version_ssot: dict) -> dict:
     return {
         "version_lock": release.get("version_lock"),
         "matches_version_ssot": release.get("version_lock") == version_ssot["version"],
-        "release_ready": bool(release.get("release_ready")),
+        "scope": "release_intent_not_publication",
+        "release_ready": False,
+        "public_pointer": "/download-release.json",
         "git_sha": release.get("git_sha"),
         "generated_at": release.get("generated_at"),
         "release_root": release.get("release_root"),
@@ -238,8 +242,23 @@ def build_evidence(cases_cfg: dict) -> dict:
     features: dict[str, dict] = {}
     videos: list[dict] = []
     integrity_problems: list[dict] = []
+    catalog = read_json(SITE_ROOT / "data" / "capabilities" / "catalog.json")
+    excluded = {p for d in catalog.get("domains", []) for m in d.get("modules", [])
+                for f in m.get("features", [])
+                for p in (f.get("evidence", {}) or {}).get("public_excluded_media", [])}
+    sensitive_features = _PRIVATE_EVIDENCE_FEATURES
 
     run_files = sorted(EVIDENCE_DIR.glob("*-run.json"))
+    # Withdrawal removes public raw copies, not the original acceptance identity.
+    for domain in catalog.get("domains", []):
+        for module in domain.get("modules", []):
+            for feature in module.get("features", []):
+                for rel in (feature.get("evidence") or {}).get("runs", []):
+                    source = REPO_ROOT / rel
+                    if feature["id"] not in sensitive_features and source.is_file():
+                        record = read_json(source)
+                        if _contains_credentials(record):
+                            run_files.append(source)
     if not run_files:
         die(f"证据目录无 run.json: {EVIDENCE_DIR}")
 
@@ -263,15 +282,17 @@ def build_evidence(cases_cfg: dict) -> dict:
         feat = d.get("feature")
         if not feat:
             die(f"run.json 缺少 feature 字段: {rf}")
+        private_run = feat in sensitive_features or public_projection(d, set()) != d
         platform = detect_platform(rf.stem)
         media_out = []
         for m in d.get("media", []):
+            if private_run or m.get("path") in excluded:
+                continue
             name = Path(m.get("path", "")).name
             entry = {
                 "file": name,
                 "sha256": m.get("sha256"),
                 "visual_review": m.get("visual_review"),
-                "visible_result": m.get("visible_result"),
                 "kind": "video" if name.endswith((".mp4", ".webm", ".mov")) else "screenshot",
             }
             local = resolve_media_local(name, feat)
@@ -364,7 +385,7 @@ def build_evidence(cases_cfg: dict) -> dict:
         # 验收运行日志（run.log）：原文公开 + SHA256，供验证中心技术层引用
         log_entry = None
         log_candidates = sorted(set(EVIDENCE_DIR.glob(f"{feat}-run.log")) | set(EVIDENCE_DIR.glob(f"{feat}_run.log")))
-        if log_candidates:
+        if log_candidates and not private_run:
             lf = log_candidates[0]
             log_entry = {
                 "file": lf.name,
@@ -383,7 +404,8 @@ def build_evidence(cases_cfg: dict) -> dict:
             "app_git_sha": d.get("app_git_sha"),
             "media": media_out,
             "run_log": log_entry,
-            "source_run": f"/capabilities/assets/evidence/{rf.name}",
+            "acceptance_sha256": sha256_file(rf),
+            "source_run": None if private_run else f"/capabilities/assets/evidence/{rf.name}",
         }
         if cur is None or (item["verified_at"] or "") >= (cur["verified_at"] or ""):
             features[feat] = item
@@ -394,8 +416,8 @@ def build_evidence(cases_cfg: dict) -> dict:
     verified_dates = [f["verified_at"] for f in feats if f["verified_at"]]
     if integrity_problems:
         print(
-            f"[public-site] WARN: {len(integrity_problems)} 个证据媒体与 run.json 记录不一致，已拒绝发布并登记"
-            f"（上游数据漂移，需证据责任方修正）:",
+            f"[public-site] WARN: {len(integrity_problems)} 个证据媒体未通过发布策略或哈希校验，已拒绝发布并登记"
+            f"（详见 integrity_problems 中的 reason；原始验收记录保持不变）:",
             file=sys.stderr,
         )
         for p in integrity_problems[:10]:
@@ -455,15 +477,18 @@ def data_updated_at(*candidates: str | None) -> str | None:
 
 
 def build() -> dict:
+    prepare_evidence_assets()
+    subprocess.run(["node", str(REPO_ROOT / "scripts/dev/materialize_media_assets.mjs"), "marketing"], check=True)
     version_ssot = parse_version_md(FHD_ROOT / "VERSION.md")
     plans_cfg = read_json(FHD_ROOT / "config" / "saas_plans.json")
     cases_cfg = read_json(FHD_ROOT / "config" / "public_cases.json")
     caps = read_json(SITE_ROOT / "data" / "capabilities.json")
-    release = read_json(SITE_ROOT / "download-release.json")
+    release = read_json(FHD_ROOT / "config" / "download_release.json")
 
-    cases = cases_cfg.get("cases")
-    if not cases:
-        die("public_cases.json 缺少 cases")
+    configured_cases = cases_cfg.get("cases")
+    if not isinstance(configured_cases, list):
+        die("public_cases.json 缺少 cases 数组")
+    cases = configured_cases
 
     evidence = build_evidence(cases_cfg)
     attach_case_media(cases, evidence)
@@ -475,13 +500,13 @@ def build() -> dict:
         hero = {
             "file": h["public_path"],
             "sha256": h["sha256"],
-            "caption": "XCAGI 实机工作台：太阳鸟企业账号（SUNBIRD·饰品包装助手）登录后的智能对话界面",
+            "caption": "XCAGI 实机工作台：登录后的智能对话界面",
             "acceptance_status": "passed",
             "verified_at": next(f["verified_at"] for f in evidence["features"] if f["feature"] == "base-login"),
         }
 
     last_verified = evidence["summary"]["last_verified_at"]
-    return {
+    result = {
         "schema": SCHEMA,
         "_comment": "由 scripts/build_public_site.py 自动生成，请勿手改（DO NOT EDIT）。事实来源见 sources。",
         "sources": {
@@ -489,7 +514,7 @@ def build() -> dict:
             "pricing": "FHD/config/saas_plans.json",
             "cases": "FHD/config/public_cases.json",
             "capabilities": "data/capabilities.json",
-            "release": "download-release.json",
+            "release": "FHD/config/download_release.json",
             "evidence": "capabilities/assets/evidence/",
         },
         "product": {
@@ -507,6 +532,7 @@ def build() -> dict:
         "evidence": evidence,
         "hero_media": hero,
     }
+    return public_projection(result, set())
 
 
 def main() -> None:

@@ -6,7 +6,7 @@ from __future__ import annotations
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.customer import Customer
 
 

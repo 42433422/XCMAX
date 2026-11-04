@@ -875,7 +875,7 @@ class TestCandidateModRootsExtra:
         assert isinstance(tac._candidate_mod_roots(), list)
 
     def test_desktop_data_dir_failure_swallowed(self, monkeypatch) -> None:
-        import app.desktop_runtime.paths as desktop_paths
+        import app.desktop_runtime.desktop_runtime_paths as desktop_paths
 
         def _boom():
             raise OSError("no desktop dir")

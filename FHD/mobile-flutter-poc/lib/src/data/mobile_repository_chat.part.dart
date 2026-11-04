@@ -244,6 +244,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     required String conversationId,
     required ChatMessage message,
   }) async {
+    final generation = _client.authGeneration;
     final id = conversationId.trim();
     if (id.isEmpty) return;
     final targetTs = message.cacheTimestampMs;
@@ -268,7 +269,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     } else {
       cache[id] = rows;
     }
-    await _client.saveSession(session.copyWith(cachedChatMessages: cache));
+    await _client.saveSession(session.copyWith(cachedChatMessages: cache),
+        authGeneration: generation);
   }
-
 }

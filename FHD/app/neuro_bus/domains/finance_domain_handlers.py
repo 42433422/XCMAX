@@ -27,13 +27,13 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from app.neuro_bus.bus import get_neuro_bus
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 # 模块级占位：测试通过 patch("...PurchaseService") 替换；生产环境在 handler 内延迟导入。
-# app.services 包存在循环导入，不能在模块加载时直接 from app.services.purchase_service import ...
+# app.services 包存在循环导入，不能在模块加载时直接 from app.domain.shared_services.purchase_service import ...
 PurchaseService = None
 get_approval_service = None
 
@@ -98,7 +98,7 @@ def _resolve_purchase_service_cls():
     if cls is not None:
         return cls
     # 生产环境：延迟导入（app.services 包此时应已完成初始化）
-    from app.services.purchase_service import PurchaseService as _LazyPS
+    from app.domain.shared_services.purchase_service import PurchaseService as _LazyPS
 
     return _LazyPS
 

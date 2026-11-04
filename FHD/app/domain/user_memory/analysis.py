@@ -1,9 +1,29 @@
 """Read-only analysis helpers for user-memory records."""
 
 from collections import defaultdict
+from datetime import UTC, datetime
 from typing import Any
 
-from app.domain.user_memory.models import UserMemory
+from app.domain.user_memory.records import UserMemory
+
+
+def chronological_contexts(contexts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sort dated records; undated legacy entries keep their recorder positions."""
+    ordered = contexts[::-1]
+    dated: list[tuple[int, datetime, dict[str, Any]]] = []
+    for index, context in enumerate(ordered):
+        try:
+            timestamp = datetime.fromisoformat(
+                str(context.get("timestamp") or "").replace("Z", "+00:00")
+            )
+        except ValueError:
+            continue
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=UTC)
+        dated.append((index, timestamp, context))
+    for original, chronological in zip(dated, sorted(dated, key=lambda row: row[1]), strict=True):
+        ordered[original[0]] = chronological[2]
+    return ordered
 
 
 def feedback_stats(memory: UserMemory | None) -> dict[str, Any]:
@@ -36,9 +56,10 @@ def feedback_stats(memory: UserMemory | None) -> dict[str, Any]:
 
 def analyze_action_sequence(memory: UserMemory) -> list[dict[str, Any]]:
     sequences: dict[str, dict[str, Any]] = defaultdict(lambda: {"count": 0})
-    for index in range(len(memory.historical_contexts) - 1):
-        current = memory.historical_contexts[index]
-        next_context = memory.historical_contexts[index + 1]
+    contexts = chronological_contexts(memory.historical_contexts)
+    for index in range(len(contexts) - 1):
+        current = contexts[index]
+        next_context = contexts[index + 1]
         sequence_key = f"{current.get('intent')}->{next_context.get('intent')}"
         sequences[sequence_key]["count"] += 1
 
@@ -56,8 +77,12 @@ def analyze_action_sequence(memory: UserMemory) -> list[dict[str, Any]]:
 def habit_suggestions(memory: UserMemory | None) -> list[dict[str, Any]]:
     if not memory:
         return []
+    return suggestions_for_sequences(analyze_action_sequence(memory))
+
+
+def suggestions_for_sequences(sequences: list[dict[str, Any]]) -> list[dict[str, Any]]:
     suggestions = []
-    for sequence in analyze_action_sequence(memory):
+    for sequence in sequences:
         if sequence["confidence"] >= 0.8 and len(sequence["actions"]) >= 2:
             actions = sequence["actions"]
             suggestions.append(

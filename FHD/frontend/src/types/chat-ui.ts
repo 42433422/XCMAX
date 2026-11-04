@@ -1,5 +1,6 @@
 /** 聊天 UI 层消息（localStorage / 组件展示；role 用 ai 而非 API 的 assistant） */
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
+import type { ChatModelRoute } from '@/utils/chatModelRoute'
 
 export interface ChatExecutionProgressItem {
   phase: string
@@ -9,6 +10,7 @@ export interface ChatExecutionProgressItem {
 }
 
 export interface ChatApprovalCard {
+  id?: string
   version?: number
   kind?: string
   plan_id?: string
@@ -24,12 +26,24 @@ export interface ChatApprovalCard {
   reason?: string
   confirm_mode?: 'interactive' | 'approval' | string
   status?: 'pending' | 'confirmed' | 'cancelled'
+  submitting?: boolean
+  error?: string
 }
 
 export interface UiChatMessage {
   role: 'user' | 'ai' | 'task'
   content: string
   time: string
+  /** Request turn shared with server history; independent of local display text. */
+  turnId?: string
+  routeMetadata?: ChatModelRoute
+  persistence?: {
+    id: string
+    status: 'local' | 'saving' | 'saved' | 'failed'
+    localSaved?: boolean
+    error?: string
+    request?: { role: 'user' | 'ai' | 'task'; content: string; metadata?: string }
+  }
   thinkingSteps?: string
   todoSteps?: string[]
   workflowAction?: string
@@ -48,6 +62,8 @@ export interface UiChatMessage {
   }>
   contextSummary?: string
   streamingShell?: boolean
+  /** Heartbeat / idle copy while the shell is still waiting for visible text. */
+  waitingHint?: string
   toolProgressLabel?: string
   /** Agent 执行时间线（计划-查询-执行 步骤），流式时实时更新，类似 Codex 对话 */
   executionProgress?: ChatExecutionProgressItem[]

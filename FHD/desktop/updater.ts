@@ -11,6 +11,7 @@ import {
   type ReleaseMediaSlide,
 } from './release-media.js'
 import { appendUpdaterEvent, discardPendingUpdateInstallReceipt } from './update-install-receipts.js'
+import { installResumableUpdaterDownload } from './resumable-download.js'
 
 let updateDownloaded = false
 let downloadedVersion = ''
@@ -324,6 +325,7 @@ export function configureUpdater(
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
   ;(autoUpdater as unknown as { allowDowngrade?: boolean }).allowDowngrade = false
+  installResumableUpdaterDownload()
   if (process.env.XCAGI_DESKTOP_TEST !== '1') {
     void ensureUpdaterNetSession()
   }

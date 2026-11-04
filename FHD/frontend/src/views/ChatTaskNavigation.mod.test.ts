@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { ref } from 'vue'
+import { ref, type Component, type Ref } from 'vue'
+import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import type { AgentRun, AgentTaskSummary } from '@/api/agentRuns'
 import type { TaskItem } from '@/composables/useChatPersistence'
 import { useChatTaskRuntimeBridge } from '@/composables/useChatTaskRuntimeBridge'
 import { taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
+import type { UiChatMessage } from '@/types/chat-ui'
 
 const api = vi.hoisted(() => ({
   listTasks: vi.fn(), listRuns: vi.fn(), markTaskRead: vi.fn(), getRun: vi.fn(),
   continueRun: vi.fn(), pauseRun: vi.fn(), resumeRun: vi.fn(), retryRun: vi.fn(), cancelRun: vi.fn(),
 }))
 vi.mock('@/api/agentRuns', () => ({ default: api }))
+const { resolveRoute, followPlatform } = vi.hoisted(() => ({ resolveRoute: vi.fn(), followPlatform: vi.fn() }))
+vi.mock('@/api/chat', () => ({ default: { getModelStatus: resolveRoute, followPlatformModel: followPlatform } }))
 vi.mock('pinia', async () => ({
   ...await vi.importActual<typeof import('pinia')>('pinia'),
   storeToRefs: (store: unknown) => store,
@@ -39,6 +43,7 @@ vi.mock('@/composables/useChatOfficeDocking', () => ({ useChatOfficeDocking: () 
 
 // Import the shipped Mod directly. The host ChatView and Vitest Mod alias cannot mask missing desktop wiring.
 import ModChatView from '../../../mods/xcagi-planner-bridge/frontend/views/ChatView.vue'
+import HostChatView from './ChatView.vue'
 
 const taskList = ref<TaskItem[]>([])
 const activeTaskId = ref('')
@@ -65,6 +70,8 @@ function summary(status = 'waiting_user'): AgentTaskSummary {
 function inertApi(): Record<string, unknown> {
   return {
     messages: ref([]), currentTask: ref(null), orderNumberFetching: ref(false), isLoading: ref(false), isStreamingReply: ref(false),
+    cacheError: ref(''), retryMessagesCache: vi.fn(), retryMessageSave: vi.fn(),
+    historyHasMore: ref(false), historyLoadingMore: ref(false), loadMoreHistorySessions: vi.fn(),
     isExecuting: ref(false), latestAssistantPush: ref(null), taskList, filteredTaskList: taskList, activeTaskId, expandedTaskIds,
     taskFilter: ref('all'), showHistory: ref(false), historySessions: ref([]), historyLoading: ref(false), historyError: ref(''),
     pushCopied: ref(false), loadingProgressText: ref(''), excelAnalyzeUploading: ref(false), multimodalPendingCount: ref(0),
@@ -77,7 +84,7 @@ function inertApi(): Record<string, unknown> {
       'addAndSaveMessage', 'stageExcelAnalysisContext'].map(name => [name, vi.fn()])),
   }
 }
-async function mountView(task = summary()) {
+async function mountView(task = summary(), feedback = false, component: Component = ModChatView, renderSuggestions = false) {
   taskList.value = taskSummariesToTaskItems([task])
   api.listTasks.mockResolvedValue({ success: true, data: [task] })
   api.getRun.mockResolvedValue({ success: true, data: task.active_run, approval: { grant: 'fresh-action-bound-grant' } })
@@ -86,21 +93,35 @@ async function mountView(task = summary()) {
     newConversation: vi.fn(), jumpToMessage: vi.fn(), toggleExpanded, clearLocalHistory: vi.fn(),
   })
   chatApi = { ...inertApi(), ...bridge }
+  if (feedback) {
+    chatApi.messages = ref<UiChatMessage[]>([{ role: 'user', content: '待保存记录', time: '12:00', persistence: {
+      id: 'message-retry', status: 'failed', localSaved: false, error: '消息保存未确认，不会重新执行任务。',
+      request: { role: 'user', content: '待保存记录' },
+    } }])
+    chatApi.cacheError = ref('本机保存失败，请重试')
+    chatApi.showHistory = ref(true)
+    chatApi.historySessions = ref([{ session_id: 'first-page', title: '第一批历史' }])
+    chatApi.historyHasMore = ref(true)
+  }
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/chat', component: { template: '<div />' } },
     { path: '/workspaces/:taskId', name: 'task-workspace', component: { template: '<div />' } },
   ] })
   await router.push('/chat')
   await router.isReady()
-  wrapper = mount(ModChatView, { global: { plugins: [router], stubs: {
-    PaneResizeHandle: true, ChatQuickActions: true, ChatMessageList: true, ChatInputToolbar: true,
-    ChatHistoryModal: true, ChatOfficeDockingReview: true,
+  wrapper = mount(component, { global: { plugins: [createPinia(), router], stubs: {
+    PaneResizeHandle: true, ChatQuickActions: true, ChatMessageList: !feedback && !renderSuggestions, ChatInputToolbar: !renderSuggestions,
+    ChatSidePanel: true, TaskWorkspaceContextBar: true,
+    ChatHistoryModal: !feedback, ChatOfficeDockingReview: true,
   } } })
   return { router, bridge }
 }
 const controls = () => [api.continueRun, api.pauseRun, api.resumeRun, api.retryRun, api.cancelRun]
 const button = (label: string) => wrapper!.findAll('button').find(item => item.text() === label)!
 beforeEach(() => {
+  localStorage.clear()
+  resolveRoute.mockReset().mockResolvedValue({ ok: true })
+  followPlatform.mockReset().mockResolvedValue({ ok: true })
   Object.values(api).forEach(mock => mock.mockReset().mockResolvedValue({ success: true }))
   activeTaskId.value = ''; expandedTaskIds.value = []
   loadConversation.mockClear(); toggleExpanded.mockClear()
@@ -108,6 +129,90 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = undefined })
 
 describe('shipped chat Mod task navigation', () => {
+  it.each([['host', HostChatView], ['desktop Mod', ModChatView]] as const)(
+    'connects %s empty examples and safe retry without exposing model diagnostics', async (_label, component) => {
+      await mountView(summary(), false, component, true)
+      await flushPromises()
+      expect(wrapper!.find('[data-testid="chat-model-status"]').exists()).toBe(false)
+      expect(wrapper!.text()).not.toContain('模型信息')
+      expect(wrapper!.find('.chat-model-recovery').exists()).toBe(false)
+      await wrapper!.get('.chat-welcome button').trigger('click')
+      expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toContain('仅回答，不执行操作')
+      ;(chatApi.messages as Ref<UiChatMessage[]>).value = [
+        { role: 'user', content: '仅回答测试', time: '12:00', turnId: 'test-turn' },
+        { role: 'ai', content: '处理失败：模型未返回正文', time: '12:00', turnId: 'test-turn', workflowAction: 'failed' },
+      ]
+      await flushPromises()
+      await button('重试本次请求（填入原文）').trigger('click')
+      expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toBe('仅回答测试')
+      expect(chatApi.sendMessage).not.toHaveBeenCalled()
+      expect(wrapper!.get('[data-testid="chat-error-recovery"]').text()).toContain('已执行的业务操作不会撤销')
+      expect(wrapper!.text()).not.toContain('查看模型状态')
+    },
+  )
+  it.each([['host', HostChatView], ['desktop Mod', ModChatView]] as const)(
+    'keeps %s preference recovery explicit and never retries the failed chat automatically', async (_label, component) => {
+      resolveRoute.mockRejectedValue({ status: 400, data: { detail: { code: 'INVALID_CHAT_PREFERENCE' } } })
+      await mountView(summary(), false, component, true)
+      await flushPromises()
+      await button('恢复平台默认模型').trigger('click')
+      await flushPromises()
+      expect(followPlatform).toHaveBeenCalledTimes(1)
+      expect(chatApi.sendMessage).not.toHaveBeenCalled()
+      expect(wrapper!.find('.chat-model-recovery').exists()).toBe(false)
+      expect(wrapper!.text()).not.toContain('模型信息')
+    },
+  )
+  it.each([['host', HostChatView], ['desktop Mod', ModChatView]] as const)(
+    'keeps %s suggestions below their reply, waits for completion, and only fills the draft', async (_label, component) => {
+      await mountView(summary(), false, component, true)
+      const messages = chatApi.messages as Ref<UiChatMessage[]>
+      const loading = chatApi.isLoading as Ref<boolean>
+      const streaming = chatApi.isStreamingReply as Ref<boolean>
+      const vm = wrapper!.vm as unknown as { currentSessionId: string }
+      messages.value = [
+        { role: 'user', content: '帮我开单', time: '12:00' },
+        { role: 'ai', content: '请核对客户', time: '12:00', persistence: { id: 'order', status: 'saved' } },
+        { role: 'user', content: '现在导入 Excel', time: '12:01' },
+        { role: 'ai', content: 'Excel 映射完成', time: '12:01', persistence: { id: 'excel', status: 'saved' } },
+      ]
+      await flushPromises()
+      await wrapper!.get('[data-testid="proactive-suggestions-toggle"] input').setValue(true)
+      const rows = wrapper!.findAll('#chatMessages [data-message-index]')
+      expect(rows[0]!.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
+      expect(rows[1]!.get('[data-testid="proactive-suggestions"]').text()).toContain('客户')
+      expect(rows[3]!.findAll('.proactive-suggestions__chip')).toHaveLength(3)
+      expect(rows[3]!.get('.proactive-suggestions').text()).toContain('映射')
+      expect(wrapper!.find('.proactive-suggestions__hint').exists()).toBe(false)
+      expect(wrapper!.text()).not.toContain('选择一条建议填入输入框')
+      expect(wrapper!.find('.message-storage-details').exists()).toBe(false)
+      expect(wrapper!.find('.input-area .proactive-suggestions').exists()).toBe(false)
+      const choice = rows[3]!.get('.proactive-suggestions__chip')
+      await choice.trigger('click')
+      expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toBe(choice.text())
+      expect(chatApi.sendMessage).not.toHaveBeenCalled()
+      expect(chatApi.handleAutoAction).not.toHaveBeenCalled()
+
+      loading.value = true; streaming.value = true
+      messages.value.push({ role: 'user', content: '继续整理', time: '12:02' },
+        { role: 'ai', content: '尚未结束的回复', time: '12:02', persistence: { id: 'pending', status: 'local' } })
+      await flushPromises()
+      expect(wrapper!.findAll('.proactive-suggestions')).toHaveLength(2)
+      loading.value = false; streaming.value = false
+      await flushPromises()
+      expect(wrapper!.findAll('.proactive-suggestions')).toHaveLength(3)
+
+      vm.currentSessionId = 'replacement-session'
+      await flushPromises()
+      expect(wrapper!.findAll('.proactive-suggestions')).toHaveLength(0)
+      messages.value = [{ role: 'ai', content: '历史中的打印回复', time: '09:00', persistence: { id: 'order', status: 'saved' } }]
+      await flushPromises()
+      expect(wrapper!.findAll('.proactive-suggestions__chip')).toHaveLength(3)
+      expect(wrapper!.get('.proactive-suggestions').text()).toContain('打印')
+      expect(wrapper!.get('#chatMessages .message-html').text()).toBe('历史中的打印回复')
+    },
+  )
+
   it('shows a confirmation link on the collapsed card and navigates by durable task and conversation without submitting', async () => {
     const { router } = await mountView()
     expect(wrapper!.find('.task-list-detail').exists()).toBe(false)
@@ -176,8 +281,27 @@ describe('shipped chat Mod task navigation', () => {
   it('retains the fresh-grant refusal at the real task bridge', async () => {
     const { bridge } = await mountView()
     api.getRun.mockResolvedValue({ success: true, data: summary().active_run, approval: {} })
-    await expect(bridge.approveTask(taskList.value[0].id)).rejects.toThrow('任务当前没有可用的审批凭证')
+    await bridge.approveTask(taskList.value[0].id)
+    expect(bridge.taskControlStates.value[taskList.value[0].id]).toMatchObject({ needsVerification: true, error: expect.stringContaining('审批未确认成功') })
     expect(api.continueRun).not.toHaveBeenCalled()
+  })
+
+  it('wires save retry, cache recovery, history paging and stale-state verification in the shipped desktop view', async () => {
+    const { bridge } = await mountView(summary(), true)
+    expect(wrapper!.get('.chat-cache-warning').text()).toContain('本机保存失败')
+    await button('仅重试保存').trigger('click')
+    await button('重试本机保存').trigger('click')
+    await button('加载更早的会话').trigger('click')
+    expect(chatApi.retryMessageSave).toHaveBeenCalledExactlyOnceWith('message-retry')
+    expect(chatApi.retryMessagesCache).toHaveBeenCalledTimes(1)
+    expect(chatApi.loadMoreHistorySessions).toHaveBeenCalledTimes(1)
+    bridge.taskSyncState.value = { stale: true, checking: false, lastVerifiedAt: 1, error: '无法核实任务状态' }
+    await flushPromises()
+    expect(wrapper!.get('.task-sync-status').text()).toContain('无法核实任务状态')
+    await wrapper!.get('.task-sync-status button').trigger('click')
+    await flushPromises()
+    expect(bridge.taskSyncState.value.stale).toBe(false)
+    controls().forEach(control => expect(control).not.toHaveBeenCalled())
   })
 
   it.each([

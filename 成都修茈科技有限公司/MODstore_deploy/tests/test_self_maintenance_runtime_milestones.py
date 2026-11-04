@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from modstore_server.self_maintenance_loop_runner import (
-    _select_recent_milestone_rows,
-)
+from modstore_server.maintenance_loop.store import _select_recent_milestone_rows
 
 NOW = datetime(2026, 7, 22, 14, 0, tzinfo=timezone.utc)
 

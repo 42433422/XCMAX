@@ -69,7 +69,7 @@ async function uploadCrashReports(options: CrashReportingOptions): Promise<void>
 
 async function sendJsCrashReport(
   options: CrashReportingOptions,
-  payload: { type: string; error: string; stack?: string },
+  payload: { type: string; error: string; stack?: string; source?: string },
 ): Promise<void> {
   try {
     await fetch(`http://127.0.0.1:${options.port}/api/desktop/crash-report`, {
@@ -130,7 +130,7 @@ export function initializeLocalCrashReporting(options: CrashReportingOptions): v
  */
 export function reportRendererError(
   options: CrashReportingOptions,
-  payload: { type: string; error: string; stack?: string },
+  payload: { type: string; error: string; stack?: string; source?: string },
 ): void {
   void sendJsCrashReport(options, payload)
 }

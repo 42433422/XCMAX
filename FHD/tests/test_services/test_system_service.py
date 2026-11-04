@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.system_service import SystemService, get_system_service
+from app.domain.shared_services.system_service import SystemService, get_system_service
 
 
 class TestSystemServiceInit:
@@ -81,7 +81,7 @@ class TestGetPrinterConfig:
 
     def test_printer_import_error(self):
         svc = SystemService()
-        with patch.dict("sys.modules", {"app.services.printer_service": None}):
+        with patch.dict("sys.modules", {"app.domain.shared_services.printer_service": None}):
             result = svc.get_printer_config()
             assert result["success"] is False
 
@@ -89,7 +89,9 @@ class TestGetPrinterConfig:
         svc = SystemService()
         mock_ps = MagicMock()
         mock_ps.list_printers.side_effect = RuntimeError("no printer")
-        with patch("app.services.printer_service.PrinterService", return_value=mock_ps):
+        with patch(
+            "app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps
+        ):
             result = svc.get_printer_config()
             assert result["success"] is False
 
@@ -98,7 +100,9 @@ class TestGetPrinterConfig:
         mock_ps = MagicMock()
         mock_ps.list_printers.return_value = ["Printer1"]
         mock_ps.get_default_printer.return_value = "Printer1"
-        with patch("app.services.printer_service.PrinterService", return_value=mock_ps):
+        with patch(
+            "app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps
+        ):
             result = svc.get_printer_config()
             assert result["success"] is True
             assert result["printers"] == ["Printer1"]
@@ -112,7 +116,9 @@ class TestSetDefaultPrinter:
         svc = SystemService()
         mock_ps = MagicMock()
         mock_ps.set_default_printer.return_value = True
-        with patch("app.services.printer_service.PrinterService", return_value=mock_ps):
+        with patch(
+            "app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps
+        ):
             result = svc.set_default_printer("Printer1")
             assert result["success"] is True
 
@@ -120,13 +126,15 @@ class TestSetDefaultPrinter:
         svc = SystemService()
         mock_ps = MagicMock()
         mock_ps.set_default_printer.return_value = False
-        with patch("app.services.printer_service.PrinterService", return_value=mock_ps):
+        with patch(
+            "app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps
+        ):
             result = svc.set_default_printer("BadPrinter")
             assert result["success"] is False
 
     def test_set_default_import_error(self):
         svc = SystemService()
-        with patch.dict("sys.modules", {"app.services.printer_service": None}):
+        with patch.dict("sys.modules", {"app.domain.shared_services.printer_service": None}):
             result = svc.set_default_printer("Printer1")
             assert result["success"] is False
 

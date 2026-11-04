@@ -17,14 +17,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.infrastructure.payment import order_store
-from app.services.hybrid_intent_service import (
+from app.domain.shared_services.hybrid_intent_service import (
     HybridIntentService,
     get_hybrid_intent_service,
     hybrid_recognize_intents,
     hybrid_recognize_intents_sync,
     reset_hybrid_intent_service,
 )
+from app.infrastructure.payment import order_store
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # ---------------------------------------------------------------------------
@@ -675,7 +675,7 @@ def _make_service(
 def test_init_disables_bert_when_init_raises() -> None:
     # _init_bert_service imports get_bert_intent_service from .bert_intent_service
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("no model"),
     ):
         svc = HybridIntentService(use_bert=True)
@@ -693,7 +693,7 @@ def test_init_with_bert_disabled() -> None:
 def test_init_with_bert_enabled_and_service_initialized() -> None:
     fake_bert = MagicMock()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         return_value=fake_bert,
     ):
         svc = HybridIntentService(use_bert=True)
@@ -988,26 +988,39 @@ def test_recognize_sync_returns_result() -> None:
 
 
 def test_recognize_sync_handles_timeout() -> None:
-    svc = _make_service(use_rasa=False, use_bert=False)
-    with patch.object(HybridIntentService, "recognize", new=AsyncMock(side_effect=_slow_recognize)):
-        # Force timeout by patching future.result to raise TimeoutError
-        import concurrent.futures
-
-        original = concurrent.futures.ThreadPoolExecutor
-        result = svc.recognize_sync("hello")
-    # Should fall back to rule_recognize_intents
-    assert (
-        "sources_used" not in result
-        or result.get("primary_intent") is None
-        or isinstance(result, dict)
-    )
-
-
-async def _slow_recognize(_msg: str) -> dict:  # noqa: RUF029
     import asyncio
+    import concurrent.futures
 
-    await asyncio.sleep(10)
-    return {}
+    from app.domain.shared_services import hybrid_intent_service as module
+
+    svc = _make_service(use_rasa=False, use_bert=False)
+    expected = module.rule_recognize_intents("hello")
+    loop = MagicMock()
+    loop.is_running.return_value = True
+    future = MagicMock(spec=concurrent.futures.Future)
+    future.result.side_effect = concurrent.futures.TimeoutError
+    executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    executor.__enter__.return_value = executor
+
+    def submit(runner, coroutine):
+        coroutine.close()
+        assert runner is asyncio.run
+        return future
+
+    executor.submit.side_effect = submit
+    with (
+        patch("asyncio.get_event_loop", return_value=loop),
+        patch("concurrent.futures.ThreadPoolExecutor", return_value=executor),
+        patch.object(
+            module, "rule_recognize_intents", wraps=module.rule_recognize_intents
+        ) as fallback,
+    ):
+        result = svc.recognize_sync("hello")
+    executor.submit.assert_called_once()
+    future.result.assert_called_once_with(timeout=30)
+    executor.__exit__.assert_called_once()
+    fallback.assert_called_once_with("hello")
+    assert result == expected
 
 
 def test_recognize_sync_handles_recoverable_error() -> None:
@@ -1059,7 +1072,7 @@ def test_recognize_sync_handles_recoverable_error() -> None:
 async def test_hybrid_recognize_intents_uses_singleton() -> None:
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         result = await hybrid_recognize_intents("你好")
@@ -1070,7 +1083,7 @@ async def test_hybrid_recognize_intents_uses_singleton() -> None:
 def test_hybrid_recognize_intents_sync_uses_singleton() -> None:
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         result = hybrid_recognize_intents_sync("你好")
@@ -1081,7 +1094,7 @@ def test_hybrid_recognize_intents_sync_uses_singleton() -> None:
 def test_get_hybrid_intent_service_singleton_caches() -> None:
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         svc1 = get_hybrid_intent_service(use_bert=True)
@@ -1093,11 +1106,11 @@ def test_get_hybrid_intent_service_with_rasa() -> None:
     reset_hybrid_intent_service()
     with (
         patch(
-            "app.services.bert_intent_service.get_bert_intent_service",
+            "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
             side_effect=RuntimeError("disabled"),
         ),
         patch(
-            "app.services.hybrid_intent_service.get_rasa_nlu_service",
+            "app.domain.shared_services.hybrid_intent_service.get_rasa_nlu_service",
             return_value=MagicMock(),
         ) as mock_get_rasa,
     ):
@@ -1110,13 +1123,13 @@ def test_get_hybrid_intent_service_with_rasa() -> None:
 def test_reset_hybrid_intent_service_clears_singleton() -> None:
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         svc1 = get_hybrid_intent_service(use_bert=True)
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         svc2 = get_hybrid_intent_service(use_bert=True)

@@ -51,7 +51,7 @@ class TraceStore:
         self._base_dir = base_dir or _default_base_dir()
         self._retention_days = retention_days if retention_days is not None else _retention_days()
         self._max_batch = max_batch
-        self._queue: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=2000)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -61,9 +61,18 @@ class TraceStore:
     # ---- 写入 ----
 
     def record(self, span_dict: dict[str, Any]) -> None:
-        """入队（永不抛异常）。"""
+        """入队（永不抛异常）。队列有上限，满时丢掉最旧的一条。"""
         try:
             self._queue.put_nowait(span_dict)
+        except queue.Full:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                self._queue.put_nowait(span_dict)
+            except queue.Full:
+                return
         except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.warning("genai trace enqueue failed", exc_info=True)
 

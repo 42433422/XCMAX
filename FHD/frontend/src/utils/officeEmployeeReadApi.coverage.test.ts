@@ -1183,3 +1183,55 @@ describe('ensureCsrf 行为', () => {
     expect(mocks.primeCsrfCookie).toHaveBeenCalled()
   })
 })
+
+describe('local employee result envelopes and route fallback', () => {
+  it.each([
+    [{ data: { result: { outputs: [{ output: {} }, { output: { summary: 'output row' } }] } } }, { summary: 'output row' }],
+    [{ data: { result: { summary: 'runtime result' } } }, { summary: 'runtime result' }],
+    [{ data: { summary: 'outer data' } }, { summary: 'outer data' }],
+    [{ summary: 'plain body' }, { summary: 'plain body' }],
+  ])('unwraps the first meaningful runtime payload from %j', async (body, expected) => {
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes(body))
+    expect(await mod.runOfficeEmployeeRead('excel-full-read-employee', 'input.xlsx', '/work', { outputRelpath: 'out.json' })).toEqual(expected)
+    expect(mocks.apiFetch).toHaveBeenCalledWith('/api/xcmax/local/employees/excel-full-read-employee/execute', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ task: 'convert', input_data: { file_path: 'input.xlsx', workspace_root: '/work', action: 'convert', output_relpath: 'out.json' }, workspace_root: '/work', retry_max: 1 }),
+    }))
+  })
+  it.each([404, 405, 500])('falls back to the legacy employee route on missing-route status %s', async (status) => {
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ error: 'Method Not Allowed' }, { ok: false, status }))
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ data: { summary: 'legacy' } }))
+    expect(await mod.runOfficeEmployeeRead('word-full-read-employee', 'input.docx', '/work')).toEqual({ summary: 'legacy' })
+    expect(mocks.apiFetch).toHaveBeenLastCalledWith('/api/mod/word-full-read-employee/employees/word-full-read-employee/run', expect.objectContaining({ body: JSON.stringify({ file_path: 'input.docx', workspace_root: '/work', action: 'convert' }) }))
+  })
+  it('reports the final legacy failure if both routes return non-JSON errors', async () => {
+    mocks.apiFetch.mockResolvedValueOnce(throwingJsonRes({ status: 404 })).mockResolvedValueOnce(throwingJsonRes({ status: 502 }))
+    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', 'input.xlsx', '/work')).rejects.toThrow('员工执行失败 HTTP 502')
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('office file routing and output reads', () => {
+  it.each([
+    ['work.XLSX', 'excel'], ['work.xlsm', 'excel'], ['work.xls', 'excel'], ['work.csv', 'csv'],
+    ['work.docx', 'word'], ['work.doc', 'word'], ['work.pdf', 'pdf'], ['work.pptx', 'ppt'], ['work.ppt', 'ppt'],
+    ['README', ''], ['archive.zip', ''],
+  ])('selects the supported reader for %s', (filename, prefix) => {
+    expect(mod.isOfficeDockingFileSupported(filename)).toBe(Boolean(prefix))
+    expect(mod.resolveOfficeReadEmployeeForFile(filename)).toBe(prefix ? `${prefix}-full-read-employee` : '')
+  })
+  it('avoids requests for empty paths and normalizes returned output records', async () => {
+    expect(await mod.readOfficeEmployeeOutputs('/work', [' ', ''])).toEqual([])
+    expect(mocks.apiFetch).not.toHaveBeenCalled()
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ data: { files: [
+      { path: 'out.json', kind: 'json', json: { count: 3 } }, { path: 'note.txt', text: 'done' },
+    ] } }))
+    expect(await mod.readOfficeEmployeeOutputs('/work', [' out.json ', '', 'note.txt'])).toEqual([
+      { path: 'out.json', kind: 'json', json: { count: 3 }, text: '' }, { path: 'note.txt', kind: 'text', json: {}, text: 'done' },
+    ])
+    expect(mocks.apiFetch).toHaveBeenCalledWith('/api/platform-shell/workspace-read-files', expect.objectContaining({ body: JSON.stringify({ workspace_root: '/work', file_paths: ['out.json', 'note.txt'] }) }))
+  })
+  it.each(['message', 'error', 'non-JSON'])('reports output-read %s failures', async (field) => {
+    mocks.apiFetch.mockResolvedValueOnce(field === 'non-JSON' ? throwingJsonRes({ status: 502 }) : jsonRes({ success: false, [field]: 'read denied' }))
+    await expect(mod.readOfficeEmployeeOutputs('/work', ['out.txt'])).rejects.toThrow(field === 'non-JSON' ? '读取输出文件失败 HTTP 502' : 'read denied')
+  })
+})

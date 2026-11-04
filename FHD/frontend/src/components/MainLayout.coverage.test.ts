@@ -556,8 +556,20 @@ describe('MainLayout.vue - coverage ramp', () => {
       wrapper.unmount()
     })
 
-    it('route.name 也为空时默认 chat', async () => {
+    it('真实无匹配地址不回落成「对话」高亮，标题显示页面不存在', async () => {
       testState.route.path = '/unknown'
+      testState.route.name = ''
+      testState.route.matched = []
+
+      const { wrapper } = await mountMainLayout()
+      await nextTick()
+      expect(wrapper.vm.currentRouteName).toBe('__route-not-found__')
+      expect(wrapper.vm.currentViewTitle).toBe('页面不存在')
+      wrapper.unmount()
+    })
+
+    it('启动前初始位置 / 无名称时仍默认 chat', async () => {
+      testState.route.path = '/'
       testState.route.name = ''
       testState.route.matched = []
 

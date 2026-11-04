@@ -1,6 +1,7 @@
 /**
  * useChatOrchestration 拆出的副窗推送 / AutoAction 行为（行为零变更）。
  */
+import { showAppToast } from '@/composables/useAppToast'
 import { ref, type Ref } from 'vue'
 import type { useTutorialStore } from '@/stores/tutorial'
 import { asRecord } from '@/utils/typeGuards'
@@ -120,12 +121,14 @@ export function useChatOrchestrationAutoActions(deps: ChatOrchestrationAutoActio
     const text = [title, desc].filter(Boolean).join('\n')
     if (!text) return
     try {
+      await navigator.clipboard.writeText(text)
       pushCopied.value = true
       window.setTimeout(() => {
         pushCopied.value = false
       }, 1200)
     } catch (_e) {
       pushCopied.value = false
+      showAppToast('复制失败，请检查剪贴板权限后重试')
     }
   }
 

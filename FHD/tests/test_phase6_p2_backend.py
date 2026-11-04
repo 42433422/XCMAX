@@ -18,7 +18,7 @@ from app.application.workflow.approval_gated_engine import (
 )
 from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.risk_gate import RiskDecision
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,
@@ -649,7 +649,7 @@ def test_chat_unified_missing_message_returns_400(ai_intent_client: TestClient) 
 
 
 def test_chat_unified_success(ai_intent_client: TestClient) -> None:
-    with patch("app.application.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
+    with patch("app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
         mock_payload.return_value = {
             "success": True,
             "message": "处理完成",
@@ -671,7 +671,7 @@ def test_chat_unified_alias_attaches_agent_run(ai_intent_client: TestClient) -> 
     from app.application.agent_orchestrator import get_agent_run_repository
 
     get_agent_run_repository().clear()
-    with patch("app.application.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
+    with patch("app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
         mock_payload.return_value = {
             "success": True,
             "message": "处理完成",
@@ -698,7 +698,7 @@ def test_chat_unified_alias_attaches_agent_run(ai_intent_client: TestClient) -> 
 def test_chat_unified_propagates_explicit_http_status(
     ai_intent_client: TestClient,
 ) -> None:
-    with patch("app.application.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
+    with patch("app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
         mock_payload.return_value = {
             "success": False,
             "message": "AI 服务错误",
@@ -718,7 +718,9 @@ def test_chat_unified_propagates_explicit_http_status(
 
 
 def test_chat_unified_batch_empty_returns_400(ai_intent_client: TestClient) -> None:
-    with patch("app.application.ai_chat_helpers.normalize_batch_messages_payload", return_value=[]):
+    with patch(
+        "app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload", return_value=[]
+    ):
         r = ai_intent_client.post("/api/ai/chat-unified/batch", json={"messages": []})
     assert r.status_code == 400
     assert r.json()["success"] is False
@@ -726,7 +728,7 @@ def test_chat_unified_batch_empty_returns_400(ai_intent_client: TestClient) -> N
 
 def test_chat_unified_batch_too_many_returns_400(ai_intent_client: TestClient) -> None:
     with patch(
-        "app.application.ai_chat_helpers.normalize_batch_messages_payload",
+        "app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload",
         return_value=[f"m{i}" for i in range(25)],
     ):
         r = ai_intent_client.post("/api/ai/chat-unified/batch", json={"messages": ["x"] * 25})
@@ -737,11 +739,11 @@ def test_chat_unified_batch_too_many_returns_400(ai_intent_client: TestClient) -
 def test_chat_unified_batch_success(ai_intent_client: TestClient) -> None:
     with (
         patch(
-            "app.application.ai_chat_helpers.normalize_batch_messages_payload",
+            "app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload",
             return_value=["a", "b"],
         ),
         patch(
-            "app.application.ai_chat_helpers.unified_chat_single_payload",
+            "app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload",
             side_effect=lambda msg, *a, **kw: {
                 "success": True,
                 "data": {"text": f"reply-{msg}"},
@@ -762,11 +764,11 @@ def test_chat_unified_batch_with_error_status_preserved(
     """批量中某条返回 _http_status>=400 → 应保留在结果中,且整体 success=False。"""
     with (
         patch(
-            "app.application.ai_chat_helpers.normalize_batch_messages_payload",
+            "app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload",
             return_value=["ok", "bad"],
         ),
         patch(
-            "app.application.ai_chat_helpers.unified_chat_single_payload",
+            "app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload",
             side_effect=[
                 {"success": True, "data": {"text": "ok"}},
                 {"success": False, "message": "err", "_http_status": 500},
@@ -801,7 +803,7 @@ def test_intent_test_success(ai_intent_client: TestClient) -> None:
 
     repo = InMemoryAgentRunRepository()
     with (
-        patch("app.application.ai_chat_helpers.recognize_intents") as mock_rec,
+        patch("app.domain.app_pure.ai_chat_helpers.recognize_intents") as mock_rec,
         patch(
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
@@ -832,7 +834,7 @@ def test_intent_test_recognizer_raises_returns_500(
     ai_intent_client: TestClient,
 ) -> None:
     with patch(
-        "app.application.ai_chat_helpers.recognize_intents",
+        "app.domain.app_pure.ai_chat_helpers.recognize_intents",
         side_effect=ValueError("意图识别错误"),
     ):
         r = ai_intent_client.post("/api/ai/intent/test", json={"message": "测试"})

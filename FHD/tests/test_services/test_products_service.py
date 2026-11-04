@@ -1,4 +1,4 @@
-"""Tests for app.services.products_service — extended coverage."""
+"""Tests for app.domain.shared_services.products_service — extended coverage."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.products_service import ProductsService
+from app.domain.shared_services.products_service import ProductsService
 
 
 @pytest.fixture

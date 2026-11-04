@@ -9,7 +9,7 @@ function mountToolbar(propsOverrides = {}) {
     props: {
       excelAnalyzeUploading: false,
       multimodalPendingCount: 0,
-      autoRefreshStarredWechat: false,
+      proactiveSuggestionsEnabled: false,
       ttsEnabled: false,
       ...propsOverrides,
     },
@@ -162,22 +162,22 @@ describe('ChatInputToolbar', () => {
 
   it('renders auto-refresh toggle', () => {
     const wrapper = mountToolbar()
-    const toggle = wrapper.find('[data-tutorial-id="star-auto-refresh-toggle"]')
+    const toggle = wrapper.find('[data-tutorial-id="proactive-suggestions-toggle"]')
     expect(toggle.exists()).toBe(true)
   })
 
-  it('auto-refresh checkbox reflects autoRefreshStarredWechat prop', () => {
-    const wrapper = mountToolbar({ autoRefreshStarredWechat: true })
-    const checkbox = wrapper.find('[data-tutorial-id="star-auto-refresh-toggle"] input[type="checkbox"]')
+  it('proactive checkbox reflects proactiveSuggestionsEnabled prop', () => {
+    const wrapper = mountToolbar({ proactiveSuggestionsEnabled: true })
+    const checkbox = wrapper.find('[data-tutorial-id="proactive-suggestions-toggle"] input[type="checkbox"]')
     expect((checkbox.element as HTMLInputElement).checked).toBe(true)
   })
 
-  it('emits auto-refresh-change when checkbox toggled', async () => {
-    const wrapper = mountToolbar({ autoRefreshStarredWechat: false })
-    const checkbox = wrapper.find('[data-tutorial-id="star-auto-refresh-toggle"] input[type="checkbox"]')
+  it('emits proactive-suggestions-change when checkbox toggled', async () => {
+    const wrapper = mountToolbar({ proactiveSuggestionsEnabled: false })
+    const checkbox = wrapper.find('[data-tutorial-id="proactive-suggestions-toggle"] input[type="checkbox"]')
     await checkbox.setValue(true)
-    expect(wrapper.emitted('auto-refresh-change')).toBeTruthy()
-    expect(wrapper.emitted('auto-refresh-change')![0]).toEqual([true])
+    expect(wrapper.emitted('proactive-suggestions-change')).toBeTruthy()
+    expect(wrapper.emitted('proactive-suggestions-change')![0]).toEqual([true])
   })
 
   it('renders TTS toggle', () => {

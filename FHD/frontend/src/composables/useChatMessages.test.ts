@@ -1,5 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { speakText, stopSpeaking } from '@/utils/tts'
+import { useChatMessageUi } from './useChatMessageUi'
 import { ref, nextTick } from 'vue'
+import { lastChatModelRoute, recordChatModelRoute, type ChatModelRoute } from '@/utils/chatModelRoute'
+import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { setActivePinia, createPinia } from 'pinia'
 import { chatMessageExtrasFromServerRow, useChatMessages, queueVoice, clearVoiceQueue } from './useChatMessages'
 
@@ -35,6 +39,7 @@ vi.mock('@/constants/industryPresets', () => ({
 }))
 
 vi.mock('@/utils/chatStorageKeys', () => ({
+  resolveChatIdentity: (modId = '') => `identity:${modId}`,
   buildChatMessagesKey: (sid: string, modId: string) => `chat_${sid}_${modId}`,
   buildChatSessionMetaKey: (sid: string, modId: string) => `chat_meta_${sid}_${modId}`,
 }))
@@ -379,6 +384,24 @@ describe('useChatMessages', () => {
     expect(result).toBe(true)
   })
 
+  it.each(['session', 'mod', 'account', 'live-message'])('ignores a late history response after %s changes', async (change) => {
+    const sid = ref('current')
+    const chat = useChatMessages(sid)
+    const api = (await import('@/api/chat')).default
+    let finish!: (value: any) => void
+    vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const pending = chat.syncFromServer()
+    if (change === 'session') sid.value = 'other'
+    if (change === 'mod') activeModIdRef.value = 'other-mod'
+    if (change === 'account') (await import('@/utils/productReadAccountScope')).productReadAccountEpoch.value++
+    if (change === 'live-message') chat.addMessage('new live request', 'user')
+    await nextTick()
+    finish({ messages: [{ role: 'ai', content: 'old approval result' }] })
+    expect(await pending).toBe(false)
+    expect(chat.messages.value.some(row => row.content.includes('old approval result'))).toBe(false)
+    activeModIdRef.value = ''
+  })
+
   it('syncFromServer restores approval, trace, and terminal business result metadata', async () => {
     const chatApi = (await import('@/api/chat')).default
     vi.mocked(chatApi.getConversation).mockResolvedValueOnce({
@@ -431,26 +454,324 @@ describe('useChatMessages', () => {
   })
 })
 
-describe('queueVoice and clearVoiceQueue', () => {
+describe('required initial conversation readiness', () => {
   beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
     vi.clearAllMocks()
+    activeModIdRef.value = ''
+  })
+
+  it('waits for the actual current conversation response before applying messages', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('required-session'))
+    let finish!: (value: Awaited<ReturnType<typeof api.getConversation>>) => void
+    vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const pending = chat.syncFromServer({ required: true })
+    expect(api.getConversation).toHaveBeenCalledWith('required-session')
+    expect(chat.messages.value.some(row => row.content.includes('server initial reply'))).toBe(false)
+    finish({ success: true, id: 'required-session', messages: [{ role: 'assistant', content: 'server initial reply' }] } as never)
+    await expect(pending).resolves.toBe(true)
+    expect(chat.messages.value.some(row => row.content.includes('server initial reply'))).toBe(true)
+  })
+
+  it('accepts a verified empty new conversation without discarding local unsaved messages', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('new-session'))
+    chat.addMessage('locally retained draft', 'user')
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, id: 'new-session', messages: [] } as never)
+    await expect(chat.syncFromServer({ required: true })).resolves.toBe(true)
+    expect(chat.messages.value.some(row => row.content.includes('locally retained draft'))).toBe(true)
+  })
+
+  it.each([
+    { success: false, messages: [] },
+    { success: true },
+    { success: true, messages: '[]' },
+    { success: true, messages: [] },
+    { messages: [] },
+    { success: true, id: 'another-session', messages: [] },
+    { success: true, id: 'required-session', messages: [{}] },
+    null,
+  ])('rejects an unverified or malformed required response: %j', async payload => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('required-session'))
+    const before = JSON.stringify(chat.messages.value)
+    vi.mocked(api.getConversation).mockResolvedValueOnce(payload as never)
+    await expect(chat.syncFromServer({ required: true })).rejects.toThrow()
+    expect(JSON.stringify(chat.messages.value)).toBe(before)
+  })
+
+  it('propagates a required transport failure and permits a fresh successful retry', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('required-session'))
+    vi.mocked(api.getConversation).mockRejectedValueOnce(new Error('synthetic conversation timeout'))
+      .mockResolvedValueOnce({ success: true, id: 'required-session', messages: [] } as never)
+    await expect(chat.syncFromServer({ required: true })).rejects.toThrow('synthetic conversation timeout')
+    await expect(chat.syncFromServer({ required: true })).resolves.toBe(true)
+    expect(api.getConversation).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['session', 'mod', 'account', 'authentication', 'live-message', 'attempt'] as const)(
+    'rejects and does not apply a required response after %s changes', async change => {
+      const api = (await import('@/api/chat')).default
+      const sid = ref('required-session')
+      const chat = useChatMessages(sid)
+      let current = true
+      let finish!: (value: Awaited<ReturnType<typeof api.getConversation>>) => void
+      vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+      const pending = chat.syncFromServer({ required: true, isCurrent: () => current })
+      if (change === 'session') sid.value = 'next-session'
+      if (change === 'mod') activeModIdRef.value = 'next-mod'
+      if (change === 'account') (await import('@/utils/productReadAccountScope')).productReadAccountEpoch.value++
+      if (change === 'authentication') invalidateEnterpriseSessionCache()
+      if (change === 'live-message') chat.addMessage('new live message', 'user')
+      if (change === 'attempt') current = false
+      await nextTick()
+      finish({ success: true, id: 'required-session', messages: [{ role: 'assistant', content: 'retired initial reply' }] } as never)
+      await expect(pending).rejects.toThrow()
+      expect(chat.messages.value.some(row => row.content.includes('retired initial reply'))).toBe(false)
+      if (change === 'live-message') expect(chat.messages.value.some(row => row.content.includes('new live message'))).toBe(true)
+      activeModIdRef.value = ''
+    },
+  )
+
+  it('does not accept an absent required session id as an empty conversation', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref(''))
+    await expect(chat.syncFromServer({ required: true })).rejects.toThrow()
+    expect(api.getConversation).not.toHaveBeenCalled()
+  })
+})
+
+describe('message persistence failure UX', () => {
+  beforeEach(() => { localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks() })
+
+  it('retains a retryable bubble when both the server and local storage fail, then recovers its local copy', async () => {
+    const api = useChatMessages(ref('cache-failure'))
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.saveMessage).mockRejectedValueOnce(new Error('offline'))
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+    api.addMessage('重要记录', 'user')
+    await api.saveMessage('user', '重要记录')
+    expect(api.cacheError.value).toContain('本机保存失败')
+    expect(api.messages.value.at(-1)?.persistence?.localSaved).toBe(false)
+    expect(api.messages.value.at(-1)?.persistence).toMatchObject({ status: 'failed', request: { role: 'user', content: '重要记录' } })
+    expect(api.messages.value.at(-1)?.content).toContain('重要记录')
+    write.mockRestore()
+    api.retryMessagesCache()
+    expect(api.cacheError.value).toBe('')
+    expect(api.messages.value.at(-1)?.persistence?.localSaved).toBe(true)
+  })
+
+  it.each(['message-b', ''])('preserves an unsaved repeated message when only the second copy is on the server (client id=%s)', async clientId => {
+    const chatApi = (await import('@/api/chat')).default
+    const api = useChatMessages(ref('repeated-content'))
+    const body = { role: 'user' as const, content: '相同消息', time: '12:00' }
+    api.loadMessages([
+      { ...body, persistence: { id: 'message-a', status: 'failed', request: { role: 'user', content: '相同消息' } } },
+      { ...body, persistence: { id: 'message-b', status: 'saved' } },
+    ])
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, messages: [
+      { ...body, id: 2, metadata: JSON.stringify({ client_message_id: clientId }) },
+    ] } as never)
+    expect(await api.syncFromServer()).toBe(true)
+    expect(api.messages.value).toHaveLength(2)
+    expect(api.messages.value.find(item => item.persistence?.id === 'message-a')?.persistence).toMatchObject({ status: 'failed', request: { content: '相同消息' } })
+    expect(api.messages.value.filter(item => item.persistence?.status === 'saved')).toHaveLength(1)
+    expect(chatApi.saveMessage).not.toHaveBeenCalled()
+  })
+
+  it('restores a failed save with the same id and retains it during server history synchronization', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.saveMessage).mockRejectedValueOnce(new Error('offline'))
+    const first = useChatMessages(ref('persisted-failure'))
+    await first.addAndSaveMessage('需要保留的记录', 'user')
+    const id = first.messages.value.at(-1)!.persistence!.id
+    const restored = useChatMessages(ref('persisted-failure'))
+    expect(restored.messages.value.at(-1)?.persistence).toMatchObject({ id, status: 'failed' })
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, messages: [{ id: 12, role: 'ai', content: 'older server reply', timestamp: '2026-10-29T08:00:00Z' }] } as never)
+    await restored.syncFromServer()
+    expect(restored.messages.value.some(row => row.persistence?.id === id && row.persistence.status === 'failed')).toBe(true)
+    vi.mocked(chatApi.saveMessage).mockResolvedValueOnce({ success: true, saved: true, durable: true } as never)
+    await restored.retryMessageSave(id)
+    expect(vi.mocked(chatApi.saveMessage).mock.calls.at(-1)?.[0]).toMatchObject({ client_message_id: id, content: '需要保留的记录' })
+    expect(restored.messages.value.find(row => row.persistence?.id === id)?.persistence?.status).toBe('saved')
+  })
+})
+
+describe('queueVoice and clearVoiceQueue', () => {
+  beforeEach(() => { vi.useFakeTimers(); clearVoiceQueue(); vi.clearAllMocks() })
+  afterEach(() => { clearVoiceQueue(); vi.useRealTimers() })
+
+  it('serializes complete playback even when a message exceeds 30 seconds', async () => {
+    let finish!: () => void
+    vi.mocked(speakText).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    queueVoice('<b>第一句</b>'); queueVoice('第二句')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(speakText).toHaveBeenCalledTimes(1)
+    expect(speakText).toHaveBeenLastCalledWith('第一句')
+    expect(stopSpeaking).not.toHaveBeenCalled()
+    finish(); await vi.advanceTimersByTimeAsync(349)
+    expect(speakText).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(speakText).toHaveBeenLastCalledWith('第二句')
+  })
+
+  it('ignores empty text and stops queued playback', async () => {
+    queueVoice(''); queueVoice('   ')
+    expect(speakText).not.toHaveBeenCalled()
+    queueVoice('first'); queueVoice('discarded')
+    await Promise.resolve()
     clearVoiceQueue()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(speakText).toHaveBeenCalledTimes(1)
+    expect(stopSpeaking).toHaveBeenCalledOnce()
   })
 
-  it('queueVoice adds text to queue', () => {
-    queueVoice('Hello world')
-    // Voice queue is internal; just ensure no error
+  it('manual playback clears automatic speech so queued messages cannot interrupt it', async () => {
+    let finish!: () => void
+    vi.mocked(speakText).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    queueVoice('automatic'); queueVoice('discarded')
+    const ui = useChatMessageUi({ messages: ref([]), chatMessagesRef: ref(null) })
+    await ui.toggleMessageTts(0, 'manual')
+    finish(); await vi.advanceTimersByTimeAsync(1000)
+    expect(speakText).toHaveBeenCalledTimes(2)
+    expect(speakText).toHaveBeenLastCalledWith('manual', expect.any(Object))
   })
 
-  it('queueVoice ignores empty text', () => {
-    queueVoice('')
-    queueVoice('   ')
-    // No error
+  it('fences late completion after clear so it cannot consume a new queue', async () => {
+    const finish: Array<() => void> = []
+    vi.mocked(speakText).mockImplementation(() => new Promise(resolve => { finish.push(resolve) }))
+    queueVoice('old'); queueVoice('discarded')
+    clearVoiceQueue(); queueVoice('new'); queueVoice('next')
+    finish[0]!(); await vi.advanceTimersByTimeAsync(1000)
+    expect(speakText).toHaveBeenCalledTimes(2)
+    finish[1]!(); await vi.advanceTimersByTimeAsync(350)
+    expect(speakText).toHaveBeenLastCalledWith('next')
+    expect(speakText).toHaveBeenCalledTimes(3)
+    finish[2]!()
+    vi.mocked(speakText).mockResolvedValue(undefined)
   })
+})
 
-  it('clearVoiceQueue stops speaking', () => {
-    queueVoice('test')
-    clearVoiceQueue()
-    // No error
-  })
+ it('batches synthetic token cache writes and flushes into the original session', async () => {
+  vi.useFakeTimers()
+  const sid = ref('synthetic-a')
+  const api = useChatMessages(sid)
+  const index = api.pushStreamingAiShell()
+  await nextTick()
+  const writes = vi.spyOn(Storage.prototype, 'setItem')
+  writes.mockClear()
+  for (let i = 1; i <= 200; i++) api.applyPlainTextToMessageIndex(index, 'x'.repeat(i))
+  expect(writes).not.toHaveBeenCalled()
+  expect(api.messages.value[index].content).toHaveLength(200)
+  await vi.advanceTimersByTimeAsync(250)
+  expect(writes).toHaveBeenCalledTimes(2)
+  api.applyPlainTextToMessageIndex(index, 'final old session')
+  sid.value = 'synthetic-b'
+  expect(JSON.parse(localStorage.getItem('chat_synthetic-a_') || '[]')[index].content).toBe('final old session')
+  expect(localStorage.getItem('chat_synthetic-b_')).toBeNull()
+  writes.mockRestore()
+  vi.useRealTimers()
+ })
+
+
+it('restores two same-minute failures once each across repeated server syncs', async () => {
+  localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks()
+  const chatApi = (await import('@/api/chat')).default
+  const api = useChatMessages(ref('failure-restoration'))
+  api.loadMessages([
+    { role: 'user', content: '测试一', time: '12:00', persistence: { id: 'user-a', status: 'local' } },
+    { role: 'ai', content: '处理失败：模型未返回可显示的正文，已停止重复请求。请检查模型服务后重试。', time: '12:00', persistence: { id: 'reply-a', status: 'local' } },
+    { role: 'user', content: '测试二', time: '12:00', persistence: { id: 'user-b', status: 'local' } },
+    { role: 'ai', content: '处理失败：模型未返回可显示的正文，已停止重复请求。请检查模型服务后重试。', time: '12:00', persistence: { id: 'reply-b', status: 'local' } },
+  ])
+  const serverMessages = api.messages.value.map((row, index) => ({ id: index + 1, role: row.role, content: row.content.replace('处理失败：', ''), time: row.time }))
+  vi.mocked(chatApi.getConversation).mockResolvedValue({ success: true, messages: serverMessages } as never)
+  await api.syncFromServer()
+  await api.syncFromServer()
+  expect(api.messages.value).toHaveLength(4)
+  expect(api.messages.value.every(row => row.persistence?.status === 'saved')).toBe(true)
+  expect(chatApi.saveMessage).not.toHaveBeenCalled()
+})
+
+it.each([undefined, 'explicit-turn'])('preserves the user turn through the save envelope and server restoration (override=%s)', async override => {
+  localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks()
+  const chatApi = (await import('@/api/chat')).default
+  vi.mocked(chatApi.saveMessage).mockResolvedValueOnce({ success: true, saved: true, durable: true } as never)
+  const api = useChatMessages(ref('user-turn-persistence'))
+  api.addMessage('本轮原文', 'user', { turnId: 'local-turn' })
+  await api.saveMessage('user', '本轮原文', undefined, override ? { turnId: override } : undefined)
+  const payload = vi.mocked(chatApi.saveMessage).mock.calls[0]![0] as { metadata: string; client_message_id: string }
+  const storedMetadata = { ...JSON.parse(payload.metadata), client_message_id: payload.client_message_id }
+  const restored = chatMessageExtrasFromServerRow({ id: 41, role: 'user', metadata: JSON.stringify(storedMetadata) })
+  expect(restored.turnId).toBe(override || 'local-turn')
+  expect(restored.persistence).toEqual({ id: payload.client_message_id, status: 'saved' })
+})
+
+
+it('restores only safe route receipts after server history, refresh and conversation reentry, and retires them on logout', async () => {
+  localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
+  const chatApi = (await import('@/api/chat')).default
+  const route: ChatModelRoute = { provider: 'xiaomi', model: 'flash', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'server-a', route_state: 'completed' }
+  const sid = ref('route-history')
+  const api = useChatMessages(sid)
+  vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ messages: [{ id: 10, role: 'assistant', content: '实际回复', time: '12:00', metadata: JSON.stringify({ route_metadata: { ...route, api_key: 'synthetic-never-render', route_token: 'synthetic-token' } }) }] } as never)
+  await api.syncFromServer()
+  expect(lastChatModelRoute('route-history')).toEqual(route)
+  expect(api.messages.value[0]?.routeMetadata).toEqual(route)
+  recordChatModelRoute('route-history', null)
+  const reopened = useChatMessages(ref('route-history'))
+  expect(reopened.messages.value[0]?.routeMetadata).toEqual(route)
+  expect(lastChatModelRoute('route-history')).toEqual(route)
+  sid.value = 'other-history'
+  expect(lastChatModelRoute('other-history')).toBeNull()
+  sid.value = 'route-history'
+  expect(lastChatModelRoute('route-history')).toEqual(route)
+  activeModIdRef.value = 'other-mod'
+  expect(lastChatModelRoute('route-history', 'identity:other-mod')).toBeNull()
+  invalidateEnterpriseSessionCache()
+  expect(lastChatModelRoute('route-history', 'identity:')).toBeNull()
+  expect(chatMessageExtrasFromServerRow({ role: 'user', metadata: { route_metadata: route } }).routeMetadata).toBeUndefined()
+})
+
+it('does not replace current selected or failed local metadata with an older completed history receipt', async () => {
+  localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
+  const chatApi = (await import('@/api/chat')).default
+  const old: ChatModelRoute = { provider: 'xiaomi', model: 'old-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'completed' }
+  const current: ChatModelRoute = { ...old, model: 'current-model', config_revision: 'b', route_state: 'selected' }
+  const api = useChatMessages(ref('live-history-fence'))
+  api.loadMessages([
+    { role: 'ai', content: 'older reply', time: '12:00', routeMetadata: old, persistence: { id: 'server:1', status: 'saved' } },
+    { role: 'ai', content: '已停止接收本轮回复', time: '12:01', routeMetadata: current, persistence: { id: 'local-current', status: 'local' } },
+  ])
+  vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ messages: [{ id: 1, role: 'assistant', content: 'older reply', time: '12:00', metadata: { route_metadata: old } }] } as never)
+  await api.syncFromServer()
+  expect(lastChatModelRoute('live-history-fence')).toEqual(current)
+  expect(useChatMessages(ref('live-history-fence')).messages.value.at(-1)?.routeMetadata).toEqual(current)
+})
+
+
+it('retires only cached streaming placeholders after refresh while preserving unconfirmed route identity across history and account scopes', async () => {
+  localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
+  const route: ChatModelRoute = { provider: 'xiaomi', model: 'selected-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'selected' }
+  const first = useChatMessages(ref('refresh-stream'))
+  const idx = first.pushStreamingAiShell()
+  first.messages.value[idx]!.routeMetadata = route
+  await nextTick()
+  expect(first.messages.value[idx]?.streamingShell).toBe(true)
+  const reopened = useChatMessages(ref('refresh-stream'))
+  expect(reopened.messages.value.at(-1)?.streamingShell).toBeUndefined()
+  expect(reopened.messages.value.at(-1)?.content).toContain('未收到完成回执')
+  expect(lastChatModelRoute('refresh-stream')).toEqual(route)
+  expect(first.messages.value[idx]?.streamingShell).toBe(true)
+  const sid = ref('other-conversation')
+  const history = useChatMessages(sid)
+  expect(lastChatModelRoute('other-conversation')).toBeNull()
+  sid.value = 'refresh-stream'
+  expect(history.messages.value.at(-1)?.streamingShell).toBeUndefined()
+  expect(history.messages.value.at(-1)?.routeMetadata).toEqual(route)
+  invalidateEnterpriseSessionCache()
+  expect(lastChatModelRoute('refresh-stream')).toBeNull()
 })

@@ -1,7 +1,0 @@
-2026-09-30T04:27:10+0800 [erp-ar-ap] 开始验收 erp-ar-ap 应收应付与毛利；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:27:10+0800 [erp-ar-ap] M1 passed :: HTTP 200 73ms；应收 0
-2026-09-30T04:27:10+0800 [erp-ar-ap] M2 passed :: HTTP 200 16ms；应付 6
-2026-09-30T04:27:10+0800 [erp-ar-ap] M3 passed :: HTTP 200 14ms；{"total_revenue": 2100, "total_cost": 0, "gross_profit": 2100, "gross_margin_pct": 100, "total_payable": 300, "manual_receipt": 0, "manual_payment": 0, "period": {"start": null, "end": null}}
-2026-09-30T04:27:13+0800 [erp-ar-ap] M4 passed :: 导航后路径 /kitten-finance；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告 |  | 立即开
-2026-09-30T04:27:15+0800 [erp-ar-ap] screenshot result.png
-2026-09-30T04:27:17+0800 [erp-ar-ap] video operation.webm bytes=230781

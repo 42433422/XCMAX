@@ -1,0 +1,42 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M12.ota-upgrade-and-recovery",
+ "platform": "macos",
+ "architecture": "arm64",
+ "product_version": "1.0.0.5",
+ "from_sha": "c46f93821bc751c2c32b5a208c4ba86d29af9e45",
+ "to_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "feed": "http://127.0.0.1:8765/latest-mac.yml",
+ "install_location": "/Applications/XCAGI.app",
+ "non_applications_copy_refused": "当前 XCAGI 不是“应用程序”目录中的正式安装副本。请通过安装包替换 /Applications/XCAGI.app 后再使用在线更新。",
+ "timeline_utc": {
+  "update_available": "2026-10-12T11:22:41.725Z",
+  "download_start": "2026-10-12T11:22:41.728Z",
+  "update_downloaded": "2026-10-12T11:22:46.408Z",
+  "install_start": "2026-10-12T11:22:52.325Z",
+  "shipit_completed": "2026-10-12 19:23:29 local",
+  "shipit_launched": "2026-10-12 19:23:34 Successfully launched application"
+ },
+ "shipit": "Installation completed successfully; Successfully launched application",
+ "post_install_signature": {
+  "codesign_deep_strict": "PASS",
+  "spctl": "accepted source=Notarized Developer ID",
+  "stapler_validate": "worked"
+ },
+ "post_install_data_on_acceptance_profile": {
+  "health": "healthy",
+  "git_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+  "product": {
+   "id": 1,
+   "name": "M07确认品",
+   "price": 8.8
+  },
+  "shipment_order": "20261012191340",
+  "quick_check": "ok",
+  "ai_action_audit": 12,
+  "approval_requests": 4
+ },
+ "recovery_note": "ShipIt 自动替换并拉起新进程。拉起时继承了登录会话里另一份 XCAGI_DESKTOP_USER_DATA_DIR（FULLCLOSED customer），验收目录未被升级过程改写。随后用验收目录显式重开，业务行、发货单号、审计计数与升级前一致。",
+ "verdict": "PASS",
+ "captured_at_utc": "2026-10-12T11:24:57Z"
+}

@@ -12,7 +12,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
-from app.application.workflow.types import normalize_workflow_risk
+from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -67,7 +67,7 @@ def _run_materials_agent(
     route_path: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()

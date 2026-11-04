@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
+import { parseApprovalCardFromPayload, restoreApprovalCard } from '@/utils/chatApprovalCard'
 
 describe('parseApprovalCardFromPayload', () => {
   it('parses nested approval_card from payload', () => {
@@ -41,5 +41,15 @@ describe('parseApprovalCardFromPayload', () => {
     })
     expect(card?.plan_id).toBe('p1')
     expect(card?.confirm_mode).toBe('approval')
+  })
+
+  it('retains an envelope run ID and restores a stable card ID without a stuck submitting state', () => {
+    const card = parseApprovalCardFromPayload({
+      run_id: 'run-envelope',
+      data: { action: 'workflow_confirmation_required', data: { approval_card: { plan_id: 'plan-A' } } },
+    })!
+    expect(card.run_id).toBe('run-envelope')
+    expect(card.id).toBeTruthy()
+    expect(restoreApprovalCard({ ...card, submitting: true })).toEqual(card)
   })
 })

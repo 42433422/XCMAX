@@ -104,7 +104,9 @@ class NeuroIntentRecognizer:
         reflex_arc: IntentReflexArc | None = None,
         base_recognizer: Any | None = None,
     ):
-        from app.services.unified_intent_recognizer import get_unified_intent_recognizer
+        from app.domain.shared_services.unified_intent_recognizer import (
+            get_unified_intent_recognizer,
+        )
 
         self._reflex = reflex_arc or get_reflex_arc()
         self._base = base_recognizer or get_unified_intent_recognizer()
@@ -252,7 +254,7 @@ class NeuroIntentRecognizer:
         try:
             from app.domain.neuro.processors.conscious import get_conscious_processor
             from app.neuro_async_bridge import run_coroutine_on_neuro_loop
-            from app.neuro_bus.events.base import (
+            from app.neuro_bus.events.events_base import (
                 EventMetadata,
                 EventPriority,
                 NeuroEvent,
@@ -343,7 +345,7 @@ class NeuroIntentRecognizer:
         processor_type: ProcessorType = ProcessorType.CONSCIOUS,
     ) -> NeuroIntentResult:
         """先走 ConsciousProcessor（若已注册），失败则 fallback unified_recognizer。"""
-        from app.services.unified_intent_recognizer import RecognizerResult
+        from app.domain.shared_services.unified_intent_recognizer import RecognizerResult
 
         processed = self._try_conscious_processor(
             text, user_id, context_data, processor_type, start_time

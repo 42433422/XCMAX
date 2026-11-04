@@ -1,6 +1,5 @@
 ﻿param(
-  [string]$Version = '',
-  [switch]$SkipUiInstaller
+  [string]$Version = ''
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,7 +31,6 @@ foreach ($sku in @('personal', 'enterprise')) {
     '-Version', $Version,
     '-ProductSku', $sku
   )
-  if ($SkipUiInstaller) { $args += '-SkipUiInstaller' }
   & powershell @args
   if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
     throw "build-installer failed for SKU $sku (exit $LASTEXITCODE)"

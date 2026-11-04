@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from modstore_server.download_release import public_subset
+import json
+from pathlib import Path
+
+import pytest
+
+from modstore_server.download_release import public_subset, record_installer_push
 
 
 def test_public_subset_preserves_enterprise_release_identity() -> None:
@@ -36,3 +41,52 @@ def test_public_subset_preserves_enterprise_release_identity() -> None:
     assert public["manifest_url"] == "https://xiu-ci.com/xcagi-v1.0.0.0/manifest.json"
     assert public["auto_update_base"] == "https://xiu-ci.com/releases/stable"
     assert public["release_history"] == history
+
+
+@pytest.mark.parametrize("was_ready", [False, True])
+def test_installer_upload_does_not_promote_or_rebind_public_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, was_ready: bool
+) -> None:
+    old_sha = "a" * 40
+    candidate_sha = "b" * 40
+    ssot_path = tmp_path / "download_release.json"
+    public_path = tmp_path / "public" / "download-release.json"
+    public_path.parent.mkdir()
+    prior_public = {
+        "version_lock": "1.0.0.5",
+        "download_version": "1.0.0.5",
+        "release_ready": was_ready,
+        "git_sha": old_sha,
+        "release_root": "https://downloads.invalid/xcagi-v1.0.0.5",
+    }
+    public_bytes = (json.dumps(prior_public, indent=2) + "\n").encode()
+    public_path.write_bytes(public_bytes)
+    ssot_path.write_text(
+        json.dumps(
+            {
+                **prior_public,
+                "last_push": {"git_sha": old_sha, "release_train": "1.0.0.5"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "modstore_server.download_release.public_manifest_targets",
+        lambda: [public_path],
+    )
+
+    result = record_installer_push(
+        release_train="1.0.0.6-candidate",
+        release_kind="installer",
+        git_sha=candidate_sha,
+        cos_uploaded=True,
+        path=ssot_path,
+    )
+
+    state = json.loads(ssot_path.read_text(encoding="utf-8"))
+    assert state["last_upload"]["git_sha"] == candidate_sha  # telemetry is recorded
+    assert state["last_push"]["git_sha"] == old_sha
+    assert public_subset(state)["git_sha"] == old_sha  # dynamic readers also stay bound
+    assert state["release_ready"] is was_ready  # upload cannot change acceptance
+    assert public_path.read_bytes() == public_bytes  # old public version/SHA/path stay bound
+    assert result["public_written"] == []

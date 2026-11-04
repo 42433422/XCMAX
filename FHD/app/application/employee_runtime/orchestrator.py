@@ -17,7 +17,7 @@ from app.application.employee_runtime.loader import (
     parse_employee_config_v2,
 )
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.domain.employee.collaboration_graph import CollaborationGraph
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

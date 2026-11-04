@@ -22,7 +22,8 @@ import {
 } from './updater'
 import { cancelPreparedRollback } from './rollback'
 import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity, installUpdate } from './desktop-install-update'
-import { desktopOfflineDbPath, queryOffline } from './data-bridge'
+import { desktopOfflineDbPath } from './data-bridge'
+import { queryOfflineForSession } from './data-bridge-session'
 import { deleteSecret, getSecret, listSecrets, setSecret } from './secure-store'
 import { reportRendererError } from './desktop-resilience'
 
@@ -48,7 +49,7 @@ function handleTrusted<T extends unknown[]>(
   handler: (event: IpcMainInvokeEvent, ...args: T) => unknown,
 ): void {
   ipcMain.handle(channel, (event: IpcMainInvokeEvent, ...args: unknown[]) => {
-    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow)) {
+    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow, { port: DEFAULT_PORT, splashUrl: desktopRuntime.splashUrl })) {
       writeBackendLog(`[ipc] rejected call from untrusted sender channel=${channel}\n`)
       return { ok: false, reason: 'untrusted_sender' }
     }
@@ -118,7 +119,7 @@ export function registerDesktopIpcHandlers(): void {
       mainWindow.flashFrame(n > 0)
     }
   })
-  ipcMain.handle(
+  handleTrusted(
     'xcagi:show-notification',
     (_event, payload: { title?: string; body?: string }) => {
       const title = String(payload?.title || APP_NAME).trim() || APP_NAME
@@ -139,18 +140,24 @@ export function registerDesktopIpcHandlers(): void {
     }
   )
 
-  // 原生本地数据桥（离线只读）：后端 HTTP 不可用时前端可直读本地 SQLite。
-  handleTrusted('xcagi:offline-query', (_event, params: unknown) => {
+  // Offline reads use the sender's current session cookie, never renderer-supplied user IDs.
+  handleTrusted('xcagi:offline-query', async (event, params: unknown) => {
     const p = (params && typeof params === 'object' ? params : {}) as {
       kind?: string
       keyword?: string
       limit?: number
     }
-    return queryOffline(desktopOfflineDbPath(), {
-      kind: String(p.kind || ''),
-      keyword: p.keyword,
-      limit: p.limit,
-    })
+    const result = await queryOfflineForSession(
+      event.sender.session,
+      desktopOfflineDbPath(),
+      { kind: String(p.kind || ''), keyword: p.keyword, limit: p.limit },
+      `http://127.0.0.1:${DEFAULT_PORT}/`,
+      (process.env.SESSION_COOKIE_NAME || 'session_id').trim(),
+    )
+    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow, { port: DEFAULT_PORT, splashUrl: desktopRuntime.splashUrl })) {
+      return { ok: false, reason: 'untrusted_sender' }
+    }
+    return result
   })
 
   // 端侧密钥链（safeStorage）：敏感配置加密落盘，明文只驻内存。
@@ -163,8 +170,8 @@ export function registerDesktopIpcHandlers(): void {
 
   // 剪贴板原生读写（P2 高频微交互）。
   handleTrusted('xcagi:clipboard-read-text', () => clipboard.readText())
-  handleTrusted('xcagi:clipboard-write-text', (_event, text: string) => {
-    clipboard.writeText(String(text ?? ''))
+  handleTrusted('xcagi:clipboard-write-text', async (_event, text: string) => {
+    await clipboard.writeText(String(text ?? ''))
     return { ok: true }
   })
   // 原生打开本地路径（文件/目录），供拖拽文件、导出等场景系统级打开。
@@ -191,14 +198,24 @@ export function registerDesktopIpcHandlers(): void {
   // 渲染进程错误遥测：复用后端 crash-report 通道（opt-in 由后端统一聚合），best-effort。
   handleTrusted(
     'xcagi:report-error',
-    (_event, payload: { type?: string; error?: string; stack?: string }) => {
+    (_event, payload: { type?: string; error?: unknown; stack?: string; source?: string }) => {
       const p = payload && typeof payload === 'object' ? payload : {}
+      const source = typeof p.source === 'string' ? p.source : ''
+      const stack = typeof p.stack === 'string' ? p.stack : ''
+      const raw = p.error && typeof p.error === 'object'
+        ? String((p.error as { message?: unknown }).message || '')
+        : String(p.error || '')
+      const message = raw.trim()
+      const stackSummary = stack.split('\n').map(line => line.trim()).find(line => line && !line.startsWith('at '))
+        ?.replace(/^Error:\s*/, '') || ''
+      const useful = message && message !== 'unknown' ? message : stackSummary
       reportRendererError(
         { port: DEFAULT_PORT, writeLog: writeBackendLog },
         {
           type: String(p.type || 'renderer:error'),
-          error: String(p.error || 'unknown'),
-          stack: typeof p.stack === 'string' ? p.stack : undefined,
+          error: useful || (source ? `renderer error at ${source}` : 'renderer error without message'),
+          stack: stack || undefined,
+          source: source || undefined,
         },
       )
     },

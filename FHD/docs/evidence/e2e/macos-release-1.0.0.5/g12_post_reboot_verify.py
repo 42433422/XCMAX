@@ -6,7 +6,15 @@
 数据摘要未丢失、Mod 加载、会话仍有效，并复跑 G11 业务链。
 输出：round-20260918-g12-post-reboot-verify-10005.json（verdict PASS/BLOCKED）。
 """
-import json, os, shlex, subprocess, sqlite3, sys, time, urllib.error, urllib.request
+import json
+import os
+import shlex
+import sqlite3
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHA = "54325894cc6e3fc2becfcbc98697a099310d9420"

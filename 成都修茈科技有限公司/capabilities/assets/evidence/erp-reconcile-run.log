@@ -1,8 +1,0 @@
-2026-09-30T04:29:45+0800 [erp-reconcile] 开始验收 erp-reconcile 经营对账与结算；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:29:45+0800 [erp-reconcile] M1 passed :: HTTP 200 19ms；{"success": true, "dry_run": false, "ran_at": "2026-09-29T20:29:45.421430+00:00", "period_start": "2026-09-28T20:29:45.421430+00:00", "period_end": "2026-09-29T
-2026-09-30T04:29:45+0800 [erp-reconcile] M2 passed :: HTTP 200 17ms；{"last_run": {"ran_at": "2026-09-29T20:29:45.421430+00:00", "period_start": "2026-09-28T20:29:45.421430+00:00", "period_end": "2026-09-29T20:29:45.421430+00:00"
-2026-09-30T04:29:45+0800 [erp-reconcile] M3 passed :: HTTP 503 14ms；{"success": false, "error_code": "http_503", "message": "internal api not configured", "path": "/api/internal/payment/reconciliation-period"}
-2026-09-30T04:29:47+0800 [erp-reconcile] M4 passed :: HTTP 200 1889ms；pipeline 1，步骤 ['O1', 'O2', 'O3', 'O4', 'O5', 'O6', 'O7', 'O8', 'O9']
-2026-09-30T04:29:50+0800 [erp-reconcile] M5 passed :: 导航后路径 /kitten-finance；命中文本 ['财务分析']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告 |  | 立即开
-2026-09-30T04:29:52+0800 [erp-reconcile] screenshot result.png
-2026-09-30T04:29:54+0800 [erp-reconcile] video operation.webm bytes=220871

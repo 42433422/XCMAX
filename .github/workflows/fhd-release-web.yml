@@ -51,7 +51,7 @@ jobs:
           printf '%s' "${{ inputs.release_sha }}" | grep -Eq '^[0-9a-f]{40}$'
           test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
       - name: Download shared vue-dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-vue-dist
           path: FHD/templates/vue-dist
@@ -97,7 +97,7 @@ jobs:
           printf '%s' "${{ inputs.release_sha }}" | grep -Eq '^[0-9a-f]{40}$'
           test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
       - name: Download shared vue-dist (for frontend image)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: xcagi-vue-dist
           path: FHD/templates/vue-dist
@@ -110,13 +110,13 @@ jobs:
           # docker tag 不允许大写与斜杠；FHD/v1.0.0.1 → v1.0.0.1
           echo "RELEASE_TAG=$(echo '${{ github.event.inputs.version || github.ref_name }}' | tr '[:upper:]' '[:lower:]' | sed 's|.*/||')" >> $GITHUB_ENV
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           # 生产镜像统一走 FHD/Dockerfile（server-api 锁定依赖）。此前 context=FHD/XCAGI
           # 会把含 `-e ..` 本地 editable 引用的 XCAGI/requirements.txt 带进构建并失败。
@@ -128,7 +128,7 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/backend:${{ env.RELEASE_TAG }}
             ${{ env.IMAGE_PREFIX }}/backend:latest
       - name: Build and push frontend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           # 上下文为 FHD/：镜像内直接 COPY 共享 templates/vue-dist（不再 vite build）。
           # 非 tag 触发的 workflow_dispatch（无共享产物）时，改用上下文 FHD（含已构建 vue-dist 或退化为空）。

@@ -58,13 +58,12 @@ class TestEnvApiKey:
 
 
 class TestVerifyApiKey:
-    def test_no_keys_configured_allows_access(self):
-        with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("AIOPEN_API_KEY", None)
+    def test_no_keys_configured_denies_access(self):
         saved = AIOPEN_STATE.pop("runtime_keys", None)
         try:
-            assert verify_api_key(None) is True
-            assert verify_api_key("anything") is True
+            with patch.dict(os.environ, {}, clear=True):
+                assert verify_api_key(None) is False
+                assert verify_api_key("anything") is False
         finally:
             if saved is not None:
                 AIOPEN_STATE["runtime_keys"] = saved

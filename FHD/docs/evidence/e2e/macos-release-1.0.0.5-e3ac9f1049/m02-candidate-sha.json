@@ -1,0 +1,13 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M02.candidate-sha",
+ "candidate_release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "origin_main_tip": "bd29251969a1544be7207aa3eb6a1f81d10fb47c",
+ "tip_delta": "仅 FHD/metrics/benchmark_run_mode.json 与 task_benchmark_report.json，不进入安装包",
+ "contains_pr_2303": true,
+ "arm64_run": 38231964156,
+ "x64_run": 38231975504,
+ "reason": "可安装、已公证的主线提交。尖端只多指标 JSON，不另打一版以免安装身份和实机证据脱节。",
+ "verdict": "PASS",
+ "captured_at_utc": "2026-10-12T11:24:57Z"
+}

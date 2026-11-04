@@ -1,0 +1,446 @@
+{
+  "schema": "gitleaks-disposition-registry/v1",
+  "generated_at": "2026-11-01T02:44:58Z",
+  "tip_basis_sha": "d20ae2492ddb00342ef2cc1ae83c3dbb7ecfb340",
+  "author": "codex-security-remediation",
+  "reviewer": "42433422",
+  "rows": [
+    {
+      "key": "generic-api-key|FHD/mobile_relay_desktop.json|c743ed3a0929f422f407cc206556ab64c9dd519d|3",
+      "n": 1,
+      "rule": "generic-api-key",
+      "path": "FHD/mobile_relay_desktop.json",
+      "line": 3,
+      "commit_sha": "c743ed3a0929f422f407cc206556ab64c9dd519d",
+      "disposition": "live-rejected",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n01.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n01.json"
+      ],
+      "attestation_sha256": "528f11354169de3f0aba62363e628b865e72fb8d939503a43adadbff58f6d7a5"
+    },
+    {
+      "key": "generic-api-key|FHD/mobile_relay_desktop.json|0814979bb4167b21fb5db41a9845cedb3b085077|3",
+      "n": 2,
+      "rule": "generic-api-key",
+      "path": "FHD/mobile_relay_desktop.json",
+      "line": 3,
+      "commit_sha": "0814979bb4167b21fb5db41a9845cedb3b085077",
+      "disposition": "live-rejected",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n02.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n02.json"
+      ],
+      "attestation_sha256": "eb8539fb7d5001c0c885d960cd5ff479cdf11f71fccb14769789f6362c908cdd"
+    },
+    {
+      "key": "generic-api-key|FHD/mobile_relay_desktop.json|2833a2d7586fc342258fdbb7ee721eb711706e3d|3",
+      "n": 3,
+      "rule": "generic-api-key",
+      "path": "FHD/mobile_relay_desktop.json",
+      "line": 3,
+      "commit_sha": "2833a2d7586fc342258fdbb7ee721eb711706e3d",
+      "disposition": "live-rejected",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n03.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n03.json"
+      ],
+      "attestation_sha256": "626caa29cbe49a3c79310dd63daa4af7a8bab8e403edde48bb95babee087df87"
+    },
+    {
+      "key": "generic-api-key|FHD/mobile_relay_desktop.json|4a6aaefdd3fecfe3b6e6cde7f3e007f6e4a5c1d3|3",
+      "n": 4,
+      "rule": "generic-api-key",
+      "path": "FHD/mobile_relay_desktop.json",
+      "line": 3,
+      "commit_sha": "4a6aaefdd3fecfe3b6e6cde7f3e007f6e4a5c1d3",
+      "disposition": "live-rejected",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n04.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n04.json"
+      ],
+      "attestation_sha256": "be09defe0ac94457c363e334628cffb02a9a5cbc91fedfd4143cabde921ab76d"
+    },
+    {
+      "key": "generic-api-key|FHD/mobile_relay_desktop.json|4079f0e3c59d4ab52b3106f92d28cc9b2df7263b|3",
+      "n": 5,
+      "rule": "generic-api-key",
+      "path": "FHD/mobile_relay_desktop.json",
+      "line": 3,
+      "commit_sha": "4079f0e3c59d4ab52b3106f92d28cc9b2df7263b",
+      "disposition": "live-rejected",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n05.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n05.json"
+      ],
+      "attestation_sha256": "ba1c16a976294b7e0a96d7f14a3ffe4f71c5c6cdb6a823fc7b9a662817a42a6b"
+    },
+    {
+      "key": "generic-api-key|FHD/mobile_relay_desktop.json|8d1275db996c1d030659879f81cf2d03a245f540|3",
+      "n": 6,
+      "rule": "generic-api-key",
+      "path": "FHD/mobile_relay_desktop.json",
+      "line": 3,
+      "commit_sha": "8d1275db996c1d030659879f81cf2d03a245f540",
+      "disposition": "live-rejected",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n06.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n06.json"
+      ],
+      "attestation_sha256": "dde6fcd584ba65b57b2157fb20910ed83fad841735561b9b68a0295d7e22f63f"
+    },
+    {
+      "key": "generic-api-key|FHD/mobile_relay_desktop.json|3f440e7551e4ff3c181ae07bee034561a8cda807|3",
+      "n": 7,
+      "rule": "generic-api-key",
+      "path": "FHD/mobile_relay_desktop.json",
+      "line": 3,
+      "commit_sha": "3f440e7551e4ff3c181ae07bee034561a8cda807",
+      "disposition": "live-rejected",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n07.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n07.json"
+      ],
+      "attestation_sha256": "6391c419fa78630c718635cd44729840266461a527110f41fb01763057e45dbf"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/vibe-coding/test_vibe_debug.py|bd82363655b570611240eeea9da69d06aaa5b235|9",
+      "n": 8,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/vibe-coding/test_vibe_debug.py",
+      "line": 9,
+      "commit_sha": "bd82363655b570611240eeea9da69d06aaa5b235",
+      "disposition": "evidence-pack-ready",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n08.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n08.json"
+      ],
+      "attestation_sha256": "b5bbec1aec5becfb4a4dd62d0ab16130f87da1cf702544bff3a9cda488afbdcc"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/vibe-coding/test_vibe_batch.py|bd82363655b570611240eeea9da69d06aaa5b235|125",
+      "n": 9,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/vibe-coding/test_vibe_batch.py",
+      "line": 125,
+      "commit_sha": "bd82363655b570611240eeea9da69d06aaa5b235",
+      "disposition": "evidence-pack-ready",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n09.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n09.json"
+      ],
+      "attestation_sha256": "ded6b6236ba0950ef4cfbb6944d2d47cf375f4bd46b1a061e2f4336a4570244e"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/vibe-coding/test_vibe_quick.py|bd82363655b570611240eeea9da69d06aaa5b235|11",
+      "n": 10,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/vibe-coding/test_vibe_quick.py",
+      "line": 11,
+      "commit_sha": "bd82363655b570611240eeea9da69d06aaa5b235",
+      "disposition": "evidence-pack-ready",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n10.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n10.json"
+      ],
+      "attestation_sha256": "03b2adeee1f8e43aa28a2239e678764b9a41c81c14c785f973cbc1deeca793d5"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/vibe-coding/test_vibe_real_llm.py|bd82363655b570611240eeea9da69d06aaa5b235|10",
+      "n": 11,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/vibe-coding/test_vibe_real_llm.py",
+      "line": 10,
+      "commit_sha": "bd82363655b570611240eeea9da69d06aaa5b235",
+      "disposition": "evidence-pack-ready",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n11.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n11.json"
+      ],
+      "attestation_sha256": "1792ebb69fcb4d127c422d381071525e5936a4aa6476989ade95b051b5160093"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/vibe-coding/test_vibe_long_code.py|bd82363655b570611240eeea9da69d06aaa5b235|165",
+      "n": 12,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/vibe-coding/test_vibe_long_code.py",
+      "line": 165,
+      "commit_sha": "bd82363655b570611240eeea9da69d06aaa5b235",
+      "disposition": "evidence-pack-ready",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n12.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n12.json"
+      ],
+      "attestation_sha256": "fe74384c3d8b4071f512e0616ccc30838d022a4262ccf3d67acca32bf1d5eea0"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/corp-butler/assets/whisper-asr-worker-g82nLP2_.js|dd7924cd878ec878cf6863c879e7a2d02f74b192|9",
+      "n": 13,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/corp-butler/assets/whisper-asr-worker-g82nLP2_.js",
+      "line": 9,
+      "commit_sha": "dd7924cd878ec878cf6863c879e7a2d02f74b192",
+      "disposition": "false-positive",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n13.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n13.json"
+      ],
+      "attestation_sha256": "20a4ae11b63b3ba66df75825109308764808fc7ae0e01fdd78d8f095acd18759"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/corp-butler/assets/whisper-asr-worker-g82nLP2_.js|f127b49cf9503e5b4847746f934a9a8b2da3d042|9",
+      "n": 14,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/corp-butler/assets/whisper-asr-worker-g82nLP2_.js",
+      "line": 9,
+      "commit_sha": "f127b49cf9503e5b4847746f934a9a8b2da3d042",
+      "disposition": "false-positive",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n14.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n14.json"
+      ],
+      "attestation_sha256": "d978c87a54d4db3a2ab54b7e0afad815998005780152463d5ded4afa6a9b2f00"
+    },
+    {
+      "key": "generic-api-key|FHD/.env.fhd-docker|9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152|1",
+      "n": 15,
+      "rule": "generic-api-key",
+      "path": "FHD/.env.fhd-docker",
+      "line": 1,
+      "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+      "disposition": "tip-absent-historic",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n15.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n15.json"
+      ],
+      "attestation_sha256": "1587ef97e133a2cac450689b940475cceef37bc48fd02dc5dfa7be57a9b5818f"
+    },
+    {
+      "key": "curl-auth-user|deploy_staging.sh|9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152|180",
+      "n": 16,
+      "rule": "curl-auth-user",
+      "path": "deploy_staging.sh",
+      "line": 180,
+      "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+      "disposition": "tip-absent-historic",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n16.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n16.json"
+      ],
+      "attestation_sha256": "0ba0e2a3d4cdf419c3362a3686b7b9134c29dfe6535cfe0d80877d2ec2a45fea"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/MODstore_deploy/tests/test_butler_qq_bridge.py|9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152|25",
+      "n": 17,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/MODstore_deploy/tests/test_butler_qq_bridge.py",
+      "line": 25,
+      "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+      "disposition": "console-revoked",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n17.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n17.json"
+      ],
+      "attestation_sha256": "967fe8629d208277233b22bfd2fb3fb1c28f068d797aeb5ab7de7e8181eff14a"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/MODstore_deploy/tests/test_butler_qq_bridge.py|9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152|26",
+      "n": 18,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/MODstore_deploy/tests/test_butler_qq_bridge.py",
+      "line": 26,
+      "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+      "disposition": "console-revoked",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n18.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n18.json"
+      ],
+      "attestation_sha256": "af66037954f65991dd8a7264af2a740aac70ec7c56757f41ebda67c1c386340e"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/MODstore_deploy/tests/test_butler_qq_bridge.py|9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152|317",
+      "n": 19,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/MODstore_deploy/tests/test_butler_qq_bridge.py",
+      "line": 317,
+      "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+      "disposition": "console-revoked",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n19.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n19.json"
+      ],
+      "attestation_sha256": "c1513839b2702ef46d0ddc8bbcab367303db3d806ff2605ac4b3756d556e77b6"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/MODstore_deploy/tests/test_email_service_config.py|9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152|100",
+      "n": 20,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/MODstore_deploy/tests/test_email_service_config.py",
+      "line": 100,
+      "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+      "disposition": "evidence-pack-ready",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n20.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n20.json"
+      ],
+      "attestation_sha256": "86740478bac2f3560fc3a1f3acb1b44cc9b43b489dd5e658c5a343c417b35732"
+    },
+    {
+      "key": "generic-api-key|成都修茈科技有限公司/MODstore_deploy/tests/test_email_service_config.py|9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152|124",
+      "n": 21,
+      "rule": "generic-api-key",
+      "path": "成都修茈科技有限公司/MODstore_deploy/tests/test_email_service_config.py",
+      "line": 124,
+      "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+      "disposition": "evidence-pack-ready",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n21.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n21.json"
+      ],
+      "attestation_sha256": "ee3ce6c4a68e9292aa538d04f3650fcf991f456dc47209aa4d08dfc6756f3c32"
+    },
+    {
+      "key": "generic-api-key|FHD/templates/admin-vue-dist/assets/js/transformers.web-CyFZv2zc.js|9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152|2893",
+      "n": 22,
+      "rule": "generic-api-key",
+      "path": "FHD/templates/admin-vue-dist/assets/js/transformers.web-CyFZv2zc.js",
+      "line": 2893,
+      "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+      "disposition": "false-positive",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n22.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n22.json"
+      ],
+      "attestation_sha256": "c9b65641c7d662ba6e21cd09aa8f22081f1430563ea18fb739ff06f042a0efec"
+    },
+    {
+      "key": "generic-api-key|FHD/templates/sunbird-vue-dist/assets/js/transformers.web-Dito4dTh.js|9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152|2893",
+      "n": 23,
+      "rule": "generic-api-key",
+      "path": "FHD/templates/sunbird-vue-dist/assets/js/transformers.web-Dito4dTh.js",
+      "line": 2893,
+      "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+      "disposition": "false-positive",
+      "closed": true,
+      "author": "codex-security-remediation",
+      "reviewer": "42433422",
+      "reviewed_at": "2026-11-01T02:00:00Z",
+      "review_due": "2027-01-30T00:00:00Z",
+      "evidence": "sanitized attestation evidence/n23.json; offline pack refs in linked_evidence_refs; owner reviewer 42433422 confirmed INC/gitleaks×23 closeout (#2808/#2889)",
+      "evidence_files": [
+        "evidence/n23.json"
+      ],
+      "attestation_sha256": "ec053cb803fe8497819f17d65271ffe61f0c9fa085d44da8ccbdaf7b9e1de8c7"
+    }
+  ]
+}

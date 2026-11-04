@@ -87,7 +87,9 @@ def _workspace_root(ctx: Dict[str, Any]) -> Path:
 
 def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
     default_rel = "outputs/avatar_profile.json"
-    requested_rel = str(payload.get("output_relpath") or default_rel).strip().replace("\\", "/")
+    requested_rel = (
+        str(payload.get("output_relpath") or default_rel).strip().replace("\\", "/")
+    )
     if requested_rel != default_rel:
         raise ValueError("output_relpath must stay inside the employee workspace")
     # The employee has one declared output contract.  Letting request data
@@ -102,7 +104,9 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(payload or {})
     ctx = dict(ctx or {})
     action = (
-        str(payload.get("action") or RULE_SPEC.get("default_action") or "generate").strip().lower()
+        str(payload.get("action") or RULE_SPEC.get("default_action") or "generate")
+        .strip()
+        .lower()
     )
     if action in ("help", "说明", "status"):
         return _ok(
@@ -119,10 +123,12 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         vendor_dir = _backend_root() / "vendor"
         if str(vendor_dir) not in sys.path:
             sys.path.insert(0, str(vendor_dir))
-        from avatar_generation.convert import convert_avatar_profile
+        from avatar_generation.avatar_generation_convert import convert_avatar_profile
 
         out = _resolve_output(payload, ctx)
-        result = convert_avatar_profile(payload, ctx, output_path=out, rule_spec=RULE_SPEC)
+        result = convert_avatar_profile(
+            payload, ctx, output_path=out, rule_spec=RULE_SPEC
+        )
         if asyncio.iscoroutine(result):
             result = await result
         if not out.is_file():
@@ -132,7 +138,9 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             )
         return _ok(
             result,
-            warnings=list(result.get("warnings") or []) if isinstance(result, dict) else [],
+            warnings=list(result.get("warnings") or [])
+            if isinstance(result, dict)
+            else [],
             meta={
                 "handler": "direct_python",
                 "action": "generate",

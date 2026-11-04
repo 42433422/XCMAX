@@ -30,14 +30,22 @@ import { useApprovalMode } from './useApprovalMode'
 import { useCanonicalChatTaskBridge } from './useCanonicalChatTaskBridge'
 import type { UseChatViewOptions } from './useChatView'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 import { isStartPrintMessage } from '../utils/textParser'
-import { generateSessionId, normalizeServerContentToHtml } from './chat-orchestration/chatOrchestrationShared'
+import { generateSessionId, normalizeServerContentToHtml, type ChatLocalScope } from './chat-orchestration/chatOrchestrationShared'
 import { useChatOrchestrationAutoActions } from './chat-orchestration/useChatOrchestrationAutoActions'
 import { useChatOrchestrationTaskExecution } from './chat-orchestration/useChatOrchestrationTaskExecution'
 import { useChatOrchestrationPrintFlow } from './chat-orchestration/useChatOrchestrationPrintFlow'
 import { useChatOrchestrationExcelTasks } from './chat-orchestration/useChatOrchestrationExcelTasks'
 import { useChatOrchestrationRemoteRound } from './chat-orchestration/useChatOrchestrationRemoteRound'
 import { useOnboardingFirstOrderRun } from './useOnboardingFirstOrderRun'
+import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
+import agentRunsApi from '@/api/agentRuns'
+import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
+import { asRecord } from '@/utils/typeGuards'
+import { lastChatModelRoute } from '@/utils/chatModelRoute'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -45,11 +53,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const { sessionId } = options
   const {
     messages,
+    cacheError,
+    retryMessagesCache,
+    retryMessageSave,
     addMessage,
     addAndSaveMessage: addAndSaveMessageRaw,
     saveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    flushMessagesCache,
     clearMessages,
     loadMessages,
     syncFromServer,
@@ -78,6 +90,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const orderNumberFetching = ref(false)
   const chatSessionActivity = useChatSessionActivity(sessionId)
   const { isLoading, isStreamingReply } = chatSessionActivity
+  let localViewRevision = 0
+  watch(sessionId, () => { localViewRevision++ }, { flush: 'sync' })
+  function captureLocalScope(): ChatLocalScope {
+    const targetSessionId = String(sessionId.value || '').trim() || 'default'
+    const identity = resolveChatIdentity(String(modsStore.activeModId || ''))
+    const accountEpoch = productReadAccountEpoch.value, revision = localViewRevision
+    const isGenerationCurrent = chatSessionActivity.captureGeneration(targetSessionId)
+    const isOwnerCurrent = () => accountEpoch === productReadAccountEpoch.value && identity === resolveChatIdentity(String(modsStore.activeModId || ''))
+    return { sessionId: targetSessionId, isOwnerCurrent, isCurrent: () => isOwnerCurrent() && revision === localViewRevision && targetSessionId === (String(sessionId.value || '').trim() || 'default') && isGenerationCurrent() }
+  }
   const isExecuting = ref(false)
   // 工作流「步骤进度」：消费后方 state.update 事件，维护正在执行/已完成的节点列表
   const stateSteps = ref<
@@ -135,7 +157,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     executeRemoteChatRound: (msgs, opts) => executeRemoteChatRoundRef.fn(msgs, opts),
   })
   const { handleChatRequiresToken } = dbGate
-  const excelCtx = useChatExcelContext({ sessionId, addAndSaveMessage })
+  const excelCtx = useChatExcelContext({
+    sessionId, addAndSaveMessage,
+    getIdentity: () => resolveChatIdentity(String(modsStore.activeModId || '')),
+    captureIsCurrent: () => captureLocalScope().isCurrent,
+  })
   const {
     lastExcelAnalysisContext,
     linkedExcelSheet,
@@ -217,12 +243,24 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     clearPersistedTaskPanelState,
     generateSessionId,
     normalizeServerContentToHtml,
+    onIdentityChange: () => {
+      pendingDbWriteChatRetryMessages.value = null
+      plannerWriteUnlockResumeDraft.value = ''
+      chatSessionActivity.cancelAll()
+      chatRequest.cancelPendingChatBatch()
+      chatSessionActivity.runningIds.value.clear()
+      chatSessionActivity.streamingIds.value.clear()
+      clearVoiceQueue()
+    },
   })
   const {
     showHistory,
     historySessions,
     historyLoading,
     historyError,
+    historyHasMore,
+    historyLoadingMore,
+    loadMoreHistorySessions,
     refreshHistorySessions,
     showHistoryPanel,
     loadSession: loadSessionFromHistory,
@@ -250,7 +288,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     refreshTasks: agentTaskRuntime.refreshTasks,
   })
   const onboardingFirstOrderRun = useOnboardingFirstOrderRun({
-    sessionId: () => String(sessionId.value || '').trim() || 'default',
     saveMessage,
     addAndSaveMessage,
     refreshTasks: agentTaskRuntime.refreshTasks,
@@ -263,7 +300,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     getTaskTableColumns,
     getTaskTableItems,
     getTaskOrderNumber,
-  } = useShipmentTask({ addAndSaveMessage }, currentTask)
+  } = useShipmentTask({ addAndSaveMessage }, currentTask, () => captureLocalScope().isCurrent)
 
   const { isPrinting, executePrintTask, buildPrintSummaryMessage } = usePrintService()
 
@@ -325,6 +362,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   // 打印链路
   const printFlow = useChatOrchestrationPrintFlow({
     modsStore,
+    captureLocalScope,
+    saveMessage,
     addAndSaveMessage,
     taskList,
     createTaskId,
@@ -346,6 +385,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   // Excel 分析任务回调
   const excelTasks = useChatOrchestrationExcelTasks({
     sessionId,
+    captureLocalScope,
     addMessage,
     saveMessage,
     lastExcelAnalysisContext,
@@ -375,6 +415,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     queueVoice,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    flushMessagesCache,
     ttsEnabled,
     chatSessionActivity,
     pendingDbWriteChatRetryMessages,
@@ -407,85 +448,182 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   // 审批模式：自动档时，出现待审批卡片即自动确认（审批工作台仍由后端留记录）。
   const { state: approvalModeState } = useApprovalMode()
   watch(
-    messages,
-    (list) => {
-      if (!approvalModeState.enabled || approvalModeState.mode !== 'auto') return
-      const hasPendingApproval = list.some((msg) => msg?.role === 'ai' && msg.approvalCard?.status === 'pending')
-      if (hasPendingApproval) void confirmWorkflowFromCard()
+    [messages, isLoading],
+    ([list, loading]) => {
+      if (loading || !approvalModeState.enabled || approvalModeState.mode !== 'auto') return
+      const card = list.find(msg => msg.role === 'ai' && msg.approvalCard?.status === 'pending'
+        && !msg.approvalCard.submitting && !msg.approvalCard.error
+        && !msg.approvalCard.approval_path && !msg.approvalCard.approval_request_ids?.length)?.approvalCard
+      if (card) void confirmWorkflowFromCard(approvalCardId(card))
     },
     { deep: true },
   )
 
+  /**
+   * Cancel the in-flight round.
+   * A newer send supersedes quietly: the previous stream is aborted and an empty
+   * thinking shell is removed, without the manual-stop banner.
+   */
+  function stopReply(options?: { supersede?: boolean }) {
+    localViewRevision++
+    const stopped = chatSessionActivity.cancelSession()
+    chatRequest.cancelPendingChatBatch()
+    chatRequest.stopLoadingProgress()
+    clearVoiceQueue()
+    pendingDbWriteChatRetryMessages.value = null
+    plannerWriteUnlockResumeDraft.value = ''
+    if (!stopped) return
+    const kept = messages.value.filter((msg) => {
+      if (!msg.streamingShell) return true
+      const plain = plainTextFromChatHtml(msg.content).trim()
+      delete msg.streamingShell
+      delete msg.waitingHint
+      return plain.length > 0
+    })
+    if (kept.length !== messages.value.length) messages.value = kept
+    if (options?.supersede) return
+    const routeMetadata = lastChatModelRoute(sessionId.value, resolveChatIdentity(String(modsStore.activeModId || '')))
+    addMessage('已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。', 'ai', routeMetadata ? { routeMetadata } : undefined)
+  }
+
   async function sendMessage(message: string) {
     const taskSessionId = String(sessionId.value || '').trim() || 'default'
-    addMessage(message, 'user')
+    if (isLoading.value) stopReply({ supersede: true })
+    const generation = chatSessionActivity.beginRound(taskSessionId)
+    generation.setLoading(true)
+    const turnId = createBusinessHarnessId('turn')
+    addMessage(message, 'user', { turnId })
     const requestScope = {
+      identity: resolveChatIdentity(String(modsStore.activeModId || '')),
+      signal: generation.signal,
+      isCurrent: generation.isCurrent,
       sessionId: taskSessionId,
       messages: [...messages.value],
-      turnId: createBusinessHarnessId('turn'),
+      turnId,
       taskId: createBusinessHarnessId('task'),
     }
-    if (await onboardingFirstOrderRun.tryStart(message)) {
-      await refreshHistorySessions()
-      return
-    }
-    const previewModified = await handleShipmentModify(message)
-    if (previewModified) {
-      await saveMessage('user', message, taskSessionId)
-      await refreshHistorySessions()
-      return
-    }
-
-    const printHandled = await handleStartPrintCommand(message)
-    if (printHandled) {
-      await saveMessage('user', message, taskSessionId)
-      await refreshHistorySessions()
-      return
-    }
-
-    const debounceMs = getChatBatchDebounceMs()
-    if (debounceMs <= 0) {
-      try {
-        await executeRemoteChatRound([message], undefined, requestScope)
-      } finally {
-        await refreshHistorySessions()
-      }
-      return
-    }
-    enqueueChatBatchMessage(message, debounceMs, (msgs) => {
-      void executeRemoteChatRound(msgs, undefined, requestScope).finally(() => refreshHistorySessions())
-    })
-  }
-
-  async function confirmWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
-        break
-      }
-    }
-    await sendMessage('确认')
-  }
-
-  async function cancelWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
-        break
-      }
-    }
-    await sendMessage('取消')
-  }
-
-  async function syncSessionMessages(): Promise<void> {
+    const localScope = captureLocalScope()
+    let queued = false
     try {
-      await syncFromServer()
+      if (await onboardingFirstOrderRun.tryStart(message, localScope)) {
+        await refreshHistorySessions()
+        return
+      }
+      const isCurrent = localScope.isCurrent
+      if (!isCurrent()) return
+      const previewModified = await handleShipmentModify(message, localScope.isCurrent)
+      if (!isCurrent()) return
+      if (previewModified) {
+        await saveMessage('user', message, taskSessionId)
+        await refreshHistorySessions()
+        return
+      }
+
+      const printHandled = await handleStartPrintCommand(message, localScope)
+      if (!isCurrent()) return
+      if (printHandled) {
+        await saveMessage('user', message, taskSessionId)
+        await refreshHistorySessions()
+        return
+      }
+
+      const debounceMs = getChatBatchDebounceMs()
+      if (debounceMs <= 0) {
+        try {
+          await executeRemoteChatRound([message], undefined, requestScope)
+        } finally {
+          await refreshHistorySessions()
+        }
+        return
+      }
+      queued = true
+      enqueueChatBatchMessage(message, debounceMs, (msgs) => {
+        void executeRemoteChatRound(msgs, undefined, requestScope).finally(async () => {
+          if (localScope.isCurrent()) await syncFromServer()
+          await refreshHistorySessions()
+        })
+      })
     } finally {
-      applyPersistedTaskPanelStateForSession(String(sessionId.value || '').trim() || 'default')
-      await agentTaskRuntime.refreshTasks()
+      if (!queued) {
+        generation.setLoading(false)
+        if (localScope.isCurrent()) await syncFromServer()
+      }
     }
+  }
+
+  async function controlWorkflowFromCard(cardId: string, action: 'confirm' | 'cancel') {
+    if (!cardId || isLoading.value) return
+    const card = messages.value.find(msg => msg.role === 'ai' && msg.approvalCard
+      && approvalCardId(msg.approvalCard) === cardId)?.approvalCard
+    if (!card || card.status !== 'pending' || card.submitting || card.approval_path || card.approval_request_ids?.length) return
+    const round = chatSessionActivity.beginRound()
+    const scope = captureLocalScope()
+    const isCurrent = () => scope.isCurrent() && messages.value.some(msg => msg.approvalCard === card)
+    round.setLoading(true)
+    card.submitting = true
+    delete card.error
+    const control = action === 'confirm' ? '确认' : '取消'
+    try {
+      const runId = String(card.run_id || card.agent_run_id || '').trim()
+      if (runId) {
+        const receipt = action === 'confirm'
+          ? await approveRunWithFreshGrant(runId, { isCurrent, runtimeContext: { source: 'chat_approval_card', ...dbGate.resolveChatDbTokensForPayload() } })
+          : await agentRunsApi.cancelRun(runId)
+        if (!isCurrent() || !receipt) return
+        if (!receipt.success || receipt.data?.run_id !== runId) throw new Error(receipt.message || '未收到原任务的操作回执，请核对后重试')
+        if (action === 'cancel' && receipt.data.status !== 'cancelled') throw new Error('取消请求已提交，任务尚未确认取消。请在原任务中核对状态。')
+        card.status = action === 'confirm' ? 'confirmed' : 'cancelled'
+        await addAndSaveMessage(action === 'confirm' ? '已收到确认回执，任务已提交执行，请在任务中查看实际结果。' : '已收到取消回执，任务已取消。', 'ai', undefined, scope.sessionId)
+        if (isCurrent()) await syncAgentRunFromPayload({ run_id: runId }, control, isCurrent).catch(() => undefined)
+      } else {
+        const planId = String(card.plan_id || '').trim()
+        if (!planId) throw new Error('确认卡缺少任务标识，请返回原任务核对后重试')
+        const payload = await chatRequest.requestChatByModeWithTimeout(control, 90_000, { expectedWorkflowPlanId: planId }, {
+          sessionId: scope.sessionId, messages: [...messages.value], signal: round.signal, isCurrent,
+        })
+        if (!isCurrent()) return
+        const envelope = asRecord(payload.data), inner = asRecord(envelope.data)
+        const allowed = action === 'confirm' ? ['workflow_done', 'approval_pending'] : ['workflow_cancelled']
+        if (!payload.success || inner.plan_id !== planId || !allowed.includes(String(envelope.action || ''))) {
+          throw new Error(String(payload.response || payload.message || '未收到原计划的操作回执，请核对后重试'))
+        }
+        card.status = action === 'confirm' ? 'confirmed' : 'cancelled'
+        const nextCard = parseApprovalCardFromPayload(payload)
+        await addAndSaveMessage(payload.response || `原计划已${action === 'confirm' ? '确认' : '取消'}。`, 'ai', nextCard ? { approvalCard: nextCard } : undefined, scope.sessionId)
+        if (!isCurrent()) return
+        syncTaskFromChatResponse(payload, control)
+        remoteRound.consumeStateUpdates(payload)
+        attachThinkingStepsToLastAiMessage(payload)
+        attachTodoStepsToLastAiMessage(payload)
+        attachWorkflowTraceToLastAiMessage(payload)
+        if (payload.task) showTaskConfirm(payload.task)
+        if (payload.autoAction) handleAutoAction(payload.autoAction, control)
+        await syncAgentRunFromPayload(payload, control, isCurrent).catch(() => undefined)
+      }
+      if (isCurrent()) await agentTaskRuntime.refreshTasks().catch(() => undefined)
+    } catch (error) {
+      if (isCurrent()) card.error = error instanceof Error ? error.message : '操作未确认，请核对原任务后重试'
+    } finally {
+      card.submitting = false
+      round.setLoading(false)
+    }
+  }
+
+  const confirmWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'confirm')
+  const cancelWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'cancel')
+
+  async function syncSessionMessages(options: { required?: boolean; isCurrent?: () => boolean } = {}): Promise<void> {
+    if (isLoading.value || isExecuting.value) {
+      if (options.required) throw new Error('当前会话正在处理，请稍后重试')
+      return
+    }
+    const scope = captureLocalScope()
+    await syncFromServer(options)
+    if (!scope.isCurrent() || options.isCurrent?.() === false) return
+    applyPersistedTaskPanelStateForSession(scope.sessionId)
+    // Tasks have their own stale/error recovery and are not required to read the current conversation.
+    if (options.required) void agentTaskRuntime.refreshTasks().catch(() => {})
+    else await agentTaskRuntime.refreshTasks()
   }
   executeRemoteChatRoundRef.fn = executeRemoteChatRound
 
@@ -509,13 +647,19 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
 
   onBeforeUnmount(() => {
+    localViewRevision++
     window.removeEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
     workflowPanel.unmountWorkflowPanel()
     agentTaskRuntime.stop()
+    chatSessionActivity.cancelAll()
+    chatRequest.cancelPendingChatBatch()
   })
 
   return {
     messages,
+    cacheError,
+    retryMessagesCache,
+    retryMessageSave,
     lastMessage: computed(() => messages.value[messages.value.length - 1] ?? null),
     currentTask,
     orderNumberFetching,
@@ -534,6 +678,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     historySessions,
     historyLoading,
     historyError,
+    historyHasMore,
+    historyLoadingMore,
+    loadMoreHistorySessions,
     refreshHistorySessions,
     chatMessagesRef,
     pushCopied,
@@ -551,6 +698,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     generateSessionId,
     scrollToBottom,
     sendMessage,
+    stopReply,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,
     confirmTask,

@@ -229,7 +229,9 @@ void main() {
     'MobileApiClient persists Flutter local auth and settings flags',
     () async {
       final store = MemoryMobileSessionStore();
-      final client = MobileApiClient(sessionStore: store);
+      final client = MobileApiClient(
+        sessionStore: store, credentialCipher: const _FakeCredentialCipher(),
+      );
 
       await client.saveLoginPreferences(
         username: 'admin',
@@ -250,7 +252,7 @@ void main() {
 
       var saved = await store.load();
       expect(saved.savedUsername, 'admin');
-      expect(saved.savedPassword, 'secret');
+      expect(saved.savedPassword, 'enc:v1:secret');
       expect(saved.rememberPassword, isTrue);
       expect(saved.autoLogin, isTrue);
       expect(saved.themeMode, 'dark');
@@ -376,7 +378,9 @@ void main() {
           },
         ),
       );
-      final client = MobileApiClient(sessionStore: store);
+      final client = MobileApiClient(
+        sessionStore: store, credentialCipher: const _FakeCredentialCipher(),
+      );
 
       await client.clearActiveAuth();
 
@@ -400,7 +404,7 @@ void main() {
       expect(saved.relayPairedAt, '');
       expect(saved.setupComplete, isFalse);
       expect(saved.savedUsername, 'remembered');
-      expect(saved.savedPassword, 'secret');
+      expect(saved.savedPassword, 'enc:v1:secret');
       expect(saved.rememberPassword, isTrue);
       expect(saved.autoLogin, isFalse);
       expect(saved.walletBalanceJson, '');

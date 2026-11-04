@@ -184,20 +184,27 @@ def test_credential_rotation_requires_independent_hashed_evidence() -> None:
         "status": "resolved",
         "author": "fix-author",
         "reviewer": "security-reviewer",
+        "required_actions": ["revoke", "rotate", "verify_old_credential_rejected"],
         "revoked_at": (now - timedelta(minutes=20)).isoformat(),
         "rotated_at": (now - timedelta(minutes=10)).isoformat(),
+        "old_credential_rejected_at": (now - timedelta(minutes=5)).isoformat(),
         "reviewed_at": now.isoformat(),
         "review_due": (now + timedelta(days=30)).isoformat(),
         "resolution_evidence_sha256": "b" * 64,
     }
     assert normalizer._credential_resolution_is_valid(row) is True
+
     row["reviewer"] = "fix-author"
     assert normalizer._credential_resolution_is_valid(row) is False
-    row["reviewer"] = " FIX-AUTHOR "
+    row["reviewer"] = "security-reviewer"
+    row.pop("old_credential_rejected_at")
+    assert normalizer._credential_resolution_is_valid(row) is False
+    row["old_credential_rejected_at"] = (now - timedelta(minutes=5)).isoformat()
+    row["required_actions"] = ["revoke", "rotate"]
     assert normalizer._credential_resolution_is_valid(row) is False
 
 
-def test_owner_accepted_risk_closes_incident() -> None:
+def test_owner_accepted_risk_does_not_close_credential_incident() -> None:
     normalizer = _normalizer_module()
     now = datetime.now(UTC)
     row = {
@@ -206,6 +213,7 @@ def test_owner_accepted_risk_closes_incident() -> None:
         "status": "accepted_risk",
         "author": "codex-security-remediation",
         "reviewer": "owner-42433422",
+        "required_actions": ["revoke", "rotate", "verify_old_credential_rejected"],
         "accepted_at": (now - timedelta(hours=2)).isoformat(),
         "reviewed_at": (now - timedelta(hours=1)).isoformat(),
         "review_due": (now + timedelta(days=30)).isoformat(),
@@ -214,8 +222,8 @@ def test_owner_accepted_risk_closes_incident() -> None:
     rows = normalizer.normalize(
         "credential-incidents", {"schema": "credential-incidents/v1", "incidents": [row]}
     )
-    assert rows[0]["status"] == "closed"
-    assert rows[0]["secret"] is False
+    assert rows[0]["status"] == "open"
+    assert rows[0]["secret"] is True
 
 
 @pytest.mark.parametrize(
@@ -229,7 +237,7 @@ def test_owner_accepted_risk_closes_incident() -> None:
         {"status": "rotation_pending"},
     ],
 )
-def test_owner_accepted_risk_fails_closed_on_weak_evidence(mutation) -> None:
+def test_owner_accepted_risk_never_closes_credential_incident(mutation) -> None:
     normalizer = _normalizer_module()
     now = datetime.now(UTC)
     row = {
@@ -238,6 +246,7 @@ def test_owner_accepted_risk_fails_closed_on_weak_evidence(mutation) -> None:
         "status": "accepted_risk",
         "author": "codex-security-remediation",
         "reviewer": "owner-42433422",
+        "required_actions": ["revoke", "rotate", "verify_old_credential_rejected"],
         "accepted_at": (now - timedelta(hours=2)).isoformat(),
         "reviewed_at": (now - timedelta(hours=1)).isoformat(),
         "review_due": (now + timedelta(days=30)).isoformat(),

@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from sqlalchemy import or_
+
 from app.db.models import Customer, Product
 
 
@@ -48,6 +50,10 @@ def resolve_quote_references(
     for item in items:
         product_id = item.get("product_id")
         model = str(item.get("model_number") or "").strip()
+        alias = str(item.get("product_model") or "").strip()
+        if model and alias and model != alias:
+            raise ValueError("产品型号参数不一致")
+        model = model or alias
         product = None
         if product_id:
             product = db.query(Product).filter(Product.id == int(product_id)).first()
@@ -58,5 +64,18 @@ def resolve_quote_references(
             if len(matches) != 1:
                 raise ValueError("产品型号不存在或存在重复，请选择明确的产品")
             product = matches[0]
+        elif label := str(item.get("product_name") or "").strip():
+            matches = (
+                db.query(Product)
+                .filter(
+                    Product.tenant_id == customer.tenant_id,
+                    or_(Product.name == label, Product.model_number == label),
+                )
+                .limit(2)
+                .all()
+            )
+            if len(matches) > 1:
+                raise ValueError("产品名称或型号存在歧义，请选择明确的产品")
+            product = matches[0] if matches else None
         resolved.append((item, product))
     return customer, resolved

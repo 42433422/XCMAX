@@ -24,13 +24,13 @@ from unittest.mock import patch
 
 import pytest
 
-from app.application.etl.errors import EtlError
-from app.application.etl.parser_ocr_provenance import enrich_ocr_provenance
-from app.application.etl.parser_region_projection import (
+from app.application.elt.errors import EltError
+from app.application.elt.parser_ocr_provenance import enrich_ocr_provenance
+from app.application.elt.parser_region_projection import (
     project_delivery_region,
     region_source_features,
 )
-from app.application.etl.parser_structure import (
+from app.application.elt.parser_structure import (
     TableLayout,
     clean_cell_text,
     detect_table_layout,
@@ -41,11 +41,11 @@ from app.application.etl.parser_structure import (
     is_repeated_header,
     semantic_key,
 )
-from app.application.etl.parser_target_match import (
+from app.application.elt.parser_target_match import (
     covers_required_target_fields,
     target_header_hints,
 )
-from app.application.etl.parser_types import ParsedDataset, ParsedRow
+from app.application.elt.parser_types import ParsedDataset, ParsedRow
 
 # ---------------------------------------------------------------------------
 # parser_types.py
@@ -328,7 +328,7 @@ def test_enrich_ocr_provenance_cells_and_confidence():
     assert row.provenance["confidence"] == 0.9
     assert row.provenance["cells"]["产品名称"]["confidence"] == 0.9
     assert row.provenance["cells"]["数量"]["confidence"] == 1.5  # >1 -> /100? no: 150/100=1.5
-    assert any(w["code"] == "ETL_OCR_REVIEW_REQUIRED" for w in ds.warnings)
+    assert any(w["code"] == "ELT_OCR_REVIEW_REQUIRED" for w in ds.warnings)
 
 
 def test_enrich_ocr_provenance_no_evidence_low_confidence():
@@ -453,35 +453,35 @@ def _simple_products_workbook(path: Path) -> Path:
 
 
 def test_parse_file_missing_path(tmp_path):
-    with pytest.raises(EtlError) as exc:
-        from app.application.etl.parsers import parse_file
+    with pytest.raises(EltError) as exc:
+        from app.application.elt.parsers import parse_file
 
         parse_file(tmp_path / "nope.xlsx", target_type="products")
-    assert exc.value.code == "ETL_UPLOAD_MISSING"
+    assert exc.value.code == "ELT_UPLOAD_MISSING"
 
 
 def test_parse_file_unsupported_suffix(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = tmp_path / "file.txt"
     p.write_text("hello")
-    with pytest.raises(EtlError) as exc:
+    with pytest.raises(EltError) as exc:
         parse_file(p, target_type="products")
-    assert exc.value.code == "ETL_FILE_TYPE_UNSUPPORTED"
+    assert exc.value.code == "ELT_FILE_TYPE_UNSUPPORTED"
 
 
 def test_parse_file_docx_wrong_target(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = tmp_path / "notes.docx"
     p.write_bytes(b"%PDF-ish")
-    with pytest.raises(EtlError) as exc:
+    with pytest.raises(EltError) as exc:
         parse_file(p, target_type="products")
-    assert exc.value.code == "ETL_KNOWLEDGE_ONLY_FILE"
+    assert exc.value.code == "ELT_KNOWLEDGE_ONLY_FILE"
 
 
 def test_parse_file_docx_knowledge(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = tmp_path / "notes.docx"
     p.write_bytes(b"x")
@@ -492,16 +492,16 @@ def test_parse_file_docx_knowledge(tmp_path):
 
 
 def test_parse_file_csv_with_preset_rejected(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = _write_csv(tmp_path / "a.csv", [["产品名称"], ["面漆"]])
-    with pytest.raises(EtlError) as exc:
+    with pytest.raises(EltError) as exc:
         parse_file(p, target_type="products", compatibility_preset_id="legacy")
-    assert exc.value.code == "ETL_COMPATIBILITY_PRESET_FILE_UNSUPPORTED"
+    assert exc.value.code == "ELT_COMPATIBILITY_PRESET_FILE_UNSUPPORTED"
 
 
 def test_parse_file_csv_happy_path(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = _write_csv(
         tmp_path / "a.csv",
@@ -519,7 +519,7 @@ def test_parse_file_csv_happy_path(tmp_path):
 
 
 def test_parse_file_csv_row_limit(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = _write_csv(
         tmp_path / "a.csv",
@@ -529,27 +529,27 @@ def test_parse_file_csv_row_limit(tmp_path):
             ["客户乙", "底漆", "25", "8"],
         ],
     )
-    with pytest.raises(EtlError) as exc:
+    with pytest.raises(EltError) as exc:
         parse_file(p, target_type="products", max_rows=1)
-    assert exc.value.code == "ETL_ROW_LIMIT_EXCEEDED"
+    assert exc.value.code == "ELT_ROW_LIMIT_EXCEEDED"
 
 
 def test_parse_file_xlsx_compat_preset_wrong_target(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = _simple_products_workbook(tmp_path / "a.xlsx")
-    with pytest.raises(EtlError) as exc:
+    with pytest.raises(EltError) as exc:
         parse_file(p, target_type="knowledge", compatibility_preset_id="legacy")
-    assert exc.value.code == "ETL_COMPATIBILITY_PRESET_TARGET_MISMATCH"
+    assert exc.value.code == "ELT_COMPATIBILITY_PRESET_TARGET_MISMATCH"
 
 
 def test_parse_file_xlsx_customer_products_regional_preferred(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = _delivery_workbook(tmp_path / "delivery.xlsx")
     # patch legacy compat parser so the regional (preferred) path is the only one
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = None
         ds = parse_file(p, target_type="customer_products")
@@ -559,11 +559,11 @@ def test_parse_file_xlsx_customer_products_regional_preferred(tmp_path):
 
 
 def test_parse_file_xlsx_shipment_records_regional(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = _delivery_workbook(tmp_path / "delivery.xlsx")
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = None
         ds = parse_file(p, target_type="shipment_records")
@@ -573,11 +573,11 @@ def test_parse_file_xlsx_shipment_records_regional(tmp_path):
 
 
 def test_parse_file_xlsx_generic_workbook(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = _simple_products_workbook(tmp_path / "products.xlsx")
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = None
         ds = parse_file(p, target_type="products")
@@ -587,7 +587,7 @@ def test_parse_file_xlsx_generic_workbook(tmp_path):
 
 
 def test_parse_file_xlsx_generic_preferred_over_compat(tmp_path):
-    from app.application.etl.parsers import ParsedDataset, ParsedRow, parse_file
+    from app.application.elt.parsers import ParsedDataset, ParsedRow, parse_file
 
     p = _simple_products_workbook(tmp_path / "products.xlsx")
     compat_ds = ParsedDataset(
@@ -596,19 +596,19 @@ def test_parse_file_xlsx_generic_preferred_over_compat(tmp_path):
         source_features={"kind": "compat"},
     )
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = compat_ds
         ds = parse_file(p, target_type="products")
     # generic rows present and cover required fields -> generic preferred
     assert ds.source_features["structure_detection"] == "deterministic_v2"
-    assert any(w["code"] == "ETL_GENERIC_STRUCTURE_PREFERRED" for w in ds.warnings)
+    assert any(w["code"] == "ELT_GENERIC_STRUCTURE_PREFERRED" for w in ds.warnings)
 
 
 def test_parse_file_xlsx_compat_fallback_on_generic_error(tmp_path):
     from openpyxl import Workbook
 
-    from app.application.etl.parsers import ParsedDataset, ParsedRow, parse_file
+    from app.application.elt.parsers import ParsedDataset, ParsedRow, parse_file
 
     # workbook whose generic parse fails
     p = tmp_path / "weird.xlsx"
@@ -625,29 +625,29 @@ def test_parse_file_xlsx_compat_fallback_on_generic_error(tmp_path):
         source_features={"kind": "compat"},
     )
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = compat_ds
-        with patch("app.application.etl.parsers._parse_workbook", side_effect=RuntimeError("boom")):
+        with patch("app.application.elt.parsers._parse_workbook", side_effect=RuntimeError("boom")):
             ds = parse_file(p, target_type="products")
     assert ds.source_features["kind"] == "compat"
 
 
 def test_parse_file_xlsx_compat_preset_no_match(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = _simple_products_workbook(tmp_path / "products.xlsx")
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = None
-        with pytest.raises(EtlError) as exc:
+        with pytest.raises(EltError) as exc:
             parse_file(p, target_type="products", compatibility_preset_id="legacy")
-    assert exc.value.code == "ETL_COMPATIBILITY_PRESET_NO_MATCH"
+    assert exc.value.code == "ELT_COMPATIBILITY_PRESET_NO_MATCH"
 
 
 def test_parse_file_xlsx_compat_preset_returned(tmp_path):
-    from app.application.etl.parsers import ParsedDataset, ParsedRow, parse_file
+    from app.application.elt.parsers import ParsedDataset, ParsedRow, parse_file
 
     p = _simple_products_workbook(tmp_path / "products.xlsx")
     compat_ds = ParsedDataset(
@@ -656,7 +656,7 @@ def test_parse_file_xlsx_compat_preset_returned(tmp_path):
         source_features={"kind": "compat"},
     )
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = compat_ds
         ds = parse_file(p, target_type="products", compatibility_preset_id="legacy")
@@ -664,7 +664,7 @@ def test_parse_file_xlsx_compat_preset_returned(tmp_path):
 
 
 def test_parse_file_xlsx_shipment_records_uses_compat_directly(tmp_path):
-    from app.application.etl.parsers import ParsedDataset, ParsedRow, parse_file
+    from app.application.elt.parsers import ParsedDataset, ParsedRow, parse_file
 
     p = _simple_products_workbook(tmp_path / "products.xlsx")
     compat_ds = ParsedDataset(
@@ -673,7 +673,7 @@ def test_parse_file_xlsx_shipment_records_uses_compat_directly(tmp_path):
         source_features={"kind": "compat"},
     )
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = compat_ds
         ds = parse_file(p, target_type="shipment_records")
@@ -681,7 +681,7 @@ def test_parse_file_xlsx_shipment_records_uses_compat_directly(tmp_path):
 
 
 def test_parse_file_ocr_success(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     # OCR module returns an xlsx path; parse_file then runs _parse_workbook on it
     ocr_out_path = _simple_products_workbook(tmp_path / "ocr_out.xlsx")
@@ -699,29 +699,29 @@ def test_parse_file_ocr_success(tmp_path):
     assert ds.source_features["kind"] == "ocr"
     assert ds.source_features["ocr_block_count"] == 2
     assert len(ds.rows) == 2
-    assert any(w["code"] == "ETL_OCR_REVIEW_REQUIRED" for w in ds.warnings)
+    assert any(w["code"] == "ELT_OCR_REVIEW_REQUIRED" for w in ds.warnings)
 
 
 def test_parse_file_ocr_failure(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     src = tmp_path / "img.pdf"
     src.write_bytes(b"pdf")
     with patch("app.application.shipment_excel_etl_ocr.ocr_source_to_workbook") as ocr_mock:
         ocr_mock.return_value = {"success": False, "error_code": "low_confidence"}
-        with pytest.raises(EtlError) as exc:
+        with pytest.raises(EltError) as exc:
             parse_file(src, target_type="products")
     assert exc.value.code == "LOW_CONFIDENCE"
 
 
 def test_parse_file_ocr_with_compat_preset_rejected(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     src = tmp_path / "img.pdf"
     src.write_bytes(b"pdf")
-    with pytest.raises(EtlError) as exc:
+    with pytest.raises(EltError) as exc:
         parse_file(src, target_type="products", compatibility_preset_id="legacy")
-    assert exc.value.code == "ETL_COMPATIBILITY_PRESET_FILE_UNSUPPORTED"
+    assert exc.value.code == "ELT_COMPATIBILITY_PRESET_FILE_UNSUPPORTED"
 
 
 # ---------------------------------------------------------------------------
@@ -732,7 +732,7 @@ def test_parse_file_ocr_with_compat_preset_rejected(tmp_path):
 def test_parse_workbook_auxiliary_sheet_and_repeated_footer(tmp_path):
     from openpyxl import Workbook
 
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     path = tmp_path / "mixed.xlsx"
     wb = Workbook()
@@ -746,19 +746,19 @@ def test_parse_workbook_auxiliary_sheet_and_repeated_footer(tmp_path):
     wb.save(path)
 
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = None
         ds = parse_file(path, target_type="products")
     assert ds.source_features["kind"] == "workbook"
     # auxiliary sheet skipped warning present
-    assert any(w["code"] == "ETL_AUXILIARY_SHEETS_SKIPPED" for w in ds.warnings)
+    assert any(w["code"] == "ELT_AUXILIARY_SHEETS_SKIPPED" for w in ds.warnings)
 
 
 def test_parse_workbook_footer_and_repeated_headers(tmp_path):
     from openpyxl import Workbook
 
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     path = tmp_path / "foot.xlsx"
     wb = Workbook()
@@ -771,20 +771,20 @@ def test_parse_workbook_footer_and_repeated_headers(tmp_path):
     wb.save(path)
 
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = None
         ds = parse_file(path, target_type="products")
     codes = {w["code"] for w in ds.warnings}
-    assert "ETL_REPEATED_HEADERS_SKIPPED" in codes
-    assert "ETL_FOOTER_ROWS_SKIPPED" in codes
+    assert "ELT_REPEATED_HEADERS_SKIPPED" in codes
+    assert "ELT_FOOTER_ROWS_SKIPPED" in codes
     assert len(ds.rows) == 1
 
 
 def test_parse_workbook_row_limit(tmp_path):
     from openpyxl import Workbook
 
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     path = tmp_path / "many.xlsx"
     wb = Workbook()
@@ -796,18 +796,18 @@ def test_parse_workbook_row_limit(tmp_path):
     wb.save(path)
 
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = None
-        with pytest.raises(EtlError) as exc:
+        with pytest.raises(EltError) as exc:
             parse_file(path, target_type="products", max_rows=1)
-    assert exc.value.code == "ETL_ROW_LIMIT_EXCEEDED"
+    assert exc.value.code == "ELT_ROW_LIMIT_EXCEEDED"
 
 
 def test_parse_workbook_dynamic_fields_knowledge(tmp_path):
     from openpyxl import Workbook
 
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     # knowledge target -> allow_dynamic_fields branch in _aligned_headers_by_sheet
     path = tmp_path / "kb.xlsx"
@@ -819,7 +819,7 @@ def test_parse_workbook_dynamic_fields_knowledge(tmp_path):
     wb.save(path)
 
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = None
         ds = parse_file(path, target_type="knowledge")
@@ -834,17 +834,17 @@ def test_parse_workbook_dynamic_fields_knowledge(tmp_path):
 
 @pytest.fixture
 def _fake_llm_advice():
-    from app.application.etl.llm_assist import LlmAssistResult
+    from app.application.elt.llm_assist import LlmAssistResult
 
     with patch(
-        "app.application.etl.parser_regions.advise_workbook_regions",
+        "app.application.elt.parser_regions.advise_workbook_regions",
         return_value=LlmAssistResult(),
     ):
         yield
 
 
 def test_parse_regions_customer_products(tmp_path, _fake_llm_advice):
-    from app.application.etl.parser_regions import parse_customer_product_regions
+    from app.application.elt.parser_regions import parse_customer_product_regions
 
     p = _delivery_workbook(tmp_path / "delivery.xlsx")
     ds = parse_customer_product_regions(p, max_rows=1000, target_type="customer_products")
@@ -852,11 +852,11 @@ def test_parse_regions_customer_products(tmp_path, _fake_llm_advice):
     assert ds.source_features["structure_detection"] == "deterministic_regions_v1"
     assert len(ds.rows) >= 1
     assert ds.rows[0].values.get("customer_name") == "混合客户"
-    assert any(w["code"] == "ETL_MULTI_REGION_WORKBOOK_PLANNED" for w in ds.warnings)
+    assert any(w["code"] == "ELT_MULTI_REGION_WORKBOOK_PLANNED" for w in ds.warnings)
 
 
 def test_parse_regions_shipment_records(tmp_path, _fake_llm_advice):
-    from app.application.etl.parser_regions import parse_customer_product_regions
+    from app.application.elt.parser_regions import parse_customer_product_regions
 
     p = _delivery_workbook(tmp_path / "delivery.xlsx")
     ds = parse_customer_product_regions(p, max_rows=1000, target_type="shipment_records")
@@ -867,7 +867,7 @@ def test_parse_regions_shipment_records(tmp_path, _fake_llm_advice):
 
 
 def test_parse_regions_no_target_returns_none(tmp_path, _fake_llm_advice):
-    from app.application.etl.parser_regions import parse_customer_product_regions
+    from app.application.elt.parser_regions import parse_customer_product_regions
 
     p = tmp_path / "plain.xlsx"
     from openpyxl import Workbook
@@ -883,18 +883,18 @@ def test_parse_regions_no_target_returns_none(tmp_path, _fake_llm_advice):
 
 
 def test_parse_regions_row_limit(tmp_path, _fake_llm_advice):
-    from app.application.etl.parser_regions import parse_customer_product_regions
+    from app.application.elt.parser_regions import parse_customer_product_regions
 
     p = _delivery_workbook(tmp_path / "delivery.xlsx")
-    with pytest.raises(EtlError) as exc:
+    with pytest.raises(EltError) as exc:
         parse_customer_product_regions(p, max_rows=1, target_type="customer_products")
-    assert exc.value.code == "ETL_ROW_LIMIT_EXCEEDED"
+    assert exc.value.code == "ELT_ROW_LIMIT_EXCEEDED"
 
 
 def test_parse_regions_finance_sheet_excluded(tmp_path, _fake_llm_advice):
     from openpyxl import Workbook
 
-    from app.application.etl.parser_regions import parse_customer_product_regions
+    from app.application.elt.parser_regions import parse_customer_product_regions
 
     p = tmp_path / "finance.xlsx"
     wb = Workbook()
@@ -911,7 +911,7 @@ def test_parse_regions_finance_sheet_excluded(tmp_path, _fake_llm_advice):
 
 def test_parse_regions_region_role_helpers():
     # exercise private helpers directly for branch coverage
-    from app.application.etl import parser_regions as pr
+    from app.application.elt import parser_regions as pr
 
     # _field_for_header mapping branches
     assert pr._field_for_header("产品型号") == "model_number"
@@ -1045,7 +1045,7 @@ def test_parse_regions_region_role_helpers():
 
 
 def test_parse_regions_private_helpers():
-    from app.application.etl import parser_regions as pr
+    from app.application.elt import parser_regions as pr
 
     # _build_sheet_plan: every branch
     plan = pr._build_sheet_plan(
@@ -1170,8 +1170,8 @@ def test_parse_regions_private_helpers():
 def test_parse_regions_companion_and_conflict_warnings(tmp_path, _fake_llm_advice):
     from openpyxl import Workbook
 
-    from app.application.etl.parser_regions import parse_customer_product_regions
-    from app.application.etl.parser_types import ParsedRow
+    from app.application.elt.parser_regions import parse_customer_product_regions
+    from app.application.elt.parser_types import ParsedRow
 
     p = _delivery_workbook(tmp_path / "delivery.xlsx")
     from openpyxl import load_workbook
@@ -1212,32 +1212,32 @@ def test_parse_regions_companion_and_conflict_warnings(tmp_path, _fake_llm_advic
     ]
     with (
         patch(
-            "app.application.etl.parser_regions.parse_shipment_history_rows",
+            "app.application.elt.parser_regions.parse_shipment_history_rows",
             return_value=companion_rows,
         ),
         patch(
-            "app.application.etl.parser_regions.parse_structured_shipment_history_rows",
+            "app.application.elt.parser_regions.parse_structured_shipment_history_rows",
             return_value=[],
         ),
         patch(
-            "app.application.etl.parser_regions.parse_quote_rows",
+            "app.application.elt.parser_regions.parse_quote_rows",
             return_value=[],
         ),
     ):
         ds = parse_customer_product_regions(p, max_rows=1000, target_type="customer_products")
     assert ds is not None
     codes = {w["code"] for w in ds.warnings}
-    assert "ETL_LATEST_SOURCE_CONFLICT" in codes
-    assert "ETL_FUTURE_DATED_SOURCE_ROW" in codes
-    assert "ETL_LATEST_PRODUCT_DATA_SELECTED" in codes
-    assert "ETL_SHIPMENT_HISTORY_PRODUCTS_INCLUDED" in codes
+    assert "ELT_LATEST_SOURCE_CONFLICT" in codes
+    assert "ELT_FUTURE_DATED_SOURCE_ROW" in codes
+    assert "ELT_LATEST_PRODUCT_DATA_SELECTED" in codes
+    assert "ELT_SHIPMENT_HISTORY_PRODUCTS_INCLUDED" in codes
 
 
 def test_parse_regions_model_ambiguity_warning(tmp_path, _fake_llm_advice):
     from openpyxl import load_workbook
 
-    from app.application.etl.parser_regions import parse_customer_product_regions
-    from app.application.etl.parser_types import ParsedRow
+    from app.application.elt.parser_regions import parse_customer_product_regions
+    from app.application.elt.parser_types import ParsedRow
 
     p = _delivery_workbook(tmp_path / "delivery.xlsx")
     wb = load_workbook(p)
@@ -1260,27 +1260,27 @@ def test_parse_regions_model_ambiguity_warning(tmp_path, _fake_llm_advice):
     )
     with (
         patch(
-            "app.application.etl.parser_regions.parse_shipment_history_rows",
+            "app.application.elt.parser_regions.parse_shipment_history_rows",
             return_value=[modeled, nomodel],
         ),
         patch(
-            "app.application.etl.parser_regions.parse_structured_shipment_history_rows",
+            "app.application.elt.parser_regions.parse_structured_shipment_history_rows",
             return_value=[],
         ),
         patch(
-            "app.application.etl.parser_regions.parse_quote_rows",
+            "app.application.elt.parser_regions.parse_quote_rows",
             return_value=[],
         ),
     ):
         ds = parse_customer_product_regions(p, max_rows=1000, target_type="customer_products")
     assert ds is not None
-    assert any(w["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY" for w in ds.warnings)
+    assert any(w["code"] == "ELT_PRODUCT_MODEL_AMBIGUITY" for w in ds.warnings)
 
 
 def test_parse_regions_shipment_fingerprint_non_numeric(tmp_path, _fake_llm_advice):
     from openpyxl import Workbook
 
-    from app.application.etl.parser_regions import parse_customer_product_regions
+    from app.application.elt.parser_regions import parse_customer_product_regions
 
     p = tmp_path / "shipment.xlsx"
     wb = Workbook()
@@ -1310,7 +1310,7 @@ def test_parse_regions_shipment_fingerprint_non_numeric(tmp_path, _fake_llm_advi
 
 
 def test_parse_file_csv_no_tabular_header(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     # Empty CSV: no detectable table layout -> empty dataset (edge case).
     p = _write_csv(tmp_path / "empty.csv", [])
@@ -1320,7 +1320,7 @@ def test_parse_file_csv_no_tabular_header(tmp_path):
 
 
 def test_parse_file_csv_repeated_header_and_footer(tmp_path):
-    from app.application.etl.parsers import parse_file
+    from app.application.elt.parsers import parse_file
 
     p = _write_csv(
         tmp_path / "a.csv",
@@ -1333,13 +1333,13 @@ def test_parse_file_csv_repeated_header_and_footer(tmp_path):
     )
     ds = parse_file(p, target_type="products")
     codes = {w["code"] for w in ds.warnings}
-    assert "ETL_REPEATED_HEADERS_SKIPPED" in codes
-    assert "ETL_FOOTER_ROWS_SKIPPED" in codes
+    assert "ELT_REPEATED_HEADERS_SKIPPED" in codes
+    assert "ELT_FOOTER_ROWS_SKIPPED" in codes
     assert len(ds.rows) == 1
 
 
 def test_parse_file_xlsx_regional_raises_non_etl_falls_back(tmp_path):
-    from app.application.etl.parsers import ParsedDataset, ParsedRow, parse_file
+    from app.application.elt.parsers import ParsedDataset, ParsedRow, parse_file
 
     p = _delivery_workbook(tmp_path / "delivery.xlsx")
     compat_ds = ParsedDataset(
@@ -1348,11 +1348,11 @@ def test_parse_file_xlsx_regional_raises_non_etl_falls_back(tmp_path):
         source_features={"kind": "compat"},
     )
     with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
+        "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = compat_ds
         with patch(
-            "app.application.etl.parser_regions.parse_customer_product_regions",
+            "app.application.elt.parser_regions.parse_customer_product_regions",
             side_effect=RuntimeError("boom"),
         ):
             ds = parse_file(p, target_type="customer_products")

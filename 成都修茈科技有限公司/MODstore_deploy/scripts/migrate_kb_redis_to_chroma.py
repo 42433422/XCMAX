@@ -77,7 +77,9 @@ def _scan_user_chunks(redis_client) -> Iterable[Tuple[int, str, List[Dict[str, A
         data["__chunk_index__"] = chunk_idx
         grouped.setdefault((user_id, doc_id), []).append(data)
     for (uid, doc_id), rows in grouped.items():
-        rows.sort(key=lambda r: int(r.get("__chunk_index__") or r.get("chunk_index") or 0))
+        rows.sort(
+            key=lambda r: int(r.get("__chunk_index__") or r.get("chunk_index") or 0)
+        )
         yield uid, doc_id, rows
 
 
@@ -169,7 +171,9 @@ def main(argv: List[str] | None = None) -> int:
                 emb = c.get("embedding") or []
                 if not emb:
                     continue
-                cid = str(c.get("chunk_id") or f"{doc_id}:{c.get('__chunk_index__', 0)}")
+                cid = str(
+                    c.get("chunk_id") or f"{doc_id}:{c.get('__chunk_index__', 0)}"
+                )
                 ids.append(cid)
                 embeddings.append([float(x) for x in emb])
                 documents.append(str(c.get("content") or ""))
@@ -196,7 +200,9 @@ def main(argv: List[str] | None = None) -> int:
 
             if not ids:
                 logger.warning(
-                    "user=%s doc=%s 没有可迁移的 chunk（embedding 缺失）", user_id, doc_id
+                    "user=%s doc=%s 没有可迁移的 chunk（embedding 缺失）",
+                    user_id,
+                    doc_id,
                 )
                 continue
 

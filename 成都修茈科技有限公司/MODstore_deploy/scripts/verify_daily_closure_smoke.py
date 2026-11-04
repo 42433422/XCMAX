@@ -64,13 +64,17 @@ def run_smoke(*, with_digest: bool = False) -> dict:
         except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             out["digest"] = {"ok": False, "error": str(exc)[:500]}
 
-    out["ok"] = bool(out["backup"].get("ok")) and bool(out["retention_dry_run"].get("ok"))
+    out["ok"] = bool(out["backup"].get("ok")) and bool(
+        out["retention_dry_run"].get("ok")
+    )
     return out
 
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--digest", action="store_true", help="also run run_daily_digest_email")
+    p.add_argument(
+        "--digest", action="store_true", help="also run run_daily_digest_email"
+    )
     args = p.parse_args()
     result = run_smoke(with_digest=args.digest)
     print(json.dumps(result, ensure_ascii=False, indent=2))

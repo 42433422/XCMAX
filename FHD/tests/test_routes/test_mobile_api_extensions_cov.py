@@ -7,28 +7,23 @@ called as coroutines with mocked dependencies.
 
 from __future__ import annotations
 
-import sys
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Module fixture: ensure the extension module is loaded exactly once
-# ---------------------------------------------------------------------------
 
-
-@pytest.fixture(autouse=True, scope="module")
-def _load_ext_module():
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401
-    yield
+@pytest.fixture(autouse=True)
+def _fake_circle_report_transport(monkeypatch):
+    monkeypatch.setattr(
+        "app.domain.app_pure.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+    )
 
 
 @pytest.fixture
 def m():
-    """Return the already-imported extension module."""
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 # ---------------------------------------------------------------------------
@@ -503,7 +498,7 @@ class TestMobilePairingIssue:
 
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request",
+                "app.fastapi_routes.mobile_api_extensions._trusted_desktop_pairing_request",
                 return_value=True,
             ),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
@@ -533,7 +528,7 @@ class TestMobilePairingIssue:
 
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request",
+                "app.fastapi_routes.mobile_api_extensions._trusted_desktop_pairing_request",
                 return_value=True,
             ),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
@@ -557,7 +552,7 @@ class TestMobilePairingIssue:
 
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request",
+                "app.fastapi_routes.mobile_api_extensions._trusted_desktop_pairing_request",
                 return_value=True,
             ),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),

@@ -15,8 +15,10 @@ from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse
 
 from app.build_identity import build_identity
+from app.domain.shipment.shipment_quantities import shipment_quantity_hint
 from app.fastapi_routes.ai_assistant_responses import fail as _fail
 from app.fastapi_routes.ai_assistant_responses import ok as _ok
+from app.fastapi_routes.ai_assistant_responses import shipment_failure
 from app.fastapi_routes.ai_assistant_tts import router as tts_router
 from app.infrastructure.auth.business_scope_gate import require_print_permission as _print_gate
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
@@ -150,8 +152,6 @@ def compat_health():
 @router.post("/api/generate", dependencies=_shipment_access)
 def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
     order_text = str(payload.get("order_text") or "").strip()
-    template_name = payload.get("template_name")
-    template_id = payload.get("template_id")
     preferred_template = payload.get("preferred_template") or payload.get("template")
 
     if not order_text:
@@ -162,7 +162,11 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
 
         parsed = _parse_order_text(order_text)
         if not parsed.get("success"):
-            return _fail("订单解析失败，请检查输入内容", 400)
+            return _fail(
+                shipment_quantity_hint(str(parsed.get("error_code") or ""))
+                or "订单解析失败，请检查输入内容",
+                400,
+            )
 
         unit_name = str(parsed.get("unit_name") or "").strip()
         products = parsed.get("products") or []
@@ -173,26 +177,22 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
         result = app_service.generate_shipment_document(
             unit_name=unit_name,
             products=products,
-            template_name=template_name,
-            template_id=template_id,
+            template_name=payload.get("template_name"),
+            template_id=payload.get("template_id"),
             preferred_template=preferred_template,
             intent="shipment_generate",
             raw_text=order_text,
         )
 
         if not result.get("success"):
-            safe_fail = {
-                "success": False,
-                "message": "生成失败",
-                "error_code": str(result.get("error_code") or "")[:64] or None,
-            }
+            safe_fail, failure_status = shipment_failure(result)
             traced = _trace_ai_assistant_route(
                 safe_fail,
                 route="/api/generate",
                 action="generate_shipment_document",
                 body=payload,
             )
-            return JSONResponse(traced, status_code=500)
+            return JSONResponse(traced, status_code=failure_status)
 
         file_path = result.get("file_path")
         doc_name = result.get("doc_name") or (os.path.basename(file_path) if file_path else None)

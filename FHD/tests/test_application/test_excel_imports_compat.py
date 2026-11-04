@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.application.excel_imports import _norm_model, _parse_price
+from app.domain.app_pure.excel_imports import _norm_model, _parse_price
 
 
 def test_parse_price_accepts_common_legacy_values() -> None:

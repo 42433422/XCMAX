@@ -26,7 +26,7 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 
 
 def _pg_url() -> str:
-    return os.environ.get("ETL_TEST_POSTGRES_URL", "")
+    return os.environ.get("ELT_TEST_POSTGRES_URL", "")
 
 
 def _make_engine(tmp_path):

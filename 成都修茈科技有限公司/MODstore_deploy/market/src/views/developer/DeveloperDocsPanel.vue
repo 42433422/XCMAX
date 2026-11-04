@@ -33,7 +33,7 @@ const guides: DocLink[] = [
   {
     href: '/dev-docs/developer/01-quickstart.md',
     title: '01 · Quickstart',
-    description: '5 分钟跑通：拿到 Token → 触发员工 → 收到 webhook',
+    description: '创建 mod:sync Token → 读取已授权 Mod',
     badge: '推荐起步',
   },
   {

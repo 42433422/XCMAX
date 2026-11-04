@@ -83,6 +83,9 @@ const { balance } = storeToRefs(walletStore)
 
     <div class="wb-sidebar-admin-nav" v-if="currentMode === 'admin' && !isTestMode">
       <div class="wb-sidebar-admin-nav-title">管理端</div>
+      <router-link :to="{ name: 'admin-overview' }" class="wb-sidebar-mode-btn" :class="{ 'wb-sidebar-mode-btn--active': route.name === 'admin-overview' }">
+        <span>市场总览</span>
+      </router-link>
       <router-link :to="{ name: 'admin-database' }" class="wb-sidebar-mode-btn" :class="{ 'wb-sidebar-mode-btn--active': route.name === 'admin-database' }">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="4" rx="5.5" ry="2.5"/><path d="M2.5 4v8c0 1.38 2.46 2.5 5.5 2.5s5.5-1.12 5.5-2.5V4"/><path d="M2.5 8c0 1.38 2.46 2.5 5.5 2.5s5.5-1.12 5.5-2.5"/></svg>
         <span>数据库管理</span>

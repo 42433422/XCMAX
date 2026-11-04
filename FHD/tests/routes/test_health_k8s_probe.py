@@ -183,7 +183,7 @@ class TestCapabilities:
                 return_value={"status": "healthy", "engines": {}},
             ),
             patch(
-                "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer"
+                "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer"
             ) as g,
         ):
             rec = MagicMock()
@@ -208,7 +208,7 @@ class TestCapabilities:
                 return_value={"status": "healthy"},
             ),
             patch(
-                "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer",
+                "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer",
                 side_effect=RuntimeError("boot fail"),
             ),
         ):
@@ -229,7 +229,7 @@ class TestCapabilities:
                 return_value={"status": "healthy"},
             ),
             patch(
-                "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer"
+                "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer"
             ) as g,
         ):
             rec = MagicMock()
@@ -293,7 +293,7 @@ class TestCheckHelpers:
         from app.fastapi_routes.health_k8s import _check_ai_service
 
         with patch(
-            "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer"
+            "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer"
         ) as g:
             rec = MagicMock()
             rec.is_ready.return_value = True

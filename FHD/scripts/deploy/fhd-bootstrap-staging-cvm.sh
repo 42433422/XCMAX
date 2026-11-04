@@ -34,6 +34,50 @@ if [[ ! -f "$STABLE_MANIFEST" ]]; then
   echo "[err] missing stable manifest: $STABLE_MANIFEST" >&2
   exit 1
 fi
+ARTIFACT="$(python3 -c "import json;print(json.load(open('$STABLE_MANIFEST'))['artifact'])")"
+GIT_SHA="$(python3 -c "import json;print(json.load(open('$STABLE_MANIFEST')).get('git_sha',''))")"
+SHA256="$(python3 -c "import json;print(json.load(open('$STABLE_MANIFEST'))['sha256'])")"
+ARCHIVE_VERIFY_SHA256="$(python3 -c "import json;print(json.load(open('$STABLE_MANIFEST')).get('archive_verifier_sha256',''))")"
+TARBALL="$(dirname "$STABLE_MANIFEST")/$ARTIFACT"
+TRUSTED_ARCHIVE_VERIFY="${FHD_TRUSTED_ARCHIVE_VERIFY:-/opt/fhd-full/scripts/deploy/lib/verify_release_archive.py}"
+[[ -f "$TARBALL" && "$SHA256" =~ ^[0-9a-f]{64}$ && "$ARCHIVE_VERIFY_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "[err] stable release identity or artifact is incomplete" >&2; exit 1;
+}
+ACTUAL_SHA256="$(python3 - "$TARBALL" <<'PY'
+import hashlib, sys
+with open(sys.argv[1], "rb") as stream:
+    digest = hashlib.sha256()
+    for block in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(block)
+print(digest.hexdigest())
+PY
+)"
+ACTUAL_VERIFY_SHA256="$(python3 - "$TRUSTED_ARCHIVE_VERIFY" <<'PY'
+import hashlib, sys
+with open(sys.argv[1], "rb") as stream:
+    print(hashlib.sha256(stream.read()).hexdigest())
+PY
+)"
+[[ "$ACTUAL_SHA256" == "$SHA256" && "$ACTUAL_VERIFY_SHA256" == "$ARCHIVE_VERIFY_SHA256" ]] || {
+  echo "[err] stable artifact or trusted candidate verifier SHA256 mismatch" >&2; exit 1;
+}
+python3 "$TRUSTED_ARCHIVE_VERIFY" --archive "$TARBALL"
+BUNDLED_ARCHIVE_VERIFY_SHA256="$(python3 - "$TARBALL" <<'PY'
+import hashlib, tarfile, sys
+with tarfile.open(sys.argv[1], "r:gz") as archive:
+    matches = [member for member in archive.getmembers()
+               if member.name.removeprefix("./") == "scripts/deploy/lib/verify_release_archive.py"]
+    if len(matches) != 1 or not matches[0].isfile():
+        raise SystemExit("release archive verifier member is missing or ambiguous")
+    source = archive.extractfile(matches[0])
+    if source is None:
+        raise SystemExit("release archive verifier member cannot be read")
+    print(hashlib.sha256(source.read()).hexdigest())
+PY
+)"
+[[ "$BUNDLED_ARCHIVE_VERIFY_SHA256" == "$ARCHIVE_VERIFY_SHA256" ]] || {
+  echo "[err] bundled verifier differs from exact candidate source" >&2; exit 1;
+}
 
 echo "[1/7] ensure staging database"
 PW="$(docker exec modstore_deploy-postgres-1 printenv POSTGRES_PASSWORD)"
@@ -105,19 +149,15 @@ ensure("MODSTORE_DEPLOY_TIER", "staging")
 ensure("FHD_DEPLOY_TIER", "staging")
 Path("$ENV_FILE").write_text("\n".join(out) + "\n")
 text = Path("$ENV_FILE").read_text()
-assert "XCAGI_API_PORT=$API_PORT" in text, text
-assert "/xcagi_staging" in text
-assert "XCAGI_NEURO_BUS_DEDUP=1" in text
+assert "XCAGI_API_PORT=$API_PORT" in text, "staging API port is not configured"
+assert "/xcagi_staging" in text, "staging database URI is not configured"
+assert "XCAGI_NEURO_BUS_DEDUP=1" in text, "staging event deduplication is not configured"
 print("env_ok", Path("$ENV_FILE").stat().st_size)
 PY
 chmod 600 "$ENV_FILE"
 
 echo "[3/7] seed $DEPLOY_ROOT from stable tarball"
-ARTIFACT="$(python3 -c "import json;print(json.load(open('$STABLE_MANIFEST'))['artifact'])")"
-GIT_SHA="$(python3 -c "import json;print(json.load(open('$STABLE_MANIFEST')).get('git_sha',''))")"
-SHA256="$(python3 -c "import json;print(json.load(open('$STABLE_MANIFEST'))['sha256'])")"
-TARBALL="$(dirname "$STABLE_MANIFEST")/$ARTIFACT"
-[[ -f "$TARBALL" ]] || { echo "[err] missing tarball $TARBALL" >&2; exit 1; }
+# Stable artifact and exact-source verifier were checked before earlier staging writes.
 
 install -d -m 755 "$DEPLOY_ROOT"
 TMP="$(mktemp -d /tmp/fhd-staging-seed.XXXXXX)"

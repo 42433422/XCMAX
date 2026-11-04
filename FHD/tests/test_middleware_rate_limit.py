@@ -95,6 +95,21 @@ def test_global_rate_limit_disabled_in_desktop_mode(monkeypatch, rate_limit_app)
         assert client.get("/api/other/ping").status_code == 200
 
 
+@pytest.mark.parametrize("probe", ["/api/ping", "/api/desktop/status"])
+def test_startup_probe_survives_exhausted_global_bucket(monkeypatch, rate_limit_app, probe):
+    monkeypatch.delenv("XCAGI_DESKTOP_MODE", raising=False)
+    monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT", "0")
+    monkeypatch.setenv("XCAGI_GLOBAL_RATE_LIMIT", "1")
+    monkeypatch.setenv("XCAGI_GLOBAL_RATE_LIMIT_MAX", "1")
+    rate_limit_app.add_api_route(probe, lambda: {"ready": True})
+    rate_limit_app.add_api_route(probe + "/business", lambda: {"ready": True})
+    client = TestClient(rate_limit_app)
+    assert client.get(probe + "/business").status_code == 200
+    assert client.get(probe + "/business").status_code == 429
+    for _ in range(3):
+        assert client.get(probe).json() == {"ready": True}
+
+
 def test_global_rate_limit_skips_platform_shell(monkeypatch, rate_limit_app):
     monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT", "0")
     monkeypatch.setenv("XCAGI_GLOBAL_RATE_LIMIT", "1")

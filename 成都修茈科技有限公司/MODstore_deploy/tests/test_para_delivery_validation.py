@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modstore_server.self_maintenance_loop_runner import (
+from modstore_server.maintenance_loop.results import (
     _find_delivery_validation,
     _is_accepted_para_wait_timeout,
 )

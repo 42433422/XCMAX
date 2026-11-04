@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 
 
 def _clamp01(x: float) -> float:

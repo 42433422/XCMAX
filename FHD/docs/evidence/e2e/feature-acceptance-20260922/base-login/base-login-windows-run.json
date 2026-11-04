@@ -690,7 +690,7 @@
       "input": "The session cookie obtained in W2, reused after killing and restarting the XCAGI processes.",
       "actions": "Close the app, wait for the backend to stop, start XCAGI.exe again, wait for health, then call me + session/validate with the same cookie.",
       "expected": "Backend health is 200 and the same session is still valid (me.success=true, validate.valid=true).",
-      "observed": "{\"health_after_restart\":200,\"window_title_after_restart\":\"智能对话 - XCAGI\",\"me_after_restart\":{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"etl.execute\",\"dataset.read\",\"shipment.edit\",\"print.label\",\"customer.view\",\"dataset.write\",\"shipment.create\",\"product.view\",\"material.view\",\"etl.template.manage\",\"product.edit\",\"customer.edit\",\"etl.read\",\"material.edit\",\"shipment.view\"],\"account_kind\":\"enterprise\",\"company_brand\":\"SUNBIRD\",\"market_is_admin\":false,\"market_is_enterprise\":true,\"market_user_id\":29,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"SUNBIRD\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"pro\",\"budget_range\":null,\"entitled_industries\":[],\"market_membership_tier\":\"free\",\"email_verified\":false,\"mfa_enabled\":false}},\"validate_after_restart\":{\"success\":true,\"valid\":true,\"data\":{\"session_id\":\"3f15f0fb-3014-42f4-b9ea-061eba1fbb67\",\"user_id\":2,\"username\":\"SUNBIRD\",\"created_at\":\"2026-09-24T09:35:27.095802\",\"expires_at\":\"2036-09-21T09:35:27.095802\"},\"account_kind\":\"enterprise\",\"company_brand\":\"SUNBIRD\",\"market_is_admin\":false,\"market_is_enterprise\":true,\"market_user_id\":29,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"SUNBIRD\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"pro\",\"budget_range\":null,\"entitled_industries\":[],\"market_membership_tier\":\"free\",\"email_verified\":false,\"mfa_enabled\":false},\"session_cookie_reused\":true,\"session_cookie_fingerprint\":\"8afa871a18953610\"}",
+      "observed": "{\"health_after_restart\":200,\"window_title_after_restart\":\"智能对话 - XCAGI\",\"me_after_restart\":{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"etl.execute\",\"dataset.read\",\"shipment.edit\",\"print.label\",\"customer.view\",\"dataset.write\",\"shipment.create\",\"product.view\",\"material.view\",\"etl.template.manage\",\"product.edit\",\"customer.edit\",\"etl.read\",\"material.edit\",\"shipment.view\"],\"account_kind\":\"enterprise\",\"company_brand\":\"SUNBIRD\",\"market_is_admin\":false,\"market_is_enterprise\":true,\"market_user_id\":29,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"SUNBIRD\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"pro\",\"budget_range\":null,\"entitled_industries\":[],\"market_membership_tier\":\"free\",\"email_verified\":false,\"mfa_enabled\":false}},\"validate_after_restart\":{\"success\":true,\"valid\":true,\"data\":{\"session_id\":\"[REDACTED_SESSION_ID]\",\"user_id\":2,\"username\":\"SUNBIRD\",\"created_at\":\"2026-09-24T09:35:27.095802\",\"expires_at\":\"2036-09-21T09:35:27.095802\"},\"account_kind\":\"enterprise\",\"company_brand\":\"SUNBIRD\",\"market_is_admin\":false,\"market_is_enterprise\":true,\"market_user_id\":29,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"SUNBIRD\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"pro\",\"budget_range\":null,\"entitled_industries\":[],\"market_membership_tier\":\"free\",\"email_verified\":false,\"mfa_enabled\":false},\"session_cookie_reused\":true,\"session_cookie_fingerprint\":\"8afa871a18953610\"}",
       "result": "passed",
       "verdict": "PASS",
       "verify_time": "2026-09-24 17:36:03",
@@ -751,7 +751,7 @@
           "success": true,
           "valid": true,
           "data": {
-            "session_id": "3f15f0fb-3014-42f4-b9ea-061eba1fbb67",
+            "session_id": "[REDACTED_SESSION_ID]",
             "user_id": 2,
             "username": "SUNBIRD",
             "created_at": "2026-09-24T09:35:27.095802",
@@ -1569,5 +1569,10 @@
       "note": "the same enterprise account also logs in on the market (Web) endpoint"
     }
   ],
-  "warnings": []
+  "warnings": [],
+  "credential_redaction": {
+    "date": "2026-10-21",
+    "original_sha256": "8e7d570ff6fb7d2e196b66c8fd470d22a615d328169e18154791b183508f50e2",
+    "note": "Removed the session identifier from structured and observed W3 evidence. Original verdicts, timestamps and media are unchanged. This is not a new acceptance run, credential revocation, or Git history purge."
+  }
 }

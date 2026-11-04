@@ -85,7 +85,9 @@ handlers 必须为 direct_python；禁止编造数据中不存在的行列。"""
     inputs_dir = session_assets / "inputs"
     inputs_dir.mkdir(parents=True, exist_ok=True)
     sample = inputs_dir / "kitten_dataset.json"
-    sample.write_text(json.dumps(SAMPLE_DATASET, ensure_ascii=False, indent=2), encoding="utf-8")
+    sample.write_text(
+        json.dumps(SAMPLE_DATASET, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     asset_manifest["assets"].append(
         {
             "id": "kitten_dataset.json",
@@ -131,7 +133,9 @@ def main() -> int:
     results = []
     for meta in CHART_EMPLOYEES:
         results.append(_bootstrap_one(meta))
-    print(json.dumps({"ok": True, "bootstrapped": results}, ensure_ascii=False, indent=2))
+    print(
+        json.dumps({"ok": True, "bootstrapped": results}, ensure_ascii=False, indent=2)
+    )
     return 0
 
 

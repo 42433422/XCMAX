@@ -16,9 +16,9 @@ from app.application.workflow.planner import (
     _filter_tool_registry_for_profile,
     get_tool_registry,
 )
-from app.services.purchase_service import PurchaseService
-from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
-from app.services.tools_workflow_registered import _registered_router_customers
+from app.domain.shared_services.purchase_service import PurchaseService
+from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
+from app.domain.shared_services.tools_workflow_registered import _registered_router_customers
 
 # ---------------------------------------------------------------------------
 # DB mock helpers
@@ -54,7 +54,7 @@ def _contact_row(**kw):
 # ---------------------------------------------------------------------------
 
 
-@patch("app.services.purchase_service.get_db")
+@patch("app.domain.shared_services.purchase_service.get_db")
 def test_purchase_get_suppliers(mock_get_db: MagicMock) -> None:
     db = MagicMock()
     q = MagicMock()
@@ -68,7 +68,7 @@ def test_purchase_get_suppliers(mock_get_db: MagicMock) -> None:
     assert out["count"] == 0
 
 
-@patch("app.services.purchase_service.get_db")
+@patch("app.domain.shared_services.purchase_service.get_db")
 def test_purchase_get_supplier_missing(mock_get_db: MagicMock) -> None:
     db = MagicMock()
     q = MagicMock()
@@ -94,8 +94,12 @@ def test_registered_router_customers_query(mock_get: MagicMock) -> None:
 
 @patch("app.application.get_customer_app_service")
 def test_registered_router_customers_ensure_exists(mock_get: MagicMock) -> None:
-    mock_get.return_value.match_purchase_unit.return_value = None
-    mock_get.return_value.create.return_value = {"success": True}
+    mock_get.return_value.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+    mock_get.return_value.create.return_value = {"success": True, "data": {"id": 1}}
+    mock_get.return_value.get_by_id.return_value = {
+        "success": True,
+        "data": {"id": 1, "customer_name": "甲公司"},
+    }
     out = _registered_router_customers("ensure_exists", {"unit_name": "甲公司"}, {}, "pro", "")
     assert out["success"] is True
 

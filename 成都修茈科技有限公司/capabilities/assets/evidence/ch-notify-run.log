@@ -1,6 +1,0 @@
-2026-09-29T20:22:34+0800 [ch-notify] 开始验收 ch-notify 通知与推送；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
-2026-09-29T20:22:34+0800 [ch-notify] M1 passed :: HTTP 200 52ms；unread_total=0
-2026-09-29T20:22:34+0800 [ch-notify] M2 failed :: 受阻：需要已配对的 Android/iOS 真机接收推送
-2026-09-29T20:22:38+0800 [ch-notify] M3 passed :: 导航后路径 /im；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 信息 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 信息 | 实时已连接 | 客 | 客户消息 · 客来来在 XCMAX 内只读查看客户会话 | 💬 | 用户客服员工 | O-A 获客部 · 未安装 | 🧭 | 需求接入
-2026-09-29T20:22:39+0800 [ch-notify] screenshot result.png
-2026-09-29T20:22:42+0800 [ch-notify] video operation.webm bytes=263113

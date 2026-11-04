@@ -110,7 +110,8 @@ export function useProductOnboardingActions(
       await refreshBaseline(true)
 
       const industryMissing = [...(baselinePlan.value?.missing_industry_mod_ids || [])]
-      const customMissing = [...(baselinePlan.value?.missing_account_custom_mod_ids || [])]
+      const deferred = new Set(baselinePlan.value?.deferred_account_custom_mod_ids || [])
+      const customMissing = (baselinePlan.value?.missing_account_custom_mod_ids || []).filter(id => !deferred.has(id))
       const installErrors: string[] = []
       if (industryMissing.length) {
         try {
@@ -162,7 +163,7 @@ export function useProductOnboardingActions(
         const pendingCustom = (baselinePlan.value?.groups || [])
           .filter((group) => group.id === 'account_custom')
           .flatMap((group) => group.items)
-          .filter((item) => !item.installed)
+          .filter((item) => !item.installed && item.delivery_deferred === true)
           .map((item) => item.label)
         if (pendingCustom.length) {
           await appAlert(

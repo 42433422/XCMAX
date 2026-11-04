@@ -134,7 +134,7 @@ class TestRealConversationGate:
         )
 
     def test_real_chitchat_does_not_create_work_order(self, isolated_stores: Path) -> None:
-        from app.services.intent_confirmation_service import get_confirmation_service
+        from app.domain.shared_services.intent_confirmation_service import get_confirmation_service
 
         result = get_confirmation_service().check_and_build_prompt(
             {
@@ -150,7 +150,7 @@ class TestRealConversationGate:
         self._no_work_order_or_proposal(isolated_stores)
 
     def test_real_qa_does_not_create_work_order(self, isolated_stores: Path) -> None:
-        from app.services.intent_confirmation_service import get_confirmation_service
+        from app.domain.shared_services.intent_confirmation_service import get_confirmation_service
 
         result = get_confirmation_service().check_and_build_prompt(
             {
@@ -374,7 +374,7 @@ class TestRealChatEntryToWorkOrder:
     """真实聊天入口 → 工单：闲聊/普通问答不派发开发任务，全程零网络。"""
 
     def _service(self) -> Any:
-        from app.services.intent_confirmation_service import IntentConfirmationService
+        from app.domain.shared_services.intent_confirmation_service import IntentConfirmationService
 
         return IntentConfirmationService()
 

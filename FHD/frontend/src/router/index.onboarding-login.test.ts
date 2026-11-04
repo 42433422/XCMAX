@@ -96,7 +96,9 @@ describe('normal desktop login through the real onboarding router guard', () => 
     invalidateHostPackCompletionCache()
     setActivePinia(createPinia())
     mocks.post.mockResolvedValue(loginPayload)
-    mocks.get.mockResolvedValue(loginPayload)
+    mocks.get.mockImplementation(async (url: string) => url === '/api/system/industries'
+      ? { success: true, data: { industries: [] } }
+      : url === '/api/system/industry' ? { success: true, data: { id: '考勤', name: '考勤', units: { primary: '天' } } } : loginPayload)
     mocks.prefs.mockImplementation(async (url: string) => {
       if (url !== '/api/workspace/prefs') throw new Error(`unexpected API ${url}`)
       return prefsResponse()
@@ -153,4 +155,22 @@ describe('normal desktop login through the real onboarding router guard', () => 
       expect(mocks.backgroundRefresh).not.toHaveBeenCalled()
     },
   )
+  it('does not let a retained authenticated cookie bypass failed current-industry hydration after reload', async () => {
+    const profile = useAccountProfileStore()
+    profile.clear()
+    mocks.get.mockImplementation(async (url: string) => {
+      if (url === '/api/system/industry') throw new Error('industry network timeout')
+      return url === '/api/system/industries' ? { success: true, data: { industries: [] } } : loginPayload
+    })
+    mocks.catalog.mockResolvedValue({ owner_id: 'tenant:10', selected_industry_id: '考勤', open_packages: [] })
+    await router.replace(modChatPath)
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(profile.workspaceReady).toBe(false)
+    mocks.get.mockImplementation(async (url: string) => url === '/api/system/industry'
+      ? { success: true, data: { id: '考勤' } } : loginPayload)
+    await router.replace(modChatPath)
+    expect(profile.workspaceReady).toBe(true)
+    expect(router.currentRoute.value.path).toBe(modChatPath)
+  })
+
 })

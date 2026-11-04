@@ -60,7 +60,7 @@
                      Foreground="{StaticResource TextPrimary}"
                      HorizontalAlignment="Center" />
           <TextBlock x:Name="WelcomeSubtitleText"
-                     Text="8.0 · 企业 AI 员工宿主"
+                     Text="企业 AI 员工宿主"
                      FontSize="13"
                      Foreground="{StaticResource TextMuted}"
                      HorizontalAlignment="Center"
@@ -163,12 +163,6 @@
                       Style="{StaticResource ModernCheckBoxStyle}"
                       Content="安装完成后打开 XCAGI"
                       IsChecked="True" />
-            <CheckBox x:Name="FetchSunbirdDataCheck"
-                      Style="{StaticResource ModernCheckBoxStyle}"
-                      Content="获取太阳鸟业务数据（考勤模板与人员花名册）"
-                      IsChecked="True"
-                      Margin="0,8,0,0"
-                      Visibility="Collapsed" />
           </StackPanel>
         </StackPanel>
 
@@ -204,10 +198,9 @@
                      Foreground="{StaticResource AccentGreen}"
                      HorizontalAlignment="Center"
                      Margin="0,0,0,12" />
-          <TextBlock Text="安装成功"
+          <TextBlock Text="安装成功 · 100%"
                      FontFamily="{StaticResource FontFamilyDisplay}"
-                     FontSize="22"
-                     FontWeight="SemiBold"
+                     FontSize="22" FontWeight="SemiBold"
                      HorizontalAlignment="Center"
                      Margin="0,0,0,8" />
           <TextBlock x:Name="CompletePathText"

@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -308,6 +308,11 @@ class TestFinalizeEnterpriseLogin:
                 return_value={"tenant_id": 42, "tenant_name": "Brand"},
             ),
             patch("app.application.enterprise_login_flow.persist_session_account_meta"),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new_callable=AsyncMock,
+                return_value={"__proxy_error__": True, "status_code": 503, "payload": {}},
+            ) as market_proxy,
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -320,6 +325,15 @@ class TestFinalizeEnterpriseLogin:
             )
         # skip_market_sync → goes to elif branch, binds tenant from result
         assert out.get("tenant_id") == 42
+        assert market_proxy.await_args_list == [
+            call("GET", "/api/payment/my-plan", authorization="tok", return_error_payload=True),
+            call(
+                "GET",
+                "/api/enterprise/entitled-mod-ids",
+                authorization="Bearer tok",
+                return_error_payload=True,
+            ),
+        ]
 
     @pytest.mark.asyncio
     async def test_market_success_saves_token(self):
@@ -844,6 +858,11 @@ class TestFinalizeEnterpriseLogin:
         with (
             patch("app.application.enterprise_login_flow.bind_tenant_for_login") as mock_bind,
             patch("app.application.enterprise_login_flow.persist_session_account_meta"),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new_callable=AsyncMock,
+                return_value={"__proxy_error__": True, "status_code": 503, "payload": {}},
+            ) as market_proxy,
         ):
             out = await finalize_enterprise_login(
                 result=result,
@@ -856,6 +875,15 @@ class TestFinalizeEnterpriseLogin:
             )
         mock_bind.assert_not_called()
         assert out["account_kind"] == "enterprise"
+        assert market_proxy.await_args_list == [
+            call("GET", "/api/payment/my-plan", authorization="tok", return_error_payload=True),
+            call(
+                "GET",
+                "/api/enterprise/entitled-mod-ids",
+                authorization="Bearer tok",
+                return_error_payload=True,
+            ),
+        ]
 
 
 # ───────────────────── run_market_first_login ─────────────────────

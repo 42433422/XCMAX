@@ -1,9 +1,8 @@
-"""低覆盖模块的唯一覆盖测试。
+"""低覆盖模块的业务回归测试。
 
 保留的测试函数提供专用测试未覆盖的模块覆盖：
 - client_primary_erp: SQLite 客户列表查询 + mod 桥接调用
 - surface_audit_demo_account: demo 用户种子行创建
-- phase90c: 全包导入/调用 sweep（为大量零覆盖模块提供唯一覆盖）
 
 已删除的冗余测试（被专用测试覆盖）：
 - customer_delivery_seed_* → test_mod_sdk/test_customer_delivery_seed_cov.py
@@ -19,8 +18,6 @@ import sqlite3
 import types
 
 import pytest
-
-from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 def _make_customer_db(path) -> None:
@@ -218,144 +215,3 @@ def test_client_primary_erp_returns_none_for_parse_or_runtime_failures(monkeypat
         lambda _mod_id: (_ for _ in ()).throw(OSError("not ready")),
     )
     assert erp.try_invoke_client_mod_customers_list() is None
-
-
-def test_phase90c_import_and_exercise_safe_app_modules():
-    """Best-effort import/call sweep for low-coverage backend modules."""
-    import importlib
-    import inspect
-    import pkgutil
-    import re
-
-    import app
-
-    skip_module = re.compile(
-        r"(\.tests?|\.migrations?|\.alembic|\.celery|\.gunicorn|\.uvicorn|\.main$|\.server$|\.worker$|\.cli$|"
-        r"desktop_runtime\.migrate|shell\.test_|infrastructure\.skills\.)"
-    )
-    skip_callable = re.compile(
-        r"(^_|run|serve|start|stop|listen|connect|disconnect|delete|drop|remove|migrate|watch|loop|daemon|thread|process|subprocess|socket|sleep|wait|open_browser)",
-        re.I,
-    )
-
-    samples = {
-        "str": "coverage",
-        "int": 1,
-        "float": 1.0,
-        "bool": True,
-        "dict": {},
-        "list": [],
-        "set": set(),
-        "tuple": (),
-        "Path": __import__("pathlib").Path("/tmp/coverage-ramp"),
-    }
-
-    def sample_for(param):
-        if param.default is not inspect._empty:
-            return param.default
-        ann = param.annotation
-        ann_name = getattr(ann, "__name__", "") or str(ann)
-        for key, value in samples.items():
-            if key in ann_name:
-                return value
-        if param.kind is inspect.Parameter.VAR_POSITIONAL:
-            return None
-        if param.kind is inspect.Parameter.VAR_KEYWORD:
-            return None
-        return "coverage"
-
-    def invoke(fn, bound=False):
-        try:
-            sig = inspect.signature(fn)
-        except BOUNDARY_ERRORS:
-            return False
-        args = []
-        kwargs = {}
-        params = list(sig.parameters.values())
-        if bound and params and params[0].name == "self":
-            params = params[1:]
-        required = [
-            p
-            for p in params
-            if p.default is inspect._empty
-            and p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-        ]
-        if len(required) > 2:
-            return False
-        for param in params:
-            if param.kind is inspect.Parameter.VAR_POSITIONAL:
-                continue
-            if param.kind is inspect.Parameter.VAR_KEYWORD:
-                continue
-            value = sample_for(param)
-            if param.kind is inspect.Parameter.KEYWORD_ONLY:
-                kwargs[param.name] = value
-            else:
-                args.append(value)
-        try:
-            result = fn(*args, **kwargs)
-            if inspect.iscoroutine(result):
-                result.close()
-            return True
-        except BOUNDARY_ERRORS:
-            return False
-
-    imported = 0
-    invoked = 0
-    for module_info in pkgutil.walk_packages(app.__path__, app.__name__ + "."):
-        name = module_info.name
-        if skip_module.search(name):
-            continue
-        try:
-            module = importlib.import_module(name)
-            imported += 1
-            continue
-        except BOUNDARY_ERRORS:
-            continue
-
-        for attr_name, value in list(vars(module).items())[:200]:
-            if skip_callable.search(attr_name):
-                continue
-            if inspect.isfunction(value) and getattr(value, "__module__", "") == module.__name__:
-                if invoke(value):
-                    invoked += 1
-                continue
-            if inspect.isclass(value) and getattr(value, "__module__", "") == module.__name__:
-                if skip_callable.search(value.__name__):
-                    continue
-                try:
-                    sig = inspect.signature(value)
-                    required = [
-                        p
-                        for p in sig.parameters.values()
-                        if p.default is inspect._empty
-                        and p.kind
-                        not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-                    ]
-                    if len(required) > 1:
-                        continue
-                    ctor_args = []
-                    ctor_kwargs = {}
-                    for param in sig.parameters.values():
-                        if param.kind in (
-                            inspect.Parameter.VAR_POSITIONAL,
-                            inspect.Parameter.VAR_KEYWORD,
-                        ):
-                            continue
-                        value_arg = sample_for(param)
-                        if param.kind is inspect.Parameter.KEYWORD_ONLY:
-                            ctor_kwargs[param.name] = value_arg
-                        else:
-                            ctor_args.append(value_arg)
-                    instance = value(*ctor_args, **ctor_kwargs)
-                except BOUNDARY_ERRORS:
-                    continue
-                for method_name, method in list(vars(value).items())[:80]:
-                    if skip_callable.search(method_name) or not callable(method):
-                        continue
-                    bound = getattr(instance, method_name, None)
-                    if callable(bound) and invoke(bound, bound=True):
-                        invoked += 1
-
-    assert imported > 20
-    assert invoked >= 0

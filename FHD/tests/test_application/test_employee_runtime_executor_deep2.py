@@ -132,6 +132,10 @@ class TestMemoryLightDeep:
 
 
 class TestResolveFilePathDeep:
+    @pytest.fixture(autouse=True)
+    def _configured_workspace(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_workspace_root_none_uses_cwd(self, tmp_path, monkeypatch) -> None:
         f = tmp_path / "x.txt"
         f.write_text("hi")
@@ -302,6 +306,10 @@ class TestLoadRuleSpecDeep:
 
 
 class TestActionVendorConvertDeep:
+    @pytest.fixture(autouse=True)
+    def _configured_workspace(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_generate_with_existing_src_file(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
         backend = tmp_path / "backend" / "vendor" / "csv"
@@ -721,7 +729,7 @@ class TestHandlersExecutionOkDeep:
         assert exec_mod._handlers_execution_ok({"outputs": None}) is True
 
     def test_output_not_dict_returns_true(self) -> None:
-        assert exec_mod._handlers_execution_ok({"outputs": ["string"]}) is True
+        assert exec_mod._handlers_execution_ok({"outputs": ["string"]}) is False
 
     def test_output_ok_true_returns_true(self) -> None:
         assert exec_mod._handlers_execution_ok({"outputs": [{"ok": True}]}) is True

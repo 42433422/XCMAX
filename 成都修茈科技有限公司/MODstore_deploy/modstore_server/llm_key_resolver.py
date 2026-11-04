@@ -1,10 +1,14 @@
 # mypy: disable-error-code="arg-type, union-attr"
-"""解析平台环境变量密钥与用户 BYOK（用户优先）。"""
+"""Resolve user BYOK or server-managed platform credentials without mixing origins."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
-from typing import Optional, Tuple
+import time
+from dataclasses import dataclass, field
+from typing import Any, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -108,17 +112,22 @@ def is_minimax_token_plan_key(api_key: Optional[str]) -> bool:
 def normalize_minimax_api_key(api_key: Optional[str]) -> str:
     """容错处理聊天中常见的 ``minimax`` 标签与密钥粘连。"""
 
+    from modstore_server.platform_model_config import PlatformApiKey
+
     value = (api_key or "").strip()
     if value.lower().startswith("minimaxsk-cp-"):
-        return value[len("minimax") :]
+        value = value[len("minimax") :]
+    if isinstance(api_key, PlatformApiKey):
+        return PlatformApiKey(value, dict(api_key.configuration))
     return value
 
 
-def minimax_anthropic_base_url(base_url: Optional[str] = None) -> str:
+def minimax_anthropic_base_url(base_url: Optional[str] = None, *, prefer_base: bool = False) -> str:
     """返回 MiniMax Anthropic 兼容根地址（不含末尾 ``/v1``）。"""
 
     raw = (
-        _env("MINIMAX_ANTHROPIC_BASE_URL")
+        ((base_url or "").strip() if prefer_base else "")
+        or _env("MINIMAX_ANTHROPIC_BASE_URL")
         or (base_url or "").strip()
         or platform_base_url("minimax")
         or openai_compat_default_root("minimax")
@@ -136,7 +145,7 @@ def _env(name: str) -> str:
     return (os.environ.get(name) or "").strip()
 
 
-def platform_api_key(provider: str) -> Optional[str]:
+def _environment_api_key(provider: str) -> Optional[str]:
     if provider == "openai":
         k = _env("OPENAI_API_KEY")
         return k or None
@@ -207,7 +216,7 @@ def platform_api_key(provider: str) -> Optional[str]:
     return None
 
 
-def platform_base_url(provider: str) -> Optional[str]:
+def _environment_base_url(provider: str) -> Optional[str]:
     if provider == "openai":
         u = _env("OPENAI_BASE_URL")
         return (u or openai_compat_default_root("openai")).rstrip("/")
@@ -276,35 +285,235 @@ def _load_user_row(session: Session, user_id: int, provider: str) -> Optional[Us
     )
 
 
-def resolve_api_key(session: Session, user_id: int, provider: str) -> Tuple[Optional[str], str]:
-    """返回 (api_key, source) source 为 user_override | platform | none"""
+def platform_credentials(
+    provider: str, *, state: dict[str, Any] | None = None
+) -> tuple[Optional[str], Optional[str]]:
+    from modstore_server.platform_model_config import (
+        PlatformApiKey,
+        stored_config,
+        stored_key,
+    )
+
+    row = stored_config(provider) if state is None else state["providers"].get(provider)
+    if row is not None:
+        return PlatformApiKey(stored_key(row), row), row["base_url"]
+    key, base = _environment_api_key(provider), _environment_base_url(provider)
+    if key:
+        key = PlatformApiKey(
+            key,
+            {
+                "provider": provider,
+                "base_url": base,
+                "model": "",
+                "display_name": "",
+                "revision": "",
+                "source": "environment",
+            },
+        )
+    return key, base
+
+
+def platform_api_key(provider: str) -> Optional[str]:
+    return platform_credentials(provider)[0]
+
+
+def platform_base_url(provider: str) -> Optional[str]:
+    return platform_credentials(provider)[1]
+
+
+def resolve_credentials(
+    session: Session, user_id: int, provider: str, *, platform_state: dict[str, Any] | None = None
+) -> tuple[Optional[str], Optional[str], str]:
+    """Read key and endpoint from one snapshot; a platform key never uses a BYOK URL."""
     row = _load_user_row(session, user_id, provider)
+    if row and row.api_key_encrypted and not fernet_configured():
+        return None, None, "user_override"
     if row and row.api_key_encrypted and fernet_configured():
         try:
             k = decrypt_secret(row.api_key_encrypted).strip()
             if k:
                 if provider == "minimax":
                     k = normalize_minimax_api_key(k)
-                return k, "user_override"
-        except ValueError:
-            pass
-    pk = platform_api_key(provider)
+                base = _environment_base_url(provider)
+                if row.base_url_encrypted:
+                    # A broken BYOK endpoint must not route its key to another account's endpoint.
+                    base = decrypt_secret(row.base_url_encrypted).strip().rstrip("/") or base
+                return k, base, "user_override"
+        except (ValueError, RuntimeError):
+            return None, None, "user_override"
+        return None, None, "user_override"
+    pk, base = (
+        platform_credentials(provider)
+        if platform_state is None
+        else platform_credentials(provider, state=platform_state)
+    )
     if pk:
-        return pk, "platform"
-    return None, "none"
+        return pk, base, "platform"
+    return None, base, "none"
+
+
+@dataclass(frozen=True)
+class ChatRouteSnapshot:
+    provider: str
+    model: str
+    route_source: str
+    key_source: str
+    config_revision: str
+    api_key: str = field(repr=False)
+    base_url: str | None = field(repr=False)
+
+    def public_metadata(self) -> dict[str, Any]:
+        metadata: dict[str, Any] = {
+            name: getattr(self, name)
+            for name in ("provider", "model", "route_source", "key_source", "config_revision")
+        }
+        if self.provider == "xiaomi" and self.key_source == "platform":
+            from modstore_server.llm_chat_proxy import _normalize_openai_base
+
+            approved_base = "https://token-plan-cn.xiaomimimo.com/v1"
+            effective_base = _normalize_openai_base(
+                self.provider, self.base_url, self.api_key
+            ).rstrip("/")
+            if effective_base == approved_base:
+                metadata["recipient"] = {
+                    "id": "xiaomi-mimo-cn",
+                    "provider": self.provider,
+                    "api_base": approved_base,
+                    "region": "CN",
+                    "disclosure_version": "2026-11-01",
+                }
+        return metadata
+
+
+def chat_route_snapshot(
+    provider: str,
+    model: str,
+    api_key: str | None,
+    base_url: str | None,
+    key_source: str,
+    route_source: str,
+) -> ChatRouteSnapshot:
+    from fastapi import HTTPException
+
+    from modstore_server.llm_chat_proxy import normalize_model
+    from modstore_server.llm_model_taxonomy import classify_model
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    if provider not in KNOWN_PROVIDERS or not api_key:
+        raise HTTPException(400, "所选供应商未配置可用密钥，请选择聊天模型或跟随平台")
+    model = normalize_model(provider, model, base_url)
+    if classify_model(provider, model) not in {"llm", "vlm"}:
+        raise HTTPException(
+            400,
+            {
+                "code": "INVALID_CHAT_PREFERENCE",
+                "message": "所选模型不支持聊天，请重新选择聊天模型或跟随平台",
+                "recovery": "choose_chat_model_or_follow_platform",
+            },
+        )
+    revision = (
+        str(api_key.configuration.get("revision") or "")
+        if isinstance(api_key, PlatformApiKey)
+        else ""
+    )
+    if not revision:
+        revision = hashlib.sha256(
+            json.dumps([provider, base_url, api_key, key_source]).encode()
+        ).hexdigest()
+    return ChatRouteSnapshot(provider, model, route_source, key_source, revision, api_key, base_url)
+
+
+def resolve_chat_route_snapshot(
+    session: Session, user_id: int, provider: str, model: str, route_source: str = "explicit"
+) -> ChatRouteSnapshot:
+    key, base, source = resolve_credentials(session, user_id, provider)
+    return chat_route_snapshot(provider, model, key, base, source, route_source)
+
+
+def chat_route_token(snapshot: ChatRouteSnapshot, user_id: int) -> str | None:
+    """Carry an encrypted, user-bound route across a single tool round; never log it."""
+    from modstore_server.llm_crypto import encrypt_secret
+
+    if not fernet_configured():
+        return None
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    return encrypt_secret(
+        json.dumps(
+            {
+                **snapshot.public_metadata(),
+                "api_key": str(snapshot.api_key),
+                "base_url": snapshot.base_url,
+                "user_id": int(user_id),
+                "expires": int(time.time()) + 600,
+                "platform_source": (
+                    snapshot.api_key.configuration["source"]
+                    if isinstance(snapshot.api_key, PlatformApiKey)
+                    else None
+                ),
+            }
+        )
+    )
+
+
+def read_chat_route_token(token: str, user_id: int, provider: str, model: str) -> ChatRouteSnapshot:
+    from fastapi import HTTPException
+
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    try:
+        payload = json.loads(decrypt_secret(token))
+        if (
+            payload["user_id"] != int(user_id)
+            or payload["expires"] <= time.time()
+            or payload["expires"] > time.time() + 601
+            or payload["provider"] != provider
+            or payload["model"] != model
+            or payload["key_source"] not in {"platform", "user_override"}
+            or not isinstance(payload["config_revision"], str)
+            or not isinstance(payload["route_source"], str)
+            or not isinstance(payload["base_url"], (str, type(None)))
+            or not payload["config_revision"]
+            or not payload["route_source"]
+            or not isinstance(payload["api_key"], str)
+            or not payload["api_key"]
+        ):
+            raise ValueError("route mismatch")
+        key = payload["api_key"]
+        if payload["key_source"] == "platform":
+            key = PlatformApiKey(
+                key,
+                {
+                    "provider": provider,
+                    "base_url": payload["base_url"],
+                    "model": model,
+                    "display_name": model,
+                    "revision": payload["config_revision"],
+                    "source": payload.get("platform_source") or "environment",
+                },
+            )
+        return ChatRouteSnapshot(
+            provider,
+            model,
+            payload["route_source"],
+            payload["key_source"],
+            payload["config_revision"],
+            key,
+            payload["base_url"],
+        )
+    except (ValueError, RuntimeError, KeyError, TypeError):
+        raise HTTPException(
+            409, {"code": "CHAT_ROUTE_EXPIRED", "message": "模型配置快照已失效，请重新发送此轮对话"}
+        ) from None
+
+
+def resolve_api_key(session: Session, user_id: int, provider: str) -> Tuple[Optional[str], str]:
+    key, _base, source = resolve_credentials(session, user_id, provider)
+    return key, source
 
 
 def resolve_base_url(session: Session, user_id: int, provider: str) -> Optional[str]:
-    """OpenAI 兼容系：用户 base_url 优先，否则平台。anthropic/google 返回 None。"""
-    row = _load_user_row(session, user_id, provider)
-    if row and row.base_url_encrypted and fernet_configured():
-        try:
-            u = decrypt_secret(row.base_url_encrypted).strip().rstrip("/")
-            if u:
-                return u
-        except ValueError:
-            pass
-    return platform_base_url(provider)
+    return resolve_credentials(session, user_id, provider)[1]
 
 
 def credential_status(session: Session, user_id: int, provider: str) -> dict:

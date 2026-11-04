@@ -9,3 +9,6 @@ paths-ignore:
   - "**/scripts/**"
   - "**/node_modules/**"
   - "**/dist/**"
+
+# In-repo model pack cannot be loaded via Actions packs: (GHCR-only). Python
+# SARIF post-strips the three hardened ETL dir_fd py/path-injection FPs.

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import platform
+import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +15,8 @@ import pytest
 pytestmark = pytest.mark.integration
 
 BUDGET_MS = int(os.environ.get("XCAGI_SLA_HEALTH_MS", "500"))
+if BUDGET_MS <= 0:
+    raise ValueError("XCAGI_SLA_HEALTH_MS must be positive")
 METRICS_DIR = Path(__file__).resolve().parents[1] / "metrics"
 SNAPSHOT_PATH = Path(
     os.environ.get("XCAGI_SLA_SNAPSHOT_PATH") or METRICS_DIR / "sla-snapshot.json"
@@ -26,7 +30,7 @@ def _probe_health(client) -> dict:
     return {
         "status_code": resp.status_code,
         "elapsed_ms": elapsed_ms,
-        "within_budget": resp.status_code < 500 and elapsed_ms <= BUDGET_MS * 4,
+        "within_budget": resp.status_code == 200 and elapsed_ms <= BUDGET_MS,
         "budget_ms": BUDGET_MS,
     }
 
@@ -35,16 +39,6 @@ def _write_snapshot(client, health: dict | None = None) -> None:
     if os.environ.get("SKIP_SLA_SNAPSHOT_WRITE", "").strip().lower() in {"1", "true", "yes"}:
         return
     health = health or _probe_health(client)
-    login_started = time.perf_counter()
-    login_resp = client.post(
-        "/api/auth/login",
-        json={
-            "username": os.environ.get("E2E_USER", "admin"),
-            "password": os.environ.get("E2E_PASSWORD", "admin123"),
-            "account_kind": "personal",
-        },
-    )
-    login_ms = round((time.perf_counter() - login_started) * 1000, 2)
     payload: dict = {}
     if SNAPSHOT_PATH.is_file():
         payload = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
@@ -52,6 +46,10 @@ def _write_snapshot(client, health: dict | None = None) -> None:
         {
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "source": "tests/test_sla_health_probe.py + docs/SLO.md",
+            "source_sha": subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=METRICS_DIR.parent, text=True
+            ).strip(),
+            "environment": {"python": platform.python_version(), "platform": platform.platform()},
             "probe": {
                 "endpoint": "/api/health",
                 "budget_ms_env": "XCAGI_SLA_HEALTH_MS",
@@ -59,10 +57,6 @@ def _write_snapshot(client, health: dict | None = None) -> None:
                 "measured_at": datetime.now(UTC).isoformat(),
                 "probe_result": {
                     "health": health,
-                    "login": {
-                        "status_code": login_resp.status_code,
-                        "elapsed_ms": login_ms,
-                    },
                 },
             },
         }
@@ -76,7 +70,7 @@ def _write_snapshot(client, health: dict | None = None) -> None:
 def test_health_endpoint_latency_probe(client):
     """Probe /api/health; budget from XCAGI_SLA_HEALTH_MS (default 500ms)."""
     result = _probe_health(client)
-    assert result["status_code"] < 500, f"health returned {result['status_code']}"
+    assert result["status_code"] == 200, f"health returned {result['status_code']}"
     assert result["within_budget"], (
         f"/api/health took {result['elapsed_ms']}ms (budget {BUDGET_MS}ms)"
     )
@@ -105,10 +99,9 @@ def _market_reachable() -> bool:
 
 
 def test_login_endpoint_reachable(client):
-    """Optional login probe for SLO-API-02 metric path (non-blocking on 401/403)."""
+    """Optional login availability check; invalid credentials do not measure login SLO."""
     if not _market_reachable():
         pytest.skip("market service unreachable; login probe requires it")
-    started = time.perf_counter()
     resp = client.post(
         "/api/auth/login",
         json={
@@ -117,6 +110,4 @@ def test_login_endpoint_reachable(client):
             "account_kind": "personal",
         },
     )
-    elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
     assert resp.status_code < 500, resp.text
-    assert elapsed_ms < BUDGET_MS * 10

@@ -8,7 +8,7 @@
 | `critical-paths.spec.ts`              | 6    | mock 或全栈           |
 | `plan2026-skeleton.spec.ts`           | 5    | 需 `E2E_FULL_STACK=1` |
 | `login-flow.spec.ts`                  | 2    | SLA 登录探针          |
-| `sla-perf.spec.ts`                    | 3    | `sla-probe.yml`       |
+| `sla-perf.spec.ts`                    | 3    | 生产构建＋真实 API；`performance-smoke.yml` |
 | `desktop-shell.spec.ts`               | 4    | 桌面壳契约            |
 | `core-business.spec.ts`               | 4    | mock 或全栈           |
 | `navigation.spec.ts`                  | 2    | 始终                  |
@@ -31,7 +31,7 @@ P0 mock 模式 `npm run test:e2e:p0` 仍维持稳定基线（部分新场景作�
 | 3   | AI 多轮对话（context 携带）      | P0     | `ai-chat-multi-turn.spec.ts`          |
 | 4   | Mod 安装/卸载（installed badge） | P1     | `mod-install-uninstall.spec.ts`       |
 | 5   | Onboarding 多步串接              | P1     | `onboarding-empty-enterprise.spec.ts` |
-| 6   | SLA 报表 P95/P99 字段            | P1     | `sla-perf.spec.ts`                    |
+| 6   | 严格就绪预算与真实 HTTP P95/P99  | P1     | `sla-perf.spec.ts`                    |
 | 7   | Electron IPC invoke open-modal   | P2     | `desktop-shell.spec.ts`               |
 | 8   | 跨端登录态复用（cookie 注入）    | P2     | `cross-device-session.spec.ts`        |
 
@@ -69,5 +69,10 @@ ln -sfn .nm-e2e FHD/frontend/node_modules
 `E2E_EVIDENCE_DIR` 显式指定输出目录。
 
 ## CI
+
+性能门禁使用 `performance-smoke.yml`：壳就绪默认 3000ms，健康请求默认 500ms，
+观察超时与失败预算分开；不再放宽倍数或用固定 mock 分位数作为性能证据。
+壳测试的非全栈模式只 mock 鉴权并明确标注范围；健康请求始终发到真实 API，
+可用 `E2E_API_BASE_URL` 指定地址。30 次原始 HTTP 样本与构建提交身份随报告上传。
 
 仓根 [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../../../.github/workflows/e2e-playwright-reusable.yml)。

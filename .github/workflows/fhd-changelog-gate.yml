@@ -2,9 +2,7 @@
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Changelog gate
 
-# 更新日志 SSOT 门禁：凡改动产品代码的 PR，必须在 FHD/CHANGELOG.md 的
-# 「## Unreleased」节新增一条人类可读的变更说明（见该文件头部约定）。
-# 豁免：autonomy/* 分支（AI 自愈链路，与 ai-self-heal 递归保护同一约定）。
+# 产品代码 PR 必须在 FHD/CHANGELOG.md 的 Unreleased 节新增变更说明。
 
 on:
   pull_request:
@@ -37,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - name: Require CHANGELOG.md entry on product PRs
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -45,6 +43,7 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
+          git -C "${GITHUB_WORKSPACE}" fetch --no-tags --depth=1 origin "${BASE_SHA}" "${HEAD_SHA}"
           if [[ "${HEAD_REF}" == autonomy/* ]]; then
             echo "[skip] autonomy/* 分支豁免（AI 自愈链路）"
             exit 0

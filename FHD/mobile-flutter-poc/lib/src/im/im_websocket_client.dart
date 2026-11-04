@@ -19,22 +19,40 @@ class ImWsMessageEvent {
   final int createdAtMs;
 }
 
-class ImWebSocketClient {
-  ImWebSocketClient();
+/// 真实连接状态：只有握手成功（`WebSocketChannel.ready` 完成）才算已连接。
+enum ImWsConnectionState { disconnected, connecting, connected, reconnecting }
 
+typedef ImWebSocketConnector = WebSocketChannel Function(Uri uri);
+
+class ImWebSocketClient {
+  ImWebSocketClient({ImWebSocketConnector? connector})
+      : _connector = connector ?? WebSocketChannel.connect;
+
+  final ImWebSocketConnector _connector;
   final _events = StreamController<Map<String, Object?>>.broadcast();
+  final _states = StreamController<ImWsConnectionState>.broadcast();
+  var _state = ImWsConnectionState.disconnected;
   WebSocketChannel? _channel;
   StreamSubscription<Object?>? _subscription;
   Timer? _heartbeatTimer;
   Timer? _reconnectTimer;
   String _sessionId = '';
   String _url = '';
-  var _connected = false;
   var _reconnectAttempts = 0;
   var _disposed = false;
+  var _generation = 0;
 
   Stream<Map<String, Object?>> get events => _events.stream;
-  bool get connected => _connected;
+  Stream<ImWsConnectionState> get states => _states.stream;
+  ImWsConnectionState get state => _state;
+  bool get connected => _state == ImWsConnectionState.connected;
+  String get url => _url;
+
+  void _setState(ImWsConnectionState next) {
+    if (_state == next) return;
+    _state = next;
+    if (!_states.isClosed) _states.add(next);
+  }
 
   void connect({required String sessionId, required String url}) {
     if (sessionId.trim().isEmpty || url.trim().isEmpty) return;
@@ -51,34 +69,54 @@ class ImWebSocketClient {
     _url = '';
     _cancelReconnect();
     _disconnectSocket();
+    _setState(ImWsConnectionState.disconnected);
   }
 
   void dispose() {
     _disposed = true;
     disconnect();
     _events.close();
+    _states.close();
   }
 
   void _openSocket() {
     if (_disposed || _sessionId.isEmpty || _url.isEmpty) return;
+    final generation = ++_generation;
+    _setState(
+      _reconnectAttempts > 0
+          ? ImWsConnectionState.reconnecting
+          : ImWsConnectionState.connecting,
+    );
     try {
-      _channel = WebSocketChannel.connect(Uri.parse(_url));
-      _subscription = _channel!.stream.listen(
+      final channel = _connector(Uri.parse(_url));
+      _channel = channel;
+      _subscription = channel.stream.listen(
         _onData,
         onDone: _onDone,
         onError: _onError,
         cancelOnError: true,
       );
-      _connected = true;
-      _reconnectAttempts = 0;
-      _startHeartbeat();
+      channel.ready.then((_) {
+        if (generation != _generation || _channel != channel) return;
+        _markConnected();
+      }, onError: (Object error) {
+        if (generation != _generation || _channel != channel) return;
+        _onError(error);
+      });
     } catch (_) {
-      _connected = false;
       _scheduleReconnect();
     }
   }
 
+  void _markConnected() {
+    _reconnectAttempts = 0;
+    _setState(ImWsConnectionState.connected);
+    _startHeartbeat();
+  }
+
   void _onData(Object? data) {
+    // 收到任何帧即证明握手已完成（兼容 ready 未及时完成的实现）。
+    if (_state != ImWsConnectionState.connected) _markConnected();
     if (data is! String || data.trim().isEmpty) return;
     try {
       final decoded = jsonDecode(data);
@@ -96,13 +134,11 @@ class ImWebSocketClient {
   }
 
   void _onDone() {
-    _connected = false;
     _stopHeartbeat();
     _scheduleReconnect();
   }
 
   void _onError(Object _) {
-    _connected = false;
     _stopHeartbeat();
     _scheduleReconnect();
   }
@@ -110,7 +146,7 @@ class ImWebSocketClient {
   void _startHeartbeat() {
     _stopHeartbeat();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!_connected) return;
+      if (!connected) return;
       try {
         _channel?.sink.add(jsonEncode(const {'type': 'ping'}));
       } catch (error) {
@@ -125,7 +161,13 @@ class ImWebSocketClient {
   }
 
   void _scheduleReconnect() {
-    if (_disposed || _sessionId.isEmpty) return;
+    if (_disposed || _sessionId.isEmpty) {
+      _setState(ImWsConnectionState.disconnected);
+      return;
+    }
+    _setState(ImWsConnectionState.reconnecting);
+    // ready 失败与 stream onError 可能同时触发，只排一次重连。
+    if (_reconnectTimer?.isActive ?? false) return;
     _cancelReconnect();
     final delayMs = _reconnectDelayMs(_reconnectAttempts);
     _reconnectAttempts += 1;
@@ -158,7 +200,7 @@ class ImWebSocketClient {
       // ignore close errors
     }
     _channel = null;
-    _connected = false;
+    _generation += 1;
   }
 
   static ImWsMessageEvent? parseMessageEvent(Map<String, Object?> json) {

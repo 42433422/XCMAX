@@ -1,20 +1,20 @@
 <template>
   <Teleport to="body">
     <div v-if="modelValue" class="confirm-dialog-overlay" @click.self="handleCancel">
-      <div class="confirm-dialog" :style="{ maxWidth: maxWidth }">
+      <div ref="panel" class="confirm-dialog" :style="{ maxWidth: maxWidth }" role="dialog" aria-modal="true" :aria-labelledby="titleId" :aria-describedby="messageId" tabindex="-1">
         <div class="confirm-dialog-header">
-          <h3>{{ title }}</h3>
+          <h3 :id="titleId">{{ title }}</h3>
         </div>
-        <div class="confirm-dialog-body">
+        <div :id="messageId" class="confirm-dialog-body">
           <slot>
             <p>{{ message }}</p>
           </slot>
         </div>
         <div class="confirm-dialog-footer">
-          <button v-if="showCancel" class="btn btn-secondary" @click="handleCancel">
+          <button v-if="showCancel" type="button" class="btn btn-secondary" data-dialog-initial-focus @click="handleCancel">
             {{ cancelText }}
           </button>
-          <button :class="['btn', confirmClass]" @click="handleConfirm">
+          <button type="button" :class="['btn', confirmClass]" @click="handleConfirm">
             {{ confirmText }}
           </button>
         </div>
@@ -24,6 +24,8 @@
 </template>
 
 <script setup>
+import { ref, useId } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 const props = defineProps({
   modelValue: {
     type: Boolean,
@@ -70,6 +72,10 @@ const handleCancel = () => {
   emit('cancel')
   emit('update:modelValue', false)
 }
+const panel = ref(null)
+const titleId = useId()
+const messageId = useId()
+useDialogFocus(panel, () => props.modelValue, handleCancel)
 </script>
 
 <style scoped>

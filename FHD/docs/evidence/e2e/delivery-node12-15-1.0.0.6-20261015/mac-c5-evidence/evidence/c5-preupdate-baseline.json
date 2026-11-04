@@ -1,0 +1,22 @@
+{
+  "capturedAt": "2026-10-15T20:11:45.393427+08:00",
+  "scope": "isolated lifecycle baseline only; no business records written",
+  "device": "arm64",
+  "applicationPath": "/Applications/XCAGI.app",
+  "appVersion": "1.0.0.5",
+  "appSourceSha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+  "backendHealthVisible": "系统正常 at 127.0.0.1:18502",
+  "userDataPath": "/private/tmp/xcagi-mac-c5-20261015/update-data/userData",
+  "databasePath": "/private/tmp/xcagi-mac-c5-20261015/update-data/userData/data/xcagi.db",
+  "databaseQuickCheck": "ok",
+  "tableCount": 94,
+  "nonemptyTableCount": 25,
+  "selectedRowCounts": {
+    "tenants": 2,
+    "users": 3,
+    "shipment_records": 1,
+    "user_preferences": 2,
+    "etl_uploads": 0
+  },
+  "appProcesses": "normal app + backend on isolated userData; left running for OTA"
+}

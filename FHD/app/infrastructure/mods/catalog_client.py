@@ -13,6 +13,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.infrastructure.topology import LLM_V1_BASE_URL, MARKET_CATALOG_URL
+from app.utils.http_tls import shared_ssl_context
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ async def _http_get_json(
     timeout = httpx.Timeout(5.0, read=15.0, write=5.0, connect=5.0)
     for attempt in range(1, max_attempts + 1):
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, verify=shared_ssl_context()) as client:
                 request_headers = _catalog_headers()
                 if headers:
                     request_headers.update(headers)
@@ -265,7 +266,7 @@ async def catalog_download_to(
 
 async def iter_catalog_packages() -> AsyncIterator[dict[str, Any]]:
     """Yield 可安装包：默认与 SUNBIRD 市场同源（/api/market/catalog），失败时回退过滤后的 index.json。"""
-    from app.services.catalog_visibility import is_public_catalog_row
+    from app.domain.shared_services.catalog_visibility import is_public_catalog_row
 
     if _use_market_catalog():
         try:

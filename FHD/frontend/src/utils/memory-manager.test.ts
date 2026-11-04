@@ -151,3 +151,68 @@ describe('globalResourceManager', () => {
     expect(globalResourceManager).toBeInstanceOf(ResourceManager)
   })
 })
+
+describe('resource cleanup guarantees', () => {
+  it.each(['destroy', 'cleanup'] as const)('calls the %s protocol and forgets released resources', (method) => {
+    const mgr = createResourceManager(), release = vi.fn()
+    mgr.register('item', { [method]: release })
+    expect(mgr.release('item')).toBe(true)
+    expect(release).toHaveBeenCalledOnce()
+    expect(mgr.release('item')).toBe(false)
+    expect(mgr.get('item')).toBeNull()
+  })
+  it('still unregisters resources after disposal errors and runs all cleanup callbacks', () => {
+    const error = new Error('dispose failed'), log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const mgr = createResourceManager()
+    mgr.register('broken', { dispose: () => { throw error } })
+    expect(mgr.release('broken')).toBe(true); expect(mgr.has('broken')).toBe(false)
+    expect(log).toHaveBeenCalledWith('ResourceManager: Error releasing resource "broken":', error)
+    const cleanup = useCleanup(), next = vi.fn()
+    cleanup.register(() => { throw error }); cleanup.register(next)
+    cleanup.cleanup(); cleanup.cleanup()
+    expect(next).toHaveBeenCalledOnce(); expect(log).toHaveBeenCalledWith('Cleanup error:', error)
+    log.mockRestore()
+  })
+  it('releases listeners for only the registered event target', () => {
+    const mgr = createResourceManager(), target = new EventTarget(), other = new EventTarget()
+    const handler = vi.fn(), retained = vi.fn()
+    mgr.addListener(target, 'release', handler, { capture: true })
+    const retainedKey = mgr.addListener(other, 'retain', retained)
+    mgr.register('target', target)
+    mgr.release('target')
+    target.dispatchEvent(new Event('release')); other.dispatchEvent(new Event('retain'))
+    expect(handler).not.toHaveBeenCalled(); expect(retained).toHaveBeenCalledOnce()
+    expect(mgr.removeListener('missing')).toBe(false)
+    expect(mgr.removeListener(retainedKey)).toBe(true)
+    other.dispatchEvent(new Event('retain')); expect(retained).toHaveBeenCalledOnce()
+  })
+  it('clears replaced timers, all timers and timers released with the manager', () => {
+    vi.useFakeTimers()
+    try {
+      const mgr = createResourceManager(), expired = vi.fn(), current = vi.fn(), released = vi.fn()
+      mgr.registerTimer('same', window.setInterval(expired, 10))
+      mgr.registerTimer('same', window.setTimeout(current, 10))
+      vi.advanceTimersByTime(10)
+      expect(expired).not.toHaveBeenCalled(); expect(current).toHaveBeenCalledOnce()
+      mgr.registerTimer('all', window.setInterval(expired, 10))
+      mgr.clearAllTimers(); mgr.clearTimer('missing')
+      mgr.registerTimer('release', window.setInterval(released, 10)); expect(mgr.releaseAll()).toBe(0)
+      vi.advanceTimersByTime(100)
+      expect(expired).not.toHaveBeenCalled(); expect(released).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+  it('disconnects all observers only once, including after a later release', () => {
+    const mgr = createResourceManager(), disconnect = vi.fn()
+    mgr.registerObserver({ disconnect } as unknown as MutationObserver)
+    mgr.disconnectAllObservers(); mgr.disconnectAllObservers(); mgr.releaseAll()
+    expect(disconnect).toHaveBeenCalledOnce()
+  })
+  it('clears a canvas before releasing its dimensions and handles an already empty canvas', () => {
+    const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 480
+    const clearRect = vi.fn(), ctx = { canvas, clearRect } as unknown as CanvasRenderingContext2D
+    cleanupCanvas(ctx)
+    expect(clearRect).toHaveBeenCalledWith(0, 0, 640, 480)
+    expect([canvas.width, canvas.height]).toEqual([0, 0])
+    cleanupCanvas(ctx); expect(clearRect).toHaveBeenLastCalledWith(0, 0, 0, 0)
+  })
+})

@@ -36,7 +36,7 @@ class TestPngHttpResponse:
     def test_basic(self):
         resp = _png_http_response(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
         assert resp.media_type == "image/png"
-        assert "max-age=86400" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
     def test_viewport(self):
         resp = _png_http_response(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100, view="viewport")
@@ -48,7 +48,7 @@ class TestPngHttpResponse:
 
     def test_no_cache_for_unknown_view(self):
         resp = _png_http_response(b"data", view="unknown")
-        assert "no-cache" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
 
 # ========================= _strip_b64_attach_image_urls - extended ========

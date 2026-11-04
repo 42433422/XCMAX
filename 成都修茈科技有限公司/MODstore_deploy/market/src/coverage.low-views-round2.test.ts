@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const apiMock = vi.hoisted(() => ({
   adminListAiAccounts: vi.fn(),
-  butlerQqStatus: vi.fn(),
   adminCreateAiAccount: vi.fn(),
   adminUpdateAiAccount: vi.fn(),
   adminRotateAiAccountSecret: vi.fn(),
@@ -115,16 +114,16 @@ const globalMount = {
 function aiAccount(overrides: Record<string, unknown> = {}) {
   return {
     id: 7,
-    platform: 'qq',
-    external_id: 'qq-open-id',
+    platform: 'email',
+    external_id: 'bot@example.com',
     employee_id: 'emp_support',
     display_name: 'Support bot',
     status: 'active',
     sandbox: false,
     notes: 'ready',
     has_secret: true,
-    secrets_path: '/secrets/qq',
-    channel: { platform: 'qq', paths: [{ label: 'webhook', path: '/api/qq/hook' }] },
+    secrets_path: '/secrets/email',
+    channel: { platform: 'email', paths: [{ label: 'inbound', path: '/api/email/inbound' }] },
     ...overrides,
   }
 }
@@ -161,15 +160,6 @@ beforeEach(() => {
     total: 1,
     limit: 200,
     offset: 0,
-  })
-  apiMock.butlerQqStatus.mockResolvedValue({
-    configured: true,
-    credential_source: 'env',
-    app_id: 'app-id',
-    butler_employee_id: 'butler',
-    first_class_employees: [],
-    sandbox: false,
-    api_base: 'https://qq.example',
   })
   apiMock.adminCreateAiAccount.mockResolvedValue({})
   apiMock.adminUpdateAiAccount.mockResolvedValue({})
@@ -311,7 +301,7 @@ describe('low coverage admin and developer views, round 2', () => {
     await flushPromises()
     const vm = wrapper.vm as UnsafeTestValue
     expect(apiMock.adminListAiAccounts).toHaveBeenCalledWith({ limit: 200 })
-    expect(vm.fullWebhookList[0].paths[0].url).toContain('/api/qq/hook')
+    expect(vm.fullWebhookList[0].paths[0].url).toContain('/api/email/inbound')
 
     vm.openCreate()
     await vm.submitCreate()
@@ -319,18 +309,18 @@ describe('low coverage admin and developer views, round 2', () => {
     vm.createForm.platform = 'qq'
     vm.createForm.external_id = 'open-id'
     vm.createForm.employee_id = 'emp_new'
+    vm.createForm.secret_json = '{"token":"x"}'
     await vm.submitCreate()
     expect(vm.error).toContain('QQ')
-    vm.createForm.app_id = 'app'
-    vm.createForm.app_secret = 'secret'
-    vm.createForm.bot_token = 'token'
+    vm.createForm.platform = 'email'
+    vm.createForm.secret_json = '{"token":"secret"}'
     await vm.submitCreate()
     expect(apiMock.adminCreateAiAccount).toHaveBeenCalledWith(
       expect.objectContaining({
-        platform: 'qq',
+        platform: 'email',
         external_id: 'open-id',
         employee_id: 'emp_new',
-        secret: { app_id: 'app', app_secret: 'secret', bot_token: 'token' },
+        secret: { token: 'secret' },
       }),
     )
 
@@ -342,15 +332,11 @@ describe('low coverage admin and developer views, round 2', () => {
 
     vm.openRotate(row)
     await vm.submitRotate()
-    expect(vm.error).toContain('轮换')
-    vm.rotateForm.app_id = 'app2'
-    vm.rotateForm.app_secret = 'secret2'
-    vm.rotateForm.bot_token = 'token2'
+    expect(vm.error).toContain('secret')
+    vm.rotateForm.secret_json = '{"token":"token2"}'
     await vm.submitRotate()
     expect(apiMock.adminRotateAiAccountSecret).toHaveBeenCalledWith(7, {
-      app_id: 'app2',
-      app_secret: 'secret2',
-      bot_token: 'token2',
+      token: 'token2',
     })
     ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false).mockReturnValueOnce(true)
     await vm.removeAccount(row)
@@ -360,22 +346,6 @@ describe('low coverage admin and developer views, round 2', () => {
   })
 
   it('covers AI account template interactions, filters and clipboard fallback', async () => {
-    apiMock.butlerQqStatus.mockResolvedValueOnce({
-      configured: true,
-      credential_source: 'env',
-      app_id: 'app-id',
-      butler_employee_id: 'butler',
-      first_class_employees: [
-        {
-          employee_id: 'emp_fc',
-          app_id: 'fc-app',
-          app_secret_present: true,
-          by_employee_path: '/api/qq/first-class/emp_fc/hook',
-        },
-      ],
-      sandbox: false,
-      api_base: 'https://qq.example',
-    })
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: undefined,
@@ -388,19 +358,18 @@ describe('low coverage admin and developer views, round 2', () => {
     const wrapper = mount(AdminAiAccountsView, { ...globalMount, attachTo: document.body })
     await flushPromises()
 
-    await wrapper.get('.aa-fc-list .btn.link').trigger('click')
     await wrapper.get('tbody .aa-url-list .btn.link').trigger('click')
-    expect(document.execCommand).toHaveBeenCalledTimes(2)
+    expect(document.execCommand).toHaveBeenCalledTimes(1)
 
     const filters = wrapper.findAll('.aa-filters .aa-input')
-    await filters[0].setValue('qq')
+    await filters[0].setValue('email')
     await filters[0].trigger('change')
     await filters[1].setValue('emp_support')
     await filters[1].trigger('change')
     await filters[2].setValue('active')
     await filters[2].trigger('change')
     expect(apiMock.adminListAiAccounts).toHaveBeenLastCalledWith({
-      platform: 'qq',
+      platform: 'email',
       employee_id: 'emp_support',
       status: 'active',
       limit: 200,
@@ -409,15 +378,14 @@ describe('low coverage admin and developer views, round 2', () => {
     await wrapper.get('header .btn.primary').trigger('click')
     await flushPromises()
     let inputs = wrapper.findAll('.aa-modal input:not([type="checkbox"])')
-    await wrapper.get('.aa-modal select').setValue('qq')
+    await wrapper.get('.aa-modal select').setValue('email')
     await inputs[0].setValue('emp_modal')
     await inputs[1].setValue('modal-open-id')
     await inputs[2].setValue('Modal bot')
-    await wrapper.get('.aa-modal textarea').setValue('modal notes')
+    const createTextareas = wrapper.findAll('.aa-modal textarea')
+    await createTextareas[0].setValue('modal notes')
     await wrapper.get('.aa-modal input[type="checkbox"]').setValue(true)
-    await inputs[3].setValue('modal-app')
-    await inputs[4].setValue('modal-secret')
-    await inputs[5].setValue('modal-token')
+    await createTextareas[1].setValue('{"token":"modal-token"}')
     ;(wrapper.vm as UnsafeTestValue).closeCreate()
     await flushPromises()
 
@@ -434,10 +402,7 @@ describe('low coverage admin and developer views, round 2', () => {
 
     await wrapper.findAll('.aa-row-actions .btn')[1].trigger('click')
     await flushPromises()
-    inputs = wrapper.findAll('.aa-modal input:not([type="checkbox"])')
-    await inputs[0].setValue('rotate-app')
-    await inputs[1].setValue('rotate-secret')
-    await inputs[2].setValue('rotate-token')
+    await wrapper.get('.aa-modal textarea').setValue('{"token":"rotate-token"}')
     ;(wrapper.vm as UnsafeTestValue).closeRotate()
     await flushPromises()
 
@@ -455,12 +420,6 @@ describe('low coverage admin and developer views, round 2', () => {
     denied.unmount()
     authMock.isAdmin = true
 
-    apiMock.butlerQqStatus.mockRejectedValueOnce(new Error('qq status down'))
-    const qqStatusFailure = mount(AdminAiAccountsView, globalMount)
-    await flushPromises()
-    expect((qqStatusFailure.vm as UnsafeTestValue).qqStatus).toBe(null)
-    qqStatusFailure.unmount()
-
     apiMock.adminListAiAccounts.mockRejectedValueOnce(new Error('list down'))
     const listFailure = mount(AdminAiAccountsView, globalMount)
     await flushPromises()
@@ -473,12 +432,10 @@ describe('low coverage admin and developer views, round 2', () => {
 
     apiMock.adminCreateAiAccount.mockRejectedValueOnce(new Error('create down'))
     vm.openCreate()
-    vm.createForm.platform = 'qq'
+    vm.createForm.platform = 'email'
     vm.createForm.external_id = 'open-id'
     vm.createForm.employee_id = 'emp_new'
-    vm.createForm.app_id = 'app'
-    vm.createForm.app_secret = 'secret'
-    vm.createForm.bot_token = 'token'
+    vm.createForm.secret_json = '{"token":"secret"}'
     await vm.submitCreate()
     expect(vm.error).toBe('create down')
 
@@ -489,9 +446,7 @@ describe('low coverage admin and developer views, round 2', () => {
 
     apiMock.adminRotateAiAccountSecret.mockRejectedValueOnce(new Error('rotate down'))
     vm.openRotate(aiAccount())
-    vm.rotateForm.app_id = 'app2'
-    vm.rotateForm.app_secret = 'secret2'
-    vm.rotateForm.bot_token = 'token2'
+    vm.rotateForm.secret_json = '{"token":"token2"}'
     await vm.submitRotate()
     expect(vm.error).toBe('rotate down')
 

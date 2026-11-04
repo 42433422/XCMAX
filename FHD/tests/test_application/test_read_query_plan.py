@@ -83,7 +83,7 @@ def test_sales_export_preserves_month_scope_and_leap_day():
 @pytest.mark.parametrize("action", ["dashboard", "inventory_summary"])
 def test_snapshot_reports_do_not_request_unsupported_period_or_grouping(action):
     from app.application.workflow.clarification_node import detect_erp_clarification
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     plan = PlanGraph(
         plan_id="snapshot",

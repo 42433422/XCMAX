@@ -118,8 +118,13 @@ def _register_scheduler_phase_01():
                     result.get("existing"),
                     result.get("skipped"),
                 )
-        except RECOVERABLE_ERRORS:
-            _facade().logger.exception("customer-value reconciliation failed")
+        except RECOVERABLE_ERRORS as exc:
+            from modstore_server.scheduler_runtime import public_exception_type
+
+            _facade().logger.error(
+                "customer-value reconciliation failed: error_type=%s",
+                public_exception_type(exc),
+            )
             raise
 
     _facade()._scheduler.add_job(

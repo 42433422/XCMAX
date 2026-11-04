@@ -1,0 +1,118 @@
+{
+  "run_id": "PREFREEZE-ARTIFACT-604ab1531-20261006",
+  "status": "pre_freeze_dry_run",
+  "final_evidence": false,
+  "not_final_reason": "604ab1531 是集成 PR #2170 之前的 main 提交；冻结 SHA 必须是合入后的 main 提交，因此本文件只证明核验流程可执行，不能填入 candidate.run.json，也不能作为闸门 3/4/24 的通过证据。",
+  "verified_at": "2026-10-06T16:25:00Z",
+  "verified_by": "cloud-agent (read-only gh run download)",
+  "source": {
+    "sha": "604ab1531407cd9849c01631fb8c3f38b6e5d7d0",
+    "on_origin_main": true,
+    "committed_at": "2026-10-05T19:13:25Z",
+    "subject": "fix(windows): preserve product identity in approved sales orders (#2168)"
+  },
+  "windows": {
+    "build_run_id": 37362180646,
+    "workflow": "Release Desktop",
+    "event": "workflow_dispatch",
+    "branch": "main",
+    "conclusion": "success",
+    "artifact": "xcagi-windows-installer-604ab1531407cd9849c01631fb8c3f38b6e5d7d0",
+    "installer_name": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+    "installer_sha256": "bfc4dde1b41759f849c2372c45ad87f70a34726d41f58d363231f9cf6cb47623",
+    "installer_size": 250278156,
+    "sha256_file_matches": true,
+    "delivery_receipt_matches": true,
+    "delivery_receipt": {
+      "delivery_mode": "manual_installer",
+      "signature_status": "unsigned",
+      "authenticode_status": "NotSigned",
+      "runner_install_smoke": "passed",
+      "stable_auto_update": false,
+      "customer_machine_acceptance": "not_verified"
+    },
+    "signature": {
+      "result": "unsigned",
+      "policy": "accepted_risk",
+      "osslsigncode_verify": "Unable to extract existing signature / Failed"
+    },
+    "build_info_source": "$PLUGINSDIR/app-64.7z -> resources/build-info.json",
+    "build_info": {
+      "version": "1.0.0.5",
+      "gitSha": "604ab1531407cd9849c01631fb8c3f38b6e5d7d0",
+      "releaseId": "xcagi-1.0.0.5-604ab1531407cd9849c01631fb8c3f38b6e5d7d0"
+    },
+    "update_feed": "无：manual_installer 模式不产出 latest.yml，不进入稳定自动更新"
+  },
+  "macos_arm64": {
+    "build_run_id": 37363727082,
+    "workflow": "Release Desktop macOS OTA",
+    "event": "workflow_dispatch",
+    "branch": "main",
+    "conclusion": "success",
+    "artifact": "mac-acceptance-604ab1531407cd9849c01631fb8c3f38b6e5d7d0-arm64",
+    "dmg": {
+      "name": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "sha256": "d78a7739442dd75012a584d193c78194633e4f187ac41a1f5b50fe5ec431c672",
+      "size": 304516186
+    },
+    "zip": {
+      "name": "XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
+      "sha256": "1dc90d18a89f5a78766901a7b43f2adb091471b0ae90c3c3bed247209b21b9b4",
+      "size": 263450355,
+      "sha512_matches_feed": true,
+      "blockmap_sha512_and_size_match_feed": true
+    },
+    "build_info": {
+      "version": "1.0.0.5",
+      "gitSha": "604ab1531407cd9849c01631fb8c3f38b6e5d7d0",
+      "releaseId": "xcagi-1.0.0.5-604ab1531407cd9849c01631fb8c3f38b6e5d7d0",
+      "builtAt": "2026-10-05T19:35:20.135Z"
+    },
+    "dmg_and_zip_identical": {
+      "Contents/Resources/build-info.json": "a3d908252c433a6d",
+      "Contents/CodeResources": "b7a023c32170a216",
+      "Contents/MacOS/XCAGI": "ae45576cd4271d4a"
+    },
+    "info_plist": {
+      "CFBundleIdentifier": "com.xcagi.desktop.enterprise",
+      "CFBundleShortVersionString": "1.0.0.5",
+      "CFBundleVersion": "1.0.0.5",
+      "LSMinimumSystemVersion": "12.0"
+    },
+    "signing_traces": {
+      "embedded_certificate_chain": [
+        "Developer ID Application: jialong Li (G26WSH472M)",
+        "Developer ID Certification Authority",
+        "Apple Root CA"
+      ],
+      "stapled_ticket": "Contents/CodeResources 以 s8ch 魔数开头（notarization ticket 已 staple）",
+      "limits": "Linux 只能读取签名痕迹；codesign --verify --deep --strict、spctl -a -vv、xcrun stapler validate 的原始输出必须在真实 Mac 上采集（macos-a.run.json 闸门 3）"
+    },
+    "update_feed": {
+      "name": "latest-mac.yml",
+      "sha256": "50ce235328b5f205bd8ecdb3cea51b92ab214ffb1c1239d9113287c9ab2dd475",
+      "productVersion": "1.0.0.5",
+      "buildSha": "604ab1531407cd9849c01631fb8c3f38b6e5d7d0",
+      "releaseId": "xcagi-1.0.0.5-604ab1531407cd9849c01631fb8c3f38b6e5d7d0",
+      "releaseDate": "2026-10-05T19:43:13.296Z",
+      "ed25519_signature_valid": true,
+      "tampered_body_rejected": true,
+      "verified_with": "FHD/desktop/desktop-config.ts ED25519_PUBLIC_KEY_PEM，按 FHD/desktop/updater.ts verifyMetadataSignatureText 的正文规则（去掉 signature 行、\\n 拼接、trimEnd），Python cryptography 与 Node crypto.verify 结果一致"
+    }
+  },
+  "macos_x64": {
+    "result": "UNKNOWN",
+    "note": "604ab1531 没有 x64 构建；冻结 SHA 需要单独触发 x64 构建或在 candidate.run.json 中写明不交付 x64"
+  },
+  "procedure_for_frozen_sha": [
+    "gh run download <windows_run> -n xcagi-windows-installer-<sha> && sha256sum -c *.sha256",
+    "7z x <installer>.exe '$PLUGINSDIR/app-64.7z' && 7z e app-64.7z resources/build-info.json",
+    "osslsigncode verify -in <installer>.exe",
+    "gh run download <macos_run> -n mac-acceptance-<sha>-arm64 && sha256sum *.dmg *.zip",
+    "7z x <dmg> XCAGI.app/Contents/Resources/build-info.json XCAGI.app/Contents/CodeResources XCAGI.app/Contents/MacOS/XCAGI XCAGI.app/Contents/Info.plist（ZIP 同路径对比）",
+    "openssl dgst -sha512 -binary <zip> | base64 -w0 对比 latest-mac.yml files[].sha512",
+    "按 updater.ts 规则用内置公钥校验 latest-mac.yml 的 ed25519 签名",
+    "真实 Mac：codesign --verify --deep --strict --verbose=2、spctl -a -vv -t install、xcrun stapler validate"
+  ]
+}

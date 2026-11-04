@@ -102,11 +102,31 @@ export function normalizeChunkSource(chunk: KnowledgeBaseChunk): string {
   return normalized || '知识来源'
 }
 
+const LEGACY_EN_ANSWER_PREFIX =
+  /^Based on the retrieved dataset evidence(?: for ['"]?[\s\S]*?['"]?)?:\s*/i
+
+/** Strip legacy English retrieval lead-in; keep the excerpt + citation. */
+export function stripLegacyRetrievalPrefix(answer: string): string {
+  return answer.replace(LEGACY_EN_ANSWER_PREFIX, '').trim()
+}
+
+/**
+ * Customer-facing answer line for Persy 知识库 recall panel.
+ * New backend copy is already Chinese (根据知识库资料…); legacy English
+ * templates are rewritten so the UI matches 智能对话 tone without dropping the excerpt.
+ */
 export function normalizeAnswer(value: unknown, evidenceCount: number): string {
   const answer = String(value || '').trim()
-  if (!answer) return ''
-  if (/^Based on the retrieved dataset evidence\b/i.test(answer)) {
-    return `已召回 ${evidenceCount} 条相关知识证据。`
+  if (!answer) {
+    return evidenceCount > 0 ? `已召回 ${evidenceCount} 条相关知识证据。` : ''
+  }
+  if (/^根据知识库资料/.test(answer)) {
+    return answer
+  }
+  if (LEGACY_EN_ANSWER_PREFIX.test(answer)) {
+    const body = stripLegacyRetrievalPrefix(answer)
+    if (body) return `根据知识库资料：${body}`
+    return evidenceCount > 0 ? `已召回 ${evidenceCount} 条相关知识证据。` : ''
   }
   return answer
 }

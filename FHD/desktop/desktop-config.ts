@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import fs from 'node:fs'
 import net from 'node:net'
+import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { readJsonTextFile } from './backend-env-utils'
 
@@ -31,15 +32,26 @@ export function resolveDesktopBackendBindHost(): string {
 
 export const DESKTOP_BACKEND_BIND_HOST = resolveDesktopBackendBindHost()
 
-/** 检测 bindHost:port 是否可绑定（未被占用）。桌面模式不做端口避让，启动前必须预检。 */
-export function isPortAvailable(port: number, bindHost = DESKTOP_BACKEND_BIND_HOST): Promise<boolean> {
+/** Windows 壳仅预检本机端口，避免临时 LAN 监听触发第二份防火墙授权；后台仍按原地址监听。 */
+export async function isPortAvailable(port: number, bindHost = DESKTOP_BACKEND_BIND_HOST): Promise<boolean> {
+  // Windows 允许不同本机地址共用端口；只读监听表，不以连通性或临时 LAN 监听判空闲。
+  if (process.platform === 'win32' && port > 0) {
+    const occupied = await new Promise<boolean>(resolve => {
+      execFile(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'netstat.exe'), ['-an'],
+        { windowsHide: true, timeout: 5_000 }, (error, output) => {
+          if (error) console.warn('[xcagi-desktop] cannot inspect Windows port listeners:', error.message)
+          resolve(Boolean(error) || new RegExp(`^\\s*TCP\\s+\\S+:${port}\\s+\\S+\\s+LISTENING\\b`, 'm').test(output))
+        })
+    })
+    if (occupied) return false
+  }
   return new Promise(resolve => {
     const tester = net.createServer()
     tester.once('error', () => resolve(false))
     tester.once('listening', () => {
       tester.close(() => resolve(true))
     })
-    tester.listen(port, bindHost)
+    tester.listen(port, process.platform === 'win32' ? '127.0.0.1' : bindHost)
   })
 }
 

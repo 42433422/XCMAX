@@ -88,5 +88,3 @@ const showNoKeyPanel = computed({
 
             <!-- ── Gap panel (Phase 3-b) ─────────────────────────────────── -->
 </template>
-
-<style scoped src="../DutyRosterGraphPanel.css"></style>

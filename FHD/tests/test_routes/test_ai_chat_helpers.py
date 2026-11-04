@@ -1,4 +1,4 @@
-"""Tests for app.application.ai_chat_helpers pure helper functions."""
+"""Tests for app.domain.app_pure.ai_chat_helpers pure helper functions."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application.ai_chat_helpers import (
+from app.domain.app_pure.ai_chat_helpers import (
     _build_number_preview_items,
     _fetch_product_meta_by_models,
     _resolve_mode_scoped_user_id,
@@ -126,7 +126,7 @@ class TestBuildNumberPreviewItems:
             }
         ]
         with patch(
-            "app.application.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
+            "app.domain.app_pure.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
         ):
             result = _build_number_preview_items("TestUnit", products)
             assert len(result["items"]) == 1
@@ -145,7 +145,7 @@ class TestBuildNumberPreviewItems:
             }
         ]
         with patch(
-            "app.application.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
+            "app.domain.app_pure.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
         ):
             result = _build_number_preview_items("TestUnit", products)
             assert result["grand_total"] == 300.0
@@ -159,7 +159,7 @@ class TestBuildNumberPreviewItems:
             }
         ]
         with patch(
-            "app.application.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
+            "app.domain.app_pure.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
         ):
             result = _build_number_preview_items("TestUnit", products)
             assert result["grand_total"] == 200.0
@@ -173,7 +173,7 @@ class TestBuildNumberPreviewItems:
             }
         ]
         with patch(
-            "app.application.ai_chat_helpers._fetch_product_meta_by_models",
+            "app.domain.app_pure.ai_chat_helpers._fetch_product_meta_by_models",
             return_value={"M1": {"name": "Real Name", "price": 50}},
         ):
             result = _build_number_preview_items("TestUnit", products)
@@ -188,7 +188,7 @@ class TestBuildNumberPreviewItems:
             }
         ]
         with patch(
-            "app.application.ai_chat_helpers._fetch_product_meta_by_models",
+            "app.domain.app_pure.ai_chat_helpers._fetch_product_meta_by_models",
             return_value={"M1": {"name": "Widget", "price": 25}},
         ):
             result = _build_number_preview_items("TestUnit", products)
@@ -204,7 +204,7 @@ class TestBuildNumberPreviewItems:
             }
         ]
         with patch(
-            "app.application.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
+            "app.domain.app_pure.ai_chat_helpers._fetch_product_meta_by_models", return_value={}
         ):
             result = _build_number_preview_items("TestUnit", products)
             assert result["items"][0]["桶数"] == 2.5
@@ -218,7 +218,7 @@ class TestBuildShipmentPreviewResponseDict:
     def test_basic_structure(self):
         products = [{"model_number": "M1", "quantity_tins": 5, "unit_price": 10, "name": "Widget"}]
         with patch(
-            "app.application.ai_chat_helpers._build_number_preview_items",
+            "app.domain.app_pure.ai_chat_helpers._build_number_preview_items",
             return_value={"items": [{"型号": "M1"}], "grand_total": 50.0},
         ):
             result = build_shipment_preview_response_dict("TestUnit", products, "order text")
@@ -231,7 +231,7 @@ class TestBuildShipmentPreviewResponseDict:
 
     def test_no_grand_total(self):
         with patch(
-            "app.application.ai_chat_helpers._build_number_preview_items",
+            "app.domain.app_pure.ai_chat_helpers._build_number_preview_items",
             return_value={"items": [], "grand_total": None},
         ):
             result = build_shipment_preview_response_dict("Unit", [], "text")
@@ -239,7 +239,7 @@ class TestBuildShipmentPreviewResponseDict:
 
     def test_with_grand_total(self):
         with patch(
-            "app.application.ai_chat_helpers._build_number_preview_items",
+            "app.domain.app_pure.ai_chat_helpers._build_number_preview_items",
             return_value={"items": [], "grand_total": 100.0},
         ):
             result = build_shipment_preview_response_dict("Unit", [], "text")
@@ -263,7 +263,7 @@ class TestRecognizeIntents:
             "sources_used": ["rule_engine", "llm"],
         }
         with patch(
-            "app.application.intent_recognition_app.recognize_intents",
+            "app.domain.app_pure.intent_recognition_app.recognize_intents",
             return_value=mock_result,
         ):
             result = recognize_intents("查询产品")
@@ -415,7 +415,7 @@ class TestUnifiedChatSinglePayload:
                 },
             ),
             patch(
-                "app.application.ai_chat_helpers.build_shipment_preview_response_dict",
+                "app.domain.app_pure.ai_chat_helpers.build_shipment_preview_response_dict",
                 return_value={"success": True, "task": {"type": "shipment_generate"}},
             ),
         ):
@@ -486,9 +486,17 @@ class TestUnifiedChatSinglePayload:
                 "app.application.normal_chat_dispatch.build_product_query_response_dict",
                 return_value=None,
             ),
+            patch("app.application.get_ai_chat_app_service") as get_service,
         ):
+            get_service.return_value.process_chat.return_value = {
+                "success": True,
+                "response": "planning fallback",
+            }
             result = unified_chat_single_payload("查询产品", "user1", "127.0.0.1", "normal", None)
-            assert "success" in result
+            assert result == {"success": True, "response": "planning fallback"}
+            get_service.return_value.process_chat.assert_called_once_with(
+                user_id="user1", message="查询产品", context=None, source="pro", file_context={}
+            )
 
     def test_other_intent_runs_planning(self):
         # 全局启用多步编排后：unified_chat 对普通消息兜底走 process_chat(source="pro")，

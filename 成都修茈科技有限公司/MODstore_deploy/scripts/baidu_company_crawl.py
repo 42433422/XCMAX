@@ -26,7 +26,9 @@ from modstore_server.research_tools import (  # noqa: E402
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Bing 浏览器填框爬虫（整句搜索，标题原样输出）")
+    p = argparse.ArgumentParser(
+        description="Bing 浏览器填框爬虫（整句搜索，标题原样输出）"
+    )
     p.add_argument("query", help="搜索关键词")
     p.add_argument("--max", type=int, default=10)
     p.add_argument("--companies-only", action="store_true")
@@ -35,7 +37,9 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="仅 Bing 爬虫（等同 MODSTORE_WEB_SEARCH_USE_TAVILY=0）",
     )
-    p.add_argument("--no-tavily", action="store_true", help="禁用 Tavily 兜底，失败则 DDG/SearXNG")
+    p.add_argument(
+        "--no-tavily", action="store_true", help="禁用 Tavily 兜底，失败则 DDG/SearXNG"
+    )
     p.add_argument("--headed", action="store_true", help="Edge 可见窗口（过验证码）")
     return p
 
@@ -48,7 +52,9 @@ async def _run(args: argparse.Namespace) -> Dict[str, Any]:
     if args.crawler_only or args.no_tavily:
         os.environ["MODSTORE_WEB_SEARCH_USE_TAVILY"] = "0"
     if args.crawler_only:
-        results, via, crawl_errors = await web_search_crawl_parallel(q, max_results=args.max)
+        results, via, crawl_errors = await web_search_crawl_parallel(
+            q, max_results=args.max
+        )
         err = "; ".join(crawl_errors)[:220] if crawl_errors and not results else None
     else:
         results, via, err = await web_search_with_fallback(q, max_results=args.max)

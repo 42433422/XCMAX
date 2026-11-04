@@ -17,7 +17,7 @@ from app.application.workflow.runtime.shadow_canary_diff import (
     deterministic_canary_selected,
     normalize_context,
 )
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowRunResult,

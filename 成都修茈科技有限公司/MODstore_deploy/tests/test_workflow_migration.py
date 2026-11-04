@@ -217,11 +217,7 @@ def test_build_brief_from_workflow_includes_nodes_and_triggers(client):
     """``build_brief_from_workflow`` 把 nodes/edges/triggers 都灌到 goal 里。"""
     import json
 
-    from modstore_server.models import (
-        Workflow,
-        WorkflowTrigger,
-        get_session_factory,
-    )
+    from modstore_server.models import Workflow, WorkflowTrigger, get_session_factory
     from modstore_server.scripts import migrate_workflows_to_script as m
 
     user_id = _make_user()

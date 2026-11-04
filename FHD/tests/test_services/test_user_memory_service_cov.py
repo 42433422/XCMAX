@@ -1,19 +1,13 @@
 from __future__ import annotations
 
-"""Branch-coverage supplement for user_memory_service.py.
-
-Targets the 47 missing branches at lines: 193,218,224,241,273,287,366,385,387,
-443,446,448,452,457,458,460,462,464,468,507,510,517,548,551,553,560 and
-adjacent decision points.
-"""
+"""User memory persistence, preferences and feedback regressions."""
 
 import json
 import os
 
 import pytest
 
-from app.services import user_memory_service
-from app.services.user_memory_service import (
+from app.domain.shared_services.user_memory_service import (
     ActionPattern,
     ContextSummary,
     FeedbackRecord,
@@ -23,10 +17,7 @@ from app.services.user_memory_service import (
     get_user_memory_service,
     reset_user_memory_service,
 )
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+from app.services import user_memory_service
 
 
 @pytest.fixture(autouse=True)
@@ -62,11 +53,6 @@ def svc(monkeypatch, tmp_path):
     return UserMemoryService(storage_type="json")
 
 
-# ---------------------------------------------------------------------------
-# 1. UserMemoryStore – singleton and load/save branches (lines 193, 218, 224)
-# ---------------------------------------------------------------------------
-
-
 class TestUserMemoryStore:
     def test_singleton_returns_same_instance(self, tmp_store):
         store, _ = tmp_store
@@ -85,17 +71,17 @@ class TestUserMemoryStore:
         store = UserMemoryStore(storage_type="json")
         assert store.get_memory("user1") is not None
 
-    def test_load_corrupt_json_resets_cache(self, monkeypatch, tmp_path):
-        """Load branch: file exists but JSON is invalid → cache reset."""
+    def test_load_corrupt_json_resets_cache_without_overwriting(self, monkeypatch, tmp_path):
         json_path = str(tmp_path / "memory_store.json")
+        original = b"{not valid json}"
         with open(json_path, "w", encoding="utf-8") as f:
-            f.write("{not valid json}")
+            f.write(original.decode("utf-8"))
         monkeypatch.setattr(user_memory_service, "MEMORY_DIR", str(tmp_path))
         monkeypatch.setattr(user_memory_service, "JSON_MEMORY_PATH", json_path)
         UserMemoryStore._instance = None
         store = UserMemoryStore(storage_type="json")
-        # Should not raise; cache should be empty
-        assert isinstance(store._memory_cache, dict)
+        assert store._memory_cache == {}
+        assert tmp_path.joinpath("memory_store.json").read_bytes() == original
 
     def test_save_creates_file(self, tmp_store):
         store, json_path = tmp_store
@@ -119,20 +105,16 @@ class TestUserMemoryStore:
         # File should NOT be created because storage_type is sqlite
         assert not os.path.exists(json_path)
 
-    def test_should_persist_returns_false_when_no_dirty(self, tmp_store):
-        store, _ = tmp_store
-        assert store._should_persist() is False
+    def test_save_memory_persists_without_dirty_tracking(self, tmp_store):
+        store, path = tmp_store
+        store.save_memory("persisted", store.get_memory("persisted"))
+        assert os.path.exists(path)
 
     def test_get_memory_creates_new_if_absent(self, tmp_store):
         store, _ = tmp_store
         mem = store.get_memory("brand_new_user")
         assert mem is not None
         assert mem.user_id == "brand_new_user"
-
-
-# ---------------------------------------------------------------------------
-# 2. add_preference / get_preference / get_all_preferences (lines 241, 273, 287)
-# ---------------------------------------------------------------------------
 
 
 class TestPreferences:
@@ -163,11 +145,6 @@ class TestPreferences:
         svc.add_preference("u1", "k2", "v2")
         r = svc.get_all_preferences("u1")
         assert r == {"k1": "v1", "k2": "v2"}
-
-
-# ---------------------------------------------------------------------------
-# 3. propose_memory_candidate branches (lines 385, 387 and governance)
-# ---------------------------------------------------------------------------
 
 
 class TestProposeMemoryCandidate:
@@ -231,11 +208,6 @@ class TestProposeMemoryCandidate:
             )
         mem = svc._store.get_memory("u1")
         assert len(mem.memory_v2_records) <= 200
-
-
-# ---------------------------------------------------------------------------
-# 4. confirm_memory_candidate branches (lines 443–476)
-# ---------------------------------------------------------------------------
 
 
 class TestConfirmMemoryCandidate:
@@ -319,11 +291,6 @@ class TestConfirmMemoryCandidate:
         assert r["memory"]["memory_type"] == "entity"
 
 
-# ---------------------------------------------------------------------------
-# 5. reject / delete / _set_memory_v2_status branches (lines 507–535)
-# ---------------------------------------------------------------------------
-
-
 class TestSetMemoryV2Status:
     def test_reject_nonexistent_user(self, svc):
         r = svc.reject_memory_candidate("ghost", "mid")
@@ -375,11 +342,6 @@ class TestSetMemoryV2Status:
     def test_invalid_status_raises(self, svc):
         with pytest.raises(ValueError, match="unsupported memory status"):
             svc._set_memory_v2_status("u1", "mid", "invalid_status")
-
-
-# ---------------------------------------------------------------------------
-# 6. correct_memory branches (lines 548–592)
-# ---------------------------------------------------------------------------
 
 
 class TestCorrectMemory:
@@ -445,11 +407,6 @@ class TestCorrectMemory:
         assert "new_color" in mem2.preferences
 
 
-# ---------------------------------------------------------------------------
-# 7. list_memories / get_memory_v2_summary / format_memory_v2_for_prompt
-# ---------------------------------------------------------------------------
-
-
 class TestListAndSummary:
     def test_list_no_status_filter(self, svc):
         svc.propose_memory_candidate("u1", "preference", "k1", "v1", source="user_explicit")
@@ -503,11 +460,6 @@ class TestListAndSummary:
         assert "blue" in result
 
 
-# ---------------------------------------------------------------------------
-# 8. record_action branches (accumulate vs new pattern)
-# ---------------------------------------------------------------------------
-
-
 class TestRecordAction:
     def test_new_action_recorded(self, svc):
         svc.record_action("u1", "create_order", {"unit_name": "ACME"})
@@ -539,11 +491,6 @@ class TestRecordAction:
         assert all(r["intent"] == "intent_a" for r in results)
 
 
-# ---------------------------------------------------------------------------
-# 9. get_similar_pattern branches
-# ---------------------------------------------------------------------------
-
-
 class TestGetSimilarPattern:
     def test_no_memory_returns_none(self, svc):
         assert svc.get_similar_pattern("ghost", "intent", {}) is None
@@ -570,11 +517,6 @@ class TestGetSimilarPattern:
         svc.record_action("u1", "order", {"unit_name": "ABC"})
         result = svc.get_similar_pattern("u1", "order", {"unit_name": "XYZ"}, threshold=0.9)
         assert result is None
-
-
-# ---------------------------------------------------------------------------
-# 10. add_feedback + _adjust_pattern_weights branches
-# ---------------------------------------------------------------------------
 
 
 class TestAddFeedback:
@@ -612,11 +554,6 @@ class TestAddFeedback:
         assert svc.get_recent_actions("u1") is not None
 
 
-# ---------------------------------------------------------------------------
-# 11. get_feedback_stats
-# ---------------------------------------------------------------------------
-
-
 class TestGetFeedbackStats:
     def test_empty_stats(self, svc):
         r = svc.get_feedback_stats("ghost")
@@ -637,11 +574,6 @@ class TestGetFeedbackStats:
         assert r["error_rates"] == {}
 
 
-# ---------------------------------------------------------------------------
-# 12. get_habit_suggestions + _analyze_action_sequence
-# ---------------------------------------------------------------------------
-
-
 class TestHabitSuggestions:
     def test_no_memory_returns_empty(self, svc):
         assert svc.get_habit_suggestions("ghost") == []
@@ -660,11 +592,6 @@ class TestHabitSuggestions:
         suggestions = svc.get_habit_suggestions("u1")
         # With repeated sequence and confidence >= 0.8, should have suggestions
         assert isinstance(suggestions, list)
-
-
-# ---------------------------------------------------------------------------
-# 13. apply_preference_to_slots
-# ---------------------------------------------------------------------------
 
 
 class TestApplyPreferenceToSlots:
@@ -689,11 +616,6 @@ class TestApplyPreferenceToSlots:
         assert result["quantity"] == 5
 
 
-# ---------------------------------------------------------------------------
-# 14. get_memory_summary
-# ---------------------------------------------------------------------------
-
-
 class TestGetMemorySummary:
     def test_no_memory_returns_has_memory_false(self, svc):
         # get_memory always creates, so result should always have memory
@@ -713,11 +635,6 @@ class TestGetMemorySummary:
         assert r["memory_v2_count"] >= 1
 
 
-# ---------------------------------------------------------------------------
-# 15. get_user_memory_service / reset singleton
-# ---------------------------------------------------------------------------
-
-
 class TestSingletonLifecycle:
     def test_get_returns_same_instance(self, monkeypatch, tmp_path):
         json_path = str(tmp_path / "memory_store.json")
@@ -729,6 +646,7 @@ class TestSingletonLifecycle:
         svc1 = get_user_memory_service()
         svc2 = get_user_memory_service()
         assert svc1 is svc2
+        assert UserMemoryService() is svc1
 
     def test_reset_clears_singleton(self, monkeypatch, tmp_path):
         json_path = str(tmp_path / "memory_store.json")
@@ -743,11 +661,6 @@ class TestSingletonLifecycle:
         UserMemoryService._instance = None
         svc2 = get_user_memory_service()
         assert svc1 is not svc2
-
-
-# ---------------------------------------------------------------------------
-# 16. UserMemory dataclass serialization
-# ---------------------------------------------------------------------------
 
 
 class TestUserMemoryDataclass:
@@ -789,11 +702,6 @@ class TestUserMemoryDataclass:
         assert cs2.intent == "i"
 
 
-# ---------------------------------------------------------------------------
-# 17. _normalize helpers branches
-# ---------------------------------------------------------------------------
-
-
 class TestNormalizeHelpers:
     def test_normalize_type_alias_pref(self, svc):
         assert svc._normalize_memory_v2_type("pref") == "preference"
@@ -811,11 +719,6 @@ class TestNormalizeHelpers:
     def test_normalize_status_invalid_raises(self, svc):
         with pytest.raises(ValueError):
             svc._normalize_memory_v2_status("bad_status")
-
-
-# ---------------------------------------------------------------------------
-# 18. _govern_memory_v2_candidate evidence_required flag branches
-# ---------------------------------------------------------------------------
 
 
 class TestGovernMemoryCandidate:

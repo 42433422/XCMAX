@@ -14,6 +14,12 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
         );
 
   Future<MobileSessionData> loadSession({bool forceReload = false}) async {
+    Future<void> pending;
+    do {
+      pending = _sessionWrites;
+      await pending;
+    } while (!identical(pending, _sessionWrites));
+    final generation = _authGeneration;
     if (!forceReload &&
         (_lastSession.hasAuth ||
             _lastSession.hasIdentity ||
@@ -24,18 +30,65 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
           (_) => MobileSessionData.empty,
         );
     final decodedStored = await _decodeSavedCredential(stored);
+    if (!identical(pending, _sessionWrites)) {
+      return loadSession(forceReload: forceReload);
+    }
+    if (generation != _authGeneration) return _lastSession;
     final session = decodedStored.mergePreferNonBlank(_configSession());
     _rememberSession(session);
     return session;
   }
 
-  Future<void> _saveSession(
-    MobileSessionData session, {
-    MobileSessionData? notifyAs,
-  }) async {
-    await _sessionStore.save(session);
-    _rememberSession(notifyAs ?? await _decodeSavedCredential(session));
+  Future<void> _updateSession(
+    MobileSessionData? Function(MobileSessionData current) update, {
+    int? authGeneration,
+    bool passwordIsPlaintext = false,
+  }) {
+    final generation = authGeneration ?? _authGeneration;
+    final write = _sessionWrites.then((_) async {
+      if (generation != _authGeneration) return;
+      final current = await _sessionStore.load().catchError(
+            (_) => MobileSessionData.empty,
+          );
+      if (generation != _authGeneration) return;
+      final candidate = update(current);
+      if (candidate == null) return;
+      var stored = candidate;
+      if (stored.savedPassword.isNotEmpty &&
+          (passwordIsPlaintext ||
+              !stored.savedPassword.startsWith('enc:v1:'))) {
+        try {
+          stored = stored.copyWith(
+            savedPassword: await _encodeSavedCredential(stored.savedPassword),
+          );
+        } catch (_) {
+          stored = stored.copyWith(
+            savedUsername: '',
+            savedPassword: '',
+            rememberPassword: false,
+            autoLogin: false,
+          );
+        }
+      }
+      if (generation != _authGeneration) return;
+      await _sessionStore.save(stored);
+      final visible = await _decodeSavedCredential(stored);
+      if (generation == _authGeneration) _rememberSession(visible);
+    });
+    // Keep later logout/login writes ordered even when an earlier write fails.
+    _sessionWrites = write.catchError((Object _) {});
+    return write;
   }
+
+  int _beginAuthChange() {
+    _refreshInFlight = null;
+    return ++_authGeneration;
+  }
+
+  int get authGeneration => _authGeneration;
+
+  /// Invalidate requests from earlier login attempts before issuing a new one.
+  int beginLoginAttempt() => _beginAuthChange();
 
   /// Persist a session mutation while keeping the in-memory snapshot fresh.
   ///
@@ -43,7 +96,19 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
   /// store directly leaves `loadSession()` serving a stale cached session, so
   /// consecutive mutations (e.g. caching the user message then the assistant
   /// reply) silently overwrite each other.
-  Future<void> saveSession(MobileSessionData session) => _saveSession(session);
+  Future<void> saveSession(MobileSessionData session, {int? authGeneration}) =>
+      _updateSession((stored) {
+        final current = stored.mergePreferNonBlank(_configSession());
+        if (session.accessToken != current.accessToken ||
+            session.refreshToken != current.refreshToken ||
+            session.sessionId != current.sessionId ||
+            session.userId != current.userId ||
+            session.username != current.username ||
+            session.marketAccessToken != current.marketAccessToken ||
+            session.marketRefreshToken != current.marketRefreshToken)
+          return null;
+        return session;
+      }, authGeneration: authGeneration, passwordIsPlaintext: true);
 
   Future<MobileSessionData> _decodeSavedCredential(
     MobileSessionData session,
@@ -59,7 +124,13 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
 
   Future<String> _encodeSavedCredential(String password) async {
     if (password.isEmpty) return '';
-    return _credentialCipher.encrypt(password).catchError((_) => password);
+    final encrypted = await _credentialCipher.encrypt(password);
+    if (!encrypted.startsWith('enc:v1:') ||
+        encrypted.length <= 'enc:v1:'.length ||
+        encrypted == password) {
+      throw StateError('当前设备无法安全保存密码');
+    }
+    return encrypted;
   }
 
   void _rememberSession(MobileSessionData session) {
@@ -76,12 +147,9 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
     required String displayName,
     required String avatarSource,
   }) async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
     final cleanName = displayName.trim();
-    await _saveSession(
-      current.copyWith(
+    await _updateSession(
+      (current) => current.copyWith(
         username: cleanName.isEmpty ? current.username : cleanName,
         localAvatarSource: avatarSource.trim(),
       ),
@@ -93,26 +161,17 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
     required String password,
     required bool rememberPassword,
     required bool autoLogin,
+    int? authGeneration,
   }) async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
-    final storedPassword =
-        rememberPassword ? await _encodeSavedCredential(password) : '';
-    final notifySession = current.copyWith(
-      savedUsername: rememberPassword ? username.trim() : '',
-      savedPassword: rememberPassword ? password : '',
-      rememberPassword: rememberPassword,
-      autoLogin: autoLogin,
-    );
-    await _saveSession(
-      current.copyWith(
+    await _updateSession(
+      (current) => current.copyWith(
         savedUsername: rememberPassword ? username.trim() : '',
-        savedPassword: storedPassword,
+        savedPassword: rememberPassword ? password : '',
         rememberPassword: rememberPassword,
-        autoLogin: autoLogin,
+        autoLogin: rememberPassword && autoLogin,
       ),
-      notifyAs: notifySession,
+      authGeneration: authGeneration,
+      passwordIsPlaintext: true,
     );
   }
 
@@ -121,52 +180,41 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
     bool? biometricEnabled,
     String? serverMode,
   }) async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
+    await _updateSession((current) {
+      var next = current;
+      final rawTheme = themeMode;
+      if (rawTheme != null) {
+        next = next.copyWith(
+          themeMode: rawTheme.trim().isEmpty ? 'system' : rawTheme.trim(),
         );
-    var next = current;
-    final rawTheme = themeMode;
-    if (rawTheme != null) {
-      next = next.copyWith(
-        themeMode: rawTheme.trim().isEmpty ? 'system' : rawTheme.trim(),
-      );
-    }
-    if (biometricEnabled != null) {
-      next = next.copyWith(biometricEnabled: biometricEnabled);
-    }
-    if (serverMode != null) {
-      final normalized = serverMode.trim().toLowerCase();
-      next = next.copyWith(serverMode: normalized == 'lan' ? 'lan' : 'cloud');
-    }
-    await _saveSession(next);
+      }
+      if (biometricEnabled != null) {
+        next = next.copyWith(biometricEnabled: biometricEnabled);
+      }
+      if (serverMode != null) {
+        final normalized = serverMode.trim().toLowerCase();
+        next = next.copyWith(serverMode: normalized == 'lan' ? 'lan' : 'cloud');
+      }
+      return next;
+    });
   }
 
   Future<void> saveLegalAcceptedVersion(String version) async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
-    await _saveSession(current.copyWith(legalAcceptedVersion: version.trim()));
+    await _updateSession(
+        (current) => current.copyWith(legalAcceptedVersion: version.trim()));
   }
 
   Future<void> saveSetupComplete(bool complete) async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
-    await _saveSession(current.copyWith(setupComplete: complete));
+    await _updateSession(
+        (current) => current.copyWith(setupComplete: complete));
   }
 
   Future<void> saveFcmToken(String token) async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
-    await _saveSession(current.copyWith(fcmToken: token.trim()));
+    await _updateSession((current) => current.copyWith(fcmToken: token.trim()));
   }
 
   Future<void> saveAutoLanProbe(bool enabled) async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
-    await _saveSession(current.copyWith(autoLanProbe: enabled));
+    await _updateSession((current) => current.copyWith(autoLanProbe: enabled));
   }
 
   Future<void> saveSyncState({
@@ -174,34 +222,27 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
     String? lastSyncAt,
     bool? autoSync,
   }) async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
-    var next = current;
-    if (syncCursor != null) {
-      next = next.copyWith(syncCursor: syncCursor < 0 ? 0 : syncCursor);
-    }
-    if (lastSyncAt != null) {
-      next = next.copyWith(lastSyncAt: lastSyncAt.trim());
-    }
-    if (autoSync != null) {
-      next = next.copyWith(autoSync: autoSync);
-    }
-    await _saveSession(next);
+    await _updateSession((current) {
+      var next = current;
+      if (syncCursor != null) {
+        next = next.copyWith(syncCursor: syncCursor < 0 ? 0 : syncCursor);
+      }
+      if (lastSyncAt != null) {
+        next = next.copyWith(lastSyncAt: lastSyncAt.trim());
+      }
+      if (autoSync != null) {
+        next = next.copyWith(autoSync: autoSync);
+      }
+      return next;
+    });
   }
 
   Future<void> saveWalletBalanceJson(String json) async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
-    await _saveSession(current.copyWith(walletBalanceJson: json.trim()));
+    await _updateSession(
+        (current) => current.copyWith(walletBalanceJson: json.trim()));
   }
 
-  Future<void> clearActiveAuth() async {
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
-    await _saveSession(
+  MobileSessionData _withoutActiveAuth(MobileSessionData current) =>
       current.copyWith(
         accessToken: '',
         refreshToken: '',
@@ -209,6 +250,7 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
         username: '',
         accountKind: '',
         userId: 0,
+        localAvatarSource: '',
         marketAccessToken: '',
         marketRefreshToken: '',
         relayDesktopId: '',
@@ -225,18 +267,17 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
         cachedChatMessages: const <String, List<Map<String, Object?>>>{},
         conversationListStates: const <String, Map<String, Object?>>{},
         cachedModInfos: const <Map<String, Object?>>[],
-      ),
-    );
+      );
+
+  Future<void> clearActiveAuth() async {
+    final generation = _beginAuthChange();
+    await _updateSession(_withoutActiveAuth, authGeneration: generation);
   }
 
   Future<void> cacheModInfos(List<Map<String, Object?>> mods) async {
     if (mods.isEmpty) return;
-    final current = await _sessionStore.load().catchError(
-          (_) => MobileSessionData.empty,
-        );
-    await _saveSession(current.copyWith(cachedModInfos: mods));
+    await _updateSession((current) => current.copyWith(cachedModInfos: mods));
   }
-
 
   MobileSessionData _configSession() {
     return MobileSessionData(

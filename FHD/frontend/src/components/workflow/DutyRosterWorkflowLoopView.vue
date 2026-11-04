@@ -70,7 +70,7 @@ const loopNodes = computed(() => [
   {
     key: 'runtime',
     title: '执行回写',
-    meta: ready.value ? '可运行' : '待对齐',
+    meta: ready.value ? '包已对齐' : '待核实',
     text: '后端执行、调度、审计结果回到图谱和员工空间。',
     to: routeTarget('duty-roster-graph', '/duty-roster-graph'),
   },
@@ -134,7 +134,8 @@ const employeeCards = computed(() => {
     const primary = flows[0]
     const missingLocal = status.value.missingLocalIds.includes(employeeId)
     const missingCatalog = status.value.missingCatalogIds.includes(employeeId)
-    const statusLabel = missingLocal ? '本机缺包' : missingCatalog ? 'Catalog 缺岗' : '已对齐'
+    const known = status.value.localKnown && status.value.catalogKnown
+    const statusLabel = missingLocal ? '本机缺包' : missingCatalog ? 'Catalog 缺岗' : known ? '包已对齐' : '待核实'
 
     return {
       id: employeeId,
@@ -146,7 +147,7 @@ const employeeCards = computed(() => {
       color: primary?.color || '#2563eb',
       flows,
       statusLabel,
-      statusKind: missingLocal || missingCatalog ? 'warn' : 'ok',
+      statusKind: missingLocal || missingCatalog || !known ? 'warn' : 'ok',
     }
   })
 })
@@ -155,23 +156,23 @@ const healthCards = computed(() => [
   { label: '编制员工', value: status.value.plannedCount, sub: '编制主索引' },
   {
     label: '本机安装',
-    value: `${status.value.localInstalledCount}/${status.value.plannedCount}`,
+    value: status.value.localKnown ? `${status.value.localInstalledCount}/${status.value.plannedCount}` : '待核实',
     sub: 'mods/_employees',
   },
   {
     label: 'Catalog',
-    value: `${status.value.catalogRegisteredCount}/${status.value.plannedCount}`,
+    value: status.value.catalogKnown ? `${status.value.catalogRegisteredCount}/${status.value.plannedCount}` : '待核实',
     sub: '员工包登记',
   },
   {
     label: '缺口',
-    value: status.value.missingLocalCount + status.value.missingCatalogCount,
+    value: status.value.localKnown && status.value.catalogKnown ? status.value.missingLocalCount + status.value.missingCatalogCount : '待核实',
     sub: '本机 + Catalog',
   },
 ])
 
 const riskLine = computed(() => {
-  if (ready.value) return '编制、本机员工包与 Catalog 已对齐，前端可直接观察闭环。'
+  if (ready.value) return '编制包已对齐；实际执行、调度和业务回执仍需分别核对。'
   const parts = []
   if (status.value.missingLocalCount) parts.push(`本机缺包 ${status.value.missingLocalCount}`)
   if (status.value.missingCatalogCount) parts.push(`Catalog 缺岗 ${status.value.missingCatalogCount}`)
@@ -227,7 +228,7 @@ const riskLine = computed(() => {
         <p class="drlv-dept-sub">
           {{ dept.subzoneCount }} 个子区
           <template v-if="dept.missingLocal || dept.missingCatalog"> · 缺口 {{ dept.missingLocal + dept.missingCatalog }} </template>
-          <template v-else> · 已对齐 </template>
+          <template v-else> · {{ status.localKnown && status.catalogKnown ? '包已对齐' : '待核实' }} </template>
         </p>
       </div>
     </div>
@@ -236,8 +237,8 @@ const riskLine = computed(() => {
       <div class="drlv-employees-head">
         <div>
           <p class="drlv-kicker">员工说明</p>
-          <h4 id="drlv-employees-title" class="drlv-employees-title">52 个编制员工如何进入流程</h4>
-          <p class="drlv-employees-sub">每张卡对应一个本机员工包 manifest 的岗位说明，并标出它参与的六部门流程节点。</p>
+          <h4 id="drlv-employees-title" class="drlv-employees-title">{{ employeeCards.length }} 个编制员工如何进入流程</h4>
+          <p class="drlv-employees-sub">岗位说明来自当前编制，包安装与实际执行分别核对，并显示员工参与的流程节点。</p>
         </div>
         <strong class="drlv-employees-count">{{ employeeCards.length }} 员工</strong>
       </div>

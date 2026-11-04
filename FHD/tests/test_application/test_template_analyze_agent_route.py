@@ -6,19 +6,19 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _client() -> TestClient:
-    from app.fastapi_routes.domains.system.routes import router
+def _client(actor) -> TestClient:
+    from app.fastapi_routes.domains.system.system_routes import router
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
 
 
 def test_templates_analyze_route_executes_template_extract_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
@@ -31,30 +31,30 @@ def test_templates_analyze_route_executes_template_extract_through_agent_orchest
             return_value=repo,
         ),
         patch(
-            "app.services.document_templates_service._extract_structured_excel_preview",
+            "app.domain.shared_services.document_templates_service._extract_structured_excel_preview",
             return_value={
                 "fields": [{"label": "客户", "type": "dynamic"}],
                 "sample_rows": [{"客户": "ACME Trading"}],
             },
         ),
         patch(
-            "app.services.document_templates_service._extract_excel_grid_preview",
+            "app.domain.shared_services.document_templates_service._extract_excel_grid_preview",
             return_value={"rows": [["客户"], ["ACME Trading"]]},
         ),
         patch(
-            "app.services.document_templates_service._extract_excel_grid_style_cache",
+            "app.domain.shared_services.document_templates_service._extract_excel_grid_style_cache",
             return_value={"cells": {}},
         ),
         patch(
-            "app.services.document_templates_service._extract_excel_all_sheets_preview",
+            "app.domain.shared_services.document_templates_service._extract_excel_all_sheets_preview",
             return_value=[{"sheet_name": "出货"}],
         ),
         patch(
-            "app.services.document_templates_service._list_excel_sheet_names",
+            "app.domain.shared_services.document_templates_service._list_excel_sheet_names",
             return_value=["出货"],
         ),
     ):
-        response = _client().post(
+        response = _client(trusted_actor(user_id=17)).post(
             "/api/templates/analyze",
             files={
                 "file": (
@@ -76,7 +76,7 @@ def test_templates_analyze_route_executes_template_extract_through_agent_orchest
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "17"
     assert run.status == "completed"
     assert run.intent == "templates_analyze"
     assert run.tool_calls[0].tool_id == "template_extract"

@@ -54,6 +54,12 @@ export function useCodexStreamEngine(input: CodexStreamEngineInput) {
     if (el) el.scrollTop = el.scrollHeight
   }
 
+  function captureScrollFollow(): () => void {
+    const el = codexScrollEl.value
+    const pinned = el && el.scrollHeight - el.scrollTop - el.clientHeight <= 48
+    return () => { if (pinned && el === codexScrollEl.value) scrollCodexToBottom() }
+  }
+
   function stopCodexTypewriter(clearBody = false): void {
     if (codexStreamTimer) {
       clearInterval(codexStreamTimer)
@@ -92,9 +98,10 @@ export function useCodexStreamEngine(input: CodexStreamEngineInput) {
       }
       const remaining = codexStreamTarget.length - current.length
       const step = Math.max(1, Math.min(8, Math.ceil(remaining / 18)))
+      const follow = captureScrollFollow()
       codexStreamBody.value = codexStreamTarget.slice(0, current.length + step)
       codexStreamActive.value = true
-      void nextTick().then(scrollCodexToBottom)
+      void nextTick().then(follow)
     }, 34)
   }
 
@@ -108,18 +115,27 @@ export function useCodexStreamEngine(input: CodexStreamEngineInput) {
   }): void {
     const target = sanitizeCodexReplyText(options.body)
     if (!target) return
+    const follow = captureScrollFollow()
     const nextMessageId = options.messageId || CODEX_STREAM_PLACEHOLDER_ID
     const messageChanged = codexStreamMessageId.value !== nextMessageId
     codexStreamTarget = target
     codexStreamMessageId.value = nextMessageId
     codexStreamRequestId.value = options.requestId || codexStreamRequestId.value
     codexStreamCreatedAt.value = options.createdAt || codexStreamCreatedAt.value || new Date().toISOString()
+    // A completed response is already available; animation must not delay reading/copying it.
+    if (options.active === false) {
+      stopCodexTypewriter()
+      codexStreamBody.value = target
+      codexStreamActive.value = false
+      void nextTick().then(follow)
+      return
+    }
     if (options.reset || messageChanged || !target.startsWith(codexStreamBody.value) || codexStreamBody.value.length > target.length) {
       codexStreamBody.value = target.slice(0, Math.min(target.length, 10))
     }
-    codexStreamActive.value = options.active !== false || codexStreamBody.value.length < target.length
+    codexStreamActive.value = true
     ensureCodexTypewriter()
-    void nextTick().then(scrollCodexToBottom)
+    void nextTick().then(follow)
   }
 
   function syncCodexStreamFromMessages(items: CodexSuperEmployeeMessage[], requestId = ''): boolean {
@@ -160,6 +176,7 @@ export function useCodexStreamEngine(input: CodexStreamEngineInput) {
       codexPollRound += 1
       try {
         const next = await fetchActiveSuperMessages()
+        const follow = captureScrollFollow()
         codexMessages.value = next
         const shouldContinue = syncCodexStreamFromMessages(next, requestId)
         if (shouldContinue && codexPollRound < CODEX_POLL_MAX_ROUNDS) {
@@ -168,7 +185,7 @@ export function useCodexStreamEngine(input: CodexStreamEngineInput) {
           codexPollTimer = null
         }
         await nextTick()
-        scrollCodexToBottom()
+        follow()
       } catch {
         if (codexPollRound < CODEX_POLL_MAX_ROUNDS) {
           codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS)

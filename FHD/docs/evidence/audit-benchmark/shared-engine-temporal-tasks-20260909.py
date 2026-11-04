@@ -6,10 +6,9 @@ import hashlib
 import json
 import time
 
+import r22_defs as d
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Replayer, Worker
-
-import r22_defs as d
 
 out = {"benchmark": "temporal-oss", "tasks": {}}
 RUN = str(int(time.time()))

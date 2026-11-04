@@ -4,11 +4,12 @@
       <div>
         <h3>{{ isInitialIncluded ? '首次交付费用规则' : '交付后新增开发·报价与收款' }}</h3>
         <p class="delivery-commerce__rule">{{ ticket.custom_delivery?.pricing_label }}</p>
-        <p v-if="ticket.custom_delivery?.commerce_ready">商务条件已齐备，可进入客户安装。</p>
+        <p v-if="ticket.custom_delivery?.commerce_ready">商务条件已齐备；安装仍需技术验收和交付产物。</p>
         <p v-else>{{ (ticket.custom_delivery?.commerce_blockers || []).join('、') || '商务资料待完善' }}</p>
+        <p>技术交付：{{ ticket.custom_delivery?.gate_ok && ticket.custom_delivery?.artifacts?.length ? '验收通过且已有产物' : '待验收或缺少产物，不可安装' }}</p>
       </div>
       <span :class="['commerce-state', ticket.custom_delivery?.commerce_ready ? 'is-ready' : 'is-pending']">
-        {{ ticket.custom_delivery?.commerce_ready ? '已就绪' : '未就绪' }}
+        {{ ticket.custom_delivery?.commerce_ready ? '商务已就绪' : '商务未就绪' }}
       </span>
     </header>
     <div v-if="isInitialIncluded" class="delivery-commerce__included">
@@ -129,8 +130,6 @@ watch(() => props.ticket, hydrate, { immediate: true })
 .delivery-commerce__grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
 .delivery-commerce__grid label { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid #dfe9f2; border-radius: 10px; background: #fff; }
 .delivery-commerce__grid label > span { color: #466884; font-size: 10px; font-weight: 800; }
-.delivery-commerce__grid input,.delivery-commerce__grid select { min-width: 0; border: 1px solid #d1dfec; border-radius: 7px; background: #fff; color: #294b68; padding: 7px 8px; font-size: 10px; }
-.delivery-commerce__grid button { border: 0; border-radius: 7px; background: #2f7ed7; color: #fff; padding: 7px 8px; font-size: 10px; font-weight: 700; cursor: pointer; }
 .delivery-commerce__grid button:disabled { opacity: .5; cursor: wait; }
 @media (max-width: 1100px) { .delivery-commerce__grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 760px) { .delivery-commerce__grid { grid-template-columns: 1fr; } }

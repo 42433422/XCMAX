@@ -1,7 +1,0 @@
-2026-09-30T04:17:10+0800 [erp-ocr-clean] 开始验收 erp-ocr-clean 识别结果清洗与入库；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:17:18+0800 [erp-ocr-clean] M1 passed :: HTTP 200 7435ms；{"purchase_unit": null, "contact_person": null, "contact_phone": null, "purchase_date": null, "order_number": null, "total_amount": null, "products": [], "raw_text": "发货单 NO.20260929\n客户：太阳鸟\n产品：包装盒 数量：24"}
-2026-09-30T04:17:18+0800 [erp-ocr-clean] M2 passed :: HTTP 400 83ms；{"success": false, "message": "请提供图像文件或文件路径"}
-2026-09-30T04:17:18+0800 [erp-ocr-clean] M3 passed :: HTTP 200 22ms；transforms=['cast', 'concat', 'date', 'default', 'formula', 'lookup'] targets=['knowledge', 'customer_products', 'customers', 'products', 'purchase_orders', 'shipment_records', 'attendance', 'export_xlsx', 'export_csv', 'webhook']
-2026-09-30T04:17:21+0800 [erp-ocr-clean] M4 passed :: 导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | 
-2026-09-30T04:17:23+0800 [erp-ocr-clean] screenshot result.png
-2026-09-30T04:17:27+0800 [erp-ocr-clean] video operation.webm bytes=488445

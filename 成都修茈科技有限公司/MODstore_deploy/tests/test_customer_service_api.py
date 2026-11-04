@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import types
 import uuid
+from contextlib import contextmanager
 from threading import enumerate as live_threads
 from unittest.mock import AsyncMock
 
 import pytest
 
 pytest.importorskip("fastapi")
+
+from modstore_server import customer_service_api  # noqa: E402
+from modstore_server.app import app  # noqa: E402
+from modstore_server.models import get_session_factory  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -25,7 +29,7 @@ def isolate_customer_ticket_workers(monkeypatch):
 
 
 def _make_user(username: str, *, admin: bool = False):
-    from modstore_server.models import User, get_session_factory
+    from modstore_server.models import User
 
     username = f"{username}_{uuid.uuid4().hex[:8]}"
     sf = get_session_factory()
@@ -39,13 +43,35 @@ def _make_user(username: str, *, admin: bool = False):
         session.add(user)
         session.commit()
         session.refresh(user)
-        return types.SimpleNamespace(
-            id=user.id, username=user.username, email=user.email, is_admin=user.is_admin
-        )
+        return user
+
+
+@contextmanager
+def _as_user(user):
+    previous = app.dependency_overrides.copy()
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    if user.is_admin:
+        app.dependency_overrides[customer_service_api._require_admin] = lambda: user
+    try:
+        yield user
+    finally:
+        app.dependency_overrides = previous
+
+
+def _make_ticket(db, user, **values):
+    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
+
+    session = CustomerServiceSession(user_id=user.id)
+    db.add(session)
+    db.flush()
+    ticket = CustomerServiceTicket(user_id=user.id, session_id=session.id, **values)
+    db.add(ticket)
+    db.flush()
+    return ticket
 
 
 def _grant_permanent_purchase(user_id: int, plan_id: str = "saas-permanent-growth") -> str:
-    from modstore_server.models import Entitlement, UserPlan, get_session_factory
+    from modstore_server.models import Entitlement, UserPlan
 
     order_no = f"ACCOUNT-PYTEST-{uuid.uuid4().hex[:10]}"
     sf = get_session_factory()
@@ -86,22 +112,24 @@ def _paid_order(tmp_path, monkeypatch, user_id: int) -> str:
     return order_no
 
 
-def test_customer_service_refund_chat_creates_ticket_action_and_refund(
-    client, tmp_path, monkeypatch
+@pytest.mark.parametrize("order_owner", ["self", "missing", "other"])
+def test_customer_service_refund_chat_reports_real_submission(
+    client, tmp_path, monkeypatch, order_owner
 ):
-    from modstore_server import customer_service_api, webhook_dispatcher
-    from modstore_server.app import app
-    from modstore_server.models import RefundRequest, get_session_factory
+    from modstore_server import webhook_dispatcher
+    from modstore_server.models import RefundRequest
     from modstore_server.models_cs import CustomerServiceTicket
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    monkeypatch.setenv("PAYMENT_BACKEND", "python")
+    monkeypatch.setenv("MODSTORE_PAYMENT_ORDERS_DIR", str(tmp_path / "orders"))
     user = _make_user("cs_user")
-    order_no = _paid_order(tmp_path, monkeypatch, user.id)
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    owner = user if order_owner == "self" else _make_user("other_owner")
+    order_no = "RF999" if order_owner == "missing" else _paid_order(tmp_path, monkeypatch, owner.id)
     monkeypatch.setattr(
         webhook_dispatcher, "dispatch_event", lambda event: {"ok": True, "event": event}
     )
-    try:
+    with _as_user(user):
         r = client.post(
             "/api/customer-service/chat",
             json={
@@ -115,7 +143,12 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
         assert data["ticket"]["intent"] == "refund"
         assert data["decision"]["decision"] == "approved"
         assert data["actions"][0]["action_type"] == "refund.apply"
-        assert data["actions"][0]["status"] == "completed"
+        valid = order_owner == "self"
+        assert data["actions"][0]["status"] == ("completed" if valid else "failed")
+        if not valid:
+            assert data["ticket"]["status"] == "processing"
+            assert "未确认提交成功" in data["message"]["content"]
+            assert "不能视为已退款" in data["message"]["content"]
 
         sf = get_session_factory()
         with sf() as session:
@@ -125,21 +158,17 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
                 .first()
             )
             refund = session.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
-            assert refund is not None
-            assert refund.status == "pending"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+            assert (refund is not None) is valid
+            if refund:
+                assert refund.status == "pending"
 
 
 def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeypatch):
     """材料不齐的退款诉求只聊天引导，不立刻建单。"""
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_missing")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post("/api/customer-service/chat", json={"message": "我要退款", "context": {}})
         assert r.status_code == 200, r.text
         data = r.json()
@@ -147,17 +176,77 @@ def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeyp
         assert data["intent"]["intent"] == "refund"
         assert data["intent"]["need_ticket"] is False
         assert "提交工单" in data["message"]["content"]
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
-def test_customer_service_chat_does_not_block_on_incident_publish_async(client, monkeypatch):
+@pytest.mark.parametrize("context", [{}, {"scene": "refund", "complaint_type": "refund"}])
+def test_product_report_does_not_continue_waiting_refund(client, monkeypatch, context):
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("onsite_new_topic")
+    with _as_user(user):
+        refund = client.post(
+            "/api/customer-service/chat", json={"message": "我要退款，请提交工单"}
+        ).json()
+        sid = refund["session"]["id"]
+        assert refund["ticket"]["status"] == "waiting_user"
+        report = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "window思考时间长时间后会500卡死",
+                "context": context,
+                "session_id": sid,
+            },
+        )
+        assert report.status_code == 200, report.text
+        assert report.json()["ticket"] is None
+        assert report.json()["intent"]["intent"] == "product_issue"
+        submitted = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "提交工单",
+                "session_id": sid,
+            },
+        )
+        assert submitted.status_code == 200, submitted.text
+        ticket = submitted.json()["ticket"]
+        assert ticket["intent"] == "product_issue"
+        assert ticket["id"] != refund["ticket"]["id"]
+        assert "500" in ticket["summary"]
+
+
+def test_distinct_tickets_in_one_second_have_unique_numbers(client, monkeypatch):
+    from datetime import datetime, timezone
+
+    from modstore_server import customer_service_orchestrator as orchestrator
+    from modstore_server.models_cs import CustomerServiceSession
+
+    class FixedTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 26, 9, 40, 0, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(orchestrator, "datetime", FixedTime)
+    user = _make_user("onsite_ticket_number")
+    with get_session_factory()() as db:
+        session = CustomerServiceSession(user_id=user.id)
+        db.add(session)
+        db.flush()
+        first = orchestrator.ensure_ticket(
+            db, user=user, session=session, intent="refund", extracted={}
+        )
+        second = orchestrator.ensure_ticket(
+            db, user=user, session=session, intent="product_issue", extracted={}
+        )
+        assert first.ticket_no != second.ticket_no
+        replay = orchestrator.ensure_ticket(
+            db, user=user, session=session, intent="product_issue", extracted={}
+        )
+        assert replay.id == second.id
+
+
+def _assert_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
     """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
     import time
     from threading import Event
-
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_async_inc")
@@ -169,8 +258,7 @@ def test_customer_service_chat_does_not_block_on_incident_publish_async(client, 
         started_event.set()
 
     monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         t0 = time.time()
         r = client.post(
             "/api/customer-service/chat",
@@ -185,58 +273,22 @@ def test_customer_service_chat_does_not_block_on_incident_publish_async(client, 
         assert elapsed < 4.0, f"chat unexpectedly slow on async incident publish: {elapsed:.2f}s"
         assert started_event.wait(1.0)
         assert started["ok"] is True
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
-    """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
-    import time
-    from threading import Event
+    _assert_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch)
 
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
 
-    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
-    user = _make_user("cs_async_inc")
-    started = {"ok": False}
-    started_event = Event()
-
-    def slow_publish(payload):
-        started["ok"] = True
-        started_event.set()
-
-    monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
-        t0 = time.time()
-        r = client.post(
-            "/api/customer-service/chat",
-            json={
-                "message": "订单号 RF123456 想退款，原因是重复购买",
-                "context": {"channel": "web"},
-            },
-        )
-        elapsed = time.time() - t0
-        assert r.status_code == 200, r.text
-        assert r.json().get("ticket")
-        assert elapsed < 4.0, f"chat unexpectedly slow on async incident publish: {elapsed:.2f}s"
-        assert started_event.wait(1.0)
-        assert started["ok"] is True
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+def test_customer_service_chat_does_not_block_on_incident_publish_async(client, monkeypatch):
+    _assert_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch)
 
 
 def test_customer_service_greeting_does_not_create_ticket(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-    from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceTicket
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_hi")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post("/api/customer-service/chat", json={"message": "你好", "context": {}})
         assert r.status_code == 200, r.text
         data = r.json()
@@ -257,18 +309,12 @@ def test_customer_service_greeting_does_not_create_ticket(client, monkeypatch):
                 .count()
             )
             assert n == 0
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_customer_service_escalate_phrase_creates_ticket(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_esc")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post(
             "/api/customer-service/chat",
             json={"message": "这个问题处理不了，请提交工单", "context": {}},
@@ -283,18 +329,12 @@ def test_customer_service_escalate_phrase_creates_ticket(client, monkeypatch):
         assert data["ticket"]["status"] != "resolved"
         assert (data.get("decision") or {}).get("decision") == "accepted"
         assert "已处理完成" not in str(data.get("message", {}).get("content") or "")
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_customer_service_ui_bug_escalate_stays_processing(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_ui_bug")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r1 = client.post(
             "/api/customer-service/chat",
             json={"message": "浅色模式/自选模型文字看不见", "context": {}},
@@ -321,8 +361,6 @@ def test_customer_service_ui_bug_escalate_stays_processing(client, monkeypatch):
         body = str(data.get("message", {}).get("content") or "")
         assert "已处理完成" not in body
         assert "功能问题" in body or "浅色" in body or "看不见" in body
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_resolve_issue_domain_three_way():
@@ -363,13 +401,19 @@ def test_resolve_issue_domain_three_way():
 
 
 def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     published: list = []
 
-    def _fake_publish(event_type, payload, *, source, fingerprint=None, dedupe_minutes=0):
+    def _fake_publish(
+        event_type,
+        payload,
+        *,
+        source,
+        fingerprint=None,
+        dedupe_minutes=0,
+        inbox_key=None,
+    ):
+        assert inbox_key, "Durable dispatch must forward its inbox identity"
         published.append(
             {"event_type": event_type, "payload": dict(payload or {}), "source": source}
         )
@@ -387,8 +431,7 @@ def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
     )
 
     user = _make_user("cs_domain_clarify")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r1 = client.post(
             "/api/customer-service/chat",
             json={"message": "浅色模式/自选模型文字看不见", "context": {}},
@@ -425,8 +468,6 @@ def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
         assert published[-1]["event_type"] == "ops.intake.customer_ticket"
         assert published[-1]["payload"].get("user_confirmed_domain") == "platform"
         assert published[-1]["payload"].get("source") == "customer_ticket"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_parse_intent_json_handles_truncated_minimax():
@@ -478,13 +519,10 @@ def test_ticket_lifecycle_five_stages():
 
 def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monkeypatch):
     """incident team 结果应回写客服消息，并把工单推到「有结果」。"""
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
     from modstore_server.customer_service_orchestrator import (
         apply_customer_ticket_incident_progress,
         ticket_lifecycle_stage,
     )
-    from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceMessage, CustomerServiceTicket
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
@@ -494,8 +532,7 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         lambda payload: None,
     )
     user = _make_user("cs_emp_progress")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r1 = client.post(
             "/api/customer-service/chat",
             json={"message": "浅色模式文字看不见", "context": {}},
@@ -512,8 +549,6 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         )
         assert r2.status_code == 200, r2.text
         ticket_id = int(r2.json()["ticket"]["id"])
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
     sf = get_session_factory()
     with sf() as db:
@@ -528,6 +563,17 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
                     "employee_id": "change-request-auditor",
                     "ok": False,
                     "status": "handler_failed",
+                    "handler_outputs": {
+                        "outputs": [
+                            {
+                                "handler": "para_delegate",
+                                "accepted": True,
+                                "completed": False,
+                                "task_id": "p1",
+                                "output_summary": "未产生修复 token=should-be-redacted",
+                            }
+                        ]
+                    },
                 },
                 {
                     "role": "fix",
@@ -564,6 +610,15 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
             .all()
         )
         assert any("员工处理进展" in (m.content or "") for m in msgs)
+        assert "未产生修复" not in msgs[0].content and "下一步" in msgs[0].content
+        assert "should-be-redacted" not in msgs[0].content
+        from modstore_server.customer_service_tools import json_loads
+
+        resolution = json_loads(ticket.evidence_json, {})["resolution"]
+        assert resolution["ticket_id"] == ticket_id
+        recorded = resolution["processing"][0]["outputs"][0]
+        assert recorded["task_id"] == "p1"
+        assert recorded["output_summary"] == "未产生修复 token=[redacted]"
 
 
 def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
@@ -571,16 +626,13 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
 ):
     """定制交付不能因员工报告成功提前结案；必须质量门、验收和安装回执齐全。"""
     from modstore_server import (
-        customer_service_api,
         customer_service_delivery_create_api,
         customer_service_delivery_payment_api,
         workbench_api,
     )
-    from modstore_server.app import app
     from modstore_server.customer_service_orchestrator import (
         apply_customer_ticket_incident_progress,
     )
-    from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceAuditLog, CustomerServiceTicket
 
     user = _make_user("custom_delivery")
@@ -614,8 +666,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
         "_schedule_customer_ticket_incident",
         lambda payload: None,
     )
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         created = client.post(
             "/api/customer-service/custom-deliveries",
             json={
@@ -925,8 +976,32 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
         assert paid["custom_delivery"]["crm"]["payment"]["status"] == "paid"
         assert paid["custom_delivery"]["commerce_ready"] is True
         assert paid["custom_delivery"]["stage"] == "production"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+@pytest.mark.parametrize(
+    "message,expected",
+    [
+        ("订单号 RF999 想退款，原因是重复购买", "RF999"),
+        ("订单号 RF123456 想退款，原因是重复购买", "RF123456"),
+        ("order_no: RF999 refund duplicate purchase", "RF999"),
+        ("ORDER NO：A1 想退款", "A1"),
+        ("订单 RF999 想退款", "RF999"),
+        ("订单 123456 想退款", "123456"),
+        ("订单号 ABCDEF 想退款", "ABCDEF"),
+        ("我有123456元余额，想退款", None),
+        ("RF999 想退款", None),
+        ("订单号 abc 想退款", None),
+        ("订单号 12345 想退款", None),
+        ("订单没有编号，想退款", None),
+        ("订单号：" + "R" * 64, "R" * 64),
+        ("订单号：" + "R" * 65, None),
+    ],
+)
+def test_order_field_extract_keeps_short_mixed_ids_and_rejects_ambiguous_text(message, expected):
+    from modstore_server.customer_service_orchestrator import extract_fields
+
+    assert extract_fields(message, {}).get("order_no") == expected
+    assert extract_fields(message, {"order_no": "CONTEXT-123"})["order_no"] == "CONTEXT-123"
 
 
 def test_infer_intent_order_no_alone_is_not_refund():
@@ -1008,13 +1083,10 @@ def test_homepage_load_issue_classifies_as_product_issue(monkeypatch):
 
 def test_admin_privilege_request_is_refused_without_ticket(client, monkeypatch):
     """要管理员权限必须拒答，且不建工单、不产生可执行动作。"""
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_no_admin")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post(
             "/api/customer-service/chat",
             json={"message": "为什么不给我管理员权限，马上开通", "context": {}},
@@ -1044,8 +1116,6 @@ def test_admin_privilege_request_is_refused_without_ticket(client, monkeypatch):
         data2 = r2.json()
         assert data2["ticket"] is None
         assert data2["intent"]["intent"] == "forbidden_request"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_execute_action_hard_blocks_admin_grant():
@@ -1092,13 +1162,9 @@ def test_execute_action_hard_blocks_admin_grant():
 
 
 def test_customer_service_balance_chats_until_escalate(client, monkeypatch):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_bal")
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-    try:
+    with _as_user(user):
         r = client.post(
             "/api/customer-service/chat",
             json={"message": "我的余额不对", "context": {}},
@@ -1123,18 +1189,11 @@ def test_customer_service_balance_chats_until_escalate(client, monkeypatch):
         data2 = r2.json()
         assert data2["ticket"] is not None
         assert data2["ticket"]["intent"] == "account_support"
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
 def test_admin_can_manage_customer_service_standard(client):
-    from modstore_server import customer_service_api
-    from modstore_server.app import app
-
     admin = _make_user("cs_admin", admin=True)
-    app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
-    app.dependency_overrides[customer_service_api._require_admin] = lambda: admin
-    try:
+    with _as_user(admin):
         payload = {
             "name": "pytest 标准",
             "scenario": "pytest_case",
@@ -1155,6 +1214,366 @@ def test_admin_can_manage_customer_service_standard(client):
         r = client.put(f"/api/customer-service/standards/{created['id']}", json=updated_payload)
         assert r.status_code == 200, r.text
         assert r.json()["priority"] == 6
-    finally:
-        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
-        app.dependency_overrides.pop(customer_service_api._require_admin, None)
+
+
+def test_ticket_search_preserves_ownership_identity_and_pagination(client):
+    owner, other, admin = (
+        _make_user("search_owner"),
+        _make_user("search_other"),
+        _make_user("search_admin", admin=True),
+    )
+    marker = f"SEARCH-{uuid.uuid4().hex}"
+    ids = []
+    with get_session_factory()() as db:
+        for user, suffix in [(owner, "290063"), (other, "290063"), (owner, "other")]:
+            ticket = _make_ticket(
+                db,
+                user,
+                ticket_no=f"{marker}-{user.id}-{suffix}",
+                summary=f"{marker} original 100%_text",
+                assigned_admin_id=None,
+            )
+            ids.append(ticket.id)
+        db.commit()
+    with _as_user(owner):
+        response = client.get(
+            "/api/customer-service/tickets", params={"search": marker, "limit": 1}
+        )
+        assert response.status_code == 200
+        assert response.json()["total"] == 2
+        first = response.json()["items"][0]
+        second = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "limit": 1, "offset": 1},
+        ).json()["items"][0]
+        assert {first["id"], second["id"]} == {ids[0], ids[2]}
+        assert ids[1] not in {
+            row["id"]
+            for row in client.get(
+                "/api/customer-service/tickets", params={"search": str(ids[1])}
+            ).json()["items"]
+        }
+        assert client.get(f"/api/customer-service/tickets/{ids[1]}").status_code == 404
+        own = client.get(f"/api/customer-service/tickets/{ids[0]}").json()
+        assert own["ticket"]["ticket_no"] == f"{marker}-{owner.id}-290063"
+        assert "assigned_admin_id" not in own["ticket"]
+        assert own["ticket"]["summary"] == f"{marker} original 100%_text"
+        assert own["actions"] == own["audit_logs"] == []
+        assert (
+            client.get("/api/customer-service/tickets", params={"search": marker + "%"}).json()[
+                "items"
+            ]
+            == []
+        )
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+        result = client.get("/api/customer-service/tickets", params={"search": marker}).json()
+        assert result["total"] == 3
+        assert {row["id"] for row in result["items"]} == set(ids)
+        assert {row["submitter_type"] for row in result["items"]} == {"customer"}
+        result = client.get(
+            "/api/customer-service/tickets",
+            params={"search": f"{marker}-{other.id}-290063"},
+        ).json()
+        assert result["items"][0]["id"] == ids[1]
+        assert client.get("/api/customer-service/tickets", params={"offset": -1}).status_code == 422
+
+
+def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(client):
+    import importlib.util
+    from pathlib import Path
+
+    from sqlalchemy import text
+
+    from modstore_server.db.db_base import get_engine
+    from modstore_server.models_cs import CustomerServiceAuditLog
+
+    customer, admin = (
+        _make_user("submitter_customer"),
+        _make_user("submitter_admin", admin=True),
+    )
+    marker = f"SUBMITTER-{uuid.uuid4().hex}"
+    with get_session_factory()() as db:
+        customer_ticket = _make_ticket(
+            db, customer, ticket_no=f"{marker}-{customer.id}", summary=marker
+        )
+        _make_ticket(db, admin, ticket_no=f"{marker}-{admin.id}", summary=marker)
+        customer_ticket_id = customer_ticket.id
+        db.commit()
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE customer_service_tickets SET submitter_type = '' "
+                "WHERE ticket_no LIKE :ticket_no"
+            ),
+            {"ticket_no": f"{marker}%"},
+        )
+    migration = Path(__file__).parents[1] / "alembic/versions/20261019_ticket_submitter_type.py"
+    spec = importlib.util.spec_from_file_location("ticket_submitter_migration", migration)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with get_engine().begin() as conn:
+        module.backfill_submitter_types(conn)
+
+    ticket_url = f"/api/customer-service/tickets/{customer_ticket_id}"
+    with _as_user(admin):
+        for kind in ("admin", "customer"):
+            result = client.get(
+                "/api/customer-service/tickets",
+                params={"search": marker, "submitter_type": kind},
+            ).json()
+            assert result["total"] == 1
+            assert result["items"][0]["submitter_type"] == kind
+        updated = client.patch(
+            f"{ticket_url}/expected-completion",
+            json={"expected_completion_at": "2026-10-21T11:30:00+08:00"},
+        )
+        assert updated.json()["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
+        with get_session_factory()() as db:
+            audit = db.query(CustomerServiceAuditLog).filter_by(ticket_id=customer_ticket_id).one()
+            assert audit.event_type == "expected_completion_updated"
+
+    with _as_user(customer):
+        own = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "submitter_type": "admin"},
+        ).json()
+        assert own["total"] == 1 and own["items"][0]["user_id"] == customer.id
+        assert "submitter_type" not in own["items"][0]
+        own_ticket = client.get(ticket_url).json()
+        assert own_ticket["ticket"]["expected_completion_at"] == "2026-10-21T03:30:00+00:00"
+        assert own_ticket["audit_logs"] == []
+
+    with _as_user(admin):
+        cleared = client.patch(
+            f"{ticket_url}/expected-completion", json={"expected_completion_at": None}
+        )
+        assert cleared.status_code == 200
+    with _as_user(customer):
+        own_ticket = client.get(ticket_url).json()
+        assert own_ticket["ticket"]["expected_completion_at"] is None
+
+
+def test_admin_reply_preserves_ticket_and_original_customer_session(client):
+    from modstore_server.models_cs import (
+        CustomerServiceAction,
+        CustomerServiceAuditLog,
+        CustomerServiceMessage,
+        CustomerServiceTicket,
+    )
+
+    owner, other, admin = (
+        _make_user("reply_owner"),
+        _make_user("reply_other"),
+        _make_user("reply_admin", admin=True),
+    )
+    with get_session_factory()() as db:
+        ticket = _make_ticket(
+            db,
+            owner,
+            ticket_no=f"REPLY-{uuid.uuid4().hex}",
+            status="processing",
+            intent="product_issue",
+        )
+        db.commit()
+        ticket_id, session_id = ticket.id, ticket.session_id
+    url = f"/api/customer-service/tickets/{ticket_id}/reply"
+    payload = {
+        "request_id": str(uuid.uuid4()),
+        "note": "请进入信息页展开问题工单处理结果查看进度。",
+    }
+    with _as_user(owner):
+        assert client.post(url, json=payload).status_code == 403
+    with _as_user(admin):
+        response = client.post(url, json=payload)
+        assert response.status_code == 200, response.text
+        assert response.json()["ticket"]["status"] == "processing"
+        assert client.post(url, json=payload).json()["replayed"] is True
+        assert (
+            client.post(url, json={**payload, "note": "同一请求不得修改答复内容"}).status_code
+            == 409
+        )
+        assert (
+            client.post(
+                url, json={**payload, "request_id": str(uuid.uuid4()), "note": "    "}
+            ).status_code
+            == 422
+        )
+    with _as_user(owner):
+        messages = client.get(f"/api/customer-service/sessions/{session_id}").json()["messages"]
+        assert [message["content"] for message in messages] == [payload["note"]]
+    with _as_user(other):
+        assert client.get(f"/api/customer-service/sessions/{session_id}").status_code == 404
+    with get_session_factory()() as db:
+        assert db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count() == 1
+        assert (
+            db.query(CustomerServiceAction)
+            .filter_by(ticket_id=ticket_id, action_type="ticket.reply")
+            .count()
+            == 1
+        )
+        assert (
+            db.query(CustomerServiceAuditLog)
+            .filter_by(ticket_id=ticket_id, event_type="admin_ticket_replied")
+            .count()
+            == 1
+        )
+        db.get(CustomerServiceTicket, ticket_id).status = "resolved"
+        db.commit()
+    with _as_user(admin):
+        assert (
+            client.post(url, json={**payload, "request_id": str(uuid.uuid4())}).status_code == 409
+        )
+
+
+def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope(
+    client,
+):
+    customer, other_customer, admin = (
+        _make_user("filter_customer"),
+        _make_user("filter_other_customer"),
+        _make_user("filter_admin", admin=True),
+    )
+    marker = f"FILTER-{uuid.uuid4().hex}"
+    with get_session_factory()() as db:
+        own_ticket = _make_ticket(
+            db,
+            customer,
+            ticket_no=f"{marker}-own",
+            summary=marker,
+            intent="account_support",
+            status="open",
+        )
+        other_ticket = _make_ticket(
+            db,
+            other_customer,
+            ticket_no=f"{marker}-other",
+            summary=marker,
+            intent="product_issue",
+            status="open",
+        )
+        admin_ticket = _make_ticket(
+            db,
+            admin,
+            ticket_no=f"{marker}-admin",
+            summary=marker,
+            intent="product_issue",
+            status="processing",
+        )
+        own_id, other_id, admin_id = own_ticket.id, other_ticket.id, admin_ticket.id
+        db.commit()
+
+    with _as_user(admin):
+        filtered = client.get(
+            "/api/customer-service/tickets",
+            params={
+                "search": marker,
+                "intent": "product_issue",
+                "status": "processing",
+            },
+        ).json()
+        assert filtered["total"] == 1
+        assert filtered["items"][0]["id"] == admin_id
+        assert filtered["items"][0]["intent"] == "product_issue"
+        assert filtered["items"][0]["status"] == "processing"
+        by_category = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "intent": "product_issue", "status": "open"},
+        ).json()
+        assert [row["id"] for row in by_category["items"]] == [other_id]
+
+    with _as_user(customer):
+        own = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "intent": "product_issue", "status": "open"},
+        ).json()
+        assert own["total"] == 1
+        assert own["items"][0]["id"] == own_id
+        assert own["items"][0]["user_id"] == customer.id
+        assert own["items"][0]["status"] == "open"
+
+
+@pytest.mark.parametrize("always_collides", [False, True])
+def test_ticket_number_collision_retry_is_bounded(client, monkeypatch, always_collides):
+    from types import SimpleNamespace
+
+    from sqlalchemy.exc import IntegrityError
+
+    from modstore_server import customer_service_orchestrator as facade
+    from modstore_server import customer_service_orchestrator_merged as implementation
+    from modstore_server.models_cs import CustomerServiceSession
+
+    user = _make_user("number_collision")
+    calls = []
+
+    def number():
+        calls.append(1)
+        return SimpleNamespace(hex="collision" if always_collides or len(calls) < 3 else "unique")
+
+    monkeypatch.setattr(implementation, "uuid4", number)
+    with get_session_factory()() as db:
+        session = CustomerServiceSession(user_id=user.id)
+        db.add(session)
+        db.flush()
+        facade.ensure_ticket(db, user=user, session=session, intent="refund", extracted={})
+        if always_collides:
+            with pytest.raises(IntegrityError):
+                facade.ensure_ticket(
+                    db, user=user, session=session, intent="product_issue", extracted={}
+                )
+        else:
+            result = facade.ensure_ticket(
+                db, user=user, session=session, intent="product_issue", extracted={}
+            )
+            assert result.ticket_no == "CSunique"
+        assert len(calls) == 3  # First ticket + at most two attempts; no retry loop.
+
+
+def test_source_ref_readback_is_exact_and_owner_scoped(client):
+    from modstore_server.customer_issue_intake import request_identity
+
+    owner, other = _make_user("readback_owner"), _make_user("readback_other")
+    ref = "enterprise-cs:synthetic-owner:synthetic-conversation:hash"
+    with get_session_factory()() as db:
+        ticket = _make_ticket(
+            db,
+            owner,
+            ticket_no=request_identity(owner.id, "customer_feedback", ref),
+            intent="product_issue",
+            evidence_json='{"source_ref":"' + ref + '"}',
+        )
+        expected_id = ticket.id
+        for index in range(55):
+            _make_ticket(db, owner, ticket_no=f"CS-newer-{uuid.uuid4().hex}")
+        db.commit()
+    with _as_user(owner):
+        rows = client.get("/api/customer-service/tickets", params={"source_ref": ref}).json()[
+            "items"
+        ]
+        assert [row["id"] for row in rows] == [expected_id]
+    with _as_user(other):
+        assert (
+            client.get("/api/customer-service/tickets", params={"source_ref": ref}).json()["items"]
+            == []
+        )
+
+
+def test_waiting_refund_still_accepts_its_order_number(client, monkeypatch):
+    from modstore_server import customer_service_orchestrator as orchestrator
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    monkeypatch.setattr(orchestrator, "plan_actions", lambda *args, **kwargs: [])
+    monkeypatch.setattr(orchestrator, "execute_matching_integrations", lambda *args, **kwargs: [])
+    with _as_user(_make_user("refund_followup")):
+        first = client.post(
+            "/api/customer-service/chat", json={"message": "我要退款，请提交工单"}
+        ).json()
+        second = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "订单号：SYNTHETIC123",
+                "session_id": first["session"]["id"],
+            },
+        ).json()
+        assert second["ticket"]["id"] == first["ticket"]["id"]
+        assert second["ticket"]["intent"] == "refund"
+        assert second["decision"]["decision"] == "approved"

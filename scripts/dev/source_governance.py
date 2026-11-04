@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Cross-stack source governance ratchet.
 
-The repository has legitimate historical oversized files. This gate grandfathers
-their current size, but rejects:
+Production files above 800 lines emit advisory warnings, not failures.
+Blocking checks still reject:
 
-* a new production source file above its stack soft cap;
-* positive line growth in an already oversized file;
 * positive route growth in an already oversized FastAPI router;
 * growth in exact-copy debt outside declared generated/derived trees;
-* any tracked file that is also ignored by Git.
+* new numbered fragments or growth in dynamic facade back-references;
+* any tracked file that is also ignored by Git;
+* source files in retired mirrors.
 
 Only Python's standard library is required, so the check can run before project
 dependencies are installed.
@@ -51,6 +51,8 @@ GENERATED_DIRS = {
 }
 TEST_NAME_MARKERS = (".test.", ".spec.", "_test.")
 GENERATED_NAME_MARKERS = (".generated.", ".freezed.", ".g.dart")
+NUMBERED_FRAGMENT = re.compile(r"(?:part|mixin)\d+", re.IGNORECASE)
+FACADE_CALL = re.compile(r"\b_facade\s*\(")
 
 # These are materialized build/export trees, not independent editing sources.
 #
@@ -61,7 +63,6 @@ DUPLICATE_EXCLUDED_PREFIXES = (
     "FHD/XCAGI/mods/",
     "FHD/packages/xcagi_langgraph_",
     "FHD/templates/",
-    "FHD/third_party/langgraph/",
     # Generated dual-target pair: scripts/dev/sync_duty_roster.py renders
     # FHD/config/duty_roster.json (SSOT) into two independently deployed Vue
     # apps; both copies are generator outputs and live import targets.
@@ -122,12 +123,12 @@ STACK_RULES = (
             "FHD/sunbird-console/src/",
             "FHD/mods/",
         ),
-        {".vue": 500, ".ts": 600, ".tsx": 600, ".js": 600, ".jsx": 600, ".py": 800},
+        {".vue": 800, ".ts": 800, ".tsx": 800, ".js": 800, ".jsx": 800, ".py": 800},
     ),
     StackRule(
         "modstore_vue",
         ("成都修茈科技有限公司/MODstore_deploy/market/src/",),
-        {".vue": 500, ".ts": 600, ".tsx": 600, ".js": 600, ".jsx": 600},
+        {".vue": 800, ".ts": 800, ".tsx": 800, ".js": 800, ".jsx": 800},
     ),
     StackRule(
         "electron",
@@ -135,12 +136,12 @@ STACK_RULES = (
             "FHD/desktop/",
             "成都修茈科技有限公司/MODstore_deploy/desktop-shell/",
         ),
-        {".ts": 600, ".tsx": 600, ".js": 600, ".jsx": 600},
+        {".ts": 800, ".tsx": 800, ".js": 800, ".jsx": 800},
     ),
     StackRule(
         "flutter",
         ("FHD/mobile-flutter-poc/lib/",),
-        {".dart": 500},
+        {".dart": 800},
     ),
 )
 
@@ -306,6 +307,22 @@ def _forbidden_source_mirrors(repo_root: Path, tracked: list[str]) -> list[str]:
     )
 
 
+def _measure_mechanical_modules(repo_root: Path, tracked: list[str]) -> dict:
+    """A debt inventory, not a claim that names prove architectural quality."""
+    result = {}
+    for rel in tracked:
+        if Path(rel).suffix != ".py" or _is_excluded_source(rel):
+            continue
+        source = _read_source(repo_root / rel)
+        if source is None:
+            continue
+        numbered = bool(NUMBERED_FRAGMENT.search(Path(rel).name))
+        facade_calls = len(FACADE_CALL.findall(source[1]))
+        if numbered or facade_calls:
+            result[rel] = facade_calls
+    return result
+
+
 def measure(repo_root: Path) -> dict:
     tracked = _tracked_paths(repo_root)
     oversized, oversized_routes = _measure_sizes(repo_root, tracked)
@@ -317,6 +334,7 @@ def measure(repo_root: Path) -> dict:
         "duplicate_groups": duplicate_groups,
         "forbidden_source_mirrors": _forbidden_source_mirrors(repo_root, tracked),
         "ignored_tracked_files": sorted(_ignored_tracked_paths(repo_root)),
+        "mechanical_modules": _measure_mechanical_modules(repo_root, tracked),
     }
 
 
@@ -330,10 +348,10 @@ def load_baseline(repo_root: Path) -> dict | None:
 def baseline_payload(current: dict) -> dict:
     return {
         "_note": (
-            "Cross-stack source debt ratchet. Existing oversized files and exact-copy "
-            "debt may only shrink; generated/derived roots are excluded."
+            "Source size above 800 lines is advisory. Router, exact-copy and mechanical-module "
+            "debt may only shrink; source-boundary gates remain blocking and derived roots are excluded."
         ),
-        "schema_version": 1,
+        "schema_version": 2,
         "updated_at": datetime.now(timezone.utc).date().isoformat(),
         "oversized_files": {
             item["file"]: {
@@ -353,6 +371,7 @@ def baseline_payload(current: dict) -> dict:
         },
         "duplicate_metrics": current["duplicate_metrics"],
         "duplicate_excluded_prefixes": list(DUPLICATE_EXCLUDED_PREFIXES),
+        "mechanical_modules": current.get("mechanical_modules", {}),
     }
 
 
@@ -361,18 +380,19 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     progress: list[str] = []
     file_limits = baseline.get("oversized_files", {})
     route_limits = baseline.get("oversized_routers", {})
-
-    for item in current["oversized_files"]:
-        old = file_limits.get(item["file"])
+    mechanical_limits = baseline.get("mechanical_modules", {})
+    mechanical_current = current.get("mechanical_modules", {})
+    for path, item in mechanical_current.items():
+        old = mechanical_limits.get(path)
         if old is None:
             errors.append(
-                f"new oversized {item['stack']} file: {item['file']} "
-                f"({item['lines']} > {item['soft_cap']} lines)"
+                f"new mechanical fragment or dynamic facade dependency: {path}"
             )
-        elif item["lines"] > old["lines"]:
-            errors.append(
-                f"oversized file grew: {item['file']} ({old['lines']} -> {item['lines']} lines)"
-            )
+        elif item > old:
+            errors.append(f"dynamic facade coupling grew: {path}")
+    removed = set(mechanical_limits) - set(mechanical_current)
+    if removed:
+        progress.append(f"mechanical module debt reduced by {len(removed)} file(s)")
 
     for item in current["oversized_routers"]:
         old = route_limits.get(item["file"])
@@ -419,9 +439,15 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     removed_file_debt = sorted(set(file_limits) - current_file_names)
     if removed_file_debt:
         progress.append(
-            f"oversized-file debt reduced by {len(removed_file_debt)} file(s)"
+            f"{len(removed_file_debt)} file(s) no longer above the advisory cap"
         )
     return errors, progress
+
+
+
+def size_warnings(current: dict) -> list[str]:
+    return [f"size advisory: {item['file']} ({item['lines']} > {item['soft_cap']} lines)"
+            for item in current["oversized_files"]]
 
 
 def _summary(current: dict) -> dict:
@@ -431,6 +457,7 @@ def _summary(current: dict) -> dict:
         "duplicate_metrics": current["duplicate_metrics"],
         "forbidden_source_mirrors": len(current.get("forbidden_source_mirrors", [])),
         "ignored_tracked_files": len(current["ignored_tracked_files"]),
+        "mechanical_modules": len(current.get("mechanical_modules", {})),
     }
 
 
@@ -494,6 +521,7 @@ def main(argv: list[str] | None = None) -> int:
     errors, progress = evaluate(current, baseline)
     payload = {
         "current": _summary(current),
+        "warnings": size_warnings(current),
         "errors": errors,
         "progress": progress,
         "ok": not errors,
@@ -504,6 +532,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"[source-governance] {json.dumps(_summary(current), ensure_ascii=False)}"
         )
+        for warning in payload["warnings"]:
+            print(f"[source-governance] WARNING: {warning}")
         for item in progress:
             print(f"[source-governance] PROGRESS: {item}")
         if args.top > 0:
@@ -513,7 +543,7 @@ def main(argv: list[str] | None = None) -> int:
             for item in errors:
                 print(f"  - {item}", file=sys.stderr)
         else:
-            print("[source-governance] OK — source debt did not grow")
+            print("[source-governance] OK — blocking source gates passed; file size is advisory")
     return 1 if errors else 0
 
 

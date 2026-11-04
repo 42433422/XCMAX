@@ -2,9 +2,13 @@
 """校验 总账 / 原始 JSON / 截图 / 安装结果 四者一致（全部以文件为准，不手写）。"""
 import json
 import os
+import runpy
 import sys
+from pathlib import Path
 
-DST = "/Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.5-8d50fe9d"
+DST = str(Path(__file__).resolve().parent)
+REPO_ROOT = Path(__file__).resolve().parents[5]
+runpy.run_path(str(REPO_ROOT / "成都修茈科技有限公司/scripts/evidence_assets.py"))["materialize_sources"](REPO_ROOT)
 ledger = json.load(open(os.path.join(DST, "delivery-ledger.json")))
 c2 = ledger["chain_2_ota_upgrade"]["steps"]
 fails, notes = [], []

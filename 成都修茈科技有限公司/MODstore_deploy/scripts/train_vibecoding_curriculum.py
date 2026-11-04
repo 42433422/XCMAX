@@ -191,13 +191,19 @@ async def _run_one_pack(
                 return entry
             sid = str(start.get("session_id") or "")
             entry["session_id"] = sid
-            final = await _poll_session(token, sid, deadline=time.time() + deadline_min * 60)
+            final = await _poll_session(
+                token, sid, deadline=time.time() + deadline_min * 60
+            )
             entry["final_status"] = final.get("status")
-            art = final.get("artifact") if isinstance(final.get("artifact"), dict) else {}
+            art = (
+                final.get("artifact") if isinstance(final.get("artifact"), dict) else {}
+            )
             entry["runtime_generation"] = art.get("runtime_generation")
             entry["golden_comparison"] = art.get("golden_comparison")
             entry["domain_smoke"] = art.get("domain_smoke")
-            entry["parity_score"] = (art.get("golden_comparison") or {}).get("parity_score")
+            entry["parity_score"] = (art.get("golden_comparison") or {}).get(
+                "parity_score"
+            )
             entry["ok"] = final.get("status") == "done"
             entry["error"] = final.get("error")
             for k, v in RUNTIME_TO_GOLDEN_PACK.items():
@@ -208,7 +214,9 @@ async def _run_one_pack(
             entry["ok"] = False
             entry["error"] = str(exc)[:500]
         finally:
-            cleanup = cleanup_experimental_pack(train_pack_id, metadata={"experimental_pack": True})
+            cleanup = cleanup_experimental_pack(
+                train_pack_id, metadata={"experimental_pack": True}
+            )
             entry["cleanup"] = cleanup
             entry["elapsed_sec"] = int(time.time() - entry["started_at"])
     return entry
@@ -227,11 +235,16 @@ async def run_curriculum(
 
     token = await _login_token()
     sem = asyncio.Semaphore(max(1, parallel))
-    tasks = [_run_one_pack(sem, token, pid, run_id, deadline_min=deadline_min) for pid in packs]
+    tasks = [
+        _run_one_pack(sem, token, pid, run_id, deadline_min=deadline_min)
+        for pid in packs
+    ]
     results = await asyncio.gather(*tasks)
 
     passed = sum(1 for r in results if r.get("ok"))
-    parities = [float(r["parity_score"]) for r in results if r.get("parity_score") is not None]
+    parities = [
+        float(r["parity_score"]) for r in results if r.get("parity_score") is not None
+    ]
     summary = {
         "run_id": run_id,
         "wave": wave,
@@ -254,9 +267,13 @@ async def run_curriculum(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Vibecoding curriculum training harness")
+    parser = argparse.ArgumentParser(
+        description="Vibecoding curriculum training harness"
+    )
     parser.add_argument("--wave", type=int, choices=(1, 2, 3), default=1)
-    parser.add_argument("--pack", type=str, default="", help="comma-separated golden pack ids")
+    parser.add_argument(
+        "--pack", type=str, default="", help="comma-separated golden pack ids"
+    )
     parser.add_argument("--parallel", type=int, default=TRAIN_MAX_PARALLEL)
     parser.add_argument("--deadline-min", type=int, default=45)
     args = parser.parse_args()
@@ -268,10 +285,17 @@ def main() -> int:
     )
     summary = asyncio.run(
         run_curriculum(
-            wave=args.wave, packs=packs, parallel=args.parallel, deadline_min=args.deadline_min
+            wave=args.wave,
+            packs=packs,
+            parallel=args.parallel,
+            deadline_min=args.deadline_min,
         )
     )
-    return 0 if summary.get("passed") == summary.get("total") and summary.get("total") else 1
+    return (
+        0
+        if summary.get("passed") == summary.get("total") and summary.get("total")
+        else 1
+    )
 
 
 if __name__ == "__main__":

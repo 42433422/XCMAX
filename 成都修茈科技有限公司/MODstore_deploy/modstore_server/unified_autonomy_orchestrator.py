@@ -7,6 +7,7 @@ import json
 import time
 from typing import Any, Dict
 
+from modstore_server.incident_bus import _incident_payload
 from modstore_server.models import IncidentEvent, get_session_factory
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
@@ -97,12 +98,7 @@ def orchestrate_incident(event_id: int) -> Dict[str, Any]:
         ev = session.query(IncidentEvent).filter(IncidentEvent.id == int(event_id)).first()
         if not ev:
             return {"ok": False, "reason": "incident_not_found"}
-        try:
-            payload = json.loads(ev.payload_json or "{}")
-        except json.JSONDecodeError:
-            payload = {}
-        if not isinstance(payload, dict):
-            payload = {}
+        payload = _incident_payload(ev)
         scope = _scope(payload, str(ev.source or ""))
         priority = _priority(str(ev.event_type or ""), payload, scope)
         try:
@@ -129,7 +125,7 @@ def orchestrate_incident(event_id: int) -> Dict[str, Any]:
         payload["_unified_orchestration"] = plan
         payload["priority"] = priority
         payload["scope"] = scope
-        ev.payload_json = json.dumps(payload, ensure_ascii=False)[:8000]
+        ev.payload_json = json.dumps(payload, ensure_ascii=False)
         session.commit()
 
         # website scope 端侧 runner：消费 web_pool 字段，触发 redeploy / escalate

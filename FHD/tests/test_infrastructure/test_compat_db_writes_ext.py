@@ -36,7 +36,7 @@ from app.infrastructure.persistence.compat_db.writes import (
 @contextmanager
 def _patch_norm_model(return_value="M1"):
     """Patch normalization without removing the real symbol after the test."""
-    import app.application.excel_imports as _ei
+    import app.domain.app_pure.excel_imports as _ei
 
     with patch.object(_ei, "_norm_model", return_value=return_value) as mock_fn:
         yield mock_fn

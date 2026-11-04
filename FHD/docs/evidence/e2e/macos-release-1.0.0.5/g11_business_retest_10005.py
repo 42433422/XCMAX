@@ -8,7 +8,14 @@
 用法: python3 g11_business_retest_10005.py [--cookies <json>] [--base http://127.0.0.1:17500]
 输出证据: round-20260918-g11-business-10005.json
 """
-import argparse, hashlib, json, os, sys, urllib.error, urllib.request, uuid
+import argparse
+import hashlib
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SESS = "G11重测提交 %s" % uuid.uuid4().hex[:8]

@@ -35,7 +35,7 @@ def _payload_scope(payload: Dict[str, Any]) -> str:
     return str(payload.get("scope") or payload.get("source_scope") or "").strip().lower()
 
 
-def route_for_incident(
+def _model_route_for_incident(
     *,
     event_type: str,
     payload: Dict[str, Any],
@@ -80,6 +80,62 @@ def route_for_incident(
         "reason": "executor_auto",
         "role": role_key,
     }
+
+
+_ROLE_BUDGETS = {
+    "scout": (12000, 2400, 1600, "low"),
+    "fix": (24000, 4000, 4000, "high"),
+    "verify": (18000, 4000, 2400, "medium"),
+}
+
+
+def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        return max(minimum, min(maximum, int(value))) if not isinstance(value, bool) else default
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def route_for_incident(
+    *, event_type: str, payload: Dict[str, Any], role: str = ""
+) -> Dict[str, Any]:
+    """Server-owned budgets accompany the route, never customer-supplied limits."""
+    route = _model_route_for_incident(event_type=event_type, payload=payload, role=role)
+    role = str(role or "").strip().lower()
+    if role not in _ROLE_BUDGETS:
+        return route
+    context, handoff, output, effort = _ROLE_BUDGETS[role]
+    scope = _payload_scope(payload)
+    routes = _load_route_json()
+    overrides: Dict[str, Any] = {}
+    for key in (
+        f"{event_type}:{scope}:{role}",
+        f"{event_type}:{scope}",
+        f"{event_type}:{role}",
+        event_type,
+        f"scope:{scope}",
+        f"role:{role}",
+    ):
+        row = routes.get(key)
+        if isinstance(row, dict) and isinstance(row.get("budget"), dict):
+            overrides = row["budget"]
+            break
+    from modstore_server.codex_model_attempts import _split_models
+
+    configured_effort = str(overrides.get("reasoning_effort") or effort)
+    route["budget"] = {
+        "context_chars": _bounded_int(overrides.get("context_chars"), context, 4000, 120000),
+        "handoff_chars": _bounded_int(overrides.get("handoff_chars"), handoff, 1200, 12000),
+        "output_tokens": _bounded_int(overrides.get("output_tokens"), output, 256, 32768),
+        "reasoning_effort": (
+            configured_effort if configured_effort in {"low", "medium", "high"} else effort
+        ),
+        "codex_model_candidates": _split_models(
+            overrides.get("codex_model_candidates")
+            or os.environ.get(f"MODSTORE_INCIDENT_CODEX_{role.upper()}_MODELS", "")
+        ),
+    }
+    return route
 
 
 def bench_override_for_route(route: Dict[str, Any]) -> Optional[Tuple[str, str]]:

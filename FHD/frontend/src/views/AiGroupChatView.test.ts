@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const mocks = vi.hoisted(() => ({
@@ -47,8 +47,12 @@ const sampleMessage = {
   created_at: '2026-06-24T10:00:00Z',
 }
 
+const wrappers: ReturnType<typeof mount>[] = []
+afterEach(() => { wrappers.splice(0).forEach((wrapper) => wrapper.unmount()); vi.restoreAllMocks() })
 function mountView() {
-  return mount(AiGroupChatView)
+  const wrapper = mount(AiGroupChatView)
+  wrappers.push(wrapper)
+  return wrapper
 }
 
 describe('AiGroupChatView', () => {
@@ -495,4 +499,38 @@ describe('AiGroupChatView', () => {
     resolvePost!({ messages: [], group: null })
     await flushPromises()
   })
+  it.each(['success', 'empty', 'error'])('adds a catalog employee through the membership drawer: %s', async (result) => {
+    const employee = { employee_id: 'e2', mod_id: 'mod-2', name: '新增员工', avatar: '/avatars/e2.png', summary: '待加入' }
+    const other = { ...sampleGroup, id: 'g2', name: '另一个群' }
+    fetchAiGroups.mockResolvedValue([{ ...sampleGroup, members: [{ ...sampleGroup.members[0], avatar: 'https://example.com/e1.png' }] }, other])
+    apiFetchMock.mockResolvedValue({ json: async () => ({ employees: [
+      { id: 'e1', display_name: '已加入' }, employee, { employee_id: 'e3', name: '无头像' }, {},
+    ] }) })
+    mocks.addAiGroupMember.mockResolvedValue(result === 'success' ? { ...sampleGroup, members: [...sampleGroup.members, employee], member_count: 3 } : null)
+    if (result === 'error') mocks.addAiGroupMember.mockRejectedValueOnce(new Error('member service offline'))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('.aigc-chat__head .aigc-text-btn').trigger('click')
+    expect(wrapper.findAll('.aigc-member--add')).toHaveLength(2)
+    expect(wrapper.get('.aigc-member:not(button) img').attributes('src')).toBe('https://example.com/e1.png')
+    const candidate = wrapper.get('.aigc-member--add')
+    expect(candidate.get('img').attributes('src')).toBe('/avatars/e2.png')
+    await candidate.trigger('click')
+    await flushPromises()
+    expect(mocks.addAiGroupMember).toHaveBeenCalledWith('g1', employee, 'admin')
+    expect(wrapper.findAll('.aigc-member--add')).toHaveLength(result === 'success' ? 1 : 2)
+    expect(wrapper.findAll('.aigc-group')[1].text()).toContain('另一个群')
+    expect(wrapper.get('.aigc-members__head').text()).toContain(result === 'success' ? '3' : '2')
+  })
+
+  it('keeps the group usable when employee discovery fails', async () => {
+    fetchAiGroups.mockResolvedValue([sampleGroup])
+    apiFetchMock.mockRejectedValueOnce(new Error('employee service offline'))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('.aigc-chat__head .aigc-text-btn').trigger('click')
+    expect(wrapper.text()).toContain('没有可添加的 AI 员工')
+    expect(wrapper.get('.aigc-chat__title').text()).toBe('测试群')
+  })
+
 })

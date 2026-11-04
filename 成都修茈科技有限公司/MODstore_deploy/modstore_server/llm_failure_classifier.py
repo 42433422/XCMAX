@@ -17,6 +17,21 @@ FAILURE_KIND_QUOTA = "quota"  # 配额/额度/计费/欠费/402/403 —— 改 p
 FAILURE_KIND_TRANSIENT = "transient"  # 限流/超时/网关抖动 —— 重试可恢复，亦非 prompt 问题
 FAILURE_KIND_PROMPT = "prompt"  # 其它（可能由 prompt/逻辑导致，进化引擎可据此重写）
 FAILURE_KIND_NONE = ""  # 无错误
+# 事故小组外层超时（incident_team_role_timeout:…）：任务可能仍在跑，不能当 transient 重派
+FAILURE_KIND_ROLE_TIMEOUT = "role_timeout"
+# 模型不被当前账号/渠道支持（如 Codex ChatGPT 账号不支持某模型）——应交模型降级层，不能重派同模型 fix
+FAILURE_KIND_MODEL_UNSUPPORTED = "model_unsupported"
+
+_ROLE_TIMEOUT_PREFIX = "incident_team_role_timeout:"
+
+_MODEL_UNSUPPORTED_NEEDLES = (
+    "model is not supported",
+    "model not supported",
+    "is not supported when using",
+    "unsupported model",
+    "模型不受支持",
+    "模型不支持",
+)
 
 # 命中即判定为配额/计费类（小写子串匹配）。覆盖中英文上游与内部配额闸门。
 _QUOTA_NEEDLES = (
@@ -128,18 +143,33 @@ def is_transient_failure(error_text: str, status_code: Optional[int] = None) -> 
     return any(n in low for n in _TRANSIENT_NEEDLES)
 
 
+def is_role_timeout_failure(error_text: str) -> bool:
+    """事故小组外层角色超时（与 Para 仍在跑可并存）。"""
+    return (error_text or "").strip().startswith(_ROLE_TIMEOUT_PREFIX)
+
+
+def is_model_unsupported_failure(error_text: str) -> bool:
+    """当前账号/渠道不支持该模型（应走模型降级，而非重派同模型）。"""
+    low = (error_text or "").lower()
+    return any(n in low for n in _MODEL_UNSUPPORTED_NEEDLES)
+
+
 def classify_failure_kind(error_text: str, status_code: Optional[int] = None) -> str:
     """把一段错误信息映射到失败大类。
 
-    优先级：配额/计费 > 瞬时 > prompt。配额优先于瞬时是刻意的：部分上游（如 OpenAI
-    ``insufficient_quota``）把额度耗尽放在 HTTP 429 下返回，本质仍是「改 prompt 无效」，
-    不能被当成可重试的限流，更不能触发自进化重写。
+    优先级：外层角色超时 > 配额/计费 > 模型不支持 > 瞬时 > prompt。
+    配额优先于瞬时是刻意的：部分上游把额度耗尽放在 HTTP 429 下返回。
+    角色超时含 ``timeout`` 子串，必须先于瞬时判定，否则会被误重派。
     """
     text = (error_text or "").strip()
     if not text:
         return FAILURE_KIND_NONE
+    if is_role_timeout_failure(text):
+        return FAILURE_KIND_ROLE_TIMEOUT
     if is_quota_or_billing_failure(text, status_code):
         return FAILURE_KIND_QUOTA
+    if is_model_unsupported_failure(text):
+        return FAILURE_KIND_MODEL_UNSUPPORTED
     if is_transient_failure(text, status_code):
         return FAILURE_KIND_TRANSIENT
     return FAILURE_KIND_PROMPT
@@ -150,7 +180,11 @@ __all__ = [
     "FAILURE_KIND_TRANSIENT",
     "FAILURE_KIND_PROMPT",
     "FAILURE_KIND_NONE",
+    "FAILURE_KIND_ROLE_TIMEOUT",
+    "FAILURE_KIND_MODEL_UNSUPPORTED",
     "classify_failure_kind",
     "is_quota_or_billing_failure",
     "is_transient_failure",
+    "is_role_timeout_failure",
+    "is_model_unsupported_failure",
 ]

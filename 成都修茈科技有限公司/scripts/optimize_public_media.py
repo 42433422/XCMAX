@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import runpy
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ OUT_DIR = SITE_ROOT / "assets" / "optimized"
 
 
 def collect_media() -> list[Path]:
+    runpy.run_path(str(Path(__file__).with_name("evidence_assets.py")))["materialize"](SITE_ROOT.parent)
     files: list[Path] = []
     ps = SITE_ROOT / "site" / "data" / "public-site.json"
     data = json.loads(ps.read_text(encoding="utf-8"))

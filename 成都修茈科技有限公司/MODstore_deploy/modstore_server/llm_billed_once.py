@@ -24,11 +24,11 @@ from modstore_server.llm_billing import (
 )
 from modstore_server.llm_chat_proxy import chat_dispatch
 from modstore_server.llm_key_resolver import (
-    KNOWN_PROVIDERS,
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
-    resolve_api_key,
-    resolve_base_url,
+    ChatRouteSnapshot,
+    resolve_chat_route_snapshot,
 )
+from modstore_server.llm_model_gates import assert_llm_chat_allowed
 from modstore_server.models import User
 from modstore_server.multimodal_llm import (
     messages_use_openai_multipart_content,
@@ -49,24 +49,53 @@ async def run_billed_llm_chat_once(
     messages: list[dict[str, Any]],
     max_tokens: Optional[int] = None,
     conversation_id: Optional[int] = None,
+    route_snapshot: ChatRouteSnapshot | None = None,
 ) -> dict[str, Any]:
-    """Execute and settle a single provider/model chat attempt."""
-    if provider not in KNOWN_PROVIDERS:
-        raise HTTPException(400, "unknown provider")
-    api_key, key_source = resolve_api_key(db, user.id, provider)
-    if not api_key:
-        raise HTTPException(
-            400,
-            f"供应商「{provider}」未配置可用 API Key（平台环境变量或 BYOK）。"
-            f"请在钱包页为该厂商保存密钥，或将默认模型切换到已有密钥的厂商；"
-            f"仅配置了其它厂商（如 DeepSeek）时，请把 LLM 默认供应商改为该厂商或切到「自选」。",
+    """Execute one attempt and attach its actual route to every final receipt."""
+    route = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
+    try:
+        return await _execute_billed_chat(
+            request, db, user, route, messages, max_tokens, conversation_id
         )
-    is_byok = key_source == "user_override"
-    base = (
-        resolve_base_url(db, user.id, provider)
-        if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
+    except HTTPException as exc:
+        raise HTTPException(
+            exc.status_code, failed_chat_route_detail(route, exc.detail), headers=exc.headers
+        ) from exc
+    except RECOVERABLE_ERRORS as exc:
+        raise HTTPException(502, failed_chat_route_detail(route, str(exc))) from exc
+
+
+def failed_chat_route_detail(route: ChatRouteSnapshot, detail: Any) -> dict[str, Any]:
+    """Keep existing error/reconciliation fields without serializing credentials."""
+    fields = {"message", "error", "code", "recovery", "request_id", "hold_no", "status"}
+    payload = (
+        {key: value for key, value in detail.items() if key in fields}
+        if isinstance(detail, dict)
+        else {"message": str(detail)}
     )
+    message = str(payload.get("message") or payload.get("error") or "模型调用失败")
+    for name in ("message", "error"):
+        value = str(payload.get(name) or message)
+        for private in (route.api_key, route.base_url):
+            if private:
+                value = value.replace(private, "[REDACTED]")
+        payload[name] = value
+    return {**payload, **route.public_metadata(), "route_state": "failed"}
+
+
+async def _execute_billed_chat(
+    request: Request,
+    db: Session,
+    user: User,
+    route: ChatRouteSnapshot,
+    messages: list[dict[str, Any]],
+    max_tokens: Optional[int],
+    conversation_id: Optional[int],
+) -> dict[str, Any]:
+    provider, model = route.provider, route.model
+    api_key, key_source = route.api_key, route.key_source
+    is_byok = key_source == "user_override"
+    base = route.base_url if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS else None
     if not messages:
         raise HTTPException(400, "messages 不能为空")
     size_error = validate_multimodal_payload_size(messages)
@@ -82,18 +111,35 @@ async def run_billed_llm_chat_once(
             "请更换 provider 或改发纯文本。",
         )
     model = model.strip()
+    if getattr(request.state, "llm_pat_user_id", None) is not None:
+        await assert_llm_chat_allowed(db, int(user.id), provider, model, is_byok=is_byok)
     request_id = new_request_id()
     enforce_risk_limits(db, user.id, provider, model, messages, request)
-    wallet = JavaWalletClient()
+    wallet = JavaWalletClient(request=request)
     if is_byok:
+        if getattr(request.state, "llm_pat_user_id", None) is not None:
+            wallet.validate_pat(authorization_header(request))
         hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
     else:
         preauth_amount = estimate_preauthorization(db, provider, model, messages, max_tokens)
-        hold = await wallet.preauthorize(
-            authorization_header(request), preauth_amount, provider, model, request_id
-        )
+        try:
+            hold = await wallet.preauthorize(
+                authorization_header(request), preauth_amount, provider, model, request_id
+            )
+        except HTTPException as exc:
+            if getattr(request.state, "llm_pat_user_id", None) is not None and exc.status_code in {
+                502,
+                503,
+                504,
+            }:
+                raise HTTPException(
+                    409, {"message": "模型预授权状态待核对", "request_id": request_id}
+                ) from exc
+            raise
     charge = Decimal("0")
+    upstream_started = False
     try:
+        upstream_started = True
         result = await chat_dispatch(
             provider,
             api_key=api_key,
@@ -138,12 +184,40 @@ async def run_billed_llm_chat_once(
             conversation_id=conversation_id,
         )
     except HTTPException as exc:
+        if upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None:
+            logger.error(
+                "LLM settlement needs reconciliation request_id=%s hold=%s",
+                request_id,
+                hold.hold_no,
+            )
+            raise HTTPException(
+                409,
+                {
+                    "message": "模型请求已发送，计费状态待核对",
+                    "request_id": request_id,
+                    "hold_no": hold.hold_no,
+                },
+            ) from exc
         try:
             await wallet.release(authorization_header(request), hold, str(exc.detail), request_id)
         except RECOVERABLE_ERRORS:
             logger.exception("failed to release LLM wallet hold")
         raise
     except RECOVERABLE_ERRORS as exc:
+        if upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None:
+            logger.error(
+                "LLM settlement needs reconciliation request_id=%s hold=%s",
+                request_id,
+                hold.hold_no,
+            )
+            raise HTTPException(
+                409,
+                {
+                    "message": "模型请求已发送，计费状态待核对",
+                    "request_id": request_id,
+                    "hold_no": hold.hold_no,
+                },
+            ) from exc
         try:
             save_failure_log(
                 db,
@@ -164,9 +238,8 @@ async def run_billed_llm_chat_once(
         "usage": usage.__dict__,
         "charge_amount": float(charge),
         "hold_no": hold.hold_no,
-        "key_source": key_source,
+        **route.public_metadata(),
+        "route_state": "completed",
         "billed": not is_byok,
-        "provider": provider,
-        "model": model,
         "request_id": request_id,
     }

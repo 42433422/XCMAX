@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from importlib.metadata import distributions
@@ -32,17 +33,71 @@ def parse_top_level(path: Path) -> list[str]:
     return names
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--package",
+        action="append",
+        default=[],
+        help="只更新已安装的指定运行时包，保留其他锁定版本",
+    )
+    args = parser.parse_args(argv)
     installed: dict[str, str] = {}
     for dist in distributions():
         installed[normalize(dist.metadata["Name"])] = dist.version
+
+    declared = parse_top_level(REQ)
+    selected = {normalize(name) for name in args.package}
+    if selected:
+        if selected - {normalize(name) for name in declared} or not LOCK.is_file():
+            print(
+                "targeted regeneration requires declared packages and an existing lock",
+                file=sys.stderr,
+            )
+            return 1
+        lines = LOCK.read_text(encoding="utf-8").splitlines()
+        locked = {
+            normalize(line.split("==", 1)[0])
+            for line in lines
+            if "==" in line and not line.startswith("#")
+        }
+        if {normalize(name) for name in declared} - locked - selected:
+            print(
+                "existing lock is missing other runtime packages; regenerate the complete lock",
+                file=sys.stderr,
+            )
+            return 1
+        for pkg in declared:
+            key = normalize(pkg)
+            if key not in selected:
+                continue
+            ver = installed.get(key)
+            if not ver:
+                print(f"install missing package first: {pkg}", file=sys.stderr)
+                return 1
+            pin = f"{pkg}=={ver}"
+            index = next(
+                (
+                    i
+                    for i, line in enumerate(lines)
+                    if "==" in line and normalize(line.split("==", 1)[0]) == key
+                ),
+                None,
+            )
+            if index is None:
+                lines.append(pin)
+            else:
+                lines[index] = pin
+        LOCK.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"updated {LOCK} ({len(selected)} packages; other pins preserved)")
+        return 0
 
     lines = [
         "# Top-level pins from local pip install (requirements-server-api.txt)",
         "# Regenerate: pip install -r requirements-server-api.txt && python3 scripts/dev/regenerate_requirements_lock.py",
     ]
     missing: list[str] = []
-    for pkg in parse_top_level(REQ):
+    for pkg in declared:
         ver = installed.get(normalize(pkg))
         if not ver:
             missing.append(pkg)

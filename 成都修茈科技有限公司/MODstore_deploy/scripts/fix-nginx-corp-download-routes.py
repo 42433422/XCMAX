@@ -108,7 +108,9 @@ def main() -> None:
         if brace < 0:
             raise SystemExit("cannot find closing brace for download-releases.html")
         insert_at = brace + 1
-        CONF.write_text(text[:insert_at] + "\n\n" + BLOCK + text[insert_at:], encoding="utf-8")
+        CONF.write_text(
+            text[:insert_at] + "\n\n" + BLOCK + text[insert_at:], encoding="utf-8"
+        )
         print("installed board routes after /download-releases.html")
         return
 
@@ -120,7 +122,9 @@ def main() -> None:
         if brace < 0:
             raise SystemExit("cannot find closing brace for /download")
         insert_at = brace + 1
-        CONF.write_text(text[:insert_at] + "\n\n" + BLOCK + text[insert_at:], encoding="utf-8")
+        CONF.write_text(
+            text[:insert_at] + "\n\n" + BLOCK + text[insert_at:], encoding="utf-8"
+        )
         print("installed board routes after /download")
         return
 

@@ -1,0 +1,330 @@
+#!/usr/bin/env python3
+"""工单闭环验收总账（ticket-loop.run.json）判定校验。
+
+只读校验，不改总账。核心规则：
+  1. 任何一项判 PASS 都必须有 observed_at 与非空 evidence（不能预填）。
+  2. 「发版解决问题」必须走 Para：AI 处理相关条目（processor_policy.applies_to_items）
+     判 PASS 时，每张已填工单的 processing 记录里必须有一次 para_delegate
+     成功完成（accepted+completed+ok，且有 Para 任务号），并且不能出现任何
+     本地大模型 / 本地执行回退（agent、vibe_*、cursor_delegate、direct_python、
+     llm_md 等）。检测到回退即判失败，不算通过。
+  3. B–I 段有 PASS 时，冻结版本、两个不同租户的客户账号、已解决工单号必须已填；
+     重开条目 PASS 时重开工单号必须已填且不同于已解决工单号。
+  4. GREEN 闸门不得省略固定契约中的工单来源；全部必需条目必须 PASS 且本校验无错误。
+  5. 条目分区和来源映射使用已审阅的结构摘要固定，不能通过删改待验数据放宽。
+
+用法：python ticket_loop_ledger_check.py [--ledger PATH] [--gates PATH]
+退出码 0 = 无违规；1 = 有违规（stdout 打印 JSON 违规列表）。
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+DEFAULT_DIR = (
+    Path(__file__).resolve().parents[2] / "docs" / "evidence" / "e2e" / "final-acceptance-1.0.0.5"
+)
+
+PARA_HANDLER = "para_delegate"
+# 与 modstore_server.employee_executor 的 _LOCAL_FALLBACK_HANDLERS 对齐，并额外包含 llm_md
+# （llm_md 不受 skip_local_after_para_ok 约束，Para 成功后仍可能执行，同样视为回退）。
+DEFAULT_FORBIDDEN = (
+    "agent",
+    "vibe_edit",
+    "vibe_heal",
+    "vibe_code",
+    "cursor_delegate",
+    "direct_python",
+    "llm_md",
+)
+DEFAULT_PARA_ITEMS = tuple(range(17, 28)) + (41, 48, 49)
+IDENTITY_SECTIONS = set("BCDEFGHI")
+REOPEN_ITEMS = (36, 37, 52)
+# Pin only reviewed structure, not mutable evidence/status. Intentional contract
+# changes require reviewing this digest; caller --ledger/--gates/base never select it.
+ACCEPTANCE_CONTRACT_SHA256 = "fe39a9ec4724c317ba7a9ad5447930f0c1cc5de1784bc56fe5bfd59f471e65b5"
+
+
+def _acceptance_contract() -> tuple[dict[int, str], dict[int, set[int]]]:
+    ledger = json.loads((DEFAULT_DIR / "ticket-loop.run.json").read_text(encoding="utf-8"))
+    gates = json.loads((DEFAULT_DIR / "gates.json").read_text(encoding="utf-8"))
+    sections = sorted((item["no"], item["section"]) for item in ledger["items"])
+    sources = sorted(
+        (
+            gate["no"],
+            sorted(
+                {
+                    n
+                    for source in gate.get("sources", [])
+                    if source.get("run") == "ticket-loop.run.json"
+                    for n in source["items"]
+                }
+            ),
+        )
+        for gate in gates["gates"]
+    )
+    projection = json.dumps([sections, sources], separators=(",", ":")).encode()
+    if hashlib.sha256(projection).hexdigest() != ACCEPTANCE_CONTRACT_SHA256:
+        raise ValueError("acceptance structure changed without contract review")
+    return dict(sections), {no: set(nos) for no, nos in sources}
+
+
+def _items(ledger: dict[str, Any], errs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    items: dict[int, dict[str, Any]] = {}
+    rows = ledger.get("items", [])
+    if not isinstance(rows, list):
+        errs.append({"code": "items_invalid"})
+        return items
+    for row in rows:
+        raw = row.get("no") if isinstance(row, dict) else None
+        if isinstance(raw, bool) or not re.fullmatch(r"[0-9]+", str(raw)) or int(raw) < 1:
+            errs.append({"code": "item_number_invalid"})
+            continue
+        no = int(raw)
+        if no in items:
+            errs.append({"code": "item_number_duplicate", "item": no})
+            continue
+        items[no] = row
+    return items
+
+
+def _observed_at(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).utcoffset() is not None
+    except ValueError:
+        return False
+
+
+def _passed(items: dict[int, dict[str, Any]], nos) -> list[int]:
+    return [n for n in nos if (items.get(n) or {}).get("result") == "PASS"]
+
+
+def _para_task_id(entry: dict[str, Any]) -> str:
+    for key in ("para_task_id", "task_id"):
+        if entry.get(key):
+            return str(entry[key])
+    snap = entry.get("para_result")
+    if isinstance(snap, dict):
+        if snap.get("id"):
+            return str(snap["id"])
+        task = snap.get("task")
+        if isinstance(task, dict) and task.get("id"):
+            return str(task["id"])
+    return ""
+
+
+def _load_attempts(processing: dict[str, Any], base: Path) -> tuple[list[dict[str, Any]], str]:
+    attempts = processing.get("handlers_attempted")
+    ref = processing.get("handler_outputs_evidence")
+    if not attempts and ref:
+        path = (base / str(ref)).resolve()
+        if not path.is_file():
+            return [], f"handler_outputs_evidence 文件不存在：{ref}"
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        attempts = raw.get("outputs") if isinstance(raw, dict) else raw
+    if not isinstance(attempts, list):
+        return [], "handlers_attempted 必须是 handler 输出列表"
+    if any(not isinstance(a, dict) or not str(a.get("handler") or "").strip() for a in attempts):
+        return [], "handlers_attempted 含无效 handler 执行记录"
+    return attempts, ""
+
+
+def check_para_processing(
+    name: str, processing: dict[str, Any] | None, policy: dict[str, Any], base: Path
+) -> list[dict[str, Any]]:
+    """单张工单的 Para 处理证据判定；返回违规列表（空 = 通过）。"""
+    errs: list[dict[str, Any]] = []
+    if not isinstance(processing, dict):
+        return [{"code": "para_evidence_missing", "ticket": name}]
+    attempts, load_err = _load_attempts(processing, base)
+    if load_err:
+        return [{"code": "para_evidence_missing", "ticket": name, "detail": load_err}]
+    if not attempts:
+        return [
+            {
+                "code": "para_evidence_missing",
+                "ticket": name,
+                "detail": "无 handler 执行记录",
+            }
+        ]
+    forbidden = set(DEFAULT_FORBIDDEN) | set(policy.get("forbidden_local_handlers") or ())
+    fallback = sorted(
+        {str(a.get("handler")) for a in attempts if str(a.get("handler")) in forbidden}
+    )
+    if fallback:
+        errs.append({"code": "para_fallback_detected", "ticket": name, "handlers": fallback})
+    para_ok = [
+        a
+        for a in attempts
+        if a.get("handler") == PARA_HANDLER
+        and a.get("ok") is True
+        and a.get("accepted") is True
+        and a.get("completed") is True
+        and _para_task_id(a)
+    ]
+    if not para_ok:
+        errs.append({"code": "para_not_completed", "ticket": name})
+    declared = str(processing.get("para_task_id") or "")
+    if para_ok and declared and declared not in {_para_task_id(a) for a in para_ok}:
+        errs.append({"code": "para_task_id_mismatch", "ticket": name, "declared": declared})
+    if para_ok and not declared:
+        errs.append({"code": "para_task_id_not_recorded", "ticket": name})
+    return errs
+
+
+def check_ledger(
+    ledger: dict[str, Any],
+    gates: dict[str, Any] | None = None,
+    base: Path | None = None,
+) -> list[dict[str, Any]]:
+    base = base or DEFAULT_DIR
+    errs: list[dict[str, Any]] = []
+    if not isinstance(ledger, dict):
+        return [{"code": "ledger_invalid"}]
+    try:
+        sections, gate_sources = _acceptance_contract()
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return [{"code": "acceptance_contract_invalid"}]
+    items = _items(ledger, errs)
+
+    for no, item in sorted(items.items()):
+        if no not in sections:
+            errs.append({"code": "item_number_unknown", "item": no})
+        elif item.get("section") != sections[no]:
+            errs.append({"code": "item_section_invalid", "item": no})
+        if item.get("result") == "PASS":
+            if not item.get("observed_at"):
+                errs.append({"code": "pass_without_observed_at", "item": no})
+            elif not _observed_at(item["observed_at"]):
+                errs.append({"code": "pass_with_invalid_observed_at", "item": no})
+            evidence = item.get("evidence")
+            if not isinstance(evidence, list) or not any(
+                isinstance(entry, str) and entry.strip() for entry in evidence
+            ):
+                errs.append({"code": "pass_without_evidence", "item": no})
+
+    policy = ledger.get("processor_policy") or {}
+    if not isinstance(policy, dict):
+        errs.append({"code": "processor_policy_invalid"})
+        policy = {}
+    for key, kind in (("forbidden_local_handlers", str), ("applies_to_items", int)):
+        values = policy.get(key)
+        if values is not None and (
+            not isinstance(values, list) or any(type(value) is not kind for value in values)
+        ):
+            errs.append({"code": "processor_policy_invalid", "field": key})
+            policy = {**policy, key: []}
+    para_items = set(DEFAULT_PARA_ITEMS) | set(policy.get("applies_to_items") or ())
+    tickets = ledger.get("tickets") or {}
+    if _passed(items, para_items):
+        for name in ("resolved", "reopened"):
+            t = tickets.get(name) or {}
+            if name == "resolved" or t.get("ticket_id"):
+                errs.extend(check_para_processing(name, t.get("processing"), policy, base))
+
+    identity_pass = [
+        n
+        for n, i in items.items()
+        if sections.get(n) in IDENTITY_SECTIONS and i.get("result") == "PASS"
+    ]
+    if identity_pass:
+        cand = ledger.get("candidate") or {}
+        for key, width in (("source_sha", 40), ("installer_sha256", 64)):
+            value = cand.get(key)
+            if not value:
+                errs.append({"code": "frozen_candidate_missing", "field": f"candidate.{key}"})
+            elif not isinstance(value, str) or not re.fullmatch(rf"[0-9a-fA-F]{{{width}}}", value):
+                errs.append({"code": "frozen_candidate_invalid", "field": f"candidate.{key}"})
+        accounts = ledger.get("accounts") or {}
+        tenants = []
+        for acc in ("customer_a", "customer_b"):
+            a = accounts.get(acc) or {}
+            if not a.get("alias") or not a.get("tenant"):
+                errs.append({"code": "account_missing", "field": f"accounts.{acc}"})
+            tenants.append(a.get("tenant"))
+        if all(tenants) and tenants[0] == tenants[1]:
+            errs.append({"code": "accounts_same_tenant"})
+        if not (tickets.get("resolved") or {}).get("ticket_id"):
+            errs.append({"code": "resolved_ticket_missing"})
+    if _passed(items, REOPEN_ITEMS):
+        r = (tickets.get("reopened") or {}).get("ticket_id")
+        if not r:
+            errs.append({"code": "reopened_ticket_missing"})
+        elif r == (tickets.get("resolved") or {}).get("ticket_id"):
+            errs.append({"code": "reopened_ticket_same_as_resolved"})
+
+    if gates is not None and not isinstance(gates, dict):
+        return errs + [{"code": "gates_invalid"}]
+    rows = (gates or {}).get("gates", [])
+    if not isinstance(rows, list):
+        return errs + [{"code": "gates_invalid"}]
+    for gate in rows:
+        if not isinstance(gate, dict):
+            errs.append({"code": "gate_invalid"})
+            continue
+        if gate.get("status") != "GREEN":
+            continue
+        no = gate.get("no")
+        if type(no) is not int or no not in gate_sources:
+            errs.append({"code": "gate_number_invalid", "gate": no})
+            continue
+        required = gate_sources[no]
+        declared: set[int] = set()
+        sources = gate.get("sources") or []
+        if not isinstance(sources, list):
+            errs.append({"code": "gate_sources_invalid", "gate": no})
+            sources = []
+        for src in sources:
+            if not isinstance(src, dict):
+                errs.append({"code": "gate_source_invalid", "gate": no})
+                continue
+            if src.get("run") != "ticket-loop.run.json":
+                continue
+            nos = src.get("items")
+            if not isinstance(nos, list) or not nos or any(type(n) is not int for n in nos):
+                errs.append({"code": "gate_source_items_invalid", "gate": no})
+                continue
+            declared.update(nos)
+        omitted = sorted(required - declared)
+        if omitted:
+            errs.append({"code": "gate_required_sources_missing", "gate": no, "items": omitted})
+        if required or declared:
+            missing = sorted(
+                n for n in required | declared if (items.get(n) or {}).get("result") != "PASS"
+            )
+            if missing or errs:
+                errs.append({"code": "gate_green_without_pass", "gate": no, "items": missing})
+    return errs
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--ledger", type=Path, default=DEFAULT_DIR / "ticket-loop.run.json")
+    ap.add_argument("--gates", type=Path, default=DEFAULT_DIR / "gates.json")
+    args = ap.parse_args(argv)
+    try:
+        ledger = json.loads(args.ledger.read_text(encoding="utf-8"))
+        gates = json.loads(args.gates.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        errs = [{"code": "input_file_invalid", "kind": type(exc).__name__}]
+    else:
+        errs = (
+            check_ledger(ledger, gates, args.ledger.resolve().parent)
+            if isinstance(gates, dict)
+            else [{"code": "gates_invalid"}]
+        )
+    print(json.dumps({"ok": not errs, "violations": errs}, ensure_ascii=False, indent=1))
+    return 1 if errs else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

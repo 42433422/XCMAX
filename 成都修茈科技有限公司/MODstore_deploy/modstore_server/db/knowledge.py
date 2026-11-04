@@ -14,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
-from modstore_server.db.base import Base
+from modstore_server.db.db_base import Base
 
 
 class KnowledgeCollection(Base):

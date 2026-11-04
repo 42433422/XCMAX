@@ -22,12 +22,13 @@ import {
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { checkPendingRollback } from './rollback'
 import { configureUpdater } from './updater'
+import { configureDesktopDownloads } from './desktop-downloads'
 import {
   handleDesktopWindowOpen,
   handleDesktopWillNavigate,
   isBenignDesktopLoadAbort,
-  safeDownloadFilename,
 } from './desktop-navigation'
+import { reportRendererError } from './desktop-resilience'
 
 /** 闪屏进度 0–100；供启动阶段与单测共用。 */
 export function clampSplashProgress(percent: number): number {
@@ -90,15 +91,28 @@ export function toggleMainWindow(): void {
     void createWindow()
     return
   }
-  if (mainWindow.isVisible()) {
+  // 最小化窗口在 Windows 上 isVisible() 仍为 true，再 hide 会让托盘「显示」把窗口藏掉。
+  if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
     mainWindow.hide()
   } else {
     showMainWindow()
   }
 }
 
+/** 托盘唤起时，窗口若几乎不在当前工作区内，拉回该显示器，避免点了却看不见。 */
+function bringOffscreenWindowIntoWorkArea(win: BrowserWindow): void {
+  const bounds = win.getBounds()
+  const work = screen.getDisplayMatching(bounds).workArea
+  const overlapW = Math.min(bounds.x + bounds.width, work.x + work.width) - Math.max(bounds.x, work.x)
+  const overlapH = Math.min(bounds.y + bounds.height, work.y + work.height) - Math.max(bounds.y, work.y)
+  const visibleEnough =
+    overlapW >= Math.min(240, bounds.width / 2) && overlapH >= Math.min(180, bounds.height / 2)
+  if (visibleEnough) return
+  win.setBounds(clampWindowBounds(bounds, work))
+}
+
 /**
- * 仅显示并聚焦主窗口（不隐藏），用于语音唤起、深链等"确保窗口可见"场景，
+ * 仅显示并聚焦主窗口（不隐藏），用于托盘单击、语音唤起、深链等“确保窗口可见”场景，
  * 区别于 toggleMainWindow 的显隐切换语义。
  */
 export function showMainWindow(): void {
@@ -107,9 +121,20 @@ export function showMainWindow(): void {
     void createWindow()
     return
   }
-  mainWindow.show()
   if (mainWindow.isMinimized()) mainWindow.restore()
+  bringOffscreenWindowIntoWorkArea(mainWindow)
+  mainWindow.show()
+  if (process.platform === 'darwin') {
+    app.focus({ steal: true })
+  }
   mainWindow.focus()
+  if (process.platform === 'win32') {
+    // 托盘单击拿不到前台许可，短暂置顶再取消，窗口才会真正露到最前。
+    mainWindow.setAlwaysOnTop(true)
+    mainWindow.moveTop()
+    mainWindow.focus()
+    mainWindow.setAlwaysOnTop(false)
+  }
 }
 
 /** macOS 全屏/恢复后窗口可能只剩顶部一条，拉回工作区。 */
@@ -136,12 +161,37 @@ function ensureMacWindowInWorkArea(win: BrowserWindow): void {
 }
 
 function tagDesktopWebContents(win: BrowserWindow): void {
-  const classes = ['xcagi-electron']
-  if (process.platform === 'darwin') classes.push('xcagi-electron-mac')
-  if (process.platform === 'win32') classes.push('xcagi-electron-win')
+  const platformClass =
+    process.platform === 'darwin'
+      ? 'xcagi-electron-mac'
+      : process.platform === 'win32'
+        ? 'xcagi-electron-win'
+        : ''
+  const sheet = platformClass === 'xcagi-electron-mac'
+    ? 'mac'
+    : platformClass === 'xcagi-electron-win'
+      ? 'win'
+      : ''
   void win.webContents
     .executeJavaScript(
-      classes.map(c => `document.documentElement.classList.add('${c}');`).join('')
+      `(() => {
+        const root = document.documentElement;
+        root.classList.add('xcagi-electron');
+        root.classList.remove('xcagi-electron-mac', 'xcagi-electron-win');
+        ${platformClass ? `root.classList.add('${platformClass}');` : ''}
+        const sheet = ${sheet ? `'${sheet}'` : 'null'};
+        if (!sheet) return;
+        const other = sheet === 'win' ? 'mac' : 'win';
+        const stale = document.getElementById('xcagi-platform-chrome-' + other);
+        if (stale) stale.remove();
+        const id = 'xcagi-platform-chrome-' + sheet;
+        if (document.getElementById(id)) return;
+        const link = document.createElement('link');
+        link.id = id;
+        link.rel = 'stylesheet';
+        link.href = '/platform/electron-' + sheet + '.css';
+        document.head.appendChild(link);
+      })();`
     )
     .catch(() => { })
 }
@@ -161,7 +211,8 @@ export async function createWindow(): Promise<void> {
     minHeight: 760,
     title: APP_NAME,
     autoHideMenuBar: process.platform !== 'darwin',
-    show: true,
+    // Avoid exposing an empty native surface before the local splash has painted.
+    show: false,
     backgroundColor: '#f4f7fb'
   }
   if (fs.existsSync(icon)) {
@@ -189,6 +240,15 @@ export async function createWindow(): Promise<void> {
   } })
   desktopRuntime.mainWindow = mainWindow
   desktopRuntime.rendererFailedDuringStartup = false
+  let startupWindowShown = false
+  let lastRendererReloadAt = 0
+  const showStartupWindow = () => {
+    if (startupWindowShown || mainWindow.isDestroyed()) return
+    startupWindowShown = true
+    mainWindow.show()
+    mainWindow.focus()
+  }
+  mainWindow.once('ready-to-show', showStartupWindow)
   let stateWriteTimer: NodeJS.Timeout | null = null
   const persistWindowState = () => {
     if (mainWindow.isDestroyed() || mainWindow.isMinimized() || mainWindow.isFullScreen()) return
@@ -236,44 +296,60 @@ export async function createWindow(): Promise<void> {
   })
   // 未注册 will-download 时 Chromium 只把文件留在下载目录的 <guid>.tmp，
   // 客户看不到「文件名: xxx.xlsx」对应的文件。显式落盘到下载目录并保留业务文件名。
-  mainWindow.webContents.session.on('will-download', (_event, item) => {
-    const target = path.join(app.getPath('downloads'), safeDownloadFilename(item.getFilename()))
-    item.setSavePath(target)
-    item.once('done', (_doneEvent, state) => {
-      writeBackendLog(`[download] ${state} -> ${target}\n`)
-    })
-  })
+  configureDesktopDownloads(mainWindow.webContents.session, () => app.getPath('downloads'), writeBackendLog)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message)) }
+    return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message), target => mainWindow.webContents.downloadURL(target)) }
+  })
+  const reportMainRenderer = (type: string, error: string, source?: string) => {
+    reportRendererError({ port: DEFAULT_PORT, writeLog: writeBackendLog }, { type, error, source })
+  }
+  mainWindow.webContents.on('console-message', (...args: unknown[]) => {
+    const details = (typeof args[1] === 'object' && args[1]) ? args[1] as { level?: string | number; message?: string; lineNumber?: number; sourceId?: string } : null
+    const resolvedLevel = details ? details.level : args[1]
+    const resolvedMessage = details ? String(details.message || '') : String(args[2] || '')
+    const resolvedLine = details ? details.lineNumber : args[3]
+    const resolvedSource = details ? details.sourceId : args[4]
+    const isError = resolvedLevel === 'error' || resolvedLevel === 3
+    if (!isError || !resolvedMessage.trim()) return
+    reportMainRenderer(
+      'renderer:console',
+      resolvedMessage.trim().slice(0, 4000),
+      [resolvedSource, resolvedLine].filter((part) => part !== undefined && part !== '').join(':'),
+    )
   })
   mainWindow.webContents.on('unresponsive', () => {
     writeBackendLog('[crash] renderer unresponsive\n')
+    reportMainRenderer('renderer:unresponsive', 'renderer process is unresponsive')
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    writeBackendLog(`[crash] renderer gone reason=${details.reason} exitCode=${details.exitCode}\n`)
+    const summary = `reason=${details.reason} exitCode=${details.exitCode}`
+    writeBackendLog(`[crash] renderer gone ${summary}\n`)
+    reportMainRenderer('renderer:gone', summary)
     if (checkPendingRollback()) {
       desktopRuntime.rendererFailedDuringStartup = true
       return
     }
-    if (!app.isQuitting && details.reason !== 'clean-exit') {
-      void dialog.showMessageBox(mainWindow, {
-        type: 'error',
-        title: APP_NAME,
-        message: '界面进程意外退出',
-        detail: '崩溃信息已保存在数据目录。可以重新加载界面继续工作，后端与本地数据不会被清除。',
-        buttons: ['重新加载', '退出'],
-        defaultId: 0,
-        cancelId: 1,
-      }).then(({ response }) => {
-        if (response === 0 && !mainWindow.isDestroyed()) mainWindow.reload()
-        else app.quit()
-      })
+    if (!app.isQuitting && details.reason !== 'clean-exit' && !mainWindow.isDestroyed()) {
+      const now = Date.now()
+      if (now - lastRendererReloadAt < 3000) {
+        writeBackendLog(`[crash] skip reload; renderer crashed again within 3s (${summary})\n`)
+        return
+      }
+      lastRendererReloadAt = now
+      // Reload the same document. Quitting or sending the user to login drops a still-valid session.
+      writeBackendLog(`[crash] reloading renderer in place after ${summary}\n`)
+      mainWindow.reload()
     }
   })
 
-  void mainWindow.loadURL(resolveDesktopSplashUrl())
-  mainWindow.show()
-  mainWindow.focus()
+  desktopRuntime.splashUrl = resolveDesktopSplashUrl()
+  void mainWindow.loadURL(desktopRuntime.splashUrl).catch(error => {
+    // The backend may become ready while the splash is still loading. Its
+    // replacement navigation must still wait for a painted renderer to show.
+    if (error instanceof Error && /ERR_ABORTED/i.test(error.message)) return
+    console.error('[xcagi-desktop] load startup splash failed', error)
+    showStartupWindow()
+  })
   updateSplashProgress(8, '正在启动本地服务…')
 
   if (shouldClearFrontendCache()) {
@@ -296,7 +372,7 @@ export async function createWindow(): Promise<void> {
       if (process.platform === 'darwin') {
         ensureMacWindowInWorkArea(desktopRuntime.mainWindow)
       }
-      desktopRuntime.mainWindow.focus()
+      if (startupWindowShown) desktopRuntime.mainWindow.focus()
     } catch (error) {
       const currentUrl = desktopRuntime.mainWindow?.webContents.getURL()
       if (isBenignDesktopLoadAbort(error, currentUrl, DEFAULT_PORT)) {

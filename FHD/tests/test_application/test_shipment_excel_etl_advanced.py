@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 
-from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
 from app.application.shipment_etl_profile import clear_profile_cache
 from app.application.shipment_excel_etl_app_service import (
     execute_shipment_excel_etl,
@@ -15,14 +15,17 @@ from app.application.shipment_excel_etl_app_service import (
     write_ledger_workbook,
 )
 from app.application.shipment_excel_etl_ocr import (
+    _load_image_arrays,
     grid_to_workbook_path,
     text_blocks_to_grid,
 )
 from app.application.shipment_excel_etl_security import direct_execute_allowed
+from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
 
 @pytest.fixture(autouse=True)
 def _kb(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
@@ -143,7 +146,8 @@ def test_mixed_workbook_roles(tmp_path):
     assert both["ledger_note_count"] >= 1
 
 
-def test_ocr_text_blocks_to_grid_and_parse(tmp_path):
+def test_ocr_text_blocks_to_grid_and_parse(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     blocks = [
         {"text": "客户：OCR客户", "left": 10, "top": 10, "width": 120, "height": 20},
         {"text": "联系人：甲", "left": 150, "top": 10, "width": 80, "height": 20},
@@ -177,6 +181,29 @@ def test_ocr_text_blocks_to_grid_and_parse(tmp_path):
     assert "OCR" in note["unit_name"] or note["items"][0]["model_number"] == "OCR-01"
     assert note["items"][0]["model_number"] == "OCR-01"
     assert note["items"][0]["quantity_tins"] == 2
+
+
+def test_ocr_image_loader_accepts_a_secure_binary_stream():
+    from PIL import Image
+
+    image_bytes = BytesIO()
+    Image.new("RGB", (2, 3), color="white").save(image_bytes, format="PNG")
+    image_bytes.seek(0)
+
+    arrays = _load_image_arrays(image_bytes, suffix=".png")
+    assert len(arrays) == 1
+    assert arrays[0].shape == (3, 2, 3)
+
+
+def test_ocr_image_loader_keeps_path_caller_behind_secure_open(tmp_path):
+    from PIL import Image
+
+    image_path = tmp_path / "safe.png"
+    Image.new("RGB", (2, 3), color="white").save(image_path)
+
+    arrays = _load_image_arrays(image_path)
+    assert len(arrays) == 1
+    assert arrays[0].shape == (3, 2, 3)
 
 
 def test_direct_execute_requires_env(tmp_path, monkeypatch):
@@ -219,7 +246,7 @@ def test_direct_execute_requires_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _Fake())
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
@@ -279,7 +306,7 @@ def test_direct_promotes_preview_only_target(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _Fake())
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     fp = tmp_path / "fp2.sqlite3"

@@ -28,7 +28,7 @@ export function useShellActions(deps: ShellActionDeps) {
 
   function switchMode(mode: 'client' | 'admin') {
     if (mode === 'admin') {
-      enterAdminRoute('admin-database')
+      enterAdminRoute('admin-overview')
       return
     }
     currentMode.value = 'client'

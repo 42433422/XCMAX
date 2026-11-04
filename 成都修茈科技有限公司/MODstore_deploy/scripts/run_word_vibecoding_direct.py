@@ -39,7 +39,9 @@ async def main() -> int:
         "--provider", type=str, default=os.environ.get("SMOKE_LLM_PROVIDER") or "xiaomi"
     )
     parser.add_argument(
-        "--model", type=str, default=os.environ.get("SMOKE_LLM_MODEL") or "mimo-v2.5-pro"
+        "--model",
+        type=str,
+        default=os.environ.get("SMOKE_LLM_MODEL") or "mimo-v2.5-pro",
     )
     parser.add_argument("--no-cleanup", action="store_true")
     args = parser.parse_args()
@@ -47,12 +49,16 @@ async def main() -> int:
     _load_env()
     os.chdir(ROOT)
 
-    from modstore_server.employee_asset_pipeline import run_word_extract_employee_scaffold_async
+    from modstore_server.employee_asset_pipeline import (
+        run_word_extract_employee_scaffold_async,
+    )
     from modstore_server.employee_pack_cleanup import cleanup_experimental_pack
     from modstore_server.models import User, get_session_factory
     from modstore_server.vibecoding_convert_loop import is_llm_codegen_source
 
-    pack_id = (args.pack_id or f"word-full-read-employee-direct-{uuid.uuid4().hex[:8]}").strip()
+    pack_id = (
+        args.pack_id or f"word-full-read-employee-direct-{uuid.uuid4().hex[:8]}"
+    ).strip()
     brief = BRIEF_TEMPLATE.format(pack_id=pack_id)
     session_id = uuid.uuid4().hex[:24]
 
@@ -63,7 +69,9 @@ async def main() -> int:
         else:
             user = db.query(User).order_by(User.id.asc()).first()
         if not user:
-            print(json.dumps({"ok": False, "error": "no user in DB"}, ensure_ascii=False))
+            print(
+                json.dumps({"ok": False, "error": "no user in DB"}, ensure_ascii=False)
+            )
             return 2
 
         print(
@@ -84,8 +92,16 @@ async def main() -> int:
             payload={"pack_id": pack_id, "experimental_pack": True},
         )
 
-    rt = res.get("runtime_generation") if isinstance(res.get("runtime_generation"), dict) else {}
-    gc = res.get("golden_comparison") if isinstance(res.get("golden_comparison"), dict) else {}
+    rt = (
+        res.get("runtime_generation")
+        if isinstance(res.get("runtime_generation"), dict)
+        else {}
+    )
+    gc = (
+        res.get("golden_comparison")
+        if isinstance(res.get("golden_comparison"), dict)
+        else {}
+    )
     ds = res.get("domain_smoke") if isinstance(res.get("domain_smoke"), dict) else {}
 
     report = {
@@ -105,7 +121,9 @@ async def main() -> int:
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
     if not args.no_cleanup and pack_id:
-        cleanup = cleanup_experimental_pack(pack_id, metadata={"experimental_pack": True})
+        cleanup = cleanup_experimental_pack(
+            pack_id, metadata={"experimental_pack": True}
+        )
         print("cleanup:", json.dumps(cleanup, ensure_ascii=False))
 
     passed = (

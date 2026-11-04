@@ -191,6 +191,7 @@ vi.mock('./composables/useWorkbenchManifest', () => ({
       paths: ['collaboration.workflow'],
     },
     memory: { label: 'Memory', icon: 'M', accent: '#555', required: false, paths: ['memory'] },
+    perception: { label: 'Perception', icon: 'P', accent: '#555', required: false, paths: ['perception'] },
   },
   DEFAULT_MODULE_ORDER: ['identity', 'prompt', 'skills', 'workflow_heart', 'memory'],
   manifestToNodes: manifestHelpers.manifestToNodes,
@@ -252,6 +253,7 @@ import WorkbenchShell from './views/workbench/WorkbenchShell.vue'
 import CanvasStage from './views/workbench/panels/CanvasStage.vue'
 import LeftRail from './views/workbench/panels/LeftRail.vue'
 import RightRail from './views/workbench/panels/RightRail.vue'
+import { MODULE_META } from './composables/useWorkbenchManifest'
 import EmployeeModuleNode from './views/workbench/nodes/EmployeeModuleNode.vue'
 
 const globalMount = {
@@ -608,20 +610,7 @@ describe('workbench canvas and rails coverage', () => {
 describe('workbench right rail coverage', () => {
   it('covers identity/prompt fields, LLM catalog, refine, research, run and TTS', async () => {
     localStorage.setItem('modstore_token', 'token')
-    workbenchStore.selectedNode = {
-      id: 'prompt',
-      data: {
-        moduleKind: 'prompt',
-        label: 'Prompt',
-        meta: {
-          label: 'Prompt',
-          icon: 'P',
-          accent: '#222',
-          required: true,
-          paths: ['cognition.agent'],
-        },
-      },
-    }
+    workbenchStore.selectedNode = { id: 'prompt', data: { moduleKind: 'prompt', label: 'Prompt', meta: MODULE_META.prompt } }
     const wrapper = mount(RightRail, globalMount)
     await flushPromises()
     const vm = wrapper.vm as UnsafeTestValue
@@ -733,6 +722,16 @@ describe('workbench right rail coverage', () => {
     expect(vm.formatDiffVal(null)).toBe('(空)')
     expect(vm.formatDiffVal('x'.repeat(130))).toContain('…')
     expect(vm.formatDiffVal({ a: 1 })).toBe('{"a":1}')
+  })
+
+  it('updates advanced module JSON and retains the previous configuration after an invalid edit', async () => {
+    workbenchStore.selectedNode = { id: 'perception', data: { moduleKind: 'perception', label: 'Perception', meta: MODULE_META.perception, slice: { long_term: true } } }
+    const wrapper = mount(RightRail, globalMount)
+    const editor = wrapper.get('textarea.field-json')
+    await editor.setValue('{')
+    expect(workbenchStore.patchManifest).not.toHaveBeenCalled()
+    await editor.setValue('{"long_term":false}')
+    expect(workbenchStore.patchManifest).toHaveBeenCalledWith('perception', { long_term: false })
   })
 
   it('covers right rail empty-id and error branches', async () => {

@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from app.infrastructure.llm.providers.base import LLMProvider
 from app.infrastructure.llm.providers.deepseek_legacy import DeepSeekLegacyProvider
 from app.infrastructure.llm.providers.modstore_provider import ModstoreProvider
 from app.infrastructure.llm.providers.openai_compatible_provider import (
@@ -13,6 +12,7 @@ from app.infrastructure.llm.providers.openai_compatible_provider import (
     XiaomiMimoProvider,
 )
 from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvider
+from app.infrastructure.llm.providers.providers_base import LLMProvider
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _DEFAULT_ORDER = ("modstore", "openai_compatible", "deepseek_legacy", "openai_sdk")
@@ -82,28 +82,33 @@ class LLMProviderRegistry:
         header_provider: str | None = None,
         conversation_service: Any | None = None,
     ) -> LLMProvider | None:
+        providers = dict(self._providers)
+        from app.infrastructure.llm.client import _scoped_client
+
+        if _scoped_client.get() is not None:
+            return _maybe_instrument(OpenAISdkProvider())
         if header_provider:
-            p = self._providers.get(_normalize_provider_id(header_provider))
+            p = providers.get(_normalize_provider_id(header_provider))
             if p and p.is_configured:
                 return _maybe_instrument(p)
 
         if conversation_service is not None:
             mod = getattr(conversation_service, "modstore_adapter", None)
             if mod is not None:
-                self._providers["modstore"] = ModstoreProvider(mod)
+                providers["modstore"] = ModstoreProvider(mod)
             llm = getattr(conversation_service, "llm_adapter", None)
             if llm is not None:
-                self._providers["openai_compatible"] = OpenAICompatibleProvider(llm)
+                providers["openai_compatible"] = OpenAICompatibleProvider(llm)
             legacy_key = getattr(conversation_service, "api_key", None)
             if legacy_key:
-                self._providers["deepseek_legacy"] = DeepSeekLegacyProvider(
+                providers["deepseek_legacy"] = DeepSeekLegacyProvider(
                     api_key=str(legacy_key),
                     api_url=getattr(conversation_service, "api_url", None),
                     model=getattr(conversation_service, "model", None),
                 )
 
         for pid in _routing_order():
-            provider = self._providers.get(pid)
+            provider = providers.get(pid)
             if provider and provider.is_configured:
                 return _maybe_instrument(provider)
         return None
@@ -138,6 +143,27 @@ def get_active_provider(
     )
 
 
+_MARKET_ACCOUNT_FACADE = "app.fastapi_routes.market_account"
+
+
+def _initialized_market_token_reader():
+    """返回已初始化完成的 ``market_account.latest_session_market_token``；否则 None。
+
+    不导入任何模块：门面未加载或仍在（其它线程）初始化中时直接返回 None，
+    健康检查/LLMPort 只是暂不把平台模型算作可用，等导入完成后自然生效。
+    """
+    import sys
+
+    facade = sys.modules.get(_MARKET_ACCOUNT_FACADE)
+    if facade is None:
+        return None
+    spec = getattr(facade, "__spec__", None)
+    if spec is not None and getattr(spec, "_initializing", False):
+        return None
+    reader = getattr(facade, "latest_session_market_token", None)
+    return reader if callable(reader) else None
+
+
 def _register_llm_port_source() -> None:
     """把本 registry 组装进 domain 层 ``LLMPort``（infrastructure→domain 为合法方向）。
 
@@ -155,16 +181,14 @@ def _register_llm_port_source() -> None:
         _self = sys.modules[__name__]
 
         def _active_with_conversation():
-            """按会话就绪的对话服务解析活跃 provider。
+            """Resolve request credentials without retaining an account's adapter globally."""
+            from app.infrastructure.llm.client import _scoped_client
 
-            真实聊天路径（``call_llm_api`` → ``get_active_provider(conversation_service=...)``）
-            会在解析前把登录 session 的平台适配器注入对话服务；这里保持同一语义，
-            避免 LLMPort/健康检查因省略 ``conversation_service`` 而漏掉已配好的平台模型
-            （表现为"配了本地平台却显示 AI 未就绪"）。
-            """
+            if _scoped_client.get() is not None:
+                return _self.get_active_provider()
             conversation_service = None
             try:
-                from app.services.conversation.manager import (
+                from app.domain.shared_services.conversation.manager import (
                     get_ai_conversation_service_if_ready,
                 )
 
@@ -174,35 +198,22 @@ def _register_llm_port_source() -> None:
             if conversation_service is not None:
                 return _self.get_active_provider(conversation_service=conversation_service)
 
-            # 桌面端对话服务是惰性加载的：登录后首次走 AI 链路才会初始化。
-            # 未初始化时，若市场账号模块已就绪（应用已 boot，仅生产运行时成立），
-            # 直接用最新持久化的市场登录 token 构造平台适配器并注册为 modstore
-            # provider，使"已登录平台且配了模型"的应用启动即视为本地 LLM 可用
-            # （健康检查不再误报"部分 AI 能力未就绪"）。未 boot 场景直接跳过，
-            # 保持与旧行为一致。
-            import sys
-
-            if (
-                "app.fastapi_routes.market_account_part01" in sys.modules
-                or "app.fastapi_routes.market_account" in sys.modules
-            ):
+            # First-launch health probes may inspect the initialized account facade,
+            # but must neither import it during boot nor cache its credentials.
+            market_token_reader = _initialized_market_token_reader()
+            if market_token_reader is not None:
                 try:
-                    from app.fastapi_routes.market_account_part01 import (
-                        latest_session_market_token,
-                    )
-
-                    token = latest_session_market_token()
+                    token = market_token_reader()
                     if token:
-                        from app.services.conversation.modstore_adapter import (
+                        from app.domain.shared_services.conversation.modstore_adapter import (
                             ModstorePlatformAdapter,
                         )
 
                         adapter = ModstorePlatformAdapter()
                         adapter.auth_token = token
                         if adapter.is_configured:
-                            _self.get_llm_registry().register("modstore", ModstoreProvider(adapter))
-                            return _self.get_active_provider()
-                except (RECOVERABLE_ERRORS, ImportError):
+                            return _maybe_instrument(ModstoreProvider(adapter))
+                except RECOVERABLE_ERRORS:
                     pass
             return _self.get_active_provider()
 

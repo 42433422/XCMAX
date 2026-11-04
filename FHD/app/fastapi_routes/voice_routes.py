@@ -15,11 +15,12 @@ from __future__ import annotations
 import logging
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 
 from app.fastapi_routes.voice_model_source import (
     env as _env,
@@ -46,9 +47,15 @@ _MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB；等同于 OpenAI Whisper 官方�
 
 # 懒加载：第一次调用才把 faster-whisper 模型加载进内存，避免服务冷启动时白耗几百 MB
 _model_holder: dict[str, Any] = {"instance": None, "signature": None}
+_model_lock = threading.Lock()
 
 
 def _get_model():
+    with _model_lock:
+        return _load_model()
+
+
+def _load_model():
     """返回已就绪的 faster-whisper 模型实例；未安装 faster-whisper 时抛 HTTPException 503"""
     try:
         from faster_whisper import WhisperModel
@@ -119,7 +126,12 @@ def _save_upload_to_tempfile(upload: UploadFile, raw: bytes) -> Path:
     return Path(tmp.name)
 
 
+def _model_is_loaded() -> bool:
+    return _model_holder.get("instance") is not None
+
+
 def _run_transcribe(path: Path, language: str | None) -> dict[str, Any]:
+    cold_start = not _model_is_loaded()
     model = _get_model()
 
     beam = max(1, int(_env("XCAGI_CHAT_ASR_BEAM", "1")))
@@ -145,6 +157,8 @@ def _run_transcribe(path: Path, language: str | None) -> dict[str, Any]:
         "text": text,
         "language": getattr(info, "language", lang) or "",
         "audio_seconds": float(getattr(info, "duration", 0.0) or 0.0),
+        "cold_start": cold_start,
+        "model_loaded": True,
     }
 
 
@@ -202,6 +216,45 @@ async def voice_health():
             "reason": reason,
             "model": _resolve_model_name(),
             "device_hint": _resolve_device(),
+            "model_loaded": _model_is_loaded(),
+        },
+    }
+
+
+@router.post("/warm")
+def voice_warm():
+    """Best-effort model warm so the first push-to-talk is not a 6–7s cold load.
+
+    Safe: only loads into memory; does not delete data or change config.
+    Disabled when XCAGI_CHAT_ASR_WARM=0.
+    """
+    if (_env("XCAGI_CHAT_ASR_WARM", "1") or "1").strip().lower() in {"0", "false", "off", "no"}:
+        return {
+            "success": True,
+            "data": {
+                "warmed": False,
+                "skipped": True,
+                "model_loaded": _model_is_loaded(),
+            },
+        }
+    already = _model_is_loaded()
+    if already:
+        return {
+            "success": True,
+            "data": {"warmed": True, "skipped": True, "model_loaded": True, "cold_start": False},
+        }
+    t0 = time.monotonic()
+    _get_model()
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    logger.info("voice model warm completed in %sms", elapsed_ms)
+    return {
+        "success": True,
+        "data": {
+            "warmed": True,
+            "skipped": False,
+            "model_loaded": True,
+            "cold_start": True,
+            "elapsed_ms": elapsed_ms,
         },
     }
 
@@ -239,7 +292,7 @@ def _transcribe_audio(file_path: Path, language: str | None = None) -> str:
 def _recognize_intent(text: str) -> dict[str, Any]:
     """对转写文本做意图识别，返回统一结构。
 
-    优先复用规则引擎（``app.services.intent_service.recognize_intents``），
+    优先复用规则引擎（``app.domain.shared_services.intent_service.recognize_intents``），
     规则未命中 tool_key 时再尝试 unified_intent_recognizer（覆盖蒸馏/BERT/DeepSeek 等慢路径，
     失败回退为纯规则结果）。规则引擎同步、轻量、无外部依赖，适合语音指令场景。
 
@@ -329,6 +382,7 @@ def _execute_intent_tool(
     text: str,
     slots: dict[str, Any],
     session_id: str = "",
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """复用 AIChatApplicationService._execute_pro_mode_tools 执行低风险工具。
 
@@ -359,6 +413,7 @@ def _execute_intent_tool(
         parsed_params=parsed_params,
         ai_result=ai_result,
         original_message=text,
+        runtime_context=runtime_context,
     )
 
     return {
@@ -375,6 +430,7 @@ def _execute_intent_tool(
 
 @router.post("/command")
 async def voice_command(
+    request: Request,
     file: UploadFile = File(..., description="按住说话录制的音频（webm/ogg/wav/m4a）"),
     auto_execute: bool = Form(default=False, description="是否自动执行识别到的低风险意图"),
     session_id: str = Form(default="", description="会话 ID，用于执行链路追踪"),
@@ -466,7 +522,14 @@ async def voice_command(
     else:
         # 低风险 + 高置信度 + auto_execute=True → 真实执行
         try:
-            exec_payload = _execute_intent_tool(tool_key, text, slots, session_id)
+            from app.fastapi_routes.xcagi_compat_chat_helpers import (
+                _runtime_context_with_authenticated_actor,
+            )
+
+            runtime_context = _runtime_context_with_authenticated_actor(request, {})
+            exec_payload = _execute_intent_tool(
+                tool_key, text, slots, session_id, runtime_context=runtime_context
+            )
             executed = bool(exec_payload.get("executed", False))
             result = exec_payload.get("result")
             reason = exec_payload.get("reason", "executed" if executed else "execution_failed")

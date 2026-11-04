@@ -31,6 +31,9 @@ from modstore_server.employee_change_request_verification import (
 from modstore_server.employee_change_request_verification import (
     _run_post_apply_verification as _run_post_apply_verification,
 )
+from modstore_server.employee_change_request_verification import (
+    _workspace_fd,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -155,8 +158,10 @@ def apply_employee_change_request(
                 logger.exception("conflict detection failed for CR %d", change_request_id)
 
         try:
-            Path(resolved).parent.mkdir(parents=True, exist_ok=True)
-            Path(resolved).write_text(content, encoding="utf-8")
+            with _workspace_fd(ws, rel, write=True) as fd:
+                with os.fdopen(os.dup(fd), "w", encoding="utf-8") as stream:
+                    os.ftruncate(fd, 0)
+                    stream.write(content)
         except OSError as exc:
             row.status = "failed"
             row.error = str(exc)[:2000]

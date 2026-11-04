@@ -115,7 +115,7 @@ def _build_create_order_plan(plan_id: str, message: str, params: dict[str, Any])
       n1 customers.ensure_exists (medium)        — 创建/确认客户
       n2 shipment_generate.generate (medium)     — 生成发货单
     """
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     unit_name = str(params.get("unit_name") or "上海宏达公司").strip()
     products = params.get("products") or [

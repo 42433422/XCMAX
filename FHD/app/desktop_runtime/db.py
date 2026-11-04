@@ -6,7 +6,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-from .paths import ensure_desktop_dirs, sqlite_database_url
+from .desktop_runtime_paths import ensure_desktop_dirs, sqlite_database_url
 
 
 def configure_sqlite_defaults(data_dir: str | os.PathLike[str] | None = None) -> str:

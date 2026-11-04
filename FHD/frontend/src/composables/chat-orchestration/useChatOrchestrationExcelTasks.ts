@@ -11,13 +11,14 @@ import {
 } from '../useChatPersistence'
 import { useExcelAnalysis } from '../useExcelAnalysis'
 import type { useChatExcelContext } from '../useChatExcelContext'
-import { getXcagiWindow } from './chatOrchestrationShared'
+import { getXcagiWindow, type ChatLocalScope } from './chatOrchestrationShared'
 
 type TaskListApi = ReturnType<typeof useChatTaskList>
 type ExcelCtxApi = ReturnType<typeof useChatExcelContext>
 
 export interface ChatOrchestrationExcelTasksDeps {
   sessionId: Ref<string>
+  captureLocalScope: () => ChatLocalScope
   addMessage: ReturnType<typeof import('../useChatMessages')['useChatMessages']>['addMessage']
   saveMessage: ReturnType<typeof import('../useChatMessages')['useChatMessages']>['saveMessage']
   lastExcelAnalysisContext: ExcelCtxApi['lastExcelAnalysisContext']
@@ -53,7 +54,9 @@ export function useChatOrchestrationExcelTasks(deps: ChatOrchestrationExcelTasks
     useExcelAnalysis(
       { addMessage, saveMessage },
       {
+        captureIsCurrent: () => deps.captureLocalScope().isCurrent,
         onAnalyzed: ({ fileName, summary, result }) => {
+          const isCurrent = deps.captureLocalScope().isCurrent
           const persistedPath = resolveExcelFilePathFromAnalysis(result)
           const payload = {
             file_name: fileName,
@@ -79,6 +82,7 @@ export function useChatOrchestrationExcelTasks(deps: ChatOrchestrationExcelTasks
           const sid = String(sessionId.value || '').trim() || 'default'
           persistExcelAnalysisContext(sid, payload)
           window.requestAnimationFrame(() => {
+            if (!isCurrent()) return
             const displayFileName =
               String(fileName || '').trim() ||
               String(persistedPath || '')

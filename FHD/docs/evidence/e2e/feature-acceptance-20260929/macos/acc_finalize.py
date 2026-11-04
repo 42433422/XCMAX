@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import runpy
 import shutil
 import sys
 from pathlib import Path
@@ -30,6 +31,9 @@ REVIEWS = Path(os.environ.get("XCAGI_ACCEPT_REVIEWS", "")) if os.environ.get("XC
 
 
 def sha(p: Path) -> str:
+    if not p.exists():
+        resolver = runpy.run_path(str(REPO / "成都修茈科技有限公司/scripts/evidence_assets.py"))["resolve_source"]
+        p = resolver(REPO, p.relative_to(REPO).as_posix())
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 

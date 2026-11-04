@@ -1,0 +1,31 @@
+name: Media source and alias integrity
+on:
+  pull_request:
+    paths:
+      - 'config/media-aliases.json'
+      - 'scripts/dev/*media_assets*'
+      - 'FHD/frontend/public/**'
+      - 'FHD/frontend/vite.config.js'
+      - 'appstore-screenshots/**'
+      - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/corp-butler/**'
+      - '成都修茈科技有限公司/MODstore_deploy/market/public/**'
+      - '成都修茈科技有限公司/MODstore_deploy/market/vite*.config.ts'
+      - '.github/workflows/media-assets.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  media-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+      - run: node scripts/dev/materialize_media_assets.mjs --check
+      - run: python3 成都修茈科技有限公司/scripts/evidence_assets.py guard
+      - run: node --test scripts/dev/test_media_assets.mjs

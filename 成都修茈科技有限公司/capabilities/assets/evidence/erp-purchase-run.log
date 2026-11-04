@@ -1,8 +1,0 @@
-2026-09-30T04:28:26+0800 [erp-purchase] 开始验收 erp-purchase 采购管理；被测 {'app_version': '1.0.0.5', 'app_git_sha': '50f51b6ad65512a3342a833a2dc696f54b5921e8', 'built_at': '2026-09-29T19:55:42.928Z', 'account': 'SUNBIRD'}
-2026-09-30T04:28:26+0800 [erp-purchase] M1 passed :: HTTP 200 116ms；供应商 id=10 code=MACSUP713706
-2026-09-30T04:28:26+0800 [erp-purchase] M2 passed :: HTTP 200 61ms；订单 id=7 no=PO20260930042826 金额=50
-2026-09-30T04:28:27+0800 [erp-purchase] M3 passed :: HTTP 200 14ms；{"success": false, "message": "采购订单不存在"}
-2026-09-30T04:28:27+0800 [erp-purchase] M4 passed :: HTTP 200 21ms；订单 7 条
-2026-09-30T04:28:30+0800 [erp-purchase] M5 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/purchase；命中文本 ['采购管理', '采购订单']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 采购管理 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 采购管理 | 新建采购订单 | 全部状态 | 草稿 | 已审核 | 部分入库 | 已完成 | 已取消 | 全部供应商 | MAC验收0929入库供应商 | MAC验收092
-2026-09-30T04:28:31+0800 [erp-purchase] screenshot result.png
-2026-09-30T04:28:35+0800 [erp-purchase] video operation.webm bytes=344278

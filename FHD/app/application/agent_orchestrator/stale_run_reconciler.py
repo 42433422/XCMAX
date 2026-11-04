@@ -9,7 +9,7 @@ failed，并同步 ``agent_tasks``，使界面口径与存储口径一致。
 - 只收敛 planning/running/retrying 等在途状态。``queued`` 属于可恢复的持久队列，
   由 ``task_dispatcher`` 的 claim()/重认领负责，启动对账失败它会破坏队列。
 - 仍持有**未过期租约**的 run 交给既有租约+重认领机制，启动对账不改写。
-- 不在此处「修正」业务结果，也不改动任何权益、审批或安全门禁状态。
+- 不推断业务成功、不解除权益或审批门禁；未确认的非幂等调用需人工核对后才能重试。
 """
 
 from __future__ import annotations
@@ -19,7 +19,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from app.application.agent_orchestrator.run_models import utc_now_iso
+from app.application.agent_orchestrator.run_models import agent_run_from_dict, utc_now_iso
+from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -120,6 +121,26 @@ def reconcile_stale_running_runs(
                 "reconciled_at": current,
                 "previous_status": str(record.status or ""),
             }
+            interrupted = agent_run_from_dict(payload)
+            uncertain_steps = []
+            for step in interrupted.steps:
+                if step.status != "running":
+                    continue
+                spec = get_tool_action_spec(step.tool_id, step.action)
+                if not (step.idempotent and spec is not None and spec.idempotent):
+                    uncertain_steps.append(step.step_id)
+            if uncertain_steps or metadata.get("trace_mode") in {
+                "legacy_planner_run",
+                "legacy_planner_run_with_tools",
+            }:
+                metadata["non_retryable"] = True
+                recovery = metadata.get("recovery")
+                metadata["recovery"] = {
+                    **(recovery if isinstance(recovery, dict) else {}),
+                    "state": "manual_reconciliation_required",
+                    "error_code": INTERRUPTED_ERROR_CODE,
+                    "step_ids": uncertain_steps,
+                }
             payload["metadata"] = metadata
             record.status = "failed"
             record.payload_json = json.dumps(payload, ensure_ascii=False, default=str)

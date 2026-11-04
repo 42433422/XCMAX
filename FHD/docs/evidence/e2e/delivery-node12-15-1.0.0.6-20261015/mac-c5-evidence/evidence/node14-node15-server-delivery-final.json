@@ -1,0 +1,137 @@
+{
+  "result": "PASS",
+  "issuedAt": "2026-10-15T22:55:16.946647+08:00",
+  "scope": "Current installation/update lifecycle delivery handoff and nodes12-15; no second business/work-order loop or all-feature claim",
+  "nodes": {
+    "12": "PASS",
+    "13": "PASS",
+    "14": "PASS",
+    "15": "PASS"
+  },
+  "version": "1.0.0.6",
+  "machine": {
+    "chip": "Apple M4",
+    "architecture": "arm64",
+    "macOS": "26.3"
+  },
+  "integrationPr": "https://github.com/42433422/XCMAX/pull/2340",
+  "sourceRelationship": {
+    "macMainlineMergeSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+    "windowsActualAcceptedSourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+    "mergeParents": [
+      "5af87debbf38c35edf46584e7cac9f8c6c13c643",
+      "7102b713df1136ae83848eed5814a60ede66a355"
+    ],
+    "windowsIsDirectSecondParent": true,
+    "macTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "windowsTree": "60aef1efa8c18fb01cea7c7234716c2e5b758671",
+    "gitDiffExitCode": 0,
+    "sameTrackedCodeTree": true,
+    "sameFullCommitSha": false,
+    "differentCommitIdsNotRewritten": true,
+    "verdict": "PASS under user-adopted shared-source-tree criterion"
+  },
+  "actualArtifacts": [
+    {
+      "version": "1.0.0.6",
+      "platform": "macArm64",
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "bytes": 568802820,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:40:16.295848+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.json",
+      "originalReceiptSha256": "01ef4bd9c5768d500166a912356924cb44def40ab8662b0d450dd5d70eab4793"
+    },
+    {
+      "version": "1.0.0.6",
+      "platform": "macArm64",
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:48:24.033622+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.json",
+      "originalReceiptSha256": "3b15b3808e300e7488a962b1c5aacb9e9a37d3f26c78e901dc8d9e6a5c040548"
+    },
+    {
+      "version": "1.0.0.6",
+      "platform": "windowsX64",
+      "file": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+      "buildRun": "local-windows-longpath-20261015-114026",
+      "bytes": 331819335,
+      "sha256": "9d7025e9367bb934868adb79be7a99bbb8dae728727aa7ace00c492c45f40100",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:16:30.824973+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-windows-public-download-verification.json",
+      "originalReceiptSha256": "d0ac509059959987ce3c6cb9a8063a68ca759f5aef14f4f75e8abc4750c9cc54"
+    }
+  ],
+  "distributionPage": "https://xiu-ci.com/xcagi-v1.0.0.6/index.html",
+  "distributionMode": "Independent version-specific manual download",
+  "windowsSigningRequired": false,
+  "userAcceptanceMode": "Explicit prior conditional acceptance based on agent public download verification; condition satisfied",
+  "sourceReports": [
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node13-joint-verification-final.json",
+      "sha256": "ab40b1c8d0fcc054ad411620f7eef5fc3c1e584a38acbb359aeb73e55fd10257"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/mac-c5-lifecycle-final.json",
+      "sha256": "bf473b6bc8368011eb4458f1c936d90962b5a90d672b538b6f56969885bed2f6"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-distribution-final.json",
+      "sha256": "64c941c13e6b0e24855c8de17b3226f365c28034aff881e6423ecd58abbdb691"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node15-user-conditional-acceptance-final.json",
+      "sha256": "b01d2bdaedaa8ebc18d12f96083859632b6b5f858bc14a7e176cfed98ba86334"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-workspace-cleanup-result.json",
+      "sha256": "73c55be637054e310d9025c55ea75fe67478989db897166596613c519f8ca78d"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-final-local-state-and-space.json",
+      "sha256": "520a144306f123c0350429db8814c62816f4863732dc82898d6cce8e57187e04"
+    }
+  ],
+  "cleanup": {
+    "scriptExitCode": 0,
+    "errors": 0,
+    "dirtyStatusPreserved": true,
+    "reclaimedTemporaryBytes": 1096948848,
+    "spaces": {
+      "/Users/Shared/XCMAX": {
+        "totalBytes": 494384795648,
+        "freeBytes": 2795610112
+      },
+      "/Volumes/KINGSTON": {
+        "totalBytes": 1024190578688,
+        "freeBytes": 36748394496
+      },
+      "/private/tmp/xcagi-mac-c5-20261015": {
+        "totalBytes": 32002498560,
+        "freeBytes": 17154084864
+      }
+    },
+    "durableBackingImage": "/Volumes/KINGSTON/XCMAX-mac-aligned-c5-20261015.sparsebundle"
+  },
+  "remainingInThisScopedHandoff": [],
+  "outsideScope": [
+    "Intel Mac acceptance",
+    "Ordinary business workflows",
+    "Stable OTA automatic push and default website current-version promotion",
+    "Production application deployment",
+    "Independent external-customer personal installation/signature"
+  ]
+}

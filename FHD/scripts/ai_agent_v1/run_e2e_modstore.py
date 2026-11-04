@@ -55,7 +55,7 @@ def _stub_planner_rag() -> None:
 
 
 def _build_modstore_plan(plan_id: str) -> Any:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     return PlanGraph(
         plan_id=plan_id,

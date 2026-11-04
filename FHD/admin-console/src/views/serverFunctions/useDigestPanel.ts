@@ -1,5 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import { api } from '@/api'
+import { MARKET_BASE_URL } from '@/constants/topology'
 
 /** 每日摘要行：模板/逻辑实际消费 ``id`` / ``recipients`` / ``body_html`` / ``body_text``，其余字段保持开放。 */
 export interface DigestRow {
@@ -84,19 +85,11 @@ export function useDigestPanel(activeTab: Ref<TabKey>) {
   const identityCopied = ref(false)
   let identityCopiedTimer = 0
 
-  const marketWebFromDigest = computed(() => {
-    const b = digestApiBase.value.trim().replace(/\/$/, '')
-    if (!/^https?:\/\//i.test(b)) return ''
-    return `${b}/market`
-  })
+  const marketWebFromDigest = computed(() => MARKET_BASE_URL)
 
-  const identityBadgeTitle = computed(() => {
-    const base = digestApiBase.value.trim()
-    const tail = base
-      ? ` 当前签发 API：${base}。解锁须在该 API 对应的修茈市场（通常 ${base}/market）提交本码，与 POST /api/auth/verify-admin-digest-code 同源。`
-      : ''
-    return `修茈市场管理端解锁用；由服务器 /api/xcmax/admin/digest-identity 与解锁校验同源。选中历史摘要不改变此码。点击复制。${tail}`
-  })
+  const identityBadgeTitle = computed(() =>
+    `管理员摘要校验码；请在公网市场 ${MARKET_BASE_URL} 提交。内部签发 API：${digestApiBase.value || '未知'}`,
+  )
 
   const selectedDigest = computed(() =>
     digestRecords.value.find((row) => Number(row.id) === Number(selectedDigestId.value)) || null,

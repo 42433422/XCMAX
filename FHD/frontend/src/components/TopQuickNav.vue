@@ -16,22 +16,31 @@
       @keydown="onKeydown"
       @blur="onBlur"
     />
-    <ul v-if="open" id="top-quick-nav-list" class="top-quick-nav__list" role="listbox" aria-label="功能列表">
-      <li v-if="!filtered.length" class="top-quick-nav__empty">没有匹配的功能</li>
-      <li
-        v-for="(item, idx) in filtered"
-        :key="`${item.source}-${item.key}`"
-        class="top-quick-nav__option"
-        :class="{ highlighted: idx === highlightIndex }"
-        role="option"
-        :aria-selected="idx === highlightIndex ? 'true' : 'false'"
-        @mouseenter="highlightIndex = idx"
-        @mousedown.prevent="choose(item)"
+    <Teleport to="body">
+      <ul
+        v-if="open"
+        id="top-quick-nav-list"
+        class="top-quick-nav__list"
+        role="listbox"
+        aria-label="功能列表"
+        :style="listStyle"
       >
-        <i v-if="item.iconClass" class="fa top-quick-nav__option-icon" :class="item.iconClass" aria-hidden="true"></i>
-        <span class="top-quick-nav__option-name">{{ item.name }}</span>
-      </li>
-    </ul>
+        <li v-if="!filtered.length" class="top-quick-nav__empty">没有匹配的功能</li>
+        <li
+          v-for="(item, idx) in filtered"
+          :key="`${item.source}-${item.key}-${idx}`"
+          class="top-quick-nav__option"
+          :class="{ highlighted: idx === highlightIndex }"
+          role="option"
+          :aria-selected="idx === highlightIndex ? 'true' : 'false'"
+          @mouseenter="highlightIndex = idx"
+          @mousedown.prevent="choose(item)"
+        >
+          <i v-if="item.iconClass" class="fa top-quick-nav__option-icon" :class="item.iconClass" aria-hidden="true"></i>
+          <span class="top-quick-nav__option-name">{{ item.name }}</span>
+        </li>
+      </ul>
+    </Teleport>
   </div>
 </template>
 
@@ -40,7 +49,7 @@
  * 顶部中间快捷跳转框：输入功能名即搜全部侧边栏入口（与 Sidebar 同源 useVisibleNavItems），
  * 回车/点击后经 MainLayout 的 navigateToView 跳转（与侧栏点击完全同路径）。
  */
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
 
 const emit = defineEmits(['select'])
@@ -50,26 +59,72 @@ const { visibleNavItems } = useVisibleNavItems()
 const query = ref('')
 const open = ref(false)
 const highlightIndex = ref(0)
+const keyboardMoved = ref(false)
 const inputRef = ref(null)
+const listStyle = ref({ position: 'fixed', top: '0px', left: '0px', width: '420px', zIndex: 4000 })
 
 const filtered = computed(() => {
   const keyword = query.value.trim().toLowerCase()
   const items = visibleNavItems.value || []
   if (!keyword) return items
-  return items.filter((item) => String(item.name || '').toLowerCase().includes(keyword))
+  return items.filter((item) => {
+    const haystack = `${item.name || ''} ${item.key || ''} ${item.routeName || ''}`.toLowerCase()
+    return haystack.includes(keyword)
+  })
 })
+
+function placeList() {
+  const el = inputRef.value
+  if (!el?.getBoundingClientRect) return
+  const rect = el.getBoundingClientRect()
+  listStyle.value = {
+    position: 'fixed',
+    top: `${rect.bottom + 6}px`,
+    left: `${rect.left}px`,
+    width: `${rect.width}px`,
+    zIndex: 4000,
+  }
+}
 
 function onFocus() {
   open.value = true
   highlightIndex.value = 0
+  keyboardMoved.value = false
+  placeList()
+}
+
+function onViewportChange() {
+  if (open.value) placeList()
 }
 
 function onBlur() {
   // 延迟关闭：让选项的 mousedown（已 preventDefault 不夺焦）先完成选择
   window.setTimeout(() => {
     open.value = false
-  }, 120)
+  }, 180)
 }
+
+watch(query, () => {
+  highlightIndex.value = 0
+  keyboardMoved.value = false
+})
+
+watch(highlightIndex, () => {
+  void nextTick(() => {
+    const node = document.querySelector('#top-quick-nav-list .top-quick-nav__option.highlighted')
+    if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'nearest' })
+  })
+})
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', onViewportChange)
+  window.addEventListener('scroll', onViewportChange, true)
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
+})
 
 function choose(item) {
   if (!item?.key) return
@@ -80,6 +135,7 @@ function choose(item) {
 }
 
 function onKeydown(event) {
+  if (event.isComposing || event.keyCode === 229) return
   if (event.key === 'Escape') {
     open.value = false
     inputRef.value?.blur?.()
@@ -87,17 +143,26 @@ function onKeydown(event) {
   }
   if (!open.value) {
     open.value = true
+    placeList()
     return
   }
   const total = filtered.value.length
+  if (highlightIndex.value >= total) highlightIndex.value = 0
   if (event.key === 'ArrowDown') {
     event.preventDefault()
-    if (total) highlightIndex.value = (highlightIndex.value + 1) % total
+    if (total) {
+      keyboardMoved.value = true
+      highlightIndex.value = (highlightIndex.value + 1) % total
+    }
   } else if (event.key === 'ArrowUp') {
     event.preventDefault()
-    if (total) highlightIndex.value = (highlightIndex.value - 1 + total) % total
+    if (total) {
+      keyboardMoved.value = true
+      highlightIndex.value = (highlightIndex.value - 1 + total) % total
+    }
   } else if (event.key === 'Enter') {
     event.preventDefault()
+    if (!query.value.trim() && !keyboardMoved.value) return
     const item = filtered.value[highlightIndex.value]
     if (item) choose(item)
   }
@@ -151,10 +216,7 @@ function onKeydown(event) {
 }
 
 .top-quick-nav__list {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
+  position: fixed;
   margin: 0;
   padding: 6px;
   list-style: none;

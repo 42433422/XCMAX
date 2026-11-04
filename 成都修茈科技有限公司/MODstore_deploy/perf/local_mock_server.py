@@ -61,13 +61,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18000)
-    parser.add_argument("--latency-ms", type=int, default=0, help="每次响应人为延迟（毫秒）")
+    parser.add_argument(
+        "--latency-ms", type=int, default=0, help="每次响应人为延迟（毫秒）"
+    )
     args = parser.parse_args()
 
     server = ThreadingHTTPServer((args.host, args.port), make_handler(args.latency_ms))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    print(f"local-mock listening on http://{args.host}:{args.port} (latency={args.latency_ms}ms)")
+    print(
+        f"local-mock listening on http://{args.host}:{args.port} (latency={args.latency_ms}ms)"
+    )
     try:
         thread.join()
     except KeyboardInterrupt:

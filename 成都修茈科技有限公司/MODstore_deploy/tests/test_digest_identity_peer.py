@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 
 def test_internal_verify_404_when_inbound_disabled(client, monkeypatch):
@@ -33,7 +33,7 @@ def test_internal_verify_200_ok(client, monkeypatch):
     plain = "B0B0B0"
     th = hashlib.sha256(plain.encode("utf-8")).hexdigest()
     sf = models.get_session_factory()
-    expires_at = datetime.utcnow() + timedelta(hours=24)
+    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=24)
     with sf() as s:
         s.add(
             models.OpsApprovalToken(

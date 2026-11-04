@@ -14,8 +14,8 @@ import logging
 import threading
 from typing import Any
 
-from app.neuro_bus.domains.base import DomainChannel
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.domains.domains_base import DomainChannel
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -30,6 +30,7 @@ __all__ = [
 ]
 
 _lock = threading.RLock()
+_MAX_ORDER_CREATED_MEMORY = 500
 # 样板可查询投影：order_id -> 最新 order.created 副作用记录
 _ORDER_CREATED_PROJECTIONS: dict[str, dict[str, Any]] = {}
 # 样板可查询 event log（按写入顺序）
@@ -88,6 +89,12 @@ def apply_order_created_side_effect(event: NeuroEvent) -> dict[str, Any]:
     with _lock:
         _ORDER_CREATED_PROJECTIONS[order_id] = dict(record)
         _ORDER_CREATED_EVENT_LOG.append(dict(record))
+        if len(_ORDER_CREATED_EVENT_LOG) > _MAX_ORDER_CREATED_MEMORY:
+            del _ORDER_CREATED_EVENT_LOG[
+                : len(_ORDER_CREATED_EVENT_LOG) - _MAX_ORDER_CREATED_MEMORY
+            ]
+        while len(_ORDER_CREATED_PROJECTIONS) > _MAX_ORDER_CREATED_MEMORY:
+            _ORDER_CREATED_PROJECTIONS.pop(next(iter(_ORDER_CREATED_PROJECTIONS)))
     return record
 
 

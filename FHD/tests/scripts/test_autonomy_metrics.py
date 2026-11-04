@@ -1,6 +1,26 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+import pytest
+
+from app.domain.autonomy import operating_metrics
 from scripts.autonomy import autonomy_metrics
+
+# Pin the clock so the quarterly boundary-review due date in
+# config/autonomy_boundaries.yaml (last_reviewed_at + review_cadence_days)
+# cannot turn these veto-rate tests into a date-dependent failure.
+FIXED_NOW = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _pin_boundary_review_clock(monkeypatch) -> None:
+    real_status = operating_metrics.autonomy_boundary_review_status
+    monkeypatch.setattr(
+        operating_metrics,
+        "autonomy_boundary_review_status",
+        lambda *, now=None: real_status(now=FIXED_NOW),
+    )
 
 
 def _summary(

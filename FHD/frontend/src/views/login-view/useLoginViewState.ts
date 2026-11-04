@@ -3,6 +3,7 @@ import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import type { AccountKind } from '@/api/auth'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { isDesktopShell } from '@/utils/desktopShell'
+import { normalizeLoginRedirect, stripAppBase } from '@/utils/startupRedirect'
 
 /**
  * LoginView 的全部响应式状态与基础计算属性（与拆分前逐项对应）。
@@ -43,14 +44,14 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
   })
 
   function peelNestedLoginRedirect(raw: string): string {
-    let v = raw.trim()
+    let v = stripAppBase(raw.trim(), import.meta.env.BASE_URL)
     for (let i = 0; i < 5 && v.startsWith('/login'); i++) {
       const q = v.indexOf('?')
       if (q < 0) return '/'
       const nested = new URLSearchParams(v.slice(q + 1)).get('redirect')
       // URLSearchParams already decodes the nested value. Decoding it again
       // would turn an encoded '&' in onboarding's return path into a new key.
-      v = nested ? nested.trim() : '/'
+      v = nested ? stripAppBase(nested.trim(), import.meta.env.BASE_URL) : '/'
     }
     const pathOnly = v.split('?')[0].split('#')[0]
     return pathOnly === '/onboarding' ? v : pathOnly
@@ -67,8 +68,7 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
       /* keep */
     }
     v = peelNestedLoginRedirect(v)
-    if (!v.startsWith('/') || v.startsWith('//') || v.startsWith('/login')) return '/'
-    return v
+    return normalizeLoginRedirect(v)
   })
 
   const canSubmit = computed(() => {

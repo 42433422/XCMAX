@@ -20,6 +20,17 @@ def _evaluate_execution_success(result: Dict[str, Any]) -> tuple[bool, str]:
     """从 execute_employee_task 返回值判定真实成功与否（非仅「未抛异常」）。"""
     if not isinstance(result, dict):
         return False, "invalid result payload"
+    if result.get("ok") is False or result.get("success") is False or result.get("error"):
+        return False, str(result.get("error") or result.get("message") or "execution failed")
+    if str(result.get("status") or "").lower() in {
+        "failed",
+        "error",
+        "pending",
+        "running",
+        "unknown",
+        "skipped",
+    }:
+        return False, str(result["status"])
     if result.get("blocked_by_risk_gate"):
         return False, "blocked_by_risk_gate"
 
@@ -163,7 +174,10 @@ def dispatch_subtasks(
 
     uid = _resolve_uid(created_by_user_id)
 
-    layers = _topo_layers(subtasks)
+    try:
+        layers = _topo_layers(subtasks)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "results": [], "handoff_chain": []}
     all_results: List[Dict[str, Any]] = []
     completed: Dict[str, Any] = {}
     visited_employees: set = {st.employee_id for st in subtasks}
@@ -215,7 +229,7 @@ def dispatch_subtasks(
         last_results = followup_results
         handoff_depth += 1
 
-    ok = all(r.get("ok", True) for r in all_results)
+    ok = bool(all_results) and all(r.get("ok") is True for r in all_results)
     return {
         "ok": ok,
         "results": all_results,
@@ -226,6 +240,9 @@ def dispatch_subtasks(
 
 def _topo_layers(subtasks: List[SubTask]) -> List[List[SubTask]]:
     """将 SubTask 列表按 depends_on 分成可并行的层次。"""
+    identifiers = {st.employee_id for st in subtasks}
+    if len(identifiers) != len(subtasks):
+        raise ValueError("duplicate employee_id in subtask graph")
     remaining = list(subtasks)
     done_ids: set = set()
     layers: List[List] = []
@@ -233,8 +250,7 @@ def _topo_layers(subtasks: List[SubTask]) -> List[List[SubTask]]:
     while remaining:
         layer = [st for st in remaining if all(d in done_ids for d in (st.depends_on or []))]
         if not layer:
-            # 循环依赖或无法解析，剩余全部放最后一层
-            layer = list(remaining)
+            raise ValueError("subtask dependencies contain a cycle or missing employee")
 
         # 按 priority 排序（数字小=优先级高）
         layer.sort(key=lambda s: (s.priority, s.employee_id))
@@ -259,6 +275,16 @@ def _run_layer(
     def _run_one(st) -> Dict[str, Any]:
         import time
 
+        blocked = [
+            dep for dep in st.depends_on or [] if completed.get(dep, {}).get("ok") is not True
+        ]
+        if blocked:
+            return {
+                "ok": False,
+                "status": "skipped",
+                "employee_id": st.employee_id,
+                "error": "upstream dependency not successful: " + ", ".join(blocked),
+            }
         # 把已完成的依赖结果注入 input_data
         input_data = dict(st.input_data or {})
         for dep_id in st.depends_on or []:
@@ -273,7 +299,9 @@ def _run_layer(
                 user_id=uid,
                 bench_llm_override=bench_llm_override,
             )
-            ok, reason = _evaluate_execution_success(result if isinstance(result, dict) else {})
+            ok, reason = _evaluate_execution_success(
+                result if isinstance(result, dict) else {"error": "invalid result payload"}
+            )
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             if not ok:
                 _record_dispatch_metric(

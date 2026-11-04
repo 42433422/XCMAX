@@ -7,7 +7,10 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy import text
 
-from app.infrastructure.persistence.compat_db.base import _sql_ident, _sql_insert_returning
+from app.infrastructure.persistence.compat_db.compat_db_base import (
+    _sql_ident,
+    _sql_insert_returning,
+)
 
 
 def _compat_module() -> Any:
@@ -110,7 +113,7 @@ def products_pg_insert_row(
     parse_quantity,
     parse_is_active,
 ) -> int:
-    from app.application.excel_imports import _norm_model
+    from app.domain.app_pure.excel_imports import _norm_model
 
     compat = _compat_module()
     engine = compat.get_sync_engine()

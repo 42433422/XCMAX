@@ -1482,10 +1482,18 @@ class TestAuthorizationFromRequest:
 
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
         req = FR(scope)
-        with patch.object(ma, "session_id_from_request", return_value="no_such_sid"):
-            with patch.object(ma, "latest_session_market_token", return_value="latest_tok"):
-                result = ma._authorization_from_request(req, {})
+        with (
+            patch.object(ma, "session_id_from_request", return_value="verified-owner-session"),
+            patch.object(ma, "session_market_token", return_value=""),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=Mock(id=71),
+            ),
+            patch.object(ma, "latest_session_market_token", return_value="latest_tok") as latest,
+        ):
+            result = ma._authorization_from_request(req, {})
         assert result == "Bearer latest_tok"
+        latest.assert_called_once_with(user_id=71)
 
     def test_body_token_third_priority(self):
         from fastapi import Request as FR
