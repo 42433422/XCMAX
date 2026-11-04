@@ -9,7 +9,7 @@ const boundary = await vi.hoisted(async () => {
     account: { avatarInputRef: ref(null), localUser: ref({ username: 'synthetic-user' }), isLoggedIn: ref(true), loadLocalUser: vi.fn(), loadAuditLogs: vi.fn() },
     mods: { currentIndustry: ref('default'), loadIndustries: vi.fn(), loadCurrentIndustryDetail: vi.fn(), loadIntentPackages: vi.fn() },
     basics: { sidebarThemePreset: ref('dark'), loadPreferences: vi.fn(), loadAutoLaunch: vi.fn(), loadDesktopDatabaseStatus: vi.fn(), loadDistillationVersions: vi.fn() },
-    memory: { loadMemoryV2: vi.fn(), loadPersyProfile: vi.fn() },
+    memory: { memoryV2Loading: ref(false), persyLoading: ref(false), loadMemoryV2: vi.fn(), loadPersyProfile: vi.fn() },
   }
 })
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {}, fullPath: '/settings' }) }))
@@ -69,7 +69,13 @@ describe('settings first-screen startup registration', () => {
     await flushPromises()
     expect(ready).toBe(false)
     expect(read).toHaveBeenCalledOnce()
-    expect(read).toHaveBeenCalledWith(expect.objectContaining({ required: true, current: expect.any(Function) }))
+    if (resource === 'account') {
+      expect(read).toHaveBeenCalledWith(expect.objectContaining({ required: true, current: expect.any(Function) }))
+    } else if (resource === 'industries') {
+      expect(boundary.mods.loadCurrentIndustryDetail).toHaveBeenCalledOnce()
+    } else {
+      expect(boundary.mods.loadIndustries).toHaveBeenCalledOnce()
+    }
     delayed.resolve()
     await startup
     expect(ready).toBe(true)

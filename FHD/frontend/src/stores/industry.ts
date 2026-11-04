@@ -160,10 +160,7 @@ export const useIndustryStore = defineStore('industry', () => {
       await initInFlight
       return
     }
-    initInFlight = (async () => {
-      await loadIndustries()
-      await loadCurrentIndustry()
-    })()
+    initInFlight = loadFromServer(false)
     try {
       await initInFlight
     } finally {

@@ -468,26 +468,34 @@ function scrollToSettingsSection() {
 watch(() => route.query.section, scrollToSettingsSection)
 
 const preparePage = useStartupPageReady(async current => {
+  memoryV2Loading.value = true
+  persyLoading.value = true
   await loadLocalUser({ required: true, current })
   if (!current()) return
-  refreshAccountExtras()
-  await loadIndustries({ required: true, current })
-  if (!current()) return
-  await loadCurrentIndustryDetail({ required: true, current })
-})
-
-function refreshAccountExtras() {
   void loadAuditLogs()
   void loadMemoryV2()
   void loadPersyProfile()
   void loadIntentPackages()
+  // List and detail are independent aggregates; run them as one round trip window
+  // instead of a serial list -> detail waterfall.
+  await Promise.all([
+    loadIndustries({ required: true, current }),
+    loadCurrentIndustryDetail({ required: true, current }),
+  ])
+})
+
+function prepareSettingsPage() {
+  void preparePage().catch(() => {
+    memoryV2Loading.value = false
+    persyLoading.value = false
+  })
 }
 
 onMounted(() => {
   sidebarThemePreset.value = readStoredSidebarTheme()
   applySidebarTheme(sidebarThemePreset.value)
   scrollToSettingsSection()
-  void preparePage().catch(() => {})
+  prepareSettingsPage()
   void loadDesktopDatabaseStatus()
   void loadPreferences()
   loadAutoLaunch()
@@ -497,7 +505,7 @@ onMounted(() => {
 let activatedOnce = false
 onActivated(() => {
   if (!activatedOnce) { activatedOnce = true; return }
-  void preparePage().catch(() => {})
+  prepareSettingsPage()
 })
 
 </script>
