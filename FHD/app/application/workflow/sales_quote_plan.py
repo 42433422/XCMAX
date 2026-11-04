@@ -7,9 +7,7 @@ from app.application.workflow.workflow_types import WorkflowNode
 from app.domain.conversation.services.chat_tool_intent import is_negated_action_request
 
 _MAX_PLANNER_TEXT_CHARS = 4096
-_ENGLISH_SELL = re.compile(
-    r"(?i)SELL\s+(\d+(?:\.\d+)?)\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+TO\s+(.+)"
-)
+_ENGLISH_SELL = re.compile(r"(?i)SELL\s+(\d+(?:\.\d+)?)\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+TO\s+(.+)")
 _FIELD_LABELS = {
     "客户名称": "customer_name",
     "客户": "customer_name",
