@@ -1,11 +1,15 @@
 """Preserve named quotation inputs and leave absent commercial terms unanswered."""
 
+import re
 from typing import Any
 
 from app.application.workflow.workflow_types import WorkflowNode
 from app.domain.conversation.services.chat_tool_intent import is_negated_action_request
 
 _MAX_PLANNER_TEXT_CHARS = 4096
+_ENGLISH_SELL = re.compile(
+    r"(?i)SELL\s+(\d+(?:\.\d+)?)\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+TO\s+(.+)"
+)
 _FIELD_LABELS = {
     "客户名称": "customer_name",
     "客户": "customer_name",
@@ -196,6 +200,22 @@ def sales_quote_node(
         return None
     if "sales" not in registry or is_negated_action_request(message):
         return None
+    english = _ENGLISH_SELL.fullmatch(message.strip())
+    if english:
+        quantity, model, customer = english.groups()
+        return WorkflowNode(
+            node_id="sales_create_order",
+            tool_id="sales",
+            action="create_order",
+            params={
+                "customer_name": customer.strip(),
+                "price_source": "catalog",
+                "items": [{"model_number": model, "quantity": float(quantity)}],
+            },
+            risk="medium",
+            idempotent=False,
+            description=f"为{customer.strip()}创建并确认{model}销售订单",
+        )
     order_offset = min(
         (message.find(prefix) for prefix in ("创建", "新建", "新增") if message.find(prefix) >= 0),
         default=-1,

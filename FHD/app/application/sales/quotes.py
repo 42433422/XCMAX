@@ -127,10 +127,14 @@ class SalesQuotes:
             )
             ctx.add(order)
             ctx.flush()
+            allow_catalog_price = data.get("price_source") == "catalog"
             for item_data, product in resolved_items:
                 product_id = product.id if product is not None else None
                 quantity = self._decimal(item_data.get("quantity", "0"))
-                unit_price = self._decimal(item_data.get("unit_price", "0"))
+                price_input = item_data.get("unit_price")
+                if price_input in (None, "") and product is not None and allow_catalog_price:
+                    price_input = product.price
+                unit_price = self._decimal(price_input or "0")
                 amount = quantity * unit_price
                 total_amount += amount
                 ctx.add(
@@ -140,7 +144,7 @@ class SalesQuotes:
                         product_name=product.name if product else item_data.get("product_name"),
                         specification=item_data.get("specification"),
                         quantity=quantity,
-                        unit=item_data.get("unit", "个"),
+                        unit=item_data.get("unit") or (product.unit if product else "个"),
                         unit_price=unit_price,
                         amount=amount,
                         ordered_quantity=quantity,
