@@ -8,7 +8,10 @@ const state = await vi.hoisted(async () => {
     route: vue.reactive({ name: 'chat', fullPath: '/', path: '/', meta: {} as Record<string, unknown>, query: {} }),
     authEpoch: vue.ref(0),
     accountEpoch: vue.ref(0),
-    account: vue.reactive({ workspaceReady: true, workspaceHydrationReady: true, sessionCheckUnavailable: false, loaded: true }),
+    account: vue.reactive({
+      workspaceReady: true, workspaceHydrationReady: true, sessionCheckUnavailable: false, loaded: true,
+      refreshFromServer: vi.fn(async () => undefined),
+    }),
     mods: vue.reactive({ isLoaded: false, clientModsUiOff: false, loadError: null as string | null, initialize: vi.fn() }),
     ensureAuth: vi.fn(),
     router: { isReady: vi.fn(), replace: vi.fn(), push: vi.fn() },
@@ -79,6 +82,7 @@ beforeEach(() => {
   state.authEpoch.value = 0; state.accountEpoch.value = 0
   state.account.workspaceReady = true; state.account.sessionCheckUnavailable = false
   state.account.workspaceHydrationReady = true
+  state.account.refreshFromServer.mockReset().mockImplementation(async () => undefined)
   state.mods.isLoaded = false; state.mods.clientModsUiOff = false; state.mods.loadError = null
   state.ensureAuth.mockReset().mockResolvedValue({ ok: true, entitledModIds: ['owned-mod'], accountUsername: 'synthetic-user' })
   state.mods.initialize.mockReset().mockImplementation(async () => { state.mods.isLoaded = true })
@@ -164,9 +168,12 @@ describe('workspace startup readiness', () => {
     if (outcome === 'ready') state.account.workspaceHydrationReady = true
     else state.account.sessionCheckUnavailable = true
     await settle()
+    if (outcome === 'unavailable') await vi.advanceTimersByTimeAsync(2_000)
     expect(boot.appReady.value).toBe(outcome === 'ready')
-    if (outcome === 'unavailable') expect(boot.startupError.value).toContain('工作空间资料未就绪')
-    else expect(boot.startupError.value).toBe('')
+    if (outcome === 'unavailable') {
+      expect(boot.startupError.value).toContain('登录状态无法确认，请重试登录')
+      expect(boot.startupError.value).not.toContain('工作空间资料未就绪')
+    } else expect(boot.startupError.value).toBe('')
   })
 
   it('ignores a removed page rejection and waits for its newly registered replacement', async () => {
@@ -208,9 +215,35 @@ describe('workspace startup readiness', () => {
     await settle()
     state.account.sessionCheckUnavailable = true
     await settle()
+    await vi.advanceTimersByTimeAsync(2_000)
     expect(boot.appReady.value).toBe(false)
-    expect(boot.startupError.value).toBeTruthy()
+    expect(boot.startupError.value).toContain('登录状态无法确认，请重试登录')
+    expect(boot.startupError.value).not.toContain('工作空间资料未就绪')
     expect(state.mods.initialize).not.toHaveBeenCalled()
+  })
+
+  it('retries a session check and enters once the workspace hydrates', async () => {
+    state.account.workspaceReady = false
+    state.account.workspaceHydrationReady = false
+    state.account.sessionCheckUnavailable = true
+    state.account.refreshFromServer.mockImplementation(async () => {
+      state.account.sessionCheckUnavailable = false
+      state.account.workspaceReady = true
+      state.account.workspaceHydrationReady = true
+    })
+    const boot = mountBoot()
+    await settle()
+    expect(state.account.refreshFromServer).toHaveBeenCalled()
+    expect(boot.appReady.value).toBe(true)
+    expect(boot.startupError.value).toBe('')
+  })
+
+  it('does not treat a stale session-check flag as a workspace failure when hydration is ready', async () => {
+    state.account.sessionCheckUnavailable = true
+    const boot = mountBoot()
+    await settle()
+    expect(boot.appReady.value).toBe(true)
+    expect(boot.startupError.value).not.toContain('工作空间资料未就绪')
   })
 
   it.each(['timeout', 'cancel'] as const)('retires pending hydration on %s and ignores its late readiness', async (action) => {
@@ -232,7 +265,7 @@ describe('workspace startup readiness', () => {
     state.ensureAuth.mockResolvedValueOnce({ ok: true, entitledModIds: ['old-mod'] }).mockReturnValueOnce(auth.promise)
     const boot = mountBoot()
     await settle()
-    state.accountEpoch.value++
+    state.authEpoch.value++
     await settle()
     state.account.workspaceReady = true
     await settle()
@@ -325,7 +358,10 @@ describe('workspace startup readiness', () => {
 
   it.each(['workspace', 'session', 'mods'] as const)('does not treat a swallowed %s failure as readiness', async (failure) => {
     if (failure === 'workspace') state.account.workspaceReady = false
-    if (failure === 'session') state.account.sessionCheckUnavailable = true
+    if (failure === 'session') {
+      state.account.workspaceHydrationReady = false
+      state.account.sessionCheckUnavailable = true
+    }
     if (failure === 'mods') state.mods.initialize.mockResolvedValue(undefined)
     const boot = mountBoot()
     await settle()
@@ -333,9 +369,11 @@ describe('workspace startup readiness', () => {
       expect(boot.startupError.value).toBe('')
       await vi.advanceTimersByTimeAsync(STARTUP_READY_TIMEOUT_MS)
     }
+    if (failure === 'session') await vi.advanceTimersByTimeAsync(2_000)
     expect(boot.appReady.value).toBe(false)
     expect(boot.startupVisible.value).toBe(true)
     expect(boot.startupError.value).toBeTruthy()
+    if (failure === 'session') expect(boot.startupError.value).not.toContain('工作空间资料未就绪')
   })
 
   it('shows an initialization error and retries the required work', async () => {
@@ -381,13 +419,26 @@ describe('workspace startup readiness', () => {
     expect(boot.appReady.value).toBe(true)
   })
 
-  it.each(['auth', 'account'] as const)('retires old %s scope work and waits for the new session', async (scope) => {
+  it('keeps the workbench up when only the scope generation changes', async () => {
+    const boot = mountBoot()
+    await settle()
+    expect(boot.appReady.value).toBe(true)
+    const calls = state.ensureAuth.mock.calls.length
+    state.accountEpoch.value++
+    state.route.fullPath = '/chat?hydrating=1'
+    await settle()
+    expect(state.ensureAuth.mock.calls.length).toBe(calls)
+    expect(boot.appReady.value).toBe(true)
+    expect(boot.startupVisible.value).toBe(false)
+    expect(state.router.replace).not.toHaveBeenCalled()
+  })
+
+  it.each(['auth'] as const)('retires old %s scope work and waits for the new session', async (scope) => {
     const old = deferred<unknown[]>(), current = deferred<unknown[]>()
     state.loadFont.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise)
     const boot = mountBoot()
     await settle()
     if (scope === 'auth') state.authEpoch.value++
-    else state.accountEpoch.value++
     expect(boot.appReady.value).toBe(false)
     await settle()
     old.resolve([{ status: 'loaded' }]); await settle()
@@ -402,7 +453,7 @@ describe('workspace startup readiness', () => {
     state.ensureAuth.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise)
     const boot = mountBoot()
     await settle()
-    state.accountEpoch.value++
+    state.authEpoch.value++
     await settle()
     old.resolve({ ok: true, entitledModIds: ['old-mod'] })
     await settle()
@@ -426,7 +477,7 @@ describe('workspace startup readiness', () => {
     })
     const boot = mountBoot()
     await settle()
-    state.accountEpoch.value++
+    state.authEpoch.value++
     await settle()
     old.resolve(); await settle()
     expect(forced).toBe(2)
@@ -496,7 +547,7 @@ describe('workspace startup readiness', () => {
     expect(state.sync.stop).toHaveBeenCalled()
   })
 
-  it('retries startup when the route changes while the gate is still visible', async () => {
+  it('does not restart startup when the route changes under the splash', async () => {
     const font = deferred<unknown[]>()
     state.loadFont.mockReturnValue(font.promise)
     const boot = mountBoot()
@@ -505,8 +556,9 @@ describe('workspace startup readiness', () => {
     const before = state.loadFont.mock.calls.length
     state.route.fullPath = '/settings'
     await settle()
-    expect(state.loadFont.mock.calls.length).toBeGreaterThan(before)
+    expect(state.loadFont.mock.calls.length).toBe(before)
     font.resolve([{ status: 'loaded' }]); await settle()
+    expect(boot.appReady.value).toBe(true)
   })
 
   it('re-initializes mods when the tab becomes visible after a ready workspace lost its catalog', async () => {

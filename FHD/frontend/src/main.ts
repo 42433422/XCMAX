@@ -1,4 +1,4 @@
-import { installDesktopRendererErrorReporting } from '@/utils/desktopRendererErrors'
+import { installDesktopRendererErrorReporting, reportDesktopRendererFault } from '@/utils/desktopRendererErrors'
 import { createApp } from 'vue'
 
 installDesktopRendererErrorReporting()
@@ -143,7 +143,8 @@ async function bootstrap() {
   const pinia = createPinia()
 
   app.config.errorHandler = (err, _instance, info) => {
-    console.error('[Vue]', info || 'unknown hook', err)
+    console.error('[Vue]', info || 'vue', err)
+    reportDesktopRendererFault(err, typeof info === 'string' ? info : undefined)
   }
   window.addEventListener('unhandledrejection', (event) => {
     console.error('[unhandledrejection]', event.reason)

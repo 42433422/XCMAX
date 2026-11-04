@@ -141,3 +141,13 @@ describe('authSessionCache', () => {
   await vi.waitFor(() => expect(profile.refreshFromServer).toHaveBeenCalledOnce())
   expect(replace).not.toHaveBeenCalled()
  })
+
+ it('does not log out a valid session whose workspace hydration has not published yet', async () => {
+  const { refreshDesktopSessionInBackground } = await import('./desktopSessionRestore')
+  vi.mocked(authApi.validateSession).mockResolvedValue({ success: true, data: { valid: true } })
+  const replace = vi.fn()
+  const profile = { loaded: false, sessionCheckUnavailable: false, refreshFromServer: vi.fn().mockResolvedValue(undefined) }
+  refreshDesktopSessionInBackground({ replace }, profile, '/')
+  await vi.waitFor(() => expect(profile.refreshFromServer).toHaveBeenCalledOnce())
+  expect(replace).not.toHaveBeenCalled()
+ })

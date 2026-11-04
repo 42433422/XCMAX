@@ -8,6 +8,12 @@ import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRun
 import type { TenantStorageScopeInput } from '@/utils/tenantStorageScope'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
+const SCOPE_MOVED = '登录工作空间已改变，请重试'
+
+function scopeMoved(error: unknown): boolean {
+  return error instanceof Error && error.message === SCOPE_MOVED
+}
+
 function buildScopeInput(
   tenantId: number | null,
   marketUserId: number | null,
@@ -36,10 +42,17 @@ async function syncTenantScopedStoresFromProfile(
   const refreshing = refreshTenantScopedClientStores(input)
   const epoch = productReadAccountEpoch.value
   await refreshing
-  if (epoch !== productReadAccountEpoch.value) throw new Error('登录工作空间已改变，请重试')
+  // Preferences already retried once inside the refresh. If the generation
+  // still moved, a newer profile read owns industry loading — do not fail this login.
+  if (epoch !== productReadAccountEpoch.value) return
   if (tenantId !== null || localUserId !== null || marketUserId !== null) {
     const { useIndustryStore } = await import('@/stores/industry')
-    await useIndustryStore().loadFromServer(accountKind !== 'admin')
+    try {
+      await useIndustryStore().loadFromServer(accountKind !== 'admin')
+    } catch (error) {
+      if (scopeMoved(error)) return
+      throw error
+    }
   }
 }
 
@@ -67,7 +80,11 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const sessionCheckUnavailable = ref(false)
   const workspaceEpoch = ref(-1)
   const workspaceHydrationReady = ref(false)
-  const workspaceReady = computed(() => loaded.value && workspaceEpoch.value === productReadAccountEpoch.value)
+  // Hydration readiness outlives a later scope-generation bump. The epoch match
+  // only keeps an already verified workspace visible while the next read is in flight.
+  const workspaceReady = computed(() => loaded.value && (
+    workspaceHydrationReady.value || workspaceEpoch.value === productReadAccountEpoch.value
+  ))
   let hydrationEpoch = 0
   let clearedEpoch = 0
   let latestHydration: { epoch: number; promise: Promise<void> } | null = null
@@ -137,7 +154,13 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       impersonatingUsername.value,
     )
     // The synchronous scope update above establishes the owner of this hydration.
-    const scopeCurrent = captureAuthSession(), cleared = clearedEpoch
+    const scopeCurrent = captureAuthSession()
+    const authAtStart = getAuthSessionEpoch()
+    const cleared = clearedEpoch
+    function publishReady() {
+      workspaceEpoch.value = productReadAccountEpoch.value
+      workspaceHydrationReady.value = true
+    }
     async function finish(error?: unknown, failed = false): Promise<void> {
       let observed = epoch
       while (scopeCurrent() && cleared === clearedEpoch) {
@@ -151,13 +174,18 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
         if (observed !== hydrationEpoch) break
         if (failed) throw error
         // Earlier same-owner reads join the newest result; only its own read publishes readiness.
-        if (epoch === hydrationEpoch) {
-          workspaceEpoch.value = productReadAccountEpoch.value
-          workspaceHydrationReady.value = true
-        }
+        if (epoch === hydrationEpoch) publishReady()
         return
       }
-      throw new Error('登录工作空间已改变，请重试')
+      // A scope-generation bump from a concurrent refresh is not a new login.
+      // The latest read adopts the current generation; superseded reads still fail.
+      if (cleared !== clearedEpoch || authAtStart !== getAuthSessionEpoch()) throw new Error(SCOPE_MOVED)
+      if (epoch === hydrationEpoch && (!failed || scopeMoved(error))) {
+        publishReady()
+        return
+      }
+      if (failed) throw error
+      throw new Error(SCOPE_MOVED)
     }
     const promise = hydration.then(() => finish(), error => finish(error, true))
     latestHydration = { epoch, promise }

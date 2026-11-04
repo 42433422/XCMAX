@@ -79,14 +79,9 @@ router.beforeEach(async (to, _from, finish) => {
     if (generation === getSidebarNavigationGeneration()) showAppToast('连接暂不可用，未能验证会话。请检查连接后重试；没有判定账号失效。', 'warning')
     next(false)
   }
-  const refreshSignedInProfile = (profile: { loaded: boolean; refreshFromServer: () => Promise<unknown> }) => {
-    void profile.refreshFromServer().then(() => {
-      if (profile.loaded) return
-      const current = router.currentRoute.value
-      if (current.meta?.publicAccess || current.name === 'login') return
-      const redirect = current.fullPath && current.fullPath !== '/login' ? current.fullPath : '/'
-      void router.replace({ name: 'login', query: { redirect } })
-    }).catch(() => undefined)
+  const refreshSignedInProfile = (profile: { refreshFromServer: () => Promise<unknown> }) => {
+    // Background refresh must not race a valid session into the login page.
+    void profile.refreshFromServer().catch(() => undefined)
   }
   let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {
@@ -164,7 +159,8 @@ router.beforeEach(async (to, _from, finish) => {
       if (profile.sessionCheckUnavailable || sku === null || isEnterpriseEdition(sku)) {
         try { await profile.refreshFromServer() } catch { unavailable(); return }
         if (profile.sessionCheckUnavailable) { unavailable(); return }
-        if (!profile.loaded || profile.workspaceReady === false || profile.sessionCheckUnavailable) {
+        // Hydration can still be false while /api/auth/me is 200. That is not logout.
+        if (!profile.loaded) {
           next({ name: 'login', query: { redirect: to.fullPath }, replace: true })
           return
         }

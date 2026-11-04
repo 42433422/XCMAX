@@ -59,6 +59,22 @@ describe('desktop renderer error reporting', () => {
     expect(reports[3].error).toBe('[object Object]')
   })
 
+  it('reports an error-like object message and does not persist a bare unknown', () => {
+    const reportError = install()
+    const crossRealm = { message: 'workspace gate failed', stack: 'Error: workspace gate failed\n at boot' }
+    window.dispatchEvent(new ErrorEvent('error', { error: crossRealm, message: 'unknown' }))
+    const onlyUnknown = { message: 'unknown', stack: 'Error: session probe failed\n at refresh' }
+    const opaque = new Event('error')
+    Object.defineProperty(opaque, 'error', { value: onlyUnknown })
+    Object.defineProperty(opaque, 'message', { value: 'unknown' })
+    window.dispatchEvent(opaque)
+    const reports = reportError.mock.calls.map(([payload]) => payload as Report)
+    expect(reports[0]).toMatchObject({ error: 'workspace gate failed' })
+    expect(reports[0].stack).toContain('workspace gate failed')
+    expect(reports[1].error).toBe('session probe failed')
+    expect(reports.map(item => item.error)).not.toContain('unknown')
+  })
+
   it('reports unhandled rejections with and without a reason', () => {
     const reportError = install()
     const reason = new Error('rejected')

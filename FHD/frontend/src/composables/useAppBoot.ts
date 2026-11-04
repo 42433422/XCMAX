@@ -9,7 +9,6 @@ import { startupPageReadyKey, useStartupSplash, waitForCriticalFonts } from '@/c
 import { useAppShellBridge } from '@/composables/useAppShellBridge'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
 import { getAuthSessionEpoch } from '@/utils/authSessionCache'
-import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { buildLoginLocation } from '@/utils/startupRedirect'
 
 export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
@@ -47,14 +46,34 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     })
   }
 
+  function pause(ms: number, signal: AbortSignal): Promise<void> {
+    if (ms <= 0 || signal.aborted) return Promise.resolve()
+    return new Promise(resolve => {
+      const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve() }
+      const timer = setTimeout(finish, ms)
+      signal.addEventListener('abort', finish, { once: true })
+    })
+  }
+
   async function waitForWorkspace(current: () => boolean, signal: AbortSignal) {
+    // A failed session probe is not a hydrated workspace. Retry the profile
+    // read; if it stays unreachable, say so — never the workspace-not-ready text.
     const ready = () => account.workspaceReady && account.workspaceHydrationReady
-    await waitUntil(() => ready() || account.sessionCheckUnavailable, signal)
-    if (!current()) return false
-    if (!ready() || account.sessionCheckUnavailable) {
-      throw new Error('工作空间资料未就绪，请重试')
+    const retryDelays = [0, 400, 1200]
+    let retries = 0
+    while (current() && !signal.aborted) {
+      if (ready()) return true
+      if (!account.sessionCheckUnavailable) {
+        await waitUntil(() => ready() || account.sessionCheckUnavailable, signal)
+        if (!current() || signal.aborted) return false
+        continue
+      }
+      if (retries >= retryDelays.length) throw new Error('登录状态无法确认，请重试登录')
+      await pause(retryDelays[retries++], signal)
+      if (!current() || signal.aborted) return false
+      try { await account.refreshFromServer() } catch { /* the store records the outage */ }
     }
-    return true
+    return false
   }
 
   function retryStartup() {
@@ -105,7 +124,10 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     }
   }
 
-  watch(() => [getAuthSessionEpoch(), productReadAccountEpoch.value, publicEntry.value], () => {
+  // Scope-generation bumps and in-splash route changes must not restart this gate.
+  // Those restarts kept the overlay up while chat assets loaded, then a slow
+  // hydration was treated as logout. A real login/logout still changes the auth epoch.
+  watch(() => [getAuthSessionEpoch(), publicEntry.value], () => {
     if (publicEntry.value) {
       splash.dismissStartupSplashImmediate()
       xcmaxSync.stop()
@@ -114,9 +136,6 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
       if (mounted) retryStartup()
     }
   }, { immediate: true, flush: 'sync' })
-  watch(() => route.fullPath, () => {
-    if (mounted && splash.startupVisible.value && !publicEntry.value) retryStartup()
-  }, { flush: 'sync' })
 
   watch(splash.appReady, ready => {
     const root = document.getElementById('app')

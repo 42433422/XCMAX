@@ -25,4 +25,16 @@ describe('refreshTenantScopedClientStores', () => {
     await expect(refreshTenantScopedClientStores({ tenantId: 't1', marketUserId: 'u1' })).resolves.toBeUndefined()
     expect(mockRefreshHostPackAcknowledged).toHaveBeenCalledOnce()
   })
+
+  it('retries once when the scope generation moves during prefs and still finishes', async () => {
+    const { hydrateWorkspacePrefsFromServer } = await import('@/utils/workspacePrefsApi')
+    const { updateProductReadAccountScope } = await import('./productReadAccountScope')
+    vi.mocked(hydrateWorkspacePrefsFromServer).mockImplementationOnce(async () => {
+      updateProductReadAccountScope({ tenantId: 2, marketUserId: 2, accountKind: 'enterprise' })
+      return {}
+    })
+    await expect(refreshTenantScopedClientStores({ tenantId: 1, marketUserId: 1, accountKind: 'enterprise' })).resolves.toBeUndefined()
+    expect(hydrateWorkspacePrefsFromServer).toHaveBeenCalledTimes(2)
+    expect(mockRefreshHostPackAcknowledged).toHaveBeenCalledOnce()
+  })
 })

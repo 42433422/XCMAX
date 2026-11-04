@@ -25,10 +25,8 @@ export function refreshDesktopSessionInBackground(router: DesktopSessionRouter, 
         await router.replace({ name: 'login', query: { redirect } })
         return
       }
+      // validate already returned success. A slow or restarted hydration must not log the user out.
       await profile.refreshFromServer()
-      if (!profile.loaded && !profile.sessionCheckUnavailable) {
-        await router.replace({ name: 'login', query: { redirect } })
-      }
     })
     .catch(() => {
       // Network trouble must not discard a previously working local shell.

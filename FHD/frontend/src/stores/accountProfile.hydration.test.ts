@@ -314,6 +314,33 @@ describe('account workspace hydration ownership', () => {
     expect(store.workspaceHydrationReady).toBe(false)
   })
 
+  it('hydrates a valid me when the prefs read is an empty ownerless payload', async () => {
+    const store = useAccountProfileStore()
+    boundary.getCurrentUser.mockResolvedValue({ success: true, data: account(1) })
+    const pending = store.refreshFromServer()
+    await flushPromises()
+    expect(boundary.preferences.length).toBeGreaterThan(0)
+    await preferencesReady(0)
+    boundary.industries[0].resolve()
+    await pending
+    expect(store.loaded).toBe(true)
+    expect(store.sessionCheckUnavailable).toBe(false)
+    expect(store.workspaceHydrationReady).toBe(true)
+    expect(store.workspaceReady).toBe(true)
+  })
+
+  it('adopts a scope-generation bump during prefs instead of failing the latest me', async () => {
+    const store = useAccountProfileStore()
+    const pending = observe(store.applyFromMeData(account(1)))
+    updateProductReadAccountScope({ tenantId: 9, marketUserId: 9, localUserId: 900, accountKind: 'enterprise' })
+    await preferencesReady(0)
+    await pending.done
+    expect(pending.result.error).toBeUndefined()
+    expect(store.workspaceHydrationReady).toBe(true)
+    expect(store.workspaceReady).toBe(true)
+    expect(store.sessionCheckUnavailable).toBe(false)
+  })
+
   it('does not let a pre-relogin caller join or release the new same-account login', async () => {
     const store = useAccountProfileStore()
     const old = observe(store.applyFromMeData(account(1)))

@@ -60,14 +60,34 @@ const reportRendererError = (payload: { type: string; error: string; stack?: str
   void ipcRenderer.invoke('xcagi:report-error', payload).catch(() => undefined)
 }
 
-function errorText(value: unknown): string {
-  if (value instanceof Error) return value.message || value.name
-  if (typeof value === 'string') return value
-  if (value == null) return ''
+function usableText(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text && text !== 'unknown' ? text : ''
+}
+
+function stackLine(stack?: string): string {
+  if (!stack) return ''
+  const line = stack.split('\n').map(part => part.trim()).find(Boolean) || ''
+  return line.replace(/^Error:\s*/, '')
+}
+
+function describeFault(value: unknown): { error: string; stack?: string } {
+  if (value instanceof Error) {
+    const stack = value.stack
+    return { error: usableText(value.message) || usableText(value.name) || stackLine(stack), stack }
+  }
+  if (value && typeof value === 'object') {
+    const record = value as { message?: unknown; name?: unknown; stack?: unknown }
+    const stack = typeof record.stack === 'string' ? record.stack : undefined
+    const error = usableText(record.message) || usableText(record.name) || stackLine(stack)
+    if (error || stack) return { error, stack }
+  }
+  if (typeof value === 'string') return { error: usableText(value) }
+  if (value == null) return { error: '' }
   try {
-    return JSON.stringify(value)
+    return { error: JSON.stringify(value) }
   } catch {
-    return String(value)
+    return { error: String(value) }
   }
 }
 
@@ -83,13 +103,12 @@ function resourceTarget(event: Event): string {
 window.addEventListener(
   'error',
   (event) => {
-    const err = event.error
+    const described = describeFault(event.error)
     const location = [event.filename, event.lineno, event.colno].filter((part) => part !== undefined && part !== '').join(':')
-    const message = errorText(err) || String(event.message || '').trim() || resourceTarget(event)
     reportRendererError({
       type: 'renderer:error',
-      error: message || 'renderer error without message',
-      stack: err instanceof Error ? err.stack : undefined,
+      error: described.error || usableText(event.message) || resourceTarget(event) || 'renderer error without message',
+      stack: described.stack,
       source: location || undefined,
     })
   },
@@ -99,11 +118,11 @@ window.addEventListener(
 window.addEventListener(
   'unhandledrejection',
   (event) => {
-    const reason = event.reason
+    const described = describeFault(event.reason)
     reportRendererError({
       type: 'renderer:unhandledrejection',
-      error: errorText(reason) || 'unhandled rejection without reason',
-      stack: reason instanceof Error ? reason.stack : undefined,
+      error: described.error || 'unhandled rejection without reason',
+      stack: described.stack,
     })
   },
   true,

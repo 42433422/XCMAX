@@ -84,12 +84,21 @@ describe('useStartupAuth', () => {
     expect(mockRouter.replace).toHaveBeenCalled()
   })
 
-  it('ensureStartupAuthenticated handles exception', async () => {
+  it('ensureStartupAuthenticated does not send a transient failure to login', async () => {
     ;(authApi.validateSession as any).mockRejectedValue(new Error('Network error'))
     const { ensureStartupAuthenticated } = getComposable()
     const result = await ensureStartupAuthenticated()
     expect(result.ok).toBe(false)
-    expect(mockDismiss).toHaveBeenCalled()
+    expect(mockDismiss).not.toHaveBeenCalled()
+    expect(mockRouter.replace).not.toHaveBeenCalled()
+  })
+
+  it('ensureStartupAuthenticated redirects when the server rejects the session', async () => {
+    ;(authApi.validateSession as any).mockRejectedValue(Object.assign(new Error('unauthorized'), { status: 401 }))
+    const { ensureStartupAuthenticated } = getComposable()
+    const result = await ensureStartupAuthenticated()
+    expect(result.ok).toBe(false)
+    expect(mockRouter.replace).toHaveBeenCalled()
   })
 
   it('ensureStartupAuthenticated accepts res.valid === true', async () => {
