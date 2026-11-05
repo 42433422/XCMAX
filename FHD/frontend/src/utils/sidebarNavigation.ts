@@ -1,4 +1,14 @@
 import type { Router } from 'vue-router'
+import {
+  beginAppNavIntent,
+  clearAppNavIntentIfCurrent,
+  getAppNavIntentId,
+  isAppNavIntentCurrent,
+  pushWithAppNavIntent,
+  resetAppNavigationForTests,
+  shouldShowNavFailure,
+  type AppNavOutcome,
+} from '@/utils/appNavigation'
 import { resolveNavRouteName } from '@/constants/navRouteAliases'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
@@ -29,6 +39,7 @@ export function resetSidebarNavigationForTests(): void {
   queuedSidebarViewKey = null
   queuedSidebarOptions = null
   sidebarNavDrain = null
+  resetAppNavigationForTests()
 }
 
 export function getSidebarNavigationGeneration(): number {
@@ -115,31 +126,40 @@ async function ensureModRoutesRegisteredUnlessStale(
   }
 }
 
-function navigationSettled(push: Promise<unknown>, isStale: () => boolean): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let settled = false
-    const finish = (succeeded: boolean, error?: unknown) => {
-      if (settled) return
-      settled = true
-      clearInterval(timer)
-      if (succeeded) resolve()
-      else reject(error)
-    }
-    const timer = setInterval(() => {
-      if (isStale()) finish(true)
-    }, 16)
-    push.then(() => finish(true), (error) => finish(isStale(), error))
-  })
-}
-
 async function pushSidebarRoute(
   router: Router,
   location: Parameters<Router['push']>[0],
-  isStale: () => boolean,
+  intentId: number,
+  targetKey: string,
 ): Promise<boolean> {
-  if (isStale()) return false
-  await navigationSettled(router.push(location), isStale)
-  return !isStale()
+  if (!isAppNavIntentCurrent(intentId)) return false
+  const intent = {
+    id: intentId,
+    targetKey,
+    source: 'sidebar',
+    startedAt: Date.now(),
+  }
+  const matchName =
+    typeof location === 'object' && location && 'name' in location
+      ? String((location as { name?: unknown }).name ?? '')
+      : null
+  const matchPath =
+    typeof location === 'string'
+      ? location
+      : typeof location === 'object' && location && 'path' in location
+        ? String((location as { path?: unknown }).path ?? '')
+        : null
+  const result: AppNavOutcome = await pushWithAppNavIntent(router, location, intent, {
+    isStale: () => !isAppNavIntentCurrent(intentId),
+    match: { name: matchName, path: matchPath, key: targetKey },
+  })
+  if (shouldShowNavFailure(result.status)) {
+    const err = result.error ?? new Error(result.message)
+    throw err
+  }
+  // superseded: a newer user intent owns the UI; this call did not apply its own target.
+  if (result.status === 'superseded') return false
+  return result.status === 'arrived' || result.status === 'duplicate'
 }
 
 async function performSidebarNavigation(
@@ -147,8 +167,9 @@ async function performSidebarNavigation(
   viewKey: string,
   options: NavigateFromSidebarOptions,
   generation: number,
+  intentId: number,
 ): Promise<boolean> {
-  const isStale = () => generation !== sidebarNavGeneration
+  const isStale = () => generation !== sidebarNavGeneration || !isAppNavIntentCurrent(intentId)
 
   const modMenuItems = readModMenuItems(options.modMenuItems)
   const routeNameMap = options.routeNameMap || SIDEBAR_ROUTE_NAME_MAP
@@ -159,7 +180,7 @@ async function performSidebarNavigation(
   const nameCandidate = typeof routeName === 'string' ? routeName.replace(/^mod-/, '') : routeName
 
   if (typeof nameCandidate === 'string' && preferHostSidebarRoute(router, nameCandidate)) {
-    return pushSidebarRoute(router, { name: nameCandidate }, isStale)
+    return pushSidebarRoute(router, { name: nameCandidate }, intentId, viewKey)
   }
 
   if (modItem?.path) {
@@ -172,12 +193,12 @@ async function performSidebarNavigation(
     }
     if (isStale()) return false
     if (router.resolve(modItem.path).matched.length > 0) {
-      return pushSidebarRoute(router, modItem.path, isStale)
+      return pushSidebarRoute(router, modItem.path, intentId, viewKey)
     }
     const legacy = resolveLegacyRouteFromModPath(router, modItem.path)
-    if (legacy) return pushSidebarRoute(router, legacy, isStale)
+    if (legacy) return pushSidebarRoute(router, legacy, intentId, viewKey)
     const csHost = customerServiceHostPathFromModPath(modItem.path)
-    if (csHost) return pushSidebarRoute(router, csHost, isStale)
+    if (csHost) return pushSidebarRoute(router, csHost, intentId, viewKey)
     console.warn('[sidebarNavigation] Mod 路由未注册，路径无效:', modItem.path)
   }
 
@@ -194,24 +215,24 @@ async function performSidebarNavigation(
       }
       if (isStale()) return false
       if (router.resolve(modBusinessPath).matched.length > 0) {
-        return pushSidebarRoute(router, modBusinessPath, isStale)
+        return pushSidebarRoute(router, modBusinessPath, intentId, viewKey)
       }
       const legacy = resolveLegacyRouteFromModPath(router, modBusinessPath)
-      if (legacy) return pushSidebarRoute(router, legacy, isStale)
+      if (legacy) return pushSidebarRoute(router, legacy, intentId, viewKey)
       const csHost = customerServiceHostPathFromModPath(modBusinessPath)
-      if (csHost) return pushSidebarRoute(router, csHost, isStale)
+      if (csHost) return pushSidebarRoute(router, csHost, intentId, viewKey)
     }
   }
 
   if (typeof nameCandidate === 'string' && router.hasRoute(nameCandidate)) {
-    return pushSidebarRoute(router, { name: nameCandidate }, isStale)
+    return pushSidebarRoute(router, { name: nameCandidate }, intentId, viewKey)
   }
   if (typeof routeName === 'string' && router.hasRoute(routeName)) {
-    return pushSidebarRoute(router, { name: routeName }, isStale)
+    return pushSidebarRoute(router, { name: routeName }, intentId, viewKey)
   }
 
   const routePath = Object.entries(routeNameMap).find(([, name]) => name === viewKey)?.[0]
-  if (routePath) return pushSidebarRoute(router, routePath, isStale)
+  if (routePath) return pushSidebarRoute(router, routePath, intentId, viewKey)
 
   console.warn('[sidebarNavigation] 侧栏无对应路由:', viewKey)
   return false
@@ -227,9 +248,15 @@ async function drainSidebarNavigationQueue(router: Router): Promise<boolean> {
       const key = queuedSidebarViewKey
       const opts = queuedSidebarOptions || {}
       const generation = sidebarNavGeneration
+      const intentId = getAppNavIntentId()
       queuedSidebarViewKey = null
       queuedSidebarOptions = null
-      applied = await performSidebarNavigation(router, key, opts, generation)
+      try {
+        applied = await performSidebarNavigation(router, key, opts, generation, intentId)
+      } finally {
+        // Only the still-current intent may clear; a newer click keeps its pending state.
+        if (isAppNavIntentCurrent(intentId)) clearAppNavIntentIfCurrent(intentId)
+      }
     }
   } finally {
     sidebarNavDrain = null
@@ -250,13 +277,18 @@ export function isSidebarNavigationPending(): boolean {
  * 侧栏 / xcagi:switch-view 统一导航：单队列 drain + 合并连点 + Enterprise 宿主路由优先。
  * 新点击会抬升 generation，使仍在 await 的旧导航尽快判定 stale 并让出，不堵住快速连点。
  */
-export function navigateFromSidebarKey(router: Router, viewKey: string, options: NavigateFromSidebarOptions = {}): Promise<boolean> {
+export function navigateFromSidebarKey(
+  router: Router,
+  viewKey: string,
+  options: NavigateFromSidebarOptions & { source?: string } = {},
+): Promise<boolean> {
   const normalized = String(viewKey || '').trim()
   if (!normalized) return Promise.resolve(false)
 
   queuedSidebarViewKey = normalized
   queuedSidebarOptions = options
   sidebarNavGeneration += 1
+  beginAppNavIntent(normalized, options.source || 'sidebar')
 
   if (!sidebarNavDrain) {
     sidebarNavDrain = drainSidebarNavigationQueue(router)

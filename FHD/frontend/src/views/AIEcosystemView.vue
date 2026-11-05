@@ -75,6 +75,7 @@ import { ref, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { resolvePlannerPageRedirectForRouteName } from '@/utils/plannerPagePaths'
+import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 import AiOpenLauncherIcon from '@/components/aiopen/AiOpenLauncherIcon.vue'
 import KittenLauncherIcon from '@/components/kitten/KittenLauncherIcon.vue'
 import ProductionEmployeeLauncherIcon from '@/components/workflow/ProductionEmployeeLauncherIcon.vue'
@@ -91,16 +92,28 @@ const activeApp = ref('kitten')
 
 const goShellPage = (name, query = {}) => {
   const modPath = resolvePlannerPageRedirectForRouteName(name)
-  if (modPath) {
-    router.push({ path: modPath, query })
-    return
-  }
-  router.push({ name, query })
+  const q = query && typeof query === 'object' ? query : {}
+  const hasQuery = Object.keys(q).length > 0
+  // Share the shell intent channel so a later sidebar/settings click can supersede this.
+  void navigateFromSidebarKey(router, name, { source: 'ecosystem-card' }).then((applied) => {
+    if (applied) {
+      if (hasQuery) {
+        void router.replace(modPath ? { path: modPath, query: q } : { name, query: q })
+      }
+      return
+    }
+    // Named target unresolved (e.g. host route not registered): fall back to planner path / name.
+    void router.push(modPath ? { path: modPath, query: q } : { name, query: q })
+  })
 }
 
 const enterAnalyzer = (appKey = 'kitten') => {
   if (appKey === 'production' && router.hasRoute('delivery-center')) {
-    router.push({ name: 'delivery-center', query: { source: 'production-employee' } })
+    void navigateFromSidebarKey(router, 'delivery-center', { source: 'ecosystem-card' }).then((applied) => {
+      const loc = { name: 'delivery-center', query: { source: 'production-employee' } }
+      if (applied) void router.replace(loc)
+      else void router.push(loc)
+    })
     return
   }
   // 'qclaw' 为旧入口键，等价于 'aiopen'（Qclaw龙虾生态已升级为 AIOPEN）
