@@ -1009,7 +1009,7 @@ def test_compat_tts_recoverable_error_returns_503_without_browser_voice() -> Non
     body = resp.json()
     assert body["success"] is False
     assert "MiMo" in body["message"] or "Edge" in body["message"]
-    assert body["data"] == {}
+    assert body["data"] == {"reason": "tts_unavailable"}
 
 
 # ===========================================================================

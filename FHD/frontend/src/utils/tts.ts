@@ -467,7 +467,8 @@ export async function speakText(text: string, options?: { onEnd?: () => void; on
       || error?.name === 'AbortError'
       || message.includes('音频播放失败')
       || message.includes('play rejected')
-    const fallbackOk = abortedByUser || playbackError ? false : await speakWithFallback(plain)
+    const offlineMode = getEngineMode() === 'offline'
+    const fallbackOk = offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(plain)
     if (!fallbackOk) {
       if (!controller.signal.aborted || error?.name === 'TimeoutError') {
         showAppToast(error?.name === 'NotAllowedError'

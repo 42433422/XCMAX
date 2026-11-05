@@ -125,6 +125,8 @@ export interface RequestOptions extends RequestInit {
   skipDefaultJsonHeader?: boolean
   responseType?: 'json' | 'blob'
   timeoutMs?: number
+  /** 显式预算的读请求（如登录行业 8s）不再自动再等一轮。 */
+  retry?: boolean
 }
 
 export type { ApiResponse } from '@/types/api'
@@ -132,17 +134,23 @@ export type { ApiResponse } from '@/types/api'
 const READ_RETRY_DELAY_MS = 250
 const READ_RETRYABLE_STATUSES = new Set([408, 429])
 
+function isTransientReadFailure(error: ApiError): boolean {
+  if (error.status >= 500 || READ_RETRYABLE_STATUSES.has(error.status)) return true
+  if (error.status !== 0) return false
+  const message = error.message
+  // 只重试传输失败和调用方设置的超时。响应形状错误不能再读一次。
+  return message.startsWith('请求超时')
+    || message === '网络错误'
+    || /failed to fetch|network|econn|abort/i.test(message)
+}
+
 function shouldRetryRead(error: unknown, options: RequestOptions): boolean {
-  if (options.signal?.aborted) return false
+  if (options.retry === false || options.signal?.aborted) return false
   // 切账号必须丢弃结果，不能当成网络失败再读一次新账号的数据。
   if (error instanceof AccountSwitchedError) return false
   const method = String(options.method || 'GET').toUpperCase()
   if (method !== 'GET' && method !== 'HEAD') return false
-  if (error instanceof ApiError) {
-    // status=0 覆盖网络中断与超时；5xx / 408 / 429 对幂等读请求可安全重试一次。
-    return error.status === 0 || error.status >= 500 || READ_RETRYABLE_STATUSES.has(error.status)
-  }
-  return true
+  return error instanceof ApiError && isTransientReadFailure(error)
 }
 
 async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {

@@ -10,7 +10,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +292,7 @@ def _synthesize_edge_mp3(req: TtsRequest) -> bytes:
         return _run_edge_sync(req)
     except TtsUpstreamBlockedError:
         raise
-    except Exception as e:  # noqa: BLE001 - 第三方语音 SDK 的异常类型不稳定
+    except BOUNDARY_ERRORS as e:
         # 语音 SDK 抛出的自定义异常可能不属于 RECOVERABLE_ERRORS；
         # 这里是集成边界，必须转换为可诊断错误，不能让 /api/tts 变成 500。
         if _is_edge_forbidden(e):

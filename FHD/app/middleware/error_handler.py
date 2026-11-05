@@ -122,8 +122,8 @@ def _elt_model_error(detail: object) -> dict:
     if code == "model_processing_failed" and valid:
         raw = detail.get("message")
         if isinstance(raw, str) and raw.strip().startswith("模型处理未完成。"):
-            reason = raw.strip().removeprefix("模型处理未完成。").replace("\r", " ").replace(
-                "\n", " "
+            reason = (
+                raw.strip().removeprefix("模型处理未完成。").replace("\r", " ").replace("\n", " ")
             )
             if reason:
                 message = f"{message}原因：{reason[:180]}"
