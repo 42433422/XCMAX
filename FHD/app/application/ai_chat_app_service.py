@@ -432,15 +432,14 @@ class AIChatApplicationService(
                     excel_analysis_obj["sheet_name"] = str(sheet_name).strip()
                 enriched_context["excel_analysis"] = excel_analysis_obj
         prepared_context = enriched_context
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            ai_result = loop.run_until_complete(
+            from app.utils.async_runtime import run_coroutine_sync
+
+            ai_result = run_coroutine_sync(
                 self.ai_service.chat(user_id, message, prepared_context, source=source)
             )
         except ConnectionError as conn_err:
             logger.error("AI 服务连接失败：%s", conn_err)
-            loop.close()
             return _finalize(
                 self._build_fallback_response(
                     message, "AI 服务连接失败，可能是网络问题或服务未启动"
@@ -448,16 +447,12 @@ class AIChatApplicationService(
             )
         except TimeoutError as timeout_err:
             logger.error("AI 服务请求超时：%s", timeout_err)
-            loop.close()
             return _finalize(self._build_fallback_response(message, "AI 服务响应超时，请稍后重试"))
         except RECOVERABLE_ERRORS:
             logger.exception("AI 服务处理异常")
-            loop.close()
             return _finalize(
                 self._build_fallback_response(message, "AI 服务暂时不可用，请稍后重试")
             )
-        finally:
-            loop.close()
         logger.info(
             "用户 %s 消息：%s... -> %s", user_id, message[:50], ai_result.get("action", "unknown")
         )

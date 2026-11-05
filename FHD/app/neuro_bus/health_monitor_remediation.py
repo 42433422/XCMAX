@@ -381,6 +381,23 @@ class HealthRemediationMixin:
             AlertLevel.WARNING if result.status == HealthStatus.DEGRADED else AlertLevel.CRITICAL
         )
 
+        # 同一组件、同一等级的活动告警已存在时只刷新状态，不重复写日志/回调；
+        # 否则 30s 一轮的监控循环会把同一个降级状态刷成“持续告警”。
+        # 计数类文案每轮都会变化，因此按组件+等级去重，而不是按完整消息。
+        existing = self._active_alerts.get(result.component)
+        if existing is not None and existing.level == level:
+            existing.message = result.message
+            existing.metadata = {
+                "latency_ms": result.latency_ms,
+                "details": result.details,
+            }
+            logger.debug(
+                "[HealthMonitor] 告警持续（已记录，不重复告警）: %s - %s",
+                result.component,
+                result.message,
+            )
+            return
+
         alert_id = f"alert-{result.component}-{int(time.time())}"
 
         alert = Alert(

@@ -104,7 +104,13 @@ class HealthCheckMixin:
             bus = _get_neuro_bus()
             stats = bus.get_stats()
             queue_size = stats.get("queue_size", 0)
-            dropped = stats.get("dropped", 0)
+            dropped_total = int(stats.get("dropped", 0) or 0)
+            # 老版本总线只暴露累计值；新总线额外提供近 60 秒窗口值。
+            dropped_recent = (
+                dropped_total
+                if "dropped_recent" not in stats
+                else int(stats.get("dropped_recent", 0) or 0)
+            )
 
             latency_ms = (time.perf_counter() - t0) * 1000
 
@@ -114,9 +120,10 @@ class HealthCheckMixin:
             elif queue_size > 5000:
                 status = HealthStatus.DEGRADED
                 message = f"队列积压: {queue_size}"
-            elif dropped > 100:
+            elif dropped_recent > 50:
+                # 只看窗口内新增丢弃：历史累计值不会再让告警永远挂起。
                 status = HealthStatus.DEGRADED
-                message = f"事件丢弃过多: {dropped}"
+                message = f"事件丢弃过多: {dropped_recent}/60s（累计 {dropped_total}）"
             else:
                 status = HealthStatus.HEALTHY
                 message = f"队列正常: {queue_size}"
@@ -128,7 +135,9 @@ class HealthCheckMixin:
                 latency_ms=latency_ms,
                 details={
                     "queue_size": queue_size,
-                    "dropped": dropped,
+                    "dropped": dropped_total,
+                    "dropped_recent": dropped_recent,
+                    "dropped_reasons": stats.get("dropped_reasons", {}),
                 },
             )
 

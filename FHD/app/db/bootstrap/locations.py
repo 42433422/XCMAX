@@ -100,6 +100,7 @@ class DatabaseFiles:
     def initialize(self, db_files: Iterable[str]) -> None:
         work_dir = self.app_data_dir()
         os.makedirs(work_dir, exist_ok=True)
+        missing: list[str] = []
         for db_file in db_files:
             target = os.path.join(work_dir, db_file)
             if os.path.exists(target):
@@ -115,11 +116,8 @@ class DatabaseFiles:
             if source is None:
                 if db_file == "error_collection.db":
                     self._create_empty_sqlite(target)
-                    self.logger.info(
-                        "未找到种子数据库文件：%s（已创建空库，供 Mod 专用库复制）", db_file
-                    )
                 else:
-                    self.logger.warning("未找到种子数据库文件：%s（将由 ORM/运行时创建）", db_file)
+                    missing.append(db_file)
                 continue
             try:
                 self.copy_file(source, target)
@@ -129,34 +127,37 @@ class DatabaseFiles:
                     cursor.fetchall()
             except RECOVERABLE_ERRORS as exc:
                 self.logger.warning("复制数据库失败 %s -> %s: %s", source, target, exc)
+        if missing:
+            # 可选种子库缺失是正常部署形态（运行时按需建库），按批次提示一次。
+            self.logger.info("未随包提供种子数据库：%s（将由 ORM/运行时创建）", ", ".join(missing))
 
     def copy_for_mods(self, mod_ids: Sequence[str], db_files: Iterable[str]) -> None:
         work_dir = self.app_data_dir()
         os.makedirs(work_dir, exist_ok=True)
         db_files = tuple(db_files)
+        # 先按母库是否存在过滤，避免对每个 Mod 重复输出同一条缺失告警。
+        missing_mothers: list[str] = []
+        available: list[str] = []
+        for db_name in db_files:
+            source = os.path.join(work_dir, db_name)
+            if os.path.exists(source):
+                available.append(db_name)
+            elif os.path.basename(source) == "error_collection.db":
+                self._create_empty_sqlite(source)
+            else:
+                missing_mothers.append(db_name)
         seen: set[str] = set()
         for raw_id in mod_ids:
             mod_id = str(raw_id or "").strip()
             if not mod_id or mod_id in seen:
                 continue
             seen.add(mod_id)
-            for db_name in db_files:
+            for db_name in available:
                 source = os.path.join(work_dir, db_name)
                 filename = sqlite_filename_with_mod_suffix(db_name, mod_id)
                 destination = os.path.join(work_dir, filename)
                 if filename == db_name or os.path.exists(destination):
                     continue
-                if not os.path.exists(source):
-                    if os.path.basename(source) == "error_collection.db":
-                        self._create_empty_sqlite(source)
-                    else:
-                        self.logger.warning(
-                            "无法为 Mod %s 准备专用库：母库不存在 %s（跳过 %s）",
-                            mod_id,
-                            source,
-                            filename,
-                        )
-                        continue
                 try:
                     self.copy_file(source, destination)
                     self.logger.info("已为 Mod %s 从母库复制专用 SQLite：%s", mod_id, filename)
@@ -164,6 +165,10 @@ class DatabaseFiles:
                     self.logger.warning(
                         "复制 Mod 专用库失败 mod=%s %s -> %s: %s", mod_id, source, destination, exc
                     )
+        if missing_mothers:
+            self.logger.info(
+                "以下母库暂未创建，已跳过对应 Mod 专用库复制：%s", ", ".join(missing_mothers)
+            )
 
 
 def build_mod_seed_plan(work_dir: str, mods: Sequence[object]) -> dict[str, Any]:

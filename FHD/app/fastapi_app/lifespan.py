@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -40,10 +41,54 @@ logger = logging.getLogger(__name__)
 
 
 def _desktop_fast_start_enabled() -> bool:
-    import os
-
     raw = os.environ.get("XCAGI_DESKTOP_FAST_START", "1").strip().lower()
     return raw not in {"0", "false", "off", "no"}
+
+
+def _parent_watchdog_pid() -> int | None:
+    """Electron 启动后端时写入 XCAGI_PARENT_PID；仅该场景启用看门狗。"""
+    raw = os.environ.get("XCAGI_PARENT_PID", "").strip()
+    if not raw.isdigit():
+        return None
+    pid = int(raw)
+    return pid if pid > 0 else None
+
+
+def _pid_is_alive(pid: int) -> bool:
+    if os.name == "nt":
+        import ctypes
+
+        synchronize = 0x00100000
+        wait_timeout = 0x00000102
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.OpenProcess(synchronize, False, pid)
+        if not handle:
+            return False
+        try:
+            return kernel32.WaitForSingleObject(handle, 0) == wait_timeout
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+async def _watch_parent_process(pid: int) -> None:
+    """父进程（Electron）消失后主动退出，避免成为占住端口的孤儿后端。"""
+    while True:
+        await asyncio.sleep(2.0)
+        if not _pid_is_alive(pid):
+            logger.error("desktop parent process %s exited; terminating backend", pid)
+            os._exit(0)
+
+
+def _start_parent_watchdog() -> asyncio.Task | None:
+    pid = _parent_watchdog_pid()
+    if pid is None:
+        return None
+    return asyncio.create_task(_watch_parent_process(pid))
 
 
 def _start_agent_tasks(app: FastAPI) -> None:
@@ -154,9 +199,12 @@ async def lifespan(app: FastAPI):
     except RECOVERABLE_ERRORS as exc:
         logger.warning("desktop memory guard skipped: %s", exc)
 
+    parent_watchdog = _start_parent_watchdog()
     try:
         yield
     finally:
+        if parent_watchdog is not None:
+            parent_watchdog.cancel()
         try:
             from app.desktop_runtime.process_memory import stop_process_memory_guard
 

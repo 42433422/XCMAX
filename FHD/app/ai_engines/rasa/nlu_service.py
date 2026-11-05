@@ -212,15 +212,10 @@ class RasaNLUService:
     def _parse_via_embedded(self, text: str) -> dict[str, Any]:
         try:
             # rasa 的 parse_message 是 async；这里同步等待。
-            result = asyncio.run(self._agent.parse_message(text))
+            from app.utils.async_runtime import run_coroutine_sync
+
+            result = run_coroutine_sync(self._agent.parse_message(text))
             return cast("dict[str, Any]", result)
-        except RuntimeError:
-            # 已经在事件循环里 —— 用新循环兜底，避免 "asyncio.run cannot be called from a running loop"。
-            loop = asyncio.new_event_loop()
-            try:
-                return loop.run_until_complete(self._agent.parse_message(text))
-            finally:
-                loop.close()
         except RECOVERABLE_ERRORS as e:
             return self._empty_result(f"parse_failed: {e}")
 
