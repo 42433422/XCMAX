@@ -1,6 +1,6 @@
 ## 2026-06-27T07:55:14Z 20260627075514-f7cfdfd7bc
 
-> Older absorption entries truncated 2026-11-05 to keep the net-deletion ratchet; full history remains in git.
+> Older entries truncated 2026-11-05; full history in git.
 
 - Source: `https://github.com/alibaba/open-code-review`
 - Local path: `/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/alibaba/open-code-review`
