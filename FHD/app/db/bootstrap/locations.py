@@ -135,6 +135,17 @@ class DatabaseFiles:
         work_dir = self.app_data_dir()
         os.makedirs(work_dir, exist_ok=True)
         db_files = tuple(db_files)
+        # 先过滤有效 Mod，避免空 id 仍创建 error_collection 等母库副作用。
+        seen: set[str] = set()
+        valid_mods: list[str] = []
+        for raw_id in mod_ids:
+            mod_id = str(raw_id or "").strip()
+            if not mod_id or mod_id in seen:
+                continue
+            seen.add(mod_id)
+            valid_mods.append(mod_id)
+        if not valid_mods:
+            return
         # 先按母库是否存在过滤，避免对每个 Mod 重复输出同一条缺失告警。
         missing_mothers: list[str] = []
         available: list[str] = []
@@ -144,14 +155,10 @@ class DatabaseFiles:
                 available.append(db_name)
             elif os.path.basename(source) == "error_collection.db":
                 self._create_empty_sqlite(source)
+                available.append(db_name)
             else:
                 missing_mothers.append(db_name)
-        seen: set[str] = set()
-        for raw_id in mod_ids:
-            mod_id = str(raw_id or "").strip()
-            if not mod_id or mod_id in seen:
-                continue
-            seen.add(mod_id)
+        for mod_id in valid_mods:
             for db_name in available:
                 source = os.path.join(work_dir, db_name)
                 filename = sqlite_filename_with_mod_suffix(db_name, mod_id)
