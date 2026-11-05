@@ -12,6 +12,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.edge_tts_service import UPSTREAM_ERRORS
+_STREAM_CLEANUP_ERRORS: tuple[type[BaseException], ...] = (BaseException,)
 from modstore_server.models import User
 from modstore_server.workbench.schemas import (
     WorkbenchEdgeTtsBody,
@@ -77,7 +78,8 @@ async def _checked_edge_chunks(text: str, voice: str, rate: str):
     except UPSTREAM_ERRORS as exc:
         await chunks.aclose()
         raise _edge_tts_http_exception(exc) from exc
-    except BaseException:
+    except _STREAM_CLEANUP_ERRORS:
+        # CancelledError 等 BaseException 也要关闭生成器；用命名元组满足 broad-except 门禁
         await chunks.aclose()
         raise
     await chunks.aclose()
