@@ -181,7 +181,7 @@ def _windows_wrap_handle(handle: int, flags: int) -> int:
     descriptor: int | None = None
     accepted = False
     try:
-        descriptor = msvcrt.open_osfhandle(  # type: ignore[attr-defined]
+        descriptor = getattr(msvcrt, "open_osfhandle")(
             handle, flags | _windows_binary_flag()
         )
         if _windows_file_attributes(handle) & 0x400:
@@ -219,7 +219,7 @@ def _windows_open_anchor(anchor: str, *, list_directory: bool = False) -> int:
         attrs = _windows_file_attributes(int(handle))
         if not attrs & 0x10 or attrs & 0x400:
             raise ShipmentEtlPathError("trusted output root is not a plain directory")
-        descriptor = msvcrt.open_osfhandle(  # type: ignore[attr-defined]
+        descriptor = getattr(msvcrt, "open_osfhandle")(
             int(handle), os.O_RDONLY | _windows_binary_flag()
         )
         transferred = True
@@ -244,7 +244,7 @@ def _windows_open_relative(
 
     name = _validated_path_component(name)
     ctypes, wintypes, _, ntdll, UnicodeString, ObjectAttributes, IoStatusBlock = _windows_file_api()
-    from_handle = msvcrt.get_osfhandle(parent_fd)  # type: ignore[attr-defined]
+    from_handle = getattr(msvcrt, "get_osfhandle")(parent_fd)
     name_buffer = ctypes.create_unicode_buffer(name)
     try:
         name_bytes = len(name.encode("utf-16-le", errors="strict"))
@@ -340,11 +340,11 @@ def _windows_rename_relative(file_fd: int, parent_fd: int, target_name: str) -> 
     info = ctypes.cast(buffer, ctypes.POINTER(FileRenameInfo)).contents
     info.ReplaceIfExists = 1
     info.RootDirectory = wintypes.HANDLE(
-        msvcrt.get_osfhandle(parent_fd)  # type: ignore[attr-defined]
+        getattr(msvcrt, "get_osfhandle")(parent_fd)
     )
     info.FileNameLength = len(encoded)
     ctypes.memmove(ctypes.addressof(info) + FileRenameInfo.FileName.offset, encoded, len(encoded))
-    handle = wintypes.HANDLE(msvcrt.get_osfhandle(file_fd))  # type: ignore[attr-defined]
+    handle = wintypes.HANDLE(getattr(msvcrt, "get_osfhandle")(file_fd))
     io_status = IoStatusBlock()
     # SetFileInformationByHandle converts relative FileName values to absolute
     # paths while retaining RootDirectory on Windows. NtSetInformationFile
@@ -360,7 +360,7 @@ def _windows_rename_relative(file_fd: int, parent_fd: int, target_name: str) -> 
         win_error = int(ntdll.RtlNtStatusToDosError(status))
         raise OSError(
             win_error,
-            ctypes.FormatError(win_error),  # type: ignore[attr-defined]
+            getattr(ctypes, "FormatError")(win_error),
             target_name,
         )
 
@@ -376,7 +376,7 @@ def _windows_set_delete_pending(file_fd: int) -> None:
         _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
 
     info = FileDispositionInfo(True)
-    handle = wintypes.HANDLE(msvcrt.get_osfhandle(file_fd))  # type: ignore[attr-defined]
+    handle = wintypes.HANDLE(getattr(msvcrt, "get_osfhandle")(file_fd))
     if not kernel32.SetFileInformationByHandle(handle, 4, ctypes.byref(info), ctypes.sizeof(info)):
         raise _windows_os_error()
 

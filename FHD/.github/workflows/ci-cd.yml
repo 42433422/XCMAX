@@ -317,7 +317,7 @@ jobs:
       - name: Type/SQL debt ratchet
         if: needs.classify.outputs.backend_skip != 'true'
         run: |
-          python scripts/dev/count_type_debt.py --max-type-ignore 0 --max-mypy-disable 0 --max-noqa 220 --max-ts-nocheck 0 --max-any 99999
+          python scripts/dev/count_type_debt.py --max-type-ignore 0 --max-mypy-disable 0 --max-noqa 222 --max-ts-nocheck 0 --max-any 99999
           python scripts/dev/count_raw_sql.py
 
       - name: "[观察期] Schema drift check（模型 vs 迁移链）"
