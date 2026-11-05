@@ -1,5 +1,5 @@
 {
-  "lines": 2414962,
+  "lines": 2414406,
   "updated": "2026-11-06",
-  "note": "PR 3014 rebase onto main after #2990 then remeasure baseline"
+  "note": "PR 3016 rebase onto main after #2990 then remeasure baseline"
 }
