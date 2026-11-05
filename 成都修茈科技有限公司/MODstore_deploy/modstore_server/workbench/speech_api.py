@@ -12,14 +12,13 @@ from fastapi.responses import Response, StreamingResponse
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.edge_tts_service import UPSTREAM_ERRORS
-
-_STREAM_CLEANUP_ERRORS: tuple[type[BaseException], ...] = (BaseException,)
 from modstore_server.models import User
 from modstore_server.workbench.schemas import (
     WorkbenchEdgeTtsBody,
     WorkbenchUnifiedTtsBody,
 )
 
+_STREAM_CLEANUP_ERRORS: tuple[type[BaseException], ...] = (BaseException,)
 _LOG = logging.getLogger("modstore_server.workbench_api")
 
 
@@ -94,7 +93,9 @@ async def _edge_response(body: WorkbenchEdgeTtsBody, ports: SpeechPorts):
     if ports.edge is None:
         raise HTTPException(503, "服务端未安装 edge-tts")
     voice = (body.voice or "").strip() or "zh-CN-XiaoxiaoNeural"
-    first, chunks = await _checked_edge_chunks(text, voice, _edge_tts_rate_str(body.rate))
+    first, chunks = await _checked_edge_chunks(
+        text, voice, _edge_tts_rate_str(body.rate)
+    )
 
     async def stream():
         try:
@@ -192,14 +193,18 @@ async def workbench_edge_tts(
     voice = (body.voice or "").strip() or "zh-CN-XiaoxiaoNeural"
     try:
         parts = []
-        async for chunk in _edge_tts_stream_chunks(text, voice, _edge_tts_rate_str(body.rate)):
+        async for chunk in _edge_tts_stream_chunks(
+            text, voice, _edge_tts_rate_str(body.rate)
+        ):
             if not isinstance(chunk, bytes):
                 raise HTTPException(502, "TTS 上游返回无效音频")
             parts.append(chunk)
         audio = b"".join(parts)
         if not audio:
             raise HTTPException(502, "TTS 上游未返回音频")
-        return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "no-cache"})
+        return Response(
+            audio, media_type="audio/mpeg", headers={"Cache-Control": "no-cache"}
+        )
     except UPSTREAM_ERRORS as exc:
         raise _edge_tts_http_exception(exc) from exc
 

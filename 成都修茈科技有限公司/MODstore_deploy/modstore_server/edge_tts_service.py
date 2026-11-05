@@ -130,7 +130,9 @@ async def stream_audio(text: str, voice: str, rs: str) -> AsyncIterator[bytes]:
     buf = bytearray()
     acquired = False
     try:
-        await asyncio.wait_for(_sem.acquire(), max(0, deadline - asyncio.get_running_loop().time()))
+        await asyncio.wait_for(
+            _sem.acquire(), max(0, deadline - asyncio.get_running_loop().time())
+        )
         acquired = True
         try:
             comm = _EDGE_TTS.Communicate(t, voice=voice, rate=rs)
@@ -138,7 +140,8 @@ async def stream_audio(text: str, voice: str, rs: str) -> AsyncIterator[bytes]:
             while True:
                 try:
                     chunk = await asyncio.wait_for(
-                        anext(chunks), max(0, deadline - asyncio.get_running_loop().time())
+                        anext(chunks),
+                        max(0, deadline - asyncio.get_running_loop().time()),
                     )
                 except StopAsyncIteration:
                     break
@@ -156,7 +159,9 @@ async def stream_audio(text: str, voice: str, rs: str) -> AsyncIterator[bytes]:
             if acquired:
                 _sem.release()
     except UPSTREAM_ERRORS:
-        _LOG.warning("edge-tts stream failed text_len=%d voice=%s", len(t), voice, exc_info=True)
+        _LOG.warning(
+            "edge-tts stream failed text_len=%d voice=%s", len(t), voice, exc_info=True
+        )
         raise
 
     if buf:
