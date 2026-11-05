@@ -19,6 +19,14 @@ from app.utils.path_io.path_utils import get_base_dir
 
 logger = logging.getLogger(__name__)
 
+# 入口 HTML 必须每次回源校验，否则升级后旧 HTML 会继续引用已删除的 hash chunk，
+# 导致图片/样式/模块路由动态 import 全部 404。hash 资源本身可长期缓存。
+_INDEX_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
 _EXCLUDED_PREFIXES = (
     "api/",
     "assets/",
@@ -125,7 +133,11 @@ def register_spa_history_fallback(app: FastAPI) -> None:
             )
         vue_index = os.path.join(_vue_dist_dir(), "index.html")
         if os.path.exists(vue_index):
-            return FileResponse(vue_index, media_type="text/html")
+            return FileResponse(
+                vue_index,
+                media_type="text/html",
+                headers=_INDEX_CACHE_HEADERS,
+            )
         return JSONResponse(
             {"success": False, "message": f"页面不存在：/{fallback}"}, status_code=404
         )

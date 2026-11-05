@@ -603,7 +603,9 @@ def test_spa_register_fallback(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Non
     app = FastAPI()
     spa_fallback.register_spa_history_fallback(app)
     client = TestClient(app)
-    assert client.get("/some-vue-route").status_code == 200
+    index_response = client.get("/some-vue-route")
+    assert index_response.status_code == 200
+    assert "no-store" in index_response.headers["cache-control"]
     assert client.get("/api/unknown").status_code == 404
 
 
