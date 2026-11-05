@@ -52,7 +52,7 @@ BASELINE = {
     "modstore_part_files": 0,
     # G11: repo-wide *.py > 40KB (ratchet; especially tests)
     # Raised 2026-11-05 Asia/Shanghai for #2995 (G11 179→187, G12 0→3): folding the
-    # MODstore `_facade()`/`_merged` fragments back into their owners makes their real
+    # MODstore facade/`_merged` fragments back into their owners makes their real
     # size visible; no code was added. Shrink by domain splits, not by line-count fragments.
     "py_gt_40kb": 187,
     "py_gt_40kb_testish": 123,
