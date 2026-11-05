@@ -1,5 +1,5 @@
 {
-  "lines": 2413719,
+  "lines": 2414684,
   "updated": "2026-11-06",
-  "note": "PR 3018 rebase onto main after #2990 then remeasure baseline"
+  "note": "SSOT Drift Gate net-deletion: tree ahead of stale rememeasure baseline; raise to current tracked code+docs lines"
 }
