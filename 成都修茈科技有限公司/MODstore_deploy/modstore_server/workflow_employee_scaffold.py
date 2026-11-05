@@ -15,13 +15,12 @@ from modman.manifest_util import (
     save_manifest_validated,
     set_public_workflow_rows,
 )
-from modstore_server.file_safe import path_under, write_text_file
+from modstore_server.file_safe import (
+    is_file_under_mod,
+    write_text_file,
+    write_text_under_mod,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _write_stub(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_file(path, content)
 
 
 class WorkflowEmployeeScaffoldDTO(BaseModel):
@@ -149,14 +148,12 @@ def run_workflow_employee_scaffold(
     merge_hint = ""
     merged_blueprint = False
 
-    stub_pkg = _ensure_employee_stubs_pkg(mod_dir)
-    stub_path = path_under(stub_pkg, f"{safe_mod}.py")
-    if stub_path.is_file():
-        raise ValueError(
-            f"占位文件已存在: backend/employee_stubs/{safe_mod}.py（请换 id 或手动删除）"
-        )
-    _write_stub(stub_path, _stub_module_body(emp_id, safe_mod))
-    files_written.append(f"backend/employee_stubs/{safe_mod}.py")
+    _ensure_employee_stubs_pkg(mod_dir)
+    stub_rel = f"backend/employee_stubs/{safe_mod}.py"
+    if is_file_under_mod(mod_dir, stub_rel):
+        raise ValueError(f"占位文件已存在: {stub_rel}（请换 id 或手动删除）")
+    write_text_under_mod(mod_dir, stub_rel, _stub_module_body(emp_id, safe_mod))
+    files_written.append(stub_rel)
 
     bp_path = _blueprints_path(mod_dir, manifest)
     if bp_path.is_file():

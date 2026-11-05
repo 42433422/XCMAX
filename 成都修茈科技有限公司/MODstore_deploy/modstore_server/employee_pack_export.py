@@ -35,7 +35,7 @@ from modstore_server.employee_pack_standalone_template import (
     render_standalone_runner_py,
     standalone_import_prefix,
 )
-from modstore_server.file_safe import path_under
+from modstore_server.file_safe import read_text_under_mod
 from modstore_server.mod_ai_scaffold import normalize_mod_id
 from modstore_server.mod_employee_impl_scaffold import sanitize_employee_stem
 
@@ -203,12 +203,9 @@ def _read_employee_source(mod_dir: Optional[Path], emp_id: str) -> Optional[str]
         return None
     try:
         stem = _sanitize_employee_stem(emp_id)
-        p = path_under(mod_dir, "backend", "employees", f"{stem}.py")
-        if p.is_file():
-            return p.read_text(encoding="utf-8")
+        return read_text_under_mod(mod_dir, f"backend/employees/{stem}.py")
     except (OSError, ValueError):
         return None
-    return None
 
 
 def _render_employee_py_for_manifest(

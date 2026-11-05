@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from modman.manifest_util import read_manifest, save_manifest_validated
-from modstore_server.file_safe import path_under
+from modstore_server.file_safe import read_text_under_mod
 
 _SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
@@ -66,12 +66,11 @@ def restore_manifest_snapshot(mod_root: Path, snap_id: str) -> Tuple[Dict[str, A
     sid = (snap_id or "").strip()
     if not re.match(r"^[a-f0-9]{12}$", sid):
         raise ValueError("snap_id 无效")
-    p = path_under(_snapshots_dir(mod_root), f"{sid}.json")
-    if not p.is_file():
-        raise ValueError("快照不存在")
     try:
-        payload = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
+        payload = json.loads(read_text_under_mod(_snapshots_dir(mod_root), f"{sid}.json"))
+    except FileNotFoundError as e:
+        raise ValueError("快照不存在") from e
+    except (OSError, ValueError) as e:
         raise ValueError(f"快照损坏: {e}") from e
     man = payload.get("manifest")
     if not isinstance(man, dict):
