@@ -1,0 +1,10 @@
+{
+  "health": "degraded",
+  "elapsed_s": 23,
+  "bi": {
+    "releaseId": "xcagi-1.0.0.2-1f7d9f11ecc739cad78d57da86a3c5118b5af3fb",
+    "schema_version": 1,
+    "version": "1.0.0.2",
+    "gitSha": "1f7d9f11ecc739cad78d57da86a3c5118b5af3fb"
+  }
+}

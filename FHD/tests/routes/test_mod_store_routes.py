@@ -554,11 +554,9 @@ class TestModStoreUninstall:
         assert resp.status_code == 400
 
     def test_uninstall_success(self, client: TestClient) -> None:
-        mock_mgr = MagicMock()
-        mock_mgr.uninstall_mod.return_value = (True, "removed")
         with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=mock_mgr,
+            "app.application.mod_uninstall.uninstall_mod_for_request",
+            return_value=(True, "removed"),
         ):
             resp = client.post("/uninstall", json={"mod_id": "mod1"})
         assert resp.status_code == 200
@@ -566,11 +564,9 @@ class TestModStoreUninstall:
         assert data["success"] is True
 
     def test_uninstall_failure(self, client: TestClient) -> None:
-        mock_mgr = MagicMock()
-        mock_mgr.uninstall_mod.return_value = (False, "not found")
         with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=mock_mgr,
+            "app.application.mod_uninstall.uninstall_mod_for_request",
+            return_value=(False, "not found"),
         ):
             resp = client.post("/uninstall", json={"mod_id": "mod1"})
         assert resp.status_code == 200
@@ -1146,6 +1142,33 @@ class TestRequestPayload:
 
 
 class TestPrivateDeliveryRequests:
+    def test_original_ticket_rework_forwards_main_source_choice(self, client, monkeypatch):
+        from app.services import private_mod_delivery as delivery
+
+        remote = AsyncMock(return_value={"id": 34, "ticket_no": "CD-original"})
+        monkeypatch.setattr(
+            private_delivery_routes, "_private_delivery_market_token", AsyncMock(return_value="jwt")
+        )
+        monkeypatch.setattr(delivery, "custom_delivery_remote_json", remote)
+        response = client.post(
+            "/private-delivery/requests/34/decision",
+            json={
+                "action": "rework",
+                "note": "在原单使用主线模块返工",
+                "source_mode": "versioned_main",
+            },
+        )
+        assert response.status_code == 200
+        assert remote.await_args.args == (
+            "jwt",
+            "/api/customer-service/custom-deliveries/34/decision",
+        )
+        assert remote.await_args.kwargs["payload"] == {
+            "action": "rework",
+            "note": "在原单使用主线模块返工",
+            "source_mode": "versioned_main",
+        }
+
     def test_create_request_proxies_current_market_identity(
         self, client: TestClient, monkeypatch
     ) -> None:
@@ -1179,6 +1202,22 @@ class TestPrivateDeliveryRequests:
         assert response.json()["data"]["custom_delivery"]["stage"] == "production"
         assert remote.await_args.args[:2] == ("jwt", "/api/customer-service/custom-deliveries")
         assert remote.await_args.kwargs["payload"]["kind"] == "bundle"
+        assert remote.await_args.kwargs["payload"]["source_mode"] == "generated"
+
+        response = client.post(
+            "/private-delivery/requests",
+            json={
+                "kind": "module",
+                "source_mode": "versioned_main",
+                "suggested_id": "sunbird-attendance-custom",
+                "title": "太阳鸟考勤转换",
+                "requirements": "交付已入主线的考勤转换私有模块",
+                "acceptance_criteria": "客户安装后真实转换并导出结果",
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert remote.await_args.kwargs["payload"]["source_mode"] == "versioned_main"
+        assert remote.await_args.kwargs["payload"]["suggested_id"] == "sunbird-attendance-custom"
 
     def test_install_request_requires_market_login(self, client: TestClient, monkeypatch) -> None:
         monkeypatch.setattr(

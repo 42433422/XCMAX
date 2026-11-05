@@ -1,0 +1,8 @@
+[14:30:11] feature=ind-fields platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-fields
+[14:30:23] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:30:26] case F1: passed - 行业字段配置清单真实读取
+[14:30:29] case F2: passed - 行业预置包目录真实读取
+[14:30:29] case F3: passed - 行业基线配置真实读取
+[14:30:29] case F4: passed - 查询不存在行业被拒（负例/边界）
+[14:30:29] video: ind-fields-web-20260929-143011.webm (1542459 bytes)
+[14:30:29] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-fields/log/ind-fields-web-20260929-143011.log

@@ -1,6 +1,6 @@
 # SLO 探针与 auto-merge 阻断（脚手架）
 
-> **状态**：文档 + env 开关；生产 Alertmanager 路由仍须人工配置（见 RELEASE_TRAIN_DEEP_CLOSURE §A8）。
+> **状态**：文档 + env 开关；生产告警以根仓 ops/README.md 所述单 CVM 哨兵为准；不要假设已部署 Alertmanager。
 
 ## CI 侧
 

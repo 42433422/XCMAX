@@ -4,21 +4,34 @@ const { apiFetch } = vi.hoisted(() => ({ apiFetch: vi.fn() }))
 vi.mock('@/utils/apiBase', () => ({ apiFetch }))
 
 import { aiModBriefFromChat, generateAndInstallAiMod } from './aiModDeliveryApi'
+import { setRuntimeTenantStorageScopeInput } from './tenantStorageScopeRuntime'
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
+const jsonResponse = (body: unknown, status = 200): Response => Response.json(body, { status })
 
 describe('aiModDeliveryApi', () => {
-  beforeEach(() => apiFetch.mockReset())
+  beforeEach(() => {
+    apiFetch.mockReset()
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+  })
+
+  it.each(['start', 'progress'])('retains generation without installing under a new account after %s', async stage => {
+    const switchOwner = () => setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 2 })
+    apiFetch.mockImplementation(async (path: string) => {
+      if (stage === 'start' || path.endsWith('/sess-1')) switchOwner()
+      return jsonResponse({ data: { session_id: 'sess-1', status: 'done', artifact: { mod_id: 'private-mod' } } })
+    })
+    await expect(generateAndInstallAiMod('生成一个库存 MOD')).rejects.toThrow('账号或 MOD 已切换')
+    expect(apiFetch).toHaveBeenCalledTimes(stage === 'start' ? 1 : 2)
+    expect(apiFetch.mock.calls.some(([path]) => path.endsWith('/install'))).toBe(false)
+  })
 
   it('only intercepts explicit requests to create a self-use module or workflow', () => {
     expect(aiModBriefFromChat('帮我做一个请假审批流')).toBe('帮我做一个请假审批流')
     expect(aiModBriefFromChat('生成一个库存 MOD')).toBe('生成一个库存 MOD')
     expect(aiModBriefFromChat('请假审批流是什么')).toBe('')
+    expect(aiModBriefFromChat('请创建一份验收文本文件。审批后实际生成文件并返回真实文件路径。不要修改应用安装目录。')).toBe('')
+    expect(aiModBriefFromChat('不要创建应用，请导出工具执行记录')).toBe('')
+    expect(aiModBriefFromChat('审批流帮我创建')).toBe('审批流帮我创建')
   })
 
   it('runs generate, validate and install as one user flow', async () => {

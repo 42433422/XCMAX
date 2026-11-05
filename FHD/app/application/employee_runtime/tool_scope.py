@@ -115,9 +115,7 @@ def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> lis
         manifest.get("tools"),
     ):
         if isinstance(candidate, list):
-            names = [str(x).strip() for x in candidate if str(x).strip()]
-            if names:
-                return names
+            return [x.strip() for x in candidate if isinstance(x, str) and x.strip()]
     return None
 
 
@@ -185,15 +183,15 @@ def is_read_only(manifest: dict[str, Any], config: dict[str, Any]) -> bool:
 
 def resolve_employee_tools(
     employee_id: str, manifest: dict[str, Any], config: dict[str, Any]
-) -> list[dict[str, Any]] | None:
+) -> list[dict[str, Any]]:
     base = _base_tool_specs()
     if not base:
-        return None
+        return []
 
     allow = _explicit_allowlist(config, manifest)
     if allow is not None:
         allowlisted = [name for name in allow if name in base]
-        return [base[name] for name in allowlisted] or None
+        return [base[name] for name in allowlisted]
 
     text = _capability_text(manifest, config)
     read_only = is_read_only(manifest, config)
@@ -217,7 +215,11 @@ def resolve_employee_tools(
             add(n)
 
     if not selected:
-        for n in ("excel_analysis", "excel_schema_understand", "generate_office_document"):
+        for n in (
+            "excel_analysis",
+            "excel_schema_understand",
+            "generate_office_document",
+        ):
             add(n)
 
     if read_only:
@@ -226,7 +228,7 @@ def resolve_employee_tools(
         blocked = set(list_write_tools())
         selected = [n for n in selected if n not in blocked]
 
-    return [base[n] for n in selected] or None
+    return [base[n] for n in selected]
 
 
 def employee_tool_names(

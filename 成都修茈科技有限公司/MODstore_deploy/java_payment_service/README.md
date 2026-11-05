@@ -9,7 +9,7 @@
 - `DATABASE_USER` / `DATABASE_PASSWORD`: PostgreSQL 账号
 - `REDIS_URL`: Redis URL，生产环境必须带认证/TLS
 - `MODSTORE_JWT_SECRET`: 与 Python `auth_service.py` 相同，用于校验 SPA Bearer Token
-- `PAYMENT_SECRET_KEY`: 与 Python 兼容的 checkout 签名密钥
+- `PAYMENT_SECRET_KEY`: 与 Python 兼容的 checkout 签名密钥。**必填**：未设置、长度不足 16 字节或仍为历史占位值 `default_secret_key` 时服务启动即失败（fail-closed），本地启动也需显式设置，例如 `set PAYMENT_SECRET_KEY=local-dev-please-change-me-0123456789`
 - `MODSTORE_ADMIN_RECHARGE_TOKEN`: 与 Python 钱包直充接口一致；未配置时 `/api/wallet/recharge` 返回不可用，避免普通用户自充值
 - `ALIPAY_*`: 支付宝应用、私钥、公钥、回调 URL
 
@@ -53,3 +53,11 @@ set DATABASE_URL=postgresql://modstore:password@127.0.0.1:5432/modstore
 set MODSTORE_PAYMENT_ORDERS_DIR=path\to\payment_orders
 python -m modstore_server.scripts.migrate_sqlite_to_pg
 ```
+
+## 微信通知验签（审计 A03 候选）
+
+通知入口保留原始请求体，使用微信支付官方 Java SDK 0.2.17 校验签名后解密，再核对 appid、mchid 和五分钟时间窗。重复或缺失签名请求头、过期通知、错误签名和商户不匹配均拒绝；业务处理异常返回失败，不伪报成功。
+
+平台公钥模式需成对配置 `WECHAT_PLATFORM_PUBLIC_KEY_PATH`（服务端 PEM 公钥文件）与 `WECHAT_PLATFORM_PUBLIC_KEY_ID`（微信提供的公钥 ID），同时保留 APIv3 密钥。未配置公钥模式时沿用商户私钥、商户证书序列号和 APIv3 密钥，由官方 SDK 获取并维护平台证书。配置缺失、证书不可获取或验签失败不会回退到仅解密。上线前须在支付沙箱校验当前公钥/平台证书与轮换过程；不得将私钥或 APIv3 密钥提交仓库。
+
+`WechatNotificationVerificationTest` 使用临时 RSA/AES 合成密钥验证真实通知入口；它不替代支付提供方沙箱、数据库故障与生产配置验收。

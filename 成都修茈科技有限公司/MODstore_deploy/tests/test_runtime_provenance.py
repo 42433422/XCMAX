@@ -5,7 +5,8 @@ import json
 import subprocess
 from pathlib import Path
 
-from modstore_server import self_maintenance_loop_runner as loop_runner
+import modstore_server.maintenance_loop.schedule as _maintenance_schedule
+import modstore_server.maintenance_loop.store as _maintenance_store
 from modstore_server.runtime_provenance import collect_runtime_provenance
 
 
@@ -169,11 +170,85 @@ def test_local_runtime_installer_manifest_covers_autonomy_controllers() -> None:
     assert '("*/manifest.json", "*/backend/employees/*.py")' in script
 
 
+def test_evaluation_stores_provenance_snapshot_not_the_module(monkeypatch) -> None:
+    snapshot = {
+        "head_sha": "abc",
+        "ok": True,
+        "reasons": [],
+        "source": "git_checkout",
+    }
+    monkeypatch.setattr(
+        _maintenance_schedule.runtime_provenance,
+        "collect_runtime_provenance",
+        lambda **_kwargs: snapshot,
+    )
+    monkeypatch.setattr(_maintenance_schedule, "_recent_employee_failure_count", lambda _hours: 0)
+    monkeypatch.setattr(
+        _maintenance_schedule,
+        "_recent_incident_signals",
+        lambda _hours, limit=8: {"count": 0, "events": []},
+    )
+    monkeypatch.setattr(
+        _maintenance_schedule.self_evolution_knowledge,
+        "collect_proactive_signals",
+        lambda: {"candidates": []},
+    )
+
+    evaluation = _maintenance_schedule.evaluate_self_maintenance_need()
+    start_record = {
+        "gate": evaluation,
+        "phase": "start",
+        "run_id": "run-provenance",
+        "runtime_provenance": evaluation.get("runtime_provenance"),
+    }
+
+    assert evaluation["runtime_provenance"] == snapshot
+    encoded = json.dumps(start_record)
+    assert json.loads(encoded)["runtime_provenance"] == snapshot
+    try:
+        from fastapi.encoders import jsonable_encoder
+    except ImportError:  # pragma: no cover - ledger crash is still covered above
+        return
+    response = jsonable_encoder({"ok": True, "result": start_record, "current_gate": evaluation})
+    assert response["current_gate"]["runtime_provenance"]["ok"] is True
+
+
+def test_append_ledger_sanitizes_module_and_non_json_values(monkeypatch, tmp_path: Path) -> None:
+    import modstore_server.runtime_provenance as provenance
+
+    ledger = tmp_path / "ledger.jsonl"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(ledger))
+
+    class _Odd:
+        def __repr__(self) -> str:
+            return "secret=must-not-leak"
+
+    _maintenance_store._append_ledger(
+        {
+            "blob": b"must-not-leak",
+            "phase": "start",
+            "run_id": "run-mod",
+            "runtime_provenance": provenance,
+            "tags": {"b", "a"},
+            "weird": _Odd(),
+        }
+    )
+
+    text = ledger.read_text(encoding="utf-8")
+    record = json.loads(text)
+    assert record["runtime_provenance"] == "module:modstore_server.runtime_provenance"
+    assert record["blob"] == "bytes:13"
+    assert record["weird"] == "non_json:_Odd"
+    assert set(record["tags"]) == {"a", "b"}
+    assert "must-not-leak" not in text
+    assert "__file__" not in text
+
+
 def test_ledger_adds_correlation_id_and_schema(monkeypatch, tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.jsonl"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(ledger))
 
-    loop_runner._append_ledger({"phase": "start", "run_id": "run-123"})
+    _maintenance_store._append_ledger({"phase": "start", "run_id": "run-123"})
 
     record = json.loads(ledger.read_text(encoding="utf-8"))
     assert record["correlation_id"] == "run-123"
@@ -182,7 +257,7 @@ def test_ledger_adds_correlation_id_and_schema(monkeypatch, tmp_path: Path) -> N
 
 def test_force_cannot_bypass_untrusted_runtime_provenance(monkeypatch) -> None:
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_schedule,
         "evaluate_self_maintenance_need",
         lambda: {
             "runtime_provenance": {
@@ -193,7 +268,7 @@ def test_force_cannot_bypass_untrusted_runtime_provenance(monkeypatch) -> None:
         },
     )
 
-    result = loop_runner.should_run_self_maintenance_loop(force=True)
+    result = _maintenance_schedule.should_run_self_maintenance_loop(force=True)
 
     assert result["should_run"] is False
     assert result["reason"] == "runtime_provenance_blocked"
@@ -206,7 +281,7 @@ def test_loop_lease_is_exclusive(monkeypatch, tmp_path: Path) -> None:
         str(tmp_path / "loop.lock"),
     )
 
-    with loop_runner._exclusive_loop_lease() as first:
-        with loop_runner._exclusive_loop_lease() as second:
+    with _maintenance_store._exclusive_loop_lease() as first:
+        with _maintenance_store._exclusive_loop_lease() as second:
             assert first is True
             assert second is False

@@ -1,0 +1,24 @@
+{
+  "verified_at": "2026-09-13T00:15:29.413271+00:00",
+  "main_sha": "7c589f2b7abc4300fcb0e68888decb3bd01d5767",
+  "pr": 1912,
+  "public": [
+    {
+      "url": "https://xiu-ci.com/download",
+      "bytes": 38820,
+      "sha256": "11fc3130e52b4507b2a43c670202567f33e54e86b63ad0ec04652832ac18d8a8",
+      "matches_main": true
+    },
+    {
+      "url": "https://xiu-ci.com/download/releases",
+      "bytes": 52735,
+      "sha256": "4542e39219f8ffce13ac6b08318c782aed6dca30d0af40740b2be9358a461367",
+      "matches_main": true
+    }
+  ],
+  "publication_note": "Server already held exact merged bytes at pre-write guard; this invocation did not overwrite changed files. Public UI independently verified.",
+  "visual_checks": [
+    "Mac 1.0.0.2 download and partial-platform notice",
+    "Current release summary macOS stable and three manifest notes"
+  ]
+}

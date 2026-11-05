@@ -35,6 +35,13 @@ class TestXcagiChatHttpExcExtended:
         assert result.status_code == 504
         assert "大模型响应超时" in result.detail
 
+    def test_transport_timeout_has_specific_recovery_message(self):
+        import httpx
+
+        result = ch._xcagi_chat_http_exc(httpx.ReadTimeout("synthetic timeout"))
+        assert result.status_code == 504
+        assert result.detail == "模型服务响应超时，请检查连接后重试。"
+
     @pytest.mark.skipif(
         True,  # httpx may not be importable in all envs; covered by import guard
         reason="requires httpx",

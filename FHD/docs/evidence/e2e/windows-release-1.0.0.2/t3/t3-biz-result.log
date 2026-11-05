@@ -1,0 +1,17 @@
+T3 fresh-login business task verification (G5 复验口径, ERP mod products/add)
+time: 2026-09-14 07:35 local (Asia/Shanghai)
+account: SUNBIRD (fresh login at 07:24 via CDP-driven UI login, password verified offline pbkdf2)
+app: XCAGI running since 07:23, CDP 127.0.0.1:9223, page: http://127.0.0.1:17500/mod/xcagi-planner-bridge/chat
+mods: /api/mods/loading-status -> HTTP 200 {"partial_failure": false}
+
+business task (replaces removed /api/auth/company-brand dead route per B10 cleanup):
+  POST /api/mod/xcagi-erp-domain-bridge/products/add  (X-CSRF-Token from cookie csrf_token)
+    body: {"name":"SUNBIRD-t3-073556","model_number":"t3-post-073556","price":1,"quantity":0,"unit":"个","is_active":true}
+  -> HTTP 200 {"add_success":true,"add_source":"mod:xcagi-erp-domain-bridge","add_handler":"products_service"}
+  GET  /api/mod/xcagi-erp-domain-bridge/products/list?keyword=<NAME>   (NAME=SUNBIRD-t3-073556)
+  -> HTTP 200 {"found":true,"total":1}
+
+raw result JSON:
+{"add_status":200,"add_success":true,"add_source":"mod:xcagi-erp-domain-bridge","add_handler":"products_service","list_status":200,"found":true,"total":1}
+
+RESULT: PASS (add 200 success=true, list回查 found=true)

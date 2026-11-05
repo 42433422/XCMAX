@@ -24,6 +24,8 @@ MANAGED_INCLUDES = (
 WWW_MANAGED_INCLUDES = ("include /etc/nginx/snippets/admin-console-www.inc.conf;",)
 
 MANAGED_LOCATION_HEADERS = (
+    "location ~ ^/(styles\\.css|main\\.js|release-data\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {",
+    "location = /data/release-history.json {",
     "location ~ ^/(styles\\.css|main\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {",
     "location = /admin/founder-autonomy {",
     "location = /admin/founder-autonomy/ {",
@@ -41,9 +43,12 @@ MANAGED_LOCATION_HEADERS = (
     "location /market/ {",
     "location = /site/main.js {",
     "location = /site/styles.css {",
+    "location = /corp-butler/ai-butler-female-avatar-v1.png {",
+    "location ~ ^/(?:data/)?capabilities(?:/|$) {",
     "location = /download-release.json {",
     "location = /download-windows-hotfix.json {",
     "location /releases/stable/ {",
+    "location /releases/testing/ {",
 )
 
 

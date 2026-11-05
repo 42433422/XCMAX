@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import stat
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -13,7 +14,6 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-UTC = UTC
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -26,24 +26,22 @@ def _runtime_metrics_dir() -> Path:
 
 def deploy_events_path() -> Path:
     raw = (os.environ.get("XCAGI_DEPLOY_EVENTS_PATH") or "").strip()
-    if raw:
-        return Path(raw).expanduser()
-    return _FHD_ROOT / "metrics" / "deploy_events.jsonl"
+    return Path(raw).expanduser() if raw else _FHD_ROOT / "metrics" / "deploy_events.jsonl"
 
 
 def autonomy_metrics_path() -> Path:
     raw = (os.environ.get("XCAGI_AUTONOMY_METRICS_LOG_PATH") or "").strip()
-    if raw:
-        return Path(raw).expanduser()
-    return _runtime_metrics_dir() / "autonomy-metrics.jsonl"
+    return Path(raw).expanduser() if raw else _runtime_metrics_dir() / "autonomy-metrics.jsonl"
 
 
-def _read_jsonl(path: Path, *, limit: int = 100) -> list[dict[str, Any]]:
+def _read_jsonl(path: Path, *, limit: int = 100, strict: bool = False) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
+    except (OSError, UnicodeError):
+        if strict:
+            raise
         return []
     items: list[dict[str, Any]] = []
     for line in reversed(lines):
@@ -53,11 +51,17 @@ def _read_jsonl(path: Path, *, limit: int = 100) -> list[dict[str, Any]]:
         try:
             row = json.loads(text)
         except json.JSONDecodeError:
+            if strict:
+                raise ValueError("审计记录格式无效") from None
             continue
         if isinstance(row, dict):
             items.append(row)
+        elif strict:
+            raise ValueError("审计记录必须为对象")
         if len(items) >= max(1, limit):
             break
+    if strict and any(line.strip() for line in lines) and not items:
+        raise ValueError("审计文件没有可解析的记录")
     return items
 
 
@@ -393,16 +397,59 @@ def read_cross_tier_audit(
         ),
         "ci": _FHD_ROOT / ".trae" / "autonomy-ci" / "audit.jsonl",
     }
-    # Prefer local FHD autonomy dir when server path missing (dev)
     server_fallback = _runtime_metrics_dir().parent / "autonomy" / "audit.jsonl"
-    if tier_key == "server" and not path_map["server"].is_file() and server_fallback.is_file():
-        path_map["server"] = server_fallback
     path = path_map.get(tier_key) or path_map["server"]
-    items = _read_jsonl(Path(path), limit=bounded)
+    status, items, last_event_at = "not_connected", [], None
+    exists, error_code = False, None
+    try:
+        try:
+            metadata = path.stat()
+        except FileNotFoundError:
+            if tier_key != "server":
+                raise
+            path = server_fallback
+            metadata = path.stat()
+        exists = True
+        if not stat.S_ISREG(metadata.st_mode):
+            raise IsADirectoryError("invalid audit source")
+        if exists:
+            items = _read_jsonl(path, limit=bounded, strict=True)
+            status = "unknown_freshness" if items else "empty"
+            times = []
+            for row in items:
+                stamp = row.get("timestamp") or row.get("ts")
+                try:
+                    dt = (
+                        datetime.fromtimestamp(stamp / 1000 if stamp > 1e11 else stamp, UTC)
+                        if isinstance(stamp, (int, float))
+                        else datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+                    )
+                    times.append(dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt)
+                except (ValueError, TypeError, OverflowError, OSError):
+                    continue
+            if times:
+                latest = max(times)
+                last_event_at = latest.isoformat()
+                age = (datetime.now(UTC) - latest).total_seconds()
+                status = "stale" if age > 86400 else "ready" if age >= -300 else "unknown_freshness"
+    except FileNotFoundError:
+        status = "not_connected"
+    except PermissionError:
+        status, error_code = "error", "permission_denied"
+    except IsADirectoryError:
+        status, error_code = "error", "invalid_path"
+    except (UnicodeError, ValueError):
+        status, error_code = "error", "invalid_format"
+    except OSError:
+        status, error_code = "error", "read_failed"
     return {
+        "error_code": error_code,
+        "collected_at": datetime.now(UTC).isoformat(),
         "tier": tier_key,
         "path": str(path),
-        "exists": Path(path).is_file(),
+        "exists": exists,
+        "status": status,
+        "last_event_at": last_event_at,
         "items": items,
         "count": len(items),
     }

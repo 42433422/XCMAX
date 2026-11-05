@@ -6,7 +6,7 @@ from typing import Optional, TypedDict
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.utils.time import utc_now_naive
 
 role_permissions = Table(
@@ -64,6 +64,7 @@ class _RoleSeed(TypedDict):
 
 
 DEFAULT_PERMISSIONS: list[_PermissionSeed] = [
+    {"name": "退款本人所属订单", "code": "model_payment.refund", "module": "payment"},
     {"name": "查看客户", "code": "customer.view", "module": "customer"},
     {"name": "编辑客户", "code": "customer.edit", "module": "customer"},
     {"name": "查看产品", "code": "product.view", "module": "product"},
@@ -76,15 +77,16 @@ DEFAULT_PERMISSIONS: list[_PermissionSeed] = [
     {"name": "查看物料", "code": "material.view", "module": "material"},
     {"name": "编辑物料", "code": "material.edit", "module": "material"},
     {"name": "管理用户", "code": "admin.manage_users", "module": "admin"},
+    {"name": "管理本企业角色", "code": "tenant.manage_roles", "module": "tenant"},
     {"name": "系统配置", "code": "admin.system_config", "module": "admin"},
     {"name": "查看企业知识", "code": "dataset.read", "module": "knowledge"},
     {"name": "管理企业知识", "code": "dataset.write", "module": "knowledge"},
     {"name": "跨租户管理知识", "code": "dataset.admin", "module": "knowledge"},
     {"name": "查看数据对接", "code": "etl.read", "module": "etl"},
-    {"name": "管理 ETL 模板", "code": "etl.template.manage", "module": "etl"},
-    {"name": "执行 ETL", "code": "etl.execute", "module": "etl"},
-    {"name": "撤销 ETL", "code": "etl.rollback", "module": "etl"},
-    {"name": "管理 ETL 目标", "code": "etl.target.manage", "module": "etl"},
+    {"name": "管理 ELT 模板", "code": "etl.template.manage", "module": "etl"},
+    {"name": "执行 ELT", "code": "etl.execute", "module": "etl"},
+    {"name": "撤销 ELT", "code": "etl.rollback", "module": "etl"},
+    {"name": "管理 ELT 目标", "code": "etl.target.manage", "module": "etl"},
 ]
 
 DEFAULT_ROLES: list[_RoleSeed] = [

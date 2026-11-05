@@ -1,0 +1,7 @@
+2026-09-29T06:48:17+0800 [erp-excel-io] 开始验收 erp-excel-io Excel 导入导出；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:48:17+0800 [erp-excel-io] M1 passed :: HTTP 200 17ms；Excel 模板服务运行正常
+2026-09-29T06:48:17+0800 [erp-excel-io] M2 passed :: HTTP 200 18ms；['客户资料初始化表', '产品资料初始化表', '销售订单标准表', '出货记录初始化表']
+2026-09-29T06:48:17+0800 [erp-excel-io] M3 passed :: HTTP 200 31ms；logs=0
+2026-09-29T06:48:21+0800 [erp-excel-io] M4 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/products；命中文本 ['导入Excel']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 人员管理 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 饰品包装品管理 | 导入Excel | 导出价格表 | 导出Excel | + 添加产品 | 产品单位： | 请选择产品单位 | MAC验收0929客
+2026-09-29T06:48:22+0800 [erp-excel-io] screenshot result.png
+2026-09-29T06:48:24+0800 [erp-excel-io] video operation.webm bytes=312092

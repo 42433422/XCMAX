@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "sec-tenant-isolation",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "77be1a654c200cf140567b0c765dbd76a0175c838cf4c2444c5d5cbdc03cf803",
+  "visible_content": "模板库及验收用模板；与后台治理、安全审计、模型门禁及 SLO 等挂名功能不相符。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/sec-tenant-isolation.png"
+}

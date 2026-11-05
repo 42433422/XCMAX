@@ -1,4 +1,4 @@
-"""Tests for app.services.report_service — sales/inventory/purchase reports."""
+"""Tests for app.domain.shared_services.report_service — sales/inventory/purchase reports."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import column
 from sqlalchemy import func as sa_func
 
-from app.services.report_service import ReportService
+from app.domain.shared_services.report_service import ReportService
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -78,7 +78,7 @@ class TestDecimalToFloat:
 class TestGetSalesReport:
     """get_sales_report() — 销售报表"""
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_group_by_product(self, mock_get_db, service):
         """按产品分组"""
         mock_record = MagicMock()
@@ -101,7 +101,7 @@ class TestGetSalesReport:
         assert "data" in result
         assert "summary" in result
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_group_by_customer(self, mock_get_db, service):
         """按客户分组"""
         mock_record = MagicMock()
@@ -121,7 +121,7 @@ class TestGetSalesReport:
         assert result["success"] is True
         assert "data" in result
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_group_by_date(self, mock_get_db, service):
         """按日期分组"""
         mock_record = MagicMock()
@@ -141,7 +141,7 @@ class TestGetSalesReport:
         assert result["success"] is True
         assert "data" in result
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_group_by_date_with_none_date(self, mock_get_db, service):
         """created_at 为 None 时归类为 unknown"""
         mock_record = MagicMock()
@@ -161,7 +161,7 @@ class TestGetSalesReport:
         assert result["success"] is True
         assert any(d["date"] == "unknown" for d in result["data"])
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_unknown_group_by_returns_empty(self, mock_get_db, service):
         """未知 group_by 返回空数据"""
         mock_db = MagicMock()
@@ -172,9 +172,9 @@ class TestGetSalesReport:
         assert result["success"] is True
         assert result["data"] == []
 
-    @patch("app.services.report_service.ShipmentRecord")
-    @patch("app.services.report_service.func")
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.ShipmentRecord")
+    @patch("app.domain.shared_services.report_service.func")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_with_date_filters(self, mock_get_db, mock_func, mock_sr, service):
         """日期范围过滤"""
         # Use real SQLAlchemy column objects so >= comparison with datetime works
@@ -198,9 +198,9 @@ class TestGetSalesReport:
         )
         assert result["success"] is True
 
-    @patch("app.services.report_service.ShipmentRecord")
-    @patch("app.services.report_service.func")
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.ShipmentRecord")
+    @patch("app.domain.shared_services.report_service.func")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_with_customer_id_filter(self, mock_get_db, mock_func, mock_sr, service):
         """客户 ID 过滤"""
         mock_sr.created_at = column("created_at")
@@ -219,7 +219,7 @@ class TestGetSalesReport:
         result = service.get_sales_report(customer_id=1, source="shipment")
         assert result["success"] is True
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_with_filters_uses_current_shipment_model_columns(self, mock_get_db, service):
         """字段漂移回归：使用真实 ShipmentRecord 字段构建过滤条件。"""
         mock_db = MagicMock()
@@ -239,7 +239,7 @@ class TestGetSalesReport:
         assert result["success"] is True
         assert mock_query.filter.call_count == 3
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_product_with_no_name_uses_fallback(self, mock_get_db, service):
         """产品名称为空时使用 fallback"""
         mock_record = MagicMock()
@@ -261,7 +261,7 @@ class TestGetSalesReport:
         assert result["success"] is True
         assert any("产品42" in d.get("product_name", "") for d in result["data"])
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_customer_with_no_name_uses_fallback(self, mock_get_db, service):
         """客户名称为空时使用 fallback"""
         mock_record = MagicMock()
@@ -290,7 +290,7 @@ class TestGetSalesReport:
 class TestGetInventoryReport:
     """get_inventory_report() — 库存报表"""
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_basic_report(self, mock_get_db, service):
         """基本库存报表"""
         mock_warehouse = MagicMock()
@@ -319,7 +319,7 @@ class TestGetInventoryReport:
         assert "data" in result
         assert "summary" in result
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_with_warehouse_filter(self, mock_get_db, service):
         """仓库过滤"""
         mock_db = MagicMock()
@@ -333,7 +333,7 @@ class TestGetInventoryReport:
         result = service.get_inventory_report(warehouse_id=1)
         assert result["success"] is True
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_with_category_filter(self, mock_get_db, service):
         """分类过滤"""
         mock_db = MagicMock()
@@ -347,7 +347,7 @@ class TestGetInventoryReport:
         result = service.get_inventory_report(category="电子")
         assert result["success"] is True
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_warehouse_none(self, mock_get_db, service):
         """warehouse 为 None 时名称也为 None"""
         mock_ledger = MagicMock()
@@ -381,7 +381,7 @@ class TestGetInventoryReport:
 class TestGetPurchaseReport:
     """get_purchase_report() — 采购报表"""
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_group_by_supplier(self, mock_get_db, service):
         """按供应商分组"""
         mock_supplier = MagicMock()
@@ -403,7 +403,7 @@ class TestGetPurchaseReport:
         assert result["success"] is True
         assert "data" in result
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_group_by_status(self, mock_get_db, service):
         """按状态分组"""
         mock_order = MagicMock()
@@ -418,7 +418,7 @@ class TestGetPurchaseReport:
         result = service.get_purchase_report(group_by="status")
         assert result["success"] is True
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_group_by_date(self, mock_get_db, service):
         """按日期分组"""
         mock_order = MagicMock()
@@ -433,7 +433,7 @@ class TestGetPurchaseReport:
         result = service.get_purchase_report(group_by="date")
         assert result["success"] is True
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_group_by_date_with_none_date(self, mock_get_db, service):
         """order_date 为 None 时归类为 unknown"""
         mock_order = MagicMock()
@@ -449,7 +449,7 @@ class TestGetPurchaseReport:
         assert result["success"] is True
         assert any(d["date"] == "unknown" for d in result["data"])
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_unknown_group_by_returns_empty(self, mock_get_db, service):
         """未知 group_by 返回空数据"""
         mock_db = MagicMock()
@@ -460,7 +460,7 @@ class TestGetPurchaseReport:
         assert result["success"] is True
         assert result["data"] == []
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_supplier_none_uses_fallback(self, mock_get_db, service):
         """supplier 为 None 时使用 fallback"""
         mock_order = MagicMock()
@@ -479,7 +479,7 @@ class TestGetPurchaseReport:
         assert result["success"] is True
         assert any("供应商5" in d.get("supplier_name", "") for d in result["data"])
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_with_date_filters(self, mock_get_db, service):
         """日期范围过滤"""
         mock_db = MagicMock()
@@ -495,7 +495,7 @@ class TestGetPurchaseReport:
         )
         assert result["success"] is True
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_status_none_uses_unknown(self, mock_get_db, service):
         """status 为 None 时归类为 unknown"""
         mock_order = MagicMock()
@@ -520,7 +520,7 @@ class TestGetPurchaseReport:
 class TestGetInventoryTransactionReport:
     """get_inventory_transaction_report() — 库存事务报表"""
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_basic_report(self, mock_get_db, service):
         """基本库存事务报表"""
         mock_product = MagicMock()
@@ -560,7 +560,7 @@ class TestGetInventoryTransactionReport:
         assert result["count"] == 1
         assert result["data"][0]["quantity"] == 10.0
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_with_filters(self, mock_get_db, service):
         """带过滤条件"""
         mock_db = MagicMock()
@@ -581,7 +581,7 @@ class TestGetInventoryTransactionReport:
         assert result["success"] is True
         assert result["count"] == 0
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_product_none(self, mock_get_db, service):
         """product 为 None 时名称为 None"""
         mock_txn = MagicMock()
@@ -623,13 +623,13 @@ class TestGetInventoryTransactionReport:
 class TestGetDashboardSummary:
     """get_dashboard_summary() — 仪表盘摘要"""
 
-    @patch("app.services.report_service.ShipmentRecord")
-    @patch("app.services.report_service.PurchaseOrder")
-    @patch("app.services.report_service.InventoryLedger")
-    @patch("app.services.report_service.Supplier")
-    @patch("app.services.report_service.Product")
-    @patch("app.services.report_service.func")
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.ShipmentRecord")
+    @patch("app.domain.shared_services.report_service.PurchaseOrder")
+    @patch("app.domain.shared_services.report_service.InventoryLedger")
+    @patch("app.domain.shared_services.report_service.Supplier")
+    @patch("app.domain.shared_services.report_service.Product")
+    @patch("app.domain.shared_services.report_service.func")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_basic_summary(
         self,
         mock_get_db,
@@ -686,13 +686,13 @@ class TestGetDashboardSummary:
         assert result["success"] is True
         assert "data" in result
 
-    @patch("app.services.report_service.ShipmentRecord")
-    @patch("app.services.report_service.PurchaseOrder")
-    @patch("app.services.report_service.InventoryLedger")
-    @patch("app.services.report_service.Supplier")
-    @patch("app.services.report_service.Product")
-    @patch("app.services.report_service.func")
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.ShipmentRecord")
+    @patch("app.domain.shared_services.report_service.PurchaseOrder")
+    @patch("app.domain.shared_services.report_service.InventoryLedger")
+    @patch("app.domain.shared_services.report_service.Supplier")
+    @patch("app.domain.shared_services.report_service.Product")
+    @patch("app.domain.shared_services.report_service.func")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_null_amounts(
         self,
         mock_get_db,
@@ -743,7 +743,7 @@ class TestGetDashboardSummary:
 
         assert result["success"] is True
 
-    @patch("app.services.report_service.get_db")
+    @patch("app.domain.shared_services.report_service.get_db")
     def test_uses_current_shipment_model_columns(self, mock_get_db, service):
         """字段漂移回归：dashboard 直接使用 ShipmentRecord.amount/created_at。"""
         mock_db = MagicMock()
@@ -801,7 +801,10 @@ class TestExportToExcel:
 
     def test_export_error(self, service):
         """导出异常时返回失败"""
-        with patch("app.services.report_service.pd.DataFrame", side_effect=ValueError("bad data")):
+        with patch(
+            "app.domain.shared_services.report_service.pd.DataFrame",
+            side_effect=ValueError("bad data"),
+        ):
             result = service.export_to_excel("sales", None, "error_report")
         assert result["success"] is False
         assert "message" in result

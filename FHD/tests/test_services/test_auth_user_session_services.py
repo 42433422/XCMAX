@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from app.services.auth_service import AuthService
-from app.services.session_service import SessionService
-from app.services.user_service import UserService
+from app.domain.shared_services.auth_service import AuthService
+from app.domain.shared_services.session_service import SessionService
+from app.domain.shared_services.user_service import UserService
 
 
 def _db_cm(mock_db):
@@ -29,9 +29,9 @@ def _user_row():
     return u
 
 
-@patch("app.services.auth_service.audit_logger")
-@patch("app.services.auth_service.check_password_hash", return_value=True)
-@patch("app.services.auth_service.get_db")
+@patch("app.domain.shared_services.auth_service.audit_logger")
+@patch("app.domain.shared_services.auth_service.check_password_hash", return_value=True)
+@patch("app.domain.shared_services.auth_service.get_db")
 def test_auth_service_authenticate_success(mock_get_db, _chk, _audit):
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.first.return_value = _user_row()
@@ -55,8 +55,8 @@ def test_auth_service_authenticate_success(mock_get_db, _chk, _audit):
     mock_sessions.create_session.assert_called_once_with(42)
 
 
-@patch("app.services.auth_service.audit_logger")
-@patch("app.services.auth_service.get_db")
+@patch("app.domain.shared_services.auth_service.audit_logger")
+@patch("app.domain.shared_services.auth_service.get_db")
 def test_auth_service_authenticate_unknown_user(mock_get_db, _audit):
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -69,7 +69,7 @@ def test_auth_service_authenticate_unknown_user(mock_get_db, _audit):
     assert "用户名" in out["message"]
 
 
-@patch("app.services.user_service.get_db")
+@patch("app.domain.shared_services.user_service.get_db")
 def test_user_service_create_user_duplicate(mock_get_db):
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.first.return_value = MagicMock()

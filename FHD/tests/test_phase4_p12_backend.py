@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.conversation.modstore_adapter import (
+from app.domain.shared_services.conversation.modstore_adapter import (
     ModstoreOpenAICompatibleClient,
     ModstorePlatformAdapter,
     _normalize_stream_choice,

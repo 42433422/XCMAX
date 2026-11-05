@@ -107,7 +107,7 @@ class ServiceMigrator:
         # 1. 添加导入
         changes.append("添加 NeuroBus 导入:")
         changes.append("  from app.neuro_bus.bus import get_neuro_bus")
-        changes.append("  from app.neuro_bus.events.base import EventPriority")
+        changes.append("  from app.neuro_bus.events.events_base import EventPriority")
 
         # 2. 检测领域
         domain = self._detect_domain(service_name)

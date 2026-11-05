@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "feature": "base-device-bind",
+  "platform": "macos",
+  "result": "PARTIAL",
+  "status": "partial",
+  "verified_at": "2026-09-25T00:29:46.216Z",
+  "product_version": "1.0.0.5",
+  "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "source_main_sha": "93b9ad2f68b72103816d4e0b75ff9165f60f9267",
+  "test_method": "ui",
+  "target": "/settings",
+  "scope": "设置页面打开并渲染；未生成/消费配对凭据或验证设备绑定。",
+  "screenshot": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-device-bind.png",
+  "video": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-device-bind.webm",
+  "log": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-device-bind.log",
+  "media": [
+    {
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-device-bind.png",
+      "sha256": "0589bbbf74f8ed6ece5b298b1368084e8bcdfd2b8cf33dd193c8c1a422fca9c6"
+    },
+    {
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-device-bind.webm",
+      "sha256": "0269e6af678d984408c195e5c2f100df60c5626ec3b1955fc7cabfbbeffcb504"
+    },
+    {
+      "kind": "log",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-device-bind.log",
+      "sha256": "775866ce4275cbac44ee31b1d4b42359a4024ae5f0d84a5539768f1f9e06184b"
+    }
+  ],
+  "limitations": "Supplementary observation only; this record is not an acceptance PASS."
+}

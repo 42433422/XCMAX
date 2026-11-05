@@ -1,0 +1,9 @@
+[07:00:24] feature=pay-refund base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-refund
+[07:00:36] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:00:42] case PF1: passed - 退款/对账审核调度状态真实读取，且审批页真实渲染
+[07:00:42] case PF2: passed - 退款申请缺少 out_trade_no 被校验拒绝
+[07:00:42] case PF3: passed - 退款查询（只读）被如实拒绝
+[07:00:42] case PF4: passed - 待审退款列表未绑定市场账号被拒
+[07:00:42] case PF5: passed - 退款审核入口未绑定市场账号被拒
+[07:00:42] video: pay-refund-web-20260929-070024.webm (1088034 bytes)
+[07:00:43] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-refund/log/pay-refund-web-20260929-070024.log

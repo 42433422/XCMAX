@@ -1,4 +1,4 @@
-"""Tests for app.services.train_intent — intent model training/evaluation/serve CLI."""
+"""Tests for app.domain.shared_services.train_intent — intent model training/evaluation/serve CLI."""
 
 # ruff: noqa: E402, I001
 from __future__ import annotations
@@ -6,13 +6,13 @@ from __future__ import annotations
 import sys
 from unittest.mock import MagicMock, patch
 
-from app.services.train_intent import (  # noqa: E402
+from app.domain.shared_services.train_intent import (  # noqa: E402
     evaluate_model,
     main,
     serve_model,
     train_model,
 )
-from app.services.train_intent import (
+from app.domain.shared_services.train_intent import (
     test_model as _do_test_model,
 )
 
@@ -24,12 +24,12 @@ from app.services.train_intent import (
 class TestTrainModel:
     """train_model() — 训练意图识别模型"""
 
-    @patch("app.services.train_intent.torch")
+    @patch("app.domain.shared_services.train_intent.torch")
     def test_import_error_returns_none(self, mock_torch):
         """无法导入训练模块时返回 None"""
-        with patch.dict(sys.modules, {"app.services.intent_trainer": None}):
+        with patch.dict(sys.modules, {"app.domain.shared_services.intent_trainer": None}):
             with patch(
-                "app.services.train_intent.train_intent_model",
+                "app.domain.shared_services.train_intent.train_intent_model",
                 side_effect=ImportError("no module"),
                 create=True,
             ):
@@ -39,7 +39,7 @@ class TestTrainModel:
                 )
         assert result is None
 
-    @patch("app.services.train_intent.torch")
+    @patch("app.domain.shared_services.train_intent.torch")
     def test_train_success_returns_path(self, mock_torch):
         """训练成功返回模型路径"""
         mock_torch.cuda.is_available.return_value = False
@@ -49,14 +49,14 @@ class TestTrainModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.intent_trainer": mock_trainer},
+            {"app.domain.shared_services.intent_trainer": mock_trainer},
         ):
             result = train_model(data_path="/tmp/data.yml")
 
         assert result == "/models/intent_bert/final"
         mock_trainer.train_intent_model.assert_called_once()
 
-    @patch("app.services.train_intent.torch")
+    @patch("app.domain.shared_services.train_intent.torch")
     def test_train_with_custom_params(self, mock_torch):
         """自定义训练参数正确传递"""
         mock_torch.cuda.is_available.return_value = True
@@ -66,7 +66,7 @@ class TestTrainModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.intent_trainer": mock_trainer},
+            {"app.domain.shared_services.intent_trainer": mock_trainer},
         ):
             result = train_model(
                 data_path="/tmp/data.yml",
@@ -85,7 +85,7 @@ class TestTrainModel:
         assert call_kwargs.kwargs.get("learning_rate") == 3e-5
         assert call_kwargs.kwargs.get("max_length") == 128
 
-    @patch("app.services.train_intent.torch")
+    @patch("app.domain.shared_services.train_intent.torch")
     def test_train_with_export_onnx(self, mock_torch):
         """export_onnx=True 时调用 export_to_onnx"""
         mock_torch.cuda.is_available.return_value = False
@@ -95,7 +95,7 @@ class TestTrainModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.intent_trainer": mock_trainer},
+            {"app.domain.shared_services.intent_trainer": mock_trainer},
         ):
             result = train_model(
                 data_path="/tmp/data.yml",
@@ -108,7 +108,7 @@ class TestTrainModel:
             64,
         )
 
-    @patch("app.services.train_intent.torch")
+    @patch("app.domain.shared_services.train_intent.torch")
     def test_train_without_export_onnx(self, mock_torch):
         """export_onnx=False 时不调用 export_to_onnx"""
         mock_torch.cuda.is_available.return_value = False
@@ -118,13 +118,13 @@ class TestTrainModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.intent_trainer": mock_trainer},
+            {"app.domain.shared_services.intent_trainer": mock_trainer},
         ):
             train_model(data_path="/tmp/data.yml", export_onnx=False)
 
         mock_trainer.export_to_onnx.assert_not_called()
 
-    @patch("app.services.train_intent.torch")
+    @patch("app.domain.shared_services.train_intent.torch")
     def test_train_recoverable_error_returns_none(self, mock_torch):
         """训练过程抛出 RECOVERABLE_ERRORS 时返回 None"""
         mock_torch.cuda.is_available.return_value = False
@@ -134,7 +134,7 @@ class TestTrainModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.intent_trainer": mock_trainer},
+            {"app.domain.shared_services.intent_trainer": mock_trainer},
         ):
             result = train_model(data_path="/tmp/data.yml")
 
@@ -151,7 +151,7 @@ class TestEvaluateModel:
 
     def test_import_error_returns_early(self):
         """无法导入推理模块时提前返回"""
-        with patch.dict(sys.modules, {"app.services.bert_intent_service": None}):
+        with patch.dict(sys.modules, {"app.domain.shared_services.bert_intent_service": None}):
             result = evaluate_model(model_path="/models/fake")
         assert result is None
 
@@ -164,7 +164,7 @@ class TestEvaluateModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.bert_intent_service": mock_svc},
+            {"app.domain.shared_services.bert_intent_service": mock_svc},
         ):
             result = evaluate_model(model_path="/models/fake")
 
@@ -180,7 +180,7 @@ class TestEvaluateModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.bert_intent_service": mock_svc},
+            {"app.domain.shared_services.bert_intent_service": mock_svc},
         ):
             evaluate_model(model_path="/models/fake")
 
@@ -201,7 +201,7 @@ class TestEvaluateModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.bert_intent_service": mock_svc},
+            {"app.domain.shared_services.bert_intent_service": mock_svc},
         ):
             evaluate_model(model_path="/models/fake")
 
@@ -216,7 +216,7 @@ class TestBatchTestModel:
 
     def test_import_error_returns_early(self):
         """无法导入推理模块时提前返回"""
-        with patch.dict(sys.modules, {"app.services.bert_intent_service": None}):
+        with patch.dict(sys.modules, {"app.domain.shared_services.bert_intent_service": None}):
             result = _do_test_model(model_path="/models/fake", texts=["你好"])
         assert result is None
 
@@ -234,7 +234,7 @@ class TestBatchTestModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.bert_intent_service": mock_svc},
+            {"app.domain.shared_services.bert_intent_service": mock_svc},
         ):
             _do_test_model(model_path="/models/fake", texts=["你好", "再见"])
 
@@ -253,7 +253,7 @@ class TestBatchTestModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.bert_intent_service": mock_svc},
+            {"app.domain.shared_services.bert_intent_service": mock_svc},
         ):
             _do_test_model(model_path="/models/fake", texts=["你好"])
 
@@ -271,7 +271,7 @@ class TestBatchTestModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.bert_intent_service": mock_svc},
+            {"app.domain.shared_services.bert_intent_service": mock_svc},
         ):
             _do_test_model(model_path="/models/fake", texts=["你好"])
 
@@ -285,7 +285,7 @@ class TestBatchTestModel:
 
         with patch.dict(
             sys.modules,
-            {"app.services.bert_intent_service": mock_svc},
+            {"app.domain.shared_services.bert_intent_service": mock_svc},
         ):
             _do_test_model(model_path="/models/fake", texts=["你好"])
 
@@ -310,7 +310,7 @@ class TestServeModel:
             patch.dict(
                 sys.modules,
                 {
-                    "app.services.bert_intent_service": mock_svc,
+                    "app.domain.shared_services.bert_intent_service": mock_svc,
                     "uvicorn": mock_uvicorn,
                 },
             ),
@@ -333,7 +333,7 @@ class TestMain:
         with patch("sys.argv", ["train_intent", "--mode", "train"]):
             main()
 
-    @patch("app.services.train_intent.train_model")
+    @patch("app.domain.shared_services.train_intent.train_model")
     def test_train_mode_with_data(self, mock_train):
         """train 模式有 --data 时调用 train_model"""
         mock_train.return_value = "/models/final"
@@ -350,7 +350,7 @@ class TestMain:
             main()
         mock_train.assert_called_once()
 
-    @patch("app.services.train_intent.evaluate_model")
+    @patch("app.domain.shared_services.train_intent.evaluate_model")
     def test_evaluate_mode(self, mock_eval):
         """evaluate 模式调用 evaluate_model"""
         with patch(
@@ -367,9 +367,9 @@ class TestMain:
         mock_eval.assert_called_once_with(model_path="/models/final", data_path=None)
 
     @patch(
-        "app.services.train_intent._do_test_model"
+        "app.domain.shared_services.train_intent._do_test_model"
         if False
-        else "app.services.train_intent.test_model"
+        else "app.domain.shared_services.train_intent.test_model"
     )
     def test_test_mode_with_texts(self, mock_test):
         """test 模式解析 --texts 参数"""
@@ -389,7 +389,7 @@ class TestMain:
         texts = call_kwargs.kwargs.get("texts") or call_kwargs[1].get("texts")
         assert texts == ["你好", "再见"]
 
-    @patch("app.services.train_intent.test_model")
+    @patch("app.domain.shared_services.train_intent.test_model")
     def test_test_mode_without_texts_uses_defaults(self, mock_test):
         """test 模式无 --texts 时使用默认文本"""
         with patch(
@@ -406,7 +406,7 @@ class TestMain:
         texts = call_kwargs.kwargs.get("texts") or call_kwargs[1].get("texts")
         assert "生成发货单" in texts
 
-    @patch("app.services.train_intent.serve_model")
+    @patch("app.domain.shared_services.train_intent.serve_model")
     def test_serve_mode(self, mock_serve):
         """serve 模式调用 serve_model"""
         with patch(
@@ -422,7 +422,7 @@ class TestMain:
             main()
         mock_serve.assert_called_once_with(model_path="models/intent_bert/final", port=9000)
 
-    @patch("app.services.train_intent.train_model")
+    @patch("app.domain.shared_services.train_intent.train_model")
     def test_train_mode_with_all_args(self, mock_train):
         """train 模式传递所有参数"""
         mock_train.return_value = "/models/final"

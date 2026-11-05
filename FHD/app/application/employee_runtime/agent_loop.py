@@ -1,17 +1,4 @@
-"""员工多轮工具调用循环（OpenAI function-calling ReAct）。
-
-替换旧的单轮 ``agent_runner._chat_completion``：员工 ``agent`` handler 现在可以
-跨多轮调用工具（来自工作流工具注册表），并对每次 tool_call 套一个可选 gate
-（P1 接入 WorkspaceGuard + risk_gate）。
-
-复用既有积木：
-- LLM 客户端：``app.infrastructure.llm.client.get_openai_compatible_client``
-- 工具执行：``app.application.tools.workflow.execute_workflow_tool``
-- 工具清单：``app.application.tools.workflow.get_workflow_tool_registry``
-
-同步实现（沿用 legacy_chat_adapter 的同步 OpenAI 客户端），由 executor 同步调用。
-无 API Key / offline 时优雅降级（返回 degraded 标记，不抛错）。
-"""
+"""员工多轮工具循环：最终派发限制在公布的工具集，授权异常及无效结果拒绝执行。"""
 
 from __future__ import annotations
 
@@ -21,6 +8,10 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from app.application.tool_execution_deadline import (
+    invocation_deadline,
+    remaining_invocation_seconds,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -78,14 +69,7 @@ def _parse_args(raw: str) -> dict[str, Any]:
 
 
 def _parse_tool_args(raw: str) -> tuple[dict[str, Any], str | None]:
-    """Parse one model function-call payload without silently executing bad JSON.
-
-    ``_parse_args`` is kept as the historic, lenient helper used by callers and
-    tests.  An agent loop has a different safety contract: malformed arguments
-    are an invalid tool call, not an invitation to execute the tool with an
-    empty object.  The model receives a structured error and can repair the
-    call on a later round.
-    """
+    """Reject malformed model arguments; keep _parse_args for legacy callers."""
 
     try:
         data = json.loads(raw or "{}")
@@ -97,14 +81,7 @@ def _parse_tool_args(raw: str) -> tuple[dict[str, Any], str | None]:
 
 
 def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
-    """Return ``(success, error, verified)`` for a workflow tool result.
-
-    The legacy workflow surface predates a uniform output schema.  A structured
-    ``success`` field is authoritative; an explicit error/token request is a
-    failure or unfinished action.  Older read-only tools that return a useful
-    object without either field remain compatible but are marked unverified in
-    the trace, rather than being mistaken for proof of a consequential action.
-    """
+    """Return success/error/verified; legacy data-only responses remain unverified."""
 
     try:
         payload = json.loads(raw)
@@ -112,6 +89,8 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
         return False, "工具返回不是有效 JSON", True
     if not isinstance(payload, dict):
         return False, "工具返回必须是 JSON 对象", True
+    if payload.get("error") or payload.get("ok") is False:
+        return False, str(payload.get("error") or "工具返回失败")[:500], True
     if "success" in payload:
         if payload.get("success") is True:
             return True, None, True
@@ -137,7 +116,9 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
 def _terminal_tool_failure(tool_trace: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Summarize an unfinished/failed tool action for the final run result."""
 
-    failed = [row for row in tool_trace if row.get("success") is False]
+    failed = [
+        row for row in tool_trace if row.get("success") is False and not row.get("superseded_by")
+    ]
     if not failed:
         return None
     first = failed[0]
@@ -173,6 +154,7 @@ def run_employee_agent_loop(
     model: str | None = None,
 ) -> dict[str, Any]:
     """运行员工多轮工具循环，返回统一结果 dict。"""
+    deadline = time.monotonic() + remaining_invocation_seconds(max(0.001, wall_time_limit_sec))
     try:
         from app.infrastructure.llm.client import (
             get_openai_compatible_client,
@@ -199,6 +181,7 @@ def run_employee_agent_loop(
 
     mdl = model or resolve_chat_model()
     tool_specs = tools if tools is not None else default_employee_tools()
+    allowed_tools = {(spec.get("function") or {}).get("name") for spec in tool_specs}
     user_payload = json.dumps({"task": task, "input": input_data or {}}, ensure_ascii=False)[:12000]
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt or "你是智能员工助手。"},
@@ -208,28 +191,41 @@ def run_employee_agent_loop(
     tool_trace: list[dict[str, Any]] = []
     trajectory: list[dict[str, Any]] = []
     action_fingerprints: list[str] = []
-    started = time.monotonic()
     rounds = 0
+
+    def expired_result(*, uncertain: bool = False) -> dict[str, Any]:
+        return {
+            "handler": "agent",
+            "ok": False,
+            "output": "",
+            "rounds": rounds,
+            "tool_calls": tool_trace,
+            "trajectory": trajectory,
+            "exit_status": "wall_time_limit",
+            "retryable": False,
+            "reconciliation_required": uncertain,
+            "execution_state": "unknown" if uncertain else "stopped",
+        }
+
+    # Real OpenAI clients can otherwise retry beyond the remaining total budget.
+    if callable(getattr(type(client), "with_options", None)):
+        client = client.with_options(max_retries=0)
     for _ in range(max(1, max_iterations)):
-        if time.monotonic() - started >= max(0.001, wall_time_limit_sec):
-            return {
-                "handler": "agent",
-                "ok": False,
-                "output": "",
-                "rounds": rounds,
-                "tool_calls": tool_trace,
-                "trajectory": trajectory,
-                "exit_status": "wall_time_limit",
-            }
+        if time.monotonic() >= deadline:
+            return expired_result()
         rounds += 1
         try:
-            completion = client.chat.completions.create(
-                model=mdl,
-                messages=messages,
-                tools=tool_specs if tool_specs else None,
-                tool_choice="auto" if tool_specs else None,
-            )
+            with invocation_deadline(deadline):
+                completion = client.chat.completions.create(
+                    model=mdl,
+                    messages=messages,
+                    tools=tool_specs if tool_specs else None,
+                    tool_choice="auto" if tool_specs else None,
+                    timeout=max(0.001, deadline - time.monotonic()),
+                )
         except RECOVERABLE_ERRORS:
+            if time.monotonic() >= deadline:
+                return expired_result()
             logger.exception("employee agent loop LLM call failed")
             return {
                 "handler": "agent",
@@ -248,7 +244,10 @@ def run_employee_agent_loop(
         try:
             # 统一 Agent Runtime 计量接缝：员工多轮循环每轮 LLM 用量入账
             # （best-effort；计费不受 XCAGI_AGENT_RUNTIME_HOOKS 开关限制）。
-            from app.application.agent_runtime.pipeline import completion_usage, meter_llm_call
+            from app.application.agent_runtime.pipeline import (
+                completion_usage,
+                meter_llm_call,
+            )
 
             meter_llm_call(
                 source="employee_agent_loop",
@@ -258,6 +257,8 @@ def run_employee_agent_loop(
             )
         except RECOVERABLE_ERRORS:
             logger.debug("employee agent loop metering skipped", exc_info=True)
+        if time.monotonic() >= deadline:
+            return expired_result()
         tcs = getattr(msg, "tool_calls", None) or []
         messages.append(
             {
@@ -299,6 +300,8 @@ def run_employee_agent_loop(
             }
 
         for tc in tcs:
+            if time.monotonic() >= deadline:
+                return expired_result()
             fn = getattr(tc, "function", None)
             tool_name = str(getattr(fn, "name", "") or "").strip()
             raw_arguments = str(getattr(fn, "arguments", "") or "")
@@ -312,6 +315,7 @@ def run_employee_agent_loop(
                         "success": False,
                         "error": args_error,
                         "invalid_arguments": True,
+                        "action_id": tc_id,
                     }
                 )
                 trajectory.append(
@@ -355,60 +359,118 @@ def run_employee_agent_loop(
                     "repeat_count": repeat_limit,
                 }
 
-            if gate is not None:
-                try:
-                    verdict = gate(tool_name, args)
-                except RECOVERABLE_ERRORS:
-                    logger.exception("employee tool gate failed closed: %s", tool_name)
-                    verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
-                if not verdict.get("ok", True):
-                    reason = str(verdict.get("reason") or "blocked by employee gate")
-                    tool_trace.append(
-                        {
-                            "tool": tool_name,
-                            "args": args,
-                            "blocked": True,
-                            "success": False,
-                            "reason": reason,
-                            "pending_approval": bool(verdict.get("pending_approval")),
-                            "approval_request_ids": list(verdict.get("approval_request_ids") or []),
-                        }
-                    )
-                    trajectory.append(
-                        {
-                            "round": rounds,
-                            "event": "tool",
-                            "tool": tool_name,
-                            "args": args,
-                            "blocked": True,
-                            "success": False,
-                            "result": reason,
-                        }
-                    )
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tc_id,
-                            "content": json.dumps(
-                                {"success": False, "blocked": True, "reason": reason},
-                                ensure_ascii=False,
-                            ),
-                        }
-                    )
-                    continue
+            verdict: dict[str, Any] = {
+                "ok": False,
+                "reason": "工具不在员工授权白名单，未执行",
+            }
+            if tool_name in allowed_tools:
+                verdict = {"ok": True}
+                if gate is not None:
+                    try:
+                        verdict = gate(tool_name, args)
+                    except RECOVERABLE_ERRORS:
+                        logger.exception("employee tool gate failed closed: %s", tool_name)
+                        verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
+            if not isinstance(verdict, dict) or type(verdict.get("ok")) is not bool:
+                verdict = {"ok": False, "reason": "工具授权结果无效，未执行"}
+            if verdict["ok"] is not True:
+                reason = str(verdict.get("reason") or "blocked by employee gate")
+                tool_trace.append(
+                    {
+                        "tool": tool_name,
+                        "args": args,
+                        "blocked": True,
+                        "success": False,
+                        "reason": reason,
+                        "pending_approval": bool(verdict.get("pending_approval")),
+                        "approval_request_ids": list(verdict.get("approval_request_ids") or []),
+                    }
+                )
+                trajectory.append(
+                    {
+                        "round": rounds,
+                        "event": "tool",
+                        "tool": tool_name,
+                        "args": args,
+                        "blocked": True,
+                        "success": False,
+                        "result": reason,
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": json.dumps(
+                            {"success": False, "blocked": True, "reason": reason},
+                            ensure_ascii=False,
+                        ),
+                    }
+                )
+                continue
 
             try:
                 from app.application.tools.workflow import execute_workflow_tool
 
-                result_raw = execute_workflow_tool(tool_name, args, workspace_root)
+                if time.monotonic() >= deadline:
+                    return expired_result()
+                with invocation_deadline(deadline) as budget:
+                    result_raw = execute_workflow_tool(tool_name, args, workspace_root)
+                if time.monotonic() >= deadline or budget.uncertain:
+                    tool_trace.append(
+                        {
+                            "tool": tool_name,
+                            "action_id": tc_id,
+                            "args": args,
+                            "success": False,
+                            "execution_state": "unknown",
+                        }
+                    )
+                    return expired_result(uncertain=True)
             except RECOVERABLE_ERRORS:
+                if time.monotonic() >= deadline:
+                    return expired_result(uncertain=True)
                 result_raw = json.dumps(
-                    {"success": False, "error": "工具执行失败"}, ensure_ascii=False
+                    {
+                        "success": False,
+                        "error": "工具执行失败",
+                        "execution_state": "unknown",
+                        "retryable": False,
+                    },
+                    ensure_ascii=False,
                 )
+            try:
+                result_payload = json.loads(str(result_raw))
+            except (TypeError, json.JSONDecodeError):
+                result_payload = None
+            invalid_receipt = not isinstance(result_payload, dict)
+            if invalid_receipt:
+                result_payload = {}
+            state = str(result_payload.get("execution_state") or result_payload.get("status") or "")
+            unknown = (
+                invalid_receipt
+                or state in {"unknown", "accepted", "pending", "running"}
+                or bool(result_payload.get("reconciliation_required"))
+            )
             tool_success, tool_error, verified = _tool_result_state(str(result_raw))
+            if unknown:
+                tool_success, tool_error = (
+                    False,
+                    str(result_payload.get("error") or "工具结果待核对"),
+                )
+            if tool_success:
+                for previous in reversed(tool_trace):
+                    if (
+                        previous.get("tool") == tool_name
+                        and previous.get("invalid_arguments")
+                        and not previous.get("superseded_by")
+                    ):
+                        previous["superseded_by"] = tc_id or f"round-{rounds}"
+                        break
             tool_trace.append(
                 {
                     "tool": tool_name,
+                    "action_id": tc_id,
                     "args": args,
                     "success": tool_success,
                     "error": tool_error,
@@ -428,8 +490,26 @@ def run_employee_agent_loop(
                 }
             )
             messages.append(
-                {"role": "tool", "tool_call_id": tc_id, "content": str(result_raw)[:8000]}
+                {
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": str(result_raw)[:8000],
+                }
             )
+            if unknown or (not tool_success and result_payload.get("retryable") is False):
+                return {
+                    "handler": "agent",
+                    "ok": False,
+                    "output": "",
+                    "rounds": rounds,
+                    "tool_calls": tool_trace,
+                    "trajectory": trajectory,
+                    "exit_status": "unknown" if unknown else "tool_failed",
+                    "execution_state": (state or "unknown") if unknown else "failed",
+                    "error": tool_error,
+                    "retryable": False,
+                    "reconciliation_required": unknown,
+                }
 
     return {
         "handler": "agent",

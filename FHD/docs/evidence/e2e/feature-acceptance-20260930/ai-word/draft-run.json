@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-word",
+ "name": "Word 生成与解析",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/mod/word-generate-employee/employees/word-generate-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-word-1790713349\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOS",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/word-generate-employee/employees/word-generate-employee/run（写操作自动附带 CSRF）：WORD 生成员工：由文本生成 .docx",
+   "expected": "ok=true 且产出 .docx 文件",
+   "observed": "HTTP 200 37ms；ok=True；{\"output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-word-1790713349/outputs/generated_document.docx\", \"template_path\": \"\", \"paragraph_count\": 3, \"table_count\": 0, \"output_sche",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/mod/word-full-read-employee/employees/word-full-read-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-word-1790713349\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOS",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/word-full-read-employee/employees/word-full-read-employee/run（写操作自动附带 CSRF）：WORD 读取员工：解析刚生成的 .docx",
+   "expected": "ok=true 且写出解析结果 JSON",
+   "observed": "HTTP 200 30ms；ok=True；{\"output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-word-1790713349/outputs/word-read.json\", \"text_output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/tem",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "POST /api/platform-shell/workspace-read-files 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-word-1790713349\", \"file_paths\": [\"/Users/Shared/XCAGI-FULLCL",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/platform-shell/workspace-read-files（写操作自动附带 CSRF）：读回 WORD 解析结果（界面同一读取接口）",
+   "expected": "解析结果含原文「太阳鸟」「包装盒」",
+   "observed": "HTTP 200 7ms；{\"success\": true, \"data\": {\"files\": [{\"path\": \"temp_excel/mac0929-ai-word-1790713349/outputs/word-read.json\", \"kind\": \"json\", \"json\": {\"metadata\": {\"source\": \"generated_document.docx\", \"format\": \"docx",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /mod/xcagi-office-employee-pack-bridge/tools",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-office-employee-pack-bridge/tools，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-office-employee-pack-bridge/tools，页面可见 ，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-word",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/macos/result.png",
+   "sha256": "896aa539798c6f5e5786556d5215fbf40a78ef8bab6d8d712bbc35518117aa7c",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-word",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/macos/operation.webm",
+   "sha256": "96391f7ccf8460729ba984d705849406aba8f7030b4a2aec7548f2a3af429312",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/macos/run.log",
+  "sha256": "89f0836c6b5bdd542d33b85bda17f0a55324d406119a46600f5112fbd3270ca1",
+  "bytes": 1839
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

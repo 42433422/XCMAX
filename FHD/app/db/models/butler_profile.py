@@ -15,7 +15,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.db_base import Base
 
 
 class ButlerUserProfile(Base):
@@ -54,7 +54,7 @@ class ButlerUserProfile(Base):
 
     def to_public_dict(self) -> dict:
         """返回 UI 可见的字典（不含 MBTI 原始分数，含派生四轴）。"""
-        from app.application.butler_identity_catalog import derive_four_axes
+        from app.domain.app_pure.butler_identity_catalog import derive_four_axes
 
         axes = derive_four_axes(self.mbti_ei, self.mbti_sn, self.mbti_tf, self.mbti_jp)
         return {

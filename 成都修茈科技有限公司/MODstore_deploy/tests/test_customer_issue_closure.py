@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import io
 import json
 import uuid
+import zipfile
 from types import SimpleNamespace as NS
 
 import pytest
@@ -14,6 +18,7 @@ from modstore_server.custom_delivery_incident_policy import apply_ticket_outcome
 from modstore_server.customer_delivery_receipts import canonical_sha256, record_receipt
 from modstore_server.customer_issue_delivery_contract import (
     execution_succeeded,
+    role_progress_state,
     team_succeeded,
 )
 
@@ -33,6 +38,8 @@ def test_fix_failure_or_missing_roles_blocks_team():
         {"status": "unknown"},
         {"status": "skipped"},
         {"ok": False},
+        {"ok": True, "accepted": True},
+        {"ok": True, "result": {"outputs": [{"ok": True, "accepted": True}]}},
         {"status": "success", "error": "failed"},
         {"ok": True, "results": [{"ok": False}]},
         {"status": "success", "result": {"outputs": [{"ok": False}]}},
@@ -40,6 +47,21 @@ def test_fix_failure_or_missing_roles_blocks_team():
 )
 def test_no_false_execution_success(value):
     assert not execution_succeeded(value)
+
+
+@pytest.mark.parametrize("status", "accepted approved signed assigned claimed dispatched".split())
+@pytest.mark.parametrize("nested", [False, True])
+def test_approval_and_assignment_are_not_execution(status, nested):
+    receipt = {"ok": True, "status": status}
+    result = {"ok": True, "result": {"outputs": [receipt]}} if nested else receipt
+    assert not execution_succeeded(result)
+    row = {"role": "fix", "ok": True, "status": "success" if nested else status}
+    if nested:
+        row["handler_outputs"] = {"outputs": [receipt]}
+    assert role_progress_state(row) in {"pending", "manual_review"}
+    assert not team_succeeded(
+        [{"role": r, "ok": True, "status": "success"} for r in ("scout", "verify")] + [row]
+    )
 
 
 def test_o7_error_and_lineage(monkeypatch):
@@ -146,14 +168,18 @@ def running(body):
 
 def test_wrapped_employee_completion_uses_delivered_module_identity(receipt_case, monkeypatch):
     from modstore_server import customer_delivery_receipts as receipts
-    from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+    from modstore_server.customer_service_delivery_completion import (
+        complete_delivery_if_ready,
+    )
 
     ticket, evidence, body = receipt_case
     evidence["kind"] = "employee"
     evidence["runs"][-1]["artifact"] = {"pack_id": "customer-mod"}
     evidence["delivery_artifacts"][0]["source_employee_pack_id"] = "customer-mod"
     monkeypatch.setattr(
-        receipts, "trusted_host_release", lambda sha: {"git_sha": sha, "source_ref": "main"}
+        receipts,
+        "trusted_host_release",
+        lambda sha: {"git_sha": sha, "source_ref": "main"},
     )
     record_receipt(ticket, evidence, body, owner_id=11)
     complete_delivery_if_ready(ticket, evidence)
@@ -161,11 +187,14 @@ def test_wrapped_employee_completion_uses_delivered_module_identity(receipt_case
     record_receipt(ticket, evidence, running(body), owner_id=11)
     complete_delivery_if_ready(ticket, evidence)
     assert ticket.status == "resolved"
+    assert evidence["resolution"]["repair_verified_by"] == "delivery_runtime_receipt"
 
 
 def test_bundle_waits_for_wrapped_employee_runtime_on_same_client(receipt_case, monkeypatch):
     from modstore_server import customer_delivery_receipts as receipts
-    from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+    from modstore_server.customer_service_delivery_completion import (
+        complete_delivery_if_ready,
+    )
 
     ticket, evidence, body = receipt_case
     evidence["kind"] = "bundle"
@@ -178,10 +207,16 @@ def test_bundle_waits_for_wrapped_employee_runtime_on_same_client(receipt_case, 
         }
     )
     evidence["download_grants"].append(
-        {**evidence["download_grants"][0], "id": "wrapped-employee", "token": "second-grant"}
+        {
+            **evidence["download_grants"][0],
+            "id": "wrapped-employee",
+            "token": "second-grant",
+        }
     )
     monkeypatch.setattr(
-        receipts, "trusted_host_release", lambda sha: {"git_sha": sha, "source_ref": "main"}
+        receipts,
+        "trusted_host_release",
+        lambda sha: {"git_sha": sha, "source_ref": "main"},
     )
     record_receipt(ticket, evidence, body, owner_id=11)
     record_receipt(ticket, evidence, running(body), owner_id=11)
@@ -197,7 +232,10 @@ def test_bundle_waits_for_wrapped_employee_runtime_on_same_client(receipt_case, 
     complete_delivery_if_ready(ticket, evidence)
     assert ticket.status == "processing"
     record_receipt(
-        ticket, evidence, {**running(employee), "receipt_id": "employee-running"}, owner_id=11
+        ticket,
+        evidence,
+        {**running(employee), "receipt_id": "employee-running"},
+        owner_id=11,
     )
     complete_delivery_if_ready(ticket, evidence)
     assert ticket.status == "resolved"
@@ -280,22 +318,15 @@ def test_runtime_exact_case_client_files_generation(receipt_case, change):
 def test_intake_owner_bound_atomic_idempotent(client):
     from modstore_server.api.deps import get_current_user
     from modstore_server.app import app
-    from modstore_server.models import OutboxEvent, User, UserMod, get_session_factory
+    from modstore_server.models import OutboxEvent, UserMod, get_session_factory
     from modstore_server.models_cs import CustomerServiceTicket
+    from tests.test_customer_service_api import _make_user
 
     sf = get_session_factory()
+    owner = _make_user("private-intake")
     with sf() as db:
-        user = User(
-            username=uuid.uuid4().hex,
-            email=uuid.uuid4().hex + "@test.invalid",
-            password_hash="x",
-        )
-        db.add(user)
-        db.flush()
-        db.add(UserMod(user_id=user.id, mod_id="private-entitlement"))
+        db.add(UserMod(user_id=owner.id, mod_id="private-entitlement"))
         db.commit()
-        db.refresh(user)
-        owner = NS(id=user.id, is_admin=False)
     app.dependency_overrides[get_current_user] = lambda: owner
     body = {
         "source": "private_mod_rework",
@@ -344,6 +375,178 @@ def test_intake_owner_bound_atomic_idempotent(client):
         app.dependency_overrides.pop(get_current_user, None)
 
 
+@pytest.mark.parametrize("incident_state", ["truncated", "identity_erased", "healthy"])
+def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(
+    client, monkeypatch, incident_state
+):
+    from modstore_server import customer_service_api
+    from modstore_server.auth_service import create_access_token
+    from modstore_server.db.ops_events import OutboxEvent
+    from modstore_server.db.work_orders import WorkOrderEvent
+    from modstore_server.models import IncidentEvent, get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
+    from tests.test_customer_service_api import _make_user
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("manifest.json", '{"redacted":true}')
+    raw = archive.getvalue()
+    sha = hashlib.sha256(raw).hexdigest()
+    monkeypatch.setattr(
+        customer_service_api,
+        "_schedule_customer_ticket_incident",
+        lambda _payload: None,
+    )
+    sf = get_session_factory()
+    user = _make_user("feedback")
+    headers = {"Authorization": f"Bearer {create_access_token(user.id, user.username)}"}
+    candidate = client.post(
+        "/api/work-orders/customer-candidate",
+        json={
+            "dedup_key": "customer-report-1",
+            "reason": "product_defect",
+            "expected": "save succeeds",
+            "actual": "save fails",
+            "confidence": 0.95,
+            "support_bundle_sha256": sha,
+            "client_instance_id": "test-instance",
+            "product_version": "1.0.0.5",
+            "git_sha": "a" * 40,
+            "platform": "macOS",
+        },
+        headers=headers,
+    )
+    wo_id = candidate.json()["wo_id"]
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("manifest.json", '{"redacted":true,"retry":true}')
+        bundle.writestr("logs/backend.log", "X" * 45000)
+    raw = archive.getvalue()
+    sha = hashlib.sha256(raw).hexdigest()
+    body = {
+        "source": "customer_feedback",
+        "source_ref": wo_id,
+        "title": "Client defect",
+        "description": "The client action returns an error instead of saving.",
+        "issue_domain": "platform",
+        "work_order_id": wo_id,
+        "support_bundle_sha256": sha,
+        "support_bundle_base64": base64.b64encode(raw).decode("ascii"),
+    }
+    first = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
+    assert first.status_code == 200, first.text
+    replay = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
+    assert replay.json()["ticket_id"] == first.json()["ticket_id"] and replay.json()["replayed"]
+    readback = client.get(
+        "/api/customer-service/tickets", params={"source_ref": wo_id}, headers=headers
+    )
+    assert readback.status_code == 200, readback.text
+    rows = readback.json()["items"]
+    assert len(rows) == 1
+    assert rows[0]["id"] == first.json()["ticket_id"]
+    assert rows[0]["ticket_no"] == first.json()["ticket_no"]
+    assert rows[0]["status"] == first.json()["ticket"]["status"]
+    with sf() as db:
+        ticket = db.get(CustomerServiceTicket, first.json()["ticket_id"])
+        evidence = json.loads(ticket.evidence_json)
+        assert evidence["work_order_id"] == wo_id
+        assert evidence["support_bundle_sha256"] == sha
+        assert base64.b64decode(evidence["support_bundle_base64"]) == raw
+        events = (
+            db.query(OutboxEvent)
+            .filter(OutboxEvent.aggregate_id.like(ticket.ticket_no + ":%"))
+            .all()
+        )
+        assert len(events) == 1
+        payload = json.loads(events[0].payload_json)
+        assert [payload["work_order_id"], payload["support_bundle_sha256"]] == [
+            wo_id,
+            sha,
+        ]
+        assert base64.b64decode(payload["support_bundle_base64"]) == raw
+        wo_events = (
+            db.query(WorkOrderEvent).filter_by(wo_id=wo_id).order_by(WorkOrderEvent.id).all()
+        )
+        assert any(
+            event.event == "transition" and event.to_state == "routed" for event in wo_events
+        )
+        receipts = [json.loads(event.ref or "{}") for event in wo_events if event.event == "gate"]
+        assert {item.get("gate_status") for item in receipts} == {"ROUTED", "COLLECTED"}
+    from modstore_server import incident_bus
+
+    original = (
+        json.dumps(payload)
+        if incident_state == "healthy"
+        else (json.dumps(payload)[:8000] if incident_state == "truncated" else '{"_team_claim":{}}')
+    )
+    original_outbox = ("dispatched", "original failure", 7)
+    with sf() as db:
+        outbox = db.get(OutboxEvent, events[0].id)
+        outbox.status, outbox.last_error, outbox.attempts = original_outbox
+        incident = IncidentEvent(
+            event_type="ops.intake.customer_ticket",
+            source="customer-issue-intake",
+            fingerprint=hashlib.sha256(outbox.event_id.encode()).hexdigest(),
+            payload_json=original,
+        )
+        db.add(incident)
+        db.commit()
+        original_id, outbox_id = incident.id, outbox.id
+    calls = []
+    monkeypatch.setenv("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
+    monkeypatch.setattr(incident_bus, "_dispatch_incident", calls.append)
+    monkeypatch.setattr(incident_bus, "_publish_stream_shadow", lambda *a, **k: None)
+    monkeypatch.setattr(
+        customer_service_api,
+        "_schedule_customer_ticket_incident",
+        customer_service_api._publish_customer_ticket_incident,
+    )
+    for _ in range(2):
+        retry = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
+        assert retry.status_code == 200 and retry.json()["ticket_id"] == ticket.id
+    other = _make_user("other-feedback")
+    denied = client.post(
+        "/api/customer-service/issues/intake",
+        json=body,
+        headers={"Authorization": f"Bearer {create_access_token(other.id, other.username)}"},
+    )
+    assert denied.status_code == 409
+    with sf() as db:
+        restored = (
+            db.query(IncidentEvent)
+            .filter_by(fingerprint=incident.fingerprint)
+            .order_by(IncidentEvent.id)
+            .all()
+        )
+        assert len(restored) == (1 if incident_state == "healthy" else 2)
+        assert db.get(IncidentEvent, original_id).payload_json == original
+        replay_payload = json.loads(restored[-1].payload_json)
+        assert all(
+            replay_payload[k] == payload[k]
+            for k in (
+                "ticket_id",
+                "user_id",
+                "ticket_no",
+                "work_order_id",
+                "support_bundle_base64",
+            )
+        )
+        if incident_state != "healthy":
+            assert replay_payload["_incident_replay"] == {
+                "original_event_id": original_id,
+                "original_payload_sha256": hashlib.sha256(original.encode()).hexdigest(),
+            }
+        outbox = db.get(OutboxEvent, outbox_id)
+        assert (outbox.status, outbox.last_error, outbox.attempts) == original_outbox
+        # Replay schedules readback of the same inbox identity, never another incident.
+        assert calls == [restored[-1].id] * 2
+    marker = f"unpersisted-{uuid.uuid4().hex}"
+    body.update(source_ref="bad-work-order", title=marker, work_order_id="WO-111111111111")
+    bad = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
+    assert bad.status_code == 409
+    with sf() as db:
+        assert not db.query(CustomerServiceTicket).filter_by(title=marker).first()
+
+
 def test_unknown_host_failure_stays_pending_and_same_id_can_be_verified(receipt_case, monkeypatch):
     from modstore_server import customer_delivery_receipts as receipts
 
@@ -361,9 +564,119 @@ def test_unknown_host_failure_stays_pending_and_same_id_can_be_verified(receipt_
     assert first["record"]["failure_recorded"] is False
     assert first["record"]["verified"] is False
     monkeypatch.setattr(
-        receipts, "trusted_host_release", lambda sha: {"git_sha": sha, "source_ref": "main"}
+        receipts,
+        "trusted_host_release",
+        lambda sha: {"git_sha": sha, "source_ref": "main"},
     )
     second = record_receipt(ticket, evidence, failed, owner_id=11)
     assert second["record"]["failure_recorded"] is True and second["record"]["verified"] is False
     assert len(evidence["receipt_events"]) == 2
     assert record_receipt(ticket, evidence, failed, owner_id=11)["replayed"] is True
+
+
+def test_same_work_order_support_reports_are_durable(client, auth_headers, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.models import OutboxEvent, get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    monkeypatch.setattr(customer_service_api, "_schedule_customer_ticket_incident", lambda _: None)
+    bundles = []
+    for version in range(2):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("manifest.json", json.dumps({"synthetic": version}))
+        raw = stream.getvalue()
+        bundles.append(
+            {
+                "support_bundle_sha256": hashlib.sha256(raw).hexdigest(),
+                "support_bundle_base64": base64.b64encode(raw).decode(),
+            }
+        )
+    candidate = client.post(
+        "/api/work-orders/customer-candidate",
+        headers=auth_headers,
+        json={
+            "dedup_key": uuid.uuid4().hex,
+            "reason": "product_defect",
+            "expected": "saves",
+            "actual": "fails",
+            "confidence": 0.95,
+            **{k: v for k, v in bundles[0].items() if k.endswith("sha256")},
+            "client_instance_id": "original",
+            "product_version": "1.0.0.4",
+            "git_sha": "a" * 40,
+            "platform": "Windows",
+        },
+    )
+    wo = candidate.json()["wo_id"]
+    body = {
+        "source": "customer_feedback",
+        "source_ref": wo,
+        "work_order_id": wo,
+        "title": "Synthetic repeat",
+        "description": "Same original failure",
+        **bundles[0],
+    }
+    first = client.post("/api/customer-service/issues/intake", json=body, headers=auth_headers)
+    assert first.status_code == 200, first.text
+    for metadata in (
+        {},
+        {
+            "customer_instance_id": "mac",
+            "product_version": "1.0.0.5",
+            "git_sha": "b" * 40,
+        },
+    ):
+        supplement = {**body, **bundles[1], **metadata}
+        for _ in range(2):
+            result = client.post(
+                "/api/customer-service/issues/intake",
+                json=supplement,
+                headers=auth_headers,
+            )
+            assert result.status_code == 200, result.text
+            assert result.json()["ticket_id"] == first.json()["ticket_id"]
+            assert (
+                result.json()["support_bundle_saved"]
+                and result.json()["support_bundle_sha256"] == bundles[1]["support_bundle_sha256"]
+            )
+    assert (
+        client.post(
+            "/api/customer-service/issues/intake",
+            headers=auth_headers,
+            json={**supplement, "description": "A different failure"},
+        ).status_code
+        == 409
+    )
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, first.json()["ticket_id"])
+        evidence = json.loads(ticket.evidence_json)
+        assert all(evidence[key] == value for key, value in bundles[0].items())
+        reports = evidence["support_reports"]
+        assert len(reports) == 2 and reports[-1]["customer_instance_id"] == "mac"
+        assert all(all(row[key] == value for key, value in bundles[1].items()) for row in reports)
+        events = (
+            db.query(OutboxEvent)
+            .filter(OutboxEvent.aggregate_id.like(ticket.ticket_no + ":%"))
+            .order_by(OutboxEvent.id)
+            .all()
+        )
+        assert len(events) == 3
+        payloads = [json.loads(row.payload_json) for row in events]
+        assert payloads[0]["support_bundle_sha256"] == bundles[0]["support_bundle_sha256"]
+        assert all(
+            row["ticket_id"] == ticket.id
+            and row["work_order_id"] == wo
+            and all(row[key] == value for key, value in bundles[1].items())
+            for row in payloads[1:]
+        )
+        ticket.status = "closed"
+        db.commit()
+    assert (
+        client.post(
+            "/api/customer-service/issues/intake",
+            headers=auth_headers,
+            json={**supplement, "customer_instance_id": "another"},
+        ).status_code
+        == 409
+    )

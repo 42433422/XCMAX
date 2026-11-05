@@ -108,7 +108,13 @@ async def align_catalog_employee_packs_llm_from_deepseek(
         mdl["provider"] = new_p
         mdl["model_name"] = new_m
 
-        body = EmployeeSaveBody(manifest=mf2, employee_id=pack_id, register_skills=False)
+        body = EmployeeSaveBody(
+            manifest=mf2,
+            employee_id=pack_id,
+            provider=new_p,
+            model=new_m,
+            register_skills=False,
+        )
         try:
             await employee_save_impl(body, eff_user)
         except HTTPException as he:
@@ -220,7 +226,13 @@ async def align_single_employee_pack_llm_to_auto(
     mdl["provider"] = "auto"
     mdl["model_name"] = "auto"
 
-    body = EmployeeSaveBody(manifest=mf2, employee_id=pack_id, register_skills=False)
+    body = EmployeeSaveBody(
+        manifest=mf2,
+        employee_id=pack_id,
+        provider="auto",
+        model="auto",
+        register_skills=False,
+    )
     try:
         await employee_save_impl(body, eff_user)
     except HTTPException as he:
@@ -331,7 +343,13 @@ async def align_catalog_employee_packs_llm_to_auto_sentinel(
         mdl["provider"] = "auto"
         mdl["model_name"] = "auto"
 
-        body = EmployeeSaveBody(manifest=mf2, employee_id=pack_id, register_skills=False)
+        body = EmployeeSaveBody(
+            manifest=mf2,
+            employee_id=pack_id,
+            provider="auto",
+            model="auto",
+            register_skills=False,
+        )
         try:
             await employee_save_impl(body, eff_user)
         except HTTPException as he:

@@ -290,7 +290,7 @@ async def voice_s2s_ws(
         return
 
     try:
-        from modstore_server.auth_service import decode_access_token
+        from modstore_server.auth_service import decode_access_token, get_user_by_id
 
         payload = decode_access_token(token)
         sub = payload.get("sub") if payload else None
@@ -299,6 +299,10 @@ async def voice_s2s_ws(
             await ws.close()
             return
         user_id = int(sub)
+        if not get_user_by_id(user_id):
+            await _send_json(ws, {"type": "error", "message": "认证无效"})
+            await ws.close()
+            return
     except RECOVERABLE_ERRORS:
         await _send_json(ws, {"type": "error", "message": "认证失败"})
         await ws.close()
@@ -360,10 +364,11 @@ async def voice_s2s_ws(
                 cancel = asyncio.Event()
             db = get_session_factory()()
             try:
-                user = db.query(User).filter(User.id == user_id).first()
+                user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
                 if not user:
                     await _send_json(ws, {"type": "error", "message": "用户不存在"})
-                    return
+                    await ws.close(code=1008)
+                    raise WebSocketDisconnect(code=1008)
                 await _run_billed_s2s_turn(
                     ws,
                     user=user,

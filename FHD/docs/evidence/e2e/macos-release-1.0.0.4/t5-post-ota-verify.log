@@ -1,0 +1,37 @@
+== T5 post-OTA verify start 2026-09-15 15:18:42 ==
+--- 1. health (expect 1.0.0.4 + 280225ac7) ---
+status: healthy
+version: 1.0.0.4
+git_sha: 280225ac77ce
+release_id: xcagi-1.0.0.4-280225ac77ce0b5f66470d2d7a11ad2844cdad67
+HEALTH OK
+--- 2. data digest 比对 (vs t5-pre-ota-digest.json) ---
+{
+  "xcagi.db.bytes": 987168768,
+  "xcagi.db.wal.bytes": 618032,
+  "excel_vectors.db.bytes": -1,
+  "mod_dbs.files": 0,
+  "uploads.files": 163,
+  "uploads.templates.files": 17,
+  "routing_policies.files": 1,
+  "mods.files": 1257,
+  "models.files": 1,
+  "backups.files": 5,
+  "backups.latest": "xcagi-unknown-20260915000232.db",
+  "rows.templates": 18,
+  "rows.sales_orders": 0,
+  "rows.manufacturing_orders": 0,
+  "rows.customers": 0,
+  "rows.users": 6
+}
+key                                         pre           post delta
+xcagi.db.bytes                        987168768      987168768 0
+uploads.files                               163            163 0
+uploads.templates.files                      17             17 0
+mods.files                                 1259           1257 -2
+rows.templates                               18             18 0
+rows.users                                    6              6 0
+DATA RETENTION: LOSS DETECTED
+--- 3. G7 业务复测 ---
+SKIP: XCAGI_TEST_USER/PASS 未设置，G7 业务复测稍后单独执行
+== T5 done 2026-09-15 15:18:42 ==

@@ -200,6 +200,9 @@ const xcmaxMarketProxy = {
       throw e
     }
   },
+  /** 市场总览业务指标（MODstore /api/admin/status）。 */
+  adminMarketStatus: () =>
+    marketReq<{ ok?: boolean; total_catalog_items?: number; total_users?: number }>('admin/status'),
   llmStatus: () => marketReq('llm/status'),
   llmResolveChatDefault: () => marketReq('llm/resolve-chat-default'),
   llmChat: (provider: string, model: string, messages: unknown[], maxTokens = 1024) =>

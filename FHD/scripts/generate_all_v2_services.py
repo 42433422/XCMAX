@@ -66,7 +66,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from app.neuro_bus.bus import get_neuro_bus
-from app.neuro_bus.events.base import EventPriority
+from app.neuro_bus.events.events_base import EventPriority
 from app.neuro_bus.events.{domain}_events import *
 
 if TYPE_CHECKING:
@@ -113,7 +113,7 @@ class {class_name}V2:
             event_type = f"{domain}.{{command_type}}"
             
             # 创建事件
-            from app.neuro_bus.events.base import NeuroEvent
+            from app.neuro_bus.events.events_base import NeuroEvent
             event = NeuroEvent(
                 event_type=event_type,
                 payload=payload,

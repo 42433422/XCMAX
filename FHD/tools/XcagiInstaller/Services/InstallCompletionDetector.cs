@@ -1,7 +1,7 @@
 namespace XcagiInstaller.Services;
 
 /// <summary>
-/// 静默 NSIS 有时文件已写完但安装进程不退出，需用关键文件判断可收尾。
+/// Required-file validation after the installer has exited successfully.
 /// </summary>
 public static class InstallCompletionDetector
 {

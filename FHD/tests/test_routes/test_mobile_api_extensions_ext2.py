@@ -13,29 +13,48 @@ mobile_auth_oidc_exchange (auth fail, success).
 
 from __future__ import annotations
 
-import sys
+import importlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _resolve_circular_import():
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401
-    yield
+@pytest.fixture(autouse=True)
+def _fake_market_profiles(monkeypatch):
+    monkeypatch.setattr(
+        "app.fastapi_routes.mobile_api_extensions._load_market_ai_employee_profile_index",
+        AsyncMock(return_value=({}, False, "")),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _fake_circle_report_transport(monkeypatch):
+    # Sync projections exercise local data; the upstream MODstore feed is external.
+    monkeypatch.setattr(
+        "app.domain.app_pure.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+    )
 
 
 @pytest.fixture
 def ext_mod():
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 def _mock_user():
     user = MagicMock()
     user.id = 1
     user.username = "testuser"
+    user.role = "enterprise"
+    user.is_active = True
     return user
+
+
+@pytest.fixture(autouse=True)
+def _isolate_pairing_limiter(monkeypatch):
+    monkeypatch.setattr(
+        "app.fastapi_routes.mobile_api_extensions._pairing_rate_allowed",
+        lambda *_args: True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -230,12 +249,13 @@ class TestMobilePairingLookupSuccess:
     @pytest.mark.asyncio
     async def test_lookup_success(self, ext_mod):
         body = ext_mod.PairingLookupBody(code="123456")
-        with patch(
-            "app.security.mobile_pairing.lookup_by_shortcode",
+        with patch.object(
+            ext_mod,
+            "lookup_by_shortcode",
             return_value={"host": "192.168.1.1", "port": 5000, "nonce": "abc", "exp": 1234},
         ):
-            result = await ext_mod.mobile_pairing_lookup(body=body)
-        assert hasattr(result, "body") or isinstance(result, dict)
+            result = await ext_mod.mobile_pairing_lookup(body=body, user=_mock_user())
+        assert result["success"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -247,47 +267,51 @@ class TestMobilePairingExchangeSuccess:
     @pytest.mark.asyncio
     async def test_exchange_by_code(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="123456", nonce="")
-        with patch(
-            "app.security.mobile_pairing.consume_by_shortcode",
+        with patch.object(
+            ext_mod,
+            "consume_by_shortcode",
             return_value={"host": "192.168.1.1", "port": 5000, "shortCode": "123456"},
         ):
-            result = await ext_mod.mobile_pairing_exchange(body=body)
-        assert hasattr(result, "body") or isinstance(result, dict)
+            result = await ext_mod.mobile_pairing_exchange(body=body, user=_mock_user())
+        assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_exchange_by_nonce_success(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="abc123")
-        with patch(
-            "app.security.mobile_pairing.consume_pairing_nonce",
+        with patch.object(
+            ext_mod,
+            "consume_pairing_nonce",
             return_value={"host": "192.168.1.1", "port": 5000, "shortCode": "123456"},
         ):
-            result = await ext_mod.mobile_pairing_exchange(body=body)
-        assert hasattr(result, "body") or isinstance(result, dict)
+            result = await ext_mod.mobile_pairing_exchange(body=body, user=_mock_user())
+        assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_exchange_invalid_both_empty(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="")
-        result = await ext_mod.mobile_pairing_exchange(body=body)
+        result = await ext_mod.mobile_pairing_exchange(body=body, user=_mock_user())
         assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_exchange_invalid_code_returns_none(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="000000", nonce="")
-        with patch(
-            "app.security.mobile_pairing.consume_by_shortcode",
+        with patch.object(
+            ext_mod,
+            "consume_by_shortcode",
             return_value=None,
         ):
-            result = await ext_mod.mobile_pairing_exchange(body=body)
+            result = await ext_mod.mobile_pairing_exchange(body=body, user=_mock_user())
         assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_exchange_invalid_nonce_returns_none(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="bad")
-        with patch(
-            "app.security.mobile_pairing.consume_pairing_nonce",
+        with patch.object(
+            ext_mod,
+            "consume_pairing_nonce",
             return_value=None,
         ):
-            result = await ext_mod.mobile_pairing_exchange(body=body)
+            result = await ext_mod.mobile_pairing_exchange(body=body, user=_mock_user())
         assert result.status_code == 400
 
 
@@ -633,6 +657,9 @@ class TestMobileSyncConflictsWithUser:
 
 
 class TestMobileAuthQrConfirmAdditional:
+    @pytest.mark.filterwarnings(
+        "ignore:The default datetime adapter is deprecated:DeprecationWarning"
+    )
     @pytest.mark.asyncio
     async def test_bearer_auth_with_user_lookup(self, ext_mod):
         """Test bearer auth path that looks up user from DB."""
@@ -658,12 +685,27 @@ class TestMobileAuthQrConfirmAdditional:
                 return_value=42,
             ),
             patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="personal"),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=({"session_id": "session-bearer"}, None)),
+            ) as login,
+            patch("app.security.auth_qr_login.confirm_auth_qr", return_value=True) as confirm,
         ):
             body = ext_mod.AuthQrConfirmBody(qr_id="a" * 8, username="", password="pass")
             result = await ext_mod.mobile_auth_qr_confirm(body=body, request=mock_request)
-        # Should fail because password is provided but username comes from bearer
-        # Actually password is provided, so should proceed to login
-        assert result.status_code in (400, 401, 500, 200)
+        assert result == {
+            "code": 200,
+            "message": "success",
+            "success": True,
+            "data": {"confirmed": True, "qr_id": "a" * 8},
+        }
+        login.assert_awaited_once()
+        assert login.await_args.kwargs["username"] == "alice"
+        assert login.await_args.kwargs["password"] == "pass"
+        confirm.assert_called_once_with(
+            "a" * 8, session_id="session-bearer", login_payload={"session_id": "session-bearer"}
+        )
 
     @pytest.mark.asyncio
     async def test_bearer_auth_no_uid(self, ext_mod):

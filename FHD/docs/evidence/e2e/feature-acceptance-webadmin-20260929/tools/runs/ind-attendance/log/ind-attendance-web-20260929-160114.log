@@ -1,0 +1,8 @@
+[16:01:14] feature=ind-attendance platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-attendance
+[16:01:27] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[16:01:28] case A1: passed - 考勤系统状态真实读取
+[16:01:30] case A2: passed - 真实新建部门/人员并读回（正向）
+[16:01:30] case A3: passed - 考勤排班真实读取
+[16:01:30] case A4: passed - 未开通定制访问被拒（负例/边界）
+[16:01:30] video: ind-attendance-web-20260929-160114.webm (1285786 bytes)
+[16:01:30] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-attendance/log/ind-attendance-web-20260929-160114.log

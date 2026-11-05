@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.db.models.ai_business_evidence import ShipmentAuditEvent
@@ -52,7 +52,10 @@ class ShipmentAuditRepository:
         with get_db() as db:
             q = db.query(ShipmentAuditEvent.decision)
             if month:
-                q = q.filter(ShipmentAuditEvent.created_at.like(f"{month}%"))
+                month_start = datetime.strptime(month, "%Y-%m")
+                month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+                created_at = ShipmentAuditEvent.created_at
+                q = q.filter(created_at >= month_start, created_at < month_end)
             for (decision,) in q.all():
                 key = str(decision or "")
                 if key in counts:

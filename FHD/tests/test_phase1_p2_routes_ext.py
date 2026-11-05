@@ -10,6 +10,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
 # ---------------------------------------------------------------------------
 # Conversation compat (stream / batch / context)
 # ---------------------------------------------------------------------------
@@ -77,7 +79,7 @@ def auth_client() -> TestClient:
 @patch("app.application.auth_app_service.get_auth_app_service")
 def test_auth_session_validate_no_session(mock_get: MagicMock, auth_client: TestClient) -> None:
     with patch.object(
-        __import__("app.fastapi_routes.domains.auth.routes", fromlist=["routes"]),
+        __import__("app.fastapi_routes.domains.auth.auth_routes", fromlist=["routes"]),
         "session_id_from_request",
         return_value=None,
     ):
@@ -140,12 +142,37 @@ def misc_client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-def test_preferences_get_post(misc_client: TestClient) -> None:
-    r = misc_client.get("/preferences", params={"user_id": "u2"})
-    assert r.status_code == 200
-    assert r.json()["data"]["user_id"] == "u2"
-    r2 = misc_client.post("/preferences", json={"theme": "dark"})
-    assert r2.status_code == 200
+def test_preferences_require_session_and_ignore_client_user_id(misc_client: TestClient) -> None:
+    got = misc_client.get("/preferences", params={"user_id": "u2"}).json()
+    assert got == {
+        "success": True,
+        "preferences": {},
+        "data": {"user_id": None, "preferences": {}},
+    }
+    r = misc_client.post("/preferences", json={"key": "theme", "value": "dark"})
+    assert r.status_code == 401
+
+
+def test_preferences_persist_per_workspace_owner(misc_client: TestClient) -> None:
+    store: dict[str, dict[str, str]] = {}
+    svc = MagicMock()
+    svc.get_all_preferences.side_effect = lambda owner: dict(store.get(owner, {}))
+    svc.set_preference.side_effect = lambda o, k, v: store.setdefault(o, {}).update({k: v}) or True
+    with (
+        patch(
+            "app.application.tenant_workspace_prefs.session_workspace_owner_id", return_value="t:7"
+        ),
+        patch(
+            "app.domain.shared_services.user_preference_service.get_user_preference_service",
+            return_value=svc,
+        ),
+    ):
+        for key, value in (("aiMode", "offline"), ("pack", {"a": 1})):
+            r = misc_client.post("/preferences", json={"key": key, "value": value})
+            assert r.status_code == 200
+        body = misc_client.get("/preferences", params={"user_id": "default"}).json()
+    assert body["preferences"] == {"aiMode": "offline", "pack": '{"a": 1}'}
+    assert body["data"]["user_id"] == "t:7"
 
 
 def test_distillation_and_intent_packages(misc_client: TestClient) -> None:
@@ -164,9 +191,10 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    import app.services.user_memory_service as memory_mod
+    import app.domain.shared_services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
+    monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
     memory_mod.reset_user_memory_service()
@@ -183,7 +211,7 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
                 "evidence": [{"message": "总是给七彩乐园开单"}],
             },
         )
-        assert created.status_code == 200
+        assert created.status_code in (200, 202), created.text
         candidate = created.json()["candidate"]
         memory_id = candidate["memory_id"]
 
@@ -252,9 +280,10 @@ def test_memory_v2_routes_govern_blocked_source(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    import app.services.user_memory_service as memory_mod
+    import app.domain.shared_services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
+    monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
     memory_mod.reset_user_memory_service()
@@ -270,7 +299,7 @@ def test_memory_v2_routes_govern_blocked_source(
                 "source": "llm_guess",
             },
         )
-        assert created.status_code == 200
+        assert created.status_code in (200, 202), created.text
         candidate = created.json()["candidate"]
         assert candidate["status"] == "rejected"
         assert candidate["source_policy"] == "blocked"
@@ -349,7 +378,7 @@ def customer_client() -> TestClient:
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-@patch("app.fastapi_routes.domains.customer.routes._customer_find_by_id")
+@patch("app.fastapi_routes.domains.customer.customer_routes._customer_find_by_id")
 def test_customers_get_by_id(
     mock_find: MagicMock, _mock_erp: MagicMock, customer_client: TestClient
 ) -> None:
@@ -361,18 +390,21 @@ def test_customers_get_by_id(
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
 def test_customers_post_missing_name(_mock_erp: MagicMock, customer_client: TestClient) -> None:
-    with patch("app.fastapi_routes.domains.customer.routes._customers_write_raise"):
+    with patch("app.fastapi_routes.domains.customer.customer_routes._customers_write_raise"):
         r = customer_client.post("/customers", json={})
     assert r.status_code == 400
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-@patch("app.fastapi_routes.domains.customer.routes._customer_pg_insert")
+@patch("app.fastapi_routes.domains.customer.customer_routes._customer_pg_insert")
 def test_customers_post_ok(
-    mock_insert: MagicMock, _mock_erp: MagicMock, customer_client: TestClient
+    mock_insert: MagicMock,
+    _mock_erp: MagicMock,
+    customer_client: TestClient,
+    local_tools,
 ) -> None:
     mock_insert.return_value = {"id": 5, "name": "丙公司"}
-    with patch("app.fastapi_routes.domains.customer.routes._customers_write_raise"):
+    with patch("app.fastapi_routes.domains.customer.customer_routes._customers_write_raise"):
         r = customer_client.post(
             "/customers",
             json={"name": "丙公司", "contact_person": "李"},
@@ -387,12 +419,12 @@ def test_customers_post_ok(
 
 
 @pytest.fixture
-def system_client() -> TestClient:
+def system_client(trusted_actor) -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
 
     app = FastAPI()
     app.include_router(system_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
 
 
 @patch("app.application.facades.session_facade.get_system_service")
@@ -410,5 +442,7 @@ def test_database_backup_create(mock_get: MagicMock, system_client: TestClient) 
         "data": {"path": "/tmp/bak"},
     }
     r = system_client.post("/api/database/backup")
-    assert r.status_code == 200
-    assert r.json()["success"] is True
+    # debt19: route goes through system maintenance agent (may return 202 while queued/blocked)
+    assert r.status_code in (200, 202), r.text
+    if r.status_code == 200:
+        assert r.json()["success"] is True

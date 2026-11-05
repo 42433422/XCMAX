@@ -14,40 +14,20 @@
 
 from __future__ import annotations
 
-import logging
 import os
 
-from sqlalchemy import event, false, or_
+from sqlalchemy import event, false, inspect, or_, select
 from sqlalchemy.orm import Session, with_loader_criteria
 
 from app.db.mixins import TenantScopedMixin
 from app.infrastructure.tenant_scope import (
     TenantScopeError,
     current_tenant_id,
+    owned_tenant_id,
     tenant_legacy_null_visible,
 )
 
-logger = logging.getLogger(__name__)
-
 _INSTALLED = False
-
-
-def _strict_criteria(cls):
-    return cls.tenant_id == _STRICT_TID
-
-
-def _null_tolerant_criteria(cls):
-    return or_(cls.tenant_id == _NT_TID, cls.tenant_id.is_(None))
-
-
-def _deny_criteria(cls):
-    return false()
-
-
-# with_loader_criteria 的 lambda 通过闭包变量追踪绑定参数；用模块级变量承载当前 tid，
-# 每次查询前更新（同一线程/任务内串行执行，配合 ContextVar 隔离）。
-_STRICT_TID: int | None = None
-_NT_TID: int | None = None
 
 
 def install_tenant_filter() -> None:
@@ -69,17 +49,16 @@ def install_tenant_filter() -> None:
         if not execute_state.is_select:
             return
         if execute_state.execution_options.get("skip_tenant_filter"):
+            if owned_tenant_id() is not None:
+                raise TenantScopeError("已授权企业查询不得跳过隔离")
             return
         tid = current_tenant_id()
-        global _STRICT_TID, _NT_TID
         if tid is None:
-            criteria = _deny_criteria
+            criteria = lambda cls: false()
         elif tenant_legacy_null_visible():
-            _NT_TID = tid
-            criteria = _null_tolerant_criteria
+            criteria = lambda cls: or_(cls.tenant_id == tid, cls.tenant_id.is_(None))
         else:
-            _STRICT_TID = tid
-            criteria = _strict_criteria
+            criteria = lambda cls: cls.tenant_id == tid
         execute_state.statement = execute_state.statement.options(
             with_loader_criteria(TenantScopedMixin, criteria, include_aliases=True)
         )
@@ -87,6 +66,38 @@ def install_tenant_filter() -> None:
     @event.listens_for(Session, "before_flush")
     def _tenant_write_tag(session, flush_context, instances):  # noqa: ANN001
         tid = current_tenant_id()
+        owned = owned_tenant_id()
+        if owned is not None:
+            for obj in session.new | session.dirty | session.deleted:
+                if not isinstance(obj, TenantScopedMixin):
+                    continue
+                proposed = getattr(obj, "tenant_id", None)
+                if obj in session.new:
+                    if proposed not in (None, owned):
+                        raise TenantScopeError("拒绝跨企业创建")
+                    obj.tenant_id = owned
+                    continue
+                state = inspect(obj)
+                table = state.mapper.local_table
+                identity = state.identity
+                if not identity or proposed != owned:
+                    raise TenantScopeError("拒绝修改非本企业对象或变更归属")
+                # Query persisted ownership independently of the identity map and
+                # ORM visibility filters; NULL/foreign rows are never adopted.
+                persisted = (
+                    session.connection()
+                    .execute(
+                        select(table.c.tenant_id).where(
+                            *[
+                                column == value
+                                for column, value in zip(state.mapper.primary_key, identity)
+                            ]
+                        )
+                    )
+                    .scalar_one_or_none()
+                )
+                if persisted != owned:
+                    raise TenantScopeError("持久化对象不属于当前企业")
         for obj in session.new:
             if isinstance(obj, TenantScopedMixin) and getattr(obj, "tenant_id", None) is None:
                 if tid is None:

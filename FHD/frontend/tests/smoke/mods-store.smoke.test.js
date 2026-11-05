@@ -26,19 +26,18 @@ vi.mock('@/stores/industry', () => ({
 }))
 import { setActivePinia, createPinia } from 'pinia'
 import { useModsStore } from '@/stores/mods'
-import { scopedActiveExtensionModStorageKey, writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
+import { readActiveExtensionModIdFromStorage, writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
 import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
 
 const TEST_SCOPE = 'tenant:1'
-const activeModStorageKey = () => scopedActiveExtensionModStorageKey(TEST_SCOPE)
 
 describe('mods store smoke', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.stubGlobal('fetch', vi.fn())
     setTenantStorageScopeCache(TEST_SCOPE)
-    localStorage.removeItem(activeModStorageKey())
+    writeActiveExtensionModIdToStorage('', TEST_SCOPE)
   })
 
   it('initialize 成功后写入 mods 并标记 isLoaded', async () => {
@@ -108,7 +107,7 @@ describe('mods store smoke', () => {
     })
 
     expect(store.activeModId).toBe(CLIENT_PRIMARY_ERP_MOD_ID)
-    expect(localStorage.getItem(activeModStorageKey())).toBe(CLIENT_PRIMARY_ERP_MOD_ID)
+    expect(readActiveExtensionModIdFromStorage(TEST_SCOPE)).toBe(CLIENT_PRIMARY_ERP_MOD_ID)
   })
 
   it('SUNBIRD 账号无 entitled 时仍强制统一考勤 Mod', async () => {

@@ -1,0 +1,13 @@
+{
+  "capturedAt": "2026-10-15T20:11:45.397416+08:00",
+  "action": "native app attachment picker and analysis; no import/commit of business data",
+  "fixturePath": "/private/tmp/xcagi-mac-c5-20261015/incoming/mac-c5-lifecycle-attachment.xlsx",
+  "fixtureBytes": 4882,
+  "fixtureSha256": "c62fdd492200ed38fc8a2a5ecd3ebedfc6afcacda31fbb6e12431fdd62ffc2f3",
+  "storedPath": "/private/tmp/xcagi-mac-c5-20261015/update-data/userData/uploads/5a1ceffe89d54606a705ff41d9918b16.xlsx",
+  "storedBytes": 4882,
+  "storedSha256": "c62fdd492200ed38fc8a2a5ecd3ebedfc6afcacda31fbb6e12431fdd62ffc2f3",
+  "storedMatchesFixture": true,
+  "visibleUi": "Excel analysis completed; attached reference @uploads/mac-c5-lifecycle-attachment.xlsx in SUNBIRD conversation at 127.0.0.1:18502",
+  "userDataPath": "/private/tmp/xcagi-mac-c5-20261015/update-data/userData"
+}

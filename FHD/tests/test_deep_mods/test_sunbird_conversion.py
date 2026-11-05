@@ -182,3 +182,62 @@ def test_parallel_owner_policies_do_not_share_process_global_state(sunbird_clien
         two = pool.submit(read_one, "tenant:2", "09:00-11:00")
         assert one.result() == ["08:00-12:00"]
         assert two.result() == ["09:00-11:00"]
+
+
+def test_duplicate_name_blocks_follow_order_without_formula_or_merge_loss(sunbird_client, tmp_path):
+    from sunbird_attendance.convert import convert_attendance_file
+    from sunbird_attendance.verification import write_conversion_sample
+
+    source, template = write_conversion_sample(tmp_path)
+    wb = load_workbook(source)
+    ws = wb.active
+    ws.delete_rows(2, ws.max_row)
+    for name, dept in [("甲", "A"), ("同名", "B"), ("同名", "C"), ("尾排", "D")]:
+        end = "10:00" if dept == "B" else "12:00"
+        ws.append([name, "2026-09-01", "公司正班", dept, "08:00", end, "13:30", "17:30"])
+    wb.save(source)
+    wb.close()
+    wb = load_workbook(template)
+    ws = wb["明细"]
+    for col in (1, 2, 3):
+        ws.merge_cells(start_row=4, start_column=col, end_row=9, end_column=col)
+    for top, label in [(4, "上午"), (6, "下午"), (8, "晚上")]:
+        ws.cell(top, 4, label)
+        ws.merge_cells(start_row=top, start_column=4, end_row=top + 1, end_column=4)
+    wb.save(template)
+    wb.close()
+    output = tmp_path / "ordered.xlsx"
+    roster = [
+        ("D", "计时", "尾排"),
+        ("A", "计时", "甲"),
+        ("B", "计时", "同名"),
+        ("C", "计时", "同名"),
+    ]
+    with owner_context("tenant:1"):
+        result = convert_attendance_file(
+            str(source),
+            str(output),
+            template_path=str(template),
+            personnel_roster=roster,
+            month="2026-09",
+            use_llm=False,
+        )
+    assert result["success"], result
+    assert result["employees_matched"] == 4
+    wb = load_workbook(output)
+    detail = wb["明细"]
+    assert [detail.cell(top, 3).value for top in (4, 10, 16, 22)] == [r[2] for r in roster]
+    assert [detail.cell(top, 1).value for top in (4, 10, 16, 22)] == [r[0] for r in roster]
+    for top in (4, 10, 16, 22):
+        assert f"C{top}:C{top + 5}" in {str(m) for m in detail.merged_cells.ranges}
+        assert [detail.cell(top + i, 4).value for i in (0, 2, 4)] == ["上午", "下午", "晚上"]
+        assert any(isinstance(c.value, str) and c.value.startswith("=SUM(") for c in detail[top])
+    assert detail.cell(17, 6).value != detail.cell(23, 6).value
+    monthly = wb["月度统计"]
+    col = next(c.column for c in monthly[1] if c.value == "姓名")
+    assert [monthly.cell(row, col).value for row in range(2, 6)] == [r[2] for r in roster]
+    for row, summary in zip(range(2, 6), range(4, 8)):
+        assert any(
+            isinstance(c.value, str) and f"'明细'!BR{summary}" in c.value for c in monthly[row]
+        )
+    wb.close()

@@ -17,17 +17,21 @@ except ImportError as _pil_import_error:
     _PIL_AVAILABLE = False
     _PIL_IMPORT_ERROR = str(_pil_import_error)
 
-from app.application.ports.shipment_document_generator import ShipmentDocumentGeneratorPort
 from app.db.models import Product
 from app.db.session import get_db
+from app.domain.shipment.ports import ShipmentDocumentGeneratorPort
 from app.domain.shipment.shipment_product_parser import prepare_parsed_products
+from app.domain.shipment.shipment_quantities import (
+    ShipmentQuantityValidationError,
+    validate_shipment_products,
+)
 from app.infrastructure.lookups.purchase_unit_resolver import (
     resolve_purchase_unit,
 )
 from app.legacy.documents.legacy_shipment_document import (
     load_legacy_shipment_document_generator,
 )
-from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir, get_resource_path
+from app.utils.path_io.path_utils import get_base_dir, get_resource_path, get_shipment_output_dir
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +209,7 @@ class SimpleLabelGenerator:
 
             tin_spec = product_data.get("tin_spec", 0)
             product_data.get("quantity_tins", 0)
-            specification = f"{tin_spec}±0.1KG/桶" if tin_spec else "20±0.1KG/桶"
+            specification = f"{tin_spec}±0.1KG/桶" if tin_spec else "按实际公斤数计量"
             draw.text((45, y_spec + 12), "产品规格", font=date_font, fill=self.text_color)
             draw.text((210, y_spec + 12), specification, font=date_font, fill=self.text_color)
             draw.text((520, y_spec + 12), "检验员", font=date_font, fill=self.text_color)
@@ -264,15 +268,17 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
     def __init__(self):
         # 模板/外部资源统一放在 XCAGI/resources 下，避免依赖项目外目录
         # 兼容期：如果 resources 下不存在，再回退到 XCAGI/AI助手/uploads（仍在项目内）
-        from app.utils.path_io.path_utils import get_resource_path
 
         resources_template_dir = get_resource_path("ai_assistant", "uploads")
         legacy_template_dir = os.path.join(get_base_dir(), "AI助手", "uploads")
         self.template_dir = (
             resources_template_dir if os.path.isdir(resources_template_dir) else legacy_template_dir
         )
-        self.output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
         os.makedirs(self.output_dir, exist_ok=True)
+
+    @property
+    def output_dir(self) -> str:
+        return get_shipment_output_dir()
 
     def _load_products_from_main_db(self) -> list[dict[str, Any]]:
         products: list[dict[str, Any]] = []
@@ -301,6 +307,10 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         template_name: str | None = None,
         order_number: str | None = None,
     ) -> dict[str, Any]:
+        try:
+            validate_shipment_products(products)
+        except ShipmentQuantityValidationError as exc:
+            return exc.result()
         # 1) 统一单位名来源：purchase_units 主库
         resolved = resolve_purchase_unit(unit_name)
         if not resolved:
@@ -342,13 +352,16 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
 
         parsed_data: dict[str, Any] = {
             "purchase_unit": resolved.unit_name,
+            "date": date,
             "products": parsed_products,
         }
 
         # 5) 调用 legacy 生成逻辑
         from app.db.init_db import get_db_path
 
-        generator = ShipmentDocumentGenerator(db_path=get_db_path("products.db"))
+        generator = ShipmentDocumentGenerator(
+            db_path=get_db_path("products.db"), output_dir=self.output_dir
+        )
         doc = generator.generate_document(
             order_text="",
             parsed_data=parsed_data,
@@ -372,7 +385,7 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
             total_quantity = getattr(doc, "total_quantity", None)
 
         # 6) 生成标签图片
-        labels_dir = get_resource_path("ai_assistant", "商标导出")
+        labels_dir = os.path.join(self.output_dir, "labels")
         label_generator = SimpleLabelGenerator(labels_dir)
         generated_labels = label_generator.generate_labels_for_order(
             order_number=order_number or filename.replace(".xlsx", ""), products=parsed_products
@@ -384,6 +397,7 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
             "doc_name": filename,
             "file_path": file_path,
             "order_number": order_number,
+            "date": date or datetime.now().strftime("%Y-%m-%d"),
             "total_amount": total_amount,
             "total_quantity": total_quantity,
             "purchase_unit": resolved.unit_name,

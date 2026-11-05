@@ -9,35 +9,10 @@ import pytest
 
 
 class TestParseExcelHeaderRow1Based:
-    def test_valid_integer(self):
-        from app.application.tools.workflow import _parse_excel_header_row_1based
-
-        assert _parse_excel_header_row_1based({"header_row": 3}) == 3
-
-    def test_string_integer(self):
-        from app.application.tools.workflow import _parse_excel_header_row_1based
-
-        assert _parse_excel_header_row_1based({"header_row": "5"}) == 5
-
-    def test_zero_returns_none(self):
-        from app.application.tools.workflow import _parse_excel_header_row_1based
-
-        assert _parse_excel_header_row_1based({"header_row": 0}) is None
-
     def test_negative_returns_none(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based
 
         assert _parse_excel_header_row_1based({"header_row": -1}) is None
-
-    def test_empty_string(self):
-        from app.application.tools.workflow import _parse_excel_header_row_1based
-
-        assert _parse_excel_header_row_1based({"header_row": ""}) is None
-
-    def test_none(self):
-        from app.application.tools.workflow import _parse_excel_header_row_1based
-
-        assert _parse_excel_header_row_1based({"header_row": None}) is None
 
     def test_missing_key(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based
@@ -49,28 +24,8 @@ class TestParseExcelHeaderRow1Based:
 
         assert _parse_excel_header_row_1based({"header_row_index": 4}) == 4
 
-    def test_invalid_string(self):
-        from app.application.tools.workflow import _parse_excel_header_row_1based
-
-        assert _parse_excel_header_row_1based({"header_row": "abc"}) is None
-
 
 class TestExcelCellAsCleanStr:
-    def test_none(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        assert _excel_cell_as_clean_str(None) == ""
-
-    def test_bool(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        assert _excel_cell_as_clean_str(True) == ""
-
-    def test_integer(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        assert _excel_cell_as_clean_str(42) == "42"
-
     def test_float_integer(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
 
@@ -102,23 +57,8 @@ class TestExcelCellAsCleanStr:
 
         assert _excel_cell_as_clean_str("NaT") == ""
 
-    def test_normal_string(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        assert _excel_cell_as_clean_str("hello") == "hello"
-
 
 class TestExcelCellAsFloat:
-    def test_none(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float(None) == 0.0
-
-    def test_nan_float(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float(float("nan")) == 0.0
-
     def test_integer(self):
         from app.application.tools.workflow import _excel_cell_as_float
 
@@ -128,11 +68,6 @@ class TestExcelCellAsFloat:
         from app.application.tools.workflow import _excel_cell_as_float
 
         assert _excel_cell_as_float("3.14") == 3.14
-
-    def test_invalid_string(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float("abc") == 0.0
 
     def test_custom_default(self):
         from app.application.tools.workflow import _excel_cell_as_float

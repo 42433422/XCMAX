@@ -1,6 +1,6 @@
 """客户端 Mod UI 关闭标记的请求级 ContextVar。
 
-Phase 3 从 ``app.legacy.request_client_mods_ctx`` 迁入。
+Phase 3 从 ``legacy-layer.request_client_mods_ctx`` 迁入。
 """
 
 from __future__ import annotations

@@ -188,14 +188,34 @@ class AgentTaskDispatcher:
                         current.last_heartbeat = now
 
     def _execute_claim(self, execution: AgentTaskExecution, owner_id: str) -> None:
+        from contextlib import nullcontext
+
+        from app.application.agent_orchestrator.business_write_guard import worker_claim_scope
+        from app.application.agent_orchestrator.run_sql_repository import (
+            SQLAlchemyAgentRunRepository,
+        )
+        from app.application.agent_orchestrator.worker_repository import (
+            ClaimedRunRepository,
+            WorkerLeaseLost,
+        )
+
+        repository = self._run_repo
+        if isinstance(repository, SQLAlchemyAgentRunRepository):
+            repository = ClaimedRunRepository(repository, execution, owner_id)
         error_code = ""
         state = "failed"
         try:
-            orchestrator = self._orchestrator_factory(self._run_repo)
-            run = orchestrator.execute_dispatched_run(
-                execution.run_id,
-                recovered=execution.recovery_count > 0,
+            orchestrator = self._orchestrator_factory(repository)
+            scope = (
+                worker_claim_scope(self._run_repo, execution, owner_id)
+                if isinstance(self._run_repo, SQLAlchemyAgentRunRepository)
+                else nullcontext()
             )
+            with scope:
+                run = orchestrator.execute_dispatched_run(
+                    execution.run_id,
+                    recovered=execution.recovery_count > 0,
+                )
             if run is None:
                 error_code = "worker_run_unavailable"
             else:
@@ -209,13 +229,16 @@ class AgentTaskDispatcher:
                 }.get(run.status, "failed")
                 if state == "failed" and run.status != "failed":
                     error_code = "worker_incomplete_state"
+        except WorkerLeaseLost:
+            error_code = "worker_lease_lost"
+            logger.info("worker stopped after lease loss for run %s", execution.run_id)
         except (
             RECOVERABLE_ERRORS
         ):  # thread boundary: preserve the worker pool and persist safe evidence
             logger.exception("agent task worker failed for run %s", execution.run_id)
             error_code = "worker_execution_failed"
             try:
-                self._orchestrator_factory(self._run_repo).fail_dispatched_run(execution.run_id)
+                self._orchestrator_factory(repository).fail_dispatched_run(execution.run_id)
             except RECOVERABLE_ERRORS:
                 logger.exception("agent task failure receipt could not be persisted")
         finally:
@@ -242,8 +265,28 @@ def get_agent_task_dispatcher() -> AgentTaskDispatcher:
         return _dispatcher
 
 
+def reconcile_interrupted_runs() -> int:
+    """启动对账：收敛上一进程遗留的 running 任务（M15）。
+
+    放在 dispatcher 启动前，保证在重新认领执行之前先把已经中断的 run 收敛为
+    failed；被动节点不启动 dispatcher，因此也不会误改运行状态。
+    """
+    from app.application.agent_orchestrator.stale_run_reconciler import (
+        reconcile_stale_running_runs,
+    )
+
+    try:
+        return reconcile_stale_running_runs()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("agent run startup reconciliation skipped: %s", exc)
+        return 0
+
+
 def start_agent_task_dispatcher() -> AgentTaskDispatcher:
     dispatcher = get_agent_task_dispatcher()
+    reconciled = reconcile_interrupted_runs()
+    if reconciled:
+        logger.info("agent run startup reconciliation converged %s run(s)", reconciled)
     dispatcher.start()
     return dispatcher
 
@@ -269,6 +312,7 @@ __all__ = [
     "AgentTaskDispatcher",
     "get_agent_task_dispatcher",
     "notify_agent_task_dispatcher",
+    "reconcile_interrupted_runs",
     "set_agent_task_dispatcher_for_tests",
     "start_agent_task_dispatcher",
     "stop_agent_task_dispatcher",

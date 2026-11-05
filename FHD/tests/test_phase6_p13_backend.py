@@ -71,7 +71,7 @@ from app.application.workflow.planner import (
     execute_tool,
     get_tool_registry,
 )
-from app.application.workflow.types import PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 
 # ===========================================================================
 # 1. app/application/ai_chat_app_service.py
@@ -171,18 +171,26 @@ class TestMergeToolRuntimeContext:
     def test_basic_merge(self) -> None:
         ctx = {"ui_surface": "normal", "intent_channel": "pro"}
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", ctx)
-        assert result["user_id"] == "u1"
+        assert result["conversation_id"] == "u1"
         assert result["message"] == "hello"
         assert result["ui_surface"] == "normal"
         assert result["intent_channel"] == "pro"
 
     def test_none_context(self) -> None:
-        result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with tenant_scope(1):
+            result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_non_dict_context(self) -> None:
-        result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not a dict")  # type: ignore[arg-type]
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with tenant_scope(1):
+            result = AIChatApplicationService._merge_tool_runtime_context(
+                "u1", "hello", "not a dict"
+            )  # type: ignore[arg-type]
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_skips_none_values(self) -> None:
         ctx = {"ui_surface": None, "intent_channel": "pro", "tool_execution_profile": None}
@@ -277,25 +285,18 @@ class TestIsNumberText:
 class TestResolveExcelPathForImport:
     """Cover _resolve_excel_path_for_import."""
 
-    def test_from_excel_analysis(self) -> None:
-        ea = {"file_path": "/tmp/x.xlsx"}
-        result = AIChatApplicationService._resolve_excel_path_for_import(ea, {})
-        assert result == "/tmp/x.xlsx"
+    @pytest.mark.parametrize(
+        "source,whitespace", [("analysis", False), ("preview", False), ("analysis", True)]
+    )
+    def test_path_source_and_whitespace(self, source, whitespace) -> None:
+        from pathlib import Path
+        from tempfile import gettempdir
 
-    def test_from_preview_data_when_excel_analysis_empty(self) -> None:
-        ea = {"file_path": ""}
-        pd_ = {"file_path": "/tmp/y.xlsx"}
-        result = AIChatApplicationService._resolve_excel_path_for_import(ea, pd_)
-        assert result == "/tmp/y.xlsx"
-
-    def test_both_empty_returns_empty(self) -> None:
-        result = AIChatApplicationService._resolve_excel_path_for_import({}, {})
-        assert result == ""
-
-    def test_strips_whitespace(self) -> None:
-        ea = {"file_path": "  /tmp/x.xlsx  "}
-        result = AIChatApplicationService._resolve_excel_path_for_import(ea, {})
-        assert result == "/tmp/x.xlsx"
+        path = str(Path(gettempdir()) / "xcagi-test.xlsx")
+        value = f"  {path}  " if whitespace else path
+        ea = {"file_path": value if source == "analysis" else ""}
+        preview = {"file_path": value if source == "preview" else ""}
+        assert AIChatApplicationService._resolve_excel_path_for_import(ea, preview) == path
 
 
 class TestExcelCellLooksLikeProductMeasureUnit:
@@ -1547,12 +1548,13 @@ class TestLLMWorkflowPlannerFallback:
 
     def test_fallback_create_product_english(self) -> None:
         # The intent matcher requires the Chinese token "产品" — English-only
-        # input falls through to generic_workflow. We assert the actual
-        # contract so the behaviour is documented.
+        # input falls through to the two-level default (2026-09: clarify when
+        # no rule-intent hit). We assert the actual contract so the behaviour
+        # is documented.
         planner = self._make_planner()
         reg = get_tool_registry()
         plan = planner._fallback_plan("p1", "create product", reg)
-        assert plan.intent == "generic_workflow"
+        assert plan.intent in ("generic_workflow", "clarify_ask")
         assert len(plan.nodes) >= 1
 
     def test_fallback_create_product_chinese(self) -> None:
@@ -1564,21 +1566,25 @@ class TestLLMWorkflowPlannerFallback:
     def test_fallback_generic(self) -> None:
         planner = self._make_planner()
         reg = get_tool_registry()
+        # 2026-09 起未命中意图不再静默 products.query，而是 clarify.ask。
         plan = planner._fallback_plan("p1", "查询信息", reg)
-        assert plan.intent == "generic_workflow"
+        assert plan.intent == "clarify_ask"
         assert len(plan.nodes) >= 1
 
     def test_fallback_no_products_in_registry(self) -> None:
         planner = self._make_planner()
         reg = {"customers": {"actions": {"query": {"risk": "low"}}}}
-        plan = planner._fallback_plan("p1", "查询", reg)
+        # 命中 customers 意图时按 tool_key 路由到 customers.query。
+        plan = planner._fallback_plan("p1", "客户列表", reg)
         assert len(plan.nodes) >= 1
         assert plan.nodes[0].tool_id == "customers"
 
     def test_fallback_empty_registry(self) -> None:
         planner = self._make_planner()
+        # 空注册表且意图未命中时仍产出 clarify 节点。
         plan = planner._fallback_plan("p1", "查询", {})
-        assert len(plan.nodes) == 0
+        assert len(plan.nodes) == 1
+        assert plan.nodes[0].tool_id == "clarify"
         assert plan.risk_level == "low"
 
     def test_fallback_risk_level_medium(self) -> None:
@@ -1604,9 +1610,6 @@ class TestLLMWorkflowPlannerPlanWithLLM:
     def test_llm_http_error_returns_none(self) -> None:
         mock_response = Mock()
         mock_response.status_code = 500
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1616,8 +1619,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is None
@@ -1626,9 +1629,6 @@ class TestLLMWorkflowPlannerPlanWithLLM:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"choices": [{"message": {"content": ""}}]}
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1638,8 +1638,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is None
@@ -1648,9 +1648,6 @@ class TestLLMWorkflowPlannerPlanWithLLM:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"choices": [{"message": {"content": "not json{"}}]}
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1660,8 +1657,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is None
@@ -1696,9 +1693,6 @@ class TestLLMWorkflowPlannerPlanWithLLM:
                 }
             ]
         }
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1708,8 +1702,8 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is not None
@@ -1847,9 +1841,6 @@ class TestLLMWorkflowPlannerCriticRepair:
     def test_http_error_returns_none(self) -> None:
         mock_response = Mock()
         mock_response.status_code = 500
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1859,8 +1850,8 @@ class TestLLMWorkflowPlannerCriticRepair:
             planner = LLMWorkflowPlanner()
             invalid_plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._critic_repair_with_llm(
                     "p1", "u1", "msg", {}, {}, "error", invalid_plan
@@ -1871,9 +1862,6 @@ class TestLLMWorkflowPlannerCriticRepair:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"choices": [{"message": {"content": ""}}]}
-        mock_client = Mock()
-        mock_client.post.return_value = mock_response
-
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_get:
             mock_svc = Mock()
             mock_svc.api_key = "key"
@@ -1883,8 +1871,8 @@ class TestLLMWorkflowPlannerCriticRepair:
             planner = LLMWorkflowPlanner()
             invalid_plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
             with patch(
-                "app.application.workflow.planner._get_planner_http_client",
-                return_value=mock_client,
+                "app.application.workflow.planner.request_planner_completion",
+                return_value=mock_response.json() if mock_response.status_code < 400 else None,
             ):
                 result = planner._critic_repair_with_llm(
                     "p1", "u1", "msg", {}, {}, "error", invalid_plan
@@ -1931,8 +1919,8 @@ class TestLLMWorkflowPlannerPlan:
                 patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
             ):
                 plan = planner.plan("u1", "msg", get_tool_registry())
-                # Should fall back to fallback plan
-                assert plan.intent in ("generic_workflow", "add_product_to_unit")
+                # Should fall back to fallback plan（2026-09：未命中意图走 clarify_ask）
+                assert plan.intent in ("generic_workflow", "add_product_to_unit", "clarify_ask")
 
     def test_plan_react_none_falls_back(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):
@@ -2264,9 +2252,11 @@ class TestHandleExcelAnalysis:
         p = tmp_path / "data.xlsx"
         pd.DataFrame({"a": [1, 2]}).to_excel(p, index=False)
         result = handle_excel_analysis(
-            {"file_path": str(p), "action": "aggregate"}, workspace_root=str(tmp_path)
+            {"file_path": str(p), "action": "aggregate", "metrics": [{"column": "a", "op": "sum"}]},
+            workspace_root=str(tmp_path),
         )
         assert result["success"] is True
+        assert result["records"] == [{"a_sum": 3}]
 
     def test_action_aggregate_invalid_metrics(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xlsx"
@@ -2280,7 +2270,8 @@ class TestHandleExcelAnalysis:
             },
             workspace_root=str(tmp_path),
         )
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["error"] == "invalid_aggregation_metrics"
 
     def test_action_statistics(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xlsx"
@@ -2342,9 +2333,10 @@ class TestRunNaturalLanguagePandas:
 
     def test_truncation(self) -> None:
         df = pd.DataFrame({"a": list(range(300))})
-        result = run_natural_language_pandas(df, "select all")
+        result = run_natural_language_pandas(df, "select all", max_rows=200)
         assert result["truncated"] is True
         assert result["returned_rows"] == 200
+        assert result["next_offset"] == 200
 
 
 class TestInvalidateWorkflowToolRegistry:
@@ -2571,7 +2563,10 @@ class TestImportProductsPreviewOrExecute:
     def test_confirm_mode_success(self) -> None:
         df = pd.DataFrame({"产品名称": ["A"], "型号": ["M1"], "单价": [10]})
         with (
-            patch("app.services.unified_query_service.find_purchase_unit", return_value=None),
+            patch(
+                "app.domain.shared_services.unified_query_service.find_purchase_unit",
+                return_value=None,
+            ),
             patch("app.bootstrap.get_customer_app_service") as mock_cust,
             patch("app.bootstrap.get_products_service") as mock_prod,
         ):
@@ -2713,8 +2708,10 @@ class TestImportOrdersPreviewOrExecute:
                 df, list(df.columns), None, confirm=True, row_count=1
             )
             parsed = json.loads(result)
-            assert parsed["success"] is True
-            assert parsed["failed"] >= 1
+            assert parsed["success"] is False
+            assert parsed["imported"] == 0
+            assert parsed["failed"] == 1
+            mock_svc.create_shipment.assert_not_called()
 
     def test_empty_df(self) -> None:
         df = pd.DataFrame({"产品名称": []})

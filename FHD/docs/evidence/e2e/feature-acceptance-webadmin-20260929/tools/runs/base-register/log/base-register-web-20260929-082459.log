@@ -1,0 +1,7 @@
+[08:24:59] feature=base-register base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-register
+[08:25:11] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:25:11] case BR1: passed - 真实注册创建账号
+[08:25:11] case BR2: passed - 空参数注册被拒（边界/负例）
+[08:25:11] case BR3: passed - 账号找回缺少有效邮箱被拒（负例）
+[08:25:12] video: base-register-web-20260929-082459.webm (611127 bytes)
+[08:25:12] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-register/log/base-register-web-20260929-082459.log

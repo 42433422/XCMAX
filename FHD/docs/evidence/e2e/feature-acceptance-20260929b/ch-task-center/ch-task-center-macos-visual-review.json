@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ch-task-center",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "11e3efa8f6b593d741149ff0fb955c969cd04973d563809eb35c1a43bd8464c1",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。业务审批工作台。待我审批为 0。我发起的 3、已通过 3。列表含「MAC验收0929通知」2026/9/29 已通过。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-task-center/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ch-task-center/macos/result.png"
+}

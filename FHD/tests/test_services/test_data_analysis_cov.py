@@ -15,7 +15,7 @@ import pytest
 
 class TestDataAnalysisService:
     def _make_svc(self):
-        from app.services.data_analysis_service import DataAnalysisService
+        from app.domain.shared_services.data_analysis_service import DataAnalysisService
 
         return DataAnalysisService()
 
@@ -135,7 +135,7 @@ class TestDataAnalysisService:
 
     # module-level factory function
     def test_get_data_analysis_service(self):
-        from app.services.data_analysis_service import get_data_analysis_service
+        from app.domain.shared_services.data_analysis_service import get_data_analysis_service
 
         svc = get_data_analysis_service()
         assert svc is not None
@@ -148,7 +148,7 @@ class TestDataAnalysisService:
 
 class TestOpenAICompatibleAdapter:
     def _make_adapter(self, provider="deepseek", api_key="test-key"):
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
         return OpenAICompatibleAdapter(provider=provider, api_key=api_key)
 
@@ -160,23 +160,87 @@ class TestOpenAICompatibleAdapter:
 
     def test_init_without_key(self):
         with patch.dict("os.environ", {}, clear=True):
-            from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+            from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
             a = OpenAICompatibleAdapter(provider="deepseek")
         assert a.is_configured is False
 
     def test_init_env_key_resolution(self):
         with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "env_key"}):
-            from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+            from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
             a = OpenAICompatibleAdapter(provider="deepseek")
         assert a.is_configured is True
 
     def test_init_unknown_provider_fallback(self):
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
         a = OpenAICompatibleAdapter(provider="unknownvendor", api_key="k")
         assert a._base_url.endswith("/v1") or "openai.com" in a._base_url
+
+    def test_xcauto_virtual_model_kept_on_gateway(self):
+        """账户虚拟名在修茈网关（默认端点）保持不变。"""
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        a = OpenAICompatibleAdapter(provider="xcauto", api_key="k")
+        assert a.model_name == "xcauto-account"
+
+    def test_xcauto_virtual_model_mapped_on_xiaomi_endpoint(self):
+        """base_url 直指小米 token-plan 时，虚拟名映射为小米真实模型（否则端点 400）。"""
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        a = OpenAICompatibleAdapter(
+            provider="xcauto", api_key="k", base_url="https://token-plan-cn.xiaomimimo.com/v1"
+        )
+        assert a.model_name == "mimo-v2.6-pro"
+
+    @pytest.mark.parametrize(
+        "old,current",
+        [
+            ("mimo-v2.5-pro", "mimo-v2.6-pro"),
+            ("mimo-v2.5", "mimo-v2.6-flash"),
+            ("mimo-v2-pro", "mimo-v2.6-pro"),
+            ("mimo-v2.6-pro", "mimo-v2.6-pro"),
+            ("mimo-v2.5-tts", "mimo-v2.5-tts"),
+        ],
+    )
+    def test_xiaomi_retired_models_use_supported_replacement(self, old, current):
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        adapter = OpenAICompatibleAdapter(provider="xiaomi", api_key="synthetic-key", model=old)
+        assert adapter.model_name == current
+
+    def test_custom_xiaomi_endpoint_keeps_its_explicit_model(self):
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        adapter = OpenAICompatibleAdapter(
+            provider="xiaomi",
+            api_key="synthetic-key",
+            model="mimo-v2.5-pro",
+            base_url="https://models.example.invalid/v1",
+        )
+        assert adapter.model_name == "mimo-v2.5-pro"
+
+    def test_xcauto_substring_host_not_matched(self):
+        """仅子串包含域名的非小米主机不触发映射（精确主机判定，防 CodeQL REDOS/绕过类问题）。"""
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        a = OpenAICompatibleAdapter(
+            provider="xcauto", api_key="k", base_url="https://evil.com/?x=xiaomimimo.com"
+        )
+        assert a.model_name == "xcauto-account"
+
+    def test_xcauto_explicit_model_survives_endpoint_switch(self):
+        """显式指定的真实模型不被端点映射覆盖。"""
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        a = OpenAICompatibleAdapter(
+            provider="xcauto",
+            api_key="k",
+            model="mimo-v2.5-pro",
+            base_url="https://token-plan-cn.xiaomimimo.com/v1",
+        )
+        assert a.model_name == "mimo-v2.5-pro"
 
     def test_normalize_base_url_already_versioned(self):
         a = self._make_adapter()
@@ -200,7 +264,7 @@ class TestOpenAICompatibleAdapter:
 
     def test_repr_not_configured(self):
         with patch.dict("os.environ", {}, clear=True):
-            from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+            from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
             a = OpenAICompatibleAdapter(provider="deepseek")
         r = repr(a)
@@ -209,7 +273,7 @@ class TestOpenAICompatibleAdapter:
     # chat_completion — no api key
     @pytest.mark.asyncio
     async def test_chat_completion_no_key_raises(self):
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
         a = OpenAICompatibleAdapter(provider="deepseek", api_key=None)
         a._api_key = None
@@ -236,7 +300,7 @@ class TestOpenAICompatibleAdapter:
 
     @pytest.mark.asyncio
     async def test_minimax_token_plan_uses_anthropic_compatible_protocol(self):
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
         adapter = OpenAICompatibleAdapter(
             provider="minimax",
@@ -274,7 +338,7 @@ class TestOpenAICompatibleAdapter:
     # stream_chat_completion — no api key
     @pytest.mark.asyncio
     async def test_stream_no_key_raises(self):
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
         a = OpenAICompatibleAdapter(provider="deepseek", api_key=None)
         a._api_key = None
@@ -310,7 +374,7 @@ class TestOpenAICompatibleAdapter:
 
     # custom base_url and model
     def test_custom_base_url_and_model(self):
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
         a = OpenAICompatibleAdapter(
             provider="openai",
@@ -329,6 +393,18 @@ class TestOpenAICompatibleAdapter:
         c2 = await a._get_client()
         assert c1 is c2
         await a.close()
+
+    @pytest.mark.asyncio
+    async def test_replace_client_continues_when_old_loop_is_closed(self):
+        a = self._make_adapter()
+        old = AsyncMock()
+        old.is_closed = False
+        old.aclose = AsyncMock(side_effect=RuntimeError("Event loop is closed"))
+        a._client = old
+        a._client_loop_id = 0
+        fresh = await a._get_client()
+        assert fresh is not old
+        await fresh.aclose()
 
     # _get_stream_client reuse
     @pytest.mark.asyncio

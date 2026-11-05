@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "pay-member-plan",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "5ef7e5dd7c9815e17dbfd99063b40513d9008088698fcf1e843903f63bc03893",
+  "visible_content": "模型服务与余额汇总，没有会员方案购买订单或权益开通结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/pay-member-plan.png"
+}

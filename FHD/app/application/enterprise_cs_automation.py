@@ -7,18 +7,24 @@ thread; explicit or risky requests are moved to the existing admin inbox.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import re
 from typing import Any
 
-from sqlalchemy import desc, select
+import httpx
+from sqlalchemy import desc, select, true
 from sqlalchemy.orm import Session
 
-from app.db.models.im import ImCustomerServiceAutomationState
+from app.db.models.im import ImCustomerServiceAutomationState, ImMessage
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
-from app.services.kellai_copilot_llm import content_from_completion, parse_json_content
+from app.domain.shared_services.kellai_copilot_llm import (
+    content_from_completion,
+    parse_json_content,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -63,6 +69,33 @@ _HIGH_RISK_PHRASES = (
     "定制承诺",
 )
 _ALLOWED_MODES = {"ai", "human"}
+_ISSUE_DESCRIPTION_PROMPT = "请说明要登记的故障现象；暂未建立工单。"
+
+
+def _intake_excluded(text: str) -> bool:
+    # Reject intake withdrawal commands, not defect descriptions such as
+    # "cannot cancel an order" or error messages containing "not found".
+    text = text.strip()
+    query = re.match(r"^(?:请|帮我|给我|麻烦|\s)*(?:查询|查一下|查查|查看|统计)", text)
+    if query:
+        ui_failure = re.match(
+            r"[^，。！？；,\n]{0,12}(?:按钮|功能|页面|界面|模块|组件)"
+            r"[^，。！？；,\n]{0,20}(?:报错|失败|异常|失效|没反应|无法|不能|卡死|闪退)",
+            text[query.end() :],
+        )
+        if not ui_failure:
+            return True
+    return bool(
+        re.search(
+            r"已(?:经)?(?:解决|修复)(?:了|完成)?(?:[，,\s]*(?:谢谢|感谢)(?:你|您)?)?[。！!?\s]*$"
+            r"|(?:^|[，。！？；,!?;\n])\s*(?:我|请|帮我|给我|麻烦)*"
+            r"(?:(?:取消|撤回|停止|不要|不用|别|无需|不必|不想|暂不|不需要)"
+            r"(?:再|继续|帮我|给我|替我|这个|这次|该|本次|\s)*"
+            r"(?:工单|建单|处理|(?:登记|提交|上报|反馈|创建|建立)(?!按钮|功能|页面|界面|模块|组件))"
+            r"|(?:取消|算了|不用了)(?:[，。！？；,!?;\s]|$))",
+            text,
+        )
+    )
 
 
 def _enabled() -> bool:
@@ -238,6 +271,134 @@ class EnterpriseCsAutomationService:
         )
         return self.public_state(conversation_id)
 
+    async def _receive_explicit_issue(
+        self,
+        conversation_id: int,
+        customer_user_id: int,
+        message_id: int,
+        text: str,
+        market_token: str,
+        *,
+        readback_only: bool = False,
+        processed_through: int = 0,
+    ) -> dict[str, Any] | None:
+        from app.application.client_product_issue_intake import (
+            _PLAIN_INTAKE_RE,
+            _bare_intake,
+            _plain_intake_match,
+            looks_like_issue_report,
+            receive_pending_report,
+        )
+        from app.application.im_app_service import ImApplicationService
+
+        if _intake_excluded(text):
+            return None
+        if not _plain_intake_match(text):
+            if not (looks_like_issue_report(text) or re.search(r"卡死|闪退|按钮失效", text)):
+                return None
+            previous = self._db.scalar(
+                select(ImMessage)
+                .where(ImMessage.conversation_id == conversation_id, ImMessage.id < message_id)
+                .order_by(ImMessage.id.desc())
+                .limit(1)
+            )
+            if not (
+                previous is not None
+                and previous.origin == "system"
+                and previous.sender_user_id
+                == ImApplicationService(self._db).enterprise_cs_user_id()
+                and previous.body == _ISSUE_DESCRIPTION_PROMPT
+            ):
+                return None
+
+        def normalized(value: str) -> str:
+            return re.sub(
+                r"^(?:请|帮我|给我|麻烦|[:：\s])+", "", _PLAIN_INTAKE_RE.sub("", value)
+            ).strip()
+
+        prior = self._db.scalars(
+            select(ImMessage)
+            .where(
+                ImMessage.conversation_id == conversation_id,
+                ImMessage.sender_user_id == customer_user_id,
+                ImMessage.id < message_id,
+            )
+            .order_by(ImMessage.id.desc())
+            .limit(24)
+        ).all()
+        report, source_id = text, message_id
+        if _bare_intake(text):
+            report = ""
+            for item in prior:
+                if _bare_intake(item.body):
+                    continue
+                if not _intake_excluded(item.body) and (
+                    looks_like_issue_report(item.body)
+                    or re.search(r"软件|页面|界面|客户端|卡死|断连", item.body)
+                ):
+                    report, source_id = item.body, item.id
+                break
+        if any(phrase in report for phrase in _HIGH_RISK_PHRASES):
+            return None
+        # Keep market-owner/conversation provenance distinct from a desktop tenant.
+        report = normalized(report)
+        readback_only = readback_only or any(
+            item.id <= processed_through
+            and _plain_intake_match(item.body)
+            and (normalized(item.body) == report or item.id >= source_id)
+            for item in prior
+        )
+        owner = self._db.get(User, customer_user_id)
+        market_owner_id = int(getattr(owner, "market_user_id", 0) or 0)
+        result: dict[str, Any] = {}
+        if not report:
+            reply = _ISSUE_DESCRIPTION_PROMPT
+        else:
+            if market_owner_id and market_token:
+                digest = hashlib.sha256(report.encode()).hexdigest()
+                source_ref = f"enterprise-cs:{market_owner_id}:{conversation_id}:{digest}"
+                result = await receive_pending_report(
+                    market_token,
+                    report,
+                    ["expected_behavior", "actual_behavior"],
+                    source_ref=source_ref,
+                    readback_only=readback_only,
+                )
+            if result.get("state") == "RECEIVED":
+                reply = f"工单已受理，编号：{result['owner_ticket_no']}。后续可在原工单补充截图和复现步骤；受理不代表故障已确认或修复。"
+            else:
+                reply = "暂无法确认工单受理结果，请先查看当前账号的问题工单处理结果，勿重复提交；如需核查可在本会话联系人工客服。"
+        existing = self._db.scalar(
+            select(ImMessage)
+            .where(
+                ImMessage.conversation_id == conversation_id,
+                ImMessage.origin == "system",
+                ImMessage.body == reply,
+                ImMessage.id > message_id if not report else true(),
+            )
+            .order_by(ImMessage.id.desc())
+            .limit(1)
+        )
+        sent = (
+            None
+            if existing
+            else ImApplicationService(self._db)
+            .cs_reply(
+                conversation_id,
+                reply,
+                origin="system",
+            )
+            .get("message")
+        )
+        self._db.commit()
+        return {
+            "handled": True,
+            "action": "issue_intake",
+            "intake": result,
+            "message": sent,
+            **self.public_state(conversation_id),
+        }
+
     async def handle_customer_message(
         self,
         *,
@@ -245,17 +406,45 @@ class EnterpriseCsAutomationService:
         customer_user_id: int,
         message_id: int,
         body: str,
+        market_token: str = "",
     ) -> dict[str, Any]:
         from app.application.im_app_service import ImApplicationService
 
         if not self.is_enterprise_cs_conversation(conversation_id, customer_user_id):
             return {"handled": False, "reason": "not_enterprise_cs"}
+        message = self._db.get(ImMessage, int(message_id))
+        if (
+            message is None
+            or message.conversation_id != conversation_id
+            or message.sender_user_id != customer_user_id
+        ):
+            return {"handled": False, "reason": "invalid_customer_message"}
+        body = message.body
         row = self._state(conversation_id, create=True)
         if row is None:
             return {"handled": False, "reason": "state_unavailable"}
         if int(row.last_customer_message_id or 0) >= int(message_id):
-            return {"handled": False, "reason": "duplicate"}
+            return await self._receive_explicit_issue(
+                conversation_id,
+                customer_user_id,
+                message_id,
+                body,
+                market_token,
+                readback_only=True,
+            ) or {"handled": False, "reason": "duplicate"}
+        processed_through = int(row.last_customer_message_id or 0)
         row.last_customer_message_id = int(message_id)
+        self._db.commit()
+        intake = await self._receive_explicit_issue(
+            conversation_id,
+            customer_user_id,
+            message_id,
+            body,
+            market_token,
+            processed_through=processed_through,
+        )
+        if intake is not None:
+            return intake
         if row.mode == "human":
             self._db.commit()
             return {
@@ -341,7 +530,27 @@ class EnterpriseCsAutomationService:
                 reasoning_enabled=False,
             )
             parsed = parse_json_content(content_from_completion(completion))
-        except RECOVERABLE_ERRORS:
+        except RECOVERABLE_ERRORS as error:
+            failure: dict[str, Any] = {"reason": "completion_failed"}
+            if isinstance(error, httpx.HTTPStatusError):
+                failure["status_code"] = error.response.status_code
+                try:
+                    detail = error.response.json().get("error", {})
+                    if isinstance(detail, dict) and str(detail.get("message", "")).startswith(
+                        "Unsupported model "
+                    ):
+                        failure["reason"] = "unsupported_model"
+                except (ValueError, AttributeError):
+                    pass
+            _audit(
+                actor="enterprise-cs-ai",
+                action="enterprise_cs.ai_failed",
+                payload={
+                    "conversation_id": int(conversation_id),
+                    "customer_message_id": int(message_id),
+                    **failure,
+                },
+            )
             logger.exception("enterprise CS AI completion failed")
             return {
                 "handled": True,
@@ -412,6 +621,8 @@ async def process_enterprise_cs_customer_message(
     customer_user_id: int,
     message_id: int,
     body: str,
+    *,
+    market_token: str = "",
 ) -> dict[str, Any]:
     """Background-task entrypoint that owns and closes its database session."""
 
@@ -424,6 +635,7 @@ async def process_enterprise_cs_customer_message(
             customer_user_id=int(customer_user_id),
             message_id=int(message_id),
             body=str(body or ""),
+            market_token=market_token,
         )
     finally:
         db.close()

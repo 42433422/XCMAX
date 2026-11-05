@@ -1,0 +1,110 @@
+{
+  "time": "2026-10-15T22:21:20.095691+08:00",
+  "stoppedOnlyOwnVerifierPids": [
+    73261,
+    74410,
+    74948,
+    74949
+  ],
+  "operatorCorrection": "Prior process-table comm field was truncated and missed old workers; corrected exact executable/args identification. Added one-process-per-package file lock. No package content generated from local reference; only validated received prefixes and discarded mismatching suffixes.",
+  "receivedPartials": [
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/000.part",
+      "receivedBytesBefore": 18087936,
+      "retainedActualReceivedPrefixBytes": 12779520,
+      "discardedMismatchingTailBytes": 5308416
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/001.part",
+      "receivedBytesBefore": 22478848,
+      "retainedActualReceivedPrefixBytes": 22478848,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/002.part",
+      "receivedBytesBefore": 7208960,
+      "retainedActualReceivedPrefixBytes": 7208960,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/003.part",
+      "receivedBytesBefore": 18415616,
+      "retainedActualReceivedPrefixBytes": 18415616,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/004.part",
+      "receivedBytesBefore": 23330816,
+      "retainedActualReceivedPrefixBytes": 23330816,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/005.part",
+      "receivedBytesBefore": 21364736,
+      "retainedActualReceivedPrefixBytes": 21364736,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/006.part",
+      "receivedBytesBefore": 10223616,
+      "retainedActualReceivedPrefixBytes": 10223616,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.ranges/007.part",
+      "receivedBytesBefore": 22675456,
+      "retainedActualReceivedPrefixBytes": 22675456,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/000.part",
+      "receivedBytesBefore": 5046272,
+      "retainedActualReceivedPrefixBytes": 3735552,
+      "discardedMismatchingTailBytes": 1310720
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/001.part",
+      "receivedBytesBefore": 5242880,
+      "retainedActualReceivedPrefixBytes": 5242880,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/002.part",
+      "receivedBytesBefore": 10158080,
+      "retainedActualReceivedPrefixBytes": 10158080,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/003.part",
+      "receivedBytesBefore": 4980736,
+      "retainedActualReceivedPrefixBytes": 4980736,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/004.part",
+      "receivedBytesBefore": 3670016,
+      "retainedActualReceivedPrefixBytes": 3670016,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/005.part",
+      "receivedBytesBefore": 3866624,
+      "retainedActualReceivedPrefixBytes": 3866624,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/006.part",
+      "receivedBytesBefore": 9764864,
+      "retainedActualReceivedPrefixBytes": 9764864,
+      "discardedMismatchingTailBytes": 0
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.ranges/007.part",
+      "receivedBytesBefore": 5046272,
+      "retainedActualReceivedPrefixBytes": 5046272,
+      "discardedMismatchingTailBytes": 0
+    }
+  ],
+  "newConcurrentConnectionsPerFile": 1,
+  "productSourceChanged": false
+}

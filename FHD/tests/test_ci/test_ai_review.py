@@ -311,6 +311,27 @@ class TestMatchRules:
         findings = review.match_high_risk_rules(hunks)
         assert len(findings) == 0
 
+    def test_retort_fixture_json_does_not_trigger_executable_code_rules(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="packages/retort_engine/tests/data/behavior_matrix_density.json",
+                start_line=1,
+                lines=[
+                    (
+                        1,
+                        "+",
+                        '"value = eval(user_input)","subprocess.run(cmd, shell=True)","pickle.loads(payload)"',
+                    )
+                ],
+                raw_header="@@ -1,1 +1,1 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(hunks)
+        assert not any(
+            finding.rule in {"subprocess-shell-true", "eval", "exec", "pickle-loads"}
+            for finding in findings
+        )
+
     def test_kb_evidence_diff_does_not_trigger_executable_code_rules(self) -> None:
         hunks = [
             review.DiffHunk(
@@ -330,6 +351,27 @@ class TestMatchRules:
         assert not any(
             finding.rule in {"n-plus-one-inline", "unbounded-while-true"} for finding in findings
         )
+
+    def test_generated_corp_butler_ignores_vue_runtime_innerhtml(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="\\346\\210\\220\\351\\203\\275/corp-butler/corp-butler.js",
+                start_line=1,
+                lines=[(1, "+", "el.innerHTML = html")],
+                raw_header="@@ -1,0 +1,1 @@",
+            )
+        ]
+        assert review.match_high_risk_rules(hunks) == []
+        source = [
+            review.DiffHunk(
+                file_path="成都修茈科技有限公司/page.html",
+                start_line=1,
+                lines=[(1, "+", "el.innerHTML = html")],
+                raw_header="@@ -1,0 +1,1 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(source)
+        assert any(f.rule == "html-innerhtml-assignment" for f in findings)
 
     def test_kb_evidence_still_scans_for_committed_secrets(self) -> None:
         hunks = [
@@ -370,82 +412,71 @@ class TestMatchRules:
 # =====================================================================
 
 
+_LLM_ENDPOINT = "https://llm.internal.test/v1/review"
+
+
+def _review_finding() -> review.Finding:
+    return review.Finding(
+        file_path="f",
+        line=1,
+        rule="eval",
+        severity="high",
+        snippet="eval()",
+        suggestion="don't",
+    )
+
+
 class TestCallLlmReview:
+    @pytest.mark.parametrize("base_url", [None, "https://llm.internal.test"])
+    def test_missing_endpoint_never_sends_key(self, monkeypatch, base_url) -> None:
+        for name in ("XCAGI_LLM_ENDPOINT", "XCAGI_LLM_BASE_URL", "XCAGI_LLM_MODEL"):
+            monkeypatch.delenv(name, raising=False)
+        if base_url:
+            monkeypatch.setenv("XCAGI_LLM_BASE_URL", base_url)
+        client = MagicMock()
+        assert (
+            review.call_llm_review(_review_finding(), api_key="secret", client=client)
+            == "unavailable"
+        )
+        client.post.assert_not_called()
+
+    def test_endpoint_from_env_is_used(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("XCAGI_LLM_ENDPOINT", _LLM_ENDPOINT)
+        client = MagicMock()
+        client.post.return_value.status_code = 200
+        client.post.return_value.json.return_value = {"verdict": "medium"}
+        assert review.call_llm_review(_review_finding(), api_key="k", client=client) == "medium"
+        assert client.post.call_args.args[0] == _LLM_ENDPOINT
+        assert client.post.call_args.kwargs["headers"]["Authorization"] == "Bearer k"
+
     def test_no_api_key_returns_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_API_KEY", raising=False)
-        finding = review.Finding(
-            file_path="f",
-            line=1,
-            rule="eval",
-            severity="high",
-            snippet="eval()",
-            suggestion="don't",
-        )
-        assert review.call_llm_review(finding) == "unavailable"
+        assert review.call_llm_review(_review_finding()) == "unavailable"
 
     def test_timeout_returns_unavailable(self) -> None:
-        finding = review.Finding(
-            file_path="f",
-            line=1,
-            rule="eval",
-            severity="high",
-            snippet="eval()",
-            suggestion="don't",
-        )
         client = MagicMock()
         client.post.side_effect = TimeoutError("timeout")
-        result = review.call_llm_review(finding, api_key="k", client=client)
-        assert result == "unavailable"
-
-    def test_http_500_returns_unavailable(self) -> None:
-        finding = review.Finding(
-            file_path="f",
-            line=1,
-            rule="eval",
-            severity="high",
-            snippet="eval()",
-            suggestion="don't",
+        assert (
+            review.call_llm_review(
+                _review_finding(), api_key="k", endpoint=_LLM_ENDPOINT, client=client
+            )
+            == "unavailable"
         )
-        client = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 500
-        client.post.return_value = resp
-        result = review.call_llm_review(finding, api_key="k", client=client)
-        assert result == "unavailable"
 
-    def test_valid_response_returns_verdict(self) -> None:
-        finding = review.Finding(
-            file_path="f",
-            line=1,
-            rule="eval",
-            severity="high",
-            snippet="eval()",
-            suggestion="don't",
-        )
+    @pytest.mark.parametrize(
+        "status,verdict,expected",
+        [(500, "high", "unavailable"), (200, "high", "high"), (200, "bogus", "unavailable")],
+    )
+    def test_response_verdict(self, status, verdict, expected) -> None:
         client = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.json.return_value = {"verdict": "high"}
-        client.post.return_value = resp
-        result = review.call_llm_review(finding, api_key="k", client=client)
-        assert result == "high"
-
-    def test_invalid_verdict_returns_unavailable(self) -> None:
-        finding = review.Finding(
-            file_path="f",
-            line=1,
-            rule="eval",
-            severity="high",
-            snippet="eval()",
-            suggestion="don't",
+        client.post.return_value.status_code = status
+        client.post.return_value.json.return_value = {"verdict": verdict}
+        assert (
+            review.call_llm_review(
+                _review_finding(), api_key="k", endpoint=_LLM_ENDPOINT, client=client
+            )
+            == expected
         )
-        client = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.json.return_value = {"verdict": "bogus"}
-        client.post.return_value = resp
-        result = review.call_llm_review(finding, api_key="k", client=client)
-        assert result == "unavailable"
 
     def test_minimax_token_plan_uses_anthropic_protocol(
         self,

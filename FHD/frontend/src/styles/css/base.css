@@ -101,17 +101,6 @@ body {
   flex-shrink: 0;
 }
 
-html.xcagi-electron-mac .main-container {
-  height: 100vh;
-  min-height: 0;
-  overflow: hidden;
-}
-
-html.xcagi-electron-mac .main-content .top-bar {
-  position: relative;
-  z-index: 2;
-}
-
 /* 桌面壳：开屏字标不露出；登录页右下角 .login-panel-logo 保留 64px 角标 */
 html.xcagi-electron .startup-logo-text,
 html.xcagi-electron img[src*='xc-logo-text']:not(.login-panel-logo):not(.sidebar-brand-logo):not(.welcome-logo) {
@@ -628,3 +617,4 @@ textarea:focus,
 .template-preview-action {
   margin: 0;
 }
+

@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "erp-finance-ledger",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "ce6364e6c37afa8b38d66e0d6e0d9c17d773562a6fe709b9b4a434d67cf5a610",
+  "visible_content": "财务分析首页明确显示“还没有分析数据”，没有发票、账本、退款或权益交付结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/erp-finance-ledger.png"
+}

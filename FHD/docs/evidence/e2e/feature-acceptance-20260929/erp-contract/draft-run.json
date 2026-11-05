@@ -1,0 +1,69 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-contract",
+ "name": "合同单据",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/sales-contract/templates",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/sales-contract/templates（写操作自动附带 CSRF）：合同模板",
+   "expected": "合同模板：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 18ms；['销售合同默认模板']",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/contract-lifecycle/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/contract-lifecycle/status?market_user_id=29&username=SUNBIRD（写操作自动附带 CSRF）：合同生命周期状态（当前市场账号）",
+   "expected": "合同生命周期状态（当前市场账号）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 33ms；{\"success\": true, \"data\": {\"market_user_id\": 29, \"stage\": \"idle\", \"username\": \"SUNBIRD\", \"erp_customer_name\": \"\", \"contract_lifecycle\": {\"status\": \"draft\", \"esign_task\": {}}, \"sign_url\": \"\", \"party_a_",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "POST /api/sales-contract/resolve-from-text 请求体 {\"text\": \"给太阳鸟做合同：产品A 10个 单价5元\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/sales-contract/resolve-from-text（写操作自动附带 CSRF）：从文本解析合同",
+   "expected": "从文本解析合同：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 20ms；{\"success\": true, \"data\": {\"party_a\": \"\", \"party_b\": \"\", \"total_amount_number\": \"\", \"products\": [{\"name\": \"定制软件服务\", \"quantity\": 1, \"unit_price\": 0}], \"raw_text\": \"给太阳鸟做合同：产品A 10个 单价5元\"}}",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /mod/xcagi-erp-domain-bridge/template-preview",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/template-preview，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-erp-domain-bridge/template-preview，页面可见 ，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/template-preview；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 模板库 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 模板预览 |  | 展示导出用 Excel 与 Word 模板：可按业务分组管理，也可选「自定义」自由新建任意模板；Word 若有「适用业务」",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-contract",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-contract/macos/result.png",
+   "sha256": "a985ec497e401e310d710e20eff2dda229dcab265cef2999d89f000ac819e0f0",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-contract",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-contract/macos/operation.webm",
+   "sha256": "0001d0955b3ae19291759f567b2c904123cf96d88e4b9ae274d67f70850e2aa6",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-contract/macos/run.log",
+  "sha256": "e5d12f5d4a7bbbd5e83a66677396f195313ab7eb60dbeec5860c8576f5e6ce95",
+  "bytes": 1645
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.domain.neuro.processors.coordinator import ProcessorType, RoutingDecision
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.neuro_bus.routing.features import build_routing_features
 from app.neuro_bus.routing.policy_nn import predict_with_confidence
 from app.neuro_bus.routing.routing_log import append_routing_decision
@@ -20,16 +20,18 @@ logger = logging.getLogger(__name__)
 
 _ACTION_ORDER = (ProcessorType.REFLEX, ProcessorType.SUBCONSCIOUS, ProcessorType.CONSCIOUS)
 
+
+def _default_canary_state_path() -> str:
+    from app.neuro_bus.routing.policy_paths import resolve_policy_file
+
+    return str(resolve_policy_file("canary_state.json"))
+
+
 # 动态 canary 状态文件（daemon 写入，router 读取）
 _CANARY_STATE_PATH = Path(
     os.environ.get(
         "XCAGI_ROUTING_CANARY_STATE",
-        str(
-            Path(__file__).resolve().parents[3]
-            / "resources"
-            / "routing_policies"
-            / "canary_state.json"
-        ),
+        _default_canary_state_path(),
     )
 )
 _CANARY_CACHE_TTL = 30.0  # 秒，每 30 秒刷新一次 canary 状态

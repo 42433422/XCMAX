@@ -1,0 +1,6 @@
+2026-09-29T13:05:35+0800 [ch-wechat-phone] 开始验收 ch-wechat-phone 微信电话员工（来电监控）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:05:35+0800 [ch-wechat-phone] M1 failed :: 受阻：需要微信 PC 版登录并有真实来电；本轮无真实微信通话硬件/会话
+2026-09-29T13:05:35+0800 [ch-wechat-phone] M2 failed :: 受阻：qclaw 网关仅暴露路由清单（wechat_open=true），无采集端与真实来电无法验证来电监控链路
+2026-09-29T13:05:35+0800 [ch-wechat-phone] M3 failed :: 受阻：无真实微信电话硬件，无法验证端到端来电处理
+2026-09-29T13:05:36+0800 [ch-wechat-phone] screenshot result.png
+2026-09-29T13:05:37+0800 [ch-wechat-phone] video operation.webm bytes=95169

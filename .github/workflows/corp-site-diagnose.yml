@@ -1,0 +1,48 @@
+# Root-only, fixed read-only snapshot; never invokes deployment or accepts shell input.
+name: Diagnose corp site sync (read only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: corp-site-diagnose
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read fixed sync process, lock and revision metadata
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.FHD_PUSH_HOST }}
+          username: root
+          key: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            set -euo pipefail
+            ROOT=/root/XCMAX
+            for tool in timeout git ps stat lslocks awk date; do
+              command -v "$tool" >/dev/null || { echo "missing tool: $tool"; exit 1; }
+            done
+            test -d "$ROOT/.git" || { echo 'repository unavailable'; exit 1; }
+            date -u '+snapshot_started=%Y-%m-%dT%H:%M:%SZ'
+            echo 'process columns: PID PPID elapsed_seconds state name (no arguments)'
+            timeout 10s ps -eo pid=,ppid=,etimes=,stat=,comm= | awk '$5 ~ /^(git|ssh|git-remote-http|git-remote-https|index-pack|unpack-objects|fetch-pack)$/ {print}'
+            for path in "$ROOT/.git/index.lock" "$ROOT/.git/shallow.lock" "$ROOT/.git/packed-refs.lock" "$ROOT/.git/FETCH_HEAD.lock" "$ROOT/.git/refs/remotes/origin/main.lock" /tmp/xcmax-site-auto-update.lock "$ROOT/.git/FETCH_HEAD"; do
+              if test -e "$path"; then
+                printf 'present %s ' "$path"
+                timeout 5s stat -c 'mtime=%Y size=%s' -- "$path"
+              else printf 'absent %s\n' "$path"; fi
+            done
+            echo 'updater flock holder PID (empty is only this snapshot, not deployment clearance)'
+            timeout 10s lslocks --noheadings --output PID,PATH | awk '$2 == "/tmp/xcmax-site-auto-update.lock" {print $1}'
+            for ref in HEAD refs/remotes/origin/main; do
+              if sha=$(timeout --kill-after=2s 10s env GIT_OPTIONAL_LOCKS=0 GIT_NO_LAZY_FETCH=1 git -c core.fsmonitor=false -C "$ROOT" rev-parse --verify "$ref" 2>/dev/null); then
+                [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'invalid revision identity'; exit 1; }
+                printf '%s=%s\n' "$ref" "$sha"
+              else rc=$?; printf 'revision lookup failed: %s exit=%s\n' "$ref" "$rc"; exit "$rc"; fi
+            done
+            date -u '+snapshot_finished=%Y-%m-%dT%H:%M:%SZ'
+            echo 'Read-only snapshot complete; review process/lock evidence before any separate deployment.'
+            exit 0

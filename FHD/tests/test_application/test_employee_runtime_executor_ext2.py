@@ -93,6 +93,10 @@ class TestMemoryLight:
 
 
 class TestResolveFilePath:
+    @pytest.fixture(autouse=True)
+    def _configured_workspace(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_empty_returns_none(self, tmp_path):
         assert exec_mod._resolve_file_path({}, str(tmp_path)) is None
 
@@ -195,6 +199,10 @@ class TestLoadRuleSpec:
 
 
 class TestActionVendorConvert:
+    @pytest.fixture(autouse=True)
+    def _configured_workspace(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_no_vendor_module(self, tmp_path):
         out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {}, None)
         assert out["ok"] is False

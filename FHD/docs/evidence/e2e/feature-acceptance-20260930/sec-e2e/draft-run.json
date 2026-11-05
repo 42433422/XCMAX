@@ -1,0 +1,54 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "sec-e2e",
+ "name": "端到端自动化验收",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 2,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/tutorial/v2/courses",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/tutorial/v2/courses（写操作自动附带 CSRF）：教程/验收场景",
+   "expected": "教程/验收场景：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 17ms；['用小C提问并查看结果', '新建客户和产品', '完成一笔销售并收款', '导入一份业务 Excel']",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "界面路由 /",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /，页面可见 智能对话，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /；命中文本 ['智能对话']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 13 次任务 · 预计节约人工费用 ¥55 |  | 你好，我是饰品包装助手。 - 查产",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "sec-e2e",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/sec-e2e/macos/result.png",
+   "sha256": "1c8c440c847c8f00b9ce0c7811b97930e8d146eb44cd23f0289a979f7b60330a",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "sec-e2e",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/sec-e2e/macos/operation.webm",
+   "sha256": "259c99c75c722265388b8c960b6b1597caec7560babf9ff9b96b317ee71cb0ea",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/sec-e2e/macos/run.log",
+  "sha256": "472ef532912e4428e5fe6cb8975daf35c9bda33fe396f1e2eeb20fc2c3f9b7e5",
+  "bytes": 1151
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

@@ -1,13 +1,5 @@
 # mypy: disable-error-code="arg-type, index, no-any-return, var-annotated"
-"""COVERAGE_RAMP Phase 6 round 15: backend low-coverage modules.
-
-Targets:
-- ``app/fastapi_routes/market_account.py`` (667 行，未覆盖 81 行，cov 85.4%)
-- ``app/services/skills/label_template_generator/label_template_generator.py`` (359 行，未覆盖 80 行，cov 72.5%)
-- ``app/services/tools_workflow_registered.py`` (399 行，未覆盖 79 行，cov 75.9%)
-- ``app/fastapi_routes/mod_store_routes.py`` (475 行，未覆盖 76 行，cov 79.2%)
-- ``app/infrastructure/mods/catalog_client.py`` (153 行，未覆盖 76 行，cov 40.1%)
-"""
+"""Regression coverage for market, Mod catalog/store, labels, and workflow routers."""
 
 from __future__ import annotations
 
@@ -25,11 +17,11 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from PIL import Image
 
+import app.domain.shared_services.tools_workflow_registered as twr
 import app.fastapi_routes.market_account as ma
 import app.fastapi_routes.mod_store_routes as msr
 import app.infrastructure.mods.catalog_client as cc
 import app.services.skills.label_template_generator.label_template_generator as ltg
-import app.services.tools_workflow_registered as twr
 from app.fastapi_routes.market_account import router as market_router
 from app.fastapi_routes.mod_store_routes import router as mod_store_router
 
@@ -975,8 +967,27 @@ class TestMarketRegisterRoute:
         assert resp.status_code == 400
 
     def test_missing_email_returns_400(self, market_client: TestClient) -> None:
-        resp = market_client.post("/api/market/register", json={"username": "u", "password": "p"})
+        with patch.object(
+            ma,
+            "_proxy_json",
+            new_callable=AsyncMock,
+            return_value={
+                "__proxy_error__": True,
+                "status_code": 400,
+                "payload": {"detail": "email 必填"},
+            },
+        ) as market_proxy:
+            resp = market_client.post(
+                "/api/market/register", json={"username": "u", "password": "p"}
+            )
         assert resp.status_code == 400
+        assert resp.json()["message"] == "email 必填"
+        market_proxy.assert_awaited_once_with(
+            "POST",
+            "/api/auth/register",
+            json_body={"username": "u", "password": "p", "email": "", "verification_code": ""},
+            return_error_payload=True,
+        )
 
     def test_success_returns_token(self, market_client: TestClient) -> None:
         with patch.object(
@@ -2319,9 +2330,15 @@ class TestTWRCustomers:
     def test_customers_ensure_exists_matched(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:
             svc = MagicMock()
-            matched = MagicMock()
-            matched.unit_name = "matched_unit"
-            svc.match_purchase_unit.return_value = matched
+            svc.lookup_purchase_unit_for_ensure.return_value = {
+                "status": "matched",
+                "id": 1,
+                "unit_name": "matched_unit",
+            }
+            svc.get_by_id.return_value = {
+                "success": True,
+                "data": {"id": 1, "customer_name": "matched_unit"},
+            }
             mock_get.return_value = svc
             result = twr._registered_router_customers(
                 "ensure_exists", {"unit_name": "u1"}, {}, "normal", ""
@@ -2332,8 +2349,9 @@ class TestTWRCustomers:
     def test_customers_ensure_exists_create_new(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:
             svc = MagicMock()
-            svc.match_purchase_unit.return_value = None
-            svc.create.return_value = {"success": True}
+            svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+            svc.create.return_value = {"success": True, "data": {"id": 1}}
+            svc.get_by_id.return_value = {"success": True, "data": {"id": 1, "customer_name": "u1"}}
             mock_get.return_value = svc
             result = twr._registered_router_customers(
                 "ensure_exists", {"unit_name": "u1"}, {}, "normal", ""
@@ -2344,14 +2362,17 @@ class TestTWRCustomers:
     def test_customers_ensure_exists_create_already_exists(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:
             svc = MagicMock()
-            svc.match_purchase_unit.return_value = None
+            svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
             svc.create.return_value = {"success": False, "message": "已存在"}
             mock_get.return_value = svc
             result = twr._registered_router_customers(
                 "ensure_exists", {"unit_name": "u1"}, {}, "normal", ""
             )
-            assert result["success"] is True
-            assert result["exists"] is True
+            assert result["success"] is False
+            assert result["outcome"] == "unknown"
+            assert result["retryable"] is False
+            assert result["reconciliation_required"] is True
+            svc.get_by_id.assert_not_called()
 
     def test_customers_create_success(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:
@@ -2621,18 +2642,20 @@ class TestTWRBusinessDocking:
         f.write_bytes(b"fake")
         with (
             patch(
-                "app.services.document_templates_service._extract_structured_excel_preview"
+                "app.domain.shared_services.document_templates_service._extract_structured_excel_preview"
             ) as mock_struct,
             patch(
-                "app.services.document_templates_service._extract_excel_grid_preview"
+                "app.domain.shared_services.document_templates_service._extract_excel_grid_preview"
             ) as mock_grid,
             patch(
-                "app.services.document_templates_service._extract_excel_grid_style_cache"
+                "app.domain.shared_services.document_templates_service._extract_excel_grid_style_cache"
             ) as mock_style,
             patch(
-                "app.services.document_templates_service._extract_excel_all_sheets_preview"
+                "app.domain.shared_services.document_templates_service._extract_excel_all_sheets_preview"
             ) as mock_all,
-            patch("app.services.document_templates_service._list_excel_sheet_names") as mock_names,
+            patch(
+                "app.domain.shared_services.document_templates_service._list_excel_sheet_names"
+            ) as mock_names,
         ):
             mock_struct.return_value = {"fields": [], "sample_rows": []}
             mock_grid.return_value = {}
@@ -2778,26 +2801,29 @@ class TestTWRSettings:
 
 
 class TestTWRExcelAnalysis:
-    """Cover ``_registered_router_excel_analysis``."""
+    """Excel 分析统一委托 handle_excel_analysis，不再维护第二套实现。"""
 
-    def test_excel_analysis_no_file_path(self) -> None:
+    def test_missing_file_path(self) -> None:
         result = twr._registered_router_excel_analysis("read", {}, {}, "normal", "")
         assert result["success"] is False
         assert "file_path" in result["message"]
 
-    def test_excel_analysis_file_path_from_runtime_context(self) -> None:
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
-            ) as mock_toolkit,
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
-            ) as mock_analyzer,
-        ):
-            tk = MagicMock()
-            tk.execute.return_value = {"success": True, "content": []}
-            mock_toolkit.return_value = tk
-            mock_analyzer.return_value = MagicMock()
+    def test_delegates_to_unified_handler(self) -> None:
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
+            result = twr._registered_router_excel_analysis(
+                "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "normal", ""
+            )
+        assert result["success"] is True
+        assert mock_exec.call_args.args[0]["action"] == "statistics"
+
+    def test_file_path_from_runtime_context(self) -> None:
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
             result = twr._registered_router_excel_analysis(
                 "read",
                 {},
@@ -2805,21 +2831,14 @@ class TestTWRExcelAnalysis:
                 "normal",
                 "",
             )
-            assert result["success"] is True
+        assert result["success"] is True
+        assert mock_exec.call_args.args[0]["file_path"] == "/tmp/x.xlsx"
 
-    def test_excel_analysis_file_path_from_last_context(self) -> None:
-        with (
-            patch(
-                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
-            ) as mock_toolkit,
-            patch(
-                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
-            ) as mock_analyzer,
-        ):
-            tk = MagicMock()
-            tk.execute.return_value = {"success": True, "content": []}
-            mock_toolkit.return_value = tk
-            mock_analyzer.return_value = MagicMock()
+    def test_file_path_from_last_context(self) -> None:
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": True},
+        ) as mock_exec:
             result = twr._registered_router_excel_analysis(
                 "read",
                 {},
@@ -2827,35 +2846,19 @@ class TestTWRExcelAnalysis:
                 "normal",
                 "",
             )
-            assert result["success"] is True
+        assert result["success"] is True
+        assert mock_exec.call_args.args[0]["file_path"] == "/tmp/x.xlsx"
 
-    def test_excel_analysis_unknown_action(self) -> None:
-        result = twr._registered_router_excel_analysis(
-            "unknown",
-            {"file_path": "/tmp/x.xlsx"},
-            {},
-            "normal",
-            "",
-        )
-        assert result["success"] is False
-        assert "未知" in result["message"]
-
-    def test_excel_analysis_import_error(self) -> None:
-        import builtins
-
-        real_import = builtins.__import__
-
-        def fake_import(name, *args, **kwargs):
-            if "excel_template_analyzer" in name:
-                raise ImportError("no module")
-            return real_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=fake_import):
+    def test_error_message_alias(self) -> None:
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={"success": False, "error": "unsupported_action"},
+        ):
             result = twr._registered_router_excel_analysis(
-                "read", {"file_path": "/tmp/x.xlsx"}, {}, "normal", ""
+                "unknown", {"file_path": "/tmp/x.xlsx"}, {}, "normal", ""
             )
-            assert result["success"] is False
-            assert "Excel Skill" in result["message"]
+        assert result["success"] is False
+        assert result["message"] == "unsupported_action"
 
 
 class TestTWRExcelImport:
@@ -2935,6 +2938,7 @@ class TestTWRExecuteRegisteredWorkflowTool:
 
     def test_execute_registered_router_dict_contains_keys(self) -> None:
         expected_keys = {
+            "desktop_automation",
             "normal_slot_dispatch",
             "customers",
             "products",
@@ -3458,10 +3462,9 @@ class TestMSRoutesWithData:
         assert resp.status_code == 400
 
     def test_uninstall_route_success(self, mod_store_client) -> None:
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_get:
-            svc = MagicMock()
-            svc.uninstall_mod.return_value = (True, "ok")
-            mock_get.return_value = svc
+        with patch(
+            "app.application.mod_uninstall.uninstall_mod_for_request", return_value=(True, "ok")
+        ):
             resp = mod_store_client.post("/uninstall", json={"mod_id": "m1"})
             assert resp.status_code == 200
             data = resp.json()
@@ -4247,7 +4250,10 @@ class TestCCIterCatalogPackages:
                 "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
                 new_callable=AsyncMock,
             ) as mock_fetch,
-            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_fetch.return_value = [{"id": "p1"}, {"id": "p2"}]
             rows = []
@@ -4266,7 +4272,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_fetch.return_value = []
             mock_get.return_value = {"packages": [{"id": "p1"}]}
@@ -4286,7 +4295,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_fetch.side_effect = HTTPException(status_code=502, detail="err")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
@@ -4306,7 +4318,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_fetch.side_effect = RuntimeError("err")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
@@ -4322,7 +4337,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_get.return_value = {"packages": [{"id": "p1"}, {"id": "p2"}]}
             rows = []
@@ -4337,7 +4355,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_get.return_value = {"packages": "not a list"}
             with pytest.raises(HTTPException) as exc_info:
@@ -4352,7 +4373,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_get.return_value = {"packages": [{"id": "p1"}, "not_dict", 42]}
             rows = []

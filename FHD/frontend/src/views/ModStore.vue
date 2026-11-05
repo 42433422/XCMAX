@@ -208,7 +208,7 @@
       </main>
     </div>
 
-    <Modal v-if="selectedMod" :title="selectedMod.name" @close="selectedMod = null">
+    <Modal v-if="selectedMod" :model-value="true" :title="selectedMod.name" @close="selectedMod = null">
       <ModDetails :mod="selectedMod" @install="installMod" @uninstall="uninstallMod" />
     </Modal>
   </div>

@@ -164,6 +164,20 @@ describe('requestJson', () => {
     vi.unstubAllGlobals()
   })
 
+  it('keeps the csrf header when a bearer token is attached', async () => {
+    vi.mocked(getAccessToken).mockReturnValue('tok')
+    document.cookie = 'csrf_token=abc'
+    const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('{}') })
+    vi.stubGlobal('fetch', mockFetch)
+
+    await requestJson('/api/write', { method: 'POST', body: '{}' })
+    const headers = mockFetch.mock.calls[0][1].headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer tok')
+    expect(headers.get('X-CSRF-Token')).toBe('abc')
+
+    vi.unstubAllGlobals()
+  })
+
   it('reports timeout aborts as ApiError 408', async () => {
     vi.useFakeTimers()
     const mockFetch = vi.fn(

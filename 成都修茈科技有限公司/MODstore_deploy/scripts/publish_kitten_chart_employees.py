@@ -31,9 +31,14 @@ from bootstrap_kitten_chart_employees import CHART_EMPLOYEES  # noqa: E402
 
 
 def _publish_one(meta: dict) -> dict:
-    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+    from modstore_server.catalog_store import (
+        append_package,
+        package_manifest_alignment_errors,
+    )
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
-    from modstore_server.employee_asset_pipeline import build_employee_pack_zip_for_library
+    from modstore_server.employee_asset_pipeline import (
+        build_employee_pack_zip_for_library,
+    )
     from modstore_server.mod_scaffold_runner import modstore_library_path
     from modstore_server.models import CatalogItem, User, get_session_factory
 

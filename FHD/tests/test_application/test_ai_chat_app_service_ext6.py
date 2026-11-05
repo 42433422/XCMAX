@@ -108,7 +108,7 @@ class TestMergeToolRuntimeContext:
         from app.application.ai_chat_app_service import AIChatApplicationService
 
         result = AIChatApplicationService._merge_tool_runtime_context("user1", "hello", None)
-        assert result["user_id"] == "user1"
+        assert result["conversation_id"] == "user1"
         assert result["message"] == "hello"
 
     def test_with_context_keys(self):

@@ -6,6 +6,7 @@ import {
   clearHostPackSkippedSession,
   invalidateHostPackCompletionCache,
   isHostPackSkippedThisSession,
+  isOnboardingEntryReady,
   markHostPackSkippedThisSession,
   needsHostPackCompletion,
   resolveHostPackOnboardingStep,
@@ -68,6 +69,7 @@ describe('hostPackOnboardingGate', () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+    vi.restoreAllMocks()
   })
 
   it('exempts onboarding and mod-store routes', () => {
@@ -90,6 +92,21 @@ describe('hostPackOnboardingGate', () => {
     await expect(needsHostPackCompletion(true)).resolves.toBe(false)
   })
 
+  it('returns an expired host-pack result immediately and refreshes in the background', async () => {
+    const start = 1_700_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(start)
+    await expect(needsHostPackCompletion(false)).resolves.toBe(true)
+    expect(fetchIndustryBaseline).toHaveBeenCalledTimes(1)
+    vi.spyOn(Date, 'now').mockReturnValue(start + 65_000)
+    let releaseBaseline!: (value: IndustryBaselinePlan) => void
+    vi.mocked(fetchIndustryBaseline).mockReturnValue(new Promise((resolve) => { releaseBaseline = resolve }))
+    await expect(needsHostPackCompletion(false)).resolves.toBe(true)
+    await vi.waitFor(() => expect(fetchIndustryBaseline).toHaveBeenCalledTimes(2))
+    releaseBaseline({ baseline_ready: true } as IndustryBaselinePlan)
+    await vi.waitFor(() => expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toContain('"needs":false'))
+    vi.restoreAllMocks()
+  })
+
   it('reuses the short session cache for a deep-link reload', async () => {
     vi.mocked(fetchIndustryBaseline).mockResolvedValue({
       baseline_ready: true,
@@ -98,6 +115,34 @@ describe('hostPackOnboardingGate', () => {
     await expect(needsHostPackCompletion(false)).resolves.toBe(false)
     expect(fetchIndustryBaseline).toHaveBeenCalledTimes(1)
     expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toContain('"needs":false')
+  })
+
+  it('retains confirmed readiness when a background baseline refresh fails', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
+    await expect(needsHostPackCompletion()).resolves.toBe(false)
+    const confirmed = sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')
+    vi.mocked(Date.now).mockReturnValue(1_700_000_065_000)
+    vi.mocked(fetchIndustryBaseline).mockRejectedValue(new Error('industry-baseline HTTP 503'))
+
+    await expect(needsHostPackCompletion()).resolves.toBe(false)
+    await vi.waitFor(() => expect(fetchIndustryBaseline).toHaveBeenCalledTimes(2))
+    expect(fetchIndustryBaseline).toHaveBeenLastCalledWith('涂料', true, { requireAvailable: true })
+    expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toBe(confirmed)
+  })
+
+  it('requires onboarding when a background refresh confirms required packages are missing', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
+    await expect(needsHostPackCompletion()).resolves.toBe(false)
+    vi.mocked(Date.now).mockReturnValue(1_700_000_065_000)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({
+      baseline_ready: false, missing_required_mod_ids: ['required-mod'],
+    } as IndustryBaselinePlan)
+
+    await expect(needsHostPackCompletion()).resolves.toBe(false)
+    await vi.waitFor(() => expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toContain('"needs":true'))
+    await expect(resolveHostPackOnboardingStep()).resolves.toBe('host-pack')
   })
 
   it('skips gate for admin account session', async () => {
@@ -163,7 +208,7 @@ describe('hostPackOnboardingGate', () => {
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog(''))
     vi.mocked(fetchWorkspacePrefs).mockResolvedValue({ success: true, owner_id: 'tenant:10', data: { selected_industry_id: '考勤' } })
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('host-pack')
-    expect(fetchIndustryBaseline).toHaveBeenCalledWith('考勤', true)
+    expect(fetchIndustryBaseline).toHaveBeenCalledWith('考勤', true, { requireAvailable: true })
     await expect(resolveHostPackOnboardingStep()).resolves.toBe('host-pack')
     expect(fetchWorkspacePrefs).toHaveBeenCalledTimes(1)
   })
@@ -172,7 +217,7 @@ describe('hostPackOnboardingGate', () => {
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog('饰品包装'))
     vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBeNull()
-    expect(fetchIndustryBaseline).toHaveBeenCalledWith('饰品包装', true)
+    expect(fetchIndustryBaseline).toHaveBeenCalledWith('饰品包装', true, { requireAvailable: true })
     expect(fetchWorkspacePrefs).not.toHaveBeenCalled()
   })
 
@@ -228,5 +273,73 @@ describe('hostPackOnboardingGate', () => {
     await expect(result).resolves.toBeNull()
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBeNull()
     expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toBeNull()
+  })
+})
+
+describe('isOnboardingEntryReady（账号定制待供应商交付不阻塞进入）', () => {
+  it('宿主基础线装齐、仅账号定制待交付 → 就绪', () => {
+    expect(
+      isOnboardingEntryReady({
+        baseline_ready: true,
+        missing_required_mod_ids: [],
+        missing_account_custom_mod_ids: ['taiyangniao-pro'],
+      }),
+    ).toBe(true)
+  })
+
+  it('产品侧必需项缺失 → 未就绪', () => {
+    expect(
+      isOnboardingEntryReady({
+        baseline_ready: false,
+        missing_required_mod_ids: ['xcagi-erp-domain-bridge'],
+        missing_account_custom_mod_ids: [],
+      }),
+    ).toBe(false)
+  })
+
+  it('必需项里混有非账号定制项 → 未就绪', () => {
+    expect(
+      isOnboardingEntryReady({
+        baseline_ready: false,
+        missing_required_mod_ids: ['taiyangniao-pro', 'xcagi-erp-domain-bridge'],
+        missing_account_custom_mod_ids: ['taiyangniao-pro'],
+      }),
+    ).toBe(false)
+  })
+
+  it('baseline_ready 为真 → 就绪', () => {
+    expect(
+      isOnboardingEntryReady({
+        baseline_ready: true,
+        missing_required_mod_ids: [],
+        missing_account_custom_mod_ids: [],
+      }),
+    ).toBe(true)
+  })
+
+  it('plan 缺失或缺少必需项列表 → 未就绪', () => {
+    expect(isOnboardingEntryReady(null)).toBe(false)
+    expect(isOnboardingEntryReady({ baseline_ready: false, missing_required_mod_ids: [] })).toBe(false)
+  })
+
+  it('needsHostPackCompletion：仅账号定制待交付时不拦截', async () => {
+    invalidateHostPackCompletionCache()
+    clearHostPackSkippedSession()
+    vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog('涂料'))
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({
+      baseline_ready: true,
+      missing_required_mod_ids: [],
+      missing_account_custom_mod_ids: ['taiyangniao-pro'],
+    } as IndustryBaselinePlan)
+    await expect(needsHostPackCompletion(true)).resolves.toBe(false)
+  })
+})
+
+
+describe('required custom delivery remains enforced', () => {
+  it.each([false, true])('does not exempt required packages merely because custom (ready=%s)', (ready) => {
+    expect(isOnboardingEntryReady({ baseline_ready: ready,
+      missing_required_mod_ids: ['private'], missing_account_custom_mod_ids: ['private'],
+    })).toBe(false)
   })
 })

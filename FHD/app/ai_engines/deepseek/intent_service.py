@@ -30,7 +30,7 @@ class _IntentRecognitionCache:
         self._ttl = ttl_seconds
 
     def _make_key(self, message: str) -> str:
-        return hashlib.md5(message.strip().lower().encode()).hexdigest()
+        return hashlib.md5(message.strip().lower().encode(), usedforsecurity=False).hexdigest()
 
     def get(self, message: str) -> dict[str, Any] | None:
         key = self._make_key(message)

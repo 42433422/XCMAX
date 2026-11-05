@@ -1,0 +1,1 @@
+G7 PASS: pre-upgrade product SUNBIRD-loop-round1-234556 read back OK; db counts preserved (sessions 25/25, users 3/3, products 5/5)

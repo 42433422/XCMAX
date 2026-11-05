@@ -1,0 +1,12 @@
+# ind-lan-license 局域网授权桥接 Mod
+# verified_at=2026-09-20T09:36:59.190Z
+# app=1.0.0.5@9d6134d5cc37372d9e14bad83ca1fcf2ea060f56
+url=http://127.0.0.1:17500/lan-gate
+title=局域网授权 - XCAGI
+--- body text (head) ---
+FHD · 局域网授权
+当前未启用局域网模式，无需授权。
+进入系统
+状态：未启用
+本机 IP：127.0.0.1
+主机管理员位

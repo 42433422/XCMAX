@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const apiMock = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  download: vi.fn(),
 }))
 
 vi.mock('./core', () => ({
@@ -12,6 +13,10 @@ vi.mock('./core', () => ({
 import agentRunsApi from './agentRuns'
 
 describe('agentRunsApi', () => {
+  it('downloads artifacts through the authenticated client with encoded identities', async () => {
+    await agentRunsApi.downloadArtifact('run/1', 'file/2')
+    expect(apiMock.download).toHaveBeenCalledWith('/api/agent/runs/run%2F1/artifacts/file%2F2')
+  })
   beforeEach(() => {
     apiMock.get.mockReset().mockResolvedValue({ success: true })
     apiMock.post.mockReset().mockResolvedValue({ success: true })
@@ -58,11 +63,11 @@ describe('agentRunsApi', () => {
     await agentRunsApi.listRuns({ limit: 10 })
     await agentRunsApi.listEvents('run/1', { after_event_id: 'evt_1' })
 
-    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1')
-    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs', { limit: 10 })
+    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1', {}, { timeoutMs: 8000 })
+    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs', { limit: 10 }, { timeoutMs: 8000 })
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1/events', {
       after_event_id: 'evt_1',
-    })
+    }, { timeoutMs: 8000 })
     expect(agentRunsApi.eventStreamPath('run/1', 'evt/1')).toBe('/api/agent/runs/run%2F1/events/stream?after_event_id=evt%2F1')
   })
 
@@ -75,7 +80,7 @@ describe('agentRunsApi', () => {
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/tasks', {
       limit: 25,
       include_archived: false,
-    })
+    }, { timeoutMs: 8000 })
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/tasks/task-1')
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/task-runtime')
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/tasks/task-1/archive', {})
@@ -88,11 +93,11 @@ describe('agentRunsApi', () => {
     await agentRunsApi.retryRun('run/1')
     await agentRunsApi.cancelRun('run/1')
 
-    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/pause', {})
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/pause', {}, { timeoutMs: 15000 })
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/resume', {
       runtime_context: { source: 'resume-test' },
-    })
-    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/retry', {})
-    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/cancel', {})
+    }, { timeoutMs: 15000 })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/retry', {}, { timeoutMs: 15000 })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/cancel', {}, { timeoutMs: 15000 })
   })
 })

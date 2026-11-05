@@ -1,0 +1,105 @@
+{
+  "node": 14,
+  "result": "PASS",
+  "issuedAt": "2026-10-15T22:55:16.946647+08:00",
+  "scope": "Approved independent version-specific manual downloads on user server. This does not claim stable OTA automatic distribution or website default-version pointer promotion.",
+  "distributionPage": "https://xiu-ci.com/xcagi-v1.0.0.6/index.html",
+  "manifestUrl": "https://xiu-ci.com/xcagi-v1.0.0.6/manual-download-manifest.json",
+  "checksumsUrl": "https://xiu-ci.com/xcagi-v1.0.0.6/SHA256SUMS.txt",
+  "version": "1.0.0.6",
+  "artifacts": [
+    {
+      "version": "1.0.0.6",
+      "platform": "macArm64",
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "bytes": 568802820,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:40:16.295848+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.json",
+      "originalReceiptSha256": "01ef4bd9c5768d500166a912356924cb44def40ab8662b0d450dd5d70eab4793"
+    },
+    {
+      "version": "1.0.0.6",
+      "platform": "macArm64",
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:48:24.033622+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.json",
+      "originalReceiptSha256": "3b15b3808e300e7488a962b1c5aacb9e9a37d3f26c78e901dc8d9e6a5c040548"
+    },
+    {
+      "version": "1.0.0.6",
+      "platform": "windowsX64",
+      "file": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+      "buildRun": "local-windows-longpath-20261015-114026",
+      "bytes": 331819335,
+      "sha256": "9d7025e9367bb934868adb79be7a99bbb8dae728727aa7ace00c492c45f40100",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:16:30.824973+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-windows-public-download-verification.json",
+      "originalReceiptSha256": "d0ac509059959987ce3c6cb9a8063a68ca759f5aef14f4f75e8abc4750c9cc54"
+    }
+  ],
+  "serverPackageHashes": "PASS",
+  "anonymousPublicFullFileDownloads": "PASS",
+  "publicMetadataReadback": "PASS",
+  "rawServerAccessOriginals": [
+    {
+      "source": "/var/log/nginx/xiu-ci.com.access.log",
+      "bytes": 17990,
+      "lines": 106,
+      "sha256": "702b3b14132af5a736baf6d074dec219eaadafe8b73fa09a65a6b27da9fce40a",
+      "savedOriginalSelectedLines": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-access-originals/xiu-ci.com.access.log"
+    }
+  ],
+  "supportingEvidence": [
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-final-state.json",
+      "sha256": "af300592abf8c4dba2b74b2e776e9eef020ea52b2623c3407026bab038c1c430"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-metadata-verification-final.json",
+      "sha256": "35f704e061caa8495faff1d6e654cf9eb17766b6494b0cb987b758b1143d870d"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-package-response-headers.json",
+      "sha256": "0c6eb44a3d226c5451320714a76d58fafd0c6ba75e12927c5eafe5f657aa165b"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-workspace-cleanup-result.json",
+      "sha256": "73c55be637054e310d9025c55ea75fe67478989db897166596613c519f8ca78d"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-final-local-state-and-space.json",
+      "sha256": "520a144306f123c0350429db8814c62816f4863732dc82898d6cce8e57187e04"
+    },
+    {
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-range-temporary-cleanup-and-recovery-index.json",
+      "sha256": "58130e35e4c3ad39ba917af6254007b1351e8909f0c016c2b614967c83207713"
+    }
+  ],
+  "lifecycleEvidenceReused": {
+    "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node13-joint-verification-final.json",
+    "sha256": "ab40b1c8d0fcc054ad411620f7eef5fc3c1e584a38acbb359aeb73e55fd10257"
+  },
+  "windowsSigningRequired": false,
+  "windowsActualSignature": "NotSigned, accepted under explicit user policy",
+  "productSourceChanged": false,
+  "newDeviceAcceptanceRun": false,
+  "limitations": [
+    "Mac acceptance is M4 arm64; Intel Mac outside this round",
+    "Ordinary business features outside this lifecycle acceptance",
+    "Stable OTA automatic update and current default website pointer were not promoted by this task"
+  ]
+}

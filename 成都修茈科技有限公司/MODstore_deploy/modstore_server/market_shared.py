@@ -13,15 +13,30 @@ from typing import Any, Dict, Optional
 from fastapi import Header, HTTPException, Request
 
 from modstore_server.api.deps import get_current_user, require_admin
-from modstore_server.duty_roster import employee_partition_meta
-from modstore_server.models import (
-    CatalogItem,
-    Entitlement,
-    User,
+from modstore_server.duty_roster import (
+    employee_partition_meta,
+    is_planned_duty_employee_pack,
 )
+from modstore_server.models import CatalogItem, Entitlement, User
 
 _get_current_user = get_current_user
 _require_admin = require_admin
+
+
+def market_item_public(item: Any) -> bool:
+    return (
+        bool(item.is_public)
+        and item.compliance_status == "approved"
+        and not is_planned_duty_employee_pack(item.pkg_id, item.artifact)
+    )
+
+
+def market_item_visible_to_user(item: Any, user: User | None, *, purchased: bool = False) -> bool:
+    return not is_planned_duty_employee_pack(item.pkg_id, item.artifact) and (
+        market_item_public(item)
+        or bool(user and (user.is_admin or item.author_id == user.id or purchased))
+    )
+
 
 MATERIAL_CATEGORY_LABELS = {
     "ai_employee": "AI 员工",
@@ -41,14 +56,6 @@ LICENSE_SCOPE_LABELS = {
     "free_personal": "免费个人用",
     "enterprise": "企业级",
 }
-
-RISKY_ORIGIN_TYPES = {
-    "derivative",
-    "collaboration",
-    "fan_linkage",
-    "suspected_plagiarism",
-}
-RISKY_IP_LEVELS = {"medium", "high"}
 
 _CONTACT_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _CONTACT_SUBMIT_TIMES: dict[str, list[float]] = defaultdict(list)
@@ -74,7 +81,9 @@ def _optional_current_user(
         return None
     try:
         return _get_current_user(authorization)
-    except HTTPException:
+    except HTTPException as exc:
+        if exc.status_code != 401:
+            raise
         return None
 
 
@@ -115,21 +124,6 @@ def _normalize_ip_risk_level(raw: str | None) -> str:
 
 def _effective_license_scope(item: CatalogItem) -> str:
     return _normalize_license_scope(getattr(item, "license_scope", None), float(item.price or 0))
-
-
-def _ensure_catalog_listing_allowed(
-    *,
-    price: float,
-    license_scope: str,
-    origin_type: str,
-    ip_risk_level: str,
-) -> None:
-    paid = float(price or 0) > 0
-    if paid and license_scope != "commercial":
-        raise HTTPException(400, "收费商品必须选择商业授权")
-    if origin_type in RISKY_ORIGIN_TYPES or ip_risk_level in RISKY_IP_LEVELS:
-        if paid or license_scope == "commercial":
-            raise HTTPException(400, "疑似抄袭、二创、联动或中高风险素材只能免费或限制个人使用")
 
 
 def _entitlement_metadata(item: CatalogItem, source: str) -> str:

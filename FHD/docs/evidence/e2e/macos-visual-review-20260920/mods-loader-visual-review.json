@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "mods-loader",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "9c46a395d156b0a3d3ae7e73ff0c37738d2a11e25416a44bd343f09c42d6b751",
+  "visible_content": "AI 员工市场显示“共 0 件”“暂无商品”，没有对应行业包内容、安装或运行结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/mods-loader.png"
+}

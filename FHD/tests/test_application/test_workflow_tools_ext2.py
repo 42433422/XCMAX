@@ -113,6 +113,50 @@ class TestHandleExcelAnalysisDeep:
         assert result["error"] == "read_excel_failed"
         assert "bad excel" not in result["error"]
 
+    def test_read_pagination(self, tmp_path):
+        import pandas as pd
+
+        from app.application.tools.workflow import handle_excel_analysis
+
+        df = pd.DataFrame({"a": list(range(300))})
+        xlsx_path = str(tmp_path / "page.xlsx")
+        df.to_excel(xlsx_path, index=False)
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            first = handle_excel_analysis(
+                {"file_path": xlsx_path, "action": "read", "max_rows": 200}
+            )
+            second = handle_excel_analysis(
+                {"file_path": xlsx_path, "action": "read", "max_rows": 200, "offset": 200}
+            )
+        assert first["row_count"] == 300
+        assert first["returned_rows"] == 200
+        assert first["has_more"] is True
+        assert first["next_offset"] == 200
+        assert second["returned_rows"] == 100
+        assert second["has_more"] is False
+        assert second["next_offset"] is None
+
+    def test_read_env_cap(self, tmp_path, monkeypatch):
+        import pandas as pd
+
+        from app.application.tools.workflow import handle_excel_analysis
+
+        monkeypatch.setenv("FHD_EXCEL_ANALYSIS_MAX_PAGE_ROWS", "500")
+        df = pd.DataFrame({"a": list(range(600))})
+        xlsx_path = str(tmp_path / "cap.xlsx")
+        df.to_excel(xlsx_path, index=False)
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            result = handle_excel_analysis(
+                {"file_path": xlsx_path, "action": "read", "max_rows": 9999}
+            )
+        assert result["page_rows"] == 500
+        assert result["returned_rows"] == 500
+        assert result["has_more"] is True
+
     def test_unsupported_action(self, tmp_path):
         import pandas as pd
 
@@ -172,7 +216,8 @@ class TestHandleExcelAnalysisDeep:
                     "metrics": [],
                 }
             )
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["error"] == "missing_aggregation_metrics"
 
     def test_statistics_action(self, tmp_path):
         import pandas as pd
@@ -348,10 +393,7 @@ class TestGetWorkflowToolRegistryExtended:
         )  # At least excel_analysis, excel_schema, excel_join, excel_chart, import_excel
 
     def test_registry_caching(self):
-        from app.application.tools.workflow import (
-            _workflow_tool_registry_cache,
-            get_workflow_tool_registry,
-        )
+        from app.application.tools.workflow import get_workflow_tool_registry
 
         # First call populates cache
         with patch("app.application.tools.workflow._workflow_tool_registry_cache", None):
@@ -374,9 +416,9 @@ class TestGetWorkflowToolRegistryExtended:
 
         with patch("app.application.tools.workflow._workflow_tool_registry_cache", [{"old": True}]):
             invalidate_workflow_tool_registry()
-        from app.application.tools.workflow import _workflow_tool_registry_cache
+            from app.application.tools.workflow import _workflow_tool_registry_cache
 
-        assert _workflow_tool_registry_cache is None
+            assert _workflow_tool_registry_cache is None
 
 
 # ========================= execute_workflow_tool - extended ================
@@ -420,7 +462,7 @@ class TestExecuteWorkflowToolExtended:
                 return_value=(None, None),
             ):
                 with patch(
-                    "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                    "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                     return_value=None,
                 ):
                     result = execute_workflow_tool("unknown_tool", {})

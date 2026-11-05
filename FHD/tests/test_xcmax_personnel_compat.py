@@ -62,8 +62,8 @@ def _seed_db(tmp_path) -> None:
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            (1, "胡超", "计划生产部", "计划生产部", "计时", "E001", "计时", "u1"),
-            (2, "樊琪麒", "质检部", "质检部", "计时", "E002", "质检", "u2"),
+            (1, "SYNTHETIC-001", "计划生产部", "计划生产部", "计时", "E001", "计时", "u1"),
+            (2, "SYNTHETIC-002", "质检部", "质检部", "计时", "E002", "质检", "u2"),
         ],
     )
     conn.executemany(
@@ -102,7 +102,7 @@ def test_xcmax_personnel_employees_reads_taiyangniao_mirror(tmp_path, monkeypatc
     payload = resp.json()
     assert payload["success"] is True
     assert payload["data"]["total"] == 1
-    assert payload["data"]["items"][0]["employee_name"] == "胡超"
+    assert payload["data"]["items"][0]["employee_name"] == "SYNTHETIC-001"
 
 
 def test_xcmax_personnel_departments_reads_taiyangniao_mirror(tmp_path, monkeypatch) -> None:

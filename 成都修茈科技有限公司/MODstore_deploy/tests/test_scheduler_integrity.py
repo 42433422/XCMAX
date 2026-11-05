@@ -34,9 +34,26 @@ def test_customer_value_startup_probe_failure_does_not_escape(monkeypatch):
         {
             "stage": "customer_value_reconciler",
             "error_type": "RuntimeError",
-            "message": "customer_value_source_unready:java_postgresql_internal_api",
+            "error_code": "customer_value_source_unready:java_postgresql_internal_api",
         }
     ]
+
+
+def test_startup_probe_failure_does_not_keep_raw_exception_text(monkeypatch):
+    import json
+
+    import modstore_server.workflow_scheduler as scheduler
+
+    monkeypatch.setattr(scheduler, "_scheduler_startup_probe_failures", [])
+
+    def leaked() -> None:
+        raise RuntimeError("api_key=must-not-leak /tmp/private")
+
+    assert scheduler._run_scheduler_startup_probe("customer_value_reconciler", leaked) is False
+    payload = scheduler._scheduler_startup_probe_failures
+    assert payload == [{"stage": "customer_value_reconciler", "error_type": "RuntimeError"}]
+    assert "must-not-leak" not in json.dumps(payload)
+    assert "message" not in payload[0]
 
 
 def test_scheduler_integrity_rejects_partial_registration(monkeypatch):

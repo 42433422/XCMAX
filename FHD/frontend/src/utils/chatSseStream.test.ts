@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { readPlannerSseResponse, isChatStreamEnabled, resolveChatStreamPath } from './chatSseStream'
 import { resolvePlannerChatStreamPath } from './plannerChatPaths'
 
@@ -71,10 +71,20 @@ describe('chatSseStream', () => {
   it('ignores non-data lines and empty payloads in the stream', async () => {
     const events: string[] = []
     await readPlannerSseResponse(
-      mockSseResponse(['event: message\nid: 1\n\n', 'data:\n\n', 'data: {"type":"token","text":"x"}\n\n']),
+      mockSseResponse(['event: message\nid: 1\n\n', 'data:\n\n', 'data: {"type":"token","text":"x"}\n\n', 'data: {"type":"done"}\n\n']),
       (ev) => events.push(ev.type),
     )
-    expect(events).toEqual(['token'])
+    expect(events).toEqual(['token', 'done'])
+  })
+
+  it.each([
+    { chunks: [] },
+    { chunks: ['data: {"type":"token","text":"partial"}\n\n'] },
+    { chunks: ['data: {"type":"done"}\n\ndata: {"type":"tool_progress","run_id":"run-pending"}\n\n'] },
+  ])('rejects EOF without a final completion receipt: $chunks', async ({ chunks }) => {
+    const response = mockSseResponse(chunks)
+    await expect(readPlannerSseResponse(response, vi.fn())).rejects.toMatchObject({ name: 'IncompletePlannerSseError' })
+    expect(response.body?.locked).toBe(false)
   })
 
   it('ignores malformed JSON payloads', async () => {
@@ -96,4 +106,50 @@ describe('chatSseStream', () => {
     await readPlannerSseResponse(mockSseResponse(['data: {"type":"error","message":"boom"}\n\n']), (ev) => events.push(ev))
     expect(events[0]).toMatchObject({ type: 'error', message: 'boom' })
   })
+
+  it('accepts an explicit authorization pause as the backend terminal receipt', async () => {
+    const onEvent = vi.fn()
+    await readPlannerSseResponse(mockSseResponse(['data: {"type":"requires_token","token_name":"DB_WRITE"}\n\n']), onEvent)
+    expect(onEvent).toHaveBeenCalledWith({ type: 'requires_token', token_name: 'DB_WRITE' })
+  })
+
+  it('returns on iteration failure without EOF or waiting for cancellation', async () => {
+    const cancel = vi.fn(() => new Promise<void>(() => {}))
+    let close!: () => void
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        close = () => controller.close()
+        controller.enqueue(new TextEncoder().encode('data: {"type":"error","message":"对话达到最大迭代次数，未完成。"}\n\ndata: {"type":"token","text":"不能算成功"}\n\n'))
+      }, cancel,
+    }))
+    const events: string[] = []
+    const reading = readPlannerSseResponse(response, ev => events.push(ev.type))
+    const returned = await Promise.race([reading.then(() => true), new Promise<boolean>(resolve => setTimeout(() => resolve(false), 30))])
+    if (!cancel.mock.calls.length) close()
+    expect(returned).toBe(true)
+    expect(events).toEqual(['error'])
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
+  it('keeps later progress, authorization and results after a done event', async () => {
+    const events: string[] = []
+    await readPlannerSseResponse(mockSseResponse([
+      'data: {"type":"done","result":{"response":"初步结果"}}\n\n',
+      'data: {"type":"tool_progress","run_id":"run_pending"}\n\ndata: {"type":"requires_token","token_name":"READ_TOKEN"}\n\n',
+      'data: {"type":"done","result":{"data":{"action":"approval_pending"}}}\n\n',
+    ]), ev => events.push(ev.type))
+    expect(events).toEqual(['done', 'tool_progress', 'requires_token', 'done'])
+  })
 })
+
+ it('cancels and releases an open reader on stop without waiting for EOF', async () => {
+  const cancel = vi.fn()
+  const response = new Response(new ReadableStream({ cancel }))
+  const controller = new AbortController()
+  const reading = readPlannerSseResponse(response, vi.fn(), controller.signal)
+  const rejected = expect(reading).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort()
+  await rejected
+  expect(cancel).toHaveBeenCalledOnce()
+  expect(response.body?.locked).toBe(false)
+ })

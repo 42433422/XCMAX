@@ -266,114 +266,53 @@ class TestBuildPriceListDocxBytes:
         with pytest.raises(FileNotFoundError):
             build_price_list_docx_bytes(template_path="/nonexistent/file.docx")
 
-    def test_generates_docx_bytes(self, tmp_path):
+    @pytest.mark.parametrize(
+        "kind", ["table", "no-table", "empty", "rows", "path-arg", "builtin", "builtin-empty"]
+    )
+    def test_generates_readable_price_list(self, tmp_path, kind):
         from docx import Document
 
-        # Create a minimal docx with a table
+        path = tmp_path / "price-list.docx"
         doc = Document()
-        table = doc.add_table(rows=2, cols=4)
-        hdr = table.rows[0].cells
-        hdr[0].text = "型号"
-        hdr[1].text = "名称"
-        hdr[2].text = "规格"
-        hdr[3].text = "单价"
-        data_row = table.rows[1].cells
-        for c in data_row:
-            c.text = ""
-
-        template_path = tmp_path / "test_template.docx"
-        doc.save(str(template_path))
-
-        products = [
-            {"model_number": "M1", "name": "Widget", "specification": "10x20", "price": 99.9},
-        ]
-        result = build_price_list_docx_bytes(
-            template_path=template_path,
-            customer_name="TestCo",
-            quote_date="2026-01-01",
-            products=products,
+        doc.add_paragraph("{{客户}} / {{报价日期}}")
+        if kind != "no-table":
+            for cell, label in zip(
+                doc.add_table(rows=1, cols=4).rows[0].cells, ["型号", "名称", "规格", "单价"]
+            ):
+                cell.text = label
+        doc.save(path)
+        products = (
+            []
+            if kind in {"empty", "path-arg", "builtin-empty"}
+            else [
+                {
+                    "model_number": "DEMO-001",
+                    "name": "演示饰品包装品",
+                    "specification": "标准",
+                    "price": 99.9,
+                }
+            ]
         )
-        assert isinstance(result, bytes)
-        assert len(result) > 0
-
-    def test_generates_docx_with_no_table(self, tmp_path):
-        from docx import Document
-
-        doc = Document()
-        doc.add_paragraph("No table here")
-        template_path = tmp_path / "no_table.docx"
-        doc.save(str(template_path))
-
-        products = [
-            {"model_number": "M1", "name": "Widget", "specification": "10x20", "price": 99.9},
-        ]
-        result = build_price_list_docx_bytes(
-            template_path=template_path,
-            products=products,
+        kwargs = {
+            "template_path_arg" if kind == "path-arg" else "template_path": path,
+            "rows" if kind == "rows" else "products": products,
+        }
+        if kind.startswith("builtin"):
+            kwargs["template_path"] = None
+            kwargs["builtin_default"] = True
+        result = Document(
+            BytesIO(
+                build_price_list_docx_bytes(
+                    customer_name="验收客户", quote_date="2026-09-20", **kwargs
+                )
+            )
         )
-        assert isinstance(result, bytes)
-
-    def test_generates_docx_with_empty_products(self, tmp_path):
-        from docx import Document
-
-        doc = Document()
-        table = doc.add_table(rows=1, cols=4)
-        hdr = table.rows[0].cells
-        hdr[0].text = "型号"
-        hdr[1].text = "名称"
-        hdr[2].text = "规格"
-        hdr[3].text = "单价"
-
-        template_path = tmp_path / "empty.docx"
-        doc.save(str(template_path))
-
-        result = build_price_list_docx_bytes(
-            template_path=template_path,
-            products=[],
-        )
-        assert isinstance(result, bytes)
-
-    def test_uses_rows_parameter(self, tmp_path):
-        from docx import Document
-
-        doc = Document()
-        table = doc.add_table(rows=2, cols=4)
-        hdr = table.rows[0].cells
-        hdr[0].text = "型号"
-        hdr[1].text = "名称"
-        hdr[2].text = "规格"
-        hdr[3].text = "单价"
-        for c in table.rows[1].cells:
-            c.text = ""
-
-        template_path = tmp_path / "rows.docx"
-        doc.save(str(template_path))
-
-        rows = [
-            {"model_number": "M1", "name": "Widget", "specification": "10x20", "price": 50},
-        ]
-        result = build_price_list_docx_bytes(
-            template_path=template_path,
-            rows=rows,
-        )
-        assert isinstance(result, bytes)
-
-    def test_template_path_arg_parameter(self, tmp_path):
-        from docx import Document
-
-        doc = Document()
-        table = doc.add_table(rows=1, cols=4)
-        hdr = table.rows[0].cells
-        hdr[0].text = "型号"
-        hdr[1].text = "名称"
-        hdr[2].text = "规格"
-        hdr[3].text = "单价"
-
-        template_path = tmp_path / "arg.docx"
-        doc.save(str(template_path))
-
-        result = build_price_list_docx_bytes(
-            template_path_arg=template_path,
-            products=[],
-        )
-        assert isinstance(result, bytes)
+        text = " ".join(p.text for p in result.paragraphs)
+        assert "验收客户" in text and "2026-09-20" in text
+        cells = [cell.text for row in result.tables[0].rows for cell in row.cells]
+        assert cells[:4] == ["型号", "名称", "规格", "单价"]
+        if products:
+            assert all(value in cells for value in ["DEMO-001", "演示饰品包装品", "标准"])
+            assert any("99.9" in value for value in cells)
+        else:
+            assert "DEMO-001" not in cells

@@ -34,7 +34,7 @@ describe('authApi', () => {
         password: 'p',
         account_kind: 'enterprise',
       },
-      { timeoutMs: 30_000 },
+      { timeoutMs: 30_000, signal: expect.any(AbortSignal) },
     )
   })
 
@@ -47,8 +47,16 @@ describe('authApi', () => {
         code: '0000',
         account_kind: 'personal',
       },
-      { timeoutMs: 30_000 },
+      { timeoutMs: 30_000, signal: expect.any(AbortSignal) },
     )
+  })
+
+  it('uses normal credential and phone login without a feature-specific consent receipt', async () => {
+    const options = { signal: new AbortController().signal }
+    await authApi.login('u', 'p', 'enterprise', '', options)
+    expect(apiMock.post.mock.calls.at(-1)?.[1]).toEqual({ username: 'u', password: 'p', account_kind: 'enterprise' })
+    await authApi.loginWithPhoneCode('139', '0000', 'enterprise', options)
+    expect(apiMock.post.mock.calls.at(-1)?.[1]).toEqual({ phone: '139', code: '0000', account_kind: 'enterprise' })
   })
 
   it('covers remaining endpoints', async () => {
@@ -83,7 +91,12 @@ describe('authApi', () => {
 
   it('logout clears storage and posts', async () => {
     window.localStorage.setItem('xcagi_market_access_token', 'tok')
+    window.localStorage.setItem('xcagi_market_refresh_token', 'refresh')
+    window.localStorage.setItem('xcagi_market_user_json', '{}')
     await authApi.logout()
-    expect(apiMock.post).toHaveBeenCalledWith('/api/auth/logout', {}, { timeoutMs: 10_000 })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/auth/logout', {}, { timeoutMs: 10_000, signal: expect.any(AbortSignal) })
+    for (const key of ['xcagi_market_access_token', 'xcagi_market_refresh_token', 'xcagi_market_user_json']) {
+      expect(window.localStorage.getItem(key)).toBeNull()
+    }
   })
 })

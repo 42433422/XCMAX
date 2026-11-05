@@ -1,4 +1,4 @@
-# 验证一级只读锁：默认开启（未设 FHD_DISABLE_DB_READ_LOCK=1 时），无 X-FHD-Db-Read-Token 的 list 请求应返回 403。
+﻿# 验证一级只读锁：默认开启（未设 FHD_DISABLE_DB_READ_LOCK=1 时），无 X-FHD-Db-Read-Token 的 list 请求应返回 403。
 # 用法: .\scripts\verify-db-read-lock.ps1
 #       .\scripts\verify-db-read-lock.ps1 http://127.0.0.1:8000
 

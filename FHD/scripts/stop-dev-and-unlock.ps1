@@ -1,4 +1,4 @@
-# 停止本机常见开发进程，减少「文件被占用 / Python OSError 22」类写入失败。
+﻿# 停止本机常见开发进程，减少「文件被占用 / Python OSError 22」类写入失败。
 # 用法（PowerShell）:  cd E:\FHD ; .\scripts\stop-dev-and-unlock.ps1
 # 需要管理员时：以管理员打开 PowerShell 再执行（仅在使用 openfiles 排查时）。
 

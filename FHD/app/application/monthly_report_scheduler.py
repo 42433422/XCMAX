@@ -206,7 +206,7 @@ def _monthly_finance_summary_task(
     # 发布 NeuroBus 事件（成功/失败均发布）
     try:
         from app.neuro_bus.bus import get_neuro_bus
-        from app.neuro_bus.events.base import NeuroEvent
+        from app.neuro_bus.events.events_base import NeuroEvent
 
         bus = get_neuro_bus()
         event_type = (

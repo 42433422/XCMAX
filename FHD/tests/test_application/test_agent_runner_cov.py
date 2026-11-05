@@ -1,9 +1,5 @@
 # mypy: disable-error-code="no-any-return"
-"""覆盖率补强测试：app.application.employee_runtime.agent_runner。
-
-聚焦于 _run_async / _resolve_employee_llm_config / _chat_completion /
-run_agent_handler 四个函数的边界与异常分支。
-"""
+"""Agent routing, async boundaries and handler delegation regressions."""
 
 from __future__ import annotations
 
@@ -15,19 +11,14 @@ import pytest
 
 from app.application.employee_runtime.agent_runner import (
     _chat_completion,
-    _resolve_employee_llm_config,
     _run_async,
     run_agent_handler,
 )
 
-CREDS_PATH = "app.infrastructure.llm.providers.credentials"
-ADAPTER_PATH = "app.services.conversation.llm_adapter.OpenAICompatibleAdapter"
 AGENT_LOOP_PATH = "app.application.employee_runtime.agent_loop.run_employee_agent_loop"
 
 
 class TestRunAsync:
-    """_run_async：在同步上下文中调度协程。"""
-
     def test_no_running_loop_uses_asyncio_run(self):
         async def coro() -> int:
             return 42
@@ -35,8 +26,6 @@ class TestRunAsync:
         assert _run_async(coro()) == 42
 
     def test_running_loop_uses_thread_pool(self):
-        """已在事件循环内时，通过 ThreadPoolExecutor 在新线程里跑 asyncio.run。"""
-
         async def inner() -> str:
             return "from-thread"
 
@@ -63,224 +52,44 @@ class TestRunAsync:
             asyncio.run(outer())
 
 
-class TestResolveEmployeeLlmConfig:
-    """_resolve_employee_llm_config：环境变量覆盖 vs 默认凭据解析。"""
-
-    def test_provider_override_with_model(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "openai")
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_MODEL", "gpt-4o")
-
-        cfg = _resolve_employee_llm_config()
-
-        assert cfg == {
-            "provider": "openai",
-            "model": "gpt-4o",
-            "api_key": None,
-            "base_url": None,
-        }
-
-    def test_provider_override_without_model(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "azure")
-        monkeypatch.delenv("FHD_EMPLOYEE_LLM_MODEL", raising=False)
-
-        cfg = _resolve_employee_llm_config()
-
-        assert cfg == {
-            "provider": "azure",
-            "model": None,
-            "api_key": None,
-            "base_url": None,
-        }
-
-    def test_provider_override_whitespace_falls_through(self, monkeypatch: pytest.MonkeyPatch):
-        """空白字符串的 provider 视为未设置，走默认凭据路径。"""
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "   ")
-        monkeypatch.delenv("FHD_EMPLOYEE_LLM_MODEL", raising=False)
-
-        with (
-            patch(f"{CREDS_PATH}.resolve_openai_env_credentials") as mock_creds,
-            patch(f"{CREDS_PATH}.resolve_default_openai_provider") as mock_provider,
-            patch(f"{CREDS_PATH}.resolve_default_chat_model") as mock_model,
-        ):
-            mock_creds.return_value = ("api-key-123", "https://api.example.com")
-            mock_provider.return_value = "openai"
-            mock_model.return_value = "gpt-4-turbo"
-
-            cfg = _resolve_employee_llm_config()
-
-        assert cfg == {
-            "provider": "openai",
-            "model": "gpt-4-turbo",
-            "api_key": "api-key-123",
-            "base_url": "https://api.example.com",
-        }
-
-    def test_default_path_with_credentials(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("FHD_EMPLOYEE_LLM_PROVIDER", raising=False)
-        monkeypatch.delenv("FHD_EMPLOYEE_LLM_MODEL", raising=False)
-
-        with (
-            patch(f"{CREDS_PATH}.resolve_openai_env_credentials") as mock_creds,
-            patch(f"{CREDS_PATH}.resolve_default_openai_provider") as mock_provider,
-            patch(f"{CREDS_PATH}.resolve_default_chat_model") as mock_model,
-        ):
-            mock_creds.return_value = ("api-key-123", "https://api.example.com")
-            mock_provider.return_value = "openai"
-            mock_model.return_value = "gpt-4-turbo"
-
-            cfg = _resolve_employee_llm_config()
-
-        assert cfg == {
-            "provider": "openai",
-            "model": "gpt-4-turbo",
-            "api_key": "api-key-123",
-            "base_url": "https://api.example.com",
-        }
-
-    def test_default_path_with_model_override(self, monkeypatch: pytest.MonkeyPatch):
-        """默认 provider 路径下，FHD_EMPLOYEE_LLM_MODEL 仍可覆盖默认模型。"""
-        monkeypatch.delenv("FHD_EMPLOYEE_LLM_PROVIDER", raising=False)
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_MODEL", "custom-model")
-
-        with (
-            patch(f"{CREDS_PATH}.resolve_openai_env_credentials") as mock_creds,
-            patch(f"{CREDS_PATH}.resolve_default_openai_provider") as mock_provider,
-            patch(f"{CREDS_PATH}.resolve_default_chat_model") as mock_model,
-        ):
-            mock_creds.return_value = ("", None)
-            mock_provider.return_value = "xcauto"
-            mock_model.return_value = "default-model"
-
-            cfg = _resolve_employee_llm_config()
-
-        assert cfg == {
-            "provider": "xcauto",
-            "model": "custom-model",
-            "api_key": None,
-            "base_url": None,
-        }
-
-
 class TestChatCompletion:
-    """_chat_completion：单轮补全的配置/错误路径。"""
+    @pytest.mark.parametrize("completion", [{"choices": [{"message": {"content": "hello"}}]}, None])
+    async def test_uses_common_provider(self, monkeypatch, completion):
+        from app.infrastructure.llm.providers import registry
 
-    async def test_adapter_not_configured_returns_error(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "openai")
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_MODEL", "gpt-4o")
-
-        adapter = MagicMock()
-        adapter.is_configured = False
-        adapter.model_name = "gpt-4o"
-
-        with patch(ADAPTER_PATH, return_value=adapter) as mock_cls:
-            result = await _chat_completion([{"role": "user", "content": "hi"}])
-
-        assert "error" in result
-        assert result["provider"] == "openai"
-        assert result["model"] == "gpt-4o"
-        mock_cls.assert_called_once()
-
-    async def test_adapter_configured_returns_completion(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "openai")
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_MODEL", "gpt-4o")
-
-        adapter = MagicMock()
-        adapter.is_configured = True
-        adapter.chat_completion = AsyncMock(return_value={"content": "hello back"})
-
-        with patch(ADAPTER_PATH, return_value=adapter) as mock_cls:
-            result = await _chat_completion([{"role": "user", "content": "hi"}], max_tokens=500)
-
-        assert result == {"content": "hello back"}
-        adapter.chat_completion.assert_awaited_once()
-        # 验证 max_tokens 透传
-        _, kwargs = adapter.chat_completion.call_args
-        assert kwargs.get("max_tokens") == 500
-        # 验证 provider/model 透传给 adapter 构造器
-        _, ctor_kwargs = mock_cls.call_args
-        assert ctor_kwargs.get("provider") == "openai"
-        assert ctor_kwargs.get("model") == "gpt-4o"
-
-    async def test_empty_provider_defaults_to_xcauto(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("FHD_EMPLOYEE_LLM_PROVIDER", raising=False)
-        monkeypatch.delenv("FHD_EMPLOYEE_LLM_MODEL", raising=False)
-
-        adapter = MagicMock()
-        adapter.is_configured = False
-        adapter.model_name = "default-model"
-
-        with (
-            patch(f"{CREDS_PATH}.resolve_openai_env_credentials", return_value=("", None)),
-            patch(f"{CREDS_PATH}.resolve_default_openai_provider", return_value=""),
-            patch(f"{CREDS_PATH}.resolve_default_chat_model", return_value="default-model"),
-            patch(ADAPTER_PATH, return_value=adapter) as mock_cls,
-        ):
-            result = await _chat_completion([{"role": "user", "content": "hi"}])
-
-        # provider 空字符串 → 默认 "xcauto"
-        _, ctor_kwargs = mock_cls.call_args
-        assert ctor_kwargs.get("provider") == "xcauto"
-        assert "error" in result
-        assert result["provider"] == "xcauto"
-
-    async def test_recoverable_error_returns_error_dict(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "openai")
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_MODEL", "gpt-4o")
-
-        adapter = MagicMock()
-        adapter.is_configured = True
-        adapter.chat_completion = AsyncMock(side_effect=ConnectionError("net down"))
-
-        with patch(ADAPTER_PATH, return_value=adapter):
-            result = await _chat_completion([{"role": "user", "content": "hi"}])
-
-        assert "error" in result
-        assert result["error"] == "主模型服务暂不可用"
-        assert "net down" not in result["error"]
-
-    async def test_primary_429_falls_back_to_minimax(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "xiaomi")
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_MODEL", "mimo-v2.5-pro")
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_FALLBACK_PROVIDER", "minimax")
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_FALLBACK_MODEL", "MiniMax-M2.7")
-
-        primary = MagicMock(is_configured=True, model_name="mimo-v2.5-pro")
-        primary.chat_completion = AsyncMock(side_effect=ConnectionError("429 quota exhausted"))
-        fallback = MagicMock(is_configured=True, model_name="MiniMax-M2.7")
-        fallback.chat_completion = AsyncMock(
-            return_value={"choices": [{"message": {"content": "fallback ok"}}]}
+        provider = MagicMock()
+        provider.chat_completion = AsyncMock(return_value=completion)
+        monkeypatch.setattr(registry, "get_active_provider", lambda: provider)
+        result = await _chat_completion([{"role": "user", "content": "hi"}], max_tokens=500)
+        provider.chat_completion.assert_awaited_once_with(
+            [{"role": "user", "content": "hi"}], max_tokens=500
+        )
+        assert (
+            result == completion
+            if completion
+            else result["error_code"] == "employee_llm_not_configured"
         )
 
-        with patch(ADAPTER_PATH, side_effect=[primary, fallback]) as mock_cls:
-            result = await _chat_completion([{"role": "user", "content": "hi"}])
+    async def test_unavailable_provider_is_not_replaced_with_another_users_credentials(
+        self, monkeypatch
+    ):
+        from app.infrastructure.llm.providers import registry
 
-        assert result["choices"][0]["message"]["content"] == "fallback ok"
-        assert result["_fallback_used"] is True
-        assert result["_primary_provider"] == "xiaomi"
-        assert result["_fallback_provider"] == "minimax"
-        assert mock_cls.call_count == 2
+        monkeypatch.setattr(registry, "get_active_provider", lambda: None)
+        assert (await _chat_completion([]))["error_code"] == "employee_llm_not_configured"
 
-    async def test_recoverable_value_error_truncated(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "openai")
-        monkeypatch.setenv("FHD_EMPLOYEE_LLM_MODEL", "gpt-4o")
+    async def test_provider_error_does_not_expose_credentials(self, monkeypatch):
+        from app.infrastructure.llm.providers import registry
 
-        long_msg = "x" * 2000
-        adapter = MagicMock()
-        adapter.is_configured = True
-        adapter.chat_completion = AsyncMock(side_effect=ValueError(long_msg))
-
-        with patch(ADAPTER_PATH, return_value=adapter):
-            result = await _chat_completion([{"role": "user", "content": "hi"}])
-
-        assert result["error"] == "主模型服务暂不可用"
-        assert long_msg[:80] not in result["error"]
+        provider = MagicMock()
+        provider.chat_completion = AsyncMock(side_effect=RuntimeError("private provider detail"))
+        monkeypatch.setattr(registry, "get_active_provider", lambda: provider)
+        result = await _chat_completion([])
+        assert "private provider detail" not in result["error"]
 
 
 class TestRunAgentHandler:
-    """run_agent_handler：参数解析与委托调用。"""
-
     def test_basic_delegation_with_full_reasoning(self):
-        """reasoning 携带 system_prompt / input / reasoning 时全部解析并透传。"""
         captured: dict[str, Any] = {}
 
         def fake_loop(**kwargs: Any) -> dict[str, Any]:

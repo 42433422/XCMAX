@@ -58,9 +58,8 @@ class TestExplicitAllowlist:
         names = ts._explicit_allowlist({"tools": ["a", "  ", ""]}, {})
         assert names == ["a"]
 
-    def test_empty_list_falls_through(self):
-        # config.tools=[] → 无有效名 → 继续找下个候选 → None
-        assert ts._explicit_allowlist({"tools": []}, {}) is None
+    def test_empty_list_denies_tools(self):
+        assert ts._explicit_allowlist({"tools": []}, {"tools": ["excel_analysis"]}) == []
 
 
 class TestCapabilityText:
@@ -102,17 +101,17 @@ class TestIsReadOnly:
 
 
 class TestResolveEmployeeTools:
-    def test_empty_base_returns_none(self, monkeypatch):
+    def test_empty_base_denies_tools(self, monkeypatch):
         monkeypatch.setattr(ts, "_base_tool_specs", lambda: {})
-        assert ts.resolve_employee_tools("e", {}, {}) is None
+        assert ts.resolve_employee_tools("e", {}, {}) == []
 
     def test_explicit_allowlist_filtered_to_base(self, fake_base):
         specs = ts.resolve_employee_tools("e", {}, {"tools": ["excel_analysis", "nonexistent"]})
         names = [s["function"]["name"] for s in specs]
         assert names == ["excel_analysis"]
 
-    def test_explicit_allowlist_none_in_base_returns_none(self, fake_base):
-        assert ts.resolve_employee_tools("e", {}, {"tools": ["nope"]}) is None
+    def test_unknown_allowlist_denies_tools(self, fake_base):
+        assert ts.resolve_employee_tools("e", {}, {"tools": ["nope"]}) == []
 
     def test_excel_keyword_selects_read_tools(self, fake_base):
         manifest = {"employee": {"capabilities": ["Excel 数据分析"]}}

@@ -1,0 +1,38 @@
+{
+  "at": "2026-09-12T17:31:11.450121+00:00",
+  "apps": {
+    "main": {
+      "path": "/Applications/XCAGI.app",
+      "build": {
+        "schema_version": 1,
+        "gitSha": "1532f84339fbcdc5b5fd8895615fa06b5a55f6e4",
+        "version": "1.0.0.1",
+        "releaseId": "xcagi-1.0.0.1-1532f84339fbcdc5b5fd8895615fa06b5a55f6e4",
+        "builtAt": "2026-09-07T08:04:56.379Z"
+      },
+      "signature_exit": 1,
+      "signature_output": "/Applications/XCAGI.app: a sealed resource is missing or invalid\n"
+    },
+    "running_acceptance": {
+      "path": "/Users/a4243342/Applications/acceptance/XCAGI.app",
+      "build": {
+        "schema_version": 1,
+        "gitSha": "99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+        "version": "1.0.0.1",
+        "releaseId": "xcagi-1.0.0.1-99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+        "builtAt": "2026-09-04T16:39:02.096Z"
+      },
+      "signature_exit": 0,
+      "signature_output": ""
+    }
+  },
+  "health": {
+    "status": "degraded",
+    "degradedReasons": [
+      "LLM_RUNTIME_UNAVAILABLE"
+    ],
+    "runtime": "healthy"
+  },
+  "ui": "running acceptance instance shows enterprise login page",
+  "complete": false
+}

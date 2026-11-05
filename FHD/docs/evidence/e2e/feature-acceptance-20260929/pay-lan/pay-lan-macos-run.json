@@ -1,0 +1,66 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "pay-lan",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "visible_content": "LAN status 与 admin whoami（本机为管理主机）可读，授权页一致。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/lan/status",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/lan/status（写操作自动附带 CSRF）：局域网网关状态",
+      "expected": "局域网网关状态：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 49ms；{\"success\": true, \"enabled\": false, \"ip\": \"127.0.0.1\", \"in_whitelist\": true, \"in_static_cidr\": true, \"in_dynamic_allowlist\": false, \"is_admin_host\": true, \"authorized\": false, \"is_admin\": false, \"expi",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/lan/admin/whoami",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/lan/admin/whoami（写操作自动附带 CSRF）：网关管理员身份",
+      "expected": "网关管理员身份：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 25ms；{\"success\": true, \"ip\": \"127.0.0.1\", \"jti\": null, \"key_id\": null, \"is_admin_host\": true, \"is_admin_key\": false}",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "界面路由 /lan-gate",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /lan-gate，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /lan-gate，页面可见 局域网，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /lan-gate；命中文本 ['局域网']；缺失 []；界面请求失败 []；页面摘录：FHD · 局域网授权 | 当前未启用局域网模式，无需授权。 | 进入系统 | 状态：未启用 | 本机 IP：127.0.0.1 | 主机管理员位",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "pay-lan",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-lan/macos/result.png",
+      "sha256": "038db54377b5a14055c7f70774a30a8ac1cf790081bb4929ff9d62bd31e330a5",
+      "visual_review": "accepted",
+      "visible_result": "「FHD · 局域网授权」卡片：未启用局域网模式，无需授权；本机 IP 127.0.0.1。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-lan",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-lan/macos/operation.webm",
+      "sha256": "6266372d1b69d008ec7267a4a09dddb08f00661ab6866cd3a910ae11d8be65f7",
+      "visual_review": "accepted",
+      "visible_result": "录屏为局域网授权页，各帧一致。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-lan/macos/run.log",
+    "sha256": "5f1be5c922aeea67a2b02aa26bb829d84724d8a2ea062f366a8b56ffa8132ceb",
+    "bytes": 1100
+  }
+}

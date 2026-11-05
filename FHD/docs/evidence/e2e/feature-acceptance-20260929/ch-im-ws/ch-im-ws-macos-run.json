@@ -1,0 +1,58 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "ch-im-ws",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 2,
+  "failed": 0,
+  "visible_content": "页面内建立 /ws/im WebSocket 握手成功，未读总数接口返回 0，信息页显示「实时已连接」。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "界面操作：在页面内建立 IM WebSocket 连接",
+      "actions": "在页面内建立 IM WebSocket 连接",
+      "expected": "握手成功（onopen）",
+      "observed": "WebSocket /ws/im 握手结果 {'ok': True}",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/im/unread-total",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/im/unread-total（写操作自动附带 CSRF）：未读计数",
+      "expected": "未读计数：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 15ms；{\"success\": true, \"unread_total\": 0}",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ch-im-ws",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-ws/macos/result.png",
+      "sha256": "76ca854cd36ca7091b7dd30d5955b4ea357feca42749d0e8d86e535131847568",
+      "visual_review": "accepted",
+      "visible_result": "「信息」页：左上「实时已连接」，会话列表完整。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ch-im-ws",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-ws/macos/operation.webm",
+      "sha256": "12429ea7262bf00033478435c0a5c476b2b7953f38dfab2f74e0055ffe316708",
+      "visual_review": "accepted",
+      "visible_result": "录屏为信息页，实时连接状态持续显示。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-ws/macos/run.log",
+    "sha256": "1e3f52c191cbbbecb671ed05cad559ecee990ee5f10b05774bba0b8c864d1eb4",
+    "bytes": 543
+  }
+}

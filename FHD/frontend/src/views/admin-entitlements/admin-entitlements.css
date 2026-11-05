@@ -5,17 +5,6 @@
   margin: 0;
 }
 
-.admin-entitlements-head h2 {
-  margin: 0 0 6px;
-}
-
-.admin-entitlements-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
 .admin-entitlements-alert {
   margin: 12px 0;
   padding: 10px 12px;

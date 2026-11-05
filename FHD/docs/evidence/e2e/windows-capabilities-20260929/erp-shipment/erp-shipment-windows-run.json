@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "erp-shipment",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 erp-shipment 对应的 Windows 客户端页面 /mod/xcagi-erp-domain-bridge/shipment-records",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「考勤记录 - XCAGI」，主标题「考勤记录」，地址 /mod/xcagi-erp-domain-bridge/shipment-records。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤记录 SUNBIRD 副窗 ◈ 工作区 出货记录管理 请选择购买单位 瓶 袋 全部状态 已打印 未打印 请选择出货记录模板 出货记录初始化表（出货记录） [未绑定文件",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=792338 mp4=133292 title=考勤记录 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-shipment/erp-shipment.log",
+    "sha256": "de5d892fb640e396c3571970a44c1a62e5065a54920fb380f5cf113c30afc87b",
+    "bytes": 1318
+  },
+  "media": [
+    {
+      "feature": "erp-shipment",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-shipment/erp-shipment.png",
+      "sha256": "f1337e12e6b98734b426d74655a0755f24e66037c7b1872c4816345b9186314f",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「考勤记录 - XCAGI」，主标题「考勤记录」，地址 /mod/xcagi-erp-domain-bridge/shipment-records。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤记录 SUNBIRD 副窗 ◈ 工作区 出货记录管理 请选择购买单位 瓶 袋 全部状态 已打印 未打印 请选择出货记录模板 出货记录初始化表（出货记录） [未绑定文件",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-shipment",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-shipment/erp-shipment.mp4",
+      "sha256": "41cdae3ea56905c87cd6cf7d15d787be5d26f389eeff93e36203149996b8dec5",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「考勤记录 - XCAGI」，主标题「考勤记录」，地址 /mod/xcagi-erp-domain-bridge/shipment-records。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤记录 SUNBIRD 副窗 ◈ 工作区 出货记录管理 请选择购买单位 瓶 袋 全部状态 已打印 未打印 请选择出货记录模板 出货记录初始化表（出货记录） [未绑定文件",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

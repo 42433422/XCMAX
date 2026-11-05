@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.tools_workflow_registered import (
+from app.domain.shared_services.tools_workflow_registered import (
     _registered_router_business_docking_family,
     _registered_router_customers,
     _registered_router_excel_analysis,
@@ -72,8 +72,15 @@ def test_normal_slot_shipment_preview(mock_run: MagicMock) -> None:
 
 @patch("app.application.get_customer_app_service")
 def test_customers_ensure_exists_already_matched(mock_get: MagicMock) -> None:
-    matched = SimpleNamespace(unit_name="七彩乐园")
-    mock_get.return_value.match_purchase_unit.return_value = matched
+    mock_get.return_value.lookup_purchase_unit_for_ensure.return_value = {
+        "status": "matched",
+        "id": 1,
+        "unit_name": "七彩乐园",
+    }
+    mock_get.return_value.get_by_id.return_value = {
+        "success": True,
+        "data": {"id": 1, "customer_name": "七彩乐园"},
+    }
     out = _registered_router_customers("ensure_exists", {"unit_name": "七彩"}, {}, "pro", "")
     assert out["success"] is True
     assert out["exists"] is True
@@ -82,8 +89,9 @@ def test_customers_ensure_exists_already_matched(mock_get: MagicMock) -> None:
 @patch("app.application.get_customer_app_service")
 def test_customers_ensure_exists_creates(mock_get: MagicMock) -> None:
     svc = mock_get.return_value
-    svc.match_purchase_unit.return_value = None
-    svc.create.return_value = {"success": True}
+    svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+    svc.create.return_value = {"success": True, "data": {"id": 2}}
+    svc.get_by_id.return_value = {"success": True, "data": {"id": 2, "customer_name": "新单位"}}
     out = _registered_router_customers("ensure_exists", {"unit_name": "新单位"}, {}, "pro", "")
     assert out["success"] is True
     assert out.get("created") is True
@@ -92,11 +100,14 @@ def test_customers_ensure_exists_creates(mock_get: MagicMock) -> None:
 @patch("app.application.get_customer_app_service")
 def test_customers_ensure_exists_duplicate_message(mock_get: MagicMock) -> None:
     svc = mock_get.return_value
-    svc.match_purchase_unit.return_value = None
+    svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
     svc.create.return_value = {"success": False, "message": "客户已存在"}
     out = _registered_router_customers("ensure_exists", {"unit_name": "重复"}, {}, "pro", "")
-    assert out["success"] is True
-    assert out["exists"] is True
+    assert out["success"] is False
+    assert out["outcome"] == "unknown"
+    assert out["retryable"] is False
+    assert out["reconciliation_required"] is True
+    svc.get_by_id.assert_not_called()
 
 
 def test_customers_ensure_exists_missing_name() -> None:
@@ -254,55 +265,21 @@ def test_settings_enable_startup(mock_get: MagicMock) -> None:
 
 
 def test_excel_analysis_missing_file_path() -> None:
-    out = _registered_router_excel_analysis("analyze", {}, {}, "pro", "")
+    out = _registered_router_excel_analysis("read", {}, {}, "pro", "")
     assert out["success"] is False
+    assert "file_path" in out["message"]
 
 
-def test_excel_analysis_read_from_runtime_context() -> None:
-    mock_skill = MagicMock()
-    mock_skill.execute.return_value = {"success": True, "content": []}
-    with (
-        patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_skill,
-        ),
-        patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=MagicMock(),
-        ),
-    ):
-        out = _registered_router_excel_analysis(
-            "read",
-            {},
-            {"excel_analysis": {"file_path": "/tmp/x.xlsx"}},
-            "pro",
-            "",
-        )
-    assert out["success"] is True
-
-
-def test_excel_analysis_statistics() -> None:
-    mock_tk = MagicMock()
-    mock_tk.execute.return_value = {
-        "success": True,
-        "content": [{"cells": [{"value": "1"}, {"value": "2"}]}],
-        "row_count": 1,
-    }
-    with (
-        patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_tk,
-        ),
-        patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
-            return_value=MagicMock(),
-        ),
-    ):
+def test_excel_analysis_delegates_to_unified_handler() -> None:
+    with patch(
+        "app.application.tools.workflow.handle_excel_analysis",
+        return_value={"success": True},
+    ) as mock_exec:
         out = _registered_router_excel_analysis(
             "statistics", {"file_path": "/tmp/x.xlsx"}, {}, "pro", ""
         )
     assert out["success"] is True
-    assert out["statistics"]["sum"] == 3.0
+    assert mock_exec.call_args.args[0]["action"] == "statistics"
 
 
 def test_excel_import_missing_pending_id() -> None:

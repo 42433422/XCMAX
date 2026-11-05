@@ -1,4 +1,4 @@
-"""Tests for app.services.uom_service (W1-06 UOM 换算服务).
+"""Tests for app.domain.shared_services.uom_service (W1-06 UOM 换算服务).
 
 覆盖 W1-06 后置条件：
   - 同一产品多单位 + 换算率（category 内单位表 + 产品自身 unit 兜底）；
@@ -14,9 +14,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import Product, UomCategory, UomUnit
-from app.services.uom_service import UomConversionError, UomService
+from app.domain.shared_services.uom_service import UomConversionError, UomService
 
 
 @pytest.fixture(scope="function")

@@ -22,7 +22,7 @@ pytestmark = pytest.mark.release_gate
 def industry_app(tmp_path, monkeypatch):
     import app.db as database
     import app.db.session as db_session
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.user import Session, User
     from app.utils.time import utc_now_naive
 

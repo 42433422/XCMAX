@@ -1,5 +1,5 @@
 # mypy: disable-error-code="attr-defined"
-"""Deep coverage tests for app.services.distillation_trainer.
+"""Deep coverage tests for app.domain.shared_services.distillation_trainer.
 
 Root cause of near-zero coverage: the source module imports ``torch`` and
 ``transformers`` at module top-level. These heavy ML deps are NOT installed in
@@ -28,7 +28,7 @@ import pytest
 # This file previously carried its own stub installer + sys.modules restore
 # logic; the restore step broke collection of later files in this directory
 # (it popped torch from sys.modules, so the next file's
-# ``from app.services.distillation_trainer import ...`` failed silently).
+# ``from app.domain.shared_services.distillation_trainer import ...`` failed silently).
 
 # ---------------------------------------------------------------------------
 # Stub heavy ML deps so the source module can be imported without torch /
@@ -192,7 +192,7 @@ def _install_torch_transformers_stubs() -> None:
 # against the stubs (or the real library if torch is installed).
 import torch  # noqa: E402
 
-from app.services.distillation_trainer import (  # noqa: E402
+from app.domain.shared_services.distillation_trainer import (  # noqa: E402
     CHECKPOINT_DIR,
     DISTILL_DIR,
     ID_TO_LABEL,
@@ -319,13 +319,13 @@ class TestDistillationTrainerInitDeep:
         assert t.warmup_ratio == 0.2
 
     def test_default_device_uses_cuda_availability(self):
-        with patch("app.services.distillation_trainer.torch") as mock_torch:
+        with patch("app.domain.shared_services.distillation_trainer.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = False
             t = DistillationTrainer()
             assert t.device == "cpu"
 
     def test_default_device_cuda_when_available(self):
-        with patch("app.services.distillation_trainer.torch") as mock_torch:
+        with patch("app.domain.shared_services.distillation_trainer.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = True
             t = DistillationTrainer()
             assert t.device == "cuda"
@@ -458,10 +458,12 @@ class TestPrepareDataDeep:
 
         t = DistillationTrainer(device="cpu")
         with (
-            patch("app.services.distillation_trainer.BertTokenizer") as mtok,
-            patch("app.services.distillation_trainer.BertForSequenceClassification") as mmodel,
-            patch("app.services.distillation_trainer.DataLoader") as mdl,
-            patch("app.services.distillation_trainer.train_test_split") as msplit,
+            patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as mtok,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification"
+            ) as mmodel,
+            patch("app.domain.shared_services.distillation_trainer.DataLoader") as mdl,
+            patch("app.domain.shared_services.distillation_trainer.train_test_split") as msplit,
         ):
             msplit.return_value = (texts[:88], texts[88:], labels[:88], labels[88:])
             mtok.from_pretrained.return_value = MagicMock()
@@ -486,10 +488,12 @@ class TestPrepareDataDeep:
 
         t = DistillationTrainer(device="cpu")
         with (
-            patch("app.services.distillation_trainer.BertTokenizer") as mtok,
-            patch("app.services.distillation_trainer.BertForSequenceClassification") as mmodel,
-            patch("app.services.distillation_trainer.DataLoader") as mdl,
-            patch("app.services.distillation_trainer.train_test_split") as msplit,
+            patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as mtok,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification"
+            ) as mmodel,
+            patch("app.domain.shared_services.distillation_trainer.DataLoader") as mdl,
+            patch("app.domain.shared_services.distillation_trainer.train_test_split") as msplit,
         ):
             msplit.return_value = (texts[:16], texts[16:], labels[:16], labels[16:])
             mtok.from_pretrained.return_value = MagicMock()
@@ -507,10 +511,12 @@ class TestPrepareDataDeep:
 
         t = DistillationTrainer(device="cpu")
         with (
-            patch("app.services.distillation_trainer.BertTokenizer") as mtok,
-            patch("app.services.distillation_trainer.BertForSequenceClassification") as mmodel,
-            patch("app.services.distillation_trainer.DataLoader"),
-            patch("app.services.distillation_trainer.train_test_split") as msplit,
+            patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as mtok,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification"
+            ) as mmodel,
+            patch("app.domain.shared_services.distillation_trainer.DataLoader"),
+            patch("app.domain.shared_services.distillation_trainer.train_test_split") as msplit,
         ):
             msplit.return_value = (texts[:10], texts[10:], labels[:10], labels[10:])
             mtok.from_pretrained.return_value = MagicMock()
@@ -569,7 +575,7 @@ class TestTrainEpochDeep:
 
         preds = _Tensor(0)  # torch.argmax result
 
-        with patch("app.services.distillation_trainer.torch") as mock_torch:
+        with patch("app.domain.shared_services.distillation_trainer.torch") as mock_torch:
             mock_torch.argmax.return_value = preds
             mock_torch.nn.utils.clip_grad_norm_ = MagicMock()
             t.model = MagicMock()
@@ -629,7 +635,7 @@ class TestTrainEpochDeep:
         mock_output.loss = _Tensor(0.4, 0)
         mock_output.logits = MagicMock()
 
-        with patch("app.services.distillation_trainer.torch") as mock_torch:
+        with patch("app.domain.shared_services.distillation_trainer.torch") as mock_torch:
             mock_torch.argmax.side_effect = [_Tensor(0, 2), _Tensor(0, 3)]
             mock_torch.nn.utils.clip_grad_norm_ = MagicMock()
             t.model = MagicMock()
@@ -690,8 +696,8 @@ class TestEvaluateDeep:
         preds_tensor = _Tensor(0, numpy_val=[0, 1])
 
         with (
-            patch("app.services.distillation_trainer.torch") as mock_torch,
-            patch("app.services.distillation_trainer.accuracy_score") as mock_acc,
+            patch("app.domain.shared_services.distillation_trainer.torch") as mock_torch,
+            patch("app.domain.shared_services.distillation_trainer.accuracy_score") as mock_acc,
         ):
             mock_torch.argmax.return_value = preds_tensor
             mock_torch.no_grad = MagicMock()
@@ -726,7 +732,7 @@ class TestSaveCheckpointDeep:
         ckpt_dir = tmp_path / "checkpoints"
         ckpt_dir.mkdir()
 
-        with patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)):
+        with patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)):
             t.save_checkpoint(str(ckpt), epoch=2, best=True)
 
         # model & tokenizer saved to ckpt path
@@ -764,7 +770,7 @@ class TestSaveCheckpointDeep:
         ckpt_dir = tmp_path / "checkpoints"
         ckpt_dir.mkdir()
 
-        with patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)):
+        with patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)):
             t.save_checkpoint(str(ckpt), epoch=1, best=False)
 
         cfg = json.loads((ckpt / "train_config.json").read_text(encoding="utf-8"))
@@ -818,13 +824,15 @@ class TestTrainOrchestrationDeep:
         t.model.parameters.return_value = iter([MagicMock()])
 
         with (
-            patch("app.services.distillation_trainer.AdamW") as mock_adamw,
+            patch("app.domain.shared_services.distillation_trainer.AdamW") as mock_adamw,
             patch(
-                "app.services.distillation_trainer.get_linear_schedule_with_warmup"
+                "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup"
             ) as mock_sched,
-            patch("app.services.distillation_trainer.classification_report") as mock_report,
-            patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)),
-            patch("app.services.distillation_trainer.LOG_DIR", str(log_dir)),
+            patch(
+                "app.domain.shared_services.distillation_trainer.classification_report"
+            ) as mock_report,
+            patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)),
+            patch("app.domain.shared_services.distillation_trainer.LOG_DIR", str(log_dir)),
         ):
             mock_adamw.return_value = MagicMock()
             mock_sched.return_value = MagicMock()
@@ -875,14 +883,19 @@ class TestTrainOrchestrationDeep:
         t.model.parameters.return_value = iter([MagicMock()])
 
         with (
-            patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()),
             patch(
-                "app.services.distillation_trainer.get_linear_schedule_with_warmup",
+                "app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()
+            ),
+            patch(
+                "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
                 return_value=MagicMock(),
             ),
-            patch("app.services.distillation_trainer.classification_report", return_value="r"),
-            patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)),
-            patch("app.services.distillation_trainer.LOG_DIR", str(log_dir)),
+            patch(
+                "app.domain.shared_services.distillation_trainer.classification_report",
+                return_value="r",
+            ),
+            patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)),
+            patch("app.domain.shared_services.distillation_trainer.LOG_DIR", str(log_dir)),
         ):
             t.train(str(path), output_dir=str(ckpt_dir))
 
@@ -905,7 +918,7 @@ class TestMainCLIDeep:
         with (
             patch("sys.argv", ["distillation_trainer"]),
             patch(
-                "app.services.distillation_trainer.get_distillation_training_data_path",
+                "app.domain.shared_services.distillation_trainer.get_distillation_training_data_path",
                 return_value=fake_default,
             ),
         ):
@@ -937,7 +950,9 @@ class TestMainCLIDeep:
                     "custom-model",
                 ],
             ),
-            patch("app.services.distillation_trainer.DistillationTrainer") as mock_cls,
+            patch(
+                "app.domain.shared_services.distillation_trainer.DistillationTrainer"
+            ) as mock_cls,
         ):
             mock_inst = MagicMock()
             mock_cls.return_value = mock_inst

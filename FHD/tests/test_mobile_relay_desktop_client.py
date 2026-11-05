@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import stat
 import time
+
+import pytest
 
 
 def test_relay_poll_backoff_is_bounded_and_resets():
@@ -97,7 +100,7 @@ def test_register_desktop_relay_uses_stable_device_id(monkeypatch, tmp_path):
     assert posted[1]["capabilities"]["port"] == 17501
 
 
-def test_register_desktop_relay_reuses_cached_pairing_on_timeout(monkeypatch, tmp_path):
+def test_register_desktop_relay_hides_cached_pairing_on_timeout(monkeypatch, tmp_path):
     from app.services import mobile_relay_desktop_client as relay
 
     config_file = tmp_path / "mobile_relay_desktop.json"
@@ -133,10 +136,7 @@ def test_register_desktop_relay_reuses_cached_pairing_on_timeout(monkeypatch, tm
 
     payload = relay.register_desktop_relay(host="192.168.0.38", port=17500)
 
-    assert payload is not None
-    assert payload["relay_id"] == "relay-cached"
-    assert payload["pairing_code"] == "123456"
-    assert "desktop_token" not in payload
+    assert payload is None
 
 
 def test_register_desktop_relay_invalid_base_url_returns_none(monkeypatch, tmp_path):
@@ -161,6 +161,23 @@ def test_register_desktop_relay_invalid_base_url_returns_none(monkeypatch, tmp_p
     payload = relay.register_desktop_relay(host="192.168.0.38", port=17500, force_new=True)
 
     assert payload is None
+
+
+def test_pending_relay_identity_available_after_lan_pairing(monkeypatch):
+    from app.fastapi_routes import mobile_api_extensions as ext
+
+    monkeypatch.setattr(
+        "app.application.facades.mobile_relay_facade.cached_desktop_relay_payload",
+        lambda: {
+            "relay_id": "pending-relay-1",
+            "pairing_code": "123456",
+            "relay_base_url": "https://xiu-ci.com/fhd-api/",
+            "paired": False,
+        },
+    )
+    result = ext._cached_desktop_relay_for_account_binding()
+    assert result is not None
+    assert result["relay_id"] == "pending-relay-1"
 
 
 def test_execute_task_waits_for_real_codex_result(monkeypatch):
@@ -420,6 +437,8 @@ def test_read_config_migrates_legacy_when_stable_missing(monkeypatch, tmp_path):
     cfg = relay._read_config()
     assert cfg.get("relay_id") == "paired-877"
     assert stable.is_file()  # 已迁移落盘
+    assert stat.S_IMODE(stable.stat().st_mode) == 0o600
+    assert stat.S_IMODE(legacy.stat().st_mode) == 0o600
 
 
 def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_path):
@@ -440,6 +459,7 @@ def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_pa
     relay._migrate_legacy_config_once()
     cfg = relay._read_config()
     assert cfg.get("relay_id") == "paired-877"
+    assert stat.S_IMODE(stable.stat().st_mode) == 0o600
 
 
 class _CaptureCodexService:
@@ -505,7 +525,8 @@ def test_execute_task_freechat_strips_mode_but_still_forces_cli(monkeypatch):
     assert "mode" not in ctx
 
 
-def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path):
+@pytest.mark.parametrize("root_name", ["xcagi-wt-stale-1", "xcmax_product_scratch/stale-1"])
+def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path, root_name):
     """工作区 GC：超期残留清掉、近期(活跃)保留。"""
     import time as _t
 
@@ -513,9 +534,9 @@ def test_gc_removes_stale_keeps_fresh(monkeypatch, tmp_path):
 
     monkeypatch.setattr(relay.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setenv("XCAGI_RELAY_WORKSPACE_GC_MAX_AGE_SEC", "100")
-    stale = tmp_path / "xcagi-wt-stale-1"
+    stale = tmp_path / root_name
     fresh = tmp_path / "xcagi-wt-fresh-2"
-    stale.mkdir()
+    stale.mkdir(parents=True)
     fresh.mkdir()
     old = _t.time() - 9999
     import os as _os

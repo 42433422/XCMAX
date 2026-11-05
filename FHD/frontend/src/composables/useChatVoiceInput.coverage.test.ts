@@ -1085,8 +1085,8 @@ describe('useChatVoiceInput – coverage ramp', () => {
     // 此时应该处于 transcribing 状态
     expect(api.voiceButtonDisabled.value).toBe(true)
     expect(api.voiceButtonIcon.value).toBe('fa-spinner fa-pulse')
-    expect(api.voiceButtonText.value).toBe('识别中...')
-    expect(api.voiceButtonTitle.value).toContain('正在把语音转成文字')
+    expect(api.voiceButtonText.value).toBe('首次识别需加载模型…')
+    expect(api.voiceButtonTitle.value).toContain('首次识别需加载语音模型')
   })
 
   // ── error 状态下 computed 属性 ───────────────────────────────────

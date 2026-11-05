@@ -1,0 +1,62 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-tts",
+ "name": "语音合成与播报（TTS）",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/tts 请求体 {\"text\": \"macOS 验收播报\", \"lang\": \"zh\", \"voice\": \"zh-CN-XiaoxiaoNeural\", \"rate\": \"+15%\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/tts（写操作自动附带 CSRF）：在线语音合成（界面播报同一接口）",
+   "expected": "返回 success 与 base64 音频",
+   "observed": "HTTP 200 6360ms；audioBase64 长度 16727，引擎 edge",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/voice/health",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/voice/health（写操作自动附带 CSRF）：语音子系统健康",
+   "expected": "语音子系统健康：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 1352ms；{\"ready\": true, \"reason\": \"\", \"model\": \"small\", \"device_hint\": \"cpu\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /settings",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /settings，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /settings，页面可见 语音，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /settings；命中文本 ['语音']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-tts",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-tts/macos/result.png",
+   "sha256": "b2441c2e59ef0ededb029e0e11103acc87b0725faddf3c1281d5acdd59dd1424",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-tts",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-tts/macos/operation.webm",
+   "sha256": "fa5c0fcee9c90061b8842acbb643386d8b87373b7754ef5205351cd2e47da1b2",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-tts/macos/run.log",
+  "sha256": "0e3d9ee95c3ed634f9bf8988044046aa1c7341c06a4dac59083793d9eafa4f68",
+  "bytes": 1189
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

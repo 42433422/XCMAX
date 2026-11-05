@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import secrets
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -51,12 +52,8 @@ _CSRF_EXEMPT_PATHS = frozenset(
     }
 )
 
-# 前缀豁免：QQ 官方机器人 V2 的 webhook 由 QQ 官方主动 POST，签名头是
-# Ed25519，没有 CSRF Cookie 概念。涵盖：
-#   - /api/agent/butler/qq/webhook                           （管家默认）
-#   - /api/agent/butler/qq/{webhook_key}/webhook             （task-router / employee-interview 等老员工）
-#   - /api/agent/butler/qq/by-employee/{employee_id}/webhook （新员工通用入口）
-_CSRF_EXEMPT_PREFIXES: tuple[str, ...] = ("/api/agent/butler/qq/",)
+# 前缀豁免：历史 QQ Bot webhook 已下线；保留空元组以免调用方假设该常量存在。
+_CSRF_EXEMPT_PREFIXES: tuple[str, ...] = ()
 
 
 def _csrf_exempt_path(path: str) -> bool:
@@ -70,6 +67,21 @@ def _csrf_exempt_path(path: str) -> bool:
     return False
 
 
+def _machine_webhook_path(path: str) -> bool:
+    """Only fixed protocol receivers; their routes must validate signatures/tokens."""
+    path = path.rstrip("/")
+    if path in {
+        "/api/inbound/webhooks/github",
+        "/api/inbound/webhooks/feishu",
+        "/api/inbound/webhooks/dingtalk",
+        "/api/inbound/webhooks/generic",
+    }:
+        return True
+    prefix = "/api/workflow-hooks/webhook/"
+    key = path.removeprefix(prefix)
+    return path.startswith(prefix) and bool(key) and "/" not in key
+
+
 def _csrf_disabled_for_tests() -> bool:
     """仅用于自动化测试（``conftest`` 设置 ``MODSTORE_DISABLE_CSRF=1``）；生产环境禁止开启。"""
     return (os.environ.get("MODSTORE_DISABLE_CSRF") or "").strip().lower() in (
@@ -78,6 +90,28 @@ def _csrf_disabled_for_tests() -> bool:
         "yes",
         "on",
     )
+
+
+def _bearer_authenticates(authorization: str) -> bool:
+    """True only for a user access token or PAT that the auth service accepts."""
+    from modstore_server.application.auth import (
+        AuthApplicationService,
+        AuthenticationError,
+    )
+    from modstore_server.auth_service import PAT_PREFIX, resolve_pat_identity
+    from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+    try:
+        raw = authorization.strip()
+        token = raw[7:].strip() if raw.startswith("Bearer ") else ""
+        if token.startswith(PAT_PREFIX):
+            return resolve_pat_identity(token) is not None
+        AuthApplicationService().current_user_from_authorization(authorization)
+    except AuthenticationError:
+        return False
+    except RECOVERABLE_ERRORS:
+        return False
+    return True
 
 
 class CSRFMiddleware:
@@ -104,8 +138,25 @@ class CSRFMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # A bearer header only skips the double-submit check when it authenticates, or
+        # when the request carries no cookies (a non-browser caller with no ambient
+        # credential to forge; the route's own auth decides). A browser request with
+        # cookies and a forged bearer still needs a matching X-CSRF-Token.
         auth_header = request.headers.get("authorization", "")
-        if auth_header.lower().startswith("bearer "):
+        if auth_header.lower().startswith("bearer ") and (
+            not request.headers.get("cookie")
+            or await run_in_threadpool(_bearer_authenticates, auth_header)
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        # External protocols have no ambient browser credentials. Cookie-bearing
+        # requests still require CSRF; path matching alone never authenticates them.
+        if (
+            method == "POST"
+            and not request.headers.get("cookie")
+            and _machine_webhook_path(request.url.path)
+        ):
             await self.app(scope, receive, send)
             return
 

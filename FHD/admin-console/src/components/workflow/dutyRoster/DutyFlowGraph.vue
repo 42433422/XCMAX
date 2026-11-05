@@ -1,18 +1,14 @@
-/**
- * VueFlow 画布（含自定义 group / default 节点模板）。
- *
- * 由 DutyRosterGraphPanel.vue 模板机械切分而来（行为与视觉保持不变）。
- */
 <script setup lang="ts">
+import { VueFlow } from '@vue-flow/core'
+import { Background } from '@vue-flow/background'
+import { Controls } from '@vue-flow/controls'
+import { MiniMap } from '@vue-flow/minimap'
 import type { Deref } from './dutyRosterTypes'
 import { HEALTH_LABEL, LLM_ACT_LABEL, RUN_STATUS_LABEL } from './dutyRosterConstants'
 import type { HealthLv, LlmActLv, RunNodeStatus } from './dutyRosterTypes'
 import type { DutyLoopCore } from './useDutyLoopCore'
 import type { DutyRosterState } from './useDutyRosterState'
 import type { DutyWorkshop } from './useDutyWorkshop'
-
-defineEmits<{
-}>()
 
 defineProps<{
   flowNodes: Deref<DutyRosterState['flowNodes']>
@@ -22,7 +18,6 @@ defineProps<{
   nodeLoopActive: Deref<DutyLoopCore['nodeLoopActive']>
   handleNodeClick: Deref<DutyWorkshop['onNodeClick']>
 }>()
-
 </script>
 
 <template>
@@ -32,6 +27,7 @@ defineProps<{
                 :edges="flowEdges"
                 :nodes-connectable="false"
                 :elements-selectable="true"
+                :min-zoom="0.1"
                 fit-view-on-init
                 class="dg-flow"
                 style="width: 100%; height: 100%;"
@@ -40,7 +36,6 @@ defineProps<{
                 <Background :pattern-color="flowBgPatternColor" :gap="24" />
                 <Controls position="bottom-left" />
                 <MiniMap position="bottom-right" :mask-color="miniMapMaskColor" />
-
                 <!-- 六部门 / 物理分区：父级 group 容器 -->
                 <template #node-group="{ label }">
                   <div class="dg-group-node">
@@ -97,5 +92,3 @@ defineProps<{
 
               <!-- ── 客户端车间详情（仅管理端） ───────────────────────────── -->
 </template>
-
-<style scoped src="../DutyRosterGraphPanel.css"></style>

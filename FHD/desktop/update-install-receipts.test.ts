@@ -53,6 +53,8 @@ describe('update installation receipts', () => {
     })
     expect(readPendingUpdateInstallReceipt()?.idempotencyKey).toBe(pending.idempotencyKey)
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const headers = new Headers(init.headers)
+      expect(headers.get('X-XCAGI-Desktop-Local')).toBe('1')
       const body = JSON.parse(String(init.body))
       expect(body.status).toBe('installed')
       expect(body.target_build_sha).toBe('expected-sha')

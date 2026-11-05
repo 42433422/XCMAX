@@ -1,0 +1,360 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ops-version-evolution",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-075726",
+  "generated_at": "2026-09-29 07:57:52",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 5,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端完成：管理员登录 → 「服务器后台总览」页真实渲染「软件版本与更新包」（管理端版本 / update 站版本 / 企业端）→ GET /api/xcmax/release-train 返回版本列车（epoch 1.0.0.0、product_version/current=1.0.0.5）→ GET /api/xcmax/ops/founder-autonomy 返回「进化状态」7 项门禁（detect/knowledge/implement/metrics/council/package/publish）→ GET /api/xcmax/admin/autonomy/deploy-events 返回自驱部署事件与 status → 无会话访问部署事件接口被拒（401）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 13518,
+        "processed": 13518,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.search",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "error.occurred",
+                "evolution.index"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/ops-version-evolution/ops-version-evolution-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ops-version-evolution",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-version-evolution/shot/00-login-form.png",
+      "sha256": "4327a8483397b2a2f31ee353c183f692b499200cc2e35285bb69e02ad4b98f6c",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-version-evolution",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-version-evolution/shot/EV1-version-panel.png",
+      "sha256": "27d75f4767c28074c4a01646a899cef911a06155131fe6cb8e5836fc172a8794",
+      "visual_review": "accepted",
+      "visible_result": "「服务器后台总览」页渲染三栏：本地节点（本地地址 127.0.0.1:42423、异常）、远端服务器（离线）、软件版本与更新包（管理端版本/管理端 Git/update 站版本/update 站 Git/企业端 不可达/安装回执 0 台已安装），含「检测中...」「推送更新安装包」按钮。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-version-evolution",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-version-evolution/shot/EV2-release-train.png",
+      "sha256": "4b4e2060b8d90074a3800ba72b610617aaf10922d7e238a9bf3b0943563ac85b",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/xcmax/release-train → 200，epoch=1.0.0.0，product_version=current=1.0.0.5，started_at 2026-07-12，day_index=1，reset_reason=stable-1.0.0.0-ssot。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-version-evolution",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-version-evolution/shot/EV3-evolution-gates.png",
+      "sha256": "d8b70daef63e5d1af199ceefdf3292142b1b9c887d9c135f04639d82ae1e72e5",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/xcmax/ops/founder-autonomy → 200，evolution 维度门禁 7 项 detect/knowledge/implement/metrics/council/package/publish，total_gate_count 7，progress 0。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-version-evolution",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-version-evolution/shot/EV4-deploy-events.png",
+      "sha256": "e5ae162d54efac52cf20c6b6842c2abe2e7de4ea45c8427764385b5b25a4aaee",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/xcmax/admin/autonomy/deploy-events → 200，ok=true，count=20；样本 deploy_id=7e4092b6d7b6 status=failed、711be1d036e3 status=success，source_workflow=fhd-auto-update、head_branch=main。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-version-evolution",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-version-evolution/shot/EV5-unauth-denied.png",
+      "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+      "visual_review": "accepted",
+      "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何部署事件数据。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-version-evolution",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-version-evolution/video/ops-version-evolution-web-20260929-075726.webm",
+      "sha256": "5147a12a764de495a6045866228c051c525fbbce3ad9dc241c984b1d6e02d9a6",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，24.52s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 服务器后台总览版本面板 → 版本列车 → 进化门禁 → 部署事件 → 无会话被拒。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "EV1",
+      "title": "「服务器后台总览」页真实渲染软件版本与更新包",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器导航到 /admin/xcmax-admin，等待 SPA 渲染后读取标题与正文。",
+      "expected": "渲染出「服务器后台总览」与「软件版本与更新包」（管理端版本 / update 站版本）。",
+      "observed": "{\"final_url\": \"http://127.0.0.1:42423/admin/xcmax-admin\", \"title\": \"服务器后台总览 - XCAGI\", \"has_overview\": true, \"has_version_panel\": true, \"has_admin_version\": true, \"has_update_site_version\": true, \"text_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能力未就绪 版本检测中 平台运维 · 系统管理 服务器后台总览 副窗 ◈ 工作区 3 总览 订单经营 自治总览 基础设施 编制与调度 自动化方针 同时完成时间架构 服务器后台总览 推送更新包 刷新中... 本地节点 异常 版本 — 数据库 — 运行时间 — 本地地址 127.0.0\"}",
+      "result": "passed"
+    },
+    {
+      "id": "EV2",
+      "title": "版本列车真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/xcmax/release-train。",
+      "expected": "200 且 success=true；epoch=1.0.0.0，current=product_version=1.0.0.5，day_index 为整数。",
+      "observed": "{\"status\": 200, \"success\": true, \"data\": {\"epoch\": \"1.0.0.0\", \"product_version\": \"1.0.0.5\", \"current\": \"1.0.0.5\", \"started_at\": \"2026-07-12\", \"day_index\": 2, \"last_bump_at\": \"2026-08-18T00:04:28.127731+00:00\", \"last_bump_day\": \"2026-08-18\", \"last_installer_push_at\": null, \"last_major_push_at\": null, \"backup_guard\": null, \"reset_at\": \"2026-07-12T08:05:13Z\", \"reset_reason\": \"stable-1.0.0.0-ssot\"}}",
+      "result": "passed"
+    },
+    {
+      "id": "EV3",
+      "title": "进化状态 7 项门禁真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/xcmax/ops/founder-autonomy。",
+      "expected": "200；dimensions[evolution] total_gate_count=7，门禁 key 与 impl 顺序一致。",
+      "observed": "{\"status\": 200, \"label\": \"进化状态\", \"gate_keys\": [\"detect\", \"knowledge\", \"implement\", \"metrics\", \"council\", \"package\", \"publish\"], \"total_gate_count\": 7}",
+      "result": "passed"
+    },
+    {
+      "id": "EV4",
+      "title": "自驱部署事件与 status 真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/xcmax/admin/autonomy/deploy-events。",
+      "expected": "200 且 ok=true；items 非空且含 deploy_id/status/source_workflow。",
+      "observed": "{\"status\": 200, \"ok\": true, \"count\": 20, \"sample\": [{\"deploy_id\": \"7e4092b6d7b6\", \"deployed_at\": \"2026-09-13T20:20:10Z\", \"commit_at\": \"2026-09-14T01:06:47+08:00\", \"status\": \"failed\", \"restored_at\": null, \"source_workflow\": \"fhd-auto-update\", \"head_branch\": \"main\"}, {\"deploy_id\": \"711be1d036e3\", \"deployed_at\": \"2026-09-13T20:15:33Z\", \"commit_at\": \"2026-09-14T01:06:47+08:00\", \"status\": \"success\", \"restored_at\": null, \"source_workflow\": \"fhd-auto-update\", \"head_branch\": \"main\"}]}",
+      "result": "passed"
+    },
+    {
+      "id": "EV5",
+      "title": "无会话访问部署事件接口被拒（负例）",
+      "input": "全新的无会话浏览器上下文。",
+      "actions": "在无 cookie 的上下文中 fetch GET /api/xcmax/admin/autonomy/deploy-events。",
+      "expected": "被拒绝（401/403），不返回部署事件数据。",
+      "observed": "{\"status\": 401, \"body\": {\"success\": false, \"message\": \"请先登录\"}}",
+      "result": "passed"
+    }
+  ]
+}

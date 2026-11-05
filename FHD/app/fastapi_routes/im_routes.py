@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -27,7 +28,6 @@ from app.application.codex_super_employee_service import (
 from app.application.cursor_super_employee_service import (
     CursorSuperEmployeeService as CursorSuperEmployeeService,
 )
-from app.application.execution_scope import factory_context as factory_context
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.application.trae_super_employee_service import (
     TraeSuperEmployeeService as TraeSuperEmployeeService,
@@ -35,6 +35,7 @@ from app.application.trae_super_employee_service import (
 from app.application.workspaces import get_workspace_registry as get_workspace_registry
 from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
+from app.domain.app_pure.execution_scope import factory_context as factory_context
 from app.fastapi_routes.im_cs_admin_routes import router as im_cs_admin_router
 from app.fastapi_routes.im_cs_client_routes import router as im_cs_client_router
 from app.infrastructure.auth.dependencies import (
@@ -42,6 +43,7 @@ from app.infrastructure.auth.dependencies import (
     get_current_user,
     require_identified_user,
 )
+from app.infrastructure.im.message_fanout import push_im_message_to_members
 from app.infrastructure.im.ws_hub import im_ws_hub
 from app.mod_sdk import assistant_ssot as assistant_ssot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -193,16 +195,29 @@ async def _notify_offline_im_members(
 def im_list_conversations(
     request: Request,
     user: CurrentUser = Depends(require_identified_user),
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    cursor: Annotated[str | None, Query(max_length=256)] = None,
 ):
     _ensure_schema()
     uid = _uid(user)
     db = HostSessionLocal()
     try:
-        items = ImApplicationService(db).list_conversations(
-            uid,
-            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
-        )
-        return {"success": True, "user_id": uid, "conversations": items}
+        # Omitted limit preserves old desktop/mobile clients' complete-list contract.
+        service = ImApplicationService(db)
+        include_cs = _include_enterprise_dedicated_cs(request, db)
+        next_cursor = None
+        if limit is None and cursor is None:
+            items = service.list_conversations(uid, include_enterprise_dedicated_cs=include_cs)
+        else:
+            items, next_cursor = service.list_conversations_page(
+                uid,
+                include_enterprise_dedicated_cs=include_cs,
+                limit=limit,
+                cursor=cursor,
+            )
+        return {"success": True, "user_id": uid, "conversations": items, "next_cursor": next_cursor}
+    except ValueError:
+        return JSONResponse({"success": False, "message": "会话分页参数无效"}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_conversations")
         return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
@@ -360,22 +375,7 @@ async def im_send_message(
             record_sync=not is_enterprise_cs,
         )
         emp_peer_id = svc.employee_id_for_conversation(conversation_id, uid)
-        legacy_payload = {
-            "type": "message",
-            "conversation_id": conversation_id,
-            "message": result["message"],
-        }
-        sync_payload = {
-            "type": "im.message",
-            "conversation_id": conversation_id,
-            "message": result["message"],
-            "updated_at_ms": result.get("updated_at_ms"),
-        }
-        member_ids = [int(mid) for mid in (result.get("member_user_ids") or [])]
-        for member_id in member_ids:
-            if member_id != uid:
-                await im_ws_hub.send_to_user(member_id, legacy_payload)
-                await im_ws_hub.send_to_user(member_id, sync_payload)
+        member_ids = await push_im_message_to_members(uid, conversation_id, result, hub=im_ws_hub)
         await _notify_offline_im_members(member_ids, uid, text)
         # 入站回流（与手机端 internal_im.im_post_message 对齐）：老板在桌面/Web 给某 AI 员工
         # 发消息 → 回流 MODstore（答 pending 问题或转 boss_im 新任务），员工才有下文。

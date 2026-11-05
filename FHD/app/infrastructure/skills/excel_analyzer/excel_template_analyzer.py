@@ -254,7 +254,7 @@ class ExcelAnalyzerSkill:
         if output_json:
             return analyze_to_json(file_path, output_json, sheet_name)
         else:
-            return analyze_template(file_path, sheet_name)
+            return analyze_template(file_path, sheet_name, verbose=True)
 
     def get_skill_info(self) -> dict[str, Any]:
         """获取技能信息"""

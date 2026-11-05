@@ -1,18 +1,17 @@
 [project]
 name = "xcagi"
-version = "1.0.0.1"
+version = "1.0.0.7"
 description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付）"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 # 运行时依赖见 optional-dependencies；CI/生产安装：requirements-server-api.txt（与 server-api extra 对齐）
-# LG-W1-T1：吸收的 LangGraph 运行时根依赖，全部经 [tool.uv.sources] 重定向到本地 XCAGI vendored 包。
 dependencies = [
     "langgraph==1.2.10",
-    "langgraph-checkpoint==4.1.1",
-    "langgraph-checkpoint-sqlite==3.1.1",
-    "langgraph-checkpoint-postgres==3.1.1",
+    "langgraph-checkpoint==4.3.0",
+    "langgraph-checkpoint-sqlite==3.1.2",
+    "langgraph-checkpoint-postgres==3.1.3",
     "langgraph-prebuilt==1.1.0",
-    "langgraph-sdk==0.4.2",
+    "langgraph-sdk==0.4.6",
 ]
 
 [project.scripts]
@@ -25,22 +24,24 @@ server-api = [
     "starlette>=1.3.1",
     "python-multipart>=0.0.31",
     "aiofiles>=23.2.1",
-    "Celery==5.3.4",
+    "Celery==5.6.3",
     "APScheduler>=3.10,<4",
     "redis==5.0.1",
     "openpyxl==3.1.5",
+    "defusedxml==0.7.1",
     "python-docx>=1.1.0",
     "python-pptx>=1.0.2",
     "pdfplumber>=0.11.0",
-    "pypdf>=6.15,<7",
+    "pypdf>=6.20.1,<7",
     "reportlab>=5,<6",
     "Pillow>=12.3.0",
     "gunicorn>=22.0.0",
     "gevent>=25.4.2",
     "python-dotenv>=1.2.2",
-    "httpx==0.26.0",
+    "httpx==0.28.1",
     "socksio>=1.0.0",
     "requests>=2.33.0",
+    "urllib3>=2.8.0",
     "python-alipay-sdk>=3.3.0",
     "edge-tts>=6.1.10",
     "faster-whisper>=1.0.0",
@@ -63,12 +64,12 @@ server-api = [
     "pydantic-settings>=2.11.0",
     "email-validator>=2.0.0",
     "passlib[bcrypt]>=1.7.4",
-    "PyJWT>=2.8.0",
+    "PyJWT>=2.15.0",
     "PyYAML>=6.0.2",
     # OpenTelemetry (NeuroBus tracer 底层)
-    "opentelemetry-api>=1.24.0",
-    "opentelemetry-sdk>=1.24.0",
-    "opentelemetry-exporter-otlp>=1.24.0",
+    "opentelemetry-api>=1.45.1",
+    "opentelemetry-sdk>=1.45.1",
+    "opentelemetry-exporter-otlp>=1.45.1",
 ]
 ml = [
     "torch>=2.13.0",
@@ -92,6 +93,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "jsonschema>=4.23",
     "ruff>=0.8,<0.16",
+    "import-linter>=2.15,<3",
     "mypy>=1.8",
     "types-redis",
     "types-requests",
@@ -100,6 +102,7 @@ dev = [
     "types-aiofiles",
     "types-pillow",
     "types-openpyxl",
+    "types-defusedxml",
     "celery-types",
     "pip-audit>=2.9",
     "bandit>=1.7",
@@ -236,6 +239,12 @@ exclude = [
 module = "modstore_server.*"
 ignore_missing_imports = true
 
+# mypy 2.4.x hits INTERNAL ERROR ("Too many iterations when checking a loop") on the
+# overlapped pack window search; ignore until upstream mypy can check this module.
+[[tool.mypy.overrides]]
+module = "app.application.reviewed_excel_multipack_stitch"
+ignore_errors = true
+
 # Optional heavyweight/platform adapters are imported behind runtime feature
 # probes.  Their availability is validated by the owning capability, while the
 # core type gate remains independent of platform-only or ML-only distributions.
@@ -287,6 +296,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short -p no:xdist --import-mode=importlib"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: 集成测试",
     "e2e: 端到端测试",
@@ -299,9 +309,14 @@ markers = [
 # Targeted third-party ignore: anyio 弃用了自家 anyio.abc.BlockingPortal 别名 shim，
 # 经 fastapi TestClient 导入链在收集期触发（filterwarnings=error 下阻断全部收集）。
 # fastapi/starlette 停用该别名后可移除。
+# pytest 9.1.1 自身收集代码（_pytest/pathlib.py find_prefixed）遗留的 scandir 迭代器在
+# gc 时发 ResourceWarning，filterwarnings=error 下变成 unraisable 异常，
+# mutmut 进程内反复跑 pytest 时在 unconfigure 期崩溃（mutation-smoke 自 6 月起 main 周跑必挂）。
+# 泄漏在 pytest 内部而非 app 代码；pytest 修复后移除本条。
 filterwarnings = [
     "error",
     'ignore:The anyio\.abc\.BlockingPortal alias is deprecated',
+    'ignore:unclosed scandir iterator:builtins.ResourceWarning',
 ]
 
 [tool.coverage.run]
@@ -357,7 +372,7 @@ show_contexts = true
 # 用法：mutmut run && python scripts/dev/mutation_kill_report.py --threshold 80
 [tool.mutmut]
 source_paths = ["app/di", "app/contexts"]
-also_copy = ["app", "resources", "tests", "conftest.py"]
+also_copy = ["app", "resources", "tests", "conftest.py", "packages"]
 pytest_add_cli_args = ["-q", "-p", "no:cacheprovider", "--no-header"]
 pytest_add_cli_args_test_selection = [
     "tests/test_di",
@@ -387,3 +402,23 @@ exclude = [
     "MODstore*",
 ]
 namespaces = false
+
+# Incremental contracts: scope only the migrated sync slice, not all legacy modules.
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+id = "sync-service-uses-dal"
+name = "Sync service uses the existing DAO instead of the SQLite driver"
+type = "forbidden"
+source_modules = ["app.domain.shared_services.xcmax_sync_service"]
+forbidden_modules = ["sqlite3"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "sync-dal-stays-low-level"
+name = "Sync DAO cannot depend on services or application entrypoints"
+type = "forbidden"
+source_modules = ["app.db.xcmax_sync"]
+forbidden_modules = ["app.services", "app.application", "app.fastapi_routes", "app.fastapi_app"]

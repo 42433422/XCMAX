@@ -19,6 +19,7 @@ export function useLoginViewActions(
     username,
     accountKind,
     password,
+    invitationCode,
     loading,
     errorMessage,
     altLoginHint,
@@ -91,19 +92,9 @@ export function useLoginViewActions(
       (errObj && typeof errObj.code === 'string' && errObj.code.trim()) || (typeof r.error_code === 'string' && r.error_code.trim()) || ''
     const message =
       (typeof r.message === 'string' && r.message.trim()) || (errObj && typeof errObj.message === 'string' && errObj.message.trim()) || ''
-    const errorId = typeof r.error_id === 'string' && r.error_id.trim() ? r.error_id.trim() : ''
 
-    let out = ''
-    if (message) {
-      out = message
-      if (errorId && !out.includes(errorId)) {
-        out = `${out}${t('login.errIdSuffix', { id: errorId })}`
-      }
-    } else if (errorId) {
-      out = t('login.errWithId', { id: errorId })
-    } else {
-      out = t('login.errLoginFailed')
-    }
+    // Login page shows only a short inline reason — no error IDs / diagnostics.
+    let out = message || t('login.errLoginFailed')
 
     if (import.meta.env.DEV && (errorCode === 'MARKET_AUTH_FAILED' || errorCode === 'LOCAL_AUTH_MISMATCH')) {
       out += t('login.devHint')
@@ -131,7 +122,7 @@ export function useLoginViewActions(
     window.location.href = url
   }
 
-  async function submitLogin() {
+  async function submitLogin(_event?: Event) {
     if (!canSubmit.value) {
       errorMessage.value = loginMode.value === 'phone' ? t('login.errNeedPhoneAndCode') : t('login.errNeedUsernamePassword')
       return
@@ -142,7 +133,7 @@ export function useLoginViewActions(
       const result =
         loginMode.value === 'phone'
           ? await authApi.loginWithPhoneCode(phone.value.trim(), smsCode.value.trim(), accountKind.value)
-          : await authApi.login(username.value.trim(), password.value, accountKind.value)
+          : await authApi.login(username.value.trim(), password.value, accountKind.value, invitationCode.value.trim())
       const raw = result as unknown as Record<string, unknown>
       const ok = raw?.success === true || (raw?.data as Record<string, unknown> | undefined)?.success === true
       if (!ok) {

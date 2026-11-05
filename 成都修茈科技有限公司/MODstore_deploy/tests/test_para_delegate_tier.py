@@ -396,7 +396,16 @@ class _IntegClient:
             return _IntegResp({"devices": self._devices})
         if "/api/tasks/" in url:
             return _IntegResp(
-                {"task": {"id": "task-1", "status": self._task_status, "subTasks": []}}
+                {
+                    "task": {
+                        "id": "task-1",
+                        "status": self._task_status,
+                        "subTasks": [
+                            {"id": f"sub-{i + 1}", "status": self._task_status}
+                            for i in range(len(self.posted_tasks))
+                        ],
+                    }
+                }
             )
         return _IntegResp({}, status_code=404)
 
@@ -543,6 +552,7 @@ class _CliFallbackClient(_IntegClient):
                 "subTasks": [
                     {
                         "id": f"sub-{self._seq}",
+                        "status": status,
                         "toolName": tool,
                         "last_error": f"{tool} CLI 失败: executable not found" if failed else "",
                     }

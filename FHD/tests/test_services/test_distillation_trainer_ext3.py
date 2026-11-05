@@ -1,4 +1,4 @@
-"""Tests for app.services.distillation_trainer — deep coverage (ext3).
+"""Tests for app.domain.shared_services.distillation_trainer — deep coverage (ext3).
 
 Focus: DistillationTrainer.load_data with TSV format, prepare_data with few labels,
 save_checkpoint, train with insufficient data, DistillationDataset.__getitem__,
@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.distillation_trainer import (
+from app.domain.shared_services.distillation_trainer import (
     CHECKPOINT_DIR,
     DISTILL_DIR,
     ID_TO_LABEL,
@@ -249,7 +249,7 @@ class TestMainCLI:
     def test_main_with_default_data_path(self, tmp_path):
         with patch("sys.argv", ["distillation_trainer"]):
             with patch(
-                "app.services.distillation_trainer.get_distillation_training_data_path",
+                "app.domain.shared_services.distillation_trainer.get_distillation_training_data_path",
                 return_value=str(tmp_path / "nonexistent.jsonl"),
             ):
                 # Should not raise

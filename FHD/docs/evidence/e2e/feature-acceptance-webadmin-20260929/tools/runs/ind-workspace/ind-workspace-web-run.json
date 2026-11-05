@@ -1,0 +1,316 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ind-workspace",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-160130",
+  "generated_at": "2026-09-29 16:01:47",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取行业工作区根与考勤工作台定制能力 → 真实新建「VC验收工作台员工」并读回人员列表确认落库 → 以真实 403 记录未开通考勤表转换定制时访问定制规则被拒（边界/负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "healthy",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 3664,
+        "processed": 3664,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.reflect",
+                "evolution.search",
+                "evolution.export",
+                "evolution.index",
+                "evolution.mine",
+                "error.occurred"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-workspace/ind-workspace-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ind-workspace",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-workspace/shot/00-login-form.png",
+      "sha256": "ebb3b808d380eb1fe82a06dddd58bd7187dfa2d56e7abb6b2927919ccf94b424",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-workspace",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-workspace/shot/W1-workspace-surface.png",
+      "sha256": "4963e5c26d2814fdd85a37ffa28f302af0de4e428f5780e4dff54ae32357e94f",
+      "visual_review": "accepted",
+      "visible_result": "卡片汇总真实读写：GET /api/platform-shell/workspace-root 200 workspace_root=/private/tmp/xcmax-verifycenter-main/FHD；GET .../attendance/capabilities 200 custom_features=[]；POST /employees 新建「VC验收工作台员工」；GET /employees 读回命中该员工（工作台真实持有数据）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-workspace",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-workspace/shot/W4-workspace-entitlement.png",
+      "sha256": "160c40bd910e9f248d9a2163a02c6ba68616b04c0c53fd380e0f335c40e4660f",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/mods/attendance-industry/attendance/rules 返回 403，message=当前账号未开通考勤表转换定制功能。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-workspace",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-workspace/video/ind-workspace-web-20260929-160130.webm",
+      "sha256": "02ba52abc567376827155394ae41d537f3835eacef92ed5d23ac6a5230e77fd7",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，15.68s，ffmpeg 实测）：管理员登录 → 工作区根 → 考勤定制能力 → 新建并读回工作台人员 → 未开通定制 403。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "W1",
+      "title": "行业工作区根与定制能力真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/platform-shell/workspace-root 与 attendance/capabilities。",
+      "expected": "HTTP 200，workspace_root 指向仓库 FHD 目录，capabilities 返回 custom_features。",
+      "observed": "{\"root_status\": 200, \"workspace_root\": \"/private/tmp/xcmax-verifycenter-main/FHD\", \"caps_status\": 200, \"custom_features\": []}",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "title": "真实新建工作台人员并读回（正向）",
+      "input": "已建立的管理员会话。",
+      "actions": "POST /employees 新建「VC验收工作台员工」，再 GET /employees 读回。",
+      "expected": "读回列表命中该员工（真实落库）。",
+      "observed": "{\"create_status\": 200, \"readback_hit\": {\"id\": 2, \"employee_name\": \"VC验收工作台员工\", \"department\": \"VC验收工作台\", \"main_department\": \"\", \"attendance_group\": \"\", \"employee_no\": \"VC-WS-001\", \"position\": \"\", \"user_id\": \"\"}, \"items_total\": 2}",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "title": "未开通定制时访问考勤定制规则被拒（负例/边界）",
+      "input": "同上（账号未购考勤表转换定制）。",
+      "actions": "页面上下文 fetch GET /api/mods/attendance-industry/attendance/rules。",
+      "expected": "HTTP 403，提示未开通考勤表转换定制功能。",
+      "observed": "{\"status\": 403, \"message\": \"当前账号未开通考勤表转换定制功能\"}",
+      "result": "passed"
+    }
+  ]
+}

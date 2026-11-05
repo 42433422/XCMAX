@@ -1,0 +1,10 @@
+feature=ind-fields
+at=2026-09-29T11:10:29.119Z
+route=/attendance-industry/settings
+landed=/attendance-industry/settings
+title=考勤工作区 · 考勤设置 - XCAGI
+heading=考勤工作区 · 考勤设置
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤工作区 · 考勤设置 SUNBIRD 副窗 ◈ 工作区 考勤工作区 主系统统一维护部门、人员、排班资源和考勤记录。 部门管理 人员管理 排班资源 考勤记录 考勤表转换（定制） 转换规则（定制） 转换规则 · 太阳鸟定制 钉钉导出表 →「明细」工作表的裁窗与符号规则。配置保存在 resources/config/approval_config.yaml 的 attendance_policy 段。 ← 返回考勤首页 周一到周六正班默认 08:00–12:00、13:30–17:30；晚上 18:00 后按最后一次打卡计加班；周日按加班处理。 公司/工厂考勤组关键字（每行一条，匹配考勤组或班次名） 工作日正班时段 1 工作日正班时段 2 周日不设正班裁窗（与「周日仅加班」策略配合） 周日将原正班 √ / 交叉 ☆ 统一记为星期天加班 ★ 保存考勤规则 小C助理

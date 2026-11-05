@@ -1,0 +1,101 @@
+{
+  "objective": "T9 Windows 最终收口（#1923 合并后）：基于最新 main 全链路实机验证 + 故障测试",
+  "main_head": "604b85e1ee82631418002708def18800d7c7f338",
+  "target_version": "1.0.0.4",
+  "baseline": {
+    "installed_version": "1.0.0.2",
+    "installer_sha256_file": "chain-1.0.0.2-download-sha256.txt",
+    "db_counts_pre_chain": {
+      "sessions": 27,
+      "users": 3,
+      "products": 10
+    },
+    "evidence": [
+      "chain-buildinfo-start.json",
+      "chain-buildinfo-1.0.0.2.json",
+      "chain-health-1.0.0.2-firstlaunch.json",
+      "chain-db-snapshot-pre.json"
+    ]
+  },
+  "steps": [
+    {
+      "step": "main CI/CD（含 container-scan 修复后）",
+      "run": "34882474880",
+      "conclusion": "success",
+      "url": "https://github.com/42433422/XCMAX/actions/runs/34882474880",
+      "note": "全 job 绿：container-scan（#1942 断言对齐 1.0.0.4 + 冒烟窗口 60→150s）、backend-test、desktop-test、frontend-e2e、security-scan、SSOT Drift Gate 等"
+    },
+    {
+      "step": "Release Desktop（1.0.0.4 @ 604b85e1，windows_installer_only）",
+      "run": "34889725771",
+      "conclusion": "success",
+      "url": "https://github.com/42433422/XCMAX/actions/runs/34889725771"
+    },
+    {
+      "step": "Sign and publish Windows testing feed",
+      "run": "34891598292",
+      "conclusion": "success",
+      "url": "https://github.com/42433422/XCMAX/actions/runs/34891598292"
+    },
+    {
+      "step": "latest.yml 外部验证",
+      "result": "PASS",
+      "detail": "productVersion=1.0.0.4 buildSha=604b85e1ee82631418002708def18800d7c7f338，installer sha512 IlnSGtts…tisw== size=248424269 B（ota-discover.json 全文）"
+    },
+    {
+      "step": "OTA 更新发现→下载→安装（应用内 feed env）",
+      "result": "PASS",
+      "evidence": [
+        "ota-discover.json",
+        "ota-download-trigger.json",
+        "ota-download-final.json",
+        "ota-install-wizard/wizard-step-1-install-options-user-selection.png",
+        "ota-install-wizard/wizard-step-3-installing-progress.png",
+        "ota-install-wizard/wizard-step-4-finish-page.png"
+      ],
+      "note": "下载 248MB 约 230s（update-downloaded）；quitAndInstall 以 assisted 模式弹出向导（isSilent=false），实机点击完成安装并勾选『运行 XCAGI』"
+    },
+    {
+      "step": "升级后版本与 health",
+      "result": "PASS",
+      "detail": "build-info 1.0.0.4@604b85e1（chain-buildinfo-post-ota.json）；/api/health status=healthy version=1.0.0.4",
+      "evidence": ["chain-buildinfo-post-ota.json"]
+    },
+    {
+      "step": "升级后数据保留 + 业务复跑 + Mod/AI 员工",
+      "result": "PASS",
+      "evidence": [
+        "chain-db-snapshot-post-ota.json",
+        "chain-biz-post-ota.json",
+        "chain-reverify-verdict.json",
+        "chain-post-ota-ui-1.0.0.4.png"
+      ],
+      "note": "DB 27/3/12 全保留+新增产品 SUNBIRD-t9-post-ota-045248；Mod15 加载与 pre-OTA 基线一致（partial_failure=false, load_errors=0）；AI 员工 split_mod_entries=6"
+    },
+    {
+      "step": "故障注入 dual-process / migration-mutex（实机 1.0.0.4）",
+      "result": "PASS=2 FAIL=0 SKIP=2（disk-full/power-cut 人工场景）",
+      "evidence": [
+        "fault-local-1.0.0.4/fault-injection-receipt.json",
+        "fault-local-1.0.0.4/dual-process-20260915-050724.txt",
+        "fault-local-1.0.0.4/migration-mutex-20260915-050724.txt"
+      ],
+      "note": "dual-process：第二实例 1s 自退（单实例锁）；migration-mutex：竞态双启动收敛，单后端单监听 37404，主库 1699840 B 无损坏证据"
+    },
+    {
+      "step": "系统重启后复验",
+      "result": "PENDING",
+      "evidence": ["post-reboot/post-reboot-verify.ps1（Startup 注册 t9-post-reboot.cmd）"],
+      "note": "重启后登录触发 Startup 脚本自动采集：冷启动 health、build-info、进程清单、DB 计数、桌面截图"
+    }
+  ],
+  "fix_records": [
+    {
+      "issue": "container-scan 冒烟断言漂移",
+      "root_cause": "#1920 升版 SSOT/VERSION 1.0.0.4 但漏改 CI 冒烟 jq 断言（仍 1.0.0.3），且容器启动 ~65s 超出 60s 冒烟窗口",
+      "fix": "PR #1942（d65dd468，squash merge 进 604b85e1）：断言对齐 1.0.0.4（根+FHD 镜像两份 workflow）+ 窗口 60→150s + release-desktop choice 补 1.0.0.4",
+      "verify": "CI/CD run 34882474880 container-scan success"
+    }
+  ],
+  "generated_at": "2026-09-15T05:20:00+08:00"
+}

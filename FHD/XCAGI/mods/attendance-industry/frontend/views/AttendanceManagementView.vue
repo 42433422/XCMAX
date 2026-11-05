@@ -1,5 +1,5 @@
 <template>
-  <div class="attendance-management">
+  <div ref="managementRoot" class="attendance-management" :class="{ 'roster-drag-active': draggingId }">
     <header class="management-header">
       <div>
         <h2>{{ pageTitle }}</h2>
@@ -23,7 +23,7 @@
         >
           转换规则（定制）
         </router-link>
-        <button type="button" class="btn" :disabled="loading" @click="loadData()">
+        <button type="button" class="btn" :disabled="loading || saving" @click="loadData()">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </div>
@@ -126,6 +126,7 @@
       <span class="total-text">共 {{ total }} 条</span>
     </section>
 
+    <p v-if="moveError" class="inline-error" role="alert">{{ moveError }}</p>
     <div v-if="error" class="state-card state-card-error" role="alert">
       <strong>数据加载失败</strong>
       <span>{{ error }}</span>
@@ -157,10 +158,11 @@
     </section>
 
     <section v-else class="table-card">
-      <div class="table-scroll">
+      <div ref="tableViewport" class="table-scroll">
         <table v-if="section === 'personnel'">
           <thead>
             <tr>
+              <th>导出顺序</th>
               <th>姓名</th>
               <th>工号</th>
               <th>部门</th>
@@ -170,8 +172,13 @@
               <th class="actions-col">操作</th>
             </tr>
           </thead>
-          <tbody>
-            <tr v-for="row in rows" :key="row.id">
+          <TransitionGroup name="roster" tag="tbody">
+            <tr v-for="row in previewRows" :key="String(row.id)" :data-roster-id="row.id"
+              :class="{ 'roster-row-dragging': String(row.id) === draggingId, 'roster-row-placeholder': String(row.id) === draggingId }"
+              @pointerdown="pointerDown">
+              <td><input type="number" :value="row.order_position" min="1" :max="rosterTotal"
+                :disabled="saving || loading || editorOpen || loadedContext !== readContext" :aria-label="`${row.employee_name}的导出序号`" style="width:5em"
+                @change="moveEmployee(row, Number(($event.target as HTMLInputElement).value))" /></td>
               <td class="primary-cell">{{ row.employee_name || '—' }}</td>
               <td>{{ row.employee_no || '—' }}</td>
               <td>{{ row.department || '未分配' }}</td>
@@ -185,7 +192,7 @@
                 <button type="button" class="danger-link" @click="removeRow(row)">删除</button>
               </td>
             </tr>
-          </tbody>
+          </TransitionGroup>
         </table>
 
         <table v-else-if="section === 'departments'">
@@ -199,7 +206,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in rows" :key="row.id">
+            <tr v-for="row in rows" :key="String(row.id)">
               <td class="primary-cell">{{ row.department || '—' }}</td>
               <td>{{ row.main_department || '—' }}</td>
               <td>
@@ -228,7 +235,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in rows" :key="row.id">
+            <tr v-for="row in rows" :key="String(row.id)">
               <td class="primary-cell">{{ row.work_date || '—' }}</td>
               <td>{{ row.employee_name || '—' }}</td>
               <td>{{ row.department || '—' }}</td>
@@ -249,12 +256,14 @@
       <div v-if="!rows.length" class="empty-state">
         <strong>{{ emptyTitle }}</strong>
         <span>{{ emptyDescription }}</span>
-        <button v-if="isEditable" type="button" class="btn btn-primary" @click="startCreate">
+        <button v-if="hasFilters" type="button" class="btn" @click="clearFilters">清除筛选</button>
+        <button v-else-if="isEditable" type="button" class="btn btn-primary" @click="startCreate">
           {{ section === 'personnel' ? '新增第一位人员' : '新增第一个部门' }}
         </button>
         <router-link v-else-if="conversionEnabled" class="btn btn-primary" :to="{ name: 'attendance-industry-home' }"
           >上传考勤表</router-link
         >
+        <router-link v-else class="btn btn-primary" :to="{ name: 'business-docking' }">导入考勤资料</router-link>
       </div>
 
       <footer v-if="total > pageSize" class="pagination">
@@ -271,9 +280,11 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, reactive, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { apiFetch } from '@/utils/apiBase';
   import { appConfirm } from '@/utils/appDialog';
+  import { productReadScopeKey } from '@/utils/productReadAccountScope';
+  import { useAttendanceRowReorder } from './useAttendanceRowReorder';
 
   type Section = 'personnel' | 'departments' | 'schedules' | 'records';
   type DataRow = Record<string, string | number | null | undefined>;
@@ -287,6 +298,8 @@
   const editorError = ref('');
   const rows = ref<DataRow[]>([]);
   const total = ref(0);
+  const rosterTotal = ref(0);
+  const orderRevision = ref('');
   const page = ref(1);
   const pageSize = 25;
   const search = ref('');
@@ -305,6 +318,27 @@
     else editorDialog.value?.close();
   });
   const editingId = ref<number | null>(null);
+  const managementRoot = ref<HTMLElement | null>(null);
+  const tableViewport = ref<HTMLElement | null>(null);
+  const moveError = ref('');
+  const loadedContext = ref('');
+  const readContext = computed(() => JSON.stringify([
+    props.section, page.value, search.value, month.value, productReadScopeKey('attendance-industry'),
+  ]));
+  let moveGeneration = 0;
+  let moving = false;
+  const { draggingId, previewRows, pointerDown } = useAttendanceRowReorder({
+    rows, root: managementRoot, viewport: tableViewport,
+    enabled: computed(() => props.section === 'personnel' && !loading.value && !saving.value &&
+      !editorOpen.value && Boolean(orderRevision.value) && loadedContext.value === readContext.value),
+    context: computed(() => `${readContext.value}:${orderRevision.value}`), move: moveEmployee,
+  });
+  watch(readContext, () => {
+    moveGeneration++;
+    if (moving) { saving.value = false; moving = false; }
+    moveError.value = '';
+  }, { flush: 'sync' });
+  onBeforeUnmount(() => { moveGeneration++; loadGeneration++; });
 
   const emptyEmployee = () => ({
     employee_name: '',
@@ -334,7 +368,7 @@
   const pageDescription = computed(
     () =>
       ({
-        personnel: '维护考勤名单、工号、所属部门与考勤组。',
+        personnel: '修改导出序号即可移动人员并自动保存；转换预览和导出沿用此顺序，新人员排在末尾。',
         departments: '维护组织部门、上级部门和对应考勤组。',
         schedules: '查看人员名单中的考勤组与人数；客户模板规则在定制转换功能内维护。',
         records: '按人员、部门和月份查询导入后的逐日考勤明细。',
@@ -349,18 +383,21 @@
         schedules: '',
       })[props.section]
   );
-  const emptyTitle = computed(() =>
-    props.section === 'personnel'
-      ? '暂无人员'
-      : props.section === 'departments'
-        ? '暂无部门'
-        : '暂无考勤记录'
+  const hasFilters = computed(() => Boolean(search.value.trim() || month.value));
+  const emptyTitle = computed(() => hasFilters.value ? '没有符合筛选条件的记录' :
+    props.section === 'personnel' ? '暂无人员' : props.section === 'departments' ? '暂无部门' : '暂无考勤记录'
   );
-  const emptyDescription = computed(() =>
-    props.section === 'records'
-      ? '当前没有符合条件的入库明细。'
-      : `当前${pageTitle.value}还没有符合条件的数据。`
+  const emptyDescription = computed(() => hasFilters.value
+    ? '请调整姓名、部门或月份，或清除筛选查看全部记录。'
+    : props.section === 'records'
+      ? '请准备含人员、日期与打卡明细的考勤表，通过数据对接中心核对模板并确认导入。'
+      : `当前${pageTitle.value}还没有数据。`
   );
+  function clearFilters() {
+    search.value = '';
+    month.value = '';
+    applyFilters();
+  }
   const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 
   async function requestJson(url: string, init?: RequestInit) {
@@ -373,26 +410,30 @@
   }
 
   async function loadDepartmentNames() {
+    const scope = productReadScopeKey('attendance-industry');
     try {
       const data = await requestJson(
         '/api/mod/attendance-industry/departments?page=1&page_size=500'
       );
+      if (scope !== productReadScopeKey('attendance-industry')) return;
       departmentNames.value = (data?.items || [])
         .map((row: DataRow) => String(row.department || ''))
         .filter(Boolean);
     } catch {
-      departmentNames.value = [];
+      if (scope === productReadScopeKey('attendance-industry')) departmentNames.value = [];
     }
   }
 
   async function loadData(quiet = false) {
     const generation = ++loadGeneration;
+    const context = readContext.value;
     if (!quiet) loading.value = true;
+    if (!quiet) moveError.value = '';
     error.value = '';
     try {
       if (props.section === 'schedules') {
         const data = await requestJson('/api/mod/attendance-industry/schedules');
-        if (generation !== loadGeneration) return;
+        if (generation !== loadGeneration || context !== readContext.value) return;
         scheduleGroups.value = Array.isArray(data?.schedule_groups) ? data.schedule_groups : [];
         ruleLines.value = Array.isArray(data?.lines) ? data.lines : [];
         return;
@@ -412,19 +453,51 @@
       const data = await requestJson(
         `/api/mod/attendance-industry/${endpoint}?${query.toString()}`
       );
-      if (generation !== loadGeneration) return;
+      if (generation !== loadGeneration || context !== readContext.value) return;
       rows.value = Array.isArray(data?.items) ? data.items : [];
+      loadedContext.value = context;
       total.value = Number(data?.total) || 0;
+      rosterTotal.value = Number(data?.roster_total) || total.value;
+      orderRevision.value = data?.order_revision || '';
       if (props.section === 'records')
         months.value = Array.isArray(data?.months) ? data.months : [];
       if (props.section === 'personnel') void loadDepartmentNames();
     } catch (cause) {
-      if (generation !== loadGeneration) return;
-      error.value = cause instanceof Error ? cause.message : String(cause);
-      rows.value = [];
-      total.value = 0;
+      if (generation !== loadGeneration || context !== readContext.value) return;
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (quiet) { moveError.value = message; loadedContext.value = ''; }
+      else { error.value = message; rows.value = []; total.value = 0; }
     } finally {
       if (generation === loadGeneration) loading.value = false;
+    }
+  }
+
+  async function moveEmployee(row: DataRow, position: number, preview?: DataRow[]) {
+    if (saving.value || loading.value || editorOpen.value || props.section !== 'personnel' ||
+      loadedContext.value !== readContext.value) return;
+    const context = readContext.value;
+    const generation = loadGeneration;
+    const ticket = ++moveGeneration;
+    const original = rows.value;
+    const current = () => ticket === moveGeneration && context === readContext.value;
+    moving = true;
+    saving.value = true;
+    moveError.value = '';
+    if (preview) rows.value = preview;
+    try {
+      await requestJson(`/api/mod/attendance-industry/employees/${row.id}/move`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position, revision: orderRevision.value }),
+      });
+      if (current()) await loadData(true);
+    } catch (cause) {
+      if (current()) {
+        if (generation === loadGeneration) rows.value = original;
+        moveError.value = cause instanceof Error ? cause.message : String(cause);
+        await loadData(true);
+      }
+    } finally {
+      if (ticket === moveGeneration) { saving.value = false; moving = false; }
     }
   }
 
@@ -470,6 +543,9 @@
 
   async function saveEditor() {
     if (saving.value) return;
+    const context = readContext.value;
+    const ticket = ++moveGeneration;
+    const current = () => ticket === moveGeneration && context === readContext.value;
     const entity = props.section === 'personnel' ? 'employees' : 'departments';
     const payload = props.section === 'personnel' ? { ...employeeForm } : { ...departmentForm };
     const id = editingId.value;
@@ -481,17 +557,19 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      if (!current()) return;
       closeEditor();
       // 保留表格 DOM 与分页，避免刷新时列表折叠导致滚动位置归零。
       await loadData(true);
     } catch (cause) {
-      editorError.value = cause instanceof Error ? cause.message : String(cause);
+      if (current()) editorError.value = cause instanceof Error ? cause.message : String(cause);
     } finally {
-      saving.value = false;
+      if (current()) saving.value = false;
     }
   }
 
   async function removeRow(row: DataRow) {
+    const context = readContext.value;
     const label =
       props.section === 'personnel'
         ? String(row.employee_name || '该人员')
@@ -499,11 +577,13 @@
     if (!(await appConfirm(`确定删除“${label}”吗？`, { danger: true }))) return;
     const entity = props.section === 'personnel' ? 'employees' : 'departments';
     try {
+      if (context !== readContext.value) return;
       await requestJson(`/api/mod/attendance-industry/${entity}/${row.id}`, { method: 'DELETE' });
+      if (context !== readContext.value) return;
       if (rows.value.length === 1 && page.value > 1) page.value -= 1;
       await loadData();
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : String(cause);
+      if (context === readContext.value) error.value = cause instanceof Error ? cause.message : String(cause);
     }
   }
 
@@ -526,14 +606,18 @@
   }
 
   watch(
-    () => props.section,
+    () => [props.section, productReadScopeKey('attendance-industry')],
     () => {
       page.value = 1;
       search.value = '';
       month.value = '';
       rows.value = [];
       total.value = 0;
-      cancelEdit();
+      orderRevision.value = '';
+      departmentNames.value = [];
+      saving.value = false;
+      moving = false;
+      closeEditor();
       void loadData();
     },
     { immediate: true }

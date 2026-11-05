@@ -39,6 +39,11 @@ _AI_REVIEW_TOOLING_FILES = {
 }
 _KB_EVIDENCE_JSON = re.compile(r"^FHD/XCAGI/kb/(?:fixes|patterns)/.+\.json$")
 _KB_EVIDENCE_SECRET_RULES = {"hardcoded-aws-secret", "js-hardcoded-third-party-key"}
+# Retort/behavior matrix fixture JSON stores inert pattern seeds (eval/exec/shell=True
+# strings) for density tests — not executable code.
+_TEST_FIXTURE_JSON = re.compile(
+    r"^packages/retort_engine/tests/data/.+\.json$"
+)
 
 
 # =====================================================================
@@ -420,6 +425,11 @@ _RULES: list[tuple[str, str, str, str, str]] = [
 ]
 
 
+def _is_generated_corp_butler(file_path: str) -> bool:
+    path = file_path.replace("\\", "/")
+    return "/corp-butler/" in path and path.endswith((".js", ".css"))
+
+
 def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
     """对 diff hunks 应用规则匹配，返回所有 finding（仅新增行 '+'）。"""
     findings: list[Finding] = []
@@ -427,6 +437,7 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
     for hunk in hunks:
         is_tooling_file = hunk.file_path in _AI_REVIEW_TOOLING_FILES
         is_kb_evidence_json = bool(_KB_EVIDENCE_JSON.match(hunk.file_path))
+        is_test_fixture_json = bool(_TEST_FIXTURE_JSON.match(hunk.file_path))
         for line_no, prefix, content in hunk.lines:
             if prefix != "+" or line_no == 0:
                 continue
@@ -439,6 +450,12 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
                     # KB fix/pattern JSON stores historical unified diffs as inert evidence.
                     # Execution/control-flow regexes inside those JSON strings are not live
                     # code, but secret scanners still apply because repository disclosure is real.
+                    continue
+                if is_test_fixture_json and rule_name not in _KB_EVIDENCE_SECRET_RULES:
+                    # Behavior-matrix density fixtures embed pattern seeds as JSON strings.
+                    continue
+                if rule_name == "html-innerhtml-assignment" and _is_generated_corp_butler(hunk.file_path):
+                    # Vite 打包的官网悬浮球含 Vue 运行时 innerHTML，字幕行为以 Vue 源码为准。
                     continue
                 if pattern.search(content):
                     key = (hunk.file_path, line_no, rule_name)
@@ -684,6 +701,10 @@ def call_llm_review(
 ) -> str:
     """LLM 复核单条 finding，返回 'high'/'medium'/'low'/'false-positive'。
 
+    Without ``XCAGI_LLM_ENDPOINT`` (or ``XCAGI_LLM_BASE_URL`` + ``XCAGI_LLM_MODEL``)
+    no request is sent and ``unavailable`` is returned; there is no placeholder
+    fallback endpoint, so the API key never leaves for an unrelated host.
+
     Any unavailable or malformed response returns ``unavailable`` so the
     required review check can fail closed.  ``false-positive`` is reserved for
     an explicit reviewer verdict and is never synthesized from an exception.
@@ -733,8 +754,8 @@ def call_llm_review(
             "max_tokens": 512,
             "messages": [{"role": "user", "content": prompt}],
         }
-    else:
-        request_url = explicit_endpoint or "https://api.example.com/v1/review"
+    elif explicit_endpoint:
+        request_url = explicit_endpoint
         headers = {
             "Authorization": f"Bearer {normalized_key}",
             "Content-Type": "application/json",
@@ -746,6 +767,11 @@ def call_llm_review(
             "file": finding.file_path,
             "line": finding.line,
         }
+    else:
+        print(
+            "[review] XCAGI_LLM_ENDPOINT / XCAGI_LLM_BASE_URL+MODEL not configured; skip LLM review"
+        )
+        return "unavailable"
     try:
         if client is None:
             client = httpx.Client(timeout=timeout)

@@ -1,0 +1,27 @@
+{
+ "before": {
+  "xcagi.db.bytes": 986615808,
+  "excel_vectors.db.bytes": -1,
+  "mod_dbs.files": 1,
+  "uploads.files": 151,
+  "mods.files": 847,
+  "models.files": 0,
+  "backups.files": 4,
+  "backups.latest": "xcagi-startup-20260912071557.db"
+ },
+ "after": {
+  "xcagi.db.bytes": 986615808,
+  "excel_vectors.db.bytes": -1,
+  "mod_dbs.files": 1,
+  "uploads.files": 151,
+  "mods.files": 847,
+  "models.files": 0,
+  "backups.files": 4,
+  "backups.latest": "xcagi-startup-20260912071557.db"
+ },
+ "marker_file": "/Users/a4243342/Library/Application Support/XCAGI/.xcagi-acceptance-marker-20260912-173900.txt",
+ "marker_kept": true,
+ "lost": [],
+ "gained": [],
+ "result": "PASS"
+}

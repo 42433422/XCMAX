@@ -1,4 +1,4 @@
-# 微信同步代理开机自启安装脚本（Windows，管理员 PowerShell 运行）
+﻿# 微信同步代理开机自启安装脚本（Windows，管理员 PowerShell 运行）
 # 用法：
 #   安装：powershell -ExecutionPolicy Bypass -File .\wechat_sync_install_task.ps1
 #   卸载：powershell -ExecutionPolicy Bypass -File .\wechat_sync_install_task.ps1 -Remove

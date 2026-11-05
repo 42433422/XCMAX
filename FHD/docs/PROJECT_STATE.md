@@ -1,86 +1,37 @@
-# 项目真实状态（诚实仪表盘）
+# 项目真实状态（SSOT）
 
-> **本文件的唯一职责：说真话。** 不写愿景、不写"已完成"除非有证据。
-> 给人看，也给 AI 员工看——它们照字面信这里的每一行，所以这里只许写实测。
-> 最后更新：2026-07-24
+## 客服闭环总线
 
-## 一句话定位
+客服工单由 MODstore `incident_bus` 与 `incident_team` 驱动；边界与事件契约见 [`CUSTOMER_TICKET_BUS_SSOT.md`](./architecture/CUSTOMER_TICKET_BUS_SSOT.md)。
 
-被资深架构师画在**生产级图纸**上、地基三刀（SSOT / schema / 运行时真相）已通电的项目。
-结构的雄心仍略跑在业务闭环前面。**当前综合 ≈ 6.5 / 10**（地基通电后上修；无人公司业务闭环另计）。
+能力、交付、覆盖率及外部对标的当前证据见生成视图 [`PRODUCT_LINES_STATUS.md`](PRODUCT_LINES_STATUS.md) 与 [`AUDIT_BENCHMARK_SSOT.md`](AUDIT_BENCHMARK_SSOT.md)；本文不复制分级、测试数量或阶段矩阵。
 
-## 客服闭环总线 SSOT（勿混）
+## PR #2631 架构治理的边界
 
-**客服工单闭环的事件总线 SSOT = MODstore `incident_bus` + `incident_team`（intake-dispatcher / user-customer-service-officer 等），不是 FHD NeuroBus。**
+本次整理模块位置、兼容入口、端口、扩展目录及版本入口，不等于 19 项架构债务全部消除。结构指标由 `scripts/ci/check_structure_gates.py` 从当前源码计算，不维护第二份手写测量快照。
 
-- 事件名如 `ops.intake.customer_ticket` 走 MODstore 发布与派发；duty 触发绑定 incident_bus，不写 NeuroBus subscribe。
-- FHD NeuroBus 仍服务宿主域事件与 Mod 钩子，**不承担**客服工单 intake→派发→回写闭环。
-- 短注：[`architecture/CUSTOMER_TICKET_BUS_SSOT.md`](./architecture/CUSTOMER_TICKET_BUS_SSOT.md)
+- 原清单 1–5、9–11、14、16、18–21：结构调整及兼容入口已实现；目录、文件数量和命名收敛不能替代语义分层与端侧验收。
+- 原清单 6–7：增加安全模块和总线组件，不据此宣称权限统一或业务恢复闭环。
+- 原清单 12–13：仍有三个超过 100 KiB 的第一方非测试 Python 模块，当前 G12 基线为 3，并非清零。
+- 原清单 15：LangGraph `pregel/main.py` 保留上游实现，结构门禁按第三方依赖排除，并未完成该文件拆分。
+- `scripts/dev/layer_ratchet_baseline.json` 中仍有迁移过渡反向依赖白名单；后续应通过显式端口逐步替换，不能把移动目录视为消除依赖。
 
-## 两份幻觉，真相在中间
-
-- **架构图骗你往高看**：DDD 四层 / NeuroBus 全套可靠性 / 一套大脑三端 / SSOT 元框架——看着 8 分。
-- **文档骗你往低看**：写 deps 漂移 31、k8s 漂移 51，**实测全是 0**；写"企业版无向量搜索"，其实 SQLite 暴力余弦**早已实现**。
-- **真相在中间**：很多地方**实物比文档好，但比架构差**。
-
-## 三轴打分（基于实证，非记忆）
-
-| 维度 | 分 | 依据 |
-|---|---|---|
-| 架构设计 / 雄心 | 8 | NeuroBus 800 行带熔断/重试/死信/追踪；跨端复用 |
-| 工程治理 | 7 | SSOT gate **blocking**；双注册表互校验；neuro-bus-events 已启用 |
-| 落地 / 生产可用 | 5 | schema 旁路已封；runtime inventory 已落地；业务闭环（客服工单/Para 真修）仍有缺口 |
-| **综合** | **6.5** | 地基通电；无人公司业务层未满 |
-
-## 真东西（不是空架子）👍
-
-- **租户隔离 🟢**：34 模型覆盖、读过滤+写打标+ratchet 守卫、27 测试。**真·承重墙。**
-- **方言分叉处理对了**：alembic baseline 已 dialect-aware，SQLite 端干净、向量检索已实现。
-- **底子比文档体面**：真实漂移是 0，不是 82。
-- **SSOT gate 🟢**：`ssot_cli.py gate` 对全部 enabled 域阻断；`neuro-bus-events` 已启用；`docs-ssot` 走 `--strict`。
-- **运行时真相 🟢**：`scripts/ops/runtime_inventory.py` + `/api/xcmax/ops/runtime-inventory` + 公司大厅 `runtime` 字段。
-
-## 曾卡住"成为产品"的 3 件事（2026-07-24 通电）
-
-| # | 问题 | 状态 | 证据 |
-|---|---|---|---|
-| 1 | 底座没插电（SSOT advisory） | 🟢 已通电 | `ssot.yaml` 全域 enabled；`registry-crosscheck`；CI `ssot-drift-gate` `continue-on-error: false` |
-| 2 | schema 双头 + SKIP 绕过 | 🟢 旁路已封 / 双头冻结 | entrypoint 拒 `FHD_SKIP_ALEMBIC=1`；FHD+MODstore ensure_* only-shrink 冻结测试 |
-| 3 | 运行时真相缺失 | 🟢 清单已落地 | topology 真值端口 9999/9990；runtime inventory；大厅嵌入；行动板 `day_stale` |
-
-## 地基施工进度（自底向上打 SSOT）
-
-| 级别 | 内容 | 状态 |
-|---|---|---|
-| **L0** 元层插电 | SSOT 统一 gate advisory→blocking | 🟢 已落地 |
-| **L1** 接神经 | 双注册表（ssot.yaml / SSOT_INDEX.md）互校验 | 🟢 `ssot_registry_crosscheck.py` |
-| **L2** schema 承重 | SQLite parity blocking + 冻结 ensure_* + 方言文档 + 摘 SKIP 开关 | 🟢 旁路封死；存量库 stamp 仍按发版流程执行 |
-| **L3** 运行时真相 | desired×actual 单一清单 | 🟢 runtime-inventory 域 + 公开投影 |
-
-> L0–L2 差价已收回大半。下一刀在**业务闭环**（客服 incident_bus 执行串、handler_failed、Para 真修通）。
-
-### 客服闭环定轨（2026-07-24）
-
-- **SSOT**：MODstore `incident_bus` + incident team（见 [`architecture/CUSTOMER_TICKET_BUS_SSOT.md`](architecture/CUSTOMER_TICKET_BUS_SSOT.md)）
-- **不是** FHD NeuroBus 订阅轨；duty 合同经 binding 落到 incident，不经 `bus.subscribe`
-- 执行体：`intake-dispatcher.routing_plan` → incident_bus 下游派发；publish 边界强制 enrich
-
-## SSOT 全景（从最底层往上）
-
-```
-L5 治理元层    注册表本身 ssot.yaml / SSOT_INDEX        🟢 互校验 blocking
-L4 质量可观测  coverage🟢 / claimed-vs-actual🟢 / compliance🟡
-L3 依赖构建    deps🟢(0漂移) / ci-workflows🟢
-L2 系统自契约  version🟢 / mods🟢 / routes🟡 / error-codes🟢 / neuro-bus-events🟢
-L1 组织与人    duty_roster🟢(有守卫)
-L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtime-inventory🟢
-```
+失效的 `DEBT19_CLOSEOUT.md`、`DEBT19_MEASUREMENT.json` 已合并到本节；原件及 SHA256 留存仓库外归档 `~/XCMAX-runtime/artifact-archive/pr2631-20261025/receipt.json`。发布、真实 macOS 运行及 76 项 Harness 验收另行验证，不由本 PR 的结构门禁代替。
 
 ## 仍未解决（别假装）
 
-- 客服 `customer_ticket`：已定轨 **MODstore `incident_bus`**（enrich + `routing_plan` 真派发 + handler_failed 按 event_type 可观测）；**生产积压率仍需实跑验收**
-- Para 多 CLI 已有 fallback，但「真改代码→验证→回写」端到端未稳定证明
-- 存量生产库若历史 `SKIP_ALEMBIC` 过，需一次 `alembic stamp/upgrade` 对齐（发版流程执行，非代码缺口）
-- 认知 Processor 已挂生产 intent（失败 fallback unified）；域事件样板仅采购订单创建→`order.created` 持久化，未宣称全域落地
-- 认知全栈补齐（2026-07-29）：SCM lite 因果/反事实、技能契约开放世界、策略向持续学习、软约束规划、白名单自我反思已落地（见 `docs/architecture/COGNITIVE_FULL_STACK_20260729.md`）；全域业务因果与跨行业适配器仍需扩样板
-- 战略自治规划（2026-07-29）：LLM 季度目标分解 + 反思修正 + adaptive_thresholds 已接入；运维 impact-predictor 规则轨仍在，LLM advisory 需 `XCAGI_IMPACT_LLM=1` 开启
+2026-10-21 九项审计追踪（仅登记未闭环事项，不代表交付或关单；保留历史 1.0.0.6 验收，不改写生产及客户数据）：
+
+| ID | 问题 | 状态与剩余证据 |
+|---|---|---|
+| 01 | 收款幂等与等额分期 | Open：[集成候选 #2459](https://github.com/42433422/XCMAX/pull/2459) 保留 #2449；真实 PostgreSQL 17 项收款断言、完整备份升级链及三库原所有者/权限恢复已验证；发布前新备份、主线发布与真实交付仍待完成。 |
+| 02 | 离线桥接账号隔离 | Open：#2449 的离线桥接 14 项回归在 Node 24 全部通过且无跳过；实际安装软件的账号切换、登出及归属验收仍待完成。 |
+| 03 | Agent 工具截止时间 | Open：[集成候选 #2459](https://github.com/42433422/XCMAX/pull/2459) 保留 #2451；90507c 旧冻结候选的60秒默认工具隔离与回收证据保留，不能冒充当前产物。16e5c2f 组合的20项真实流程与344项RAG回归通过，新增标量回传、认证租户恢复与持久后台消费；记忆跨进程事务与私有原子写入已通过工程回归；当前CI、精确主线构建发布及客户验收仍待完成。 |
+| 04 | 调度恢复与 SLO | Open：#2453 曾读回健康，后续再次出现 self_maintenance_remediation_loop 失败；持续恢复、每日任务记录及生产 SHA 绑定的 SLO/积压验收尚未完成。 |
+| 05 | MODstore 间歇线程异常 | Open：需复现、定位并重复并发验证，单次重跑成功不能销项。 |
+| 06 | 覆盖率证据 | Open：当前覆盖率报告与验收提交 SHA 的对应关系仍需核实，不沿用旧报告。 |
+| 07 | 工单完整生命周期 | Open：#2459 仍为 draft，未合入 main；17 单仍处理中，部署、真实验收、回写和生产积压验收均未完成。 |
+| 08 | 编号 Mixin 与动态导入 | Open：显式依赖和恢复类型检查的完整证据待补。 |
+| 09 | JWT 刷新跨进程状态 | Open：#2449 已有真实 PostgreSQL 多进程单次消费与新进程拒重放证据（SSH 验证等待放宽至90秒，不作为原20秒性能通过）；旧 refresh 需重登，上线须排空旧刷新进程，不得混部或回滚旧实现；实际交付仍待验收。 |
+
+存量生产库若曾跳过 Alembic，部署时须先 stamp/upgrade 对齐；Windows 交付状态与处置见专项 [`WINDOWS_RELEASE_SSOT.md`](WINDOWS_RELEASE_SSOT.md)。

@@ -29,7 +29,7 @@ from app.desktop_runtime import (
 from app.desktop_runtime.model_downloader import ModelAsset, download_model, load_manifest
 from app.desktop_runtime.support_bundle import build_support_bundle_zip
 from app.infrastructure.auth.dependencies import get_logged_in_user
-from app.runtime_integrity import runtime_integrity_snapshot
+from app.runtime_integrity import merge_public_degradation, runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
@@ -120,6 +120,19 @@ def desktop_status(request: Request):
     db_recovery = _resolve_db_recovery_status()
     last_backup = _resolve_last_backup(dirs)
     runtime = runtime_integrity_snapshot(app)
+    public = {
+        "status": runtime["status"],
+        "degradedReasons": list(runtime["degraded_reasons"]),
+        "runtime": runtime,
+    }
+    try:
+        from app.neuro_bus.integrations.fastapi_integration import get_neurobus_health
+        from app.neuro_bus.integrations.intent_integration import is_neuro_stack_enabled
+
+        neuro = get_neurobus_health() if is_neuro_stack_enabled() else {"enabled": False}
+    except RECOVERABLE_ERRORS:
+        neuro = {"enabled": True, "error": "unavailable"}
+    merge_public_degradation(public, neuro)
     return {
         "desktopMode": is_desktop_mode(),
         "dataDir": str(dirs["root"]),
@@ -135,9 +148,10 @@ def desktop_status(request: Request):
         "modsBackgroundLoadScheduled": mods_bg,
         "appRoutesReady": routes_ready,
         "readyForUi": routes_ready,
-        "runtimeStatus": runtime["status"],
-        "degraded": runtime["status"] != "healthy",
-        "degradedReasons": runtime["degraded_reasons"],
+        "runtimeStatus": public["status"],
+        "degraded": public["status"] != "healthy",
+        "degradedReasons": public["degradedReasons"],
+        "capabilities": public.get("capabilities") or {},
         "runtimeIntegrity": runtime,
         "modsReady": mods_full or not mods_bg,
         "startupTiming": timing,
@@ -369,11 +383,14 @@ def install_manifest(path: str, _user=Depends(get_logged_in_user)):
 async def receive_crash_report(request: Request):
     """接收桌面端 Electron 进程崩溃报告（JSON 或 multipart minidump）。
 
-    不要求登录——崩溃可能发生在用户登录之前。存储到数据目录 crash-reports/ 下，
-    供后续诊断分析。
+    不要求登录——崩溃可能发生在用户登录之前。仅接受本机回环调用。存储到数据目录
+    crash-reports/ 下，供后续诊断分析。
     """
     if not is_desktop_mode():
         raise HTTPException(status_code=409, detail="崩溃报告仅在桌面模式下可用")
+    client_host = str(getattr(getattr(request, "client", None), "host", "") or "")
+    if client_host not in {"127.0.0.1", "::1", "testclient"}:
+        raise HTTPException(status_code=403, detail="崩溃报告只接受本机调用")
 
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     crash_dir = dirs["root"] / "crash-reports"

@@ -35,12 +35,13 @@
         <div class="admin-card">
           <div class="card-header">
             <i class="fa fa-desktop card-icon" aria-hidden="true"></i>
-            <h3>本地节点</h3>
-            <span class="status-badge" :class="localStatus.ok ? 'badge-ok' : 'badge-err'">
-              {{ localStatus.ok ? '正常' : '异常' }}
+            <h3>本地服务健康</h3>
+            <span class="status-badge" :class="localStatus.state !== 'ready' ? 'badge-info' : localStatus.ok ? 'badge-ok' : 'badge-err'">
+              {{ observationLabel(localStatus.state) || (localStatus.ok ? '服务健康' : '服务异常') }}
             </span>
           </div>
-          <dl class="card-info">
+          <p v-if="localStatus.state !== 'ready'" class="card-state" :class="`is-${localStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[localStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <dl v-else class="card-info">
             <dt>版本</dt><dd>{{ localStatus.version || '—' }}</dd>
             <dt>数据库</dt><dd>{{ localStatus.database || '—' }}</dd>
             <dt>运行时间</dt><dd>{{ localStatus.uptime || '—' }}</dd>
@@ -53,11 +54,12 @@
           <div class="card-header">
             <i class="fa fa-server card-icon" aria-hidden="true"></i>
             <h3>远端服务器</h3>
-            <span class="status-badge" :class="remoteStatus.reachable ? 'badge-ok' : 'badge-warn'">
-              {{ remoteStatus.reachable ? '在线' : '离线' }}
+            <span class="status-badge" :class="remoteStatus.state !== 'ready' ? 'badge-info' : remoteStatus.reachable ? 'badge-ok' : 'badge-warn'">
+              {{ observationLabel(remoteStatus.state) || (remoteStatus.reachable ? '在线' : '离线') }}
             </span>
           </div>
-          <dl class="card-info">
+          <p v-if="remoteStatus.state !== 'ready'" class="card-state" :class="`is-${remoteStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[remoteStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <dl v-else class="card-info">
             <dt>地址</dt><dd>{{ remoteStatus.address || '—' }}</dd>
             <dt>延迟</dt><dd>{{ remoteStatus.latencyMs != null ? `${remoteStatus.latencyMs} ms` : '—' }}</dd>
             <dt>版本</dt><dd>{{ remoteStatus.version || '—' }}</dd>
@@ -76,20 +78,23 @@
           <div class="card-header">
             <i class="fa fa-heartbeat card-icon" aria-hidden="true"></i>
             <h3>自治健康</h3>
-            <span class="status-badge" :class="autonomyHealth.alive ? 'badge-ok' : 'badge-err'">
-              {{ autonomyHealth.alive ? '服务存活' : '不可达' }}
+            <span class="status-badge" :class="autonomyHealth.alive == null ? 'badge-info' : autonomyHealth.alive ? 'badge-ok' : 'badge-err'">
+              {{ autonomyHealthLoading ? '读取中' : autonomyHealth.alive == null ? '状态未知' : autonomyHealth.alive ? '服务存活' : '不可达' }}
             </span>
           </div>
-          <dl class="card-info">
+          <p v-if="autonomyHealthLoading || (autonomyHealth.alive == null && !autonomyHealth.error)" class="card-state" :class="{ 'is-loading': autonomyHealthLoading }">
+            {{ autonomyHealthLoading ? '正在读取…' : '尚未读取，点下方「刷新自治健康」获取' }}
+          </p>
+          <dl v-else class="card-info">
             <dt>审批服务</dt><dd>{{ autonomyHealth.service || '—' }}</dd>
-            <dt>最近 loop</dt><dd>{{ autonomyHealth.loopStatus || '—' }}</dd>
-            <dt>run_id</dt><dd class="mono small">{{ autonomyHealth.loopRunId || '—' }}</dd>
+            <dt>最近一次闭环</dt><dd>{{ autonomyHealth.loopStatus && autonomyHealth.loopStatus !== 'unknown' ? autonomyHealth.loopStatus : '未知' }}</dd>
+            <dt>运行编号</dt><dd class="mono small">{{ autonomyHealth.loopRunId || '—' }}</dd>
             <dt>闭环缺口</dt><dd>{{ autonomyHealth.gapCount ?? '—' }}</dd>
           </dl>
           <p v-if="autonomyHealth.error" class="release-error">{{ autonomyHealth.error }}</p>
           <div class="card-actions">
             <button class="btn btn-secondary btn-sm" :disabled="autonomyHealthLoading" @click="loadAutonomyHealth">
-              {{ autonomyHealthLoading ? '检测中...' : '刷新自治健康' }}
+              {{ autonomyHealthLoading ? '读取中…' : '刷新自治健康' }}
             </button>
             <button class="btn btn-primary btn-sm" type="button" @click="activeTab = 'autonomy'">打开自治总览</button>
           </div>
@@ -100,16 +105,17 @@
           <div class="card-header">
             <i class="fa fa-refresh card-icon" aria-hidden="true"></i>
             <h3>双向同步</h3>
-            <span class="status-badge" :class="syncStatus.healthy ? 'badge-ok' : 'badge-warn'">
-              {{ syncStatus.healthy ? '同步中' : '待同步' }}
+            <span class="status-badge" :class="syncStatus.state !== 'ready' ? 'badge-info' : syncStatus.healthy ? 'badge-ok' : 'badge-warn'">
+              {{ observationLabel(syncStatus.state) || (syncStatus.healthy ? '队列已清空' : '待同步') }}
             </span>
           </div>
-          <dl class="card-info">
+          <p v-if="syncStatus.state !== 'ready'" class="card-state" :class="`is-${syncStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[syncStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <dl v-else class="card-info">
             <dt>本地游标</dt><dd>{{ syncStatus.localCursor ?? '—' }}</dd>
-            <dt>服务器游标</dt><dd>{{ syncStatus.remoteCursor ?? '—' }}</dd>
-            <dt>待发送</dt><dd>{{ syncStatus.outboxCount ?? 0 }} 条</dd>
-            <dt>最近同步</dt><dd>{{ syncStatus.lastSyncAt || '—' }}</dd>
-            <dt>冲突数</dt><dd>{{ syncStatus.conflictCount ?? 0 }}</dd>
+            <dt>已拉取服务器游标</dt><dd>{{ syncStatus.remoteCursor ?? '—' }}</dd>
+            <dt>待发送</dt><dd>{{ syncStatus.outboxCount != null ? `${syncStatus.outboxCount} 条` : '—' }}</dd>
+            <dt>最近收到变更</dt><dd>{{ syncStatus.lastSyncAt || '—' }}</dd>
+            <dt>冲突数</dt><dd>{{ syncStatus.conflictCount ?? '—' }}</dd>
           </dl>
           <div class="card-actions">
             <button class="btn btn-primary btn-sm" :disabled="syncing || !remoteStatus.reachable" @click="triggerPush">
@@ -128,42 +134,44 @@
             <h3>模块注册表</h3>
             <span class="status-badge badge-info">{{ modules.length }} 个模块</span>
           </div>
-          <table class="module-table" v-if="modules.length">
-            <thead>
-              <tr>
-                <th>模块 ID</th>
-                <th>名称</th>
-                <th>版本</th>
-                <th>来源</th>
-                <th>状态</th>
-                <th>同步范围</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="mod in modules" :key="mod.module_id">
-                <td class="mono">{{ mod.module_id }}</td>
-                <td>{{ mod.display_name }}</td>
-                <td class="mono">{{ mod.version || '—' }}</td>
-                <td>
-                  <span class="source-badge" :class="`source-${mod.source}`">{{ sourceLabel(mod.source) }}</span>
-                </td>
-                <td>
-                  <span class="status-badge" :class="mod.active ? 'badge-ok' : 'badge-dim'">
-                    {{ mod.active ? '启用' : '禁用' }}
-                  </span>
-                </td>
-                <td class="mono small">{{ mod.sync_scope || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-else class="empty-hint">暂无已注册模块，刷新或检查后端 /api/xcmax/admin/modules</p>
+          <div v-if="modules.length" class="module-table-scroll">
+            <table class="module-table">
+              <thead>
+                <tr>
+                  <th>模块 ID</th>
+                  <th>名称</th>
+                  <th>版本</th>
+                  <th>来源</th>
+                  <th>状态</th>
+                  <th>同步范围</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="mod in modules" :key="mod.module_id">
+                  <td class="mono">{{ mod.module_id }}</td>
+                  <td>{{ mod.display_name }}</td>
+                  <td class="mono">{{ mod.version || '—' }}</td>
+                  <td>
+                    <span class="source-badge" :class="`source-${mod.source}`">{{ sourceLabel(mod.source) }}</span>
+                  </td>
+                  <td>
+                    <span class="status-badge" :class="mod.active ? 'badge-ok' : 'badge-dim'">
+                      {{ mod.active ? '启用' : '禁用' }}
+                    </span>
+                  </td>
+                  <td class="mono small">{{ mod.sync_scope || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="empty-hint">暂无已注册模块，可点右上角「刷新状态」重试</p>
         </div>
 
         <!-- 远端员工 (yuangon) -->
         <div class="admin-card admin-card--wide">
           <div class="card-header">
             <i class="fa fa-users card-icon" aria-hidden="true"></i>
-            <h3>远端服务器员工 (yuangon)</h3>
+            <h3>远端服务器员工</h3>
             <span class="status-badge badge-info">{{ remoteEmployees.length }} 名</span>
           </div>
           <div class="card-actions" style="margin-bottom:12px">
@@ -171,20 +179,22 @@
               {{ syncingEmployees ? '同步中...' : '同步服务器员工' }}
             </button>
           </div>
-          <table class="module-table" v-if="remoteEmployees.length">
-            <thead>
-              <tr><th>ID</th><th>名称</th><th>职能域</th><th>区域</th><th>版本</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="emp in remoteEmployees" :key="emp.employee_id">
-                <td class="mono small">{{ emp.employee_id }}</td>
-                <td>{{ emp.name }}</td>
-                <td class="small">{{ emp.domain || '—' }}</td>
-                <td>{{ emp.area || '—' }}</td>
-                <td class="mono">{{ emp.version || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="remoteEmployees.length" class="module-table-scroll">
+            <table class="module-table">
+              <thead>
+                <tr><th>ID</th><th>名称</th><th>职能域</th><th>区域</th><th>版本</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="emp in remoteEmployees" :key="emp.employee_id">
+                  <td class="mono small">{{ emp.employee_id }}</td>
+                  <td>{{ emp.name }}</td>
+                  <td class="small">{{ emp.domain || '—' }}</td>
+                  <td>{{ emp.area || '—' }}</td>
+                  <td class="mono">{{ emp.version || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p v-else class="empty-hint">暂无远端员工信息，点击上方按钮同步</p>
         </div>
 
@@ -198,26 +208,28 @@
           <div class="card-actions" style="margin-bottom:12px">
             <button class="btn btn-secondary btn-sm" @click="loadConflicts">刷新冲突列表</button>
           </div>
-          <table class="module-table" v-if="conflicts.length">
-            <thead>
-              <tr><th>ID</th><th>实体类型</th><th>实体 ID</th><th>操作</th><th>冲突说明</th><th>收到时间</th><th>处理</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="c in conflicts" :key="c.id">
-                <td class="mono">{{ c.id }}</td>
-                <td>{{ c.entity_type }}</td>
-                <td class="mono small">{{ c.entity_id }}</td>
-                <td>{{ c.operation }}</td>
-                <td class="small">{{ c.conflict_note || '—' }}</td>
-                <td class="small">{{ c.received_at }}</td>
-                <td>
-                  <button class="btn btn-sm btn-primary" @click="resolveConflict(c.id,'apply')">应用</button>
-                  &nbsp;
-                  <button class="btn btn-sm btn-secondary" @click="resolveConflict(c.id,'skip')">跳过</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="conflicts.length" class="module-table-scroll">
+            <table class="module-table">
+              <thead>
+                <tr><th>ID</th><th>实体类型</th><th>实体 ID</th><th>操作</th><th>冲突说明</th><th>收到时间</th><th>处理</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in conflicts" :key="c.id">
+                  <td class="mono">{{ c.id }}</td>
+                  <td>{{ c.entity_type }}</td>
+                  <td class="mono small">{{ c.entity_id }}</td>
+                  <td>{{ c.operation }}</td>
+                  <td class="small">{{ c.conflict_note || '—' }}</td>
+                  <td class="small">{{ c.received_at }}</td>
+                  <td>
+                    <button class="btn btn-sm btn-primary" @click="resolveConflict(c.id,'apply')">应用</button>
+                    &nbsp;
+                    <button class="btn btn-sm btn-secondary" @click="resolveConflict(c.id,'skip')">跳过</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p v-else class="empty-hint">点击「刷新冲突列表」加载详情</p>
         </div>
 
@@ -251,10 +263,7 @@
       <XCmaxAdminDutyTab />
     </div>
     <div v-show="activeTab === 'automation-policy'" class="page-content admin-tab-panel">
-      <div class="page-header">
-        <h2>自动化方针</h2>
-      </div>
-      <XcmaxDashboardEmbed :src="automationEmbedUrl" title="自动化方针" />
+      <AutomationPolicyPanel />
     </div>
     <div v-show="activeTab === 'duty-time-architecture'" class="page-content admin-tab-panel">
       <div class="page-header">
@@ -272,18 +281,17 @@ export default { name: 'XCmaxAdminView' }
 </script>
 
 <script setup>
-import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'
 import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
 import XCmaxAdminAutonomyTab from '@/components/admin/XCmaxAdminAutonomyTab.vue'
 import XCmaxAdminOrdersTab from '@/components/admin/XCmaxAdminOrdersTab.vue'
 import AdminReleaseStatusCard from '../components/admin/AdminReleaseStatusCard.vue'
 import XcmaxDashboardEmbed from '@/components/admin/XcmaxDashboardEmbed.vue'
+import AutomationPolicyPanel from '@/components/admin/AutomationPolicyPanel.vue'
 import AdminDeployUpdateModal from '@host/components/admin/AdminDeployUpdateModal.vue'
-import {
-  xcmaxAutomationPolicyEmbedUrl,
-  xcmaxDutyTimeArchitectureEmbedUrl,
-} from '@/constants/xcmaxDashboardEmbed'
+import { xcmaxDutyTimeArchitectureEmbedUrl } from '@/constants/xcmaxDashboardEmbed'
 import { useXcmaxOverview } from './xcmaxAdmin/useXcmaxOverview'
 import { useXcmaxSync } from './xcmaxAdmin/useXcmaxSync'
 import { useXcmaxAutonomyHealth } from './xcmaxAdmin/useXcmaxAutonomyHealth'
@@ -297,9 +305,16 @@ const adminTabs = [
   { id: 'automation-policy', label: '自动化方针' },
   { id: 'duty-time-architecture', label: '同时完成时间架构' },
 ]
+const route = useRoute()
 const activeTab = ref('overview')
-const automationEmbedUrl = xcmaxAutomationPolicyEmbedUrl()
 const timeArchEmbedUrl = xcmaxDutyTimeArchitectureEmbedUrl()
+
+const TAB_IDS = new Set(adminTabs.map((t) => t.id))
+function applyTabFromRoute() {
+  const tab = String(route.query.tab || '').trim()
+  if (tab && TAB_IDS.has(tab)) activeTab.value = tab
+}
+watch(() => route.query.tab, applyTabFromRoute, { immediate: true })
 
 const {
   syncingEmployees,
@@ -349,7 +364,12 @@ async function handleDeployDone() {
   await releaseStatusCard.value?.refresh?.()
 }
 
+function observationLabel(state) {
+  return { unknown: '待检测', loading: '检测中', error: '读取失败，状态未知' }[state] || ''
+}
+
 async function refreshAll() {
+  if (refreshing.value) return
   refreshing.value = true
   try {
     await Promise.all([
@@ -367,30 +387,18 @@ async function refreshAll() {
   }
 }
 
-async function bootstrapOverview() {
+async function activateOverview() {
   if (!overviewBootstrapped.value) {
     await refreshAll()
     overviewBootstrapped.value = true
   }
+  startSyncStream()
 }
+onMounted(activateOverview)
+onActivated(activateOverview)
 
-onMounted(async () => {
-  await bootstrapOverview()
-  startSyncStream()
-})
-
-onActivated(async () => {
-  await bootstrapOverview()
-  startSyncStream()
-})
-
-onDeactivated(() => {
-  stopSyncStream()
-})
-
-onBeforeUnmount(() => {
-  stopSyncStream()
-})
+onDeactivated(stopSyncStream)
+onBeforeUnmount(stopSyncStream)
 </script>
 
 <style scoped src="./XCmaxAdminView.css"></style>

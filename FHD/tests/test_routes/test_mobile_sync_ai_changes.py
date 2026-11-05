@@ -2,24 +2,24 @@
 
 from __future__ import annotations
 
-import sys
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _resolve_circular_import():
-    """Resolve circular import between mobile_api and mobile_api_extensions."""
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401
-    yield
+@pytest.fixture(autouse=True)
+def _fake_circle_report_transport(monkeypatch):
+    # Sync projections exercise local data; the upstream MODstore feed is external.
+    monkeypatch.setattr(
+        "app.domain.app_pure.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+    )
 
 
 @pytest.fixture
 def ext_mod():
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 def _build_db_mock(rows):
@@ -135,3 +135,27 @@ class TestSyncPullAiChanges:
         payload = result if isinstance(result, dict) else __import__("json").loads(result.body)
         assert payload["success"] is True
         assert payload["data"]["ai_changes"] == []
+
+
+@pytest.mark.asyncio
+async def test_circle_sync_applies_employee_profile(ext_mod, monkeypatch):
+    from app.application import ai_circle_service, employee_circle_sync
+
+    projection = ext_mod._sync._mobile_sync_circle_posts
+
+    posts = [{"employee_id": "fixture", "author_avatar": "old"}]
+    sync = AsyncMock()
+    monkeypatch.setattr(employee_circle_sync, "sync_modstore_reports", sync)
+    monkeypatch.setattr(ai_circle_service, "list_posts", lambda **kwargs: posts)
+    monkeypatch.setattr(ext_mod, "_mobile_sync_circle_posts", projection)
+    monkeypatch.setattr(ext_mod, "_ai_circle_user", lambda user: ("fixture", None, None))
+    monkeypatch.setattr(
+        ext_mod,
+        "_ai_circle_employee_profiles",
+        lambda: {"fixture": {"name": "Fixture employee", "avatar": "new"}},
+    )
+    result = await projection(SimpleNamespace(id="fixture"))
+    sync.assert_awaited_once()
+    assert result == [
+        {"employee_id": "fixture", "author_name": "Fixture employee", "author_avatar": "new"}
+    ]

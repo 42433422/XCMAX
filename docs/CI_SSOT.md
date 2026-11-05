@@ -2,7 +2,217 @@
 
 **GitHub Actions 唯一调度入口**：[`.github/workflows/`](../.github/workflows/)
 
-子目录 `FHD/.github/workflows/`、`MODstore_deploy/.github/workflows/` 仅保留 **README 指针**与 Issue/PR 模板，**不会**被 GitHub 执行。
+`FHD/.github/workflows/` 与 `MODstore_deploy/.github/workflows/` 保存实现源，**不会**被 GitHub 直接执行。修改后运行 `python scripts/dev/publish_ci_workflows_to_root.py`，以根目录生成副本调度；`--check` 校验两者一致。
+
+## CI / PR 提速执行 SSOT（2026-09-28 立即生效）
+
+> **适用对象**：Windows AI、Mac AI 及后续所有自动开发/修复 Agent。
+> **目标**：缩短「发现问题 → 修改 → 验证 → 合并」的单轮时间，同时保留发布级质量门禁。
+> 与本文档其他章节的关系：本节是**验证分级/PR 纪律的总纲**；required checks 清单见 [Branch protection（main）](#branch-protectionmain)，E2E 分层见 [E2E 分层](#e2e-分层)。
+
+### 1. 总原则
+
+禁止把每一次小修改都当成一次完整发布来验证。统一采用四级验证：
+
+**本地快测 → PR 快速 CI → 夜间全量 CI → 发布前终极 Gate**
+
+开发阶段优先追求快速反馈；全量验证集中执行。
+
+### 2. PR 规则：一个问题只维护一个 PR
+
+同一问题修复过程中：
+
+- 可以连续提交多个 commit
+- 可以继续修改同一分支
+- 可以反复补测试
+- **禁止因为发现第二层、第三层小问题就重新创建新的 PR**
+
+只有以下情况才新开 PR：已进入另一个独立问题域、改动目标发生实质变化、原 PR 已经合并。
+
+> 原则：**一个问题 = 一个 PR，而不是一次修改 = 一个 PR。**
+
+### 3. 开发阶段：LOCAL FAST PATH
+
+AI 每次完成代码修改后，默认只运行与改动直接相关的最小测试集。
+
+| 改动类型 | 只运行 |
+|----------|--------|
+| 前端 | 对应 unit test、lint / type check、与修改页面直接相关的 smoke、必要时单条 Playwright 场景 |
+| 后端 | 被修改模块对应单测、API contract / targeted integration tests、必要 lint / type check |
+| 数据库迁移 | Alembic SSOT、migration validation、数据库相关 integration test（**仅改 migration / schema 时触发**） |
+| macOS 专属 | **仅** macOS 构建 / runtime / 签名 / updater 等相关文件改动时，才跑 macOS 专属检查 |
+| Windows 专属 | **仅** Windows 直接相关的 targeted test / 实机验证，不得自动牵连 macOS 完整流程 |
+
+禁止默认运行：全量 E2E、全仓 backend tests、Alembic、Performance、Mutation、CodeQL、macOS runtime、mobile CI、Release Gate。不得因为改一个接口就运行整仓所有模块。
+
+### 4. PR 阶段：FAST CI
+
+普通 PR 的 CI 目标：**5–10 分钟内给出可合并反馈**。PR 只保留真正需要阻止明显错误进入 main 的检查。建议 Required Fast Checks：
+
+- lint / syntax
+- frontend-unit 或对应 backend targeted test
+- Source Governance
+- 必要 smoke test
+- secrets / basic security guard
+- 与 changed paths 直接对应的专项检查
+
+所有工作流必须优先使用 **changed paths / path filter / change detection**，不相关模块直接 skip（屏蔽示例见 [`fhd-test.yml`](../.github/workflows/fhd-test.yml) 的 path 过滤）。
+
+### 5. 禁止普通 PR 默认全跑的任务
+
+以下检查原则上移出普通 PR 快路径，统一进入 **Nightly / Release Gate**：
+
+- 全量 E2E
+- Release gate CI
+- Performance Smoke Test
+- mutation-smoke
+- 全量 CodeQL
+- 全量 gitleaks 深扫
+- Mac control runtime contract
+- 跨平台完整 smoke
+- mobile Flutter / iOS 完整 CI
+- 全模块 MODstore test
+- 全量 archive / artifact 深度检查
+- 大型 benchmark
+- 完整 release provenance
+- 安装包发布验证
+
+### 6. 夜间 CI
+
+每天夜间针对当天最新 `main` 运行一次完整验证，至少包含：
+
+- 全量 backend tests / 全量 frontend tests
+- E2E / Smoke Tests
+- Performance / Mutation
+- CodeQL / gitleaks
+- Alembic / migration
+- Runtime Artifacts Guard
+- Mac runtime contract / Windows / macOS 关键契约
+- mobile CI
+- Release Gate
+- 必要 benchmark
+
+夜间 CI 允许耗时较长。**开发 Agent 不得等待夜间 CI 完成才继续第二天之前的普通开发任务。**
+
+### 7. Nightly 失败处理
+
+| 等级 | 示例 | 处理 |
+|------|------|------|
+| **P0 / P1** | 登录失效、数据丢失、安装失败、权限绕过、安全问题、主流程完全不可用 | **立即阻止发布，并创建修复任务** |
+| **P2 / P3** | 边缘 UI、非主流程测试、性能轻微退化、非阻断性 warning | 记录问题并继续开发，**不得让整个仓库停下来反复跑 CI** |
+
+### 8. 发布前 Gate
+
+只有准备：出正式安装包 / OTA / 客户交付 / stable release / production deployment，才执行真正完整的发布门禁。必须包括：
+
+**完整 CI + Windows 实机 + Mac 实机 + 安装 / 升级 / 登录 / 绑定 / 运行真实证据。**
+
+发布级 Gate 不能被 Nightly 替代（实机验收口径见 `FHD/docs/MACOS_RELEASE_SSOT.md`、`FHD/docs/WINDOWS_RELEASE_SSOT.md`）。
+
+### 9. 当前 XCMAX 特别要求
+
+禁止出现「改 3 个前端文件 → 全仓十几套 CI 全部重新执行」。正确行为应为：
+
+**前端权限修改 → frontend unit → targeted smoke / e2e → governance / security 基础检查 → 合并**
+
+其余完整检查交由夜间 CI。
+
+### 10. AI 执行纪律
+
+Windows AI / Mac AI 在开始任何修改前，都必须先判断：
+
+1. 修改属于哪个 subsystem？
+2. 最小需要验证哪些测试？
+3. 哪些 CI 与本次改动无关？
+4. 当前是否可以继续使用已有 PR？
+5. 是否真的属于发布级操作？
+
+如果答案不是「正在发布」，不得自行升级成完整 Release Gate。
+
+### 11. 禁止行为
+
+- 每改一次代码就跑全仓
+- 每发现一个小问题就新开一个 PR
+- 无关平台 CI 跟随运行
+- 为等待 CI 停止后续独立开发
+- 为了「保险」无条件运行全部测试
+- 已有成功结果没有代码影响却重复执行
+- Nightly 能完成的验证强制塞进每个 PR
+- 把「测试越多」错误理解为「质量越高」
+
+> 质量目标：**正确的测试，在正确的时间运行。**
+
+### 12. 推荐流程
+
+```text
+发现问题
+  ↓
+定位 subsystem
+  ↓
+修改代码
+  ↓
+本地 targeted test
+  ↓
+继续修改同一个 PR
+  ↓
+PR Fast CI
+  ↓
+合并 main
+  ↓
+继续下一个问题
+  ↓
+夜间统一 Full CI
+  ↓
+发现异常再生成修复任务
+  ↓
+真正发布前跑 Full Release Gate
+```
+
+### 13. 例外申请
+
+任何 Agent 若认为必须恢复全量 PR CI，必须明确写出：
+
+1. 哪一个具体风险要求这样做
+2. 哪一条测试只有全量流程能够发现
+3. 为什么 Nightly / Release Gate 无法承担
+
+否则默认继续执行本 SSOT。普通 bug fix 的目标为「修改 → 快测 → PR 验证 → 合并」尽量在分钟级完成，开发速度以**有效修复数量 / 单位时间**衡量，而非「跑了多少次 CI」。
+
+## 分片执行与耗时观测（2026-11-01）
+
+本轮保留现有 11 个 required checks、测试全集及覆盖率基线，调整工作流依赖与报告成本。`backend-test`、`frontend-test` 仍是最终聚合门禁；质量检查与分片只等待 `guard-temp-scripts` 和分类完成；`SSOT Drift Gate` 同时运行，两个最终聚合门禁仍显式要求守卫与 SSOT 均成功。聚合使用 `always()`，分类失败、质量失败、分片缺失或取消不能变成成功。
+
+| 环节 | 执行与验证口径 |
+| --- | --- |
+| 统一分类 | `change_classifier.py --all` 只读一次 diff；绑定实际 checkout SHA。PR 使用 merge SHA；base/head 只负责分类。diff 缺失或为空时全跑。 |
+| 后端分片 | 默认 8 片，最多同时 8 片；手动 `backend_shards` 可选 4/8/16/24。导入前按当前 pytest 配置枚举文件、按历史模块耗时分配，各片只收集自己的文件。汇总从同版源码独立重算文件全集与分配，逐文件核对收集回执、用例和执行结果，保留 run/attempt/source 与文件哈希校验。 |
+| 后端安装 | uv 使用同一 Python 安装现有 requirements 和锁定 pytest；缓存绑定 requirements、uv.lock 及本地包声明。安装后校验依赖一致性，每片保存解析版本。更换解析器不代表间接依赖版本必然相同，以实际清单和回归为准。 |
+| 后端报告 | stdlib 先验证所有证据及工具链，再只安装分片实际使用的 coverage 版本。full/behavior 数据隔离生成 JSON，保留 XML 和两道 ratchet；HTML 仅手动 `--html`。逐阶段耗时保存在 `backend-aggregate-timings.json`。 |
+| 前端分片 | 全集只运行 4 片 Vitest，合并原生 blob/V8 和 JUnit 后执行原全局阈值及 `--require-frontend`。验证完整文件集合、片号唯一、身份及原始报告哈希。源码与测试 ESLint、stub/any 棘轮及现有 advisory vue-tsc 在质量任务执行。 |
+| 下游验证 | mock E2E 与打包提前开始；容器扫描等待实际打包产物。镜像发布仍等待前后端聚合、E2E、安全、容器扫描、打包和架构检查。 |
+| 无关变更 | 只有守卫和 SSOT 均成功、有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip；空输出或未知状态均失败。 |
+
+原 `Vitest (173 文件 · jsdom)` 与 `frontend-smoke` 检查名称保留为轻量兼容任务，显式要求 `frontend-test` 聚合成功；上游失败、取消或跳过均拒绝。`frontend-smoke` 还运行原仓库卫生检查。独立重复 Vitest、smoke 子集和 mock E2E 已移除；真实全栈 E2E、严格构建、安全扫描及覆盖率门禁保留。当前 `coverage_ramp` 为零时，后端复用已验证的 full 结果作为 behavior 结果，不重复执行测试。
+
+测试去重须核对实现、输入、夹具和独有断言，保留有效场景；不以文件名或执行条数判断质量。现有 `test_bloat_report.py --check` 同时拒绝后端测试的字面 `assert True` 和同一状态码集合同时接受成功与服务器错误。业务回归应核对精确状态、响应及副作用；ELT 全栈闭环验证预演不写入、未确认拒绝、执行后读回及重复提交拒绝，模型闭环使用真实会话与适配器、仅替代外部 HTTP 传输，不调用付费模型。
+
+### 比较时间的方法
+
+计时范围是同一提交全部 required checks 完成，并包含排队与环境准备。若没有真实事件接收时间，使用最早 workflow `created_at` 作代理起点并标注；不得把一次手动主工作流结果当成全部 11 项的耗时。PR head、被测试的 merge source、base、各 workflow run/attempt 分别保留。
+
+从 `FHD/` 运行离线分析：
+
+```bash
+python scripts/ci/measure_required_checks.py snapshot.json --output report.json
+```
+
+`snapshot.json` 包含 `repository`、`head_sha`、`event`，PR 额外提供 `pull_request_number`、`base_sha`；`required` 是分支 API 的 `protection.required_status_checks`（含 App 绑定），`runs` 为各 run 原始对象，`checks` 为完整 check-runs 响应，`jobs` 为各 run 完整 jobs 响应。分页须收齐，可传完整分页数组。可选 `observed_at`、`cache_state`；只有真实调用方记录才填写 `triggered_at` 与 `trigger_kind`。
+
+工具按 check ID 与 job/run 身份关联，拒绝跨 SHA、旧 attempt、重复、缺页或错误 App 的替代结果。证据不完整会输出报告并退出 1，不把未知状态算作成功；报告不是合并授权或测试源码证明。合并后 GitHub 可能清空 run 的 PR 关联，旧样本只能保留 observed 耗时，不能补造关联。
+
+历史样本 [PR #2494](https://github.com/42433422/XCMAX/pull/2494) 的 11 项观察完成时间为 **23 分 30 秒**，仅作单样本参照。新的提速幅度和“三分钟”目标以本分支真实 PR 结果验证，不由分片数推算成已达成。比较时同时记录冷/热缓存与 runner 分钟，避免用更多计算量掩盖排队。
+
+本次变更涉及分片选集及覆盖率汇总，PR 需完成一次实际全集验证，确认模块隔离、文件全集及合并覆盖率等价；仅跑小 fixture 无法发现全部模块的顺序依赖，留到合并后的 Nightly 会让有风险的门禁先进入 main。该验证针对共享 CI 改造，不扩大普通业务修复的默认范围。
 
 ## 仓库 git 历史说明（2026-08-01）
 
@@ -21,9 +231,9 @@
 
 > **生成 vs 手写**：根仓 `fhd-*.yml` / `modstore-*.yml` 由 publish 脚本从实现源生成，文件头为
 > `# CI SSOT: generated from … — DO NOT edit here`。**请改实现源后重跑 publish**，勿直接改根副本。
-> 以下 **6 个根仓 workflow 为手写**（无生成头，直接在根仓维护）：
+> 以下根仓 workflow 为手写（无生成头，直接在根仓维护）：
 > `archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
-> `e2e.yml`、`e2e-playwright-reusable.yml`、`frontend-unit.yml`。
+> `e2e.yml`、`e2e-playwright-reusable.yml`。
 
 ## 常用 workflow
 
@@ -32,8 +242,8 @@
 | FHD 后端 + 前端 + Docker | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) |
 | FHD 轻量 smoke（path 过滤） | [`fhd-test.yml`](../.github/workflows/fhd-test.yml) |
 | FHD Release gate | [`fhd-release-gate-ci.yml`](../.github/workflows/fhd-release-gate-ci.yml) |
-| 前端 Vitest | [`frontend-unit.yml`](../.github/workflows/frontend-unit.yml) |
-| Playwright P0 | [`e2e.yml`](../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml) |
+| 前端 Vitest | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → `frontend-test-shard` / `frontend-test` |
+| Playwright 全栈 | [`e2e.yml`](../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml) |
 | Flutter Android+iOS CI | [`fhd-ci-mobile-flutter.yml`](../.github/workflows/fhd-ci-mobile-flutter.yml) |
 | Flutter Android 发布 | [`fhd-release-android.yml`](../.github/workflows/fhd-release-android.yml) |
 | Flutter iOS / TestFlight 发布 | [`fhd-release-ios.yml`](../.github/workflows/fhd-release-ios.yml) |
@@ -47,7 +257,7 @@
 
 - **产品版本锚点**：产品 `1.0.0.1`，工具链 `1.0.0`（见 `FHD/VERSION.md`）。
 - **Git tag（发版触发）**：`FHD/v1.0.0.1`；制品身份同时记录 `git_sha` + `sha256`。
-- **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** 客户端 `fhd-release-desktop/web/android.yml`（**仅 Android**；服务器由 `fhd-ci-cd` 的 `cvm-push-release` 负责）。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
+- **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** 客户端 `fhd-release-desktop/web/android.yml`（**仅 Android**；服务器由 `fhd-ci-cd` 的 `cvm-push-release` 负责）。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。桌面验收见 [双端平级 SSOT](../FHD/docs/desktop_platform_parity_ssot.md)，服务端按已登记的部署链执行。
 
 ## 多环境 channel（stable / staging）
 
@@ -116,7 +326,7 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 `fhd-deploy.yml` 仅为 **break-glass**：SSH 到该机执行 `apply-latest`（强制跑 `fhd-auto-update.sh`）或 `restart-only`（`docker compose restart`）。
 
 > 2026-07-14：已删除 `FHD/k8s/`、`FHD/helm/` 及 blue-green/canary/GitOps/预览环境等从未接通真实集群的清单与文档路径。
-> 历史脚本在 `archive/ops/`；需要时从 git 历史取回。
+> 历史脚本已外置归档（见根 `ARCHIVE_POINTER.md` 第六批 `docs-20260917-batch6/`）；需要时从归档或 git 历史取回。
 
 
 ## Secrets / Variables 清单
@@ -142,7 +352,11 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 ## Branch protection（main）
 
-已通过 API 配置（2026-06-13，2026-07 发版红线扩展，2026-08-05 校正为 GitHub 实配 11 项）：required status checks 含 `guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、**`mutation-smoke`**（变异测试 kill rate ≥80%，作用域 app/di + app/contexts，2026-08-05 实测 **93.02%**，80/86）；`vue-tsc` / `mypy` / `build:strict` 已在 `frontend-test` / `backend-test` 内硬失败。**覆盖率门禁**（2026-08-05 诚实化；2026-09-01 D2-5 起 `coverage_ramp` stub 82 个已全部去前缀迁出为契约测试，总口径=真实行为口径，floor **78% 行 / 69% 分支**，只升不降）：`backend-test` 内以 `coverage_ratchet.py --check --behavior --require-backend` 为唯一硬 gate（行为口径，stub 清零后 `-m 'not coverage_ramp'` 等价于全量）；`frontend-test` 内以 `coverage_ratchet.py --check --require-frontend` 硬阻断前端覆盖率回退。本地等价：`bash FHD/scripts/dev/release_verify.sh`。
+> 合入顺序与**快车道**（小修复类 PR 可优先于主序列合入的条件、判定权与合入后流程）以仓根 [AGENTS.md](../AGENTS.md#合入顺序与快车道2026-10-19-0337-用户定) 为准；快车道不豁免下列 required checks。
+
+GitHub 实配 11 项 required status checks（2026-10-21 API 复核）：`guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、`mutation-smoke`。本轮不调整此清单或 App 绑定。
+
+`backend-quality` 的 mypy/lint 失败由 `backend-test` 汇总阻断；`frontend-quality` 的 ESLint/any 棘轮失败由 `frontend-test` 汇总阻断。普通 CI 的 vue-tsc 保持 advisory；发布验证中的严格构建仍按原流程执行。后端同时检查 full 和 behavior 两个口径；前端在合并原生覆盖率后执行全局阈值与 ratchet。数值以 `FHD/metrics/coverage_ratchet_baseline.json` 及测试配置为准，不在此复制历史地板值。本地发布验证入口为 `bash FHD/scripts/dev/release_verify.sh`。
 
 **文档新鲜度门禁**（2026-09-09 起，`arch-fitness` job 内硬阻断，check 名仍为 `arch-fitness`）：`docs_ssot_lint.py --strict`（SSOT 声明与登记表一致）、`verify_doc_versions.py`（docs 版本表述对齐 `VERSION.md` 锚点）、`verify_doc_claims.py`（文档覆盖率数字必须源于 SSOT 快照）、`gen_claimed_vs_actual.py --check`（`CLAIMED_VS_ACTUAL.md` 与 `metrics/` 一致；日更 metrics 由 `fhd-slo-metrics-collect.yml` 同步重生成该文档）。
 
@@ -276,7 +490,7 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 | 场景 | Workflow | 模式 | 用例 |
 |------|----------|------|------|
 | FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **8 pass / 6 skip** |
-| 前端 path 过滤 / nightly | `e2e.yml` → `e2e-playwright-reusable.yml` | mock 同上；`schedule` / `workflow_dispatch` 额外 `E2E_FULL_STACK=1` | 全栈 **14/14**（含 `plan2026-skeleton`） |
+| 前端/后端 path 过滤、nightly、手动 | `e2e.yml` → `e2e-playwright-reusable.yml` | 每次运行均为 `E2E_FULL_STACK=1`，含严格构建和真实 FastAPI | 全栈 P0 与 `plan2026-skeleton`，结果以当次报告为准 |
 
 SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scripts/dev/e2e-full.sh`。
 
@@ -439,3 +653,47 @@ python scripts/autonomy/audit_query.py --source server --since 1h \
 
 完整用法与运维剧本见 [autonomy.md](./autonomy.md)。
 
+## PR #2686 源码预算实测例外（2026-10-27）
+
+本次仅按已审阅候选的实际维护行数调整棘轮，不预分配额度、不修改统计规则。用户已批准聊天工具重复保存、同期间纠错及追溯记录与 Windows 保护接入的总净增上限 78,500 行；原批准基线 2,333,659 行，绝对上限 2,412,159 行。预算授权不代表测试、主线合入、部署或原生端验收通过。
+
+冻结代码 `5b7c5c076c5bc832431449b9d8b5a15ebb082345` 实测 2,345,705 行，比原批准基线增加 12,046 行；比已合入候选的主线 `068b0592316c9ab14eb4bce94f7bc417fb9d210f` 实测 2,330,465 行增加 15,240 行，两种比较不可混用。该阶段尚未同步更新的主线；后续已同步状态见下方补充。
+
+| 维护范围 | 冻结代码相对原批准基线净增 |
+|---|---:|
+| 生产代码与工具 | 6,109 |
+| 测试与测试支持 | 5,813 |
+| 测试夹具与数据 | 110 |
+| 文档 | 12 |
+| 配置与数据 | 2 |
+| 合计 | 12,046 |
+
+本节再增加 21 行文档，最终实测 2,345,726 行（相对原批准基线 +12,067；相对上述主线 +15,261）。`FHD/metrics/line_baseline.json` 只更新到该实测值；继续执行默认净删除棘轮，未使用额度不写入基线。生成 HTML、锁文件、外部证据及未跟踪草稿按现有规则单列，不改变排除口径。
+
+未整合草稿另列：66 个候选中不存在的维护路径共 24,820 行；63 个同路径分歧草稿共 24,160 行，需要逐项择取或替换，不能宣称已整合。为保守留量，暂将分歧草稿全部重复计入，再另留 2,098 行 Windows 草稿余量，连同本候选共 63,145 行，仍不超过上限；这不是完成情况或语义去重结论。
+
+执行方式：在 `FHD/` 运行 `python scripts/dev/check_net_deletion.py --update --force --reason "中文评审原因：实现范围、分类实测增量及用户批准上限"`，提交实际基线与原因后只读运行 `push_preflight.py` 三项门禁及相关版本、文档登记检查。后端隔离契约 316 通过、1 项可选 PostgreSQL 测试跳过；候选前端 296 项通过，类型检查与 lint 通过；不同测试集不相加，仍须精确提交的远端必需检查与最新主线同步。
+
+补充：已审阅集成代码 `714d2d51dda8f302a31dace918960a4930b9bd0c` 实测 2,349,426 行，比上述实测基线净增 3,700 行；普通合并主线 `ab9f38e4fda2b8758d48c924d3741ae1877e5230`，并显式包含 CI 修复 #2722（审阅代码 `7fd8c18d864112ac0d274bd0cd1b03b2e6bfccb0`，现已合入主线 `9d35a9306aef0d23b0c159bd2c95f78f62120f4f` 并普通同步）。保留 `9fc55fd6f9` 的 1.0.0.7 测试目标及发布指针锁/CAS；release_ready 仍为 false，不代表已有安装包、公开下载或 stable OTA 晋级。
+
+| 增量切片 | 生产/工具 | 测试 | 夹具 | 配置 | 合计 |
+|---|---:|---:|---:|---:|---:|
+| 已登记来源的 Linux 启动、鉴权、回执完成与并发保护 | 882 | 1,524 | 471 | 0 | 2,877 |
+| 最新主线的完整历史安全扫描 | 0 | 66 | 0 | 3 | 69 |
+| 明示 CI 工具链修复依赖 #2722 | 21 | 124 | 0 | 38 | 183 |
+| 未启用的 Windows 文件探针基础层 | 272 | 265 | 0 | 34 | 571 |
+| 真实 spawn 序列化及 Alembic 隔离导入契约 | 0 | 50 | 0 | 0 | 50 |
+
+生成工作流镜像、HTML 与指标仍按既有规则单列；上表是维护口径，不能与 Git 原始新增行数混算。本补充后的实际基线为 2,349,492 行（原批准基线净增 15,833；比当前主线实测 2,330,471 行增加 19,021），只登记测量值，不预分配上限。
+
+本轮后端隔离契约 469 通过、1 项可选 PostgreSQL 跳过，含真实工厂/鉴权/普通调度器/独立读回/重启与并发读；Windows/CI 契约另为 88 通过、4 项原生 Windows 跳过，不能替代原生验收。高风险测试构造改为真实子进程后另有 32 项通过；本地确定性 AI 规则已无 high，但 58 项 medium 尚待独立审阅，不称完整 AI 门禁通过。纯 GET 不释放 HOST，超时前未获准写入的 UNKNOWN 仍保留待核对标记，不凭缺少账本伪造无效果回执。Linux 已登记配置以外的部署、来源登记、市场登录、Windows 激活及该恢复协议仍待独立授权/实现/验证。
+
+未整合草稿仍保守按 24,820 + 24,160 + 2,098 行保留；连同本候选共 66,911 行，未做语义去重，也不宣称草稿已整合。继续保持 #2686 草稿和默认净删除棘轮，远端必需 CI 与公开仓库发布授权独立核验。
+
+补充：冻结候选已以同树远端 `6bb34ad30f6850e563843f52f14bf56d3f85b999` 上传草稿；随后主线推进至 `c6eef124703d66027b54d1fe2d0f45b9d9e043f4`（#2717），本次仅三方整合其 5 个文件，唯一冲突为更新日志并保留双方条目。净增 136 行加本说明 2 行，实测 2,349,630 行；沿用已批准 78,500 总净增上限，不改变计数规则。AIOPEN 隐私与既有路由 49 项隔离测试通过、网络调用 0；不代表完整远端 CI、预认领恢复、Windows 或发布验收完成。
+
+- 2026-10-28 现场候选后续：88e5c6b 的81项检查为51成功/21失败/9跳过；8个后端分片同一测试导入收集错误，汇总门禁保留阻断。CI装配、领域依赖、资源释放、日志去敏及未认领操作核对候选继续隔离验证，不以局部通过代替远端复验。
+- HashEmbedder 的MD5向量分桶告警未关闭；更换算法需兼容既有索引，未擅自换哈希或豁免安全检查。Windows原生、真实模型、线上工单、安装版验收及正式发布仍独立待验。
+- 6c146fe 远端检查终态为 54 成功、18 失败、9 跳过；后端八分片 41,698 通过、137 失败。后续候选修正真实身份测试夹具、工具契约样例、单测进程隔离及锁定依赖；另修复匿名聊天历史和记忆归属。仅批准的合成测试密钥采用精确历史指纹例外，完整扫描保留；MD5 告警仍未解决，候选不得据局部通过宣称完整验收。
+
+后续类型修复只补齐既有接口、异常元组和隔离账本映射的静态契约；本地资源受限的完整类型检查不计通过，远端原门禁仍须重跑。净增按实际维护行数计入既有批准上限，不扩大预算。

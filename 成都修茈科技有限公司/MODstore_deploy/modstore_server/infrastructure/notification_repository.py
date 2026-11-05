@@ -1,6 +1,6 @@
 # mypy: disable-error-code="arg-type, assignment"
 """SQLAlchemy adapter implementing
-:class:`modstore_server.domain.notification.ports.NotificationRepository`.
+:class:`modstore_server.domain.notification.port_contracts.NotificationRepository`.
 """
 
 from __future__ import annotations
@@ -12,8 +12,10 @@ from typing import Any
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from modstore_server.domain.notification.types import Notification as DomainNotification
-from modstore_server.domain.notification.types import (
+from modstore_server.domain.notification.notification_types import (
+    Notification as DomainNotification,
+)
+from modstore_server.domain.notification.notification_types import (
     NotificationType,
     OutboundNotification,
 )

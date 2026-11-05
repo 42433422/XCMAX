@@ -1,0 +1,22 @@
+T9 chain login/binding evidence note (2026-09-14 evening, Asia/Shanghai)
+========================================================================
+
+环境：全新卸载 1.0.0.3 → 静默安装 1.0.0.2（testing 通道官方地址，sha256
+4a8d9b14…，见 chain-1.0.0.2-download-sha256.txt）→ 冷启动（chain-health-1.0.0.2-firstlaunch.json，
+19:56:38 healthy）→ CDP 驱动复验登录。
+
+结果：t9-login2.py 于 19:59:12 执行后记录 chain-login-result.json = {"error":"no login form"}。
+解释：卸载/重装保留 %APPDATA%\XCAGI 数据根（与 OTA 语义一致），renderer 持久化会话未失效，
+故登录表单不再出现 —— 这本身即是「会话跨安装持久化」的行为证据。
+
+认证有效性的正向证据（同一 19:59 批次）：
+  chain-biz-result.json
+    - /api/mod/xcagi-erp-domain-bridge/products/add -> 200 add_success=true（mod_domain_handler）
+    - products/list 回查 -> 200 found=true（SUNBIRD-t9-195902, id=11）
+    - /api/mods/loading-status -> 200 partial_failure=false, mods_loaded=15, load_mismatch=false
+    - /api/employees -> 200 AI 员工目录（split_mod_entries 非空）
+
+新鲜 UI 登录（表单填写+密码校验+登录按钮）证据见同版本同构建的 T3 批次：
+  ../t3/t3-biz-result.log（2026-09-14 07:24 CDP 驱动 UI 登录 SUNBIRD，业务任务 PASS）
+即：G5 登录绑定在 1.0.0.2@1f7d9f11 上当日已有新鲜登录 GREEN 证据；T9 链路复验确认
+会话持久化 + 认证态下核心功能/Mod/AI 员工全部可用。

@@ -25,7 +25,6 @@ CI 中（实际执行）:
         --issue-number "$ISSUE_NUMBER" \\
         --repo "$GITHUB_REPOSITORY" \\
         --token "$GITHUB_TOKEN" \\
-        --llm-api-key "${XCAGI_LLM_API_KEY:-}" \\
         --apply
 
 退出码:
@@ -43,6 +42,7 @@ import argparse
 import json
 import logging
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -52,11 +52,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+# 直接以 `python scripts/dev/ai_issue_implement.py` 执行时 sys.path[0] 是脚本目录，
+# 仓库根的 `app` 包不在导入路径上；必须在导入 app.* 之前把 FHD 根加入 sys.path。
+FHD_ROOT = Path(__file__).resolve().parents[2]
+if str(FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(FHD_ROOT))
+
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-FHD_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = FHD_ROOT.parent
 REPORT_DIR = FHD_ROOT / "test_reports"
 DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "auto-implement-allowlist.yaml"
@@ -278,22 +283,44 @@ def _is_authorized(
 
 
 def _estimate_files(issue_title: str, issue_body: str) -> int:
-    """根据 issue 内容粗估变更文件数。
-
-    估算规则（保守偏严）：
-      - issue 提及 N 个明确文件路径 → 计入 N
-      - 提及 "新增"/"add" + 模块名 → 计 2（模块 + manifest）
-      - 提及 "测试"/"test" → 计 1
-      - 最低 1，最高 99（>5 时拒做）
-    """
+    """估算源码/配置/文档范围，排除日志中的产物并合并同一文件的路径别名。"""
     text = f"{issue_title}\n{issue_body}"
-    # 明确文件路径
-    paths = re.findall(r"`?([a-zA-Z0-9_./-]+\.(?:py|ts|vue|js|json|md|yml|yaml))`?", text)
-    explicit = {p for p in paths if "/" in p or p.startswith(("FHD", "app", "src", "tests"))}
+    paths = re.findall(
+        r"(?:[A-Za-z]:)?[A-Za-z0-9_./-]+\.[A-Za-z0-9_]+(?![A-Za-z0-9_/-])",
+        text.replace("\\", "/"),
+    )
+    generated_dirs = {
+        "test_reports",
+        "shard-evidence",
+        "coverage",
+        "htmlcov",
+        "site-packages",
+        "node_modules",
+        ".pytest_cache",
+        "__pycache__",
+    }
+    explicit: set[str] = set()
+    for path in paths:
+        # Check the complete suffix: a .jsonl log is not a .json source file.
+        if Path(path).suffix.lower() not in SAFE_SOURCE_SUFFIXES | {".toml", ".ini", ".cfg"}:
+            continue
+        path = re.sub(
+            r"^(?:/home/runner/work|/__w|[A-Za-z]:/a)/[^/]+/[^/]+/|^/github/workspace/",
+            "",
+            posixpath.normpath(re.sub(r"/+", "/", path)),
+        ).removeprefix("FHD/")
+        parts = path.split("/")
+        if generated_dirs.intersection(parts[:-1]) or parts[-1] == "shard-summary.json":
+            continue
+        explicit.add(path)
     count = len(explicit)
     if re.search(r"新增|新建|add new|create new|scaffold", text, re.IGNORECASE):
         count += 2
-    if re.search(r"测试|test|spec", text, re.IGNORECASE):
+    has_test = any(
+        re.search(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]+$|(?:_test|\.test|\.spec)\.[^/]+$", p)
+        for p in explicit
+    )
+    if not has_test and re.search(r"测试|\b(?:tests?|specs?)\b", text, re.IGNORECASE):
         count += 1
     return max(1, count)
 

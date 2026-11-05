@@ -1,0 +1,9 @@
+{
+  "status": "healthy",
+  "version": "1.0.0.0",
+  "service": "xcagi-fastapi",
+  "neuro": {
+    "status": "error",
+    "error": "No module named 'app.mod_sdk.host_services'"
+  }
+}

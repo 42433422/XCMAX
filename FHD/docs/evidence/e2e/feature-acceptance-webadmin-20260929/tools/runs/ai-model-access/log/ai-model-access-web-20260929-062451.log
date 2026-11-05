@@ -1,0 +1,9 @@
+[06:24:51] feature=ai-model-access base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-model-access
+[06:25:03] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:25:03] case M1: passed - 模型用量账本真实读取
+[06:25:05] case M2: passed - 模型调用 token 用量与成本汇总
+[06:25:05] case M3: passed - 未绑定市场账号时模型目录 fail-closed 拒绝（负例/边界）
+[06:25:06] case M4: passed - 无会话访问用量接口被拒（负例）
+[06:25:09] case M5: passed - 系统设置·模型服务页真实渲染
+[06:25:09] video: ai-model-access-web-20260929-062451.webm (1069082 bytes)
+[06:25:09] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-model-access/log/ai-model-access-web-20260929-062451.log

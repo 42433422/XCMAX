@@ -57,6 +57,9 @@ const {
     accountKind: 'personal',
     marketIsAdmin: false,
     marketIsEnterprise: false,
+    tenantId: null as number | null,
+    userRole: '',
+    permissions: [] as string[],
     refreshFromServer: vi.fn().mockResolvedValue(undefined),
   },
 }))
@@ -158,6 +161,8 @@ vi.mock('@/constants/genericModPack', async (importOriginal) => {
 vi.mock('@/utils/roleMenuProfile', () => ({
   buildRoleMenuProfile: vi.fn(() => ({})),
   canShowCoreMenuKey: () => true,
+  UNSCOPED_HOST_BUSINESS_KEYS: new Set(['products', 'customers', 'orders', 'orders-create', 'shipment-records', 'materials', 'inventory', 'print', 'printer-list', 'template-preview', 'traditional-mode', 'approval-hub', 'tools']),
+  tenantScopedBusinessPath: () => null,
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({
@@ -260,6 +265,9 @@ describe('router/index enhanced', () => {
     mockAccountProfileStore.accountKind = 'personal'
     mockAccountProfileStore.marketIsAdmin = false
     mockAccountProfileStore.marketIsEnterprise = false
+    mockAccountProfileStore.tenantId = null
+    mockAccountProfileStore.userRole = ''
+    mockAccountProfileStore.permissions = []
     mockAccountProfileStore.refreshFromServer.mockResolvedValue(undefined)
     mockResolvePlannerChatHomePath.mockReturnValue('/')
     mockResolvePlannerPagePath.mockImplementation((p: string) => p)
@@ -582,19 +590,13 @@ describe('router/index enhanced', () => {
 
   // ── edge cases ──────────────────────────────────────────
 
-  it('handles fetchProductSku failure gracefully for non-enterprise', async () => {
-    mockFetchProductSku.mockRejectedValueOnce(new Error('network'))
-    mockFetchProductSku.mockResolvedValueOnce('generic')
-    await router.push('/settings')
-    expect(router.currentRoute.value.name).toBe('settings')
-  })
-
-  it('redirects to login when enterprise SKU check fails', async () => {
+  it.each([false, true])('keeps protected navigation closed on an unavailable SKU: %s', async enterprise => {
+    await router.push('/login')
     mockFetchProductSku.mockRejectedValue(new Error('network'))
-    mockIsEnterpriseEdition.mockReturnValue(true)
-    await router.push('/')
+    mockIsEnterpriseEdition.mockReturnValue(enterprise)
     await router.push('/settings')
-    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.fullPath).toBe('/login')
+    expect(router.currentRoute.value.query.error).toBeUndefined()
   })
 
   it('allows public access routes without authentication', async () => {

@@ -1,23 +1,67 @@
-name: Mac control runtime contract
+name: Control and tool runtime contract
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    # Nightly 全量（每日 16:30 UTC = 北京 00:30）；日常 PR 仅在 runtime 相关改动时跑。
+    - cron: "30 16 * * *"
 permissions:
   contents: read
 jobs:
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.c.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Classify changed paths (unified classifier)
+        id: c
+        # 非 PR（push/schedule）时 base/head 为空 → 分类器 fail-open 返回 run=true。
+        run: |
+          python ../scripts/dev/change_classifier.py --category runtime_contract \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
   runtime-contract:
+    needs: classify
+    if: needs.classify.outputs.run != 'false'
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-2022]
+        os: [ubuntu-latest, windows-2022, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
-      - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install runtime contract dependencies with the locked pytest
+        shell: python
+        run: |
+          import os, re, subprocess, sys
+          pin = subprocess.check_output([
+              sys.executable,
+              os.path.join(os.environ["GITHUB_WORKSPACE"], "FHD/scripts/dev/check_requirements_lock.py"),
+              "--pytest-pin",
+          ], text=True).strip()
+          if not re.fullmatch(r"pytest==[0-9]+(?:\.[0-9]+){2}", pin):
+              raise SystemExit("invalid locked pytest requirement")
+          subprocess.check_call([
+              sys.executable, "-m", "pip", "install", "-e", ".[server-api]",
+              pin, "pytest-asyncio", "psutil",
+          ])
+      - run: python -m pytest --noconftest -o addopts= tests/test_application/test_tool_process.py -q -rP
+        env:
+          SECRET_KEY: isolated-process-contract-not-production
+          DATABASE_URL: sqlite://
+      - run: python -m pytest --noconftest -o addopts= tests/test_application/test_shipment_excel_etl_production_ready.py tests/test_application/test_shipment_etl_component_boundaries.py -k "etl_output_writer or etl_output_resolver or etl_input or batch_scan" -q -rP
+        env:
+          SECRET_KEY: isolated-etl-output-contract-not-production
+          DATABASE_URL: sqlite://
+      - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs scripts/autonomy/runtime_tools/pushed_branch_pr.test.mjs scripts/autonomy/runtime_tools/codex_model_gateway.test.mjs
       - uses: actions/checkout@v4
         if: matrix.os == 'ubuntu-latest'
         with:

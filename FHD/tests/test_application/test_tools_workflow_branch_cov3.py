@@ -92,14 +92,15 @@ class TestRunNaturalLanguagePandas:
         assert result["generated_code"] == ""
         assert result["row_count"] == 2
 
-    def test_truncated_when_more_than_200_rows(self) -> None:
+    def test_truncated_when_more_than_page_size(self) -> None:
         df = pd.DataFrame({"a": list(range(250))})
         patch_ctx, _ = _patch_excel_text_to_pandas(translate_return="")
         with patch_ctx:
-            result = run_natural_language_pandas(df, "x")
+            result = run_natural_language_pandas(df, "x", max_rows=200)
         assert result["truncated"] is True
         assert result["returned_rows"] == 200
         assert result["row_count"] == 250
+        assert result["next_offset"] == 200
 
     def test_not_truncated_when_less_than_200_rows(self) -> None:
         df = pd.DataFrame({"a": list(range(10))})
@@ -308,7 +309,7 @@ class TestHandleExcelAnalysis:
                 },
                 workspace_root=str(tmp_path),
             )
-        assert result["success"] is True
+        assert result["success"] is False
 
     def test_action_aggregate_no_group_by(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
@@ -319,7 +320,7 @@ class TestHandleExcelAnalysis:
                 {"file_path": "data.xlsx", "action": "aggregate"},
                 workspace_root=str(tmp_path),
             )
-        assert result["success"] is True
+        assert result["success"] is False
 
     def test_action_statistics(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
@@ -368,7 +369,7 @@ class TestExecuteWorkflowToolJoinCompare:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -536,7 +537,7 @@ class TestExecuteWorkflowToolProphet:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -639,7 +640,7 @@ class TestExecuteWorkflowToolSchemaUnderstand:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -704,7 +705,7 @@ class TestExecuteWorkflowToolBulkAndVector:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -713,7 +714,7 @@ class TestExecuteWorkflowToolBulkAndVector:
 
     def test_products_bulk_import_dispatches(self) -> None:
         with patch(
-            "app.application.excel_imports.run_bulk_import",
+            "app.domain.app_pure.excel_imports.run_bulk_import",
             return_value={"success": True},
             create=True,
         ):
@@ -795,7 +796,7 @@ class TestExecuteWorkflowToolGenerateOffice:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -813,12 +814,12 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_invalid_format_defaults_to_docx(self) -> None:
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "file.docx"),
                 create=True,
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="token123",
                 create=True,
             ),
@@ -831,12 +832,12 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_xlsx_format(self) -> None:
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "file.xlsx"),
                 create=True,
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="token123",
                 create=True,
             ),
@@ -848,7 +849,7 @@ class TestExecuteWorkflowToolGenerateOffice:
 
     def test_recoverable_error(self) -> None:
         with patch(
-            "app.services.kitten_ai_document.generate.generate_office_file",
+            "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
             side_effect=OSError("disk full"),
             create=True,
         ):
@@ -861,12 +862,12 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_prompt_alias_for_user_request(self) -> None:
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "file.docx"),
                 create=True,
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="token123",
                 create=True,
             ),
@@ -897,7 +898,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -921,12 +922,12 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
             patch(
-                "app.services.tools_workflow_registered.execute_registered_workflow_tool",
+                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
                 return_value={"result": "ok"},
                 create=True,
             ),
@@ -948,7 +949,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value='{"emp": true}',
                 create=True,
             ),
@@ -969,7 +970,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -991,7 +992,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 side_effect=RuntimeError("fail"),
                 create=True,
             ),
@@ -1023,6 +1024,55 @@ class TestHandleImportExcelToDatabase:
             create=True,
         ):
             yield
+
+    @pytest.mark.parametrize("confirmation", [None, False, "false", "true", 1])
+    @pytest.mark.parametrize("kind", ["products", "customers", "orders"])
+    def test_import_requires_explicit_boolean_confirmation(self, tmp_path, confirmation, kind):
+        source = tmp_path / "review.xlsx"
+        pd.DataFrame({"产品名称": ["测试产品"], "客户名称": ["测试客户"], "数量": [1]}).to_excel(
+            source, index=False
+        )
+        args = {"file_path": source.name, "import_type": kind, "unit_name": "测试客户"}
+        if confirmation is not None:
+            args["confirm"] = confirmation
+        with (
+            patch("app.application.tools.workflow.adapters.customer_writer") as customer,
+            patch("app.application.tools.workflow.adapters.product_writer") as products,
+            patch("app.application.tools.workflow.adapters.shipment_writer") as shipments,
+            patch("app.application.tools.workflow.adapters.find_customer") as find_customer,
+        ):
+            result = json.loads(
+                _handle_import_excel_to_database(args, workspace_root=str(tmp_path))
+            )
+        assert result["success"] is True
+        assert result["preview"] is True
+        assert result["row_count"] == 1
+        for writer in (customer, products, shipments, find_customer):
+            writer.assert_not_called()
+
+    def test_explicit_confirmation_writes_once_and_preview_only_still_wins(self, tmp_path):
+        source = tmp_path / "review.xlsx"
+        pd.DataFrame({"产品名称": ["测试产品"], "数量": [1]}).to_excel(source, index=False)
+        args = {"file_path": source.name, "import_type": "products", "confirm": True}
+        with patch("app.application.tools.workflow.adapters.product_writer") as products:
+            products.return_value.batch_add_products.return_value = {
+                "success": True,
+                "success_count": 1,
+                "failed_count": 0,
+            }
+            preview = json.loads(
+                _handle_import_excel_to_database(
+                    {**args, "preview_only": True}, workspace_root=str(tmp_path)
+                )
+            )
+            assert preview["preview"] is True
+            products.assert_not_called()
+            result = json.loads(
+                _handle_import_excel_to_database(args, workspace_root=str(tmp_path))
+            )
+        assert result["preview"] is False
+        assert result["imported"] == 1
+        products.return_value.batch_add_products.assert_called_once()
 
     def test_missing_file_path_returns_error(self) -> None:
         result = _handle_import_excel_to_database({"import_type": "products"})
@@ -1430,7 +1480,7 @@ class TestImportOrdersPreviewOrExecute:
             result = json.loads(
                 _import_orders_preview_or_execute(df, list(df.columns), "", True, 1)
             )
-        assert result["success"] is True
+        assert result["success"] is False
         assert result["failed"] == 1
 
     def test_confirm_service_error(self) -> None:
@@ -1444,7 +1494,9 @@ class TestImportOrdersPreviewOrExecute:
                 _import_orders_preview_or_execute(df, list(df.columns), "客户A", True, 1)
             )
         assert result["success"] is False
-        assert "订单导入失败" in result["error"]
+        assert "导入已停止" in result["message"]
+        assert result["outcome"] == "failed"
+        assert result["imported"] == 0
 
     def test_confirm_row_level_error(self) -> None:
         df = pd.DataFrame({"产品名称": ["a"], "数量": [2], "购买单位": ["客户A"]})
@@ -1454,7 +1506,7 @@ class TestImportOrdersPreviewOrExecute:
             result = json.loads(
                 _import_orders_preview_or_execute(df, list(df.columns), "客户A", True, 1)
             )
-        assert result["success"] is True
+        assert result["success"] is False
         assert result["failed"] == 1
 
 
@@ -1622,6 +1674,111 @@ class TestInvalidateWorkflowToolRegistry:
 # ---------------------------------------------------------------------------
 # _infer_product_field_mapping — additional branches
 # ---------------------------------------------------------------------------
+
+
+class TestImportFailureReceipts:
+    @pytest.mark.parametrize("kind", ["customers", "orders"])
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            {"success": False},
+            {"success": "true"},
+            {"success": 1},
+            {"success": True, "reconciliation_required": True},
+            {"success": True, "outcome_unknown": True},
+            TimeoutError("lost receipt"),
+            TypeError("lost receipt"),
+            AttributeError("lost receipt"),
+        ],
+    )
+    def test_partial_write_stops_and_retains_acknowledged_prefix(self, kind, failure):
+        from app.application.tools.workflow_tools.contracts import ImportServices
+        from app.application.tools.workflow_tools.import_execution import ImportExecutor
+
+        writer = MagicMock()
+        write = writer.create if kind == "customers" else writer.create_shipment
+        write.side_effect = [{"success": True}, failure, {"success": True}]
+        executor = ImportExecutor(
+            ImportServices(
+                customer=lambda: writer,
+                products=MagicMock(),
+                shipment=lambda: writer,
+                find_customer=MagicMock(),
+            )
+        )
+        if kind == "customers":
+            result = executor.customers([{"customer_name": name} for name in "ABC"], True)
+        else:
+            frame = pd.DataFrame({"name": list("ABC")})
+            result = executor.orders(frame, ["name"], {"name": "product_name"}, "客户", True, 3)
+        assert write.call_count == 2
+        assert result["success"] is False
+        assert result["imported"] == result["failed"] == result["pending"] == 1
+        assert result["outcome"] == "unknown"
+        assert result["reconciliation_required"] is True
+        assert result["retryable"] is False
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            {"success": False, "success_count": 0, "failed_count": 2},
+            {"success": True, "data": {"success_count": 1, "failed_count": 1}},
+            {"success": True, "success_count": 0, "failed_count": 0},
+            {"success": True, "success_count": 3, "failed_count": 0},
+            {"success": True, "success_count": 2.9, "failed_count": 0},
+            {"success": True, "success_count": 0, "imported": 2, "failed_count": 0},
+            {"success": True, "success_count": True, "imported": 2, "failed_count": 0},
+            {"success": True, "success_count": "2", "failed_count": 0},
+        ],
+    )
+    def test_failed_or_incomplete_product_batch_is_never_success(self, result):
+        from app.application.tools.workflow_tools.contracts import ImportServices
+        from app.application.tools.workflow_tools.import_execution import ImportExecutor
+        from app.application.tools.workflow_tools.import_mapping import ProductRows
+
+        products = MagicMock()
+        products.batch_add_products.return_value = result
+        executor = ImportExecutor(
+            ImportServices(
+                customer=MagicMock(),
+                products=lambda: products,
+                shipment=MagicMock(),
+                find_customer=lambda name: {"id": 1},
+            )
+        )
+        rows = ProductRows(
+            records=[{"name": "A"}, {"name": "B"}], unit="客户", fields={}, skipped_clauses=0
+        )
+        receipt = executor.products(rows, "客户", True, None)
+        assert receipt["success"] is False
+        assert receipt["outcome"] == "unknown"
+        assert receipt["retryable"] is False
+
+    def test_failed_customer_creation_prevents_product_batch(self):
+        from app.application.tools.workflow_tools.contracts import ImportServices
+        from app.application.tools.workflow_tools.import_execution import ImportExecutor
+        from app.application.tools.workflow_tools.import_mapping import ProductRows
+
+        customer, products = MagicMock(), MagicMock()
+        customer.create.return_value = {"success": False}
+        executor = ImportExecutor(
+            ImportServices(
+                customer=lambda: customer,
+                products=products,
+                shipment=MagicMock(),
+                find_customer=lambda name: None,
+            )
+        )
+        receipt = executor.products(
+            ProductRows(records=[{"name": "A"}], unit="客户", fields={}, skipped_clauses=0),
+            "客户",
+            True,
+            None,
+        )
+        assert receipt["success"] is False
+        assert receipt["outcome"] == "unknown"
+        assert receipt["retryable"] is False
+        products.assert_not_called()
 
 
 class TestInferProductFieldMappingAdditional:

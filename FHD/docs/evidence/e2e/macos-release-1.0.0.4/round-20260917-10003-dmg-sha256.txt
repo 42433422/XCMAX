@@ -1,0 +1,3 @@
+288549712a63035f77a860d28a65af2f7ebc83b1f9ed9606719484576b9f3068  /Users/Shared/xcagi-t6-tools/downgrade-10003/XCAGI-Enterprise-1.0.0.3-mac-arm64.dmg
+
+# 该 DMG 与官方 1.0.0.3 发布产物逐字节一致（SSOT §2），已于 2026-09-17 随夹具清理删除，可由下载中心重下复现

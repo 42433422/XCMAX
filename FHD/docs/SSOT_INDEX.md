@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-07-31
+> 最后更新：2026-10-24
 
 ## 登记规则
 
@@ -14,11 +14,13 @@
 
 | 领域 | SSOT 文档 | 说明 |
 |------|----------|------|
+| 产品版本四层口径 | [`docs/architecture/PRODUCT_VERSION_SSOT.md`](architecture/PRODUCT_VERSION_SSOT.md) | VERSION.md 数字 + 已发布/候选/构建/运行分层 |
 | audit-benchmark（18 领域对标审计） | [AUDIT_BENCHMARK_SSOT.md](AUDIT_BENCHMARK_SSOT.md) | JSON 为规范源、本文生成；商业 90 / 开源 60 锚点、证据等级与新旧分隔离 |
 | coverage（覆盖率） | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 后端/前端覆盖率基线、目标、棘轮 floor |
 | ci（CI/CD） | [../../docs/CI_SSOT.md](../../docs/CI_SSOT.md) | 根仓 .github/workflows/ 唯一调度入口 |
 | mod（Mod 开发） | [guides/MOD_AUTHORING_GUIDE.md](guides/MOD_AUTHORING_GUIDE.md) | Mod 开发规范、mods/ 为唯一编辑源 |
-| version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本 1.0.0.0、工具链映射 1.0.0 |
+| version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本与工具链映射唯一数字来源（`verify_version_anchors.py` 校验） |
+| release-changelog（用户更新记录） | [../CHANGELOG.md](../CHANGELOG.md) | 产品 PR 强制更新的用户修复记录 |
 | route（路由） | [reports/WAVE2_ROUTE_SSOT.md](reports/WAVE2_ROUTE_SSOT.md) | RouteRegistry + mounts/* 路由 SSOT |
 | git（Git 仓库） | [reports/GIT_WORKTREE_RECOVERY.md](reports/GIT_WORKTREE_RECOVERY.md) | 根仓 XCMAX/ 为 Git SSOT |
 | mypy（类型检查） | [../pyproject.toml](../pyproject.toml) | [tool.mypy] 配置 |
@@ -30,7 +32,7 @@
 | claimed-vs-actual（对外声称 vs 实测） | [CLAIMED_VS_ACTUAL.md](CLAIMED_VS_ACTUAL.md) | 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成 |
 | coverage-metrics（覆盖率唯一数字） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径） |
 | coverage-behavior-gate（行为覆盖率门禁决策） | [adr/0001-coverage-behavior-gate.md](adr/0001-coverage-behavior-gate.md) | ADR-0001 决策记录：覆盖率门禁从全量口径切换为行为口径（排除 coverage_ramp stub）；`fail_under` 保留为全量行 floor SSOT |
-| account（产品端与账号体系） | [account_system_ssot.md](account_system_ssot.md) | 产品端矩阵、账号体系四维真相源（身份/行业/会员/账号等级）、行业/Persona 派生、字段写入权限矩阵、多租户隔离与账户安全；**定价文档 SSOT** |
+| account（产品端与账号体系） | [account_system_ssot.md](account_system_ssot.md) | 产品端矩阵、账号体系四维真相源（身份/行业/会员/账号等级）、行业/Persona 派生、字段写入权限矩阵、多租户隔离与账户安全；MODstore PAT 派生消费页为 developer README/01/02/05/08 与文档/Token 面板（见注册表）；**定价文档 SSOT** |
 | pricing-enterprise（企业宿主授权价） | [../config/saas_plans.json](../config/saas_plans.json) | 体验 ¥99；永久授权 ¥49,999–¥999,999；收银与 `model-payment` / 企业开户读取 |
 | pricing-membership（市场会员价） | [../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py) | `init_default_plan_templates()` → `PlanTemplate`；VIP ¥9.9 – SVIP8 ¥4,999 |
 | licensing（许可边界，非定价） | [guides/LICENSING.md](guides/LICENSING.md) | Apache-2.0 vs EULA 触发条件、Mod 分成、Offline 功能差异；**具体金额见上两行 pricing SSOT** |
@@ -39,13 +41,21 @@
 | mobile-flutter（移动日常入口） | [guides/MOBILE_FLUTTER.md](guides/MOBILE_FLUTTER.md) | Flutter 本地开发、发版与归档规则 |
 | mobile-android（Flutter 渠道） | [guides/MOBILE_ANDROID.md](guides/MOBILE_ANDROID.md) | Flutter Android Runner、本地验证、签名和发布指南 |
 | local-data（本地数据安全） | [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md) | 桌面/Web 本地数据分类、purge CLI、诊断包与上传鉴权策略 |
+| credential-incidents（凭据事件处置） | [security/CREDENTIAL_INCIDENT_CLOSEOUT.md](security/CREDENTIAL_INCIDENT_CLOSEOUT.md) | 事件状态以根仓 `.github/security/credential-incidents.json` 为准；本文只维护供应商侧执行与独立验收流程 |
 | neuro-bus-events（事件契约） | [../config/neuro_bus_events.yaml](../config/neuro_bus_events.yaml) | NeuroBus 三流事件契约统一 SSOT（NeuroBus 域事件 + AgentRun 事件 + 应用桥接），点号命名规范化，派生 Python 常量 + TS 类型 + OpenAPI schema |
 | customer-ticket-bus（客服工单闭环） | [architecture/CUSTOMER_TICKET_BUS_SSOT.md](architecture/CUSTOMER_TICKET_BUS_SSOT.md) | 客服工单总线/告警闭环的唯一事实源：MODstore incident_bus + incident_team 与入场边界 |
 | deployment-modes（AI 部署模式） | [../config/deployment_modes.yaml](../config/deployment_modes.yaml) | 三档部署模式唯一真相源：绝对安全、安全、性能；统一内网/外网、手机局域网直连与移动端超级员工 LAN 优先策略 |
 | database-storage（数据库存储） | [../config/database_storage_modes.yaml](../config/database_storage_modes.yaml) | SQLite/PG 存储模式唯一真相源：桌面 database.json profile、SQLite→PostgreSQL 同步计划、重启生效策略 |
 | customer-delivery（客户私有交付） | [../config/customer_delivery.json](../config/customer_delivery.json) | 客户品牌；`legacy_mod_id` vs `industry_mod_id`；**双轨** `modules` / `employees` 及轨道节点进度；生产员工只列定制包；太阳鸟「考勤表转化」= 模块轨节点 |
+| deploy-path（部署主从） | [architecture/DEPLOY_PATH_SSOT.md](architecture/DEPLOY_PATH_SSOT.md) | 主路径=桌面私有化+CVM 滚动；Docker/K8s/health_k8s=experimental；权威边界见 ADR-route-a |
 | process-flow（业务流程与交付流程） | [architecture/PROCESS_FLOW_SSOT.md](architecture/PROCESS_FLOW_SSOT.md) | 业务工作流程 + 对外交付流程唯一真相源；供 AGI 编排（Agent Orchestrator / Workflow Engine / NeuroBus 事件驱动）消费；含统一单据生命周期、自动化就绪度矩阵、断点行动项 |
 | utils-boundary（app/utils 职责域） | [devex/utils-domain-boundaries.md](devex/utils-domain-boundaries.md) | app/utils 47 模块职责域归类 + 目标包结构唯一真相源；excel/resilience 已迁移，其余待后续 Stage |
+| net-deletion（净删除棘轮） | [../metrics/line_baseline.json](../metrics/line_baseline.json) | 全仓「人工维护代码 + 文档」总行数基线，只减不增；口径与排除项见 scripts/dev/check_net_deletion.py |
+| macos-release（macOS 发布交付） | [MACOS_RELEASE_SSOT.md](MACOS_RELEASE_SSOT.md) | macOS 版本/产物/SHA256/构建环境/下载与更新地址/测试机 + 12 项 Release Gate 状态与实机验收任务；每次发版复用 |
+| windows-release（Windows 发布交付） | [WINDOWS_RELEASE_SSOT.md](WINDOWS_RELEASE_SSOT.md) | 新版 WPF 唯一出包入口、版本/产物/SHA256/下载与更新地址/测试机 + 13 项 Release Gate（含 G13 回滚）状态与实机验收任务 |
+| desktop-platform-parity（桌面双端平级） | [desktop_platform_parity_ssot.md](desktop_platform_parity_ssot.md) | Windows 与 macOS 平级发布（同版本/同 release_sha/双端齐备）；功能双端验证通过才算完成；平台差异收口 desktop/platform/ 适配层 |
+| capability-center（产品能力中心） | [../成都修茈科技有限公司/data/capabilities/catalog.json](../成都修茈科技有限公司/data/capabilities/catalog.json) | 官网公开能力证据库唯一事实源（域→模块→功能+证据路径）；No Evidence, No Claim 降级引擎；生成页面见 `成都修茈科技有限公司/capabilities/` |
+| product-lines（三产品线控制面） | [PRODUCT_LINES_STATUS.md](PRODUCT_LINES_STATUS.md) | 三产品线版本/发布状态/能力/成熟度单一事实来源（自动生成；声明式输入 [../config/product_lines.yaml](../config/product_lines.yaml)，不含任何数字） |
 
 ## 机器注册表（ssot.yaml）
 
@@ -61,6 +71,7 @@
 | version | `FHD/VERSION.md` | blocking |
 | docs-ssot | `FHD/docs/SSOT_INDEX.md` | blocking |
 | account-system | `FHD/docs/account_system_ssot.md` | blocking |
+| public-site | `FHD/config/public_cases.json` | blocking |
 | test-files | `FHD/tests/` | blocking |
 | deploy-scripts | `FHD/scripts/deploy/` | blocking |
 | deps | `FHD/pyproject.toml` | blocking |
@@ -75,8 +86,15 @@
 | neuro-bus-events | `FHD/config/neuro_bus_events.yaml` | blocking |
 | runtime-inventory | `FHD/config/service_topology.yaml` | blocking |
 | repository-ssot | `FHD/app/infrastructure/repositories/` | blocking |
+| structure-gates | `FHD/scripts/ci/check_structure_gates.py` | blocking |
 | dev-inventory | `FHD/scripts/dev/` | blocking |
 | dev-guards | `FHD/scripts/dev/` | blocking |
+| net-deletion | `FHD/metrics/line_baseline.json` | blocking |
+| desktop-platform-parity | `FHD/docs/desktop_platform_parity_ssot.md` | blocking |
+| macos-release | `FHD/docs/MACOS_RELEASE_SSOT.md` | blocking |
+| windows-release | `FHD/docs/WINDOWS_RELEASE_SSOT.md` | blocking |
+| capability-center | `成都修茈科技有限公司/data/capabilities/catalog.json` | blocking |
+| product-lines | `FHD/config/product_lines.yaml` | blocking |
 
 ## 已退役 SSOT（指针化）
 

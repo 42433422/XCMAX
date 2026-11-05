@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from tests.fixtures.backend_ci_isolation import retry_throttled_fetch
 
 # Load the verifier module (stdlib-only) from its sibling directory via
 # importlib.util (no sys.path mutation; the module is not importable by name).
@@ -774,12 +775,12 @@ def test_mutation_license_byte_mismatch_even_when_hash_matches():
     assert not any("sha256" in e for e in errors)
 
 
-# --- online integration (real network, tolerantly skipped) ------------------
-
-
 def test_online_integration_real_network():
     try:
-        errors = vs.verify_online(_load("source_manifest.json"))
+        errors = vs.verify_online(
+            _load("source_manifest.json"),
+            fetch=retry_throttled_fetch(vs.default_fetcher(vs.EXPECTED_COMMIT)),
+        )
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         pytest.skip(f"network unavailable: {exc}")
     assert errors == []

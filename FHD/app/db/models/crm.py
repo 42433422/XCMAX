@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 # 地址类型（Odoo res.partner 收货/发票地址吸收）

@@ -9,34 +9,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import types
-import uuid
 from pathlib import Path
 
 import pytest
 
+from tests.test_customer_service_api import _make_user
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EMPLOYEE_ROOT = REPO_ROOT / "FHD" / "mods" / "_employees"
-
-
-def _make_user(username: str, *, admin: bool = False):
-    from modstore_server.models import User, get_session_factory
-
-    username = f"{username}_{uuid.uuid4().hex[:8]}"
-    sf = get_session_factory()
-    with sf() as session:
-        user = User(
-            username=username,
-            email=f"{username}@pytest.local",
-            password_hash="x",
-            is_admin=admin,
-        )
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-        return types.SimpleNamespace(
-            id=user.id, username=user.username, email=user.email, is_admin=user.is_admin
-        )
 
 
 def _load_intake():
@@ -127,7 +107,15 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
 
     published: list[dict] = []
 
-    def _capture_publish(event_type, payload, source="unit", fingerprint=None, dedupe_minutes=0):
+    def _capture_publish(
+        event_type,
+        payload,
+        source="unit",
+        fingerprint=None,
+        dedupe_minutes=0,
+        inbox_key=None,
+    ):
+        assert inbox_key, "Durable dispatch must forward its inbox identity"
         published.append({"event_type": event_type, "payload": dict(payload), "source": source})
         return True
 

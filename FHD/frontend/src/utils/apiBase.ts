@@ -201,7 +201,7 @@ export function apiFetch(input: string, init?: ApiFetchInit): Promise<Response> 
     try {
       return await fetch(url, fetchInit)
     } catch (e) {
-      if (canRetryApiOnDevLoopback(input)) {
+      if (['GET', 'HEAD'].includes((fetchInit.method || 'GET').toUpperCase()) && canRetryApiOnDevLoopback(input)) {
         const path = input.startsWith('/') ? input : `/${input}`
         return fetch(`${DEV_API_LOOPBACK_FALLBACK}${path}`, fetchInit)
       }

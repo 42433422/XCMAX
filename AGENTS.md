@@ -14,6 +14,18 @@ Customer customization belongs in versioned Mods with account-scoped entitlement
 
 Read-only reviews, design proposals, and requests explicitly limited to a draft do not require merging or releasing.
 
+Version/release/download/client-update changes must follow `FHD/docs/architecture/PRODUCT_VERSION_SSOT.md`: edit the existing `FHD/config/download_release.json` catalog, regenerate derived views, and run `ssot_cli.py check version product-lines`. Count evolution records, not tags or version suffixes; preserve historical acceptance and each platform/channel artifact identity. Server/site deploys must never promote desktop candidates or replace their source SHA. Record unresolved evidence instead of inventing publication status.
+
+## 合入顺序与快车道（2026-10-19 03:37 用户定）
+
+主序列 PR 按终极员工排定的顺序串行合入。快车道：小修复类 PR 可不进主序列串行合入，可优先于主序列其他 PR 合入。条件（全部满足）：
+
+1. CI 全绿；
+2. 与最新 `main` 无冲突或冲突已解；
+3. 变更范围限于修复、净变更小，只动修复逻辑，不引入新模块/新车道/新接口，不触发架构方向判断。
+
+快车道 PR 合入后同样走安全扫描 + 配对校验 + 部署流程；由终极员工（Grok Bot / Dot）判定是否符合快车道，超级员工不得自行认定或合入。叠在架构改造 PR 上、离不开其新代码的修复不算快车道。其余规则不变：CI 全绿才合、不强推、hotfix 专项规则照旧。CI 与发布链路见 [docs/CI_SSOT.md](docs/CI_SSOT.md#branch-protectionmain)。
+
 ## Audit standards
 
 For a new XCMAX capability, maturity, or competitive audit, read
@@ -29,6 +41,36 @@ Run `python scripts/dev/ssot_cli.py check audit-benchmark` after changes.
 Catalog validation does not mean the product passed an audit. Keep historical
 reports immutable: the old 73.3 and 77.1 internal-review scores cannot be converted
 into the new external-anchor scale without a new evidence-backed assessment.
+
+## Documentation and net-deletion governance
+
+Documentation is a liability once it drifts. Keep a small set of living
+documents; everything else is archived out of the workspace, not retained as a
+second stale copy inside it.
+
+1. Living documents only. Every maintained document is registered in the SSOT
+   (`FHD/config/ssot.yaml` and `FHD/docs/SSOT_INDEX.md`). Historical snapshots and
+   untracked drafts are not a source of truth, and cross-links inside a dead tree
+   do not make a document living. When a document is superseded, archive it out of
+   the workspace (see `ARCHIVE_POINTER.md`) instead of leaving a duplicate.
+2. Every iteration must delete more than it adds. A change is not complete until
+   it shows a net reduction in maintained lines (code and docs combined). The
+   ratchet baseline is `FHD/metrics/line_baseline.json`, enforced by
+   `python scripts/dev/check_net_deletion.py` (SSOT domain `net-deletion`, run by
+   the blocking `ssot-drift-gate` job). Net-deleting lowers the baseline with
+   `--update`; raising it requires `--update --force --reason <why>`.
+3. Use AI to review, delete, and reconcile, not to generate more prose. Prefer
+   audits, deduplication, and reconciliation against the SSOT over producing new
+   documents. A new document must justify why an existing one cannot be updated.
+
+## Pre-push self-check
+
+Before any `git push` or PR (Para/devfleet fix agents included), commit, then run
+`python scripts/dev/push_preflight.py --fix` from `FHD/` until it passes. It runs
+the CI changelog, capability-center and net-deletion gates in about 20 seconds.
+Commit any capability pages it regenerates. If it reports a net increase, raise the
+baseline with `check_net_deletion.py --update --force --reason` and explain why in
+the PR body. Never raise the baseline without a new reason.
 
 ## Mandatory end-of-task cleanup
 

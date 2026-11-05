@@ -11,12 +11,17 @@ import pytest
 from modstore_server.customer_service_tools import json_dumps, json_loads
 
 
-def make_ticket(client, monkeypatch, *, private=False):
+def make_ticket(client, monkeypatch, *, private=False, schedule=False):
     from modstore_server.api.deps import get_current_user
     from modstore_server.app import app
     from modstore_server.models import UserMod, get_session_factory
     from tests.test_customer_service_api import _make_user
 
+    if not schedule:
+        monkeypatch.setattr(
+            "modstore_server.customer_service_api._schedule_customer_ticket_incident",
+            lambda _: None,
+        )
     user = _make_user("closure_" + uuid.uuid4().hex[:10])
     monkeypatch.setitem(app.dependency_overrides, get_current_user, lambda: user)
     if private:
@@ -174,7 +179,12 @@ def test_shared_release_requires_real_worker_merge_ci_and_customer_action(client
     }
     complete = client.post(endpoint, json=confirmed)
     assert complete.status_code == 200, complete.text
-    assert complete.json()["ticket"]["status"] == "resolved"
+    done = complete.json()["ticket"]
+    assert done["status"] == "resolved" and "resolution" not in done["evidence"]
+    with get_session_factory()() as db:
+        resolution = json.loads(db.get(CustomerServiceTicket, tid).evidence_json)["resolution"]
+    assert resolution["repair_verified"]
+    assert resolution["repair_verified_by"] == "customer_runtime_receipt"
     assert client.post(endpoint, json={**confirmed, "version": "other"}).status_code == 409
 
 
@@ -265,6 +275,33 @@ def test_dispatch_failure_written_to_same_owner_only(client, monkeypatch):
         assert evidence["resolution"]["state"] == "dispatch_failed"
 
 
+def test_dispatch_issue_event_rejects_forged_and_missing_ticket_ownership(client, monkeypatch):
+    """Forged user_id or missing ticket must not publish into the incident bus."""
+    from modstore_server.customer_issue_intake import dispatch_issue_event
+
+    user, tid = make_ticket(client, monkeypatch)
+    published = []
+    monkeypatch.setattr(
+        "modstore_server.incident_bus.publish",
+        lambda *a, **k: published.append((a, k)) or True,
+    )
+    forged = dispatch_issue_event(
+        {"id": "forge-owner", "data": {"ticket_id": tid, "user_id": user.id + 999}}
+    )
+    assert forged == {"ok": False, "message": "customer issue ownership mismatch"}
+    missing = dispatch_issue_event(
+        {
+            "id": "missing-ticket",
+            "data": {"ticket_id": tid + 10_000_000, "user_id": user.id},
+        }
+    )
+    assert missing == {"ok": False, "message": "customer issue ticket missing"}
+    ok = dispatch_issue_event({"id": "owner-ok", "data": {"ticket_id": tid, "user_id": user.id}})
+    assert ok.get("ok") is True and ok.get("published") is True
+    assert len(published) == 1
+    assert published[0][0][0] == "ops.intake.customer_ticket"
+
+
 def test_bundle_selects_exact_module_after_employee_wrapping(client, monkeypatch, tmp_path):
     from modstore_server import customer_service_delivery_api as deliveries
     from modstore_server.models import UserMod, get_session_factory
@@ -305,7 +342,10 @@ def test_bundle_selects_exact_module_after_employee_wrapping(client, monkeypatch
     with get_session_factory()() as db:
         assert (
             db.query(UserMod)
-            .filter(UserMod.user_id == user.id, UserMod.mod_id.in_([first["id"], second["id"]]))
+            .filter(
+                UserMod.user_id == user.id,
+                UserMod.mod_id.in_([first["id"], second["id"]]),
+            )
             .count()
             == 0
         )
@@ -790,7 +830,10 @@ def test_failed_business_probe_returns_to_original_ticket_once(client, monkeypat
         assert len(rows) == 1
         from modstore_server.customer_delivery_failure import apply_runtime_failure
 
-        next_failure = {**failed.json()["receipt"]["record"], "generation": "next-generation"}
+        next_failure = {
+            **failed.json()["receipt"]["record"],
+            "generation": "next-generation",
+        }
         apply_runtime_failure(db, ticket, evidence, next_failure)
         assert evidence["resolution"]["state"] == "repair_failed"
         assert evidence["automatic_rework_generations"] == ["fixture-generation"]
@@ -801,3 +844,153 @@ def test_invalid_archive_is_explicit_delivery_rejection():
 
     with pytest.raises(ValueError):
         verify_delivery_package(b"not an archive")
+
+
+def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.api.deps import get_current_user
+    from modstore_server.app import app
+    from modstore_server.customer_service_orchestrator import (
+        apply_customer_ticket_incident_progress,
+    )
+    from modstore_server.models import OutboxEvent, get_session_factory
+    from modstore_server.models_cs import CustomerServiceAuditLog, CustomerServiceTicket
+    from tests.test_customer_service_api import _make_user
+
+    woken = []
+    monkeypatch.setattr(customer_service_api, "_schedule_customer_ticket_incident", woken.append)
+    user, tid = make_ticket(client, monkeypatch, schedule=True)
+    endpoint = f"/api/customer-service/issues/{tid}/decision"
+
+    def decide(decision, note, key):
+        return client.post(
+            endpoint, json={"decision": decision, "note": note, "idempotency_key": key}
+        )
+
+    def pending_ready():
+        rows = client.get(
+            "/api/customer-service/issues/pending-runtime",
+            params={"host_sha": "c" * 40},
+        ).json()["items"]
+        return next(row for row in rows if row["id"] == tid)["ready"]
+
+    assert decide("reopen", "还没有处理结果", "reopen-early").status_code == 409
+    github_fixture(monkeypatch)
+    with get_session_factory()() as db:
+        seed_repair(db, db.get(CustomerServiceTicket, tid))
+    mine = next(row for row in client.get("/api/customer-service/issues/mine").json()["items"])
+    assert mine["id"] == tid and mine["status"] == "processing" and mine["can_reopen"]
+    assert mine["latest_result"]["progress"] and pending_ready()
+
+    wakes = len(woken)
+    reopened = decide("reopen", "装了新版还是算错", "reopen-1")
+    assert reopened.status_code == 200, reopened.text
+    issue = reopened.json()["issue"]
+    assert [issue["status"], issue["state"], issue["reopen_count"]] == [
+        "processing",
+        "reopened",
+        1,
+    ]
+    assert woken[wakes:] == [{"ticket_id": tid}] and not pending_ready()
+    assert decide("reopen", "装了新版还是算错", "reopen-2").status_code == 409
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, tid)
+        event = db.query(OutboxEvent).filter_by(aggregate_id=f"{ticket.ticket_no}:reopen:1").one()
+        assert json.loads(event.payload_json)["summary"].startswith(
+            "客户重开说明：装了新版还是算错"
+        )
+        evidence = json_loads(ticket.evidence_json, {})
+        assert evidence["reopen_history"][0]["release_target"]["fix_sha"] == "b" * 40
+        assert evidence["resolution"]["repair_verified"] is False  # 重开后须重新核验
+        rows = [
+            {"role": role, "employee_id": role, "ok": True, "status": "success"}
+            for role in ("scout", "fix", "verify")
+        ]
+        apply_customer_ticket_incident_progress(
+            db, ticket_id=tid, event_id=992, team_ok=True, team_rows=rows
+        )
+        db.commit()
+        assert db.get(CustomerServiceTicket, tid).status == "processing"
+    assert not pending_ready()
+
+    resolved = decide("resolved", "现在可以正常计算了", "resolve-1")
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["issue"]["status"] == "resolved"
+    assert decide("resolved", "现在可以正常计算了", "resolve-1").json()["replayed"] is True
+    assert decide("resolved", "换了一个说法", "resolve-1").status_code == 409
+    assert decide("resolved", "再次确认已解决", "resolve-2").status_code == 409
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, tid)
+        resolution = json_loads(ticket.evidence_json, {})["resolution"]
+        assert ticket.closed_at is not None and resolution["closed_by_user_id"] == user.id
+        assert resolution["verification_mode"] == "customer_decision"
+        verified = (resolution["repair_verified"], resolution["repair_verified_by"])
+        assert verified == (
+            True,
+            "customer_decision",
+        )  # 已验证关单不能 repair_verified=false
+        assert resolution["handled_by"] == ["fix", "scout", "verify"]
+        audits = {  # 客户接口发起的操作记成客户本人，不记成 AI 代办（#2388）
+            row.event_type: (row.actor_type, row.actor_user_id)
+            for row in db.query(CustomerServiceAuditLog).filter_by(ticket_id=tid).all()
+        }
+        assert {
+            audits[k]
+            for k in (
+                "customer_issue_reopen",
+                "customer_issue_resolved",
+                "issue_intake",
+            )
+        } == {("user", user.id)}
+    stranger = _make_user("decision_stranger")
+    monkeypatch.setitem(app.dependency_overrides, get_current_user, lambda: stranger)
+    assert decide("reopen", "冒充客户重开工单", "stranger-1").status_code == 404
+    assert client.get("/api/customer-service/issues/mine").json()["items"] == []
+
+
+def test_dispatch_action_matches_role_results_and_records_redispatch(client, monkeypatch):
+    from modstore_server.customer_service_orchestrator import (
+        apply_customer_ticket_incident_progress,
+    )
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceAction as Action
+
+    _, tid = make_ticket(client, monkeypatch)
+
+    def run(task, ok, roles="scout fix verify", status="failed", executor="incident_team"):
+        out = {"handler": "para_delegate", "task_id": task, "tool_name": executor}
+        team = [
+            {
+                "role": r,
+                "ok": ok,
+                "status": status,
+                "handler_outputs": {"outputs": [out]},
+            }
+            for r in roles.split()
+        ]
+        apply_customer_ticket_incident_progress(
+            db,
+            ticket_id=tid,
+            event_id=7,
+            team_ok=True,
+            team_rows=team,
+            executor=executor,
+        )
+
+    with (
+        get_session_factory()() as db
+    ):  # 角色全失败、Para 待定→终态、只出报告的重派、外部执行器全成功
+        run("t1", False), run("t2", False, status="pending"), run("t2", False)
+        run("t3", True, "scout", status="success", executor="grok_bot")
+        run("t4", True, status="success", executor="grok_bot")
+        rows = (
+            db.query(Action)
+            .filter_by(ticket_id=tid, action_type="employee.dispatch")
+            .order_by(Action.id)
+        )
+        got = [(json.loads(a.request_json)["tools"], a.status, a.error) for a in rows]
+    failed = "未成功角色：scout、fix、verify"
+    assert got == [(["incident_team"], "failed", failed)] * 2 + [
+        (["grok_bot"], "partial", ""),
+        (["grok_bot"], "completed", ""),
+    ]

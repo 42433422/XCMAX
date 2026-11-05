@@ -1,0 +1,7 @@
+[08:25:51] feature=sec-gdpr base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-gdpr
+[08:26:03] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:26:03] case G1: passed - GDPR 路由已注册（运行时组件表）
+[08:26:03] case G2: passed - GDPR 接口受 Feature Flag 门禁（默认关闭）
+[08:26:03] case G3: passed - 缺少 CSRF 令牌的导出请求被拒（负例）
+[08:26:04] video: sec-gdpr-web-20260929-082551.webm (565097 bytes)
+[08:26:04] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-gdpr/log/sec-gdpr-web-20260929-082551.log

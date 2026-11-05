@@ -1,0 +1,8 @@
+[15:18:13] feature=erp-inventory-warehouse platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-inventory-warehouse
+[15:18:26] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:18:27] case IW1: passed - 仓库真实写-读回
+[15:18:28] case IW2: passed - 库位真实写-读回
+[15:18:29] case IW3: passed - 库存预警真实读取
+[15:18:29] case IW4: passed - 缺 warehouse_id 查询库位被拒（负例）
+[15:18:29] video: erp-inventory-warehouse-web-20260929-151813.webm (1194277 bytes)
+[15:18:29] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-inventory-warehouse/log/erp-inventory-warehouse-web-20260929-151813.log

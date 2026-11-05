@@ -8,6 +8,15 @@
 import { computed, ref, type Ref } from 'vue'
 import { type ImConversationSummary, type ImMessage } from '@/api/im'
 
+export function captureMessageScroll(scroll: Ref<HTMLElement | null>) {
+  const el = scroll.value
+  const top = el?.scrollTop ?? 0
+  const pinned = !el || el.scrollHeight - el.clientHeight - top <= 48
+  return () => {
+    if (el && scroll.value === el) el.scrollTop = pinned ? el.scrollHeight : top
+  }
+}
+
 export type UseChatSessionParams = {
   conversations: Ref<ImConversationSummary[]>
   activeConversationId: Ref<number | null>

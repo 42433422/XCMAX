@@ -1,0 +1,62 @@
+{
+  "release_sha": "f3421f709f585d829029c8da872d3b96708ac86f",
+  "installer_sha256": "b76e145c1067261dccdf86ea0f780d41d9d8eeae4b68b128b31265ccedb3628e",
+  "entries": [
+    {
+      "independent_id": "36824523628/110247128033",
+      "mode": "Clean",
+      "runner_id": 1000197073,
+      "runner_name": "GitHub Actions 1000197073",
+      "started_at": "2026-10-01T06:23:40Z",
+      "completed_at": "2026-10-01T06:26:29Z",
+      "result": "passed",
+      "raw_evidence": "C:\\xcagi-delivery-closeout\\evidence-f342-clean-36824523628\\acceptance.json",
+      "raw_sha256": "d72b1b314abbcb350977fb2de45089cc0719eac63eaa9c945f80abd72dc7fdf4",
+      "full_customer_acceptance": "not_verified"
+    },
+    {
+      "independent_id": "36824523628/110247128271",
+      "mode": "Gui",
+      "runner_id": 1000197104,
+      "runner_name": "GitHub Actions 1000197104",
+      "started_at": "2026-10-01T06:29:48Z",
+      "completed_at": "2026-10-01T06:35:04Z",
+      "result": "gui_regression_passed",
+      "raw_evidence": "C:\\xcagi-delivery-closeout\\evidence-f342-gui-36824523628\\acceptance.json",
+      "raw_sha256": "e5fbeff56d0a70ea9bbbca1664821efe4158c601ce063ae46988fa32f31b20ec",
+      "full_customer_acceptance": "not_verified"
+    },
+    {
+      "independent_id": "36824523628/110247128297",
+      "mode": "Recovery",
+      "runner_id": 1000197115,
+      "runner_name": "GitHub Actions 1000197115",
+      "started_at": "2026-10-01T06:31:09Z",
+      "completed_at": "2026-10-01T06:38:16Z",
+      "result": "gui_recovery_regression_passed",
+      "raw_evidence": "C:\\xcagi-delivery-closeout\\evidence-f342-recovery-36824523628\\acceptance.json",
+      "raw_sha256": "9fdcebeceeaa95792027047518cea5d63d455127bbd08856765740178045c3ce",
+      "full_customer_acceptance": "not_verified"
+    },
+    {
+      "independent_id": "36824523628/110247128342",
+      "mode": "Upgrade",
+      "runner_id": 1000197116,
+      "runner_name": "GitHub Actions 1000197116",
+      "started_at": "2026-10-01T06:31:10Z",
+      "completed_at": "2026-10-01T06:45:35Z",
+      "result": "passed",
+      "raw_evidence": "C:\\xcagi-delivery-closeout\\evidence-f342-upgrade-36824523628\\acceptance.json",
+      "raw_sha256": "70376468a9690c57057e18fe73caf31f45caf6834c2678a70ff0f2da3cddc6de",
+      "full_customer_acceptance": "not_verified"
+    }
+  ],
+  "remaining": [
+    "customer entry download and publication",
+    "device binding and promised entitlement readiness",
+    "normal native quit and reopen",
+    "natural scheduled backup trigger",
+    "complete independent A/B/C acceptance",
+    "production host high vulnerability"
+  ]
+}

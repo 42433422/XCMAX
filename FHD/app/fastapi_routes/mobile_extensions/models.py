@@ -37,8 +37,14 @@ class RelayDesktopRegisterBody(BaseModel):
     capabilities: dict[str, Any] = Field(default_factory=dict)
 
 
-class RelayMobileBindAccountBody(BaseModel):
+class RelayDesktopRenewBody(BaseModel):
     relay_id: str = Field(..., min_length=8, max_length=80)
+    desktop_token: str = Field(..., min_length=16, max_length=256)
+
+
+class RelayMobileBindAccountBody(BaseModel):
+    relay_id: str = Field(default="", max_length=80)
+    pairing_code: str = Field(default="", max_length=16)
 
 
 class RelayTaskCreateBody(BaseModel):

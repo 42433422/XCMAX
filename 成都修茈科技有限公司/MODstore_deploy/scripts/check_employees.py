@@ -19,7 +19,10 @@ else:
     print(f"packages.json not found at {pkg_json}")
 
 print("\n=== Library manifests ===")
-for lib_dir in [os.path.join(old_base, "library"), os.path.join(new_base, "modstore_library")]:
+for lib_dir in [
+    os.path.join(old_base, "library"),
+    os.path.join(new_base, "modstore_library"),
+]:
     if os.path.isdir(lib_dir):
         for name in sorted(os.listdir(lib_dir)):
             mf = os.path.join(lib_dir, name, "manifest.json")
@@ -51,7 +54,6 @@ try:
         ],
         capture_output=True,
         text=True,
-        env={**os.environ, "PGPASSWORD": "modstore"},
     )
     if r.stdout.strip():
         for line in r.stdout.strip().split("\n"):

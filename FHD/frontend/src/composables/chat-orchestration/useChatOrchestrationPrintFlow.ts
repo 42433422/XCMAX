@@ -11,12 +11,14 @@ import { isStartPrintMessage } from '@/utils/textParser'
 import { fetchShipmentRecordsForUnit, summarizeShipmentRecordsForAudit } from '@/utils/shipmentMgmtPostPrint'
 import { isCoreWorkflowModInstalled } from '@/constants/coreWorkflowMod'
 import { dispatchCoreWorkflowModRun } from '@/workflow/coreWorkflowDispatcher'
-import type { ChatOrchestrationAddAndSaveMessage } from './chatOrchestrationShared'
+import type { ChatLocalScope, ChatOrchestrationAddAndSaveMessage } from './chatOrchestrationShared'
 
 type TaskListApi = ReturnType<typeof useChatTaskList>
 type ShipmentTaskApi = ReturnType<typeof useShipmentTask>
 
 export interface ChatOrchestrationPrintFlowDeps {
+  captureLocalScope: () => ChatLocalScope
+  saveMessage: (role: 'ai', text: string, sessionId: string) => Promise<void>
   modsStore: ReturnType<typeof useModsStore>
   addAndSaveMessage: ChatOrchestrationAddAndSaveMessage
   taskList: TaskListApi['taskList']
@@ -47,19 +49,32 @@ export function useChatOrchestrationPrintFlow(deps: ChatOrchestrationPrintFlowDe
     buildPrintSummaryMessage,
   } = deps
 
+  async function recordReply(text: string, scope: ChatLocalScope) {
+    if (!scope.isOwnerCurrent()) return
+    if (scope.isCurrent()) {
+      const saving = addAndSaveMessage(text, 'ai', undefined, scope.sessionId)
+      const messageRef = getLastAiMessageRef()
+      await saving
+      return messageRef
+    }
+    await deps.saveMessage('ai', text, scope.sessionId)
+  }
+
   /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
   async function runShipmentMgmtAfterPrintSuccess(ctx: {
     purchaseUnit: string
     orderId: number | null
     filePath: string
     labelCount: number
-  }): Promise<void> {
+  }, scope = deps.captureLocalScope()): Promise<void> {
+    if (!scope.isCurrent()) return
     const enabled = readWorkflowEmployeeEnabledMap()
     if (!enabled.shipment_mgmt) return
     const unit = String(ctx.purchaseUnit || '').trim()
     if (!unit) return
 
     const rows = await fetchShipmentRecordsForUnit(unit)
+    if (!scope.isCurrent()) return
     const summary = summarizeShipmentRecordsForAudit(rows, unit, ctx.orderId)
     dispatchCoreWorkflowModRun(isCoreWorkflowModInstalled(modsStore.modsForUi), 'shipment_mgmt', {
       action: 'audit_summary',
@@ -70,8 +85,8 @@ export function useChatOrchestrationPrintFlow(deps: ChatOrchestrationPrintFlowDe
     const fullText = summary.detailLines.join('\n')
     const at = Date.now()
 
-    await addAndSaveMessage(`【出货管理 · 打印后审计】\n${fullText}`, 'ai')
-    const auditMsgRef = getLastAiMessageRef()
+    const auditMsgRef = await recordReply(`【出货管理 · 打印后审计】\n${fullText}`, scope)
+    if (!scope.isCurrent()) return
 
     try {
       window.dispatchEvent(new CustomEvent('xcagi:shipment-record-updated'))
@@ -113,8 +128,8 @@ export function useChatOrchestrationPrintFlow(deps: ChatOrchestrationPrintFlowDe
     })
   }
 
-  async function handleStartPrintCommand(message: string): Promise<boolean> {
-    if (!isStartPrintMessage(message)) return false
+  async function handleStartPrintCommand(message: string, scope = deps.captureLocalScope()): Promise<boolean> {
+    if (!scope.isCurrent() || !isStartPrintMessage(message)) return false
     const printTaskId = createTaskId('print')
     upsertTask({
       id: printTaskId,
@@ -127,23 +142,26 @@ export function useChatOrchestrationPrintFlow(deps: ChatOrchestrationPrintFlowDe
 
     const context = lastShipmentExecution.value
     if (!context) {
-      await addAndSaveMessage('暂无可打印任务。请先生成发货单，再发送"开始打印"。', 'ai')
+      await recordReply('暂无可打印任务。请先生成发货单，再发送"开始打印"。', scope)
       return true
     }
 
-    const labelPaths = Array.isArray(context.labelPaths) ? context.labelPaths : []
+    const labelPaths = Array.isArray(context.labelPaths) ? [...context.labelPaths] : []
     const filePath = context.filePath || ''
     const purchaseUnit = String(context.purchaseUnit || '').trim()
     const orderId = context.orderId
+    const shipmentListId = String(context.taskListId || '').trim()
 
     if (!labelPaths.length && !filePath) {
-      await addAndSaveMessage('最近一次任务未包含可打印文件。请重新生成发货单后再试。', 'ai')
+      await recordReply('最近一次任务未包含可打印文件。请重新生成发货单后再试。', scope)
       return true
     }
 
     const summary = await executePrintTask(labelPaths, filePath, orderId ?? undefined, purchaseUnit)
     const resultText = buildPrintSummaryMessage(summary, labelPaths.length, filePath, purchaseUnit)
-    await addAndSaveMessage(resultText, 'ai')
+    // Stopping a reply does not undo a submitted physical print. Retain its factual receipt only under the original owner/session.
+    const receiptRef = await recordReply(resultText, scope)
+    if (!scope.isCurrent()) return true
     upsertTask({
       id: printTaskId,
       type: 'print',
@@ -153,9 +171,8 @@ export function useChatOrchestrationPrintFlow(deps: ChatOrchestrationPrintFlowDe
       progress: 100,
       summary: resultText,
       error: summary.success ? '' : summary.message || '打印失败',
-      messageRef: getLastAiMessageRef(),
+      messageRef: receiptRef,
     })
-    const shipmentListId = String(context?.taskListId || '').trim()
     if (shipmentListId) {
       if (summary.success) {
         upsertTask({
@@ -167,7 +184,7 @@ export function useChatOrchestrationPrintFlow(deps: ChatOrchestrationPrintFlowDe
           progress: 100,
           stage: '',
           summary: `已生成并打印。${resultText.replace(/\s+/g, ' ').slice(0, 240)}`,
-          messageRef: getLastAiMessageRef(),
+          messageRef: receiptRef,
         })
       } else {
         upsertTask({
@@ -188,13 +205,13 @@ export function useChatOrchestrationPrintFlow(deps: ChatOrchestrationPrintFlowDe
         orderId,
         filePath,
         labelCount: labelPaths.length,
-      })
+      }, scope)
     }
     return true
   }
 
   function handleShipmentDownloadClick() {
-    addAndSaveMessage('发货单已开始下载。是否现在执行打印？可点击"开始打印"按钮或直接发送"开始打印"。', 'ai')
+    void recordReply('发货单已开始下载。是否现在执行打印？可点击"开始打印"按钮或直接发送"开始打印"。', deps.captureLocalScope())
   }
 
   async function startPrintFromTaskCard() {

@@ -543,7 +543,7 @@ class TestPatchFile:
             nonlocal call_count
             call_count += 1
             if "--check" in args:
-                return {"returncode": 0, "stdout": "", "stderr": "", "ok": True}
+                return {"returncode": 0, "stdout": "1\t1\tf.py\0", "stderr": "", "ok": True}
             return {"returncode": 1, "stdout": "", "stderr": "conflict", "ok": False}
 
         with patch.object(est, "_run_cmd", side_effect=_fake_run_cmd):
@@ -553,6 +553,7 @@ class TestPatchFile:
             )
         assert r["ok"] is False
         assert "应用失败" in r["error"]
+        assert call_count == 2
 
 
 # ---------------------------------------------------------------------------

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.domain.services.industry_rules import (
+from app.domain.shipment.services.industry_rules import (
     DERIVATION_REGISTRY,
     VALIDATOR_REGISTRY,
     FieldError,

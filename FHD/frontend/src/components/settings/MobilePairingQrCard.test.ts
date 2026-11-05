@@ -1,5 +1,5 @@
-import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('qrcode', () => ({
   default: {
@@ -23,6 +23,7 @@ vi.mock('@/api/mobilePairing', () => ({
     nonce: 'n1',
     shortCode: '123456',
     exp: Math.floor(Date.now() / 1000) + 300,
+    qr_json: { kind: 'xcagi_relay_pairing', relay_id: 'relay-1', code: '123456' },
   }),
   loadDesktopPairingPayload: (...args: unknown[]) => mockLoadDesktopPairingPayload(...args),
   resolvePairingHost: () => '127.0.0.1',
@@ -30,12 +31,14 @@ vi.mock('@/api/mobilePairing', () => ({
 }))
 
 import MobilePairingQrCard from './MobilePairingQrCard.vue'
+enableAutoUnmount(afterEach)
 
 function jsonRes(body: unknown, ok = true) {
   return { ok, json: async () => body } as Response
 }
 
 describe('MobilePairingQrCard.vue', () => {
+  afterEach(() => vi.unstubAllGlobals())
   beforeEach(() => {
     mockApiFetch.mockReset()
     mockLoadDesktopPairingPayload.mockReset()
@@ -86,7 +89,7 @@ describe('MobilePairingQrCard.vue', () => {
   it('renders the relay QR code, device code and countdown after pairing succeeds', async () => {
     const wrapper = mount(MobilePairingQrCard)
     await flushPromises()
-    // 桌面 payload 缺省 → 走 issueMobilePairing 兜底；shortCode 优先
+    // 桌面 IPC 缺省时，后端签发的云中继码仍可在 UI 显示。
     expect(wrapper.find('img.mobile-pairing__qr').attributes('src')).toBe('data:image/png;base64,fakeqr')
     expect(wrapper.find('.mobile-pairing__code-value').text()).toBe('123456')
     expect(wrapper.find('.mobile-pairing__countdown').text()).toContain('秒')
@@ -104,6 +107,23 @@ describe('MobilePairingQrCard.vue', () => {
     const wrapper = mount(MobilePairingQrCard)
     await flushPromises()
     expect(wrapper.find('.mobile-pairing__code-value').text()).toBe('654321')
+  })
+
+  it('does not advertise a LAN-only code when cloud registration failed', async () => {
+    vi.stubGlobal('xcagiDesktop', {})
+    mockLoadDesktopPairingPayload.mockResolvedValue({
+      host: '192.168.10.8',
+      port: 17500,
+      nonce: 'lan-nonce',
+      shortCode: '111111',
+      exp: Math.floor(Date.now() / 1000) + 300,
+      qr_json: { kind: 'xcagi_pairing', code: '111111' },
+    })
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    expect(wrapper.find('.mobile-pairing__code-value').exists()).toBe(false)
+    expect(wrapper.find('img.mobile-pairing__qr').exists()).toBe(false)
+    expect(wrapper.text()).toContain('无法生成二维码')
   })
 
   it('copies the pairing code to the clipboard and shows the toast', async () => {
@@ -128,4 +148,31 @@ describe('MobilePairingQrCard.vue', () => {
     clearIntervalSpy.mockRestore()
     clearTimeoutSpy.mockRestore()
   })
+  it('copies a relay code through the legacy fallback, expires feedback and renews/polls only while mounted', async () => {
+    vi.useFakeTimers()
+    const payload = () => ({ nonce: 'relay-nonce', exp: Math.floor(Date.now() / 1000) + 20,
+      qr_json: { kind: 'xcagi_relay_pairing', relay_id: 'relay-1', code: '765432' } })
+    mockLoadDesktopPairingPayload.mockImplementation(async () => payload())
+    mockApiFetch.mockResolvedValue(jsonRes({ paired: true }))
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } })
+    const oldCopy = document.execCommand
+    document.execCommand = vi.fn(() => true)
+    const wrapper = mount(MobilePairingQrCard); await flushPromises()
+    expect(wrapper.get('.mobile-pairing__status--stale').text()).toContain('已连接手机')
+    await wrapper.get('.mobile-pairing__copy-code').trigger('click'); await flushPromises()
+    expect(document.execCommand).toHaveBeenCalledWith('copy')
+    expect(document.querySelector('textarea')).toBeNull()
+    expect(wrapper.find('.mobile-pairing__copy-toast').exists()).toBe(true)
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(wrapper.find('.mobile-pairing__copy-toast').exists()).toBe(false)
+    await vi.advanceTimersByTimeAsync(13_500)
+    expect(mockLoadDesktopPairingPayload.mock.calls.length).toBeGreaterThan(1)
+    expect(mockApiFetch).toHaveBeenCalledTimes(2)
+    wrapper.unmount(); const requests = mockLoadDesktopPairingPayload.mock.calls.length
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(mockLoadDesktopPairingPayload).toHaveBeenCalledTimes(requests)
+    expect(mockApiFetch).toHaveBeenCalledTimes(2)
+    document.execCommand = oldCopy; vi.useRealTimers()
+  })
+
 })

@@ -22,6 +22,7 @@ from datetime import timedelta as timedelta
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from modstore_server.integrations.repository_packages import load_repository_module
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.retort_clarification_operations import (
     _latest_session_for_subject as _latest_session_for_subject,
@@ -201,51 +202,16 @@ def _paths_from_changed(changed_files: Sequence[Any] | None) -> list[str]:
 
 
 def _load_clarification_builder():
-    try:
-        from retort_engine.clarification import (
-            build_clarification_questions,
-            clarification_needed,
-            enrich_strategy_intent,
-        )
-
-        return (
-            build_clarification_questions,
-            clarification_needed,
-            enrich_strategy_intent,
-        )
-    except ImportError:
-        root = Path(__file__).resolve().parents[3] / "packages" / "retort_engine"
-        import sys
-
-        if root.is_dir() and str(root) not in sys.path:
-            sys.path.insert(0, str(root))
-        from retort_engine.clarification import (
-            build_clarification_questions,
-            clarification_needed,
-            enrich_strategy_intent,
-        )
-
-        return (
-            build_clarification_questions,
-            clarification_needed,
-            enrich_strategy_intent,
-        )
+    module = load_repository_module("retort_engine.clarification")
+    return (
+        module.build_clarification_questions,
+        module.clarification_needed,
+        module.enrich_strategy_intent,
+    )
 
 
 def _load_alignment():
-    try:
-        from retort_engine.intent_alignment import assess_change_intent_alignment
-
-        return assess_change_intent_alignment
-    except ImportError:
-        root = Path(__file__).resolve().parents[3] / "packages" / "retort_engine"
-        import sys
-
-        if root.is_dir() and str(root) not in sys.path:
-            sys.path.insert(0, str(root))
-        from retort_engine.intent_alignment import assess_change_intent_alignment
-
-        return assess_change_intent_alignment
+    return load_repository_module("retort_engine.intent_alignment").assess_change_intent_alignment
 
 
 def _normalize_changed_for_alignment(

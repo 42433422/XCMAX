@@ -6,6 +6,9 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
+import modstore_server.maintenance_loop.config as _maintenance_config
+import modstore_server.maintenance_loop.store as _maintenance_store
+
 RETORT_SCOPE_REASON = "retort_scope_too_large"
 RETORT_SCOPE_MAX_FILES = 6
 RETORT_SCOPE_MAX_CHANGED_LINES = 400
@@ -144,8 +147,6 @@ def retort_scope_only_clarification(value: Any) -> bool:
 def reconcile_retort_scope_remediations(memory: dict[str, Any]) -> dict[str, Any]:
     """Turn durable scope-only Retort holds into clean-base code remediation."""
 
-    from modstore_server import self_maintenance_loop_runner as runner
-
     open_items = memory.get("open_items")
     if not isinstance(open_items, list):
         open_items = []
@@ -169,7 +170,7 @@ def reconcile_retort_scope_remediations(memory: dict[str, Any]) -> dict[str, Any
             and str(original_item.get("reason") or "").strip() == RETORT_SCOPE_REASON
         )
     added_run_ids: list[str] = []
-    for row in runner._read_ledger(limit=500):
+    for row in _maintenance_store._read_ledger(limit=500):
         run_id = str(row.get("run_id") or "").strip()
         retort = row.get("retort_clarification")
         if (
@@ -195,7 +196,7 @@ def reconcile_retort_scope_remediations(memory: dict[str, Any]) -> dict[str, Any
         open_items.append(
             {
                 "branch": branch,
-                "created_at": runner._iso(runner._utc_now()),
+                "created_at": _maintenance_config._iso(_maintenance_config._utc_now()),
                 "detail": (
                     f"Retort requested risk acceptance for {changed_file_label} changed files; "
                     "rebuild the smallest valid fix from the clean base."
@@ -211,7 +212,7 @@ def reconcile_retort_scope_remediations(memory: dict[str, Any]) -> dict[str, Any
         existing_run_ids.add(run_id)
         added_run_ids.append(run_id)
     if added_run_ids:
-        memory["updated_at"] = runner._iso(runner._utc_now())
+        memory["updated_at"] = _maintenance_config._iso(_maintenance_config._utc_now())
     return {
         "added": len(added_run_ids),
         "changed": bool(added_run_ids),

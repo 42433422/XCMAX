@@ -1,0 +1,8 @@
+[14:26:52] feature=ch-im-super platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-im-super
+[14:27:04] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:27:06] case S1: passed - AI 群与超级员工编组真实读取
+[14:27:06] case S2: passed - 候选 AI 员工真实读取
+[14:27:06] case S3: passed - 指定 AI 群消息流真实读取
+[14:27:08] case S4: passed - 未登录访问 AI 群被拒（负例）
+[14:27:09] video: ch-im-super-web-20260929-142652.webm (1169760 bytes)
+[14:27:09] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-im-super/log/ch-im-super-web-20260929-142652.log

@@ -1,10 +1,6 @@
 name: CodeQL
 
-# 补齐分支保护 required 检查 analyze (python) / analyze (javascript-typescript)。
-# 此前这两个必需上下文无生产者(default-setup=not-configured、仓库无 CodeQL workflow），
-# 在每个 PR 上永远"等待中"=结构性死锁，迫使所有合并走 admin 强推。
-# job id = analyze + matrix.language → check run 名恰为 "analyze (python)" / "analyze (javascript-typescript)"，
-# 精确匹配 branch protection 的 required contexts。
+# Matrix job names provide the two required CodeQL contexts.
 
 on:
   push:
@@ -16,6 +12,9 @@ on:
     # Keep the release scanner's CodeQL provenance fresh enough for the
     # required two-consecutive-day zero-finding proof.
     - cron: "17 18 * * *"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
@@ -32,17 +31,71 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify ${{ matrix.language }} changed paths (unified classifier)
+        id: paths
+        if: github.event_name == 'pull_request'
+        run: |
+          # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
+          category="${{ matrix.language == 'python' && 'codeql_python' || 'codeql_javascript' }}"
+          python scripts/dev/change_classifier.py --category "$category" \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
 
       - name: Initialize CodeQL
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
+          # No packs: input — Actions resolves scope/name via GHCR only; in-repo
+          # +./ packs are rejected. ETL dir_fd path-injection FPs are stripped
+          # from the Python SARIF after analyze (see strip script below).
 
       - name: Perform CodeQL Analysis
+        id: analyze
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+          upload: ${{ matrix.language != 'python' }}
+          output: codeql-sarif-out
+
+      - name: Strip known-safe ETL dir_fd path-injection FPs (python)
+        if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          files=(codeql-sarif-out/**/*.sarif)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No SARIF produced" >&2
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            python3 .github/codeql/strip_etl_dir_fd_path_injection_fps.py "$f"
+          done
+
+      - name: Upload CodeQL SARIF (python, filtered)
+        if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: codeql-sarif-out
+          category: "/language:python"
+
+      - name: Retain source locations and data flows for review
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif-${{ matrix.language }}
+          path: codeql-sarif-out/**/*.sarif
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: No ${{ matrix.language }} changes (targeted skip)
+        if: github.event_name == 'pull_request' && steps.paths.outputs.run != 'true'
+        run: echo "No ${{ matrix.language }} source changes; CodeQL skipped for this PR; required check satisfied."
 
   security-no-new-critical-high:
     name: security-no-new-critical-high
@@ -71,7 +124,14 @@ jobs:
               | jq '[.[][] | select(
                   ((.rule.security_severity_level // "") | ascii_downcase)
                   as $severity | $severity == "critical" or $severity == "high"
-                ) | {number, rule_id:.rule.id, path:.most_recent_instance.location.path}]' \
+                ) | {
+                  number,
+                  rule_id:.rule.id,
+                  path:.most_recent_instance.location.path,
+                  start_line:.most_recent_instance.location.start_line,
+                  end_line:.most_recent_instance.location.end_line,
+                  message:.most_recent_instance.message.text
+                }]' \
               > "$output"
           }
           export_alerts "$BASE_REF" base.json

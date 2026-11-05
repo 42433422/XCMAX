@@ -1,4 +1,4 @@
-# FHD 一键安装 Windows 中文语音包
+﻿# FHD 一键安装 Windows 中文语音包
 # 用法：右键 → 使用 PowerShell 运行（需要管理员）；或由 FHD 后端通过 Start-Process -Verb RunAs 调起
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'

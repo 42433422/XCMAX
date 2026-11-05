@@ -1,0 +1,110 @@
+{
+  "result": "PASS",
+  "node": 14,
+  "time": "2026-10-15T22:48:24.033622+08:00",
+  "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+  "bytes": 528146028,
+  "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+  "savedFile": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-downloads/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+  "elapsedSeconds": 1623.9,
+  "segments": [
+    {
+      "segment": 0,
+      "first": 0,
+      "last": 33554431,
+      "bytes": 33554432
+    },
+    {
+      "segment": 1,
+      "first": 33554432,
+      "last": 67108863,
+      "bytes": 33554432
+    },
+    {
+      "segment": 2,
+      "first": 67108864,
+      "last": 100663295,
+      "bytes": 33554432
+    },
+    {
+      "segment": 3,
+      "first": 100663296,
+      "last": 134217727,
+      "bytes": 33554432
+    },
+    {
+      "segment": 4,
+      "first": 134217728,
+      "last": 167772159,
+      "bytes": 33554432
+    },
+    {
+      "segment": 5,
+      "first": 167772160,
+      "last": 201326591,
+      "bytes": 33554432
+    },
+    {
+      "segment": 6,
+      "first": 201326592,
+      "last": 234881023,
+      "bytes": 33554432
+    },
+    {
+      "segment": 7,
+      "first": 234881024,
+      "last": 268435455,
+      "bytes": 33554432
+    },
+    {
+      "segment": 8,
+      "first": 268435456,
+      "last": 301989887,
+      "bytes": 33554432
+    },
+    {
+      "segment": 9,
+      "first": 301989888,
+      "last": 335544319,
+      "bytes": 33554432
+    },
+    {
+      "segment": 10,
+      "first": 335544320,
+      "last": 369098751,
+      "bytes": 33554432
+    },
+    {
+      "segment": 11,
+      "first": 369098752,
+      "last": 402653183,
+      "bytes": 33554432
+    },
+    {
+      "segment": 12,
+      "first": 402653184,
+      "last": 436207615,
+      "bytes": 33554432
+    },
+    {
+      "segment": 13,
+      "first": 436207616,
+      "last": 469762047,
+      "bytes": 33554432
+    },
+    {
+      "segment": 14,
+      "first": 469762048,
+      "last": 503316479,
+      "bytes": 33554432
+    },
+    {
+      "segment": 15,
+      "first": 503316480,
+      "last": 528146027,
+      "bytes": 24829548
+    }
+  ],
+  "transport": "Anonymous HTTPS byte ranges with certificate validation; physical interface bound only for this verifier",
+  "scope": "Every byte downloaded from the public URL and the complete file checksum verified; no app retest"
+}

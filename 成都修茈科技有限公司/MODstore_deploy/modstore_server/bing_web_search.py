@@ -218,11 +218,6 @@ async def _fetch_bing_html_via_edge(
             await browser.close()
 
 
-def _tavily_fallback_enabled() -> bool:
-    raw = (os.environ.get("MODSTORE_WEB_SEARCH_USE_TAVILY") or "1").strip().lower()
-    return raw not in ("0", "false", "no", "off")
-
-
 def _apply_company_relevance(query: str, parsed: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     q = (query or "").strip()
     if "有限公司" not in q and "有限责任公司" not in q and "股份" not in q:

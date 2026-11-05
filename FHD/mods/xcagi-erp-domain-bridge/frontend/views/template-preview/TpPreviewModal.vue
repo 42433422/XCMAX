@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { ref, useId } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 import ExcelPreview from '@/components/template/ExcelPreview.vue'
 import LabelPreview from '@/components/template/LabelPreview.vue'
 import type { TemplatePreviewCtx } from './assemble'
 
-// 拆分自 TemplatePreviewView.vue 模板（原第 296–331 行）；模板逐字迁移，行为不变。
 const props = defineProps<{ tp: TemplatePreviewCtx }>()
 
 const {
@@ -11,14 +12,17 @@ const {
   canPreviewVirtualTemplate, getTemplateFields, getTemplateSampleRows, getExcelPreviewTitle,
   getTemplateGridData,
 } = props.tp
+const panel = ref<HTMLElement | null>(null)
+const titleId = useId()
+useDialogFocus(panel, () => showPreviewModal.value, closePreviewModal)
 </script>
 
 <template>
     <div v-if="showPreviewModal" class="modal-overlay" @click.self="closePreviewModal">
-      <div class="modal-content" style="max-width:800px;">
+      <div ref="panel" class="modal-content" style="max-width:800px;" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1">
         <div class="modal-header">
-          <h3><i class="fa fa-file-text-o" aria-hidden="true"></i> 模板预览 - {{ previewingTemplate?.name }}</h3>
-          <button type="button" class="modal-close" @click="closePreviewModal">&times;</button>
+          <h3 :id="titleId"><i class="fa fa-file-text-o" aria-hidden="true"></i> 模板预览 - {{ previewingTemplate?.name }}</h3>
+          <button type="button" class="modal-close" aria-label="关闭模板预览" @click="closePreviewModal">&times;</button>
         </div>
         <div class="modal-body">
           <div class="preview-modal-content">

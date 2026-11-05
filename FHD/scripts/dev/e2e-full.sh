@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 全量 Playwright e2e：编排 FastAPI :5000 + Vite :5001，跑 P0 套件（14 用例）。
+# Playwright 门禁：编排隔离 FastAPI + Vite，验证首次登录及 P0 业务闭环。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -75,6 +75,7 @@ trap cleanup EXIT INT TERM
 export LAN_GUARD_ENABLED="${LAN_GUARD_ENABLED:-0}"
 export XCAGI_NEURO_INTENT="${XCAGI_NEURO_INTENT:-1}"
 export XCAGI_PRODUCT_SKU="${XCAGI_PRODUCT_SKU:-enterprise}"
+export FHD_ETL_CENTER_ENABLED="${FHD_ETL_CENTER_ENABLED:-1}"
 export VITE_XCAGI_PRODUCT_SKU="${VITE_XCAGI_PRODUCT_SKU:-enterprise}"
 export VITE_XCAGI_EDITION="${VITE_XCAGI_EDITION:-full}"
 export VITE_XCAGI_PLATFORM_SHELL="0"

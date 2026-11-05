@@ -29,6 +29,8 @@ IGNORE_FILES = {
     FHD_ROOT / "docs" / "DEV_TOOLS_INVENTORY.md",
     # 工作区地图：多域 SSOT 的汇总导航文档，非权威 SSOT 声明文档（同 README 语义）。
     REPO_ROOT / "docs" / "workmap.md",
+    # 余债收口对照表：引用既有 SSOT 路径，本身不是权威声明。
+    FHD_ROOT / "docs" / "reports" / "DEBT24_CLOSEOUT.md",
 }
 
 CLAIM_PATTERN = re.compile(r"(唯一真相源|SSOT|单一事实来源)", re.IGNORECASE)

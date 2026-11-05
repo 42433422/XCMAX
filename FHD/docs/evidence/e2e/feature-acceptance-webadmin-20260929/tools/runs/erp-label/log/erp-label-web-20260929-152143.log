@@ -1,0 +1,7 @@
+[15:21:43] feature=erp-label platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-label
+[15:21:56] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:21:57] case LB1: passed - 标签打印员工状态真实读取
+[15:21:57] case LB2: passed - 真实发布打印作业事件
+[15:21:58] case LB3: passed - 旧打印接口 403 fail-closed（负例）
+[15:21:58] video: erp-label-web-20260929-152143.webm (1038178 bytes)
+[15:21:58] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-label/log/erp-label-web-20260929-152143.log

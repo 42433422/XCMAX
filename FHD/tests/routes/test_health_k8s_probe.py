@@ -183,7 +183,7 @@ class TestCapabilities:
                 return_value={"status": "healthy", "engines": {}},
             ),
             patch(
-                "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer"
+                "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer"
             ) as g,
         ):
             rec = MagicMock()
@@ -208,7 +208,7 @@ class TestCapabilities:
                 return_value={"status": "healthy"},
             ),
             patch(
-                "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer",
+                "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer",
                 side_effect=RuntimeError("boot fail"),
             ),
         ):
@@ -229,7 +229,7 @@ class TestCapabilities:
                 return_value={"status": "healthy"},
             ),
             patch(
-                "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer"
+                "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer"
             ) as g,
         ):
             rec = MagicMock()
@@ -256,6 +256,24 @@ class TestCheckHelpers:
             out = _check_database()
         assert out["status"] == "unhealthy"
 
+    def test_check_redis_disabled_when_unconfigured(self) -> None:
+        from app.fastapi_routes.health_k8s import _check_redis
+
+        with patch.dict("os.environ", {}, clear=True):
+            assert _check_redis()["status"] == "disabled"
+
+    def test_check_redis_probes_cache_url_and_reports_outage(self) -> None:
+        from app.fastapi_routes.health_k8s import _check_redis
+
+        url = "redis://:pw@redis:6379/0"
+        with (
+            patch.dict("os.environ", {"CACHE_REDIS_URL": url}, clear=True),
+            patch("redis.from_url") as from_url,
+        ):
+            from_url.return_value.ping.side_effect = ConnectionError("down")
+            assert _check_redis()["status"] == "unhealthy"
+        from_url.assert_called_once_with(url)
+
     def test_check_pgvector_disabled_no_url(self) -> None:
         from app.fastapi_routes.health_k8s import _check_pgvector
 
@@ -275,7 +293,7 @@ class TestCheckHelpers:
         from app.fastapi_routes.health_k8s import _check_ai_service
 
         with patch(
-            "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer"
+            "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer"
         ) as g:
             rec = MagicMock()
             rec.is_ready.return_value = True

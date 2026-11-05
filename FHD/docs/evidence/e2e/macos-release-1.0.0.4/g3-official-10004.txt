@@ -1,0 +1,10 @@
+== G3 1.0.0.4 installed bundle（ShipIt OTA 替换后）2026-09-15 ==
+$ codesign --verify --deep --strict /Applications/XCAGI.app
+exit=0
+$ spctl --assess --type execute /Applications/XCAGI.app
+exit=0
+$ Info.plist CFBundleShortVersionString
+1.0.0.4
+$ codesign -dv entitlements flag
+CodeDirectory v=20500 size=456 flags=0x10000(runtime) hashes=3+7 location=embedded
+TeamIdentifier=G26WSH472M

@@ -11,7 +11,7 @@
 
 无扩展 id 时使用基库 ``DATABASE_URL``（例如未选扩展或壳层页）。
 
-Phase 5B 从 ``app.legacy.mod_database_url`` 吸收而来。
+Phase 5B 从 ``legacy-layer.mod_database_url`` 吸收而来。
 """
 
 from __future__ import annotations

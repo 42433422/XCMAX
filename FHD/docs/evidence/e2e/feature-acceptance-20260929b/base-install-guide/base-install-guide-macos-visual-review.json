@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-install-guide",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "73c42a0d307c82912401ff006df65faba49516e093a60f67a0573f70e0348d59",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。创建您的数字公司，步骤停在公司。公司名称已填 SUNBIRD，按钮「让 XC 认识我的公司」。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-install-guide/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-install-guide/macos/result.png"
+}

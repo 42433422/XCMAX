@@ -1,4 +1,4 @@
-"""Tests for app.services.kitten_business_snapshot — business data snapshot builder."""
+"""Tests for app.domain.shared_services.kitten_business_snapshot — business data snapshot builder."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.kitten_business_snapshot import (
+from app.domain.shared_services.kitten_business_snapshot import (
     _fmt_dt,
     _iso_now,
     build_kitten_business_snapshot,

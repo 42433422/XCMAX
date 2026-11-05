@@ -1,0 +1,15 @@
+{
+  "status": "clean",
+  "root": "/private/tmp/xcmax-shipment-1920",
+  "removed_count": 0,
+  "kept_count": 0,
+  "error_count": 0,
+  "removed": [],
+  "kept": [],
+  "errors": [],
+  "first_principle": "clean_workspace_after_every_closed_run",
+  "retained_worktree": "/private/tmp/xcmax-shipment-1920",
+  "retained_reason": "PR1920 final CI and release pending",
+  "shared_checkout": "pre-existing dirty changes and active runtimes preserved",
+  "free_gib": 51.0
+}

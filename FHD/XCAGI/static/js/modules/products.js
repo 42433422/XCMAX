@@ -156,12 +156,7 @@ function batchDeleteProducts() {
         alert('请选择要删除的产品');
         return;
     }
-    const key = prompt('请输入密钥确认删除:');
-    if (key !== '61408693') {
-        alert('密钥错误');
-        return;
-    }
-    if (!confirm('确定要删除选中的 ' + checked.length + ' 个产品吗？')) return;
+    if (!confirm('确定要删除选中的 ' + checked.length + ' 个产品吗？此操作不可恢复！')) return;
     
     const ids = Array.from(checked).map(cb => parseInt(cb.value));
     

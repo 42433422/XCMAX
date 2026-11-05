@@ -144,9 +144,16 @@ def refresh_mobile_access_token(refresh_token: str) -> dict[str, str] | None:
     sid = payload.get("session_id")
     if uid is None or not sid:
         return None
-    # 会话已删除/过期时拒绝续签：否则客户端会拿到新 token 却仍在
-    # session 相关接口收到 401，形成「refresh 成功 + 业务 401」的循环。
-    if not _mobile_session_is_live(str(sid)):
+    from app.infrastructure.auth.mobile_session import ADMIN_ACCOUNT_KINDS, current_mobile_admin
+
+    account_kind = str(payload.get("account_kind") or "").strip().lower()
+    if account_kind in ADMIN_ACCOUNT_KINDS:
+        # 管理端仍走市场管理员会话校验（main 的既有语义）。
+        if current_mobile_admin(uid, sid) is None:
+            return None
+    elif not _mobile_session_is_live(str(sid)):
+        # 普通/企业会话已删除或过期时拒绝续签：否则客户端会拿到新 token
+        # 却仍在 session 相关接口收到 401，形成「refresh 成功 + 业务 401」循环。
         logger.info("mobile refresh rejected: session %s is no longer valid", sid)
         return None
     exp = int(payload.get("exp") or 0)

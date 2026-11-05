@@ -1,0 +1,14 @@
+{
+  "tested_at": "2026-09-13T05:52:55.013028+00:00",
+  "surface": "CUA in-app browser against installed formal desktop backend",
+  "url": "http://127.0.0.1:17500",
+  "build_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+  "account": "xcagi-enterprise-demo",
+  "login": "real UI login passed",
+  "template_grid": "passed",
+  "template_create": "saved; completeness 5/5",
+  "template_name": "正式版验收-20260913-送货单",
+  "shipment": "blocked: legacy /templates?action=api returns SPA HTML; /documents and /download are also stale in source",
+  "native_file_picker": "automation unresolved, browser upload used",
+  "complete": false
+}

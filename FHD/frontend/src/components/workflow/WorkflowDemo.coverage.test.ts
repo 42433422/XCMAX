@@ -1,267 +1,95 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
-
 import WorkflowDemo from '@/components/workflow/WorkflowDemo.vue'
 
+let wrapper: VueWrapper
 function mountComponent() {
-  return mount(WorkflowDemo)
+  wrapper = mount(WorkflowDemo)
+  return wrapper
 }
 
-describe('WorkflowDemo.coverage', () => {
+describe('WorkflowDemo', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.spyOn(console, 'log').mockImplementation(() => {})
   })
+  afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks() })
 
-  it('renders main heading', () => {
+  it('renders the employee controls, both branch kinds, triggers and an empty log', () => {
     const wrapper = mountComponent()
-    expect(wrapper.find('h2').text()).toBe('真实电话业务员工作流示例')
-  })
-
-  it('renders employee switch control section', () => {
-    const wrapper = mountComponent()
-    const headings = wrapper.findAll('h3')
-    expect(headings[0].text()).toBe('员工开关控制')
-  })
-
-  it('renders workflow branch visualization section', () => {
-    const wrapper = mountComponent()
-    const headings = wrapper.findAll('h3')
-    expect(headings[1].text()).toBe('工作流分支可视化')
-  })
-
-  it('renders status log section', () => {
-    const wrapper = mountComponent()
-    const headings = wrapper.findAll('h3')
-    expect(headings[2].text()).toBe('状态日志')
-  })
-
-  it('renders three employee rows', () => {
-    const wrapper = mountComponent()
+    expect(wrapper.get('h2').text()).toBe('真实电话业务员工作流示例')
+    expect(wrapper.findAll('h3').map(heading => heading.text())).toEqual(['员工开关控制', '工作流分支可视化', '状态日志'])
     const rows = wrapper.findAll('.workflow-employee-row')
-    expect(rows.length).toBe(3)
-  })
-
-  it('renders real phone employee with correct label', () => {
-    const wrapper = mountComponent()
-    const rows = wrapper.findAll('.workflow-employee-row')
-    expect(rows[0].text()).toContain('真实电话业务员')
-  })
-
-  it('renders online service employee with correct label', () => {
-    const wrapper = mountComponent()
-    const rows = wrapper.findAll('.workflow-employee-row')
-    expect(rows[1].text()).toContain('在线客服业务员')
-  })
-
-  it('renders email service employee with correct label', () => {
-    const wrapper = mountComponent()
-    const rows = wrapper.findAll('.workflow-employee-row')
-    expect(rows[2].text()).toContain('邮件业务员')
-  })
-
-  it('renders two branch cards', () => {
-    const wrapper = mountComponent()
+    expect(rows.map(row => row.text())).toEqual(['真实电话业务员', '在线客服业务员', '邮件业务员'])
+    expect(rows.map(row => row.attributes('aria-pressed'))).toEqual(['false', 'false', 'false'])
+    const vm = wrapper.vm as any
+    expect([vm.isRealPhoneActive, vm.isOnlineServiceActive, vm.isEmailServiceActive]).toEqual([false, false, false])
+    expect(vm.logs).toEqual([])
+    expect(wrapper.findAll('.log-entry')).toHaveLength(0)
     const cards = wrapper.findAll('.wf-viz-branch-card')
-    expect(cards.length).toBe(2)
-  })
-
-  it('renders real phone branch card with fixed badge', () => {
-    const wrapper = mountComponent()
-    const cards = wrapper.findAll('.wf-viz-branch-card')
-    expect(cards[0].find('.wf-viz-kind-badge').text()).toBe('固定扩展')
+    expect(cards).toHaveLength(2)
+    expect(cards[0].get('.wf-viz-kind-badge').text()).toBe('固定扩展')
     expect(cards[0].classes()).toContain('wf-viz-branch-card--fixed')
-  })
-
-  it('renders online service branch card with dynamic badge', () => {
-    const wrapper = mountComponent()
-    const cards = wrapper.findAll('.wf-viz-branch-card')
-    expect(cards[1].find('.wf-viz-kind-badge').text()).toBe('动态扩展')
+    expect(cards[1].get('.wf-viz-kind-badge').text()).toBe('动态扩展')
     expect(cards[1].classes()).not.toContain('wf-viz-branch-card--fixed')
+    expect(vm.realPhoneTriggers).toHaveLength(4)
+    expect(vm.realPhoneTriggers[0]).toMatchObject({ id: 'adb_check', type: 'fixed' })
+    expect(vm.onlineServiceTriggers).toHaveLength(2)
+    expect(vm.onlineServiceTriggers[0].type).toBe('dynamic')
+    expect(cards[0].get('.wf-viz-branch-triggers').text()).toContain('ADB 设备连通检查')
   })
 
-  it('initializes all employee toggles as inactive', () => {
+  it('toggles each employee on and off through its control and logs the real-phone identity', async () => {
     const wrapper = mountComponent()
-    expect((wrapper.vm as any).isRealPhoneActive).toBe(false)
-    expect((wrapper.vm as any).isOnlineServiceActive).toBe(false)
-    expect((wrapper.vm as any).isEmailServiceActive).toBe(false)
+    const vm = wrapper.vm as any
+    for (const [index, field] of ['isRealPhoneActive', 'isOnlineServiceActive', 'isEmailServiceActive'].entries()) {
+      const row = wrapper.findAll('.workflow-employee-row')[index]
+      await row.trigger('click')
+      expect(vm[field]).toBe(true)
+      expect(row.attributes('aria-pressed')).toBe('true')
+      expect(vm.logs.map((log: { message: string }) => log.message)).toContain('员工状态变更：启用')
+      if (index === 0) expect(vm.logs[0].message).toBe('员工切换：real_phone -> 启用')
+      await row.trigger('click')
+      expect(vm[field]).toBe(false)
+      expect(row.attributes('aria-pressed')).toBe('false')
+      expect(vm.logs.map((log: { message: string }) => log.message)).toContain('员工状态变更：禁用')
+      if (index === 0) expect(vm.logs[0].message).toBe('员工切换：real_phone -> 禁用')
+    }
+    expect(vm.logs).toHaveLength(8)
   })
 
-  it('initializes logs as empty', () => {
+  it('keeps newest log entries first, with rendered timestamps and exact event details', async () => {
     const wrapper = mountComponent()
-    expect((wrapper.vm as any).logs).toEqual([])
-    expect(wrapper.findAll('.log-entry').length).toBe(0)
-  })
-
-  it('handleEmployeeChange adds a log entry with enable message', async () => {
-    const wrapper = mountComponent()
-    ;(wrapper.vm as any).handleEmployeeChange(true)
+    const vm = wrapper.vm as any
+    vm.handleEmployeeChange(true)
+    vm.handleEmployeeToggle({ employeeId: 'email_service', active: false })
     await nextTick()
-    expect((wrapper.vm as any).logs.length).toBe(1)
-    expect((wrapper.vm as any).logs[0].message).toContain('启用')
-  })
-
-  it('handleEmployeeChange adds a log entry with disable message', async () => {
-    const wrapper = mountComponent()
-    ;(wrapper.vm as any).handleEmployeeChange(false)
-    await nextTick()
-    expect((wrapper.vm as any).logs[0].message).toContain('禁用')
-  })
-
-  it('handleEmployeeToggle adds a log with employeeId and active state', async () => {
-    const wrapper = mountComponent()
-    ;(wrapper.vm as any).handleEmployeeToggle({ employeeId: 'real_phone', active: true })
-    await nextTick()
-    expect((wrapper.vm as any).logs[0].message).toContain('real_phone')
-    expect((wrapper.vm as any).logs[0].message).toContain('启用')
-  })
-
-  it('handleEmployeeToggle adds a log with disable state', async () => {
-    const wrapper = mountComponent()
-    ;(wrapper.vm as any).handleEmployeeToggle({ employeeId: 'online_service', active: false })
-    await nextTick()
-    expect((wrapper.vm as any).logs[0].message).toContain('online_service')
-    expect((wrapper.vm as any).logs[0].message).toContain('禁用')
-  })
-
-  it('handleBranchConfigure adds a log and calls console.log', async () => {
-    const wrapper = mountComponent()
-    ;(wrapper.vm as any).handleBranchConfigure({ branchId: 'real_phone' })
-    await nextTick()
-    expect((wrapper.vm as any).logs[0].message).toContain('配置分支')
-    expect((wrapper.vm as any).logs[0].message).toContain('real_phone')
-    expect(console.log).toHaveBeenCalledWith('Configure branch:', 'real_phone')
-  })
-
-  it('handleBranchViewDetails adds a log and calls console.log', async () => {
-    const wrapper = mountComponent()
-    ;(wrapper.vm as any).handleBranchViewDetails({ branchId: 'online_service' })
-    await nextTick()
-    expect((wrapper.vm as any).logs[0].message).toContain('查看详情')
-    expect((wrapper.vm as any).logs[0].message).toContain('online_service')
-    expect(console.log).toHaveBeenCalledWith('View details:', 'online_service')
-  })
-
-  it('clicking real phone employee toggle activates it and logs', async () => {
-    const wrapper = mountComponent()
-    const rows = wrapper.findAll('.workflow-employee-row')
-    await rows[0].trigger('click')
-    expect((wrapper.vm as any).isRealPhoneActive).toBe(true)
-    expect((wrapper.vm as any).logs.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('clicking real phone employee toggle emits toggle event with employeeId', async () => {
-    const wrapper = mountComponent()
-    const rows = wrapper.findAll('.workflow-employee-row')
-    await rows[0].trigger('click')
-    const logMessages = (wrapper.vm as any).logs.map((l: any) => l.message)
-    expect(logMessages.some((m: string) => m.includes('real_phone'))).toBe(true)
-  })
-
-  it('clicking online service employee toggle activates it', async () => {
-    const wrapper = mountComponent()
-    const rows = wrapper.findAll('.workflow-employee-row')
-    await rows[1].trigger('click')
-    expect((wrapper.vm as any).isOnlineServiceActive).toBe(true)
-  })
-
-  it('clicking email service employee toggle activates it', async () => {
-    const wrapper = mountComponent()
-    const rows = wrapper.findAll('.workflow-employee-row')
-    await rows[2].trigger('click')
-    expect((wrapper.vm as any).isEmailServiceActive).toBe(true)
-  })
-
-  it('clicking configure button on first branch card logs configure', async () => {
-    const wrapper = mountComponent()
-    const cards = wrapper.findAll('.wf-viz-branch-card')
-    const configureBtn = cards[0].findAll('.wf-viz-action-btn')[0]
-    await configureBtn.trigger('click')
-    expect((wrapper.vm as any).logs[0].message).toContain('配置分支')
-    expect((wrapper.vm as any).logs[0].message).toContain('real_phone')
-  })
-
-  it('clicking view details button on first branch card logs view details', async () => {
-    const wrapper = mountComponent()
-    const cards = wrapper.findAll('.wf-viz-branch-card')
-    const viewBtn = cards[0].findAll('.wf-viz-action-btn')[1]
-    await viewBtn.trigger('click')
-    expect((wrapper.vm as any).logs[0].message).toContain('查看详情')
-  })
-
-  it('clicking configure button on second branch card logs online_service', async () => {
-    const wrapper = mountComponent()
-    const cards = wrapper.findAll('.wf-viz-branch-card')
-    const configureBtn = cards[1].findAll('.wf-viz-action-btn')[0]
-    await configureBtn.trigger('click')
-    expect((wrapper.vm as any).logs[0].message).toContain('online_service')
-  })
-
-  it('logs are prepended (newest first)', async () => {
-    const wrapper = mountComponent()
-    ;(wrapper.vm as any).handleEmployeeChange(true)
-    await nextTick()
-    ;(wrapper.vm as any).handleEmployeeToggle({ employeeId: 'email_service', active: false })
-    await nextTick()
-    expect((wrapper.vm as any).logs.length).toBe(2)
-    expect((wrapper.vm as any).logs[0].message).toContain('email_service')
-    expect((wrapper.vm as any).logs[1].message).toContain('员工状态变更')
-  })
-
-  it('log entries render time and message in DOM', async () => {
-    const wrapper = mountComponent()
-    ;(wrapper.vm as any).handleEmployeeChange(true)
-    await nextTick()
+    expect(vm.logs.map((log: { message: string }) => log.message)).toEqual(['员工切换：email_service -> 禁用', '员工状态变更：启用'])
     const entries = wrapper.findAll('.log-entry')
-    expect(entries.length).toBe(1)
-    expect(entries[0].find('.log-time').exists()).toBe(true)
-    expect(entries[0].find('.log-message').text()).toContain('启用')
-  })
-
-  it('realPhoneTriggers has 4 triggers', () => {
-    const wrapper = mountComponent()
-    expect((wrapper.vm as any).realPhoneTriggers.length).toBe(4)
-  })
-
-  it('onlineServiceTriggers has 2 triggers', () => {
-    const wrapper = mountComponent()
-    expect((wrapper.vm as any).onlineServiceTriggers.length).toBe(2)
-  })
-
-  it('realPhoneTriggers first trigger is adb_check', () => {
-    const wrapper = mountComponent()
-    expect((wrapper.vm as any).realPhoneTriggers[0].id).toBe('adb_check')
-    expect((wrapper.vm as any).realPhoneTriggers[0].type).toBe('fixed')
-  })
-
-  it('onlineServiceTriggers has dynamic type', () => {
-    const wrapper = mountComponent()
-    expect((wrapper.vm as any).onlineServiceTriggers[0].type).toBe('dynamic')
-  })
-
-  it('first branch card renders triggers slot content', () => {
-    const wrapper = mountComponent()
-    const cards = wrapper.findAll('.wf-viz-branch-card')
-    expect(cards[0].find('.wf-viz-branch-triggers').text()).toContain('ADB 设备连通检查')
-  })
-
-  it('addLog creates log entry with time string', async () => {
-    const wrapper = mountComponent()
-    ;(wrapper.vm as any).handleEmployeeChange(true)
+    expect(entries).toHaveLength(2)
+    expect(entries.map(entry => entry.get('.log-message').text())).toEqual(vm.logs.map((log: { message: string }) => log.message))
+    expect(entries[0].get('.log-time').text()).toMatch(/^\d{1,2}:\d{2}:\d{2}$/)
+    expect(vm.logs[0].time).toBe(entries[0].get('.log-time').text())
+    vm.handleEmployeeChange(false)
+    vm.handleEmployeeToggle({ employeeId: 'real_phone', active: true })
     await nextTick()
-    const log = (wrapper.vm as any).logs[0]
-    expect(log.time).toBeTruthy()
-    expect(typeof log.time).toBe('string')
+    expect(vm.logs.slice(0, 2).map((log: { message: string }) => log.message)).toEqual(['员工切换：real_phone -> 启用', '员工状态变更：禁用'])
   })
 
-  it('toggling employee off then on logs both states', async () => {
+  it('dispatches configure and view-details from both branches with the selected branch identity', async () => {
     const wrapper = mountComponent()
-    const rows = wrapper.findAll('.workflow-employee-row')
-    await rows[0].trigger('click')
-    await rows[0].trigger('click')
-    expect((wrapper.vm as any).isRealPhoneActive).toBe(false)
-    expect((wrapper.vm as any).logs.length).toBeGreaterThanOrEqual(2)
+    const vm = wrapper.vm as any
+    for (const [index, branchId] of ['real_phone', 'online_service'].entries()) {
+      const buttons = wrapper.findAll('.wf-viz-branch-card')[index].findAll('.wf-viz-action-btn')
+      await buttons[0].trigger('click')
+      expect(vm.logs[0].message).toBe(`配置分支：${branchId}`)
+      expect(console.log).toHaveBeenLastCalledWith('Configure branch:', branchId)
+      await buttons[1].trigger('click')
+      expect(vm.logs[0].message).toBe(`查看详情：${branchId}`)
+      expect(console.log).toHaveBeenLastCalledWith('View details:', branchId)
+    }
+    expect(vm.logs).toHaveLength(4)
   })
 })

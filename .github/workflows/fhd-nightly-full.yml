@@ -1,0 +1,56 @@
+# CI SSOT: generated from FHD/.github/workflows/nightly-full.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# Nightly 全量验证（SSOT: docs/CI_SSOT.md「四级验证」）。
+# 仅派发没有每日覆盖的重活；已有每日计划的套件独立运行，避免重复。
+name: Nightly Full CI
+
+on:
+  schedule:
+    - cron: "30 16 * * *"   # 每日 16:30 UTC = 北京 00:30（接在 fhd-ci-cd 夜间全量之后）
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要验证的 ref（默认 main）"
+        required: false
+        default: main
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: nightly-full
+  cancel-in-progress: false
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  dispatch-nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve latest main SHA
+        id: target
+        run: |
+          set -euo pipefail
+          ref="${{ inputs.ref || 'main' }}"
+          sha="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/${ref}" | cut -f1)"
+          if [[ ! "${sha}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::无法解析 ${ref} 的 SHA"
+            exit 1
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "Nightly 目标：${ref} @ ${sha}"
+
+      - name: Fan out and aggregate heavy suites on latest main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ steps.target.outputs.ref }}
+          RELEASE_SHA: ${{ steps.target.outputs.sha }}
+        run: bash -n scripts/ci/aggregate_nightly_results.sh && bash scripts/ci/aggregate_nightly_results.sh

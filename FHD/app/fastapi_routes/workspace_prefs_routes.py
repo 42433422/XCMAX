@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
+from anyio import CapacityLimiter
+from anyio.lowlevel import RunVar
+from anyio.to_thread import run_sync
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,6 +28,8 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/workspace", tags=["workspace"])
+_PREFS_WRITES: RunVar[CapacityLimiter] = RunVar("workspace_prefs_writes")
+_PREFS_JOBS: set[asyncio.Task[Any]] = set()
 
 
 class WorkspacePrefsPatch(BaseModel):
@@ -62,7 +68,7 @@ async def _try_grant_market_entitlements(
 
 
 @router.get("/prefs")
-async def get_workspace_prefs_endpoint(request: Request):
+def get_workspace_prefs_endpoint(request: Request):
     """读取当前登录用户所属租户/会话的工作区偏好。"""
     try:
         user = resolve_session_user(request)
@@ -76,30 +82,57 @@ async def get_workspace_prefs_endpoint(request: Request):
         return {"success": True, "data": {}, "owner_id": None}
 
 
+def _patch_local_prefs(body: WorkspacePrefsPatch, request: Request):
+    user = get_logged_in_user(request)
+    owner_id = resolve_workspace_owner_id(request, user)
+    if not owner_id:
+        raise HTTPException(status_code=400, detail="无法解析工作区归属，请先完成企业登录")
+
+    partial: dict[str, Any] = body.model_dump(exclude_none=True)
+    selected_industry_id = str(partial.get("selected_industry_id") or "").strip()
+    prefs = patch_workspace_prefs(owner_id, partial)
+    if selected_industry_id:
+        prefs = (
+            bind_selected_industry_for_user(
+                user,
+                selected_industry_id,
+                industry_mod_id=str(partial.get("industry_mod_id") or "").strip(),
+                owner_id=owner_id,
+            )
+            or prefs
+        )
+    return prefs, owner_id, selected_industry_id, session_id_from_request(request)
+
+
+async def _run_local_write(body, request, limiter, token):
+    try:
+        return await run_sync(_patch_local_prefs, body, request)
+    finally:
+        limiter.release_on_behalf_of(token)
+
+
+def _forget_local_write(job):
+    _PREFS_JOBS.discard(job)
+    if not job.cancelled():
+        job.exception()  # Observe errors even when the requesting connection has gone away.
+
+
 @router.patch("/prefs")
 async def patch_workspace_prefs_endpoint(body: WorkspacePrefsPatch, request: Request):
     """合并更新工作区偏好（跨设备同步）。"""
     try:
-        user = get_logged_in_user(request)
-        owner_id = resolve_workspace_owner_id(request, user)
-        if not owner_id:
-            raise HTTPException(status_code=400, detail="无法解析工作区归属，请先完成企业登录")
-
-        partial: dict[str, Any] = body.model_dump(exclude_none=True)
-        selected_industry_id = str(partial.get("selected_industry_id") or "").strip()
-        prefs = patch_workspace_prefs(owner_id, partial)
-        if selected_industry_id:
-            prefs = (
-                bind_selected_industry_for_user(
-                    user,
-                    selected_industry_id,
-                    industry_mod_id=str(partial.get("industry_mod_id") or "").strip(),
-                    owner_id=owner_id,
-                )
-                or prefs
-            )
+        limiter = _PREFS_WRITES.get(None)
+        if limiter is None:
+            limiter = CapacityLimiter(1)  # Preserve per-loop write order without blocking it.
+            _PREFS_WRITES.set(limiter)
+        token = asyncio.current_task()
+        await limiter.acquire()
+        job = asyncio.create_task(_run_local_write(body, request, limiter, token))
+        _PREFS_JOBS.add(job)
+        job.add_done_callback(_forget_local_write)
+        prefs, owner_id, selected_industry_id, session_id = await asyncio.shield(job)
         market_entitlements = await _try_grant_market_entitlements(
-            session_id_from_request(request),
+            session_id,
             selected_industry_id,
         )
         return {

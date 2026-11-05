@@ -1,104 +1,42 @@
-# XCAGI 1.0.0.1 企业版可交付产品说明
+# XCAGI 企业版可交付产品说明
 
-> **产品模型**：每家客户独立部署一份宿主；装平台 MOD 后变为对应垂直系统。供应商不代运营客户业务库。
+客户安装由共享 `main` 构建的宿主。客户定制通过版本化 Mod、账号权益与数据归属隔离交付；供应商不代运营客户业务库，不维护客户分叉安装包。
 
----
+## 交付身份与验收
 
-## 交付物清单
+产品版本与工具链映射以 [VERSION.md](../VERSION.md) 为准；正式构建目标是 `enterprise`，`personal` 仅保留历史兼容代码。安装包必须包含对应平台的后端，不能以 Electron 空壳交付。
 
-| 交付物 | 路径 / 命令 | 验收 |
-|--------|-------------|------|
-| Windows 企业版安装包 | `build-installer.ps1 -Version 1.0.0.1 -ProductSku enterprise` | `release/xcagi-v1.0.0.1/enterprise/` |
-| Windows 安装包（macOS/Linux 交叉构建） | `bash scripts/package/build-windows-installer.sh 1.0.0.1 enterprise` | Docker/Wine 构建，必须包含 `resources/backend/xcagi-backend.exe` |
-| macOS 安装包（单 SKU） | `bash scripts/package/build-installer.sh 1.0.0.1 enterprise` | 与 Windows 共用 SKU 资源契约，后端二进制按平台生成 |
-| 通用壳前端 | 默认 `npm run build`（generic） | 侧栏仅壳菜单 + Mod |
-| 内置 Mod 种子（L1 平台 bridge） | 安装包 `mods/` | 首启自动复制到 userData/mods |
-| 行业中性种子池（L2） | 安装包 `industry-seeds/`（仅 enterprise + open 行业） | 引导选行业后单拷，不全量激活 |
-| 账号定制 Mod（L3） | **不进安装包** | entitlement + Catalog |
-| 客户快速开始 | [QUICK_START.md](QUICK_START.md) | 5 分钟内本地可访问 |
-| 客户运维 | [customer/CUSTOMER_SUPPORT.md](customer/CUSTOMER_SUPPORT.md) | 版本/日志/回滚口径一致 |
-| 技术验收 API | `GET /api/platform-shell/deliverable-status` | `deliverable: true` |
-| 一键装包 API | `POST /api/mod-store/bootstrap-edition-pack?edition=generic` | `success: true` |
-| 自动化验收 | `scripts/dev/deliverable_smoke.ps1` | 全部 [OK] |
+交付包来自明确的主线 SHA；包内 `build-info`、运行后台、可见界面和业务证据身份一致。分支测试、健康检查和旧包结论不证明新包通过。
 
----
+| 平台 / 路径 | 事实源 |
+|---|---|
+| Mac 构建、签名公证、双架构与实机验证 | [MACOS_RELEASE_SSOT](MACOS_RELEASE_SSOT.md) |
+| Windows 构建、签名与实机验证 | [WINDOWS_RELEASE_SSOT](WINDOWS_RELEASE_SSOT.md) |
+| 同版双端和放行原则 | [desktop_platform_parity_ssot](desktop_platform_parity_ssot.md) |
+| 原工单处理、结果回流与客户确认 | [CUSTOMER_TICKET_BUS_SSOT](architecture/CUSTOMER_TICKET_BUS_SSOT.md) |
 
-## 当前发行矩阵
+正式下载指针及 stable 通道在既有门禁与客户闭环通过后推进；构建候选不代表已经发布。
 
-| SKU | 命令 | 安装包文件名 | 内置 Mod | ERP |
-|-----|------|--------------|----------|-----|
-| **enterprise** | `-ProductSku enterprise` | `XCAGI-Enterprise-Setup-{ver}-x64.exe` | `GENERIC_HOST_MOD_IDS` + 辅助 Mod | **是**（`xcagi-erp-domain-bridge`） |
+## 宿主与 Mod
 
-`personal` 仅保留历史兼容构建代码，不进入当前版本目标、正式构建矩阵、上传目录、下载清单或交付验收。
+| 层 | 交付方式 |
+|---|---|
+| L1 通用 bridge | 安装包内 `mods/` 种子；首次启动复制到用户目录 |
+| L2 中性行业种子 | 企业包的 `industry-seeds/` 只读池；选择行业后安装对应项，不全量激活 |
+| L3 账号定制 | 不放入共享安装包；通过 entitlement 和 Catalog 安装、更新 |
 
-- 打包过滤：`scripts/package/stage-bundled-mods.ps1` / `.sh` → PyInstaller 打入 L1 `mods/` 白名单；**不含** `*-industry`。
-- 行业池：`scripts/package/stage-industry-seeds.ps1` / `.sh` → `industry-seeds/`（`onboarding_open_industry_ids` 对应 mod）。
-- 运行时：`XCAGI_PRODUCT_SKU=enterprise` / `product-sku.json` 必须与企业版包一致。
-- 更新站路径：`https://xiu-ci.com/releases/stable/enterprise/`
-- 打包后验收：`pre-release-security.ps1 -Phase post` 硬性检查 Windows 后端 exe、`product-sku.json`、`verify-bundled-mods.ps1`、`verify-industry-seeds.ps1`
-- 禁止发布 Electron-only Windows 空壳包：正式 Windows 包必须带内嵌 PyInstaller 后端。
-
-官网下载页（MODstore）环境变量：`VITE_XCAGI_DOWNLOAD_BASE_URL`、`VITE_XCAGI_DOWNLOAD_VERSION`。
-
----
+Manifest、SDK、打包过滤与 Mod 发布规范见 [MOD_AUTHORING_GUIDE](guides/MOD_AUTHORING_GUIDE.md)。共享宿主升级须保留客户数据及已授权 Mod，并验证仍可更新。
 
 ## 客户标准路径
 
-1. 安装 XCAGI（generic 宿主）
-2. 首次打开 → **首次设置向导**（`/onboarding`）：认识宿主 → 宿主包就绪 → 行业定型（可跳过）
-3. 宿主包未齐时：**一键装齐通用包**（或安装包已种子 Mod）
-4. 引导 **补基础线**：`POST /api/mod-store/install-industry-seed` 从 `industry-seeds/` 安装所选行业中性 Mod（定制 Mod 仍 entitlement + Catalog）
-5. 日常使用：智能对话 + Mod 菜单；数据在客户本机 `userData`
+1. 从已核验身份的客户入口下载并安装；数据保留、备份和回滚约定见 [LOCAL_DATA_POLICY](security/LOCAL_DATA_POLICY.md)。
+2. 首次设置按公司名称 → 行业 → 配置功能进行。名称和行业保存后重新读回；失败留在当前步骤。匿名用户可先填写，再登录继续。
+3. 行业选择不授予定制权益。根据最新功能准备结果补齐本行业所需项；演示数据和 AI 第一单是可选体验。
+4. 所需功能就绪且工作区完成状态保存成功，才完成设置。日常通过智能对话、业务 Mod 菜单和扩展市场使用；升级、重启后核对原数据和权益。
+5. 出现问题从安装版提交原工单，保留内容及附件。处理结果回到原单，由客户复验并明确关闭；重开、租户隔离和异常恢复按工单总账验证。
 
-**完整流程说明（必读）**：[guides/PRODUCT_USER_FLOW.md](guides/PRODUCT_USER_FLOW.md)
+## 功能准备检查
 
----
+`GET /api/platform-shell/deliverable-status` 中的 `deliverable` 表示宿主所需功能准备就绪；`blockers` 与 `next_actions` 说明缺失项及补齐动作。它不代表安装、业务、安全或发布验收通过。
 
-## 供应商发版前自检（必做）
-
-```powershell
-cd <repo-root>
-powershell -ExecutionPolicy Bypass -File scripts/dev/adcdfg_acceptance.ps1
-powershell -ExecutionPolicy Bypass -File scripts/dev/deliverable_smoke.ps1
-```
-
-确认 `VERSION.md` 的产品版本为 **1.0.0.1**、工具链映射为 **1.0.0**，并通过版本锚点校验。
-
----
-
-## 可交付判定（API）
-
-```http
-GET /api/platform-shell/deliverable-status
-```
-
-| 字段 | 含义 |
-|------|------|
-| `deliverable` | `true` = 可对外交付该 edition |
-| `edition` | `minimal` / `generic` / `full` |
-| `generic_pack_installed` | 9 个通用 bridge Mod 是否齐全 |
-| `blockers` | 未满足项与 `missing_mod_ids` |
-| `next_actions` | 建议操作（装包、打开市场等） |
-
----
-
-## 环境变量（交付相关）
-
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| `XCAGI_GENERIC_EDITION` | 桌面 `1` | generic 发行 |
-| `XCAGI_PLATFORM_SHELL` | 桌面 `1` | 平台壳模式 |
-| `XCAGI_DEFAULT_EDITION` | 桌面 `generic` | Electron 传入 |
-| `XCAGI_PRODUCT_SKU` | `enterprise` | 当前正式包固定为企业版；`personal` 仅历史兼容 |
-| `XCAGI_AUTO_BOOTSTRAP_EDITION` | `0` | `1` 时启动会从公网 Catalog 补装 |
-| `XCAGI_REGISTER_LEGACY_ROUTES` | 非 full 关闭 | full 构建可设 `1` |
-
----
-
-## 已知非阻断项（后续版本）
-
-- `legacy_gaps_batch*` 按域拆分（full 版专用）
-- 覆盖率 80%+
-- MOD 签名强制与公网 SLA
-
-*配套：[guides/ADCDFG_COMPLETION_PLAN.md](guides/ADCDFG_COMPLETION_PLAN.md)*
+开发运行与设置操作见 [QUICK_START](QUICK_START.md)；启动配置、版本自检和发布脚本按上述发布规范执行。

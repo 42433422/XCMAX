@@ -54,7 +54,7 @@ def _action_id_for_daily(daily_id: int) -> str:
 
 def _find_track_decision_id(record_id: int) -> Optional[str]:
     """按 scope + scope_ref 查找已有追踪决策。"""
-    from modstore_server.db.base import get_session_factory
+    from modstore_server.db.db_base import get_session_factory
     from modstore_server.db.strategic import StrategicDecision as StrategicDecisionModel
 
     session = get_session_factory()()
@@ -201,7 +201,7 @@ def sync_daily_to_strategic(
                 "updated": 0,
             }
 
-        from modstore_server.db.base import get_session_factory
+        from modstore_server.db.db_base import get_session_factory
         from modstore_server.db.strategic import StrategicActionItem
         from modstore_server.digest_action_items import _dedupe_key, list_action_items
 
@@ -324,7 +324,7 @@ def mirror_daily_status(daily_item_id: int, status: str) -> Dict[str, Any]:
     action_id = _action_id_for_daily(iid)
     mapped = _map_status(status)
     try:
-        from modstore_server.db.base import get_session_factory
+        from modstore_server.db.db_base import get_session_factory
         from modstore_server.db.strategic import StrategicActionItem
 
         now = datetime.now(UTC)

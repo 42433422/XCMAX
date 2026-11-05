@@ -10,10 +10,12 @@ from modstore_server.standard_delivery_api import build_standard_delivery_rows
 
 
 def redact(text):
+    from modstore_server.cred_vault import redact as redact_known
+
     return re.sub(
         r"(?i)(bearer\s+|(?:api[_-]?key|password|token|secret)\s*[:=]\s*)[^\s,;]+",
         r"\1[redacted]",
-        str(text),
+        redact_known(text),
     )[:3000]
 
 
@@ -31,7 +33,11 @@ def customer_facts(db, customer_id=None, ticket_id=None):
                 not isinstance(evidence, dict)
                 or any(
                     key in evidence and not isinstance(evidence[key], list)
-                    for key in ("receipt_events", "install_receipts", "delivery_artifacts")
+                    for key in (
+                        "receipt_events",
+                        "install_receipts",
+                        "delivery_artifacts",
+                    )
                 )
                 or not isinstance(evidence.get("resolution") or {}, dict)
             ):
@@ -71,7 +77,10 @@ def customer_facts(db, customer_id=None, ticket_id=None):
             for sha in sorted(host_shas)
             if all_artifacts_running(
                 row,
-                {**evidence, "receipt_events": [r for r in receipts if r.get("host_sha") == sha]},
+                {
+                    **evidence,
+                    "receipt_events": [r for r in receipts if r.get("host_sha") == sha],
+                },
             )
         ]
         tickets.append(

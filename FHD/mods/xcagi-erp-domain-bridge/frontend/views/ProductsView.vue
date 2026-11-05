@@ -232,7 +232,7 @@ const saveProduct = async () => {
   if (isEdit.value && !canEditProducts.value) return;
   const result = isEdit.value && formData.value.id
     ? await store.updateProduct(formData.value.id, formData.value)
-    : await store.createProduct(formData.value);
+    : await store.createProduct({ ...formData.value, unit: selectedUnit.value });
 
   if (result.success) {
     showModal.value = false;

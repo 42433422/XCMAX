@@ -160,6 +160,7 @@ describe('useChatResponseAttach', () => {
     taskList.value = [
       {
         id: 'agent_task_task_1',
+        messageRef: '1',
         type: 'agent_task',
         source: 'agent',
         title: '写入业务数据',
@@ -191,7 +192,13 @@ describe('useChatResponseAttach', () => {
       },
     ]
 
-    attachAgentRunTraceToLastAiMessage()
+    attachAgentRunTraceToLastAiMessage('unrelated-run')
+    expect(messages.value[1].agentRunTrace).toBeUndefined()
+    taskList.value[0].messageRef = undefined
+    attachAgentRunTraceToLastAiMessage('run_business_1')
+    expect(messages.value[1].agentRunTrace).toBeUndefined()
+    taskList.value[0].messageRef = '1'
+    attachAgentRunTraceToLastAiMessage('run_business_1')
 
     expect(messages.value[1].agentRunTrace).toEqual(
       expect.objectContaining({

@@ -1,0 +1,28 @@
+{
+  "generated_at": "2026-09-15T19:36:19.6497618+08:00",
+  "install_root": "C:\\XCAGI-acceptance",
+  "data_root": "C:\\XCAGI-acceptance\\repro-data",
+  "scenarios": [
+    {
+      "场景": "corrupt-backup",
+      "结果": "PASS",
+      "说明": "坏备份 xcagi-unknown-20260915112956.db 存在时启动正常（status=degraded; degradedReasons=NEURO_BUS_UNHEALTHY;NEURO_BUS_NOT_RUNNING），主库未动"
+    },
+    {
+      "场景": "disk-full(人工)",
+      "结果": "SKIP",
+      "说明": "CI 环境：实体机场景待人工执行"
+    },
+    {
+      "场景": "power-cut(人工)",
+      "结果": "SKIP",
+      "说明": "CI 环境：实体机场景待人工执行"
+    }
+  ],
+  "summary": {
+    "skip": 2,
+    "partial": 0,
+    "fail": 0,
+    "pass": 1
+  }
+}

@@ -29,7 +29,7 @@ from app.neuro_bus.deduplicator import (
     NeuroBusDeduplicator,
     get_deduplicator,
 )
-from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 from app.neuro_bus.lifeline import (
     CRITICAL_PATH_DOMAINS,
     CRITICAL_PATH_EVENTS,

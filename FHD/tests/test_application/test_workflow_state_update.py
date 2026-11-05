@@ -8,7 +8,8 @@
 from unittest.mock import MagicMock
 
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
+from tests.test_application.ai_chat_test_helpers import _make_svc
 
 
 def _engine(dispatch_result):
@@ -99,8 +100,13 @@ class TestWorkflowStateUpdate:
                 Branch(condition={"key": "kind", "equals": "b"}, target="tb"),
             ],
         )
-        engine.run(_plan([node]), state_event_callback=events.append)
+        targets = [
+            WorkflowNode(node_id=target, tool_id="router", action="route")
+            for target in ("ta", "tb")
+        ]
+        engine.run(_plan([node, *targets]), state_event_callback=events.append)
         assert any(e["node_id"] == "router" for e in events)
+        assert not any(e["node_id"] in {"ta", "tb"} for e in events)
 
     def test_callback_from_constructor_used_when_run_has_none(self):
         collected = []
@@ -143,12 +149,10 @@ class TestWorkflowStateUpdate:
 
 class TestAiChatCollectsStateUpdates:
     def test_workflow_response_attaches_state_updates(self):
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
         state_updates = [
             {"type": "state.update", "node_id": "n1", "status": "succeeded", "output_summary": "ok"}
         ]
-        svc = AIChatApplicationService.__new__(AIChatApplicationService)
+        svc = _make_svc()
         plan = _plan([_node("n1")])
         run_result = MagicMock()
         run_result.success = True
@@ -163,9 +167,8 @@ class TestAiChatCollectsStateUpdates:
         assert payload["data"]["data"]["state_updates"] == state_updates
 
     def test_run_workflow_with_state_updates_collects(self):
-        from app.application import ai_chat_app_service as mod
-
-        svc = mod.AIChatApplicationService.__new__(mod.AIChatApplicationService)
+        svc = _make_svc()
+        svc.workflow_checkpointer = None
         engine = _engine({"success": True, "data": []})
         svc.workflow_engine = engine
         plan = _plan([_node("n1"), _node("n2", depends_on=["n1"])])

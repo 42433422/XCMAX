@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 
@@ -63,4 +63,33 @@ def admin_approver_from_session(request: Request) -> str:
     return ""
 
 
-__all__ = ["admin_approver_from_session", "require_market_admin_session"]
+def require_platform_model_admin_session(request: Request) -> JSONResponse | None:
+    """Platform secrets require a live administrator, outside customer impersonation."""
+    from app.application.session_account_meta import load_session_account_meta
+    from app.infrastructure.auth.dependencies import get_logged_in_user, session_id_from_request
+
+    denied = require_market_admin_session(request)
+    if denied is not None:
+        return denied
+    try:
+        user = get_logged_in_user(request)
+    except HTTPException as exc:
+        return JSONResponse(
+            {"success": False, "message": "管理员登录已失效，请重新登录"},
+            status_code=exc.status_code,
+        )
+    meta = load_session_account_meta(session_id_from_request(request)) or {}
+    if meta.get("local_user_id") != user.id:
+        return JSONResponse({"success": False, "message": "登录身份不一致"}, status_code=401)
+    if meta.get("impersonating_market_user_id") is not None:
+        return JSONResponse(
+            {"success": False, "message": "请退出代管用户后配置平台模型"}, status_code=403
+        )
+    return None
+
+
+__all__ = [
+    "admin_approver_from_session",
+    "require_market_admin_session",
+    "require_platform_model_admin_session",
+]

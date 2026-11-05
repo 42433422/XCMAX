@@ -110,6 +110,7 @@ poetry.lock text eol=lf -diff
 *.pyd      binary
 *.mp3      binary
 *.mp4      binary
+*.log      -text -eol whitespace=cr-at-eol
 *.wav      binary
 *.pt       binary
 *.safetensors binary

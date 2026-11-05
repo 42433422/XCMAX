@@ -61,6 +61,7 @@
           <input
             id="settings-assistant-name"
             v-model="assistantName"
+            :disabled="loading"
             class="settings-item__control settings-item__control--text"
             type="text"
             maxlength="24"
@@ -116,6 +117,7 @@
           <select
             id="settings-ai-mode"
             v-model="deploymentMode"
+            :disabled="loading"
             class="settings-item__control settings-item__control--select"
             @change="onDeploymentModeChange"
           >
@@ -146,6 +148,7 @@
           <input
             id="settings-postgres-url"
             v-model="postgresUrlDraft"
+            :disabled="loading"
             class="settings-item__control settings-item__control--text settings-item__control--wide"
             type="password"
             autocomplete="off"
@@ -296,9 +299,10 @@
       </details>
 
       <div class="settings-card__footer">
+        <p v-if="saveSummary" :role="saveHadFailures ? 'alert' : 'status'" style="white-space: pre-line">{{ saveSummary }}</p>
         <button class="settings-primary-btn" type="button" @click="saveSettings" :disabled="loading || deploymentSaving">
           {{
-            deploymentSaving ? $t('settings.switchingDeployMode') : loading ? $t('settings.saving') : $t('settings.saveSettings')
+            deploymentSaving ? $t('settings.switchingDeployMode') : loading ? $t('settings.saving') : saveHadFailures ? $t('settings.retryIncompleteSettings') : $t('settings.saveSettings')
           }}
         </button>
       </div>
@@ -353,6 +357,8 @@ defineProps<{
   loadError: string | null
   loading: boolean
   saveSettings: () => unknown
+  saveSummary: string
+  saveHadFailures: boolean
 }>()
 
 // v-model 转发回父级

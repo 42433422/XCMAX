@@ -1,4 +1,4 @@
-"""Tests for app.services.tools_workflow_registered — registered workflow tool routers."""
+"""Tests for app.domain.shared_services.tools_workflow_registered — registered workflow tool routers."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.tools_workflow_registered import (
+from app.domain.shared_services.tools_workflow_registered import (
     _REGISTERED_WORKFLOW_ROUTERS,
     _registered_router_business_docking_family,
     _registered_router_customers,
@@ -95,47 +95,78 @@ class TestCustomersRouter:
 
     def test_ensure_exists_matched(self):
         mock_svc = MagicMock()
-        mock_match = MagicMock()
-        mock_match.unit_name = "TestCo"
-        mock_svc.match_purchase_unit.return_value = mock_match
+        mock_svc.lookup_purchase_unit_for_ensure.return_value = {
+            "status": "matched",
+            "id": 7,
+            "unit_name": "TestCo",
+        }
+        mock_svc.get_by_id.return_value = {
+            "success": True,
+            "data": {"id": 7, "customer_name": "TestCo"},
+        }
         with patch("app.application.get_customer_app_service", return_value=mock_svc):
             result = _registered_router_customers(
                 "ensure_exists", {"unit_name": "TestCo"}, {}, "normal", ""
             )
-            assert result["success"] is True
-            assert result["exists"] is True
+        assert result["success"] is True and result["exists"] is True
+        assert result["id"] == 7
+        mock_svc.lookup_purchase_unit_for_ensure.assert_called_once_with("TestCo")
+        mock_svc.get_by_id.assert_called_once_with(7)
+        mock_svc.create.assert_not_called()
 
     def test_ensure_exists_creates_new(self):
         mock_svc = MagicMock()
-        mock_svc.match_purchase_unit.return_value = None
-        mock_svc.create.return_value = {"success": True}
+        mock_svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+        mock_svc.create.return_value = {"success": True, "data": {"id": 8}}
+        mock_svc.get_by_id.return_value = {
+            "success": True,
+            "data": {"id": 8, "customer_name": "NewCo"},
+        }
         with patch("app.application.get_customer_app_service", return_value=mock_svc):
             result = _registered_router_customers(
                 "ensure_exists", {"unit_name": "NewCo"}, {}, "normal", ""
             )
-            assert result["success"] is True
-            assert result["created"] is True
+        assert result["success"] is True and result["created"] is True
+        assert result["id"] == 8
+        mock_svc.create.assert_called_once_with({"customer_name": "NewCo"})
+        mock_svc.get_by_id.assert_called_once_with(8)
 
-    def test_ensure_exists_create_fails_with_duplicate(self):
+    @pytest.mark.parametrize("message", ["客户已存在", "DB error"])
+    def test_ensure_exists_create_failure_never_claims_success(self, message):
         mock_svc = MagicMock()
-        mock_svc.match_purchase_unit.return_value = None
-        mock_svc.create.return_value = {"success": False, "message": "客户已存在"}
-        with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            result = _registered_router_customers(
-                "ensure_exists", {"unit_name": "DupCo"}, {}, "normal", ""
-            )
-            assert result["success"] is True
-            assert result["exists"] is True
-
-    def test_ensure_exists_create_fails_other(self):
-        mock_svc = MagicMock()
-        mock_svc.match_purchase_unit.return_value = None
-        mock_svc.create.return_value = {"success": False, "message": "DB error"}
+        mock_svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+        mock_svc.create.return_value = {"success": False, "message": message}
         with patch("app.application.get_customer_app_service", return_value=mock_svc):
             result = _registered_router_customers(
                 "ensure_exists", {"unit_name": "FailCo"}, {}, "normal", ""
             )
-            assert result["success"] is False
+        assert result["success"] is False and result["outcome"] == "unknown"
+        assert result["retryable"] is False and result["reconciliation_required"] is True
+        mock_svc.create.assert_called_once_with({"customer_name": "FailCo"})
+        mock_svc.get_by_id.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "readback",
+        [
+            {"success": False},
+            {"success": True, "data": {"id": 9, "customer_name": "NewCo"}},
+            {"success": True, "data": {"id": 8, "customer_name": "OtherCo"}},
+        ],
+    )
+    def test_ensure_exists_unverified_receipt_is_not_success(self, readback):
+        mock_svc = MagicMock()
+        mock_svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+        mock_svc.create.return_value = {"success": True, "data": {"id": 8}}
+        mock_svc.get_by_id.return_value = readback
+        with patch("app.application.get_customer_app_service", return_value=mock_svc):
+            result = _registered_router_customers(
+                "ensure_exists", {"unit_name": "NewCo"}, {}, "normal", ""
+            )
+        assert result["success"] is False
+        assert result["error_code"] == "customer_receipt_unverified"
+        assert result["retryable"] is False and result["reconciliation_required"] is True
+        mock_svc.create.assert_called_once()
+        mock_svc.get_by_id.assert_called_once_with(8)
 
     def test_ensure_exists_missing_name(self):
         result = _registered_router_customers("ensure_exists", {}, {}, "normal", "")
@@ -550,6 +581,7 @@ class TestExecuteRegisteredWorkflowTool:
 
     def test_registered_routers_dict_completeness(self):
         expected_keys = {
+            "desktop_automation",
             "normal_slot_dispatch",
             "customers",
             "products",
@@ -611,31 +643,24 @@ class TestErpToolRegistry:
         reg = _workflow_registry()
         sales = reg["sales"]["actions"]
         assert sales["query"]["risk"] == "low" and sales["query"]["idempotent"] is True
-        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is True
+        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is False
         for a in ("confirm", "deliver", "invoice", "payment", "cancel"):
             assert sales[a]["idempotent"] is True
 
     def test_sales_required_params(self):
         reg = _workflow_registry()
         sales = reg["sales"]["actions"]
-        assert set(sales["quote"]["required_params"]) == {"customer_id", "items"}
+        assert set(sales["quote"]["required_params"]) == {"items"}
         assert set(sales["payment"]["required_params"]) == {"order_id", "amount"}
         assert sales["confirm"]["required_params"] == ["order_id"]
 
     def test_reports_tool_registered(self):
-        reg = _workflow_registry()
-        assert "reports" in reg
-        actions = set(reg["reports"]["actions"])
-        assert {
-            "sales_summary",
-            "inventory_summary",
-            "purchase_summary",
+        actions = _workflow_registry()["reports"]["actions"]
+        assert {f"{kind}_summary" for kind in ("sales", "inventory", "purchase")} | {
             "dashboard",
             "export",
-        } <= actions
-        # 报表动作均为只读低风险幂等
-        for action in reg["reports"]["actions"].values():
-            assert action["risk"] == "low" and action["idempotent"] is True
+        } <= set(actions)
+        assert all(a["risk"] == "low" and a["idempotent"] for a in actions.values())
 
     def test_inventory_extended_with_alerts(self):
         reg = _workflow_registry()
@@ -668,12 +693,15 @@ class TestErpCapabilityGate:
             {
                 "tool_id": "sales",
                 "action": "quote",
-                "params": {"customer_id": 1, "items": [{"product_id": 1, "quantity": 1}]},
+                "params": {
+                    "customer_id": 1,
+                    "items": [{"product_id": 1, "quantity": 1, "unit_price": 50}],
+                },
             }
         )
         assert r["success"] is True
         assert r["risk"] == "medium"
-        assert r["idempotent"] is True
+        assert r["idempotent"] is False
 
     def test_sales_payment_missing_amount(self):
         from app.application.tools.registered_capabilities import (
@@ -718,13 +746,33 @@ class TestErpRouterDispatch:
         r = _registered_router_sales("hack", {}, {}, "shared", "")
         assert r["success"] is False
 
-    def test_reports_router_sales_summary(self):
-        from app.services.report_service import ReportService
+    @pytest.mark.parametrize("kind", ["sales", "inventory", "purchase"])
+    def test_reports_summary_and_export_use_same_rows(self, kind):
+        rows = [{"model_number": "P002", "total_quantity": 18}]
+        with patch("app.domain.shared_services.report_service.ReportService") as factory:
+            svc = factory.return_value
+            query = getattr(svc, f"get_{kind}_report")
+            query.return_value = {"success": True, "data": rows}
+            svc.export_to_excel.return_value = {"success": True}
+            assert (
+                _registered_router_reports(f"{kind}_summary", {}, {}, "shared", "")["data"] == rows
+            )
+            result = _registered_router_reports(
+                "export", {}, {}, "shared", f"EXPORT {kind.upper()}"
+            )
+            assert result["success"]
+            svc.export_to_excel.assert_called_once_with(report_type=kind, data=rows, filename=kind)
+            assert query.call_count == 2
 
-        with patch.object(ReportService, "get_sales_report", return_value={"success": True}) as m:
-            r = _registered_router_reports("sales_summary", {}, {}, "shared", "")
-            assert r["success"] is True
-            m.assert_called_once()
+    @pytest.mark.parametrize("report", [{"success": False, "message": "query failed"}, None])
+    def test_reports_export_does_not_fabricate_empty_success(self, report):
+        with patch("app.domain.shared_services.report_service.ReportService") as factory:
+            svc = factory.return_value
+            svc.get_inventory_report.return_value = report
+            params = {"report_type": "inventory"} if report else {}
+            result = _registered_router_reports("export", params, {}, "shared", "")
+            assert not result["success"]
+            svc.export_to_excel.assert_not_called()
 
     def test_finance_router_ledger_query(self):
         from app.services import accounting_services
@@ -759,7 +807,8 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.create_bom.return_value = {"success": True, "data": {"id": 1}}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService",
+            return_value=mock_svc,
         ):
             r = _registered_router_mrp(
                 "create_bom", {"product_id": 1, "lines": []}, {}, "shared", ""
@@ -771,7 +820,8 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.query_boms.return_value = {"success": True, "data": [], "total": 0}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService",
+            return_value=mock_svc,
         ):
             r = _registered_router_mrp("query_boms", {}, {}, "shared", "")
         assert r["success"] is True
@@ -780,7 +830,8 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.get_bom.return_value = {"success": True, "data": {"id": 9}}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService",
+            return_value=mock_svc,
         ):
             r = _registered_router_mrp("get_bom", {"bom_id": 9}, {}, "shared", "")
         assert r["success"] is True
@@ -793,7 +844,8 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.create_order.return_value = {"success": True, "data": {"id": 1}}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService",
+            return_value=mock_svc,
         ):
             r = _registered_router_mrp(
                 "create_order", {"bom_id": 1, "quantity": 2}, {}, "shared", ""
@@ -804,7 +856,8 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.confirm_order.return_value = {"success": True}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService",
+            return_value=mock_svc,
         ):
             r = _registered_router_mrp("confirm_order", {"order_id": 1}, {}, "shared", "")
         assert r["success"] is True
@@ -813,7 +866,8 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.consume.return_value = {"success": True}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService",
+            return_value=mock_svc,
         ):
             r = _registered_router_mrp(
                 "consume", {"order_id": 1, "warehouse_id": 2}, {}, "shared", ""
@@ -825,7 +879,8 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.finish.return_value = {"success": True}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService",
+            return_value=mock_svc,
         ):
             r = _registered_router_mrp(
                 "finish", {"order_id": 1, "warehouse_id": 2}, {}, "shared", ""
@@ -836,7 +891,8 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.query_orders.return_value = {"success": True, "data": [], "total": 0}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService",
+            return_value=mock_svc,
         ):
             r = _registered_router_mrp("query_orders", {}, {}, "shared", "")
         assert r["success"] is True
@@ -882,7 +938,9 @@ class TestInventoryCountAndTransactionsRouter:
             "difference": 2,
             "confirmed": False,
         }
-        with patch("app.services.inventory_service.InventoryService", return_value=mock_inv):
+        with patch(
+            "app.domain.shared_services.inventory_service.InventoryService", return_value=mock_inv
+        ):
             r = _registered_router_inventory(
                 "inventory_count",
                 {"product_id": 1, "warehouse_id": 1, "actual_quantity": 10},
@@ -896,7 +954,9 @@ class TestInventoryCountAndTransactionsRouter:
     def test_query_transactions(self):
         mock_inv = MagicMock()
         mock_inv.query_transactions.return_value = {"success": True, "data": []}
-        with patch("app.services.inventory_service.InventoryService", return_value=mock_inv):
+        with patch(
+            "app.domain.shared_services.inventory_service.InventoryService", return_value=mock_inv
+        ):
             r = _registered_router_inventory(
                 "query_transactions", {"warehouse_id": 1}, {}, "shared", ""
             )

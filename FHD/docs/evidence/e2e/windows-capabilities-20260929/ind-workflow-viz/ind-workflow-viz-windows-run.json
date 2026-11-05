@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "ind-workflow-viz",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 ind-workflow-viz 对应的 Windows 客户端页面 /mod/xcagi-workflow-visualization-bridge/workflow-visualization",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「员工空间 - XCAGI」，主标题「员工空间」，地址 /workflow-employee-space。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 员工空间 SUNBIRD 副窗 ◈ 工作区 员工空间 像素入口与工位实况；数据与副窗工作流开关、智能对话任务快照同步。 员工工作流：入口与工位实况 企业版全景 · 四部门",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=919244 mp4=185609 title=员工空间 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-workflow-viz/ind-workflow-viz.log",
+    "sha256": "2d49d13a5c1d54656a1247982212cd844514772321a2b3cec6a999b61b47775d",
+    "bytes": 1917
+  },
+  "media": [
+    {
+      "feature": "ind-workflow-viz",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-workflow-viz/ind-workflow-viz.png",
+      "sha256": "9655f0445d12af3ae2203c2d662aa642cd2a49c4b3737bb5c9302072a1f2c98e",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「员工空间 - XCAGI」，主标题「员工空间」，地址 /workflow-employee-space。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 员工空间 SUNBIRD 副窗 ◈ 工作区 员工空间 像素入口与工位实况；数据与副窗工作流开关、智能对话任务快照同步。 员工工作流：入口与工位实况 企业版全景 · 四部门",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-workflow-viz",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-workflow-viz/ind-workflow-viz.mp4",
+      "sha256": "7fa51045cb1a47e9be38cbba281dab3db6501e0939db7232b9c463133691f4e7",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「员工空间 - XCAGI」，主标题「员工空间」，地址 /workflow-employee-space。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 员工空间 SUNBIRD 副窗 ◈ 工作区 员工空间 像素入口与工位实况；数据与副窗工作流开关、智能对话任务快照同步。 员工工作流：入口与工位实况 企业版全景 · 四部门",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

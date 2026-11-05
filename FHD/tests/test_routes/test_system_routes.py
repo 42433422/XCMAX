@@ -13,14 +13,15 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes.domains.system import routes
 from app.fastapi_routes.tools_execute import router as tools_execute_router
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(trusted_actor, local_tools) -> TestClient:
     app = FastAPI()
     app.include_router(routes.router)
     app.include_router(tools_execute_router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +93,7 @@ class TestSystemPrinter:
         r = client.post("/api/system/printer", json={"other": "value"})
         assert r.status_code == 400
 
-    def test_post_success(self, client: TestClient):
+    def test_post_success(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
         mock_svc.set_default_printer.return_value = {"success": True}
         with patch(
@@ -100,8 +101,9 @@ class TestSystemPrinter:
         ):
             r = client.post("/api/system/printer", json={"printer_name": "HP"})
             assert r.status_code == 200
+        mock_svc.set_default_printer.assert_called_once_with("HP")
 
-    def test_post_fail(self, client: TestClient):
+    def test_post_fail(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
         mock_svc.set_default_printer.return_value = {"success": False, "message": "error"}
         with patch(
@@ -134,7 +136,7 @@ class TestSystemStartup:
             r = client.get("/api/system/startup")
             assert r.status_code == 500
 
-    def test_post_success(self, client: TestClient):
+    def test_post_success(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
         mock_svc.enable_startup.return_value = {"success": True}
         with patch(
@@ -142,8 +144,9 @@ class TestSystemStartup:
         ):
             r = client.post("/api/system/startup")
             assert r.status_code == 200
+        mock_svc.enable_startup.assert_called_once_with()
 
-    def test_delete_success(self, client: TestClient):
+    def test_delete_success(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
         mock_svc.disable_startup.return_value = {"success": True}
         with patch(
@@ -151,6 +154,7 @@ class TestSystemStartup:
         ):
             r = client.delete("/api/system/startup")
             assert r.status_code == 200
+        mock_svc.disable_startup.assert_called_once_with()
 
     def test_delete_error(self, client: TestClient):
         with patch(
@@ -192,8 +196,9 @@ class TestDatabaseBackups:
         ):
             r = client.post("/api/database/backup")
             assert r.status_code == 200
+        mock_svc.backup_database.assert_called_once_with()
 
-    def test_backup_error(self, client: TestClient):
+    def test_backup_error(self, client: TestClient, local_tools):
         with patch(
             "app.application.facades.session_facade.get_database_service",
             side_effect=RuntimeError("fail"),
@@ -201,7 +206,7 @@ class TestDatabaseBackups:
             r = client.post("/api/database/backup")
             assert r.status_code == 500
 
-    def test_delete_backup_success(self, client: TestClient):
+    def test_delete_backup_success(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
         mock_svc.delete_backup.return_value = {"success": True}
         with patch(
@@ -209,6 +214,7 @@ class TestDatabaseBackups:
         ):
             r = client.delete("/api/database/backup/test.sql")
             assert r.status_code == 200
+        mock_svc.delete_backup.assert_called_once_with("test.sql")
 
     def test_delete_backup_error(self, client: TestClient):
         with patch(
@@ -222,7 +228,7 @@ class TestDatabaseBackups:
         r = client.post("/api/database/restore", json={})
         assert r.status_code == 400
 
-    def test_restore_success(self, client: TestClient):
+    def test_restore_success(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
         mock_svc.restore_database.return_value = {"success": True}
         with patch(
@@ -230,8 +236,9 @@ class TestDatabaseBackups:
         ):
             r = client.post("/api/database/restore", json={"backup_file": "backup.sql"})
             assert r.status_code == 200
+        mock_svc.restore_database.assert_called_once_with("backup.sql")
 
-    def test_restore_error(self, client: TestClient):
+    def test_restore_error(self, client: TestClient, local_tools):
         with patch(
             "app.application.facades.session_facade.get_database_service",
             side_effect=RuntimeError("fail"),
@@ -279,7 +286,11 @@ class TestPerformanceStatus:
 class TestPerformanceHealth:
     def test_healthy(self, client: TestClient):
         mock_opt = MagicMock()
-        mock_opt.get_health_check.return_value = {"status": "healthy", "timestamp": 0, "checks": {}}
+        mock_opt.get_health_check.return_value = {
+            "status": "healthy",
+            "timestamp": 0,
+            "checks": {},
+        }
         with patch(
             "app.utils.performance.performance_initializer.get_performance_optimizer",
             return_value=mock_opt,
@@ -416,7 +427,7 @@ class TestPerformanceCacheClear:
             r = client.post("/api/performance/cache/clear")
             assert r.status_code == 503
 
-    def test_clear_with_pattern(self, client: TestClient):
+    def test_clear_with_pattern(self, client: TestClient, local_tools):
         mock_opt = MagicMock()
         mock_opt.redis_cache.clear_pattern.return_value = 5
         with patch(
@@ -425,8 +436,9 @@ class TestPerformanceCacheClear:
         ):
             r = client.post("/api/performance/cache/clear?pattern=test:*")
             assert r.json()["success"] is True
+        mock_opt.redis_cache.clear_pattern.assert_called_once_with("test:*")
 
-    def test_clear_local(self, client: TestClient):
+    def test_clear_local(self, client: TestClient, local_tools):
         mock_opt = MagicMock()
         mock_opt.redis_cache.clear_local_cache = MagicMock()
         with patch(
@@ -435,6 +447,7 @@ class TestPerformanceCacheClear:
         ):
             r = client.post("/api/performance/cache/clear")
             assert r.json()["success"] is True
+        mock_opt.redis_cache.clear_local_cache.assert_called_once_with()
 
 
 class TestPerformanceCacheInvalidate:
@@ -452,7 +465,7 @@ class TestPerformanceCacheInvalidate:
             r = client.post("/api/performance/cache/invalidate", json={"keys": ["k1"]})
             assert r.status_code == 503
 
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         mock_opt = MagicMock()
         mock_opt.redis_cache.delete.return_value = 1
         with patch(
@@ -461,6 +474,7 @@ class TestPerformanceCacheInvalidate:
         ):
             r = client.post("/api/performance/cache/invalidate", json={"keys": ["k1"]})
             assert r.json()["success"] is True
+        mock_opt.redis_cache.delete.assert_called_once_with("k1")
 
 
 class TestPerformanceTasksStatus:
@@ -568,7 +582,7 @@ class TestPerformanceOptimizeReinitialize:
             r = client.post("/api/performance/optimize/reinitialize")
             assert r.json()["success"] is True
 
-    def test_error(self, client: TestClient):
+    def test_error(self, client: TestClient, local_tools):
         with patch(
             "app.utils.performance.performance_initializer.init_performance_optimization",
             side_effect=RuntimeError("fail"),
@@ -585,7 +599,7 @@ class TestPerformanceOptimizeReinitialize:
 class TestTemplatesProgress:
     def test_success(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.system.routes.get_template_analysis_progress",
+            "app.fastapi_routes.domains.system.system_routes.get_template_analysis_progress",
             return_value={
                 "progress": 50,
                 "success": True,
@@ -620,7 +634,8 @@ class TestTemplatesDelete:
 
     def test_fs_template_not_found(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.system.routes.get_base_dir", return_value="/nonexistent"
+            "app.fastapi_routes.domains.system.system_routes.get_base_dir",
+            return_value="/nonexistent",
         ):
             r = client.request(
                 "DELETE",
@@ -630,11 +645,12 @@ class TestTemplatesDelete:
             )
             assert r.status_code == 404
 
-    def test_fs_template_success(self, client: TestClient, tmp_path):
+    def test_builtin_fs_template_is_refused_and_preserved(self, client: TestClient, tmp_path):
         test_file = tmp_path / "test.docx"
         test_file.write_text("content")
         with patch(
-            "app.fastapi_routes.domains.system.routes.get_base_dir", return_value=str(tmp_path)
+            "app.fastapi_routes.domains.system.system_routes.get_base_dir",
+            return_value=str(tmp_path),
         ):
             r = client.request(
                 "DELETE",
@@ -642,9 +658,11 @@ class TestTemplatesDelete:
                 content=json.dumps({"id": "fs:test.docx"}),
                 headers={"Content-Type": "application/json"},
             )
-            assert r.json()["success"] is True
+            assert r.status_code == 403, r.text
+            assert r.json()["success"] is False
+            assert test_file.read_text() == "content"
 
-    def test_db_template_not_found(self, client: TestClient):
+    def test_db_template_not_found(self, client: TestClient, local_tools):
         mock_db = MagicMock()
         mock_db.execute.return_value.fetchone.return_value = None
         mock_db.__enter__ = MagicMock(return_value=mock_db)
@@ -672,7 +690,7 @@ class TestTemplatesDelete:
 
     def test_error(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.system.routes.get_base_dir",
+            "app.fastapi_routes.domains.system.system_routes.get_base_dir",
             side_effect=RuntimeError("fail"),
         ):
             r = client.request(
@@ -685,7 +703,7 @@ class TestTemplatesDelete:
 
 
 class TestTemplatesCreate:
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         with patch(
             "app.legacy.routes.document_templates_compat.run_archive_template_create",
             return_value=({"success": True}, 200),
@@ -695,7 +713,7 @@ class TestTemplatesCreate:
 
 
 class TestTemplatesUpdate:
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         with patch(
             "app.legacy.routes.document_templates_compat.run_archive_template_update",
             return_value=({"success": True}, 200),

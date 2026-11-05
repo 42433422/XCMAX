@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-rbac",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "1f4494d95c7deed4fcdbdd7cbf9eef8041088ce29839924c19c9014659ab06e2",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。角色与权限。左侧有多条「MAC验收0929角色」，选中项说明为验收，权限勾选全空。右侧用户角色未选择用户。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-rbac/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-rbac/macos/result.png"
+}

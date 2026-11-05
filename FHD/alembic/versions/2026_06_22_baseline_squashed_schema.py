@@ -144,7 +144,7 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # 1. Every ORM table, in FK-correct order, idempotently (checkfirst=True).
-    from app.db.base import Base
+    from app.db.db_base import Base
     import app.db.models  # noqa: F401  (populates Base.metadata)
 
     Base.metadata.create_all(bind=conn, checkfirst=True)
@@ -168,7 +168,7 @@ def downgrade() -> None:
         ):
             conn.execute(text(f"DROP TABLE IF EXISTS {tbl} CASCADE"))
 
-    from app.db.base import Base
+    from app.db.db_base import Base
     import app.db.models  # noqa: F401
 
     Base.metadata.drop_all(bind=conn)

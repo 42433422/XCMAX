@@ -1,0 +1,7 @@
+2026-09-29T20:21:11+0800 [ai-ocr-doc] 开始验收 ai-ocr-doc 单据图像识别解析；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
+2026-09-29T20:21:11+0800 [ai-ocr-doc] M1 passed :: HTTP 200 59ms；active_backend=macos_vision
+2026-09-29T20:21:21+0800 [ai-ocr-doc] M2 passed :: HTTP 200 9774ms；{"success": true, "message": "识别成功", "text": "发货单 NO.20260929\n客户：太阳鸟\n产品：包装盒 数量：24", "file_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png", "artifacts": [{"artifact_type": "ocr_text", "name": "o
+2026-09-29T20:21:22+0800 [ai-ocr-doc] M3 passed :: HTTP 200 574ms；{"success": true, "message": "识别成功", "text": "发货单 NO.20260929\n客户：太阳鸟\n产品：包装盒 数量：24", "file_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png", "artifacts": [{"artifact_type": "ocr_text", "name": "o
+2026-09-29T20:21:25+0800 [ai-ocr-doc] M4 passed :: 导航后路径 /；命中文本 ['上传附件']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 3 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助手。 - 查产品
+2026-09-29T20:21:27+0800 [ai-ocr-doc] screenshot result.png
+2026-09-29T20:21:31+0800 [ai-ocr-doc] video operation.webm bytes=481751

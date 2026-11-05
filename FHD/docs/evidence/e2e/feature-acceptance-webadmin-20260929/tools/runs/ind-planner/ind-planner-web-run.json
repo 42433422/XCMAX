@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ind-planner",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-151518",
+  "generated_at": "2026-09-29 15:15:34",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器在 Web 管理端读取规划器桥接状态与宿主能力 → 真实 POST /api/mod/xcagi-planner-bridge/chat 触发一次真实对话（返回 agent run_id 与问候应答）→ POST intent/test 返回真实意图 → GET tools/registry 读回 71 个已登记工具；并含空消息被 400 拒绝（负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 52810,
+        "processed": 52802,
+        "errors": 0,
+        "dropped": 8,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 10,
+            "max_cache_size": 1000,
+            "hits": 47,
+            "misses": 10,
+            "hit_rate": 0.8245614035087719,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-planner/ind-planner-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ind-planner",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-planner/shot/00-login-form.png",
+      "sha256": "4e32c2d4e68e7ee2e7ff2c5ee0a9e3872fdbd819670040a6c91725dffbd05867",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-planner",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-planner/shot/PL1-planner-status.png",
+      "sha256": "7bceb52615c586edcfee1886149a726fc0407267c5e758a4589e8d46fc79825e",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染桥接状态与宿主能力真实 JSON：mod_id=xcagi-planner-bridge、role=planner_facade、facade chat 路径、edition。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-planner",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-planner/shot/PL2-planner-chat.png",
+      "sha256": "c09220f640a0e3b52b5fbb43ec1572d789c98260b17c599a0f1bf59fc2479766",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染真实对话响应：200、success=true、response 为智能助手问候、action=greeting、含 run_id。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-planner",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-planner/shot/PL3-planner-intent-registry.png",
+      "sha256": "2858b83bf5ffc850adb72f4c3b5bc0479711fb3a0a42b3a7ab3d5db1e1775a24",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染意图识别与工具注册表：primary_intent、tool_count=71 与工具名样例。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-planner",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-planner/shot/PL4-planner-negative.png",
+      "sha256": "92ef0f9d44a972a718ea123f090437fbdc4ccb6238251da7c5eb6bd114a22a6b",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染空消息 400「消息内容不能为空」与缺 tool_name 的 400 拒绝。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-planner",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-planner/video/ind-planner-web-20260929-151518.webm",
+      "sha256": "8648f5de6ec6da83dd9067d88e1c7a4f4a7239bbe86b9de36491f316be8d5773",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 桥接状态/宿主能力 → 真实对话 → 意图与工具注册表 → 负例。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "PL1",
+      "title": "规划器桥接状态与宿主能力真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "fetch GET /status 与 GET /host-capabilities。",
+      "expected": "状态 200 且 mod_id=xcagi-planner-bridge、含 facade chat；宿主能力 200 且含 edition。",
+      "observed": "{\"status_http\": 200, \"mod_id\": \"xcagi-planner-bridge\", \"role\": \"planner_facade\", \"phase\": \"3d\", \"host_caps_http\": 200, \"edition\": \"full\", \"core_workflow_mod_id\": \"xcagi-workflow-visualization-bridge\"}",
+      "result": "passed"
+    },
+    {
+      "id": "PL2",
+      "title": "真实对话触发 agent run",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /chat（message=你好）。",
+      "expected": "HTTP 200、success=true、返回真实 run_id 与非空 response。",
+      "observed": "{\"status\": 200, \"action\": \"greeting\", \"run_id\": \"run_82aece38108949cf8c0f880fe580e438\", \"response\": \"您好！我是 XCAGI 智能助手。您可以直接吩咐：开发货单、查产品/客户库存、打印标签、管理考勤人员，或上传 Excel 让我分析。请问有什么可以帮您？\", \"intent\": \"smalltalk_greeting\"}",
+      "result": "passed"
+    },
+    {
+      "id": "PL3",
+      "title": "意图识别与工具注册表真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "POST /intent/test（message=查一下库存）；fetch GET /tools/registry。",
+      "expected": "意图接口 200 且含 primary_intent；注册表 200 且 tool_count≥50。",
+      "observed": "{\"intent_http\": 200, \"primary_intent\": \"materials\", \"tool_key\": \"materials\", \"confidence\": 0.5, \"sources_used\": [\"rule_engine\"], \"registry_http\": 200, \"tool_count\": 71, \"sample_tools\": [\"excel_analysis\", \"excel_schema_understand\", \"excel_join_compare\", \"excel_chart_recommend\", \"import_excel_to_database\", \"template_preview\", \"generate_office_document\", \"delete_order\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "PL4",
+      "title": "空消息与缺 tool_name 被拒（负例）",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /intent/test（空 body）；POST /tools/execute（空 body）。",
+      "expected": "空消息 400「消息内容不能为空」；缺 tool_name 400。",
+      "observed": "{\"empty_intent\": {\"status\": 400, \"message\": \"消息内容不能为空\"}, \"missing_tool_name\": {\"status\": 400, \"error_code\": null}}",
+      "result": "passed"
+    }
+  ]
+}

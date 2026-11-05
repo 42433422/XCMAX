@@ -1,5 +1,3 @@
-"""产品导出 mixin：从超大仓储实现中拆出 export_to_excel，保持同一契约。"""
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -9,6 +7,8 @@ from sqlalchemy import inspect
 
 from app.db.models import Product as ProductModel
 from app.db.session import get_db
+from app.infrastructure.repositories.product_query_helpers import apply_product_filters
+from app.infrastructure.tenant_scope import apply_tenant_filter
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -38,16 +38,8 @@ class ProductExportMixin:
                         "filename": None,
                     }
 
-                query = db.query(ProductModel)
-
-                if unit_name:
-                    query = query.filter(ProductModel.unit == unit_name)
-
-                if keyword:
-                    query = query.filter(
-                        (ProductModel.name.like(f"%{keyword}%"))
-                        | (ProductModel.description.like(f"%{keyword}%"))
-                    )
+                query = apply_tenant_filter(db.query(ProductModel), ProductModel)
+                query = apply_product_filters(query, unit_name=unit_name, keyword=keyword)
 
                 products = query.order_by(ProductModel.id.desc()).all()
 

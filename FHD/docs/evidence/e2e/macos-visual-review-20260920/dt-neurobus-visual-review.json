@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "dt-neurobus",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "92bbeee12da67903aa14c5278b209a82b0365a2346628ed5c1a1ecf13d1d2d74",
+  "visible_content": "桌面运行时路径与更新事件，没有事件总线投递、订阅或持久化结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/dt-neurobus.png"
+}

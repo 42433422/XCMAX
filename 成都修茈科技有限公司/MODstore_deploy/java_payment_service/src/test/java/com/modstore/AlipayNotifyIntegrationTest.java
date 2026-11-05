@@ -12,9 +12,9 @@ import com.modstore.service.WebhookDispatcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -47,10 +47,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AlipayNotifyIntegrationTest {
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("payment_test")
-            .withUsername("test")
-            .withPassword("test");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(System.getProperty("payment.test.postgres.image", "postgres:16-alpine"))
+            .withDatabaseName("payment_test");
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
@@ -78,10 +76,10 @@ class AlipayNotifyIntegrationTest {
     @Autowired
     TransactionRepository transactionRepository;
 
-    @MockBean
+    @MockitoBean
     AlipayService alipayService;
 
-    @MockBean
+    @MockitoBean
     WebhookDispatcher webhookDispatcher;
 
     User user;

@@ -258,7 +258,7 @@ describe('LoginView.vue – submitLogin', () => {
     await wrapper.find('#lv-username').setValue('testuser')
     await wrapper.find('#lv-password').setValue('testpass')
     await wrapper.find('.login-form').trigger('submit.prevent')
-    expect(mockAuthApiLogin).toHaveBeenCalledWith('testuser', 'testpass', 'enterprise')
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('testuser', 'testpass', 'enterprise', '')
   })
 
   it('shows error on login failure', async () => {
@@ -483,10 +483,11 @@ describe('LoginView.vue – formatLoginFailurePayload', () => {
     expect(result).toContain('嵌套错误消息')
   })
 
-  it('includes error_id when present', async () => {
+  it('does not expose error_id diagnostics on login failure', async () => {
     const { wrapper } = await mountLoginView()
     const result = wrapper.vm.formatLoginFailurePayload({ error_id: 'ERR-001' })
-    expect(result).toContain('ERR-001')
+    expect(result).not.toContain('ERR-001')
+    expect(result).toBeTruthy()
   })
 })
 

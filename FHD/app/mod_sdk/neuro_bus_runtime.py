@@ -52,7 +52,7 @@ def _get_bundle() -> dict[str, Any]:
 async def run_lifespan_setup() -> None:
     if not is_neuro_bus_runtime_via_mod_enabled():
         from app.neuro_bus.bus_setup import setup_neuro_bus
-        from app.neuro_bus.domains.base import get_domain_registry
+        from app.neuro_bus.domains.domains_base import get_domain_registry
 
         await setup_neuro_bus()
         await get_domain_registry().initialize_all()
@@ -64,7 +64,7 @@ async def run_lifespan_setup() -> None:
 async def run_lifespan_teardown() -> None:
     if not is_neuro_bus_runtime_via_mod_enabled():
         from app.neuro_bus.bus_setup import teardown_neuro_bus
-        from app.neuro_bus.domains.base import get_domain_registry
+        from app.neuro_bus.domains.domains_base import get_domain_registry
 
         try:
             await get_domain_registry().shutdown_all()
@@ -77,7 +77,7 @@ async def run_lifespan_teardown() -> None:
 
 def _host_publish(event_type: str, payload: dict[str, Any], domain: str) -> bool:
     from app.neuro_bus.bus import get_neuro_bus
-    from app.neuro_bus.events.base import EventPriority, NeuroEvent
+    from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 
     bus = get_neuro_bus()
     if not bus.is_running:

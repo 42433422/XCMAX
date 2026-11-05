@@ -1,9 +1,9 @@
 # mypy: disable-error-code="arg-type, assignment"
+# ruff: noqa: F401 -- dynamic route modules import these facade exports
 """XC AGI 在线市场 API：目录浏览、搜索、评价、收藏、投诉。"""
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 import logging
@@ -23,6 +23,10 @@ from modstore_server.market_shared import (
     _normalize_material_category,
     _optional_current_user,
     _require_admin,
+)
+from modstore_server.market_shared import market_item_public as _market_item_public
+from modstore_server.market_shared import (
+    market_item_visible_to_user as _market_item_visible_to_user,
 )
 from modstore_server.models import (
     CatalogComplaint,
@@ -91,7 +95,7 @@ def _market_catalog_visibility_filters():
     duty = list(all_planned_employee_ids())
     parts = [
         CatalogItem.is_public == True,  # noqa: E712
-        CatalogItem.compliance_status != "delisted",
+        CatalogItem.compliance_status == "approved",
     ]
     if duty:
         parts.append(
@@ -107,10 +111,6 @@ def _reject_internal_duty_catalog_item(item: CatalogItem) -> None:
     """用户侧市场路由：编制内运维包视为不存在（404）。"""
     if is_planned_duty_employee_pack(item.pkg_id, item.artifact):
         raise HTTPException(404, "商品不存在")
-
-
-def _market_params_hash(*args: Any) -> str:
-    return hashlib.sha1(json.dumps(args, sort_keys=True, default=str).encode()).hexdigest()[:12]
 
 
 def _invalidate_market_catalog_caches() -> None:
@@ -150,16 +150,23 @@ class CatalogComplaintReviewDTO(BaseModel):
     delist_reason: str = Field(default="", max_length=1000)
 
 
-_browse_routes = importlib.import_module("modstore_server.market_catalog_browse_routes")
-api_market_facets = _browse_routes.api_market_facets
-api_market_catalog = _browse_routes.api_market_catalog
-api_office_employee_pack_bundle = _browse_routes.api_office_employee_pack_bundle
-api_host_foundation_employee_pack_download = (
-    _browse_routes.api_host_foundation_employee_pack_download
-)
-api_workflow_employee_pack_bundle = _browse_routes.api_workflow_employee_pack_bundle
-api_market_catalog_detail = _browse_routes.api_market_catalog_detail
-_enrich_catalog_creator_profile = _browse_routes._enrich_catalog_creator_profile
+_BROWSE_EXPORTS = {
+    "api_market_facets",
+    "api_market_catalog",
+    "api_office_employee_pack_bundle",
+    "api_host_foundation_employee_pack_download",
+    "api_workflow_employee_pack_bundle",
+    "api_market_catalog_detail",
+    "_enrich_catalog_creator_profile",
+}
+
+
+def __getattr__(name: str):
+    """Lazy browse-route aliases — avoid import cycle with browse_routes_merged."""
+    if name in _BROWSE_EXPORTS:
+        mod = importlib.import_module("modstore_server.market_catalog_browse_routes")
+        return getattr(mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @router.get("/market/catalog/{item_id}/quality")
@@ -448,3 +455,9 @@ def api_admin_review_catalog_complaint(
             "status": complaint.status,
             "resolution": complaint.resolution,
         }
+
+
+# Browse list/detail/facets live in market_catalog_browse_routes_merged and
+# decorate this module's router at import time. Eager-load so create_app
+# include_router(market_catalog_api.router) mounts /market/catalog.
+importlib.import_module("modstore_server.market_catalog_browse_routes")

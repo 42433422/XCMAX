@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref } from 'vue'
+import { useModsStore } from '@/stores/mods'
 import { useShipmentTask, type ShipmentTask } from './useShipmentTask'
 
 function makeMessages() {
@@ -24,6 +25,7 @@ function mockFetchOnce(body: unknown, ok = true) {
 }
 
 beforeEach(() => {
+  useModsStore().isLoaded = true
   globalThis.fetch = vi.fn()
 })
 afterEach(() => {
@@ -162,3 +164,105 @@ describe('useShipmentTask table helpers', () => {
     expect(s.getTaskOrderNumber(shipmentTask())).toBe('待生成')
   })
 })
+
+describe('shipment preview fallbacks and asynchronous edits', () => {
+  it.each([
+    [[{ name: 'unrelated' }, { product_name: 'Paint 98-03', unit_price: '12.5', specification: '2' }], 'Paint 98-03'],
+    [[{ name: 'unrelated', model_number: '0000' }, { name: 'Model match', model_number: '9803-EX', spec: 2 }], 'Model match'],
+    [[{ name: 'Fallback', price: 'invalid' }, { name: 'Other' }], 'Fallback'],
+  ])('selects matching names, partial models, and finally the first returned product', async (data, name) => {
+    const task = ref<ShipmentTask | null>(shipmentTask([{ model_number: '9803', quantity_tins: 2 }]))
+    const s = useShipmentTask(makeMessages(), task)
+    mockFetchOnce({ success: true, data: [] })
+    mockFetchOnce({ success: true, data })
+    await s.enrichShipmentPreviewProducts(task.value!)
+    expect(task.value!.payload!.params!.products[0].name).toBe(name)
+    expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain('unit=')
+    expect(String(vi.mocked(fetch).mock.calls[1][0])).not.toContain('unit=')
+    if (name === 'Paint 98-03') expect(task.value!.items![0]).toMatchObject({ 单价: '12.50', 总价: '50.00' })
+  })
+  it('keeps a usable unpriced preview when both metadata lookups fail', async () => {
+    const messages = makeMessages(), task = ref<ShipmentTask | null>(shipmentTask())
+    const s = useShipmentTask(messages, task)
+    mockFetchOnce({ success: false }); mockFetchOnce({ success: true, data: null })
+    expect(await s.handleModifyCommand('再加 1桶9803规格28')).toBe(true)
+    expect(task.value!.items![0]).toMatchObject({ 型号: '9803', 单价: '-', 总价: '-' })
+    expect(messages.addAndSaveMessage).toHaveBeenCalledWith('已加入：9803，1桶，规格28。', 'ai')
+  })
+  it('does not query empty or already complete products and reports edits to absent models', async () => {
+    const messages = makeMessages(), task = ref<ShipmentTask | null>(shipmentTask([{ model_number: '9803', name: '蓝漆', unit_price: 5 }, {}]))
+    const s = useShipmentTask(messages, task)
+    await s.enrichShipmentPreviewProducts(shipmentTask())
+    await s.enrichShipmentPreviewProducts(task.value!)
+    expect(fetch).not.toHaveBeenCalled()
+    await s.handleModifyCommand('把9804改成2桶规格28')
+    expect(messages.addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('请先"再加 9804'), 'ai')
+  })
+  it('preserves old unit, name, quantity, and price when rebuilding a partial preview', () => {
+    const task = shipmentTask(), s = useShipmentTask(makeMessages(), ref(null))
+    task.payload = undefined
+    task.items = [{ 单位: '旧单位', 型号: '9803', 产品名称: '旧产品', 桶数: 3, 规格: 2, 单价: 4 }, {}]
+    s.updateShipmentTaskPreview(task, [{ model_number: '9803' }, { quantity: 0, spec: 0 }])
+    expect(task.items).toEqual([
+      { 单位: '旧单位', 型号: '9803', 产品名称: '旧产品', 桶数: 3, 规格: 2, 单价: '4.00', 总价: '24.00' },
+      { 单位: '旧单位', 型号: '-', 产品名称: '-', 桶数: 1, 规格: 10, 单价: '-', 总价: '-' }])
+    expect(task.description).toContain('预估总价 ¥24.00')
+    expect(s.getTaskTableColumns({ type: 'other', items: [{ custom: 0 }] })).toEqual(['custom'])
+    expect(s.getTaskTableItems({ type: 'other', items: [null, false, { custom: 0 }] })).toEqual([{ custom: 0 }])
+    expect(s.getTaskTableItems({ type: 'other' })).toEqual([])
+    expect(s.getTaskOrderNumber({ type: 'other' })).toBe('')
+  })
+  it.each(['replace', 'customize', 'force'] as const)('does not overwrite concurrent user intent during order allocation: %s', async (action) => {
+    const task = ref<ShipmentTask | null>(shipmentTask()), s = useShipmentTask(makeMessages(), task)
+    let resolve!: (value: Response) => void
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((done) => { resolve = done }))
+    const original = task.value!, pending = s.hydrateTaskOrderNumber(original, { force: action === 'force' })
+    await Promise.resolve()
+    if (action === 'replace') task.value = shipmentTask()
+    else original.customOrderNumber = 'MANUAL'
+    resolve({ ok: true, json: async () => ({ success: true, data: { order_number: 'SO-NEW' } }), headers: { get: () => 'application/json' } } as Response)
+    await pending
+    expect(original.customOrderNumber).toBe(action === 'replace' ? undefined : action === 'force' ? 'SO-NEW' : 'MANUAL')
+  })
+  it('skips completed and customized orders, and leaves allocation failures empty', async () => {
+    const task = ref<ShipmentTask | null>(shipmentTask()), s = useShipmentTask(makeMessages(), task)
+    for (const ignored of [{ type: 'other' }, { type: 'shipment_generate', completed: true }, { ...shipmentTask(), customOrderNumber: 'MANUAL' }]) await s.hydrateTaskOrderNumber(ignored)
+    expect(fetch).not.toHaveBeenCalled()
+    for (let i = 0; i < 3; i++) mockFetchOnce({ success: false })
+    await s.hydrateTaskOrderNumber(task.value!)
+    expect(task.value!.customOrderNumber).toBeUndefined()
+  })
+})
+
+ describe('local preview ownership fences', () => {
+  it.each(['generation', 'session', 'task'])('drops a pending add before mutation or reply after %s changes', async change => {
+    const m = makeMessages(), task = ref<ShipmentTask | null>(shipmentTask())
+    const s = useShipmentTask(m, task)
+    let current = true
+    let finish!: (value: Response) => void
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const original = task.value!
+    const pending = s.handleModifyCommand('再加 1桶 A001 规格10', () => current)
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    if (change === 'task') task.value = shipmentTask()
+    else current = false
+    finish({ ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: [{ model_number: 'A001', name: 'synthetic' }] }) } as Response)
+    expect(await pending).toBe(true)
+    expect(original.payload!.params!.products).toEqual([])
+    expect(m.addAndSaveMessage).not.toHaveBeenCalled()
+  })
+
+  it.each(['enrich', 'order'])('fences automatic %s hydration after a round changes', async kind => {
+    const task = ref<ShipmentTask | null>(shipmentTask([{ model_number: 'A001' }]))
+    let current = true, finish!: (value: Response) => void
+    const s = useShipmentTask(makeMessages(), task, () => () => current)
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const pending = kind === 'enrich' ? s.enrichShipmentPreviewProducts(task.value!) : s.hydrateTaskOrderNumber(task.value!)
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    current = false
+    finish({ ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: kind === 'enrich' ? [{ model_number: 'A001', name: 'old' }] : { order_number: 'OLD' } }) } as Response)
+    await pending
+    expect(task.value!.payload!.params!.products![0].name).toBeUndefined()
+    expect(task.value!.customOrderNumber).toBeUndefined()
+  })
+ })

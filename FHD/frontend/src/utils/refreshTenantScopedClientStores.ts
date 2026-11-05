@@ -9,7 +9,7 @@ import { useWorkflowEmployeeSpaceStore } from '@/stores/workflowEmployeeSpace'
 import { useModsStore } from '@/stores/mods'
 import { hydrateWorkspacePrefsFromServer } from '@/utils/workspacePrefsApi'
 import { refreshHostPackAcknowledged } from '@/constants/productFlow'
-import { updateProductReadAccountScope } from './productReadAccountScope'
+import { productReadAccountEpoch, updateProductReadAccountScope } from './productReadAccountScope'
 
 /**
  * 登录/切换租户/登出后，重载按 tenant 隔离的客户端持久化 store。
@@ -18,34 +18,25 @@ import { updateProductReadAccountScope } from './productReadAccountScope'
  * Router guards await it so retained tenant-scoped state is available before
  * deciding whether the host onboarding is really required.
  */
-export async function refreshTenantScopedClientStores(input?: TenantStorageScopeInput): Promise<void> {
+function reloadScopedStore(reload: () => void): void {
+  try { reload() } catch { /* pinia 未就绪 */ }
+}
+
+export async function refreshTenantScopedClientStores(input?: TenantStorageScopeInput, hydrate = true): Promise<void> {
   updateProductReadAccountScope(input)
+  const epoch = productReadAccountEpoch.value
   invalidateTenantStorageScopeCache()
   const scope = resolveTenantStorageScope(input)
   setTenantStorageScopeCache(scope)
-  try {
-    useWorkflowAiEmployeesStore().reloadForTenantScope(scope)
-  } catch {
-    /* pinia 未就绪 */
-  }
-  await hydrateWorkspacePrefsFromServer(scope)
+  reloadScopedStore(() => useWorkflowAiEmployeesStore().reloadForTenantScope(scope))
+  if (hydrate) await hydrateWorkspacePrefsFromServer(scope, () => epoch === productReadAccountEpoch.value)
+  // A later login owns the active scope. Never restore the older input or publish its stores.
+  if (epoch !== productReadAccountEpoch.value) return
   // Workspace preferences can write tenant-scoped localStorage in this same
   // document.  The browser emits no `storage` event to its writing document,
   // so refresh the reactive sidebar acknowledgement explicitly.
   refreshHostPackAcknowledged()
-  try {
-    useWorkflowAiEmployeesStore().reloadForTenantScope(scope)
-  } catch {
-    /* pinia 未就绪 */
-  }
-  try {
-    useWorkflowEmployeeSpaceStore().reloadForTenantScope(scope)
-  } catch {
-    /* pinia 未就绪 */
-  }
-  try {
-    useModsStore().reloadActiveModForTenantScope(scope)
-  } catch {
-    /* pinia 未就绪 */
-  }
+  reloadScopedStore(() => useWorkflowAiEmployeesStore().reloadForTenantScope(scope))
+  reloadScopedStore(() => useWorkflowEmployeeSpaceStore().reloadForTenantScope(scope))
+  reloadScopedStore(() => useModsStore().reloadActiveModForTenantScope(scope))
 }

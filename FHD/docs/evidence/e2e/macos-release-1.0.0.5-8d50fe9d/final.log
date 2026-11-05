@@ -1,0 +1,90 @@
+[10:43:03Z] === final chain start ===
+dmg_sha256=55a873779aa316fe1e2393ff043978187911b3e052b9762deaefdd6d4817e32f
+dmg_size=301669921
+--- spctl ---
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+--- codesign ---
+codesign_ok=1
+--- stapler ---
+The validate action worked!
+--- build-info ---
+{"schema_version":1,"gitSha":"8d50fe9d043391d5ba8857094a366a59a34ae43f","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f","builtAt":"2026-09-21T08:46:12.138Z"}
+
+[10:43:11Z] installed gitSha=8d50fe9d043391d5ba8857094a366a59a34ae43f
+[10:43:25Z] === final chain start ===
+dmg_sha256=55a873779aa316fe1e2393ff043978187911b3e052b9762deaefdd6d4817e32f
+dmg_size=301669921
+--- spctl ---
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+--- codesign ---
+codesign_ok=1
+--- stapler ---
+The validate action worked!
+--- build-info ---
+{"schema_version":1,"gitSha":"8d50fe9d043391d5ba8857094a366a59a34ae43f","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f","builtAt":"2026-09-21T08:46:12.138Z"}
+
+[10:43:33Z] installed gitSha=8d50fe9d043391d5ba8857094a366a59a34ae43f
+[10:43:33Z] --- 首启（独占数据根 /private/tmp/xcagi-custchain/userdata-final-8d50fe9d） ---
+{"xcagi.db.bytes": 1445888, "uploads.files": 0, "mods.files": 426, "models.files": 0, "backups.files": 0, "backups.latest": ""}
+[10:43:42Z] --- 真实 UI 全链路 ---
+[10:43:42Z]   · step0
+    "step": "ui_login",
+    "verdict": "PASS",
+    "workspace_visible": true
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-step0.json
+[10:44:11Z]   · step1
+        "source": "db"
+      }
+    ]
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-step1.json
+[10:44:27Z]   · step2
+        "price": "3.50"
+      }
+    ]
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-step2.json
+[10:44:35Z]   · step2b
+    "created": [
+      "UI客户-0921"
+    ]
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-step2b.json
+[10:44:44Z]   · step3
+      "doc": "发货单_26-09-00001A_20260921_184455.xlsx",
+      "text": " 生成结果文件名: 发货单_26-09-00001A_20260921_184455.xlsx 下载发货单 新建发货单 "
+    }
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-step3.json
+[10:44:59Z]   · step4
+        ]
+      ]
+    }
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-step4.json
+[10:45:02Z]   · step5
+    "step": "shipment_records_via_ui",
+    "verdict": "BLOCKED",
+    "rows": null
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-step5.json
+screenshot: True -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-ui.png
+{"xcagi.db.bytes": 1445888, "uploads.files": 1, "mods.files": 430, "models.files": 0, "backups.files": 1, "backups.latest": "xcagi-unknown-20260921104352.db"}
+[10:45:33Z] --- 重启 ---
+{"ui_evidence": {"template_created_by_ui": "客户送货单模板-UI", "doc_from_ui": "发货单_26-09-00001A_20260921_183924.xlsx", "unit_from_ui": "UI客户-0921"}, "relogin": {"status": 405, "success": false, "me_status": 404, "username": null, "has_shipment_edit": false}, "template_present": {"status": 404, "probe": "客户送货单模板-UI", "found": false}, "unit_present": {"status": 404, "probe": "UI客户-0921", "found": false}, "prior_document": {"doc_name": "发货单_26-09-00001A_20260921_183924.xlsx", "status": 404, "bytes": 114, "xlsx_magic": false, "sha256": "5cb7587ee683d9e9e8c5e743a8728bd2d41ed4a7ec2688ffcd12aa15b26d427c"}}
+verdict: BLOCKED -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-continuity.json
+{"xcagi.db.bytes": 1822720, "uploads.files": 1, "mods.files": 430, "models.files": 0, "backups.files": 1, "backups.latest": "xcagi-unknown-20260921104352.db"}
+screenshot: True -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/final-after-restart.png
+[10:45:42Z] --- 离线核验（直接读数据根 DB / 文件） ---
+{"data_root": "/private/tmp/xcagi-custchain/userdata-final-8d50fe9d", "checks": {"shipment_outputs": ["labels", "发货单_26-09-00001A_20260921_184455.xlsx"], "db_row_counts": {"xcagi.db:customers": 0, "xcagi.db:purchase_units": 1, "xcagi.db:shipment_records": 1, "xcagi.db:templates": 1}, "latest_doc": {"name": "发货单_26-09-00001A_20260921_184455.xlsx", "bytes": 6108, "xlsx_magic": true, "sha256": "69a83efbf7704452de0ef717ddc41d5e8d4ca9ab71550d3a0f10abe60b98b6a3"}}}
+[10:45:42Z] === final chain done ===

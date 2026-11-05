@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "erp-print-agent",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "214a321fdddd4f9e6d0d9eae07ed4513a9274e59a39454c6cbb9d8b50318b63e",
+  "visible_content": "标签打印页面明确显示“暂无已保存的标签模板”，未选择产品或模板，没有标签预览与打印结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/erp-print-agent.png"
+}

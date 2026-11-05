@@ -4,7 +4,7 @@
 Focus: _execute_price_list_tool error branches, _execute_shipment_generate_tool,
 _execute_excel_schema_tool, _execute_excel_analysis_tool, _execute_import_excel_tool,
 LLMWorkflowPlanner._validate_required_params, _fallback_plan branches,
-_filter_tool_registry_for_profile normal/pro_default profiles, _get_planner_http_client.
+_filter_tool_registry_for_profile normal/pro_default profiles.
 """
 
 from __future__ import annotations
@@ -951,10 +951,11 @@ class TestFallbackPlanBranches:
 
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         registry = get_tool_registry()
+        # 2026-09 起未命中意图不再静默查询产品，而是 clarify.ask。
         plan = planner._fallback_plan("p1", "查询信息", registry)
-        assert plan.intent == "generic_workflow"
-        # Should fall back to a query node.
+        assert plan.intent == "clarify_ask"
         assert len(plan.nodes) >= 1
+        assert plan.nodes[0].tool_id == "clarify"
 
     def test_generic_fallback_without_products(self):
         from app.application.workflow.planner import LLMWorkflowPlanner
@@ -968,8 +969,11 @@ class TestFallbackPlanBranches:
                 }
             }
         }
-        plan = planner._fallback_plan("p1", "查询信息", registry)
-        assert plan.intent == "generic_workflow"
+        # 命中 customers 意图时路由到 customers.query（#1815 customer_read_node 优先命中
+        # 时 intent=customers_query；否则规则意图服务路由 intent_route_customers）。
+        plan = planner._fallback_plan("p1", "客户列表", registry)
+        assert plan.intent in {"intent_route_customers", "customers_query"}
+        assert not any(n.tool_id == "products" for n in plan.nodes)
         assert any(n.tool_id == "customers" for n in plan.nodes)
 
     def test_generic_fallback_no_tools(self):
@@ -977,15 +981,16 @@ class TestFallbackPlanBranches:
 
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         plan = planner._fallback_plan("p1", "查询信息", {})
-        assert plan.intent == "generic_workflow"
-        assert plan.nodes == []
+        assert plan.intent == "clarify_ask"
+        assert len(plan.nodes) == 1
+        assert plan.nodes[0].tool_id == "clarify"
 
     def test_risk_level_high(self):
         from app.application.workflow.planner import (
             LLMWorkflowPlanner,
             WorkflowNode,
         )
-        from app.application.workflow.types import PlanGraph
+        from app.application.workflow.workflow_types import PlanGraph
 
         # Build a plan with a high-risk node to test risk_level propagation.
         # _fallback_plan itself doesn't produce high-risk nodes, but we test the logic.
@@ -994,28 +999,6 @@ class TestFallbackPlanBranches:
         registry = {"customers": {"actions": {"ensure_exists": {"risk": "medium"}}}}
         plan = planner._fallback_plan("p1", "添加产品", registry)
         assert plan.risk_level in ("low", "medium", "high")
-
-
-# ---------------------------------------------------------------------------
-# _get_planner_http_client
-# ---------------------------------------------------------------------------
-
-
-class TestGetPlannerHttpClient:
-    """Cover _get_planner_http_client."""
-
-    def test_returns_client(self):
-        from app.application.workflow.planner import _get_planner_http_client
-
-        client = _get_planner_http_client()
-        assert client is not None
-
-    def test_returns_same_instance(self):
-        from app.application.workflow.planner import _get_planner_http_client
-
-        c1 = _get_planner_http_client()
-        c2 = _get_planner_http_client()
-        assert c1 is c2
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-30 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-employees-workflow",
+  "platform": "macos",
+  "reviewed_at": "2026-09-30",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+  "screenshot_sha256": "38dc41be97ab764db5c8ba3ebb145ebccbcfbb92d5016c9bf89f2a57006d2169",
+  "visible_content": "员工空间显示考勤 AI 助手工位，副屏未启用。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-employees-workflow/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-employees-workflow/macos/result.png"
+}

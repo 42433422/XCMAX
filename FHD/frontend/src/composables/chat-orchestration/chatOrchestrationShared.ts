@@ -2,6 +2,7 @@
  * useChatOrchestration 拆出的共享类型与纯工具函数（行为零变更）。
  */
 import type { ChatAutoAction, ChatPlannerPayload } from '@/types/chat'
+import { resolveErpApiPath } from '@/utils/erpDomainPaths'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import type { useChatMessages } from '../useChatMessages'
 import type { ShipmentTask } from '../useShipmentTask'
@@ -13,6 +14,31 @@ export type ChatOrchestrationAddAndSaveMessage = (
   extras?: Parameters<ReturnType<typeof useChatMessages>['addAndSaveMessage']>[2],
   targetSessionId?: string,
 ) => Promise<void>
+
+/** Local async work may update only its original visible round; receipts may be saved to its original owner/session. */
+export type ChatLocalScope = { sessionId: string; isCurrent: () => boolean; isOwnerCurrent: () => boolean }
+
+/** A transport-level success cannot override an unknown tool or run outcome. */
+export function requiresTurnReconciliation(value: unknown): boolean {
+  const pending: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }]
+  const seen = new Set<object>()
+  while (pending.length) {
+    const { value: item, depth } = pending.shift()!
+    if (!item || typeof item !== 'object' || seen.has(item)) continue
+    seen.add(item)
+    const row = asRecord(item)
+    if (row.requires_reconciliation || row.reconciliation_required ||
+      ['execution_outcome', 'outcome', 'execution_state', 'status'].some(key => ['unknown', 'outcome_unknown'].includes(String(row[key] || '').toLowerCase()))) return true
+    if (depth >= 3) continue
+    for (const key of ['data', 'payload', 'result']) pending.push({ value: row[key], depth: depth + 1 })
+    for (const key of ['legacy_tool_records', '_tool_records', 'tool_records']) {
+      const records = asArray(row[key])
+      if (records.length > 100) return true
+      for (const record of records) pending.push({ value: asRecord(record).output, depth: depth + 1 })
+    }
+  }
+  return false
+}
 
 export type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
@@ -74,17 +100,28 @@ export function buildTaskCompletedDescription(successMsg: string, data: unknown)
   return parts.join('；')
 }
 
+const LEGACY_SHIPMENT_DOWNLOAD_PREFIX = '/api/shipment/download/'
+
+/**
+ * 旧 ``/api/shipment/download/*`` 对企业租户会话返回 403（全局输出目录没有租户隔离），
+ * 因此发货单下载链接一律交给 ERP 路由解析：装了领域门面 Mod 时落到按租户隔离的
+ * ``/api/mod/xcagi-erp-domain-bridge/shipment/download/*``；其他链接原样保留。
+ */
+function tenantSafeShipmentDownloadUrl(url: string): string {
+  return url.startsWith(LEGACY_SHIPMENT_DOWNLOAD_PREFIX) ? resolveErpApiPath(url) : url
+}
+
 export function buildShipmentDownloadUrl(data: unknown): string {
   const row = asRecord(data)
   const nestedData = asRecord(row.data)
   const document = asRecord(row.document || nestedData.document)
   const directUrl = row.download_url || nestedData.download_url
-  if (directUrl && typeof directUrl === 'string') return directUrl
+  if (directUrl && typeof directUrl === 'string') return tenantSafeShipmentDownloadUrl(directUrl)
 
   const docName = row.doc_name || nestedData.doc_name || document.filename
   if (!docName || typeof docName !== 'string') return ''
 
-  return `/api/shipment/download/${encodeURIComponent(docName)}`
+  return tenantSafeShipmentDownloadUrl(`${LEGACY_SHIPMENT_DOWNLOAD_PREFIX}${encodeURIComponent(docName)}`)
 }
 
 export function normalizeRecordId(value: unknown): number | null {

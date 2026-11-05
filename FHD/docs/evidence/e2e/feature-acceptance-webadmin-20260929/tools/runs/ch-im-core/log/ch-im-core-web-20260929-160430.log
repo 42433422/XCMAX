@@ -1,0 +1,9 @@
+[16:04:30] feature=ch-im-core platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-im-core
+[16:04:43] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[16:04:44] case I1: passed - IM 联系人面真实读取
+[16:04:47] case I2: passed - 建直聊→真实发送→读回消息（正向）
+[16:04:48] case I3: passed - 越权访问非本账号会话被拒（负例）
+[16:04:48] case I4: passed - 未读总数真实读取
+[16:04:49] case I5: passed - 未登录上下文访问 IM 被拒（负例）
+[16:04:50] video: ch-im-core-web-20260929-160430.webm (1373729 bytes)
+[16:04:50] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-im-core/log/ch-im-core-web-20260929-160430.log

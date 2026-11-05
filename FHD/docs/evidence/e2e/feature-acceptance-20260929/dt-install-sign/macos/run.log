@@ -1,0 +1,6 @@
+2026-09-29T07:09:28+0800 [dt-install-sign] 开始验收 dt-install-sign 安装 · 签名 · 身份校验；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:09:28+0800 [dt-install-sign] M1 passed :: HTTP 200 17ms；{"admin_console_sha256": "", "admin_console_git_sha": "", "artifact_sha256": "", "built_at": "2026-09-28T01:42:42.396Z", "git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e", "image_digest": "", "product_version": "1.0.0.5", "release_id": 
+2026-09-29T07:09:31+0800 [dt-install-sign] M2 passed :: codesign rc=0；spctl rc=0：/Applications/XCAGI.app: accepted | source=Notarized Developer ID | origin=Developer ID Application: jialong Li (G26WSH472M)
+2026-09-29T07:09:35+0800 [dt-install-sign] M3 passed :: 导航后路径 /settings；命中文本 ['v1.0.0.5']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名
+2026-09-29T07:09:36+0800 [dt-install-sign] screenshot result.png
+2026-09-29T07:09:39+0800 [dt-install-sign] video operation.webm bytes=383461

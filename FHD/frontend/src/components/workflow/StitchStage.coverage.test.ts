@@ -1283,3 +1283,24 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
     })
   })
 })
+
+it.each(['strip', 'establishment'] as const)('fits %s stations to actual viewport dimensions and keeps labels legible', async layout => {
+  const desks = Array.from({ length: 10 }, (_, index) => makeDeskRow({ empId: `emp-${index}`, shortName: `员工${index}` }))
+  const wrapper = mount(StitchStage, { props: { mode: 'composed', composedLayout: layout, desks, hotspots: [], imageSrc: '', selectedEmpId: null }, global: { stubs: { YuangongStation: true } } })
+  const vm = wrapper.vm as any
+  mockViewportSize(wrapper.get('.stitch-composed').element as HTMLElement, 1200, 600)
+  const viewport = wrapper.get('.stitch-stage-viewport').element as HTMLElement
+  mockViewportSize(viewport, 1400, 900); vm.updateViewportSize(); await flushPromises()
+  const roomyScale = vm.composedStationScale
+  expect(roomyScale).toBeGreaterThan(0); expect(roomyScale).toBeLessThanOrEqual(5.5)
+  expect(vm.layout.composedStationH.value).toBeGreaterThanOrEqual(96)
+  mockViewportSize(viewport, 500, 300); vm.updateViewportSize(); await flushPromises()
+  expect(vm.composedStationScale).toBeLessThanOrEqual(roomyScale)
+  expect(vm.composedStationWrapStyle.height).toBe(`${vm.layout.composedStationH.value}px`)
+  expect(vm.composedGroupStripWidth(0)).toBe(0)
+  expect(vm.composedGroupStripWidth(2)).toBe(2 * vm.composedCellW - vm.layout.composedCellOverlapPx.value)
+  expect(vm.composedRowsAreaH).toBeGreaterThan(vm.composedTrackH)
+  await wrapper.setProps({ desks: [] }); await flushPromises()
+  expect(vm.composedRowsAreaH).toBe(vm.composedTrackH)
+  wrapper.unmount()
+})

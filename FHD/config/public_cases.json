@@ -1,0 +1,5 @@
+{
+  "_comment": "官网公开案例 SSOT。官网案例页/首页的案例内容必须由本文件生成，禁止在 HTML 中另行维护一份事实。字段说明：public_status 为对外交付口径；evidence_status 为公开验证范围（功能已展示/实机验收已通过/验收材料待补）；screenshots/videos 引用成都修茈科技有限公司/capabilities/assets/evidence/ 下的真实文件；acceptance_ref 指向能力证据 feature id，供验证中心反查 run.json / SHA256。修改本文件后必须重新生成 site/data/public-site.json（scripts/build_public_site.py）。",
+  "schema": "xcagi.public_cases/v1",
+  "cases": []
+}

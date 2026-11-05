@@ -1,0 +1,10 @@
+{
+  "XCAGI_UPDATE_URL": "https://xiu-ci.com/releases/testing/enterprise",
+  "XCAGI_UPDATE_CHANNEL": "(removed)",
+  "args": [
+    "C:\\Users\\97088\\AppData\\Local\\Programs\\XCAGI\\XCAGI.exe",
+    "--remote-debugging-port=9223"
+  ],
+  "relaunched_at": "2026-09-15T04:22:33",
+  "note": "manual recovery after duplicate feedgo race"
+}

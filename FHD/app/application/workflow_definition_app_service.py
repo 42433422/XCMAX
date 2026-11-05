@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional, cast
 
 from app.application.workflow_definition_serialization import (
@@ -377,7 +377,7 @@ class WorkflowDefinitionAppService:
                     status_code=409,
                 )
             run.status = WorkflowRunStatus.CANCELLED.value
-            run.finished_at = datetime.utcnow()
+            run.finished_at = datetime.now(UTC).replace(tzinfo=None)
             # 未完成 step 标 skipped
             for step in run.steps:
                 if step.status not in {
@@ -385,7 +385,7 @@ class WorkflowDefinitionAppService:
                     WorkflowRunStepStatus.FAILED.value,
                 }:
                     step.status = WorkflowRunStepStatus.SKIPPED.value
-                    step.finished_at = datetime.utcnow()
+                    step.finished_at = datetime.now(UTC).replace(tzinfo=None)
             session.commit()
             session.refresh(run)
             return cast("dict[str, Any]", run.to_dict())

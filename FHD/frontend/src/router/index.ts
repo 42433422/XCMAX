@@ -3,7 +3,10 @@ import {
   createWebHistory,
   START_LOCATION,
   type RouteRecordRaw,
+  type RouteLocationRaw,
 } from 'vue-router'
+import { getSidebarNavigationGeneration } from '@/utils/sidebarNavigation'
+import { showAppToast } from '@/composables/useAppToast'
 import { useLanGate } from '@/composables/useLanGate'
 import { isPlatformShellModeEnabled, isIndustryDeliveryRouteName, SHELL_CORE_ROUTE_NAMES } from '@/constants/platformShellMode'
 import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow'
@@ -25,7 +28,7 @@ import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, isAdminConsoleSpa, resolveAdminConsole
 import { isDesktopShell } from '@/utils/desktopShell'
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes'
 import { ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES, ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav'
-import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
+import { buildRoleMenuProfile, canShowCoreMenuKey, tenantScopedBusinessPath, UNSCOPED_HOST_BUSINESS_KEYS } from '@/utils/roleMenuProfile'
 import { isClientErpSidebarContext } from '@/constants/genericModPack'
 import { resolveInitialRoutes } from './initialRouteSelection'
 import { CORE_ROUTES } from './routes/core'
@@ -33,6 +36,7 @@ import { BUSINESS_ROUTES } from './routes/business'
 import { SHELL_ROUTES } from './routes/shell'
 import { refreshDesktopSessionInBackground } from '@/utils/desktopSessionRestore'
 import { activeTutorialRunAllowsRoute } from '@/stores/tutorialV2'
+import { clearRouteChunkError, isChunkLoadError, markRouteChunkError } from '@/utils/routeLoadState'
 const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department'
 function normalizeDutyRosterGraphView(raw: unknown): string {
   const token = String(Array.isArray(raw) ? raw[0] : raw || '')
@@ -62,7 +66,23 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
-router.beforeEach(async (to, _from, next) => {
+router.beforeEach(async (to, _from, finish) => {
+  const generation = getSidebarNavigationGeneration()
+  const next = (target?: RouteLocationRaw | boolean | Error) => {
+    if (generation !== getSidebarNavigationGeneration()) finish(false)
+    else if (target === undefined) finish()
+    else if (typeof target === 'boolean') finish(target)
+    else if (target instanceof Error) finish(target)
+    else finish(target)
+  }
+  const unavailable = () => {
+    if (generation === getSidebarNavigationGeneration()) showAppToast('连接暂不可用，未能验证会话。请检查连接后重试；没有判定账号失效。', 'warning')
+    next(false)
+  }
+  const refreshSignedInProfile = (profile: { refreshFromServer: () => Promise<unknown> }) => {
+    // Background refresh must not race a valid session into the login page.
+    void profile.refreshFromServer().catch(() => undefined)
+  }
   let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {
     const nextView = normalizeDutyRosterGraphView(to.query.view)
@@ -99,6 +119,8 @@ router.beforeEach(async (to, _from, next) => {
       const { useAccountProfileStore } = await import('@/stores/accountProfile')
       const profile = useAccountProfileStore()
       if (!profile.loaded) await profile.refreshFromServer()
+      else if (profile.sessionCheckUnavailable) refreshSignedInProfile(profile)
+      if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
       if (!profile.isAdminAccount) {
         next({
           name: 'login',
@@ -115,14 +137,56 @@ router.beforeEach(async (to, _from, next) => {
         return
       }
     } catch {
-      next({
-        name: 'login',
-        query: {
-          redirect: to.path === '/' ? '/xcmax-admin' : to.fullPath,
-          error: '管理员会话校验失败，请重新登录',
-        },
-        replace: true,
-      })
+      unavailable()
+      return
+    }
+  }
+
+  if (!isAdminConsoleSpa() && !to.meta?.publicAccess) {
+    const { useAccountProfileStore } = await import('@/stores/accountProfile')
+    const profile = useAccountProfileStore()
+    // Settings is safe during the desktop session hint's background refresh.
+    const identityMissing = !profile.loaded || profile.workspaceReady === false
+    if (profile.loaded && profile.sessionCheckUnavailable && !identityMissing) {
+      refreshSignedInProfile(profile)
+      if (!profile.loaded) {
+        next({ name: 'login', query: { redirect: to.fullPath !== '/login' ? to.fullPath : '/' } })
+        return
+      }
+    }
+    if ((identityMissing || profile.sessionCheckUnavailable) && !(profile.loaded && profile.sessionCheckUnavailable && !identityMissing) && !(isDesktopShell() && to.name === 'settings')) {
+      const sku = await fetchProductSku().catch(() => null)
+      if (profile.sessionCheckUnavailable || sku === null || isEnterpriseEdition(sku)) {
+        try { await profile.refreshFromServer() } catch { unavailable(); return }
+        if (profile.sessionCheckUnavailable) { unavailable(); return }
+        // Hydration can still be false while /api/auth/me is 200. That is not logout.
+        if (!profile.loaded) {
+          next({ name: 'login', query: { redirect: to.fullPath }, replace: true })
+          return
+        }
+      }
+    }
+    if (to.name && UNSCOPED_HOST_BUSINESS_KEYS.has(String(to.name)) && profile.loaded && profile.tenantId != null) {
+      const modPage = tenantScopedBusinessPath(String(to.name))
+      if (modPage && router.resolve(modPage).matched.length === 0) {
+        const { ensureGlobModRoutes } = await import('@/router/registerModRoutes')
+        if (typeof ensureGlobModRoutes === 'function') {
+          await ensureGlobModRoutes(router).catch(() => undefined)
+        }
+      }
+      if (modPage && router.resolve(modPage).matched.length > 0 && to.path !== modPage) {
+        next({ path: modPage, replace: true })
+        return
+      }
+      next({ name: 'settings', replace: true })
+      return
+    }
+    const member = profile.loaded && String(profile.userRole || '').startsWith('tenant:')
+    const allowed = to.name === 'settings'
+      || (to.name === 'business-docking' && profile.permissions?.includes('etl.read'))
+      || (to.name === 'tenant-roles' && profile.permissions?.includes('tenant.manage_roles'))
+    if (member && !allowed) {
+      next({ name: 'settings', replace: true })
       return
     }
   }
@@ -238,33 +302,6 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
-  // 干净通用版：禁用 Mod 页 redirect，宿主 /products 等走 frontend/src/views/*
-  // if (
-  //   readErpDomainModFacadeEnabled() &&
-  //   to.name &&
-  //   !to.meta?.mod &&
-  //   !to.meta?.publicAccess
-  // ) {
-  //   const modPage = resolveHostBusinessPageRedirect(String(to.name));
-  //   if (modPage && to.path !== modPage.split('?')[0]) {
-  //     next({ path: modPage, query: to.query, hash: to.hash });
-  //     return;
-  //   }
-  // }
-
-  // if (
-  //   readCoreWorkflowModPagesEnabled() &&
-  //   to.name &&
-  //   !to.meta?.mod &&
-  //   !to.meta?.publicAccess
-  // ) {
-  //   const wfPage = resolveWorkflowPageRedirectForRouteName(String(to.name));
-  //   if (wfPage && to.path !== wfPage.split('?')[0]) {
-  //     next({ path: wfPage, query: to.query, hash: to.hash });
-  //     return;
-  //   }
-  // }
-
   // SSOT：桌面壳禁止 admin（须早于 requiresAdminAccount / 管理端客服侧，避免企业构建内 /admin/entitlements 可达）
   if (!to.meta?.publicAccess && isDesktopShell() && !isAdminConsoleSpa()) {
     try {
@@ -276,7 +313,10 @@ router.beforeEach(async (to, _from, next) => {
         refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
       } else if (!profile.loaded) {
         await profile.refreshFromServer()
+      } else if (profile.sessionCheckUnavailable) {
+        refreshSignedInProfile(profile)
       }
+      if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
       if (!provisionalDesktopEntry && profile.isAdminAccount && to.name !== 'login') {
         try {
           const { authApi } = await import('@/api/auth')
@@ -294,7 +334,8 @@ router.beforeEach(async (to, _from, next) => {
         return
       }
     } catch {
-      /* ignore — 后续企业会话校验会兜底 */
+      unavailable()
+      return
     }
   }
 
@@ -302,9 +343,9 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile')
       const profile = useAccountProfileStore()
-      if (!profile.loaded) {
-        await profile.refreshFromServer()
-      }
+      if (!profile.loaded) await profile.refreshFromServer()
+      else if (profile.sessionCheckUnavailable) refreshSignedInProfile(profile)
+      if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
       if (!profile.isAdminAccount) {
         next({ name: 'chat' })
         return
@@ -338,7 +379,10 @@ router.beforeEach(async (to, _from, next) => {
             refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
           } else if (!profile.loaded) {
             await profile.refreshFromServer()
+          } else if (profile.sessionCheckUnavailable) {
+            refreshSignedInProfile(profile)
           }
+          if (profile.sessionCheckUnavailable && !profile.loaded) { unavailable(); return }
           if (!provisionalDesktopEntry && !isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
             // 非桌面：网页企业壳把 admin 会话导向独立管理端；桌面已在上方拒入
             if (isDesktopShell()) {
@@ -373,19 +417,12 @@ router.beforeEach(async (to, _from, next) => {
             return
           }
         } catch {
-          /* ignore */
+          unavailable()
+          return
         }
       }
     } catch {
-      const sku = await fetchProductSku().catch(() => 'generic')
-      if (!isEnterpriseEdition(sku)) {
-        next()
-        return
-      }
-      next({
-        name: 'login',
-        query: { redirect: to.fullPath !== '/login' ? to.fullPath : '/' },
-      })
+      unavailable()
       return
     }
   }
@@ -408,6 +445,10 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (shouldRouteToHostPackOnboarding(to.name) && !to.meta?.publicAccess && !isAdminConsoleSpa()) {
+    if (generation !== getSidebarNavigationGeneration()) {
+      next(false)
+      return
+    }
     try {
       // The login success navigation refreshes this gate once.  Reusing its
       // short session cache keeps a subsequent desktop deep-link/reload from
@@ -431,9 +472,27 @@ router.beforeEach(async (to, _from, next) => {
   next()
 })
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('xcagi:enterprise-session-invalid', () => {
+    const current = router.currentRoute.value
+    if (current.meta?.publicAccess || current.name === 'login') return
+    void router.replace({ name: 'login', query: { redirect: current.fullPath && current.fullPath !== '/login' ? current.fullPath : '/' } })
+  })
+}
+
 router.afterEach((to) => {
   const title = to.meta?.title
   document.title = title ? `${title} - XCAGI` : 'XCAGI'
+})
+
+// 管理端：懒加载页面文件失败时（断网 / 刚发版旧分包已下线）给出可见提示和刷新入口，
+// 不再停在原页面无反馈。只影响展示，不改守卫与权限。
+router.onError((error, to) => {
+  if (isAdminConsoleSpa() && isChunkLoadError(error)) markRouteChunkError(to?.fullPath)
+})
+// 加载失败只走 onError、不会触发 afterEach；之后任何一次导航（含点当前页）都收起提示
+router.afterEach(() => {
+  clearRouteChunkError()
 })
 
 export default router

@@ -1,0 +1,6 @@
+2026-09-29T06:39:13+0800 [base-install-guide] 开始验收 base-install-guide 安装部署与初始化引导；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:39:13+0800 [base-install-guide] M1 passed :: HTTP 200 18ms；可选行业 ['通用', '饰品包装', '考勤', '涂料', '批发', '电商', '餐饮', '物流']
+2026-09-29T06:39:13+0800 [base-install-guide] M2 passed :: HTTP 200 18ms；/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer
+2026-09-29T06:39:16+0800 [base-install-guide] M3 passed :: 导航后路径 /onboarding；命中文本 ['设置']；缺失 []；界面请求失败 []；页面摘录：XCAGI · 创建您的数字公司 | 1 | 公司 | 2 | 行业 | 3 | 配置 |  | 从认识您的公司开始 |  | 您的公司叫什么？ |  | 一个名称，开启属于您的工作空间。 |  | 公司或团队名称 |  | 使用熟悉的简称也可以。完成登录后，我们会保存您的选择。 |  | 让 XC 认识我的公司 | → | XC | SUNBIRD | 知识与数据 | AI 员工 | 日常业务 | 先进入，稍后再设置 | 信息用于配置工作空间，示例业务由您另
+2026-09-29T06:39:18+0800 [base-install-guide] screenshot result.png
+2026-09-29T06:39:19+0800 [base-install-guide] video operation.webm bytes=184199

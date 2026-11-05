@@ -10,6 +10,8 @@ import httpx
 from sqlalchemy.orm import Session
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.platform_model_config import PlatformApiKey
+from modstore_server.platform_model_transport import llm_http_response, redact_key
 
 
 class EmbeddingConfigError(RuntimeError):
@@ -167,6 +169,8 @@ async def embed_texts(
         session=session, user_id=user_id, provider=provider, include_secret=True
     )
     api_key = str(cfg.pop("_api_key", "") or "").strip()
+    if isinstance(api_key, PlatformApiKey):
+        cfg["base_url"] = api_key.configuration["base_url"] or cfg["base_url"]
     selected_provider = str(cfg.get("provider") or provider or "").strip().lower()
 
     if selected_provider == "ollama":
@@ -182,24 +186,33 @@ async def embed_texts(
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     from modstore_server.infrastructure.http_clients import get_external_client
 
-    client = get_external_client()
     try:
-        res = await client.post(
-            _embeddings_url(str(cfg["base_url"]), provider=selected_provider),
-            json=body,
-            headers=headers,
-            timeout=60.0,
-        )
+        if isinstance(api_key, PlatformApiKey) and api_key.managed:
+            url = f"{api_key.configuration['base_url']}/embeddings"
+            async with llm_http_response(
+                url,
+                api_key,
+                headers,
+                body,
+                timeout=60.0,
+                limits=httpx.Limits(),
+            ) as res:
+                pass
+        else:
+            res = await get_external_client().post(
+                _embeddings_url(str(cfg["base_url"]), provider=selected_provider),
+                json=body,
+                headers=headers,
+                timeout=60.0,
+            )
         res.raise_for_status()
     except httpx.HTTPStatusError as e:
-        detail = (e.response.text or "").strip()
         raise EmbeddingConfigError(
             f"Embedding API 调用失败：HTTP {e.response.status_code}"
-            + (f"；{detail[:240]}" if detail else "")
-        ) from e
+        ) from None
     except httpx.HTTPError as e:
-        raise EmbeddingConfigError(f"Embedding API 调用失败：{e}") from e
-    data = res.json()
+        raise EmbeddingConfigError(f"Embedding API 调用失败：{type(e).__name__}") from None
+    data = redact_key(res.json(), api_key)
 
     rows = data.get("data")
     if not isinstance(rows, list):

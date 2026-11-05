@@ -112,3 +112,7 @@ def register_all_middleware(app: FastAPI) -> None:
     @app.middleware("http")
     async def _market_history_spa_mw(request: Request, call_next):
         return await market_history_spa_middleware(request, call_next)
+
+    from modstore_server.customer_ticket_reader import reader_boundary
+
+    app.middleware("http")(reader_boundary)

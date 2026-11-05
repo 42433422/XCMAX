@@ -19,7 +19,6 @@ import { useLoginViewActions } from './login-view/useLoginViewActions'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
-
 // 逻辑按领域拆分到 login-view/ 下的 composables，此处仅组装（模板与拆分前逐字一致）
 const state = useLoginViewState(route)
 const meta = useLoginViewMeta(state)
@@ -31,6 +30,7 @@ const {
   username,
   accountKind,
   password,
+  invitationCode,
   showPassword,
   loading,
   errorMessage,
@@ -143,15 +143,12 @@ onUnmounted(() => {
     </aside>
 
     <!-- 右侧登录区 -->
-    <section class="login-panel" aria-labelledby="login-heading">
+    <section class="login-panel" aria-labelledby="login-heading" aria-describedby="login-data-processing-notice">
       <LoginAccountActions v-if="!isAdminConsoleSpa()" :enterprise="isEnterpriseEdition" />
 
       <div class="login-panel-inner">
         <h1 id="login-heading" class="login-heading">{{ loginHeading }}</h1>
-        <p class="login-subheading" role="note">
-          <template v-if="accountKind === 'admin'">{{ $t('login.subheadingAdmin') }}</template>
-          <template v-else>{{ $t('login.subheadingEnterprise') }}</template>
-        </p>
+        <p v-if="accountKind === 'admin'" class="login-subheading" role="note">{{ $t('login.subheadingAdmin') }}</p>
 
         <div v-if="accountKind === 'enterprise'" class="login-mode-tabs" role="tablist">
           <button type="button" role="tab" :class="{ active: loginMode === 'password' }" @click="switchLoginMode('password')">
@@ -165,7 +162,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <form v-if="loginMode !== 'qr'" class="login-form" @submit.prevent="submitLogin" novalidate>
+        <form v-if="loginMode !== 'qr'" class="login-form" aria-describedby="login-data-processing-notice" @submit.prevent="submitLogin" novalidate>
           <template v-if="loginMode === 'password'">
             <div class="login-field" :class="{ 'is-focused': usernameFocused }">
               <label class="login-label" for="lv-username">{{ $t('login.labelUsername') }}</label>
@@ -178,6 +175,7 @@ onUnmounted(() => {
                 autocomplete="username"
                 :placeholder="accountPlaceholder"
                 :disabled="loading"
+                :aria-invalid="Boolean(errorMessage) && !username.trim() ? 'true' : undefined"
                 autofocus
                 @focus="usernameFocused = true"
                 @blur="usernameFocused = false"
@@ -195,6 +193,7 @@ onUnmounted(() => {
                 autocomplete="current-password"
                 :placeholder="passwordPlaceholder"
                 :disabled="loading"
+                :aria-invalid="Boolean(errorMessage) && !password ? 'true' : undefined"
                 @focus="passwordFocused = true"
                 @blur="passwordFocused = false"
               />
@@ -218,6 +217,10 @@ onUnmounted(() => {
               </button>
             </div>
 
+            <label v-if="accountKind === 'enterprise'" class="login-field">
+              <span class="login-label">企业邀请码（首次加入时填写）</span>
+              <input id="lv-invitation-code" v-model.trim="invitationCode" type="text" class="login-input" autocomplete="off" :disabled="loading" />
+            </label>
             <div class="login-options" role="group" :aria-label="$t('login.loginOptions')">
               <label class="login-option">
                 <input v-model="autoLogin" type="checkbox" class="login-option-input" :disabled="loading" />
@@ -260,20 +263,12 @@ onUnmounted(() => {
             </div>
           </template>
 
-          <transition name="fade">
-            <div v-if="errorMessage" class="login-error" role="alert">
-              <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-                <path
-                  fill-rule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              <span>{{ errorMessage }}</span>
-            </div>
-          </transition>
+          <div v-if="errorMessage" class="login-error" role="alert" data-testid="login-error">
+            <strong class="login-error-title">{{ $t('login.errTitle') }}</strong>
+            <span class="login-error-detail">{{ errorMessage }}</span>
+          </div>
 
-          <button class="login-submit" type="submit" :disabled="!canSubmit || loading">
+          <button class="login-submit" type="submit" aria-describedby="login-data-processing-notice" :disabled="loading">
             <span>{{ loading ? $t('login.submitting') : $t('login.submit') }}</span>
             <span v-if="loading" class="login-spinner" aria-hidden="true"></span>
             <svg v-else viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
@@ -297,6 +292,7 @@ onUnmounted(() => {
           </button>
         </div>
 
+
         <!-- SSO 仅在启用时显示 -->
         <div v-if="oidcEnabled && accountKind === 'enterprise'" class="login-alt">
           <div class="login-divider">
@@ -315,6 +311,11 @@ onUnmounted(() => {
         <transition name="fade">
           <p v-if="altLoginHint" class="login-hint" role="status">{{ altLoginHint }}</p>
         </transition>
+
+        <i18n-t keypath="login.dataProcessingNotice" scope="global" tag="p" id="login-data-processing-notice" class="login-data-processing-notice" role="note">
+          <template #agreement><RouterLink :to="{ name: 'login-legal', params: { document: 'service-agreement' }, query: route.query }">{{ $t('login.serviceAgreement') }}</RouterLink></template>
+          <template #privacy><RouterLink :to="{ name: 'login-legal', params: { document: 'privacy-policy' }, query: route.query }">{{ $t('login.privacyPolicy') }}</RouterLink></template>
+        </i18n-t>
 
         <footer class="login-footer">
           <router-link :to="forgotAccountRoute">{{ $t('login.forgotAccount') }}</router-link>

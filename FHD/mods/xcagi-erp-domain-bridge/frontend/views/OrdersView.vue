@@ -5,7 +5,7 @@
         <h2>出货单记录</h2>
         <div style="display: flex; gap: 10px;">
           <button class="btn btn-primary" @click="goCreateOrder">+ 新建订单</button>
-          <button class="btn btn-danger" @click="handleClearAll" :disabled="store.loading">清空全部</button>
+          <button class="btn btn-danger" @click="handleClearAll" :disabled="!canClearAll" title="清空当前业务空间内全部出货记录，不限于当前筛选结果">清空全部出货记录</button>
         </div>
       </div>
       <div class="search-box">
@@ -57,7 +57,7 @@
     <ConfirmDialog
       v-model="showClearConfirm"
       title="清空全部"
-      message="确定要清空所有出货记录吗？此操作不可恢复！"
+      message="确定要清空当前业务空间内全部出货记录吗？包括筛选外的记录，此操作不可恢复！"
       confirm-text="清空"
       confirm-class="btn-danger"
       @confirm="confirmClearAll"
@@ -66,19 +66,17 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, onActivated } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrdersStore } from '@/stores/orders';
 import { pushErpPage } from '@/utils/erpPagePaths';
-import { storeToRefs } from 'pinia';
 import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
-import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog';
+import { appConfirm } from '@/utils/appDialog';
 import { useTutorialV2Store } from '@/stores/tutorialV2';
 
 const router = useRouter();
 const store = useOrdersStore();
-const { orders } = storeToRefs(store);
 const tutorialStore = useTutorialV2Store();
 const tutorialSalesEvidence = computed(() => tutorialStore.courses
   .find((course) => course.id === 'sales-to-cash')
@@ -95,6 +93,7 @@ function goCreateOrder() {
 
 const searchQuery = ref('');
 const showClearConfirm = ref(false);
+const canClearAll = computed(() => !store.loading && !store.error && store.orders.length > 0);
 
 const columns = [
   { key: 'order_number', label: '单号' },
@@ -129,17 +128,16 @@ async function handleDelete(orderNumber) {
 }
 
 async function handleClearAll() {
-  const key = await appPrompt('请输入密钥确认清空:', '', { title: '密钥验证' });
-  if (key !== '61408693') {
-    await appAlert('密钥错误');
-    return;
-  }
+  if (!canClearAll.value) return;
   showClearConfirm.value = true;
 }
 
 async function confirmClearAll() {
+  if (!canClearAll.value) return;
   await store.clearAllOrders();
 }
+
+onActivated(doSearch);
 
 onMounted(() => {
   loadOrders();

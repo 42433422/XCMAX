@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-install-guide",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "73c42a0d307c82912401ff006df65faba49516e093a60f67a0573f70e0348d59",
+  "visible_content": "可选行业清单（通用/饰品包装/考勤/涂料等 8 个）与工作区根目录可读，引导页第 1 步正常渲染。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-install-guide/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-install-guide/macos/result.png"
+}

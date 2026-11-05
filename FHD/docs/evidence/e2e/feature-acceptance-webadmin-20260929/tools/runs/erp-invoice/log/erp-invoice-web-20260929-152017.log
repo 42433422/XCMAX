@@ -1,0 +1,8 @@
+[15:20:17] feature=erp-invoice platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-invoice
+[15:20:30] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:20:31] case TI1: passed - 税务通道真实读取
+[15:20:32] case TI2: passed - CRM 发票真实开具并读回
+[15:20:32] case TI3: passed - 市场发票列表读取
+[15:20:32] case TI4: passed - 缺必要凭据被拒（负例）
+[15:20:32] video: erp-invoice-web-20260929-152017.webm (1092556 bytes)
+[15:20:32] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-invoice/log/erp-invoice-web-20260929-152017.log

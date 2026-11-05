@@ -1,31 +1,5 @@
 # mypy: disable-error-code="attr-defined"
-"""测试 app.infrastructure.mods.mod_manager 的分支覆盖（第 3 轮）。
-
-覆盖目标（未在 cov2 / cov / ext* 中覆盖的分支）：
-- _default_mods_root（env 无效 / 包相对路径 / cwd mods / 向上查找 / 兜底）
-- _repo_layout_mods_candidates（多候选 / 去重）
-- import_mod_backend_py（文件缺失 / spec None / loader None / 已缓存模块）
-- _register_mod_hooks（无 hooks / 无 mod_path / backend. 前缀 / 无效 spec / 不可调用 / 成功 / 异常）
-- ModManager.ensure_mods_loaded（disabled / 已加载 / 无 discovered / 节流 / 最大尝试 / 异常）
-- ModManager._scan_mods_from_build_index（无索引 / JSON 错 / 指纹不匹配 / rows 非 list / row 非 dict / mod_path 缺 / manifest 缺 / 重复 id / 命中）
-- ModManager.scan_mods（缓存命中 / build index 命中 / 根不存在 / _ 前缀 / 非 dir / manifest 解析失败）
-- ModManager.load_mod（SKU 阻断 / 已加载同步 / 路径缺失 / manifest 无效 / bundle 已注册 / bundle 注册成功 / bundle 注册 False / 依赖未满足 / 后端错误）
-- ModManager._load_mod_backend（无 backend 目录 / entry 加载 / init TypeError / RECOVERABLE 重抛）
-- ModManager.unload_mod（instance cleanup / cleanup 异常 / comms 异常）
-- ModManager.install_mod_package（签名错 / 包错 / 缺 id / SKU 阻断 / 已存在更新 / 激活加载成功 / 激活加载失败 / 不激活 / RECOVERABLE）
-- ModManager.uninstall_mod（未加载 employee_pack / employee_pack 卸载 / 已加载 unload / remove_files / RECOVERABLE）
-- ModManager.update_mod（未安装 / 已加载 / 解压失败重载 / 加载成功 / 加载失败 / 未加载 / RECOVERABLE）
-- ModManager.validate_mod_package（非文件 / 非 zip / 缺 id / 缺字段 / bundle / employee_pack / 后端入口缺失 / 前端路由缺失 / 通过 / ModPackageError / RECOVERABLE）
-- ModManager.list_all_mods（disabled / employee registry 异常 / enterprise filter 异常）
-- ModManager.get_routes（disabled / enterprise filter 异常 / routes 空 / 命中）
-- ModManager.load_all_mods（enterprise 跳过 / 依赖未满足 / 加载失败 / 排序）
-- register_employee_pack_routes（空 pid / disabled / 无 manifest / JSON 错 / 非 employee_pack / 无 entry / 无 resolved_id / import 错 / 无 register_fastapi_routes / 成功）
-- load_employee_pack_routes（disabled / 无 emp_root / 非 dir / 无 manifest / JSON 错 / 非 employee_pack / 无 pack_id / 注册）
-- _register_single_mod_http_routes（空 mid / 已注册 / 无 metadata / 无 backend_entry / 无 mod_path / module None / register_fastapi_routes / register_websocket_routes / ws False / ws True / registered / 无 registrar / RECOVERABLE）
-- _restore_entitlements_from_session_id（空 sid / restore 异常 / cached 空 / cached 命中）
-- ensure_mod_api_ready（空 mid / disabled / 不允许 / 加载失败 / 已注册 / 获取 app 失败 / 注册路由）
-- load_mod_routes（无 mod_manager / 注册路由 / 加载 employee pack）
-"""
+"""Mod manager lifecycle and boundary regressions."""
 
 from __future__ import annotations
 
@@ -1658,7 +1632,7 @@ class TestListAllModsBranches:
             result = mm.list_all_mods()
             assert result == []
 
-    def test_enterprise_filter_error_swallowed(self, tmp_path: Path) -> None:
+    def test_enterprise_filter_error_denied(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(id="m", name="M", version="1.0.0")
         with (
@@ -1675,13 +1649,13 @@ class TestListAllModsBranches:
                 side_effect=RuntimeError("boom"),
             ):
                 result = mm.list_all_mods()
-                assert len(result) == 1  # 过滤失败 → 返回未过滤列表
+                assert result == []  # 权益未知不能返回未过滤列表
 
 
 class TestGetRoutesBranches:
     """ModManager.get_routes 分支覆盖。"""
 
-    def test_enterprise_filter_error_swallowed(self, tmp_path: Path) -> None:
+    def test_enterprise_filter_error_denied(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(id="m", name="M", version="1.0.0", frontend_routes="routes.js")
         with (
@@ -1694,8 +1668,7 @@ class TestGetRoutesBranches:
             ),
         ):
             result = mm.get_routes()
-            assert len(result) == 1
-            assert result[0]["mod_id"] == "m"
+            assert result == []
 
     def test_mod_not_visible_skipped(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
@@ -1810,8 +1783,8 @@ class TestLoadAllModsBranches:
             # 验证 primary 排序
             assert lm.call_args_list[0][0][0] == "mod1"
 
-    def test_enterprise_filter_error_swallowed(self, tmp_path: Path) -> None:
-        """enterprise filter 抛异常 → 不跳过，继续尝试加载。"""
+    def test_enterprise_filter_error_denied(self, tmp_path: Path) -> None:
+        """权益检查失败不得尝试加载。"""
         mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(id="m", name="M", version="1.0.0")
         with (
@@ -1823,7 +1796,7 @@ class TestLoadAllModsBranches:
             patch.object(mm, "load_mod", return_value=True),
         ):
             result = mm.load_all_mods()
-            assert result == ["m"]
+            assert result == []
 
 
 # ---------------------------------------------------------------------------
@@ -2097,7 +2070,8 @@ class TestRegisterSingleModHttpRoutes:
         assert _register_single_mod_http_routes(None, mm, "") is False
         assert _register_single_mod_http_routes(None, mm, "   ") is False
 
-    def test_already_registered_returns_true(self) -> None:
+    @pytest.mark.parametrize("requires_http", [True, False])
+    def test_already_registered_returns_true(self, requires_http) -> None:
         from app.infrastructure.mods.mod_manager import _register_single_mod_http_routes
 
         mm = ModManager(mods_root="/tmp")
@@ -2362,7 +2336,8 @@ class TestEnsureModApiReady:
         with patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=True):
             assert ensure_mod_api_ready("m") is False
 
-    def test_not_allowed_returns_false(self) -> None:
+    @pytest.mark.parametrize("requires_http", [True, False])
+    def test_not_allowed_returns_false(self, requires_http) -> None:
         with (
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
             patch(
@@ -2370,7 +2345,7 @@ class TestEnsureModApiReady:
                 return_value=False,
             ),
         ):
-            assert ensure_mod_api_ready("m") is False
+            assert ensure_mod_api_ready("m", requires_http=requires_http) is False
 
     def test_host_backed_compat_route_does_not_require_physical_mod(self) -> None:
         with (
@@ -2387,7 +2362,8 @@ class TestEnsureModApiReady:
             clear.assert_called_once_with("xcmax-personnel")
             get_manager.assert_not_called()
 
-    def test_load_mod_failure_returns_false(self) -> None:
+    @pytest.mark.parametrize("requires_http", [True, False])
+    def test_load_mod_failure_returns_false(self, requires_http) -> None:
         with (
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
             patch(
@@ -2403,7 +2379,7 @@ class TestEnsureModApiReady:
             mm._loaded_mods = []
             mm.load_mod.return_value = False
             gmm.return_value = mm
-            assert ensure_mod_api_ready("m") is False
+            assert ensure_mod_api_ready("m", requires_http=requires_http) is False
 
     def test_employee_pack_uses_employee_route_registry(self, tmp_path: Path) -> None:
         mods_root = tmp_path / "mods"
@@ -2414,6 +2390,7 @@ class TestEnsureModApiReady:
             encoding="utf-8",
         )
         with (
+            patch("app.fastapi_app.get_fastapi_app") as get_app,
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
             patch(
                 "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
@@ -2435,9 +2412,11 @@ class TestEnsureModApiReady:
             gmm.return_value = mm
             assert ensure_mod_api_ready("artifact-generator") is True
             mm.load_mod.assert_not_called()
-            register.assert_called_once()
+            get_app.assert_called_once()
+            register.assert_called_once_with(get_app.return_value, mm, "artifact-generator")
 
-    def test_already_registered_returns_true(self) -> None:
+    @pytest.mark.parametrize("requires_http", [True, False])
+    def test_already_registered_returns_true(self, requires_http) -> None:
         with (
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
             patch(
@@ -2451,9 +2430,9 @@ class TestEnsureModApiReady:
         ):
             mm = MagicMock()
             mm._loaded_mods = ["m"]
-            mm._http_routes_registered = {"m"}
+            mm._http_routes_registered = {"m"} if requires_http else set()
             gmm.return_value = mm
-            assert ensure_mod_api_ready("m") is True
+            assert ensure_mod_api_ready("m", requires_http=requires_http) is True
 
     def test_get_app_failure_returns_false(self) -> None:
         with (

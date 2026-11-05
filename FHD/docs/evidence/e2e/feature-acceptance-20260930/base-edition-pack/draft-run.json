@@ -1,0 +1,62 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "base-edition-pack",
+ "name": "三档部署形态（minimal / generic / full）",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/platform-shell/capabilities",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/platform-shell/capabilities（写操作自动附带 CSRF）：平台壳 edition 能力",
+   "expected": "平台壳 edition 能力：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 8ms；edition=full generic_pack_installed=True bridge_mods=8",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/platform-shell/deliverable-status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/platform-shell/deliverable-status（写操作自动附带 CSRF）：可交付状态",
+   "expected": "可交付状态：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 39ms；{\"schema_version\": 1, \"deliverable\": true, \"host_foundation_employee_installed\": false, \"host_foundation_bridges_ready\": true, \"host_foundation_materialize\": null, \"product_flow\": {\"recommended_step\":",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /mod-store",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod-store，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod-store，页面可见 能力，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod-store；命中文本 ['能力']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "base-edition-pack",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-edition-pack/macos/result.png",
+   "sha256": "e78870ca79a8d48e40099e4433077b7d949431c5d0be2ea357fcec9170d179b8",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "base-edition-pack",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-edition-pack/macos/operation.webm",
+   "sha256": "adedf1ae0b9e1f5561518b79972c3703f2cfa6f6b70cefa0f8d37f5f510fbd2c",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-edition-pack/macos/run.log",
+  "sha256": "7b8abc5def82cb88700e567364a025821fc90b20ee6bbd6bfde177d10fc0bca6",
+  "bytes": 1431
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

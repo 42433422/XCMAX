@@ -409,19 +409,27 @@ def test_thinking_steps_with_markers() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_guarded_planner_stream_yields_events() -> None:
+@pytest.mark.parametrize("tenant_id", [1, 2, None])
+@pytest.mark.parametrize("domain", [False, True])
+def test_guarded_planner_stream_yields_events(tenant_id: int | None, domain: bool) -> None:
+    from app.fastapi_routes.domains.conversation import helpers
+    from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+
+    facade = helpers if domain else mod
     body = XcagiCompatChatBody.model_validate({"message": "hi"})
 
     def _fake_stream(*a, **k):
+        assert current_tenant_id() == tenant_id
         yield {"type": "token", "text": "A"}
         yield {"type": "token", "text": "B"}
 
-    with patch.object(mod, "chat_stream_sse_events", _fake_stream):
+    with tenant_scope(99), patch.object(facade, "chat_stream_sse_events", _fake_stream):
         events = list(
-            _xcagi_guarded_planner_stream_events(
-                body, runtime_context=None, workspace_root="/tmp", client=None
+            facade._xcagi_guarded_planner_stream_events(
+                body, runtime_context={"tenant_id": tenant_id}, workspace_root="/tmp", client=None
             )
         )
+        assert current_tenant_id() == 99
     texts = [e.get("text") for e in events if isinstance(e, dict)]
     assert "A" in texts and "B" in texts
 

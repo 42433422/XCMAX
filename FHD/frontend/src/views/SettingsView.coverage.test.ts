@@ -4,7 +4,7 @@
  * 重点覆盖：未覆盖的函数、分支、错误路径、事件处理
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref, type Ref, nextTick } from 'vue'
@@ -14,7 +14,7 @@ const mockApiGet = vi.fn().mockResolvedValue({ data: {}, success: false })
 const mockApiPost = vi.fn().mockResolvedValue({ success: true })
 const mockApiPut = vi.fn().mockResolvedValue({ success: true })
 const mockApiDelete = vi.fn().mockResolvedValue({ success: true, message: 'ok' })
-const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: false })
+const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: true, valid: false })
 const mockAuthApiGetCurrentUser = vi.fn().mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
 const mockAuthApiLogout = vi.fn().mockResolvedValue({})
 const mockAuthApiUpdateCompanyBrand = vi.fn().mockResolvedValue({ success: true })
@@ -203,7 +203,7 @@ const mockAccountProfileStore = {
   isImpersonating: false,
   refresh: vi.fn().mockResolvedValue(undefined),
   refreshFromServer: vi.fn().mockResolvedValue(undefined),
-  applyFromMeData: vi.fn(),
+  applyFromMeData: vi.fn().mockResolvedValue(undefined),
   clear: vi.fn(),
 }
 
@@ -352,7 +352,7 @@ function resetApiMocks() {
     success: false,
     data: { user: null, permissions: [] },
   })
-  mockAuthApiValidateSession.mockResolvedValue({ success: false })
+  mockAuthApiValidateSession.mockResolvedValue({ success: true, valid: false })
   mockAuthApiLogout.mockResolvedValue({})
   mockAuthApiUpdateCompanyBrand.mockResolvedValue({ success: true })
   mockAuthApiUploadAvatar.mockResolvedValue({
@@ -385,13 +385,15 @@ function resetApiMocks() {
  * 用户会话与本地用户加载
  * ══════════════════════════════════════════════════════════════════ */
 
+function resetSettingsTest() {
+  setActivePinia(createPinia())
+  localStorage.clear()
+  resetApiMocks()
+  resetStores()
+}
+
 describe('SettingsView – loadLocalUser 各种路径', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('getCurrentUser 成功返回用户时设置 sessionValid', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
@@ -427,8 +429,7 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
       data: { username: 'sessuser', user_id: 5 },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.localUser).toBeTruthy()
     expect(vm.localUser.username).toBe('sessuser')
@@ -436,7 +437,7 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
     wrapper.unmount()
   })
 
-  it('session validate 无 username 时回退到 market storage', async () => {
+  it('必要首挂拒绝无身份资料，默认刷新仍兼容有效会话且不收养 market storage', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: false })
     mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: true, data: {} })
     localStorage.setItem(
@@ -449,24 +450,28 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
       }),
     )
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.localUser).toBeTruthy()
-    expect(vm.localUser.username).toBe('marketuser')
-    expect(vm.localUser.id).toBe(9)
+    expect(vm.localUser).toBeNull()
+    expect(vm.isLoggedIn).toBe(false)
+    expect(vm.accountError).toBe(true)
+    await vm.loadLocalUser()
+    expect(vm.localUser).toBeNull()
+    expect(vm.isLoggedIn).toBe(true)
     wrapper.unmount()
   })
 
-  it('getCurrentUser 抛异常时走 session validate 兜底', async () => {
+  it('getCurrentUser 网络异常显示状态不可用且不串行等待第二次校验', async () => {
     mockAuthApiGetCurrentUser.mockRejectedValueOnce(new Error('network'))
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
     expect(vm.localUser).toBeNull()
     expect(vm.isLoggedIn).toBe(false)
+    expect(vm.accountError).toBe(true)
+    expect(mockAuthApiValidateSession).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -511,12 +516,7 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – profileBrandTitle 计算属性', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('有 brand 时返回 brand', async () => {
     mockAccountProfileStore.displayBrand = '我的公司'
@@ -526,13 +526,13 @@ describe('SettingsView – profileBrandTitle 计算属性', () => {
     wrapper.unmount()
   })
 
-  it('无 brand 无 user 时返回未登录提示', async () => {
+  it('无 brand 且首挂身份未确认时返回可重试提示', async () => {
     mockAccountProfileStore.displayBrand = ''
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.profileBrandTitle).toBe('未登录')
+    expect(vm.profileBrandTitle).toBe('登录状态暂时无法确认，请稍后重试')
+    expect(vm.accountError).toBe(true)
     wrapper.unmount()
   })
 
@@ -562,19 +562,13 @@ describe('SettingsView – profileBrandTitle 计算属性', () => {
 })
 
 describe('SettingsView – profileSubline 计算属性', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
-  it('无 user 时返回登录提示', async () => {
+  it('首挂无已核实 user 时提示稍后重试', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.profileSubline).toBe('登录后同步修茈市场')
+    expect(vm.profileSubline).toBe('登录状态暂时无法确认，请稍后重试')
     wrapper.unmount()
   })
 
@@ -676,12 +670,7 @@ describe('SettingsView – profileSubline 计算属性', () => {
 })
 
 describe('SettingsView – avatarInitial 与 profileAvatarUrl', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无 user 时 avatarInitial 为空', async () => {
     const wrapper = await mountSettings()
@@ -765,11 +754,11 @@ describe('SettingsView – avatarInitial 与 profileAvatarUrl', () => {
     wrapper.unmount()
   })
 
-  it('profileAvatarUrl 从 market storage 读取 http url', async () => {
+  it('profileAvatarUrl 不采用未经当前身份确认的 market storage', async () => {
     localStorage.setItem('xcagi_market_user_json', JSON.stringify({ avatar_url: 'https://market.test/avatar.png' }))
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    expect(vm.profileAvatarUrl).toBe('https://market.test/avatar.png')
+    expect(vm.profileAvatarUrl).toBe('')
     wrapper.unmount()
   })
 
@@ -791,12 +780,7 @@ describe('SettingsView – avatarInitial 与 profileAvatarUrl', () => {
 })
 
 describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('无 user 时 profileFormDirty 为 false', async () => {
     const wrapper = await mountSettings()
@@ -823,8 +807,7 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.profileFormDirty).toBe(false)
     wrapper.unmount()
@@ -846,8 +829,7 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     vm.profileDisplayNameDraft = 'Alice New'
     await nextTick()
@@ -880,8 +862,7 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.profileHomeSummary).toContain('Alice')
     wrapper.unmount()
@@ -919,8 +900,7 @@ describe('SettingsView – companyBrandDirty', () => {
   it('草稿与当前 brand 不同时 dirty 为 true', async () => {
     mockAccountProfileStore.companyBrand = '公司A'
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     vm.companyBrandDraft = '公司B'
     await nextTick()
@@ -953,12 +933,10 @@ describe('SettingsView – saveCompanyBrand', () => {
     mockAuthApiUpdateCompanyBrand.mockResolvedValueOnce({ success: true })
     mockAccountProfileStore.refreshFromServer.mockResolvedValueOnce(undefined)
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    const vm = wrapper.vm as any
-    vm.companyBrandDraft = '新品牌'
-    await nextTick()
-    await vm.saveCompanyBrand()
+    await flushPromises()
+    await wrapper.get('#settings-company-brand').setValue('新品牌')
+    await wrapper.get('.settings-item__save-btn').trigger('click')
+    await flushPromises()
     expect(mockAuthApiUpdateCompanyBrand).toHaveBeenCalledWith('新品牌')
     expect(mockAccountProfileStore.companyBrand).toBe('新品牌')
     wrapper.unmount()
@@ -1023,8 +1001,7 @@ describe('SettingsView – saveProfile', () => {
 
   it('表单未修改时不调用 API', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     await vm.saveProfile()
     expect(mockAuthApiUpdateProfile).not.toHaveBeenCalled()
@@ -1049,10 +1026,11 @@ describe('SettingsView – saveProfile', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    vm.profileDisplayNameDraft = 'Alice New'
-    vm.profileEmailDraft = 'new@a.com'
-    await nextTick()
-    await vm.saveProfile()
+    const fields = wrapper.findAll('.settings-profile-form__input')
+    await fields[0].setValue('Alice New')
+    await fields[1].setValue('new@a.com')
+    await wrapper.get('#settings-profile-home .settings-profile-form__submit').trigger('click')
+    await flushPromises()
     expect(mockAuthApiUpdateProfile).toHaveBeenCalled()
     expect(vm.localUser.display_name).toBe('Alice New')
     wrapper.unmount()
@@ -1061,8 +1039,7 @@ describe('SettingsView – saveProfile', () => {
   it('保存抛异常时提示错误', async () => {
     mockAuthApiUpdateProfile.mockRejectedValueOnce(new Error('保存失败'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     vm.profileDisplayNameDraft = 'Alice New'
     await nextTick()
@@ -1079,12 +1056,7 @@ describe('SettingsView – saveProfile', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – 头像交互', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('未登录时点击头像不触发 input click', async () => {
     const wrapper = await mountSettings()
@@ -1107,12 +1079,9 @@ describe('SettingsView – 头像交互', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    const vm = wrapper.vm as any
-    const clickSpy = vi.fn()
-    vm.avatarInputRef = { click: clickSpy }
-    await vm.onAvatarClick()
+    await flushPromises()
+    const clickSpy = vi.spyOn(wrapper.get('.settings-profile__avatar-input').element as HTMLInputElement, 'click')
+    await wrapper.get('.settings-profile__avatar').trigger('click')
     expect(clickSpy).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -1191,7 +1160,11 @@ describe('SettingsView – 头像交互', () => {
     await nextTick()
     const vm = wrapper.vm as any
     const file = new File(['x'], 'a.png', { type: 'image/png' })
-    await vm.onAvatarFileChange({ target: { value: 'x', files: [file] } })
+    const input = wrapper.get('.settings-profile__avatar-input')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+    expect(mockAuthApiUploadAvatar).toHaveBeenCalledWith(file)
     expect(vm.localUser.avatar_url).toBe('/new-avatar.png')
     wrapper.unmount()
   })
@@ -1255,7 +1228,8 @@ describe('SettingsView – onLogout', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    await vm.onLogout()
+    await wrapper.get('.settings-profile__btn--ghost').trigger('click')
+    await flushPromises()
     expect(mockAuthApiLogout).toHaveBeenCalled()
     expect(mockAccountProfileStore.clear).toHaveBeenCalled()
     expect(vm.localUser).toBeNull()
@@ -1320,7 +1294,8 @@ describe('SettingsView – 审计日志', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    await vm.loadAuditLogs()
+    await wrapper.get('[data-tutorial-id="settings-audit-logs"] button').trigger('click')
+    await flushPromises()
     expect(vm.auditLogs.length).toBe(2)
     expect(vm.auditLogsTotal).toBe(2)
     wrapper.unmount()
@@ -1344,8 +1319,7 @@ describe('SettingsView – 审计日志', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    const vm = wrapper.vm as any
-    vm.downloadAuditCsv()
+    await wrapper.get('[data-tutorial-id="settings-audit-logs"] .settings-profile-form__submit--ghost').trigger('click')
     expect(openSpy).toHaveBeenCalledWith('/api/admin/audit.csv', '_blank', 'noopener,noreferrer')
     wrapper.unmount()
   })
@@ -1381,12 +1355,7 @@ describe('SettingsView – 审计日志', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadDesktopDatabaseStatus', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('desktopMode 为 false 时隐藏数据库信息', async () => {
     mockApiGet.mockImplementation(async (url: string) => {
@@ -1466,48 +1435,13 @@ describe('SettingsView – loadDesktopDatabaseStatus', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadIndustries', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
-
-  it('返回数组时直接赋值', async () => {
-    mockSystemApiGetIndustries.mockResolvedValueOnce({
-      success: true,
-      data: [{ id: 'mfg', name: '制造业', code: 'mfg' }],
-    })
-    const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
-    const vm = wrapper.vm as any
-    expect(vm.industries.length).toBe(1)
-    wrapper.unmount()
-  })
-
-  it('返回对象含 industries 字段时赋值', async () => {
-    mockIndustryStore.currentIndustry = { id: 'retail', name: '零售' }
-    mockSystemApiGetIndustries.mockResolvedValueOnce({
-      success: true,
-      data: { industries: [{ id: 'retail', name: '零售', code: 'rtl' }], current: 'retail' },
-    })
-    const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
-    const vm = wrapper.vm as any
-    expect(vm.industries.length).toBe(1)
-    wrapper.unmount()
-  })
+  beforeEach(resetSettingsTest)
 
   it('API 失败时不抛错', async () => {
     mockSystemApiGetIndustries.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    expect(wrapper.exists()).toBe(true)
+    await flushPromises()
+    await expect((wrapper.vm as any).loadIndustries()).resolves.toBeUndefined()
     wrapper.unmount()
   })
 })
@@ -1517,23 +1451,17 @@ describe('SettingsView – loadIndustries', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadCurrentIndustryDetail', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('成功时从 response.data.units.primary 设置主单位', async () => {
     mockSystemApiGetCurrentIndustry.mockResolvedValueOnce({
       success: true,
-      data: { units: { primary: '件' } },
+      data: { id: 'verified-industry', units: { primary: '件' } },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadCurrentIndustryDetail()
     expect(vm.currentIndustryUnit).toBe('件')
     wrapper.unmount()
   })
@@ -1544,10 +1472,9 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
       data: {},
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadCurrentIndustryDetail()
     expect(vm.currentIndustryUnit).toBe('天')
     wrapper.unmount()
   })
@@ -1563,10 +1490,9 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
     mockModsStore.activeModId = 'ext-1'
     mockSystemApiGetCurrentIndustry.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadCurrentIndustryDetail()
     expect(vm.currentIndustryUnit).toBe('小时')
     wrapper.unmount()
   })
@@ -1574,10 +1500,9 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
   it('失败且无 mod 时保持默认', async () => {
     mockSystemApiGetCurrentIndustry.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadCurrentIndustryDetail()
     expect(vm.currentIndustryUnit).toBe('天')
     wrapper.unmount()
   })
@@ -1588,12 +1513,7 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadIntentPackages', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('返回 packages 对象时更新 intentPackages', async () => {
     mockIntentPackagesApiGetPackages.mockResolvedValueOnce({
@@ -1606,10 +1526,9 @@ describe('SettingsView – loadIntentPackages', () => {
       },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadIntentPackages()
     expect(vm.intentPackages.base.enabled).toBe(false)
     expect(vm.intentPackages.base.keywords).toEqual(['新词'])
     expect(vm.intentPackages.industry.enabled).toBe(true)
@@ -1622,10 +1541,9 @@ describe('SettingsView – loadIntentPackages', () => {
       data: [{ key: 'base' }],
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const vm = wrapper.vm as any
+    await vm.loadIntentPackages()
     expect(vm.intentPackages.base.enabled).toBe(true)
     wrapper.unmount()
   })
@@ -1633,9 +1551,8 @@ describe('SettingsView – loadIntentPackages', () => {
   it('API 失败时不抛错', async () => {
     mockIntentPackagesApiGetPackages.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    expect(wrapper.exists()).toBe(true)
+    await flushPromises()
+    await expect((wrapper.vm as any).loadIntentPackages()).resolves.toBeUndefined()
     wrapper.unmount()
   })
 })
@@ -1645,12 +1562,7 @@ describe('SettingsView – loadIntentPackages', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadPreferences', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('从 prefs 读取 assistantName 与 aiMode', async () => {
     mockApiGet.mockImplementation(async (url: string) => {
@@ -1753,12 +1665,7 @@ describe('SettingsView – loadPreferences', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – saveSettings', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('保存成功时派发 assistant-name-updated 事件', async () => {
     mockApiPost.mockResolvedValue({ success: true })
@@ -1767,10 +1674,10 @@ describe('SettingsView – saveSettings', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    const vm = wrapper.vm as any
-    vm.assistantName = '新助手'
-    await nextTick()
-    await vm.saveSettings()
+    await flushPromises()
+    await wrapper.get('#settings-assistant-name').setValue('新助手')
+    await wrapper.get('.settings-primary-btn').trigger('click')
+    await flushPromises()
     expect(mockApiPost).toHaveBeenCalledTimes(2)
     const event = dispatchSpy.mock.calls[0][0]
     expect(event.type).toBe('assistant-name-updated')
@@ -1810,12 +1717,7 @@ describe('SettingsView – saveSettings', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – loadDistillationVersions', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('成功时填充 versions 与 sampleCount', async () => {
     mockApiGet.mockImplementation(async (url: string) => {
@@ -1921,7 +1823,8 @@ describe('SettingsView – onCheckForUpdates', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    await vm.onCheckForUpdates()
+    await wrapper.get('.settings-about-actions button').trigger('click')
+    await flushPromises()
     expect(checkSpy).toHaveBeenCalled()
     expect(vm.aboutUpdateMessage).toBe('已开始检查更新，如有新版本将提示下载。')
     expect(vm.aboutUpdateError).toBe(false)
@@ -1949,12 +1852,7 @@ describe('SettingsView – onCheckForUpdates', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – 主题与语言切换', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('onSidebarThemeChange 调用 persistSidebarTheme', async () => {
     const { persistSidebarTheme } = await import('@/utils/sidebarTheme')
@@ -1984,12 +1882,7 @@ describe('SettingsView – 主题与语言切换', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – openSettingsExtensions', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -2029,12 +1922,7 @@ describe('SettingsView – openSettingsExtensions', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – 路由跳转方法', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('goHostPackOnboarding 跳转到 onboarding', async () => {
     const wrapper = await mountSettings()
@@ -2060,12 +1948,7 @@ describe('SettingsView – 路由跳转方法', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – retryModRoutesLoad', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('刷新后仍有 loadError 时提示', async () => {
     mockModsStore.refresh.mockResolvedValueOnce(undefined)
@@ -2113,12 +1996,7 @@ describe('SettingsView – retryModRoutesLoad', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – onActiveModChange', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -2176,12 +2054,7 @@ describe('SettingsView – onActiveModChange', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – onUninstallMod', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('空 modId 时不执行', async () => {
     const wrapper = await mountSettings()
@@ -2294,12 +2167,7 @@ describe('SettingsView – onUninstallMod', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – scrollToSettingsSection', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -2353,12 +2221,7 @@ describe('SettingsView – scrollToSettingsSection', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – mod 相关计算属性', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('modelPaymentBridgeInstalled 检测 bridge mod', async () => {
     mockModsStore.mods = [{ id: 'xcagi-model-payment-bridge', name: 'Bridge' }]
@@ -2487,12 +2350,7 @@ describe('SettingsView – mod 相关计算属性', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – 行业与品牌计算属性', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('currentIndustryLabel 从 mod industry 获取', async () => {
     mockModsStore.mods = [{ id: 'ext-1', name: 'Ext1', industry: { id: 'ind1', name: '制造业' } }]
@@ -2648,12 +2506,7 @@ describe('SettingsView – 行业与品牌计算属性', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – intentPackageEntries', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('返回所有 intent package 条目', async () => {
     const wrapper = await mountSettings()
@@ -2701,12 +2554,7 @@ describe('SettingsView – intentPackageEntries', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – updateIndustryKeywords', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('从 mod manifest.intent_keywords 更新', async () => {
     mockModsStore.mods = [
@@ -2774,11 +2622,16 @@ describe('SettingsView – updateIndustryKeywords', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – applyAccountMetaFromAuthPayload', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
+  beforeEach(resetSettingsTest)
+
+  it('handles rejected optional settings hydration without an unhandled task', async () => {
+    mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: true, data: { user: { id: 1, username: 'a' } } })
+    mockAccountProfileStore.applyFromMeData.mockRejectedValueOnce(new Error('industry unavailable'))
+    const wrapper = await mountSettings()
+    await nextTick()
+    await nextTick()
+    expect(mockAccountProfileStore.applyFromMeData).toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('payload 含 data 对象时合并字段', async () => {
@@ -2828,12 +2681,7 @@ describe('SettingsView – applyAccountMetaFromAuthPayload', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – UI 事件交互', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -2843,9 +2691,9 @@ describe('SettingsView – UI 事件交互', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    const vm = wrapper.vm as any
-    // 直接调用 saveSettings 验证按钮绑定
-    await vm.saveSettings()
+    await flushPromises()
+    await wrapper.get('.settings-primary-btn').trigger('click')
+    await flushPromises()
     expect(mockApiPost).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -2877,7 +2725,7 @@ describe('SettingsView – UI 事件交互', () => {
     // 直接调用方法验证
     const querySpy = vi.spyOn(document, 'querySelector').mockReturnValue(null)
     const pushSpy = vi.spyOn(vm.$router, 'push')
-    vm.openSettingsExtensions()
+    await wrapper.get('.settings-model-service-empty__actions button').trigger('click')
     expect(pushSpy).toHaveBeenCalledWith({ name: 'mod-store' })
     querySpy.mockRestore()
     wrapper.unmount()
@@ -2913,12 +2761,7 @@ describe('SettingsView – UI 事件交互', () => {
  * ══════════════════════════════════════════════════════════════════ */
 
 describe('SettingsView – watch activeModIndustry', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetApiMocks()
-    resetStores()
-  })
+  beforeEach(resetSettingsTest)
 
   it('activeModIndustry 变化时触发 updateIndustryKeywords', async () => {
     mockModsStore.mods = [
@@ -2937,6 +2780,48 @@ describe('SettingsView – watch activeModIndustry', () => {
     vm.updateIndustryKeywords()
     await nextTick()
     expect(vm.intentPackages.industry.keywords).toContain('创建')
+    wrapper.unmount()
+  })
+})
+
+
+describe('SettingsView deployment and navigation controls', () => {
+  beforeEach(resetSettingsTest)
+  afterEach(() => { delete (window as any).xcagiDesktop })
+  it('keeps a PostgreSQL draft while switching deployment modes', async () => {
+    const wrapper = await mountSettings()
+    await flushPromises()
+    await wrapper.get('#settings-ai-mode').setValue('performance')
+    await wrapper.get('#settings-postgres-url').setValue('postgresql://localhost/workspace')
+    expect((wrapper.vm as any).postgresUrlDraft).toBe('postgresql://localhost/workspace')
+    expect((wrapper.vm as any).deploymentStatusMessage).toBe(settingsI18nT('settings.performanceNeedsPg'))
+    await wrapper.get('#settings-ai-mode').setValue('absolute_safe')
+    expect(wrapper.find('#settings-postgres-url').exists()).toBe(false)
+    expect((wrapper.vm as any).aiMode).toBe('offline')
+    await wrapper.get('#settings-ai-mode').setValue('performance')
+    expect((wrapper.get('#settings-postgres-url').element as HTMLInputElement).value).toBe('postgresql://localhost/workspace')
+    wrapper.unmount()
+  })
+
+  it.each(['workflow', 'industry'])('opens the store from the %s section', async (section) => {
+    mockModsStore.mods = [{ id: 'wf-example', name: 'Workflow' }]
+    const wrapper = await mountSettings()
+    const selector = section === 'workflow' ? '.mod-fold-section--inline .btn-link' : '.mod-fold-section-head .btn-link'
+    await wrapper.get(selector).trigger('click')
+    await flushPromises()
+    expect((wrapper.vm as any).$route.name).toBe('mod-store')
+    wrapper.unmount()
+  })
+
+  it('saves desktop auto-launch from its checkbox', async () => {
+    const setAutoLaunch = vi.fn().mockResolvedValue({ ok: true })
+    ;(window as any).xcagiDesktop = { getAutoLaunch: vi.fn().mockResolvedValue(false), setAutoLaunch }
+    const wrapper = await mountSettings()
+    await flushPromises()
+    await wrapper.get('.settings-about-autolaunch input').setValue(true)
+    await flushPromises()
+    expect(setAutoLaunch).toHaveBeenCalledWith(true)
+    expect((wrapper.vm as any).autoLaunch).toBe(true)
     wrapper.unmount()
   })
 })

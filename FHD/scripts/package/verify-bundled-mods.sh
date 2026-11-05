@@ -11,7 +11,8 @@ if [[ -z "${SKU}" ]]; then
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-VER="${XCAGI_VERIFY_VERSION:-1.0.0.0}"
+. "${ROOT}/scripts/deploy/lib/version.sh"
+VER="${XCAGI_VERIFY_VERSION:-$(product_version)}"
 ERP_MOD="xcagi-erp-domain-bridge"
 READ_SCRIPT="${ROOT}/scripts/package/read-host-profile-stage-ids.py"
 

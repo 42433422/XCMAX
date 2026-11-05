@@ -21,6 +21,33 @@ from app.application.excel_vector_app_service import (
 # HashEmbedder
 # ---------------------------------------------------------------------------
 class TestHashEmbedder:
+    @pytest.mark.parametrize(
+        ("text", "coordinates"),
+        [
+            ("customer invoice payment", {5: 1, 19: 1, 32: -1}),
+            (
+                "库存 查询 产品",
+                {2: 1, 14: 1, 20: -1, 23: -1, 28: 1, 33: -1, 41: -1, 47: 1, 51: -1, 59: 1, 61: -1},
+            ),
+        ],
+    )
+    def test_existing_persisted_vectors_remain_searchable(self, tmp_path, text, coordinates):
+        from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
+
+        # Frozen legacy coordinates: an algorithm change must not silently invalidate stored indexes.
+        legacy_vector = [coordinates.get(i, 0) / len(coordinates) ** 0.5 for i in range(64)]
+        db_path = str(tmp_path / "legacy-vectors.db")
+        store = SQLiteVectorStore(db_path)
+        store.create_or_update_index("legacy", "Legacy index", "old.xlsx")
+        store.upsert_chunks(
+            "legacy", [{"chunk_id": "old", "content": text, "embedding": legacy_vector}]
+        )
+        reopened = SQLiteVectorStore(db_path)
+        service = ExcelVectorSearchApplicationService(reopened, HashEmbedder(64))
+        result = service.query("legacy", text)
+        assert result["hits"][0]["content"] == text
+        assert result["hits"][0]["score"] == pytest.approx(1.0)
+
     def test_dimensions_minimum_64(self):
         emb = HashEmbedder(dimensions=10)
         assert emb._dimensions == 64

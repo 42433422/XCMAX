@@ -1,0 +1,319 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "dt-neurobus",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-135704",
+  "generated_at": "2026-09-29 13:57:18",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取事件总线运行态（running、handlers、domains、published/processed）→ 读取处理器注册表（13 个 handler spec / 多域）→ 真实发布一条事件 → 以真实 event_type_required 记录缺参发布被拒（边界/负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 29662,
+        "processed": 29656,
+        "errors": 0,
+        "dropped": 6,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 1,
+            "max_cache_size": 1000,
+            "hits": 15,
+            "misses": 1,
+            "hit_rate": 0.9375,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-neurobus/dt-neurobus-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "dt-neurobus",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-neurobus/shot/00-login-form.png",
+      "sha256": "7520aeb3eeb49aae516a017b8cc4a3b6f4537c7eb7e0336cd7490c3746420851",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「管理员登录 / XCMAX 服务器后台 · 平台运维 · 系统管理」：左侧蓝色品牌栏写「企业级 AI 对话与智能体 / 审批工作流与 ERP 集成 / 即时通讯与团队协作」，右侧账号框已填 admin、密码框为掩码（••••••••），可点蓝色「登 录 →」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-neurobus",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-neurobus/shot/N1-neurobus-health.png",
+      "sha256": "a8016a3f3f703650f4c7cb40f4bc6fcc8354773236a58e98630e9a3cf5748701",
+      "visual_review": "accepted",
+      "visible_result": "卡片「N1 · 事件总线运行态真实读取」：GET /api/neurobus/health，200，{\"status\":200,\"running\":true,\"published\":30080,\"processed\":30074,\"errors\":0,\"handlers\":39,\"domains\":[\"intent\",\"order\",\"inventory\",\"product\",\"customer\",\"ai_service\",\"print\",\"ocr\",\"payment\",\"safety\",\"shipment\"]}。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "dt-neurobus",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-neurobus/video/dt-neurobus-web-20260929-135704.webm",
+      "sha256": "0a849c8f048b8c9616174cec25662e8a8c27f37c0e37f42f86393820c2eca61f",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，13.2s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 总线运行态 → 处理器注册表 → 发布事件 → 缺 event_type 被拒。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "N1",
+      "title": "事件总线运行态真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "在页面上下文 fetch GET /api/neurobus/health。",
+      "expected": "HTTP 200，running=true，handlers>0 且 domains 非空。",
+      "observed": "{\"status\": 200, \"running\": true, \"published\": 30080, \"processed\": 30074, \"errors\": 0, \"handlers\": 39, \"domains\": [\"intent\", \"order\", \"inventory\", \"product\", \"customer\", \"ai_service\", \"print\", \"ocr\", \"payment\", \"safety\", \"shipment\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "N2",
+      "title": "处理器注册表真实读取",
+      "input": "同上。",
+      "actions": "在页面上下文 fetch GET /api/mod/xcagi-neuro-bus-bridge/handlers/registry。",
+      "expected": "HTTP 200、success=true，handler_spec_count≥1 且 domain_ids 非空。",
+      "observed": "{\"status\": 200, \"mod_id\": \"xcagi-neuro-bus-bridge\", \"execution_path\": \"mod:xcagi-neuro-bus-bridge\", \"handler_spec_count\": 13, \"domain_ids\": [\"product\", \"shipment\", \"order\", \"customer\", \"inventory\", \"payment\", \"ocr\", \"wechat\", \"print\", \"ai\", \"finance\", \"report\", \"application_consumers\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "N3",
+      "title": "真实发布事件到总线",
+      "input": "同上。",
+      "actions": "在页面上下文 POST .../events/publish（event_type=verify.accept）。",
+      "expected": "HTTP 200、data.published=true，返回 event_type/domain。",
+      "observed": "{\"status\": 200, \"published\": true, \"event_type\": \"verify.accept\", \"domain\": \"global\", \"source\": \"mod:xcagi-neuro-bus-bridge\", \"execution_path\": \"mod_event_facade\"}",
+      "result": "passed"
+    },
+    {
+      "id": "N4",
+      "title": "缺 event_type 的发布被拒（负例/边界）",
+      "input": "同上。",
+      "actions": "在页面上下文 POST .../events/publish（空 body）。",
+      "expected": "HTTP 200 且 success=false，message=event_type_required。",
+      "observed": "{\"status\": 200, \"success\": false, \"message\": \"event_type_required\"}",
+      "result": "passed"
+    }
+  ]
+}

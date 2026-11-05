@@ -1,6 +1,13 @@
 <template>
   <div class="panel-content panel-content-task" id="taskPanel">
       <div class="task-panel-body">
+        <div v-if="taskSyncState" class="task-sync-status" role="status" aria-live="polite">
+          <p v-if="taskSyncState.error">{{ taskSyncState.error }}</p>
+          <span>{{ taskSyncState.lastVerifiedAt ? `上次核对：${new Date(taskSyncState.lastVerifiedAt).toLocaleString('zh-CN')}` : '任务状态尚未核对' }}</span>
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="taskSyncState.checking" @click="$emit('refresh-tasks')">
+            {{ taskSyncState.checking ? '正在核对…' : '重新核对状态' }}
+          </button>
+        </div>
         <template v-if="currentTask">
           <div class="task-card" :class="{ 'excel-import-task': currentTask?.type === 'excel_import' }">
             <div class="task-header">{{ normalizeTaskDisplayText(currentTask.title) }}</div>
@@ -224,7 +231,7 @@
               <div v-if="expandedTaskIds.includes(task.id)" class="task-list-detail">
                 <div v-if="task.summary" class="task-summary">{{ normalizeTaskDisplayText(task.summary) }}</div>
                 <div v-if="task.error" class="task-error">{{ normalizeTaskDisplayText(task.error) }}</div>
-                <AgentTaskRuntimePanel v-if="task.type === 'agent_task'" :task="task" @open="openWorkspace(task)" @approve="$emit('approve-task', task.id)" @retry="$emit('retry-task', task.id)" @pause="$emit('pause-task', task.id)" @resume="$emit('resume-task', task.id)" @cancel="$emit('cancel-task-by-id', task.id)" />
+                <AgentTaskRuntimePanel v-if="task.type === 'agent_task'" :task="task" :control-state="taskControlStates?.[task.id]" @refresh="$emit('refresh-tasks')" @open="openWorkspace(task)" @approve="$emit('approve-task', task.id)" @retry="$emit('retry-task', task.id)" @pause="$emit('pause-task', task.id)" @resume="$emit('resume-task', task.id)" @cancel="$emit('cancel-task-by-id', task.id)" />
                 <div
                   v-if="task.type !== 'workflow_employee' && task.type !== 'agent_task'"
                   class="task-actions"
@@ -269,6 +276,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter, type RouteLocationRaw } from 'vue-router'
+import type { TaskControlState, TaskSyncState } from '@/composables/useAgentTaskWorkspace'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
 import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
@@ -298,6 +306,8 @@ function hasWorkflowBody(task: TaskItem): boolean {
 }
 const props = defineProps<{
   currentTask: ShipmentTask | null
+  taskControlStates?: Record<string, TaskControlState>
+  taskSyncState?: TaskSyncState
   taskList: TaskItem[]
   filteredTaskList: TaskItem[]
   activeTaskId: string; expandedTaskIds: string[]
@@ -315,6 +325,7 @@ const props = defineProps<{
   workflowTaskDotTitle: (task: TaskItem) => string
 }>()
 const emit = defineEmits<{
+  'refresh-tasks': []
   'confirm-task': []
   'cancel-task': []
   'refetch-order-number': []

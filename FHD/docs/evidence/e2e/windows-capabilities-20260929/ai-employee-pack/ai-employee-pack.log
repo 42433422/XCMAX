@@ -1,0 +1,10 @@
+feature=ai-employee-pack
+at=2026-09-29T11:21:21.249Z
+route=/mod/xcagi-office-employee-pack-bridge/tools
+landed=/mod/xcagi-office-employee-pack-bridge/tools
+title=工具 - XCAGI
+heading=工具
+redirected=false
+navError=
+apis=[{"api":"/api/mods","status":200,"body":"{\"success\":true,\"data\":[{\"id\":\"accessories-packaging-industry\",\"name\":\"饰品包装行业包\",\"version\":\"1.0.0\",\"author\":\"成都修茈科技有限公司\",\"description\":\"饰品与包装制品行业壳：提供产品、订单、库存、客户与标签业务语义；考勤由通用 attendance-industry 模块提供。\",\"primary\":false,\"artifact\":\"mod\",\"scope\":\"global\",\"industry\":{\"id\":\"饰品包装\",\"name\":\"饰品包装行业\",\"description\":\"适用于饰品、展示包装与包装制品的产品、订单、库存和标签管理\",\"units\":{\"primary\":\"件\",\"secondary\":\"箱\",\"primary_label\":\"件数\",\"sec"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 工具 SUNBIRD 副窗 ◈ 工作区 工具表 全部分类 AI Planner 产品管理 客户管理 出货单 Excel处理 图片OCR 原材料仓库 标签打印 数据库管理 系统设置 AI Planner 可调用的工具 以下为对话里 Planner 实际注册并可能调用的后端工具（function calling），与下方「业务工作台入口」不同。 AI Planner Planner excel_analysis 分析 Excel 文件内容，支持读取、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。 查看 AI Planner Planner excel_schema_understand 理解 Excel 文件的数据结构和 schema，返回列名、数据类型、样本数据等元信息。适合在分析前先了解文件结构。 查看 AI Planner Planner excel_join_compare 合并或对比两个 Excel 文件的数据。支持 join（合并）和 diff（差异对比）两种操作。 查看 AI Planner Planner excel_chart_recommend 根据 Excel 数据内容推荐合适的图表类型。 查看 AI Planner Planner import_excel_to_database 将 Excel 数据导入到数据库。系统会分析 Excel 内容并自动匹配字段进行导入。报价单等多行标题表必须传 header_row（与 extract-grid / excel_analysis 一致），否则列名会变成 Unnamed、映射错乱。可选 last_data_row_1based 截断表尾说明文字；未传时仍会对典型合同/报价表尾条款行做启发式过滤。【重要】参数 unit_name 在本系统中表示「客户公司全称」（与主库 purchase_units / 产品上 unit 字段一致），用于把产品挂到该客户下；不是 SKU 计量单位（件、桶、箱等）。缺省时可从运行时上下文 customer_hint / excel_customer_hint 或 Excel「客户/购买单位」列推断。若上下文已含 excel_customer_hint 或已解析的文档客户名，不要在对话中再向用户索要公司名称，直接调用本工具即可（unit_name 可填该名或留空）。 查看 AI Planner Planner template_preview 查看、查询或保存 Excel/单据

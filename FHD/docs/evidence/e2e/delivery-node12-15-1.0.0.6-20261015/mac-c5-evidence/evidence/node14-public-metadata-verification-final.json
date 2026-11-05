@@ -1,0 +1,30 @@
+{
+  "result": "PASS",
+  "time": "2026-10-15T22:49:47.363298+08:00",
+  "files": [
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/index.html",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/index.html",
+      "bytes": 1259,
+      "sha256": "6742f7ee78c8f06992456a5edcfb89a9e5fb6b050d4be3ca137fc866486b340f",
+      "result": "PASS"
+    },
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/manual-download-manifest.json",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/manual-download-manifest.json",
+      "bytes": 2296,
+      "sha256": "ecb6eeda0be0b2a314a83e8ba87ba0ab2395243ef4237cf6f2ab71f6f8f4ea8e",
+      "result": "PASS"
+    },
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/SHA256SUMS.txt",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/publication/verified-public-metadata/SHA256SUMS.txt",
+      "bytes": 315,
+      "sha256": "23ae26605f5a0d9faaca8405bc634bbe10ca912ee4427d2ec13e6f73a57a2b19",
+      "result": "PASS"
+    }
+  ],
+  "publicPackagesAllFullDownloadedAndVerified": true,
+  "manualVersionSpecificDistributionOnly": true,
+  "stableOtaPromoted": false
+}

@@ -22,6 +22,7 @@ import {
 } from '@/constants/productFlow'
 import type { ProductFlowStepId, ProductFlowStepMeta } from '@/constants/productFlow'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
+import { isOnboardingEntryReady } from '@/utils/hostPackOnboardingGate'
 
 /** 行业 chip 行（目录行或 preset 兜底后的统一形状） */
 export interface CatalogChipRow {
@@ -160,7 +161,7 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
     const days = sub.trial_days_remaining ?? '—'
     return `当前为试用账户：剩余 ${days} 天${sub.trial_expires_at ? `（至 ${sub.trial_expires_at}）` : ''}。满意后可选购永久授权（1 万元起）。`
   })
-  const baselineOk = computed(() => baselinePlan.value?.baseline_ready === true)
+  const baselineOk = computed(() => isOnboardingEntryReady(baselinePlan.value))
 
   const industryNavigationProfile = computed(() => resolveIndustryNavigationProfile(pickedIndustryId.value))
   const industrySidebarPreviewLabels = computed<string[]>(() => {

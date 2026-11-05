@@ -1,0 +1,9 @@
+[13:52:57] feature=ai-intent platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-intent
+[13:53:09] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:53:10] case N1: passed - 意图引擎健康真实读取
+[13:53:10] case N2: passed - 真实意图分类与候选概率
+[13:53:11] case N3: passed - 意图包目录真实读取
+[13:53:11] case N4: passed - 缺 text 的意图预测被拒（负例/边界）
+[13:53:11] case N5: passed - 兼容入口空消息被拒（负例/边界）
+[13:53:11] video: ai-intent-web-20260929-135257.webm (1020661 bytes)
+[13:53:11] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-intent/log/ai-intent-web-20260929-135257.log

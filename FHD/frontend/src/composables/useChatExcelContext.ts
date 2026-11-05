@@ -1,4 +1,4 @@
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed, watch, getCurrentScope, onScopeDispose, type Ref } from 'vue'
 import {
   readPersistedExcelAnalysisContext,
   persistExcelAnalysisContext,
@@ -8,11 +8,14 @@ import {
   type LinkedExcelSheet,
 } from './useChatPersistence'
 import { filesToMultimodalRows, type MultimodalAttachmentRow } from '@/utils/multimodalAttachments'
+import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 
 export interface UseChatExcelContextDeps {
   sessionId: Ref<string>
   addAndSaveMessage: (content: string, role?: 'user' | 'ai' | 'task', extras?: Record<string, unknown>) => Promise<void>
   resolveExcelAnalysisContextForRequest?: () => Record<string, unknown> | null
+  getIdentity?: () => string
+  captureIsCurrent?: () => () => boolean
 }
 
 export function useChatExcelContext(deps: UseChatExcelContextDeps) {
@@ -23,8 +26,23 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   const linkedExcelAllSheets = ref(false)
   const multimodalStaging = ref<MultimodalAttachmentRow[]>([])
   const multimodalPendingCount = computed(() => multimodalStaging.value.length)
+  const scopeKey = () => JSON.stringify([sessionId.value, (deps.getIdentity || resolveChatIdentity)()])
+  let activeScope = scopeKey(), revision = 0
+  function syncScope() {
+    const next = scopeKey()
+    if (next === activeScope) return
+    activeScope = next
+    revision += 1
+    lastExcelAnalysisContext.value = readPersistedExcelAnalysisContext(String(sessionId.value || '').trim() || 'default')
+    linkedExcelSheet.value = null
+    linkedExcelAllSheets.value = false
+    multimodalStaging.value = []
+  }
+  watch(scopeKey, syncScope, { flush: 'sync' })
+  if (getCurrentScope()) onScopeDispose(() => { revision += 1 })
 
   function resolveExcelAnalysisContextForRequest(): Record<string, unknown> | null {
+    syncScope()
     if (lastExcelAnalysisContext.value) return lastExcelAnalysisContext.value
     const sid = String(sessionId.value || '').trim() || 'default'
     const restored = readPersistedExcelAnalysisContext(sid)
@@ -84,11 +102,30 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   }
 
   function consumeMultimodalIntoPlannerContext(contextPayload: Record<string, unknown>, contextParts: string[]) {
+    syncScope()
     const rows = multimodalStaging.value
     if (!rows.length) return
     contextPayload.multimodal_attachments = rows.map((r) => ({ ...r }))
     contextParts.push(`多模态附件 ${rows.length} 个`)
     multimodalStaging.value = []
+  }
+
+  async function stageMultimodalFiles(list: File[]) {
+    if (!list.length) return
+    syncScope()
+    const capturedScope = activeScope, capturedRevision = revision
+    const isCurrent = deps.captureIsCurrent?.() || (() => true)
+    const res = await filesToMultimodalRows(list)
+    if (capturedRevision !== revision || capturedScope !== scopeKey() || !isCurrent()) return
+    if (!res.ok) {
+      await addAndSaveMessage(`[附件] ${res.error}`, 'ai')
+      return
+    }
+    multimodalStaging.value = [...multimodalStaging.value, ...res.rows].slice(-6)
+    await addAndSaveMessage(
+      `[附件] 已加入 ${res.rows.length} 个文件（${res.rows.map((r) => r.filename).join('、')}），发送下一条消息时将一并提交给模型。`,
+      'ai',
+    )
   }
 
   async function onMultimodalFileChange(ev: Event) {
@@ -99,16 +136,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     // a silent no-op on Electron/macOS.
     const list = Array.from(el.files)
     el.value = ''
-    const res = await filesToMultimodalRows(list)
-    if (!res.ok) {
-      await addAndSaveMessage(`[附件] ${res.error}`, 'ai')
-      return
-    }
-    multimodalStaging.value = [...multimodalStaging.value, ...res.rows].slice(-6)
-    await addAndSaveMessage(
-      `[附件] 已加入 ${res.rows.length} 个文件（${res.rows.map((r) => r.filename).join('、')}），发送下一条消息时将一并提交给模型。`,
-      'ai',
-    )
+    await stageMultimodalFiles(list)
   }
 
   async function bindExcelSheetToChat(sheet: LinkedExcelSheet): Promise<void> {
@@ -178,6 +206,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
     onMultimodalFileChange,
+    stageMultimodalFiles,
     bindExcelSheetToChat,
     bindAllExcelSheetsToChat,
     persistExcelAnalysisContextForSession: (sid: string, ctx: Record<string, unknown> | null) => persistExcelAnalysisContext(sid, ctx),

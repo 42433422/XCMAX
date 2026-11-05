@@ -1,0 +1,17 @@
+{
+  "wo_id": "WO-c0ffee00dead",
+  "errors": [
+    {
+      "tool": "unknown",
+      "file_path": "",
+      "code": "",
+      "line": 0,
+      "raw": "backup file corrupt, restore failed",
+      "message": "backup file corrupt, restore failed"
+    }
+  ],
+  "excerpt": "backup file corrupt, restore failed",
+  "dedup_key": "c0ffee00deadbeef12345678abcdef99",
+  "fixes": [],
+  "engine": "rule"
+}

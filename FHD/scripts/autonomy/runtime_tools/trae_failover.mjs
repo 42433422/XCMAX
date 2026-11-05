@@ -15,6 +15,7 @@ const PROVIDER_FAILURES = [
   '504',
   'authentication expired',
   'connection reset',
+  'failed to create agent: models is required',
   'model usage has reached',
   'overloaded',
   'personal quota limit',
@@ -75,6 +76,11 @@ export function describeTraeFailure(error) {
     subtype: structured.subtype,
     summary,
   };
+}
+
+export function isPolicyFailure(value) {
+  const raw = String(value || '').toLowerCase();
+  return POLICY_FAILURES.some((pattern) => raw.includes(pattern));
 }
 
 export function isTraeProviderFailoverEligible(value) {

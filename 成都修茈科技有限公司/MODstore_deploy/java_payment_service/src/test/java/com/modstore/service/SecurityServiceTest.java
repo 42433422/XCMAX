@@ -183,4 +183,31 @@ class SecurityServiceTest {
         ReflectionTestUtils.setField(service, "paymentSecretKey", "test-payment-secret");
         return service;
     }
+
+    @Test
+    void validateRejectsMissingSecretKey() {
+        SecurityService service = new SecurityService(mock(StringRedisTemplate.class));
+        assertThrows(IllegalStateException.class, service::validatePaymentSecretKey);
+    }
+
+    @Test
+    void validateRejectsLegacyPlaceholderSecretKey() {
+        SecurityService service = new SecurityService(mock(StringRedisTemplate.class));
+        ReflectionTestUtils.setField(service, "paymentSecretKey", "default_secret_key");
+        assertThrows(IllegalStateException.class, service::validatePaymentSecretKey);
+    }
+
+    @Test
+    void validateRejectsTooShortSecretKey() {
+        SecurityService service = new SecurityService(mock(StringRedisTemplate.class));
+        ReflectionTestUtils.setField(service, "paymentSecretKey", "short");
+        assertThrows(IllegalStateException.class, service::validatePaymentSecretKey);
+    }
+
+    @Test
+    void validateAcceptsStrongSecretKey() {
+        SecurityService service = new SecurityService(mock(StringRedisTemplate.class));
+        ReflectionTestUtils.setField(service, "paymentSecretKey", "test-payment-secret");
+        assertDoesNotThrow(service::validatePaymentSecretKey);
+    }
 }

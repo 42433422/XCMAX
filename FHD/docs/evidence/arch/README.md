@@ -25,5 +25,4 @@ python scripts/arch_fitness.py
 
 ## 关联
 
-- [`docs/reports/services_import_matrix.md`](../../reports/services_import_matrix.md)
 - [`docs/reports/COMPAT_LAYER_INVENTORY.md`](../../reports/COMPAT_LAYER_INVENTORY.md)

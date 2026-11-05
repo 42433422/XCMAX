@@ -1,4 +1,5 @@
 import { apiFetch, getApiBase } from '@/utils/apiBase'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 export type ImConversationSummary = {
   id: number
@@ -65,16 +66,50 @@ export async function fetchImContacts(keyword?: string): Promise<ImContact[]> {
   return data.contacts ?? []
 }
 
-export async function fetchImConversations(): Promise<ImConversationSummary[]> {
-  const res = await apiFetch('/api/im/conversations', { headers: jsonHeaders })
-  const data = await readJson<{ success?: boolean; conversations?: ImConversationSummary[] }>(res)
-  if (!data.success) throw new Error('加载会话失败')
-  return data.conversations ?? []
+export async function fetchImConversationPages(options?: { maxPages?: number; cursor?: string }): Promise<{ conversations: ImConversationSummary[]; nextCursor: string }> {
+  const epoch = productReadAccountEpoch.value
+  const conversations = new Map<number, ImConversationSummary>()
+  const cursors = new Set<string>()
+  let cursor = options?.cursor || ''
+  let pages = 0
+  do {
+    const query = new URLSearchParams({ limit: '50' })
+    if (cursor) query.set('cursor', cursor)
+    const res = await apiFetch(`/api/im/conversations?${query}`, { headers: jsonHeaders })
+    const data = await readJson<{ success?: boolean; conversations?: ImConversationSummary[]; next_cursor?: string | null }>(res)
+    if (epoch !== productReadAccountEpoch.value) throw new Error('账号已切换，请重新加载会话')
+    if (!data.success) throw new Error('加载会话失败')
+    for (const item of data.conversations ?? []) if (!conversations.has(item.id)) conversations.set(item.id, item)
+    cursor = data.next_cursor || ''
+    pages += 1
+    if (cursor && cursors.has(cursor)) throw new Error('会话分页游标重复，请重新加载')
+    if (cursor) cursors.add(cursor)
+    if (options?.maxPages != null && pages >= options.maxPages) break
+  } while (cursor)
+  return { conversations: [...conversations.values()], nextCursor: cursor }
+}
+
+export async function fetchImConversations(options?: {
+  firstPageOnly?: boolean
+  onMore?: (items: ImConversationSummary[]) => void
+}): Promise<ImConversationSummary[]> {
+  const first = await fetchImConversationPages(options?.firstPageOnly ? { maxPages: 1 } : undefined)
+  if (options?.firstPageOnly && first.nextCursor && options.onMore) {
+    const cursor = first.nextCursor
+    void fetchImConversationPages({ cursor }).then((rest) => {
+      if (rest.conversations.length) options.onMore?.(rest.conversations)
+    }).catch(() => undefined)
+  }
+  return first.conversations
 }
 
 export async function fetchImUnreadTotal(): Promise<number> {
   try {
     const res = await apiFetch('/api/im/unread-total', { headers: jsonHeaders })
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('xcagi:session-unauthorized'))
+      return 0
+    }
     const ct = res.headers.get('content-type') || ''
     if (!res.ok || !ct.toLowerCase().includes('application/json')) return 0
     const data = (await res.json()) as { success?: boolean; unread_total?: number }
@@ -127,52 +162,54 @@ export async function sendImMessage(conversationId: number, body: string): Promi
   return msg
 }
 
-/** 客户端读取生产 SSOT 的企业专属客服会话，不使用本机 IM 主键同步。 */
-export async function fetchEnterpriseCsThread(): Promise<EnterpriseCsThread> {
-  const res = await apiFetch('/api/im/enterprise-cs/messages', {
-    headers: jsonHeaders,
-    timeoutMs: 25_000,
+type EnterpriseCsReply = { success?: boolean; conversation?: ImConversationSummary; messages?: ImMessage[];
+  conversation_id?: number; message?: ImMessage | string; state?: Partial<ImConversationSummary>; detail?: string;
+  outcome?: string; retryable?: boolean; reconciliation_required?: boolean }
+export class EnterpriseCsRequestError extends Error {
+  constructor(message: string, public readonly reconciliationRequired = false) { super(message) }
+}
+async function enterpriseCsRequest(fallback: string, body?: string): Promise<EnterpriseCsReply> {
+  let res: Response
+  let responseStatus = 0
+  let data: EnterpriseCsReply
+  try {
+    res = await apiFetch('/api/im/enterprise-cs/messages', {
+    headers: jsonHeaders, timeoutMs: 25_000,
+    ...(body === undefined ? {} : { method: 'POST', body: JSON.stringify({ body }) }),
   })
-  const data = await readJson<{
-    success?: boolean
-    conversation?: ImConversationSummary
-    messages?: ImMessage[]
-    message?: string
-    detail?: string
-  }>(res)
-  if (!res.ok || !data.success || !data.conversation) {
-    throw new Error(data.message || data.detail || '加载企业专属客服失败')
+    responseStatus = res.status
+    data = await readJson<EnterpriseCsReply>(res)
+  } catch (error) {
+    if (responseStatus === 401) throw new EnterpriseCsRequestError('企业专属客服登录已失效，请到系统设置重新登录企业账号；草稿已保留。')
+    if (responseStatus === 403) throw new EnterpriseCsRequestError('当前账号无权访问企业专属客服。')
+    if (body !== undefined) throw new EnterpriseCsRequestError('发送结果未确认，请先核对会话，勿重复发送；草稿已保留。', true)
+    throw error
   }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new EnterpriseCsRequestError('发送失败：服务端回执格式无效，请核对会话后再操作。', body !== undefined)
+  }
+  if (!res.ok || data.success !== true) {
+    const reason = typeof data.message === 'string' ? data.message : data.detail || fallback
+    const uncertain = body !== undefined && (res.status >= 500 || res.ok || data.outcome === 'unknown' || data.reconciliation_required === true)
+    throw new EnterpriseCsRequestError(res.status === 401 ? '企业专属客服登录已失效，请到系统设置重新登录企业账号；草稿已保留。' : reason, uncertain)
+  }
+  return data
+}
+/** 读取生产客服原会话；客户端不转发本地主键。 */
+export async function fetchEnterpriseCsThread(): Promise<EnterpriseCsThread> {
+  const data = await enterpriseCsRequest('加载企业专属客服失败')
+  if (!data.conversation) throw new Error(data.detail || '加载企业专属客服失败')
   return { conversation: data.conversation, messages: data.messages ?? [] }
 }
-
-/** 客户端只提交正文；生产端从市场令牌解析真实企业账号。 */
+/** 仅提交正文，失败不重试；草稿由会话层保留。 */
 export async function sendEnterpriseCsMessage(body: string): Promise<{
-  conversation_id: number
-  message: ImMessage
-  state: Partial<ImConversationSummary>
+  conversation_id: number; message: ImMessage; state: Partial<ImConversationSummary>
 }> {
-  const res = await apiFetch('/api/im/enterprise-cs/messages', {
-    method: 'POST',
-    headers: jsonHeaders,
-    body: JSON.stringify({ body }),
-    timeoutMs: 25_000,
-  })
-  const data = await readJson<{
-    success?: boolean
-    conversation_id?: number
-    message?: ImMessage
-    state?: Partial<ImConversationSummary>
-    detail?: string
-  }>(res)
-  if (!res.ok || !data.success || !data.message || !data.conversation_id) {
-    throw new Error(data.detail || '发送失败')
+  const data = await enterpriseCsRequest('发送失败', body)
+  if (!Number.isInteger(data.conversation_id) || !data.conversation_id || data.conversation_id < 1 || !data.message || typeof data.message !== 'object' || !Number.isInteger(data.message.id) || data.message.id < 1 || data.message.conversation_id !== data.conversation_id || typeof data.message.body !== 'string') {
+    throw new EnterpriseCsRequestError(data.detail || '发送失败：服务端回执不完整，请核对会话后再操作。', true)
   }
-  return {
-    conversation_id: data.conversation_id,
-    message: data.message,
-    state: data.state ?? {},
-  }
+  return { conversation_id: data.conversation_id, message: data.message, state: data.state ?? {} }
 }
 
 export async function markImRead(conversationId: number, lastMessageId: number): Promise<void> {

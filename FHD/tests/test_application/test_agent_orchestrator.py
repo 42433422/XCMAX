@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -7,6 +8,14 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    # These planner/event tests mock dispatch in this interpreter; the real spawned
+    # executor and tenant persistence are exercised by test_tool_process/tenant.
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
+        lambda: SimpleNamespace(execute=AgentToolExecutor().execute),
+    )
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -30,7 +39,7 @@ def _planner_fallback_patches():
 def test_agent_orchestrator_persists_stable_error_codes_not_exception_details():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph
+    from app.application.workflow.workflow_types import PlanGraph
 
     secret = "Traceback: database password=do-not-expose"
     direct = AgentOrchestrator(repository=InMemoryAgentRunRepository())
@@ -110,7 +119,7 @@ def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
     assert completed_event.data["cost_units"] == 1
 
 
-def test_agent_tool_executor_restores_durable_runtime_tenant_scope():
+def test_agent_tool_executor_restores_durable_purchase_tenant_scope():
     from app.application.agent_orchestrator.run_models import AgentStep
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
     from app.infrastructure.tenant_scope import current_tenant_id
@@ -119,13 +128,13 @@ def test_agent_tool_executor_restores_durable_runtime_tenant_scope():
 
     def _execute(_tool_id, _action, _params):
         observed_tenant_ids.append(current_tenant_id())
-        return {"success": True, "data": [{"unit_name": "XC 演示客户"}]}
+        return {"success": True, "data": {"id": 7}}
 
     step = AgentStep(
-        node_id="read_customer",
-        tool_id="business_db",
-        action="read",
-        params={"entity": "customers", "keyword": "XC 演示客户"},
+        node_id="create_supplier",
+        tool_id="purchase",
+        action="create_supplier",
+        params={"name": "XC 演示供应商"},
     )
     with patch(
         "app.application.facades.tools_facade.execute_registered_workflow_tool",
@@ -139,7 +148,7 @@ def test_agent_tool_executor_restores_durable_runtime_tenant_scope():
     mock_execute.assert_called_once()
 
 
-@pytest.mark.parametrize("tenant_id", [True, 0, -1, "not-a-tenant"])
+@pytest.mark.parametrize("tenant_id", [True, 0, -1, 1.5, "1.5", "not-a-tenant"])
 def test_agent_tool_executor_rejects_invalid_runtime_tenant_scope(tenant_id):
     from app.application.agent_orchestrator.run_models import AgentStep
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
@@ -158,6 +167,34 @@ def test_agent_tool_executor_rejects_invalid_runtime_tenant_scope(tenant_id):
     assert result["success"] is False
     assert result["error_code"] == "invalid_tenant_context"
     mock_execute.assert_not_called()
+
+
+@pytest.mark.parametrize("tenant_id", [7, "7", True, 1.5, "invalid"])
+def test_inventory_tool_restores_and_validates_runtime_tenant(tenant_id):
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    seen = []
+
+    def execute(*args):
+        seen.append(current_tenant_id())
+        return {"success": True}
+
+    step = AgentStep(
+        node_id="in",
+        tool_id="inventory",
+        action="stock_in",
+        params={"product_id": 1, "warehouse_id": 2, "quantity": 50},
+    )
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", side_effect=execute
+    ):
+        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": tenant_id})
+    valid = tenant_id in (7, "7")
+    assert result["success"] is valid
+    assert seen == ([7] if valid else [])
+    assert current_tenant_id() == 1
 
 
 def test_agent_tool_executor_preserves_opaque_dataset_tenant_key():
@@ -296,7 +333,7 @@ def test_agent_orchestrator_resumes_exact_pending_step_after_durable_snapshot():
 def test_agent_orchestrator_blocks_approved_step_when_budget_exceeded():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -357,7 +394,7 @@ def test_agent_orchestrator_blocks_approved_step_when_budget_exceeded():
 def test_agent_orchestrator_blocks_tool_execution_when_wallet_insufficient(monkeypatch):
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "local")
     monkeypatch.setenv("MODEL_USAGE_WALLET_REQUIRED", "1")
@@ -416,7 +453,7 @@ def test_agent_orchestrator_blocks_tool_execution_when_wallet_insufficient(monke
 def test_agent_orchestrator_refunds_local_wallet_when_charged_tool_fails(monkeypatch):
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.infrastructure.billing.model_usage import get_model_wallet, set_model_wallet_balance
 
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "local")
@@ -471,7 +508,7 @@ def test_agent_orchestrator_refunds_local_wallet_when_charged_tool_fails(monkeyp
 def test_agent_orchestrator_refunds_market_wallet_when_charged_tool_fails(monkeypatch):
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.infrastructure.billing import model_usage
 
     class FakeMarketResponse:
@@ -579,7 +616,7 @@ def test_agent_orchestrator_refunds_market_wallet_when_charged_tool_fails(monkey
 
 def test_agent_orchestrator_uses_tool_spec_risk_over_planner_claim():
     from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
-    from app.application.workflow.types import WorkflowNode
+    from app.application.workflow.workflow_types import WorkflowNode
 
     node = WorkflowNode(
         node_id="write_customer",
@@ -600,7 +637,7 @@ def test_agent_orchestrator_uses_tool_spec_risk_over_planner_claim():
 def test_agent_orchestrator_starts_from_existing_plan():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -652,7 +689,7 @@ def test_agent_orchestrator_starts_from_existing_plan():
 def test_agent_orchestrator_applies_controlled_repair_and_retries_low_risk_step():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -714,7 +751,7 @@ def test_agent_orchestrator_applies_controlled_repair_and_retries_low_risk_step(
 def test_agent_orchestrator_continues_multistep_run_after_second_step_repair():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -796,7 +833,7 @@ def test_agent_orchestrator_continues_multistep_run_after_second_step_repair():
 def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     plan = PlanGraph(
         plan_id="p-first-order-three-tools",
@@ -828,7 +865,8 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
                     "operation": "create",
                     "payload": {
                         "unit_name": "新手演示客户",
-                        "products": [{"name": "新手演示商品", "qty": 1}],
+                        "products": [{"product_name": "新手演示商品", "quantity_tins": 1}],
+                        "product_source_node": "find_product",
                     },
                 },
                 risk="medium",
@@ -845,7 +883,12 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
             return {"success": True, "data": [{"customer_id": 10}]}
         if node_id == "find_product":
             assert outputs["find_customer"]["data"][0]["customer_id"] == 10
-            return {"success": True, "data": [{"product_id": 20}]}
+            return {
+                "success": True,
+                "data": [
+                    {"product_id": 20, "name": "新手演示商品", "specification": 1, "price": 99}
+                ],
+            }
         assert outputs["find_product"]["data"][0]["product_id"] == 20
         return {"success": True, "data": {"shipment_id": 30}}
 
@@ -862,6 +905,10 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
             runtime_context={"source": "first-order-acceptance"},
         )
         assert waiting.status == "waiting_user"
+        payload = waiting.steps[-1].params["payload"]
+        assert "product_source_node" not in payload
+        assert payload["products"][0]["tin_spec"] == 1
+        assert payload["products"][0]["unit_price"] == 99
         assert [call.node_id for call in waiting.tool_calls] == ["find_customer", "find_product"]
         run = orchestrator.continue_run(waiting.run_id, approved_by="u1")
 
@@ -880,7 +927,7 @@ def test_agent_orchestrator_uses_llm_repair_for_low_risk_idempotent_step(tmp_pat
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_models import LLMCall
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -964,7 +1011,7 @@ def test_agent_orchestrator_uses_llm_repair_for_low_risk_idempotent_step(tmp_pat
 def test_agent_orchestrator_generates_office_document_as_artifact_after_approval():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -988,11 +1035,11 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
             return_value="pro_default",
         ),
         patch(
-            "app.services.kitten_ai_document.generate.generate_office_file",
+            "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
             return_value=(b"content", "contract.docx"),
         ),
         patch(
-            "app.services.kitten_ai_document.pickup.store_document_pickup",
+            "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
             return_value="doc-token",
         ),
         patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
@@ -1001,7 +1048,7 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
             return_value=(None, None),
         ),
         patch(
-            "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+            "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
             return_value=None,
         ),
     ):

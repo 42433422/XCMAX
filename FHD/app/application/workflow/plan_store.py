@@ -13,14 +13,37 @@ from __future__ import annotations
 
 import json
 import logging
+import unicodedata
 from typing import Any, cast
 
 from sqlalchemy import Table
 
-from app.application.workflow.types import PlanGraph, plan_from_dict, plan_to_dict
+from app.application.workflow.workflow_types import PlanGraph, plan_from_dict, plan_to_dict
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+# Shared namespace contract: catalog code must reuse these exact prefixes.
+CATALOG_OPERATION_PREFIX = "catalog-price-operation-v1:"
+CATALOG_HEAD_PREFIX = "catalog-price-active-v1:"
+CATALOG_RECEIPT_PREFIX = "catalog-price-receipt-v1:"
+OWNED_KNOWLEDGE_CONTROL_KEY = "etl-owned-knowledge-v1"
+_RESERVED_PLAN_KEYS = (OWNED_KNOWLEDGE_CONTROL_KEY,)
+_RESERVED_PLAN_PREFIXES = (CATALOG_OPERATION_PREFIX, CATALOG_HEAD_PREFIX, CATALOG_RECEIPT_PREFIX)
+
+
+def reserved_workflow_plan_id(value: str) -> bool:
+    """Generic workflow APIs never interpret protected operation/receipt records."""
+    if not isinstance(value, str):
+        return False
+    normalized = unicodedata.normalize("NFKC", value).strip().casefold()
+    return normalized in _RESERVED_PLAN_KEYS or normalized.startswith(_RESERVED_PLAN_PREFIXES)
+
+
+def _require_ordinary_plan_id(value: str) -> None:
+    if reserved_workflow_plan_id(value):
+        raise ValueError("protected catalog authority is not an ordinary workflow plan")
+
 
 # 生命周期状态常量。
 STATUS_RUNNING = "running"
@@ -53,7 +76,7 @@ class WorkflowPlanStore:
         if self._schema_ensured:
             return
         try:
-            from app.db.base import Base
+            from app.db.db_base import Base
             from app.db.models.workflow import WorkflowPlan
 
             Base.metadata.create_all(
@@ -82,9 +105,11 @@ class WorkflowPlanStore:
         user_id: str | None = None,
         session_id: str | None = None,
         message: str | None = None,
+        require_commit: bool = False,
     ) -> str:
         """按 ``plan.plan_id`` upsert 计划快照，返回 ``plan_id``。"""
         plan_id = plan.plan_id
+        _require_ordinary_plan_id(plan_id)
         session = self._get_session()
         try:
             from sqlalchemy.exc import IntegrityError
@@ -115,15 +140,21 @@ class WorkflowPlanStore:
                     row.runtime_context = _dump_json(dict(runtime_context or {}))
                     row.status = status
                     session.commit()
+                elif require_commit:
+                    raise RuntimeError("workflow_plan concurrent save did not commit")
         except RECOVERABLE_ERRORS:
             session.rollback()
             logger.warning("workflow_plan 保存失败 plan=%s（主流程继续）", plan_id)
+            if require_commit:
+                raise
         finally:
             session.close()
         return plan_id
 
     def load(self, plan_id: str) -> dict[str, Any] | None:
         """按 ``plan_id`` 载入计划快照 dict；不存在返回 ``None``。"""
+        if reserved_workflow_plan_id(plan_id):
+            return None
         session = self._get_session()
         try:
             from app.db.models.workflow import WorkflowPlan
@@ -140,28 +171,39 @@ class WorkflowPlanStore:
             return None
         return plan_from_dict(data.get("plan") or {})
 
-    def list_active(self, user_id: str, limit: int = 10) -> list[dict[str, Any]]:
+    def list_active(
+        self, user_id: str, limit: int = 10, *, session_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """列出某用户的可续跑计划（running / pending_awaiting），按最近更新倒序。"""
         session = self._get_session()
         try:
             from app.db.models.workflow import WorkflowPlan
 
-            rows = (
-                session.query(WorkflowPlan)
-                .filter(
-                    WorkflowPlan.user_id == user_id,
-                    WorkflowPlan.status.in_(list(_ACTIVE_STATUSES)),
-                )
-                .order_by(WorkflowPlan.updated_at.desc())
-                .limit(max(1, limit))
-                .all()
+            query = session.query(WorkflowPlan).filter(
+                WorkflowPlan.user_id == user_id,
+                WorkflowPlan.status.in_(list(_ACTIVE_STATUSES)),
             )
-            return [row.to_dict() for row in rows]
+            if session_id is not None:
+                query = query.filter(WorkflowPlan.session_id == session_id)
+            query = query.filter(WorkflowPlan.plan_id.not_in(_RESERVED_PLAN_KEYS))
+            for prefix in _RESERVED_PLAN_PREFIXES:
+                query = query.filter(~WorkflowPlan.plan_id.startswith(prefix, autoescape=True))
+            result = []
+            # Filter normalized aliases before the visible limit/deserialization;
+            # SQL excludes canonical keys without dialect-specific custom functions.
+            for row in query.order_by(WorkflowPlan.updated_at.desc()).yield_per(100):
+                if reserved_workflow_plan_id(row.plan_id):
+                    continue
+                result.append(row.to_dict())
+                if len(result) >= max(1, limit):
+                    break
+            return result
         finally:
             session.close()
 
     def update_status(self, plan_id: str, status: str, message: str | None = None) -> None:
         """更新计划终态/状态；计划不存在则忽略。"""
+        _require_ordinary_plan_id(plan_id)
         session = self._get_session()
         try:
             from app.db.models.workflow import WorkflowPlan

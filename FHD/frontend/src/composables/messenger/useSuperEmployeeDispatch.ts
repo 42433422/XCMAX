@@ -224,7 +224,7 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
 
   function systemEntryLastStatus(entry: SystemEmployeeEntry): string {
     if (isSuperEmployeeEntry(entry)) return codexLastStatus.value
-    const last = (dutyEmployeeMessages.value[entry.id] || []).at(-1)
+    const last = (dutyEmployeeMessages.value[entry.id] || []).slice(-1)[0]
     if (!last) return '等待任务'
     return last.role === 'assistant' ? last.status || '已回复' : '已发送'
   }

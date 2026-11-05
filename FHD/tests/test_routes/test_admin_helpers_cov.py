@@ -594,7 +594,10 @@ class TestRequireMobileAdmin:
         req = _make_request()
         user = SimpleNamespace(role="admin")
         session_meta = {"account_kind": "admin", "market_is_admin": True}
-        with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
+        with (
+            patch.object(ah, "_mobile_session_meta", return_value=session_meta),
+            patch.object(ah, "_has_current_mobile_admin_session", return_value=True),
+        ):
             meta, err = ah._require_mobile_admin(req, user=user)
         assert err is None
 
@@ -613,7 +616,10 @@ class TestRequireMobileAdmin:
         req = _make_request()
         user = SimpleNamespace(role="admin")
         session_meta = {"account_kind": "admin", "market_is_admin": False}
-        with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
+        with (
+            patch.object(ah, "_mobile_session_meta", return_value=session_meta),
+            patch.object(ah, "_has_current_mobile_admin_session", return_value=True),
+        ):
             meta, err = ah._require_mobile_admin(req, user=user)
         assert err is None
 
@@ -663,7 +669,10 @@ class TestRequireMobileAdminOrEnterprise:
         req = _make_request()
         user = SimpleNamespace(role="admin")
         session_meta = {"account_kind": "admin", "market_is_admin": True}
-        with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
+        with (
+            patch.object(ah, "_mobile_session_meta", return_value=session_meta),
+            patch.object(ah, "_has_current_mobile_admin_session", return_value=True),
+        ):
             meta, err = ah._require_mobile_admin_or_enterprise(req, user=user)
         assert err is None
 
@@ -688,14 +697,15 @@ class TestRequireMobileAdminOrEnterprise:
         assert err is not None
         assert err.status_code == 403
 
-    def test_admin_portal_role_passes(self):
+    def test_admin_portal_role_alone_is_not_current_authority(self):
         """[368→372]: account_kind=='admin_portal', role in set."""
         req = _make_request()
         user = SimpleNamespace(role="admin_portal")
         session_meta = {"account_kind": "admin_portal", "market_is_admin": False}
         with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
             meta, err = ah._require_mobile_admin_or_enterprise(req, user=user)
-        assert err is None
+        assert err is not None
+        assert err.status_code == 403
 
 
 # ===========================================================================

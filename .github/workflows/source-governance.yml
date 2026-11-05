@@ -19,23 +19,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+      - name: Approved release admission tests
+        run: python -m unittest scripts.ci.test_modstore_release_approval
+      - name: Install source-rule test runner
+        run: python -m pip install pytest
       - name: Test source governance rules
-        run: python -m unittest scripts.dev.test_source_governance
+        run: python -m pytest -q scripts/dev/test_source_governance.py scripts/dev/test_source_size_policy.py
+      - name: Test unified change classifier
+        run: python -m unittest scripts.dev.test_change_classifier
       - name: Check cross-stack source debt
         run: python scripts/dev/source_governance.py --top 10
+      - name: Test private-data admission rules
+        run: python scripts/ci/test_private_data.py
+      - name: Reject customer data and embedded runtime snapshots
+        run: python scripts/ci/check_private_data.py
       - name: Check operational exception boundaries
         run: python scripts/ci/check_operational_errors_gate.py
       - name: Check broad exception ratchet
         run: python scripts/ci/check_broad_except_gate.py
 
+      - name: Structure gates (G1–G6 ratchet)
+        working-directory: FHD
+        run: |
+          python scripts/ci/check_structure_gates.py --repo "${GITHUB_WORKSPACE}" --fail-on-warn
+
   sunbird-source-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm

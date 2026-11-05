@@ -1,0 +1,61 @@
+{
+  "gate": "G8",
+  "phase": "更新发现（1.0.0.3 实机夹具 → 发现 1.0.0.4）",
+  "date": "2026-09-17T03:21+08:00",
+  "round": "ota2-20260917",
+  "installed_under_test": {
+    "version": "1.0.0.3",
+    "gitSha": "4bfb23365c5e9d2c0e05c5d142fa9183aea9e740",
+    "builtAt": "2026-09-13T18:16:04.812Z",
+    "path": "/Applications/XCAGI.app",
+    "install_method": "notarized DMG → ditto 到 /Applications（夹具降级，非 Gate 判据）",
+    "dmg_sha256": "288549712a63035f77a860d28a65af2f7ebc83b1f9ed9606719484576b9f3068",
+    "codesign": "accepted / Notarized Developer ID / TeamIdentifier=G26WSH472M",
+    "owner": "a4243342:staff"
+  },
+  "feed": {
+    "url_artifact": "XCAGI-Enterprise-1.0.0.4-mac-arm64.zip",
+    "productVersion": "1.0.0.4",
+    "buildSha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "releaseId": "xcagi-1.0.0.4-280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "zip_sha512": "k6NaLCXo5UVMAES5sLrtwX6bspA8f+Wl+HBEOJIP9UJcgtD4N7GGE1qyu5IUxR0Fo0Hu7pG9ft67V0l9CcpDbQ==",
+    "zip_size": 264533286,
+    "releaseDate": "2026-09-14T14:58:44.724Z",
+    "signature": "ed25519:zZK2Wol6A3OA8FL19HtW0CGXbfRXkmSbzuk473WIie1e33UXTtXAkzOoLI8rc6KgJzZF9CoLnSil7YPdSiMmBg==",
+    "snapshot_file": "round-20260917-feed-latest-mac.yml"
+  },
+  "evidence": {
+    "updater_event": {
+      "ts": "2026-09-16T19:21:01.305Z",
+      "type": "update_available",
+      "data": {"version": "1.0.0"},
+      "note": "本轮新增行；diff 基准 round-20260917-ota2-updater-events-BEFORE.jsonl（106 行）"
+    },
+    "ui": {
+      "selector": "button.desktop-update-chip",
+      "text": "可更新 1.0.0.4",
+      "disabled": false,
+      "rect": [90, 714, 100, 22],
+      "container": "sidebar-status-mods-row（左下角状态行）",
+      "parent_text": "系统正常可更新 1.0.0.4×",
+      "screenshot": "round-20260917-ota2-g8-chip-visible.png",
+      "captured_via": "CDP Page.captureScreenshot（渲染进程视图，非系统截屏）"
+    },
+    "identity_delta": {
+      "local_buildSha": "4bfb23365c5e9d2c0e05c5d142fa9183aea9e740",
+      "remote_buildSha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+      "same_sha": false,
+      "verdict": "远端 buildSha 与本机不同 → isSameVersionRebuildNewer 判定可更新，未触发 remoteSha===localSha 的抑制分支"
+    },
+    "cached_artifact": {
+      "path": "~/Library/Caches/xcagi-desktop-updater/pending/XCAGI-Enterprise-1.0.0.4-mac-arm64.zip",
+      "sha256": "5514e649ac4add504144595adfaba7d5cf7417283db821b9c69d2472908f7ba8",
+      "size": 264533286,
+      "update_info_sha512": "k6NaLCXo5UVMAES5sLrtwX6bspA8f+Wl+HBEOJIP9UJcgtD4N7GGE1qyu5IUxR0Fo0Hu7pG9ft67V0l9CcpDbQ==",
+      "feed_sha512": "k6NaLCXo5UVMAES5sLrtwX6bspA8f+Wl+HBEOJIP9UJcgtD4N7GGE1qyu5IUxR0Fo0Hu7pG9ft67V0l9CcpDbQ==",
+      "verdict": "缓存包 == feed 广播产物（sha512 一致）"
+    }
+  },
+  "verdict": "PASS",
+  "notes": "本轮 G8 为本轮新证据（19:21:01Z 事件 + 本轮截图），非历史证据复用。"
+}

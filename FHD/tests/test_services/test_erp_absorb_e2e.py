@@ -50,8 +50,8 @@ from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
 from app.application.workflow.risk_gate import HybridRiskGate
-from app.application.workflow.types import ApprovalStatus
-from app.db.base import Base
+from app.application.workflow.workflow_types import ApprovalStatus
+from app.db.db_base import Base
 from app.db.models import (
     Customer,
     InventoryLedger,
@@ -64,9 +64,9 @@ from app.db.models import (
     SalesOrderItem,
     Warehouse,
 )
+from app.domain.shared_services.report_service import ReportService
+from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.report_service import ReportService
-from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
 # 精确验收句子（实体名按句中原样：A 产品含「产品」标记与空格，客户B含「客户」前缀）
 EXACT_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款"
@@ -231,8 +231,7 @@ class TestPlannerDeterministicBypassNoLLM:
     在安装 LLM/请求炸弹的前提下，对精确验收句直接返回生产 fallback 计划，绝不触达任何
     LLM completion/context/http 路径。
 
-    炸弹把 ``request_planner_completion``（唯一 LLM completion 网关）与
-    ``_get_planner_http_client``（唯一 LLM 网络请求工厂）改为立即抛错；若确定性 bypass
+    炸弹把 ``request_planner_completion``（统一 Planner 模型入口）改为立即抛错；若确定性 bypass
     失效而落入 ReAct/CoT，炸弹会立即引爆，测试失败。
     """
 
@@ -253,10 +252,6 @@ class TestPlannerDeterministicBypassNoLLM:
             ),
             patch(
                 "app.application.workflow.planner.request_planner_completion",
-                side_effect=_bomb,
-            ),
-            patch(
-                "app.application.workflow.planner._get_planner_http_client",
                 side_effect=_bomb,
             ),
         ):
@@ -991,6 +986,44 @@ class TestRealSqliteAtomicClosedLoop:
             after = _count_business_rows(factory, 1)
             assert after == before
             assert _ledger_available(factory, 1, seed["product_id"]) == before_avail == 90.0
+
+    @pytest.mark.parametrize("refunded", [False, True])
+    @pytest.mark.parametrize("legacy_null_tenant", [False, True])
+    def test_legacy_receipt_replay_requires_reconciliation(
+        self, _e2e_db, monkeypatch, refunded, legacy_null_tenant
+    ):
+        from app.application.payment_service import refund
+
+        if legacy_null_tenant:
+            monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            service = SalesAppService()
+            assert service.execute_closed_loop(payload)["success"]
+            with factory() as db:
+                receipt = db.query(ReceivableAllocation).filter_by(reference_type="payment").one()
+                receipt_id = receipt.id
+                receipt.request_key = receipt.request_fingerprint = None
+                if legacy_null_tenant:
+                    receipt.tenant_id = None
+                db.commit()
+            if refunded:
+                assert refund(allocation_id=receipt_id)["success"]
+            before = _count_business_rows(factory, 1)
+            with factory() as db:
+                paid = db.query(SalesOrder).one().paid_amount
+            result = service.execute_closed_loop(payload)
+            assert result["success"] is False
+            assert result["failed_step"] == "payment_reconciliation"
+            assert "人工核对" in result["message"]
+            assert _count_business_rows(factory, 1) == before
+            assert _ledger_available(factory, 1, seed["product_id"]) == 90.0
+            with factory() as db:
+                assert db.query(SalesOrder).one().paid_amount == paid
+                assert db.get(ReceivableAllocation, receipt_id).request_key is None
 
     def test_same_key_different_tenant_independent_rows(self, _e2e_db, monkeypatch):
         """后置条件 6：同载荷同 key 在租户 2 建独立行，不暴露/不改动租户一行。"""
@@ -1783,7 +1816,8 @@ class TestIdempotencyPrefixBoundary:
         assert rows["orders"] == 3
         assert rows["items"] == 3
 
-    def test_exact_key_replay_after_fingerprint_appended(self, _e2e_db, monkeypatch):
+    @pytest.mark.parametrize("key", ["abc", "长" * 129])
+    def test_exact_key_replay_after_fingerprint_appended(self, _e2e_db, monkeypatch, key):
         """指纹追加后，同一精确键 + 完整载荷仍幂等重放，不增行、不动库存。"""
         factory = _e2e_db
         _patch_sessionlocal(monkeypatch, factory)

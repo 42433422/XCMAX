@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -123,6 +124,9 @@ async def complete_structured(
     """调用 LLM 并保证返回通过 schema 校验的 dict；失败带反馈重试。"""
     repairs = _max_repairs_default() if max_repairs is None else max(0, max_repairs)
     total_attempts = 1 + repairs
+    # 429 是传输层限流，与 schema 修复无关：给独立的重试预算（带退避），
+    # 否则 max_repairs=0 的调用方（如意图门）遇到限流即永久失败。
+    transport_retries_left = 2
     attempt_messages = list(messages)
     last_errors: list[str] = ["尚未调用"]
     last_raw = ""
@@ -132,7 +136,9 @@ async def complete_structured(
     if provider is not None:
         routing["provider"] = provider
 
-    for attempt in range(1, total_attempts + 1):
+    attempts_used = 0
+    while attempts_used < total_attempts:
+        attempts_used += 1
         try:
             result = await invoke.chat_completion_openai_format(
                 attempt_messages,
@@ -143,7 +149,14 @@ async def complete_structured(
             )
         except RECOVERABLE_ERRORS as exc:
             last_errors = [f"LLM 调用异常: {type(exc).__name__}: {exc}"]
-            logger.warning("complete_structured attempt %s failed: %s", attempt, exc)
+            logger.warning("complete_structured attempt %s failed: %s", attempts_used, exc)
+            if _is_rate_limited(exc) and transport_retries_left > 0:
+                transport_retries_left -= 1
+                delay = 2.0 if transport_retries_left == 1 else 5.0
+                logger.warning("complete_structured rate-limited, backing off %.1fs", delay)
+                await asyncio.sleep(delay)
+                attempts_used -= 1  # 传输级重试不消耗 schema 修复预算
+                continue
             continue
         if result is None:
             last_errors = ["LLM 调用失败或被 guardrail 拦截"]
@@ -168,8 +181,8 @@ async def complete_structured(
                     billing = {}
                 return StructuredResult(
                     data=data,
-                    attempts=attempt,
-                    repaired=attempt > 1,
+                    attempts=attempts_used,
+                    repaired=attempts_used > 1,
                     trace_id=_current_trace_id(),
                     billing=billing or None,
                     model=str(result.get("model") or billing.get("resolved_model") or ""),
@@ -184,7 +197,16 @@ async def complete_structured(
             },
         ]
 
-    raise StructuredOutputError(total_attempts, last_errors, last_raw)
+    raise StructuredOutputError(attempts_used, last_errors, last_raw)
+
+
+def _is_rate_limited(exc: BaseException) -> bool:
+    """识别 HTTP 429（httpx.HTTPStatusError 或其字符串形态）。"""
+    status = getattr(exc, "response", None)
+    code = getattr(status, "status_code", None)
+    if code == 429:
+        return True
+    return "429" in str(exc) and "Too Many Requests" in str(exc)
 
 
 def _current_trace_id() -> str | None:
@@ -196,27 +218,54 @@ def _current_trace_id() -> str | None:
         return None
 
 
+async def complete_structured_bounded(
+    messages: list[dict[str, str]], *, timeout_seconds: float = 120.0, **kwargs: Any
+) -> StructuredResult:
+    """Bound completion and its retries; cancellation must reach the provider."""
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    try:
+        result = await asyncio.wait_for(
+            complete_structured(messages, **kwargs), timeout=timeout_seconds
+        )
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            raise asyncio.CancelledError
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError
+        return result
+    except TimeoutError as exc:
+        raise StructuredOutputError(0, ["structured completion timeout"], "") from exc
+
+
 def complete_structured_sync(
     messages: list[dict[str, str]],
     *,
     timeout_seconds: float = 120.0,
     **kwargs: Any,
 ) -> StructuredResult:
-    """同步上下文桥：无运行 loop 直接 asyncio.run；有 loop 则独立线程执行。"""
+    """Compatibility for sync callers; async routes must await the bounded API."""
+
+    def run() -> StructuredResult:
+        return asyncio.run(
+            complete_structured_bounded(messages, timeout_seconds=timeout_seconds, **kwargs)
+        )
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(complete_structured(messages, **kwargs))
+        return run()
 
     box: dict[str, Any] = {}
 
-    def _runner() -> None:
+    def runner() -> None:
         try:
-            box["result"] = asyncio.run(complete_structured(messages, **kwargs))
+            box["result"] = run()
         except BOUNDARY_ERRORS as exc:
             box["error"] = exc
 
-    thread = threading.Thread(target=_runner, daemon=True)
+    # Legacy callers retain their synchronous contract, but their coroutine now
+    # has its own deadline/cancellation and keeps tenant/request context.
+    thread = threading.Thread(target=contextvars.copy_context().run, args=(runner,), daemon=True)
     thread.start()
     thread.join(timeout=timeout_seconds)
     if "error" in box:

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.services.deepseek_intent_service import DeepSeekIntentRecognizer
+from app.domain.shared_services.deepseek_intent_service import DeepSeekIntentRecognizer
 
 
 def _payload(text: str) -> dict:

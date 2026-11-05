@@ -1,0 +1,10 @@
+{
+  "time": "2026-09-13T05:15:18.044460+00:00",
+  "build_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+  "result": "NOT COMPLETED",
+  "stage": "native file picker",
+  "source_fixture": "FHD/tests/fixtures/shipment_etl/闭环测试_送货单模板.xlsx",
+  "source_sha256": "6a7958dfcdc883593b769f8c8d3e5c084ebd0e9992290ecf6b5805ce881ee5b2",
+  "observation": "CUA key confirmation returns path field to root; file not uploaded; cannot classify as product defect without independent reproduction",
+  "cleanup": "Stopped exact application process after native cancel failed; no business write submitted; removed current-task identical temporary copy"
+}

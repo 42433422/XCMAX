@@ -27,6 +27,18 @@ _TEXT_ARTIFACT_TYPES = {
 _GENERIC_SUMMARIES = {"", "生成文档", "OCR 解析结果", "Excel 解析结果"}
 
 
+def stage_artifact_for_confirmation(
+    run: AgentRun, artifact: AgentArtifact, step_ids: list[str]
+) -> None:
+    """Keep reviewable source evidence on the run until its write plan is approved."""
+    if _should_skip_artifact(artifact) or _build_ingest_request(run, artifact) is None:
+        return
+    artifact.metadata = {
+        **dict(artifact.metadata or {}),
+        "dataset_ingest_pending_step_ids": list(step_ids),
+    }
+
+
 def ingest_artifact_to_dataset(run: AgentRun, artifact: AgentArtifact) -> dict[str, Any] | None:
     """Best-effort bridge from AgentArtifact into Dataset/RAG document lifecycle."""
     if _should_skip_artifact(artifact):
@@ -74,6 +86,8 @@ def ingest_artifact_to_dataset(run: AgentRun, artifact: AgentArtifact) -> dict[s
 
 def _should_skip_artifact(artifact: AgentArtifact) -> bool:
     metadata = dict(artifact.metadata or {})
+    if metadata.get("dataset_ingest_pending_step_ids"):
+        return True
     if metadata.get("skip_dataset_ingest") is True:
         return True
     if metadata.get("dataset_ingest") is False:
@@ -111,6 +125,10 @@ def _build_ingest_request(run: AgentRun, artifact: AgentArtifact) -> dict[str, A
         "chunk_overlap": 80,
         "metadata": metadata,
     }
+    approved_steps = dict(artifact.metadata or {}).get("dataset_ingest_approved_step_ids")
+    if approved_steps:
+        metadata["approved_step_ids"] = list(approved_steps)
+        request["idempotency_key"] = f"agent_artifact:{run.run_id}:{artifact.artifact_id}"
     if file_path and artifact_type in _DOCUMENT_ARTIFACT_TYPES:
         request["file_path"] = file_path
         if text:

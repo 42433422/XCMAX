@@ -468,11 +468,18 @@ async def build_industry_baseline_plan_for_request(
                 skip_account_custom = True
             entitled = get_cached_entitled_client_mod_ids() or set()
 
+    from app.mod_sdk.industry_baseline_plans import delivery_statuses_for_session
+
     return build_industry_baseline_plan(
         industry_id,
         entitled_mod_ids=entitled,
         skip_account_custom_gate=skip_account_custom,
         account_username=account_username,
+        delivery_statuses=(
+            delivery_statuses_for_session(session_id_from_request(request) or "")
+            if user is not None
+            else {}
+        ),
     )
 
 

@@ -94,7 +94,11 @@ scripts/ai_agent_v0/demo.local.env
 # Logs & temporary output
 # ============================================================================
 *.log
+# 例外：SSOT 引用的验收证据 log（evidence 目录内的实测日志必须入仓，链接不得悬空）
+!docs/evidence/**/*.log
 logs/
+# 例外：实测证据的日志目录（日志由 SSOT 引用并做哈希校验，必须入仓）
+!docs/evidence/e2e/**/logs/
 .agent-*.log
 .uvicorn.*.log
 uvicorn-smoke.log
@@ -156,6 +160,17 @@ temp_excel/
 shipment_outputs/
 saved_analyses/
 user_memory/
+!app/services/user_memory/
+app/services/user_memory/*
+!app/services/user_memory/*.py
+!app/domain/user_memory/
+!app/domain/user_memory/*.py
+!app/application/user_memory/
+app/application/user_memory/*
+!app/application/user_memory/*.py
+!app/infrastructure/user_memory/
+app/infrastructure/user_memory/*
+!app/infrastructure/user_memory/*.py
 labels/
 test_labels/
 output/
@@ -271,6 +286,9 @@ _archived_removed_mods/
 migration_metrics.json
 migration_status_report.txt
 
+# docs_triage.py report/apply 每次重写的清单（生成物，勿提交）
+metrics/docs-triage.json
+
 # mutmut 3.x 变异测试沙箱与缓存（运行时生成约80M，勿提交）
 mutants/
 .mutmut-cache
@@ -294,3 +312,7 @@ coverage-behavior.json
 test_reports/*
 !test_reports/junit-full.xml
 !test_reports/pytest-full-last.txt
+
+# .NET build artifacts (IDE-generated; was misdetected as code changes by dispatch pipeline)
+tools/**/obj/
+tools/**/bin/

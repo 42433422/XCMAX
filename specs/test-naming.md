@@ -1,6 +1,6 @@
 # 活跃树测试命名规范
 
-> SSOT：与 [specs/spec.md](spec.md)、[FHD/tests/README_COVERAGE.md](../FHD/tests/README_COVERAGE.md) 对齐。  
+> SSOT：与 [FHD/tests/README_COVERAGE.md](../FHD/tests/README_COVERAGE.md) 对齐。  
 > 范围：FHD、MODstore_deploy、vibe-coding、packages（**不含** `_archive/`）。
 
 ## 文件命名

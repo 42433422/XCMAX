@@ -73,8 +73,9 @@
       @change="onFileChange"
     />
     <label
-      data-tutorial-id="star-auto-refresh-toggle"
-      :title="$t('chat.starAutoRefreshTitle')"
+      data-tutorial-id="proactive-suggestions-toggle"
+      data-testid="proactive-suggestions-toggle"
+      :title="$t('chat.proactiveSuggestionsTitle')"
       style="
         margin-left: auto;
         display: flex;
@@ -86,8 +87,8 @@
         user-select: none;
       "
     >
-      <input type="checkbox" :checked="autoRefreshStarredWechat" @change="onAutoRefreshChange" />
-      {{ $t('chat.starAutoRefresh') }}
+      <input type="checkbox" :checked="proactiveSuggestionsEnabled" @change="onProactiveChange" />
+      {{ $t('chat.proactiveSuggestions') }}
     </label>
     <label
       :title="$t('chat.ttsTitle')"
@@ -120,7 +121,9 @@ const approvalMode = useApprovalMode()
 const props = defineProps<{
   excelAnalyzeUploading: boolean
   multimodalPendingCount: number
-  autoRefreshStarredWechat: boolean
+  /** @deprecated kept optional for older callers; chat toolbar no longer binds WeChat star refresh */
+  autoRefreshStarredWechat?: boolean
+  proactiveSuggestionsEnabled: boolean
   ttsEnabled: boolean
   officeDockingProcessing?: boolean
   excelAnalyzeInputRef?: Ref<HTMLInputElement | null>
@@ -131,7 +134,7 @@ const emit = defineEmits<{
   'trigger-office-docking': []
   'register-excel-input': [input: HTMLInputElement | null]
   'excel-file-change': [event: Event]
-  'auto-refresh-change': [enabled: boolean]
+  'proactive-suggestions-change': [enabled: boolean]
   'toggle-tts': [enabled: boolean]
 }>()
 
@@ -162,8 +165,8 @@ function onFileChange(event: Event) {
   emit('excel-file-change', event)
 }
 
-function onAutoRefreshChange(event: Event) {
-  emit('auto-refresh-change', (event.target as HTMLInputElement).checked)
+function onProactiveChange(event: Event) {
+  emit('proactive-suggestions-change', (event.target as HTMLInputElement).checked)
 }
 </script>
 

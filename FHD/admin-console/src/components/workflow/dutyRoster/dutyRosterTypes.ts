@@ -9,7 +9,7 @@ export type Deref<T> = T extends Ref<infer V> ? V : T
 export type EmpRow   = { id: string; name?: string; source?: 'catalog' | 'v1_catalog' | 'virtual'; industry?: string }
 export type HealthSt = { total: number; success: number; rate: number; lastExecution?: string | null }
 export type HealthLv = 'healthy' | 'warn' | 'idle' | 'unknown'
-export type GapState = 'deployed' | 'missing' | 'untracked'
+export type GapState = 'deployed' | 'missing' | 'untracked' | 'unknown'
 export type ViewMode = 'hub' | 'department' | 'legacy-area' | 'client' | 'loop'
 export type GraphViewMode = Exclude<ViewMode, 'loop'>
 

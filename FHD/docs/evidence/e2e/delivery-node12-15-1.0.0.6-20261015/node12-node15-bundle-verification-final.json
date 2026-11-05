@@ -1,0 +1,13 @@
+{
+  "result": "PASS",
+  "time": "2026-10-15T22:57:35.824234+08:00",
+  "archive": "/private/tmp/xcagi-mac-c5-20261015/handoff/node12-node15-delivery-evidence.zip",
+  "durableArchive": "/Volumes/KINGSTON/XCMAX-node12-node15-final-20261015/node12-node15-delivery-evidence.zip",
+  "bytes": 836465,
+  "sha256": "bc3b5372ab1fd8b5578249efe8428872c2e99c251698cea293d9865692560d26",
+  "entries": 42,
+  "everyArchivedFileHashVerified": true,
+  "finalReport": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-node15-server-delivery-final.json",
+  "durableFinalReport": "/Volumes/KINGSTON/XCMAX-node12-node15-final-20261015/node14-node15-server-delivery-final.json",
+  "finalReportSha256": "459e85bb1093c052a23fbd4a708695cd9fb98c25e2ae1b5ce099feee329236be"
+}

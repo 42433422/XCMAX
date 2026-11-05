@@ -184,7 +184,7 @@ class PerceptionPipeline:
         try:
             from PIL import Image
 
-            from app.services.ocr_service import get_ocr_service
+            from app.domain.shared_services.ocr_service import get_ocr_service
 
             with Image.open(
                 file_path

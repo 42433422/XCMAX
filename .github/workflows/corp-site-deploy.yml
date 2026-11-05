@@ -16,27 +16,37 @@ on:
         description: Git branch to deploy on server
         required: false
         default: main
+  # Cursor 云代理 token 没有 actions:write，不能 workflow_dispatch。
+  # 合入 main 后用 repository_dispatch（event_type=corp-site-deploy）触发同一套发布。
+  repository_dispatch:
+    types: [corp-site-deploy]
+  # push 事件在 main 上曾整体未投递（#1952/#1953 合并后无任何 push 事件 run），
+  # 且服务器 cron 自动更新被 hotfix hold 冻结，静态站会静默停留在旧版本；小时级巡检兜底。
+  schedule: [{cron: '23 * * * *'}]
   push:
     branches: [main]
     paths:
       - '成都修茈科技有限公司/*.html'
       - '成都修茈科技有限公司/partials/**'
-      - '成都修茈科技有限公司/styles.css'
-      - '成都修茈科技有限公司/main.js'
-      - '成都修茈科技有限公司/contact-intake.js'
-      - '成都修茈科技有限公司/contact-channels.js'
-      - '成都修茈科技有限公司/visualization.js'
-      - '成都修茈科技有限公司/world-will.js'
+      - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/*.js'
+      - '成都修茈科技有限公司/*.css'
+      - '成都修茈科技有限公司/site/**'
+      - '成都修茈科技有限公司/data/**'
+      - '成都修茈科技有限公司/scripts/build_public_site.py'
+      - '成都修茈科技有限公司/scripts/evidence_assets.py'
+      - 'scripts/dev/materialize_media_assets.mjs'
+      - 'config/media-aliases.json'
+      - 'FHD/frontend/public/**'
+      - 'FHD/docs/evidence/**'
+      - '成都修茈科技有限公司/scripts/site_acceptance.py'
+      # 下列两条被 test_immutable_release_contract 明确断言，保留显式声明。
       - '成都修茈科技有限公司/world-will-ticker.js'
       - '成都修茈科技有限公司/world-will-ticker.css'
-      - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/**/capabilities/**'
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
-      - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
-      - '成都修茈科技有限公司/MODstore_deploy/scripts/install-site-auto-update-cron.sh'
-      - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-partials.py'
-      - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-download-routes.py'
-      - '成都修茈科技有限公司/deploy/scripts/merge-nginx-xiu-ci-snippets.py'
-      - '成都修茈科技有限公司/deploy/scripts/sync-nginx-xiu-ci-snippets.sh'
+      - '成都修茈科技有限公司/MODstore_deploy/scripts/**'
+      - '成都修茈科技有限公司/deploy/**'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json'
       - '成都修茈科技有限公司/download-action-board.json'
       - '成都修茈科技有限公司/download-action-board.js'
@@ -52,10 +62,11 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' || vars.XCMAX_AUTO_SITE_DEPLOY == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: SSH — git sync + xcmax-site-auto-update + nginx reload
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.FHD_PUSH_HOST }}
           username: root
@@ -63,7 +74,7 @@ jobs:
           command_timeout: 25m
           script: |
             set -euo pipefail
-            BRANCH="${{ github.event.inputs.branch }}"
+            BRANCH="${{ github.event.inputs.branch || github.event.client_payload.branch }}"
             if [ -z "${BRANCH}" ]; then BRANCH="${{ vars.XCMAX_GIT_BRANCH }}"; fi
             if [ -z "${BRANCH}" ]; then BRANCH="main"; fi
             REMOTE_ROOT="${{ vars.XCMAX_REMOTE_ROOT }}"
@@ -80,12 +91,20 @@ jobs:
             export XCMAX_ROOT="${REMOTE_ROOT}"
             export XCMAX_GIT_BRANCH="${BRANCH}"
             export XCMAX_GIT_RESET_HARD=1
-            # Bootstrap from the requested remote branch before invoking the
-            # repository-owned updater.  Otherwise an old updater can decide
-            # that its stale worktree is current and republish stale nginx
-            # snippets before it ever refreshes itself.
-            git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
-            git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
+            # Bound each bootstrap command; retain configured SSH identity and host checks.
+            if [ "$(readlink -f "${REMOTE_ROOT}/成都修茈科技有限公司")" = "$(readlink -f /root/成都修茈科技有限公司)" ]; then
+              echo "[err] live site must be separate from the Git tree before reset" >&2
+              exit 1
+            fi
+            SYNC_STAGE=fetch
+            trap 'rc=$?; echo "[err] site stage=${SYNC_STAGE} exit=${rc}; stopped before further publication" >&2; exit "$rc"' ERR
+            echo "[stage] fetch begin (900s limit)"
+            timeout --kill-after=15s 900s env GIT_TERMINAL_PROMPT=0 \
+              git -C "${REMOTE_ROOT}" -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30 fetch --progress origin "${BRANCH}"
+            SYNC_STAGE=reset
+            echo "[stage] fetch complete; reset begin (120s limit)"
+            timeout --kill-after=15s 120s git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
+            SYNC_STAGE=identity
             DEPLOY_SHA="$(git -C "${REMOTE_ROOT}" rev-parse HEAD)"
             REMOTE_SHA="$(git -C "${REMOTE_ROOT}" rev-parse "origin/${BRANCH}")"
             if [ "${DEPLOY_SHA}" != "${REMOTE_SHA}" ]; then
@@ -93,22 +112,21 @@ jobs:
               exit 1
             fi
             echo "[info] exact server worktree sha=${DEPLOY_SHA}"
-            # Always republish static chrome into the nginx live root (immutable
-            # release symlink). Git sync alone only updates /root/XCMAX.
-            export XCMAX_FORCE_SITE_PUBLISH=1
-            AUTO_SCRIPT="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh"
-            if [ ! -f "${AUTO_SCRIPT}" ]; then
-              echo "[err] 缺少 ${AUTO_SCRIPT}；请先 git pull 含该脚本的提交"
-              git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
-              git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
-            fi
-            bash "${AUTO_SCRIPT}"
+            # This job publishes static content only; the general updater also rebuilds
+            # market/runtime dependencies and restarts services, outside this scope.
+            SYNC_STAGE=publish
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
+            GIT_SITE="${SITE_ROOT}"
+            python3 "${GIT_SITE}/scripts/evidence_assets.py" materialize
+            node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" marketing
+            PUBLICATION_LOCK="${XCMAX_PUBLICATION_LOCK:-/run/lock/xcmax-publication.lock}"
+            mkdir -p "$(dirname "$PUBLICATION_LOCK")"
+            exec 8>"$PUBLICATION_LOCK"
+            flock -w 60 8
             # Publish git-tree site chrome into nginx live root. Production serves
             # /root/成都修茈科技有限公司 (immutable-release symlink), not /root/XCMAX/...
             LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司 2>/dev/null || true)"
             if [ -z "${LIVE_SITE}" ]; then LIVE_SITE="/root/成都修茈科技有限公司"; fi
-            GIT_SITE="${SITE_ROOT}"
             if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
               echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
@@ -118,7 +136,7 @@ jobs:
               # git snapshots.  `fhd-release-desktop.yml` publishes the latter only
               # after both platform artifacts pass verification.
               for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" \
-                       "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" \
+                       "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" "${GIT_SITE}/release-data.js" \
                        "${GIT_SITE}/world-will.js" "${GIT_SITE}/world-will-ticker.js" \
                        "${GIT_SITE}/world-will-ticker.css" \
                        "${GIT_SITE}/download-action-board.js"; do
@@ -127,13 +145,8 @@ jobs:
                 chmod u+w "${LIVE_SITE}/${base}" 2>/dev/null || true
                 cp -f "$f" "${LIVE_SITE}/${base}"
               done
-              # Bootstrap an empty site once, but never roll a verified release back
-              # to the repository's historical fallback pointer on a later web deploy.
-              if [ ! -e "${LIVE_SITE}/download-release.json" ] && [ -f "${GIT_SITE}/download-release.json" ]; then
-                cp -f "${GIT_SITE}/download-release.json" "${LIVE_SITE}/download-release.json"
-              else
-                echo "[info] preserving release-managed download-release.json"
-              fi
+              # Only the desktop publisher may create or replace download pointers.
+              echo "[info] preserving release-managed download-release.json; no Git bootstrap"
               if [ -e "${LIVE_SITE}/download-windows-hotfix.json" ]; then
                 echo "[info] preserving release-managed download-windows-hotfix.json"
               fi
@@ -143,11 +156,37 @@ jobs:
               if [ -d "${GIT_SITE}/assets" ]; then
                 cp -af "${GIT_SITE}/assets/." "${LIVE_SITE}/assets/"
               fi
+              if [ -d "${GIT_SITE}/corp-butler" ]; then
+                mkdir -p "${LIVE_SITE}/corp-butler"
+                find "${GIT_SITE}/corp-butler" -mindepth 1 -maxdepth 1 \
+                  ! -name download-release.json ! -name download-windows-hotfix.json \
+                  -exec cp -af {} "${LIVE_SITE}/corp-butler/" \;
+              fi
+              # 产品能力中心（#1951）：整目录发布，漏发即线上 404。
+              if [ -d "${GIT_SITE}/capabilities" ]; then
+                mkdir -p "${LIVE_SITE}/capabilities"
+                cp -af "${GIT_SITE}/capabilities/." "${LIVE_SITE}/capabilities/"
+              fi
+              if [ -d "${GIT_SITE}/data/capabilities" ]; then
+                mkdir -p "${LIVE_SITE}/data/capabilities"
+                cp -af "${GIT_SITE}/data/capabilities/." "${LIVE_SITE}/data/capabilities/"
+              fi
+              # SSOT 聚合数据（public-site.json）与官网数据目录发布
+              if [ -d "${GIT_SITE}/site/data" ]; then
+                mkdir -p "${LIVE_SITE}/site/data"
+                cp -af "${GIT_SITE}/site/data/." "${LIVE_SITE}/site/data/"
+              fi
+              if [ -d "${GIT_SITE}/data" ]; then
+                mkdir -p "${LIVE_SITE}/data"
+                cp -af "${GIT_SITE}/data/." "${LIVE_SITE}/data/"
+              fi
               chmod a+rx "${LIVE_SITE}" 2>/dev/null || true
               echo "[ok] live site chrome published"
             else
               echo "[info] live site root coincides with git tree or missing; skip publish copy"
             fi
+            exec 8>&-
+            SYNC_STAGE=nginx
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
               echo "[info] canonical xiu-ci.com.conf exists; skip conflicting standalone corp vhost"
@@ -156,6 +195,8 @@ jobs:
               # HTTPS whitelist never included /partials/; pin it on the live conf.
               python3 "${SITE_ROOT}/MODstore_deploy/scripts/fix-nginx-corp-partials.py"
               python3 "${SITE_ROOT}/MODstore_deploy/scripts/fix-nginx-corp-download-routes.py"
+              # 2026-09 SSOT 改版：verify/pricing 页面与 /site/data/ 白名单注入。
+              python3 "${SITE_ROOT}/MODstore_deploy/scripts/fix-nginx-corp-pages.py"
             elif [ -f "${NGINX_SRC}" ]; then
               install -m 644 "${NGINX_SRC}" /etc/nginx/conf.d/xiu-ci-corp-root.conf
             fi
@@ -192,20 +233,45 @@ jobs:
               done
               return 1
             }
+            SYNC_STAGE=public-verification
             echo "[verify] public corp/download/market surfaces:"
             xc_curl https://xiu-ci.com/ >/dev/null
             xc_curl https://xiu-ci.com/developer.html >/dev/null
             xc_curl https://xiu-ci.com/download >/dev/null
             xc_curl https://xiu-ci.com/download/releases >/dev/null
+            xc_curl -o /tmp/xc-release-history.json https://xiu-ci.com/data/release-history.json
+            cmp "${GIT_SITE}/data/release-history.json" /tmp/xc-release-history.json
+            xc_curl -o /tmp/xc-release-data.js https://xiu-ci.com/release-data.js
+            cmp "${GIT_SITE}/release-data.js" /tmp/xc-release-data.js
             xc_curl -L https://xiu-ci.com/market/download >/dev/null
             xc_curl https://xiu-ci.com/market/ >/dev/null
             echo "[verify] homepage nav present:"
             xc_curl -o /tmp/xc-home.html https://xiu-ci.com/
             grep -E -q 'site-header|>首页<|/download' /tmp/xc-home.html
-            grep -E -q '产品下载|软件下载' /tmp/xc-home.html
+            grep -E -q '产品下载|软件下载|下载' /tmp/xc-home.html  # 首页入口文案自 #2038 起为「下载」；意图仍是首页必须有下载入口，链接目标由 /download 校验保证
+            grep -E -q '/site/data/public-site.json' /tmp/xc-home.html
+            echo "[verify] SSOT aggregated data must be live:"
+            xc_curl -o /tmp/xc-public-site.json https://xiu-ci.com/site/data/public-site.json
+            python3 -c "import json; d=json.load(open('/tmp/xc-public-site.json')); assert d.get('product',{}).get('version'), 'public-site.json 空'; assert d.get('pricing',{}).get('trial'), '价格缺失'"
+            echo "[verify] customer verification center + pricing pages:"
+            xc_curl -o /tmp/xc-verify.html https://xiu-ci.com/verify.html
+            grep -E -q '验证中心|plat-grid|feat-list' /tmp/xc-verify.html
+            xc_curl -o /tmp/xc-pricing.html https://xiu-ci.com/pricing.html
+            grep -E -q 'plan-trial|plan-permanent|价格' /tmp/xc-pricing.html
+            xc_curl -o /tmp/xc-cases2.html https://xiu-ci.com/cases.html
+            grep -E -q '客户案例|case' /tmp/xc-cases2.html
             echo "[verify] download center is new product page (not old stub):"
             xc_curl -o /tmp/xc-download.html https://xiu-ci.com/download
             grep -E -q 'download/releases|更新日志|产品下载' /tmp/xc-download.html
+            echo "[verify] capability center must never 404 after merge (regression guard):"
+            xc_curl -o /tmp/xc-capabilities.html https://xiu-ci.com/capabilities/
+            grep -E -q '产品能力|能力目录' /tmp/xc-capabilities.html
+            xc_curl -o /tmp/xc-cap-catalog.html https://xiu-ci.com/capabilities/catalog.html
+            grep -E -q '能力目录|cap-status' /tmp/xc-cap-catalog.html
+            xc_curl -o /tmp/xc-cap-catalog.json https://xiu-ci.com/data/capabilities/catalog.json
+            python3 -c "import json,sys; d=json.load(open('/tmp/xc-cap-catalog.json')); assert d.get('domains'), 'catalog.json 空'"
+            xc_curl -o /tmp/xc-honors.html https://xiu-ci.com/honors.html
+            grep -E -q '/capabilities/' /tmp/xc-honors.html
             echo "[verify] public action board independent pages:"
             xc_curl -o /tmp/xc-breakpoints.html https://xiu-ci.com/download/breakpoints
             xc_curl -o /tmp/xc-goals.html https://xiu-ci.com/download/goals

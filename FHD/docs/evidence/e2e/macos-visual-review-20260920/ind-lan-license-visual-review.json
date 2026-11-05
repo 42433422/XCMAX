@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ind-lan-license",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "e8b86fee520fcc186cd198b39e12d8c13d1ce16c04b1bdbba8f265d6b7eff2e2",
+  "visible_content": "局域网授权页明确显示“当前未启用局域网模式，无需授权”，不是授权成功或隔离运行证据。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ind-lan-license.png"
+}

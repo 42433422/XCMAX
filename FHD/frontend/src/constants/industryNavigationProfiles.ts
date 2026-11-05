@@ -11,6 +11,7 @@ export type IndustryBusinessMenuKey =
   | 'shipment-records'
   | 'materials'
   | 'inventory'
+  | 'purchase'
   | 'approval-hub'
   | 'data-sources'
   | 'print'
@@ -30,8 +31,11 @@ export type IndustryNavigationProfile = {
   deferredCapabilities: string[]
 }
 
-function withDefaultTemplateLibrary<T extends IndustrySidebarPreviewKey>(keys: T[]): Array<T | 'template-preview'> {
-  return keys.some((key) => key === 'template-preview') ? [...keys] : [...keys, 'template-preview']
+function withDefaultTemplateLibrary<T extends IndustrySidebarPreviewKey>(keys: T[]): Array<T | 'template-preview' | 'purchase'> {
+  const items: Array<T | 'template-preview' | 'purchase'> = [...keys]
+  if (keys.some(key => key === 'inventory') && !keys.some(key => key === 'purchase')) items.splice(items.findIndex(key => key === 'inventory') + 1, 0, 'purchase')
+  if (!items.some(key => key === 'template-preview')) items.push('template-preview')
+  return items
 }
 
 const categoryLabelById = Object.fromEntries(ONBOARDING_INDUSTRY_CATEGORIES.map((item) => [item.id, item.label])) as Record<
@@ -201,8 +205,8 @@ const onboardingCategoryByIndustryId = new Map(ONBOARDING_INDUSTRY_OPTIONS.map((
 const FINE_GRAINED_INDUSTRY_PROFILES: Record<string, Partial<IndustryNavigationProfile>> = {
   通用: {
     menuLabels: {
-      products: '业务对象',
-      customers: '组织管理',
+      products: '产品管理',
+      customers: '客户管理',
       orders: '业务单据',
       'shipment-records': '业务记录',
       'approval-hub': '审批工作台',
@@ -303,7 +307,7 @@ export function resolveIndustryNavigationProfile(industryId: string): IndustryNa
     id: id || base.id,
     categoryId: base.categoryId,
     categoryLabel: base.categoryLabel,
-    businessMenuKeys: withDefaultTemplateLibrary(fineGrained.businessMenuKeys || base.businessMenuKeys),
+    businessMenuKeys: withDefaultTemplateLibrary([...new Set<IndustryBusinessMenuKey>([...(fineGrained.businessMenuKeys || base.businessMenuKeys), 'approval-hub'])]),
     previewMenuKeys: withDefaultTemplateLibrary(fineGrained.previewMenuKeys || base.previewMenuKeys),
     menuLabels: { ...base.menuLabels, ...(fineGrained.menuLabels || {}) },
     deferredCapabilities: [...(fineGrained.deferredCapabilities || base.deferredCapabilities)],

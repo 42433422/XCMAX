@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 def test_seed_demo_is_idempotent_and_visible_to_business_tools(tmp_path, monkeypatch) -> None:
     from app.application import onboarding_seed_app_service as service
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.product import Product, UomCategory, UomUnit
     from app.db.models.purchase_unit import PurchaseUnit
 
@@ -70,7 +70,7 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
     from app.application.onboarding_seed_app_service import seed_onboarding_demo_data
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.application.workflow.risk_gate import HybridRiskGate
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.product import Product, UomCategory, UomUnit
     from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.shipment import ShipmentRecord
@@ -104,7 +104,7 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
             lambda: SimpleNamespace(query=lambda **_kw: {"hits": []}),
         )
         monkeypatch.setattr(
-            "app.services.user_memory_service.get_user_memory_service",
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
             lambda: SimpleNamespace(format_memory_v2_for_prompt=lambda **_kw: "无已确认记忆"),
         )
         repository = InMemoryAgentRunRepository()
@@ -147,6 +147,8 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         waiting = repository.get(waiting_payload["run_id"])
         assert waiting is not None
         assert waiting.status == "waiting_user"
+        assert waiting.steps[-1].params["payload"]["products"][0]["tin_spec"] == 1
+        assert waiting.steps[-1].params["payload"]["products"][0]["unit_price"] == 99
         assert [call.status for call in waiting.tool_calls] == ["completed", "completed"]
         with get_db() as db:
             assert db.query(ShipmentRecord).count() == 0
@@ -172,6 +174,9 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
             )
             assert shipment.product_name == product
             assert shipment.quantity_tins == 1
+            assert shipment.tin_spec == 1
+            assert shipment.unit_price == 99
+            assert shipment.amount == 99
             assert shipment.tenant_id == 1
     finally:
         Base.metadata.drop_all(db_mod.engine, tables=list(reversed(tables)))

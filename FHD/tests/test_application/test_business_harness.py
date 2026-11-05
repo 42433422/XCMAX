@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
+import pytest
+
 from app.application.agent_orchestrator.business_harness import (
     BUSINESS_HARNESS_PROTOCOL,
     ensure_business_harness_context,
@@ -93,6 +95,87 @@ def test_approval_result_projection_is_idempotency_keyed_and_readable() -> None:
     assert "审批单：APR-1" in call.kwargs["content"]
 
 
+def test_text_only_order_request_is_not_a_completed_business_result() -> None:
+    run = AgentRun(
+        user_id="2",
+        message="请开一张测试订单：客户闭环验收，产品包装盒，数量1。开单后提交审批，并生成可下载的单据文件。",
+        status="completed",
+    )
+    run.final_output = {
+        "chat_payload": {
+            "success": True,
+            "response": "没问题，帮你开这张测试订单。先创建销售订单。",
+        }
+    }
+
+    result = ensure_terminal_business_result(run)
+
+    assert run.status == "failed"
+    assert result["success"] is False
+    assert result["status"] == "failed"
+    assert result["evidence"]["completed_tool_count"] == 0
+    assert "没有工具调用" in result["summary"]
+
+
+@pytest.mark.parametrize(
+    "message,tool_completed,pending",
+    [
+        ("你好", False, False),
+        ("请开一张测试订单", True, False),
+        ("请开一张测试订单", False, True),
+    ],
+)
+def test_completed_and_pending_order_results(message, tool_completed, pending) -> None:
+    run = AgentRun(user_id="2", message=message, status="completed")
+    if tool_completed:
+        run.tool_calls = [
+            ToolCall(
+                step_id="step-1",
+                node_id="write",
+                tool_id="sales",
+                action="create_order",
+                status="completed",
+            )
+        ]
+    if pending:
+        run.final_output = {"chat_payload": {"pending_approval": True, "message": "请审批"}}
+    result = ensure_terminal_business_result(run)
+    assert run.status != "failed"
+    assert result["success"] is not pending
+    assert result["status"] == ("pending_approval" if pending else "completed")
+    assert result["evidence"]["completed_tool_count"] == int(tool_completed)
+
+
+def test_explicit_order_request_forces_the_registered_erp_tool() -> None:
+    from app.application.agent_orchestrator.business_harness import forced_order_tool_choice
+
+    tools = [{"type": "function", "function": {"name": "execute_erp_capability"}}]
+    choice = forced_order_tool_choice("请开一张测试订单，客户闭环验收，数量1", tools)
+
+    assert choice == {"type": "function", "function": {"name": "execute_erp_capability"}}
+    assert forced_order_tool_choice("查询今天的订单", tools) is None
+    assert forced_order_tool_choice("不要开单", tools) is None
+    assert forced_order_tool_choice("请开一张测试订单", []) is None
+
+
+def test_legacy_order_preparation_uses_forced_tool_choice() -> None:
+    from app.legacy.chat import legacy_chat_runtime as runtime
+
+    facade = Mock()
+    facade.merge_system_prompt.return_value = ""
+    facade.build_openai_user_content.return_value = "请开一张测试订单"
+    facade.messages_have_image_parts.return_value = False
+    facade._get_workflow_tool_registry.return_value = [
+        {"type": "function", "function": {"name": "execute_erp_capability"}}
+    ]
+    with (
+        patch.object(runtime, "_facade", return_value=facade),
+        patch.object(runtime, "forced_document_tool_choice", return_value=None),
+    ):
+        prepared = runtime._prepare_chat("请开一张测试订单", None, None, Mock(), "test")
+    assert prepared[5] == {"type": "function", "function": {"name": "execute_erp_capability"}}
+
+
 def test_conversation_message_envelope_restores_whitelisted_harness_ui() -> None:
     row = _message_to_dict(
         (
@@ -109,3 +192,156 @@ def test_conversation_message_envelope_restores_whitelisted_harness_ui() -> None
 
     assert row["business_harness"] == {"run_id": "run-1"}
     assert row["ui_payload"] == {"businessResult": {"status": "completed"}}
+
+
+@pytest.mark.parametrize(
+    "run_status,plan_status,identity",
+    [
+        (state, final, identity)
+        for state, final in [
+            ("completed", "succeeded"),
+            ("cancelled", "cancelled"),
+            ("failed", "failed"),
+        ]
+        for identity in ["direct", "alias"]
+    ]
+    + [
+        ("completed", "pending_awaiting", identity)
+        for identity in [
+            "actor-mismatch",
+            "session-mismatch",
+            "tenant-mismatch",
+            "task-mismatch",
+            "child-id-mismatch",
+            "node-params-mismatch",
+            "missing-parent-link",
+            "multi-pending",
+        ]
+    ]
+    + [("completed", "succeeded", "multi-completed")],
+)
+def test_terminal_projection_closes_original_plan_without_reexecuting(
+    run_status, plan_status, identity
+):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.application.workflow.plan_store import WorkflowPlanStore
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.db.models.workflow import WorkflowPlan
+
+    engine = create_engine("sqlite:///:memory:", poolclass=StaticPool)
+    WorkflowPlan.__table__.create(engine)
+    store = WorkflowPlanStore(session_factory=sessionmaker(bind=engine))
+    node = WorkflowNode(
+        node_id="sales_create_order", tool_id="sales", action="create_order", params={"quantity": 2}
+    )
+    nodes = [node]
+    if identity.startswith("multi-"):
+        nodes.append(
+            WorkflowNode(
+                node_id="second_order",
+                tool_id="sales",
+                action="create_order",
+                params={"quantity": 3},
+            )
+        )
+    plan = PlanGraph(plan_id="wp-projection-fixture", intent="sales", nodes=nodes, todo_steps=[])
+    owner = "7" if identity == "direct" else "web_normal_conv-1"
+    context = {
+        "user_id": owner,
+        "local_user_id": "7",
+        "actor_id": "7",
+        "session_id": "conv-1",
+        "conversation_id": "conv-1",
+        "tenant_id": "tenant-1",
+        "task_id": "task-1",
+    }
+    stored_context = dict(context)
+    if identity == "actor-mismatch":
+        stored_context.update(local_user_id="8", actor_id="8")
+    elif identity == "session-mismatch":
+        stored_context["conversation_id"] = "other-session"
+    elif identity == "tenant-mismatch":
+        stored_context["tenant_id"] = "other-tenant"
+    elif identity == "task-mismatch":
+        stored_context["task_id"] = "other-task"
+    store.save(
+        plan=plan,
+        runtime_context=stored_context,
+        status="pending_awaiting",
+        user_id=owner,
+        session_id="conv-1",
+    )
+    run = AgentRun(user_id="7", message="synthetic sale", status=run_status)
+    run.plan_id = f"{plan.plan_id}:{node.node_id}"
+    run.metadata["runtime_context"] = context
+    run.metadata["plan"] = {
+        "metadata": {
+            "approval_parent_plan_id": plan.plan_id,
+            "approval_parent_node_id": node.node_id,
+        }
+    }
+    run.steps = [
+        AgentStep(
+            node_id=node.node_id, tool_id=node.tool_id, action=node.action, params=node.params
+        )
+    ]
+    if identity == "child-id-mismatch":
+        run.plan_id += ":unrelated"
+    elif identity == "node-params-mismatch":
+        run.steps[0].params = {"quantity": 99}
+    elif identity == "missing-parent-link":
+        run.metadata["plan"] = {"metadata": {}}
+    apply_task_context(run, context)
+    run.final_output = {
+        "node_outputs": {
+            "write": {"success": True, "message": "synthetic sale saved", "order_id": 23}
+        }
+    }
+    orchestrator, conversation = Mock(), Mock()
+    orchestrator.get_run.return_value = run
+    if identity.startswith("multi-"):
+        import copy
+
+        sibling = copy.deepcopy(run)
+        sibling.run_id = "run-sibling-fixture"
+        sibling.plan_id = f"{plan.plan_id}:{nodes[1].node_id}"
+        sibling.metadata["plan"]["metadata"]["approval_parent_node_id"] = nodes[1].node_id
+        sibling.steps = [
+            AgentStep(
+                node_id=nodes[1].node_id,
+                tool_id=nodes[1].tool_id,
+                action=nodes[1].action,
+                params=nodes[1].params,
+            )
+        ]
+        sibling.status = "waiting_user" if identity == "multi-pending" else "completed"
+        orchestrator.list_task_runs.return_value = [run, sibling]
+    conversation.save_message.return_value = 91
+    try:
+        with (
+            patch(
+                "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
+            ),
+            patch("app.services.get_conversation_service", return_value=conversation),
+            patch("app.application.workflow.plan_store.WorkflowPlanStore", return_value=store),
+        ):
+            assert (
+                project_terminal_run_to_conversation(run.run_id, approval_request_id="APR-fixture")
+                == 91
+            )
+            assert (
+                project_terminal_run_to_conversation(run.run_id, approval_request_id="APR-fixture")
+                == 91
+            )
+        assert store.load(plan.plan_id)["status"] == plan_status
+        assert bool(store.list_active(owner)) == (plan_status == "pending_awaiting")
+        orchestrator.continue_run.assert_not_called()
+        assert (
+            conversation.save_message.call_args_list[0].kwargs["idempotency_key"]
+            == conversation.save_message.call_args_list[1].kwargs["idempotency_key"]
+        )
+    finally:
+        engine.dispose()

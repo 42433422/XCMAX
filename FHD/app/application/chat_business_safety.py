@@ -1,71 +1,42 @@
-"""Verified business actions for natural-language chat.
+"""Application facade for verified business chat actions.
 
-The implementation is split by operation; this module preserves the stable
-public and test seams used by the chat routes.
+Keeps infrastructure auth resolution out of domain.app_pure.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from app.application.chat_business_safety_attendance import _handle_attendance_read
-from app.application.chat_business_safety_core import (
+from app.domain.app_pure.chat_business_safety import (
     BusinessChatIntent,
-    _resolve_actor_identity,
     classify_business_chat_intent,
+    try_handle_business_chat_action,
 )
-from app.application.chat_business_safety_core import (
-    _authenticated_user_from_request as _core_authenticated_user_from_request,
+from app.domain.app_pure.chat_business_safety import (
+    _db_path as _db_path,
 )
-from app.application.chat_business_safety_core import (
-    _db_path as _core_db_path,
-)
-from app.application.chat_business_safety_leave import _handle_leave_write
-from app.application.chat_business_safety_output import (
-    _default_get_printer_service,
-    _handle_attendance_export,
-    _handle_attendance_print,
-)
-from app.application.chat_business_safety_personnel import _handle_personnel_read
-from app.mod_sdk.workspace import resolve_safe_workspace_relpath as _resolve_safe_workspace_relpath
+from app.domain.app_pure.chat_business_safety_output import _default_get_printer_service
+from app.mod_sdk.workspace import resolve_safe_workspace_relpath as resolve_safe_workspace_relpath
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-_authenticated_user_from_request = _core_authenticated_user_from_request
-_db_path = _core_db_path
+# Domain output resolves printers via this facade attribute.
 _get_printer_service = _default_get_printer_service
-resolve_safe_workspace_relpath = _resolve_safe_workspace_relpath
 
 
-def try_handle_business_chat_action(
-    message: str,
-    *,
-    runtime_context: dict[str, Any] | None = None,
-    user_id: str | None = None,
-    request: Any = None,
-) -> dict[str, Any] | None:
-    """Execute a protected business action or return ``None`` for normal chat."""
-
-    intent = classify_business_chat_intent(message)
-    if intent is None:
+def _authenticated_user_from_request(request: Any) -> Any | None:
+    if request is None:
         return None
-    context = runtime_context if isinstance(runtime_context, dict) else {}
-    actor = _resolve_actor_identity(
-        request=request,
-        runtime_context=context,
-        client_user_id=user_id or str(context.get("user_id") or ""),
-    )
-    handlers = {
-        "personnel_read": _handle_personnel_read,
-        "attendance_read": _handle_attendance_read,
-        "leave_write": _handle_leave_write,
-        "attendance_export": _handle_attendance_export,
-        "attendance_print": _handle_attendance_print,
-    }
-    handler = handlers.get(intent.operation)
-    return handler(message, intent, actor=actor) if handler else None
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        return resolve_session_user(request)
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - identity resolution must fail closed
+        return None
 
 
 __all__ = [
     "BusinessChatIntent",
+    "_get_printer_service",
     "classify_business_chat_intent",
     "try_handle_business_chat_action",
 ]

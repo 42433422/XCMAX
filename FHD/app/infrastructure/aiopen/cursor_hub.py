@@ -18,6 +18,7 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from app.infrastructure.aiopen.principal_context import current_screen_principal
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class AiOpenCursorHub:
         self._sessions: dict[str, WebSocket] = {}
         self._session_meta: dict[str, dict[str, Any]] = {}
         self._pending: dict[str, asyncio.Future] = {}
+        self._pending_sessions: dict[str, str] = {}
         self._lock = asyncio.Lock()
         self._command_log: list[dict[str, Any]] = []
 
@@ -41,6 +43,8 @@ class AiOpenCursorHub:
         self, session_id: str, ws: WebSocket, meta: dict[str, Any] | None = None
     ) -> None:
         async with self._lock:
+            if session_id in self._sessions:
+                raise ValueError("AIOPEN screen session already registered")
             self._sessions[session_id] = ws
             self._session_meta[session_id] = {
                 "session_id": session_id,
@@ -53,15 +57,28 @@ class AiOpenCursorHub:
         async with self._lock:
             self._sessions.pop(session_id, None)
             self._session_meta.pop(session_id, None)
+            # Unblock commands waiting on a screen that has disconnected.
+            for req_id, owner in tuple(self._pending_sessions.items()):
+                if owner != session_id:
+                    continue
+                self._pending_sessions.pop(req_id, None)
+                future = self._pending.pop(req_id, None)
+                if future is not None and not future.done():
+                    future.set_result({"success": False, "code": "SCREEN_DISCONNECTED"})
         logger.info(
             "aiopen cursor ws disconnect session=%s total=%s", session_id, len(self._sessions)
         )
 
     def session_ids(self) -> list[str]:
-        return list(self._sessions.keys())
+        principal = current_screen_principal()
+        return [
+            sid
+            for sid in self._sessions
+            if principal is not None and principal.owns(self._session_meta.get(sid, {}))
+        ]
 
     def sessions_info(self) -> list[dict[str, Any]]:
-        return [dict(meta) for meta in self._session_meta.values()]
+        return [dict(self._session_meta[sid]) for sid in self.session_ids()]
 
     # ---- 指令下发与回执 -------------------------------------------
 
@@ -73,17 +90,22 @@ class AiOpenCursorHub:
         session_id: str | None = None,
         timeout: float = 10.0,
     ) -> dict[str, Any]:
-        """向 screen 会话下发指令并等待回执。
-
-        ``session_id`` 为空时取第一个在线会话。返回前端回传的 ``result`` 字典；
-        无会话 / 超时 / 发送失败统一返回 ``{"success": False, "message": ...}``。
-        """
-        target = session_id or (self.session_ids()[0] if self._sessions else None)
-        if not target or target not in self._sessions:
+        """Authorize the exact owner and tenant before selecting or sending to a screen."""
+        principal = current_screen_principal()
+        if principal is None:
             return {
                 "success": False,
-                "message": "没有在线的虚拟光标会话；请在 XCAGI 前端 AIOPEN 面板开启「远程操控」。",
-                "online_sessions": self.session_ids(),
+                "code": "SCREEN_PRINCIPAL_REQUIRED",
+                "message": "需要绑定用户与租户的屏幕访问凭据",
+            }
+        authorized = self.session_ids()
+        target = session_id or (authorized[0] if authorized else None)
+        if not target or target not in authorized:
+            # Missing and foreign targets are intentionally indistinguishable.
+            return {
+                "success": False,
+                "code": "SCREEN_NOT_AUTHORIZED",
+                "message": "目标屏幕不可访问",
             }
         ws = self._sessions[target]
         req_id = uuid.uuid4().hex
@@ -96,10 +118,13 @@ class AiOpenCursorHub:
         loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         self._pending[req_id] = fut
+        self._pending_sessions[req_id] = target
         self._log_command(
             {
                 "id": req_id,
                 "session_id": target,
+                "principal_id": principal.principal_id,
+                "tenant_id": principal.tenant_id,
                 "action": action,
                 "params": params or {},
                 "ts": time.time(),
@@ -109,6 +134,7 @@ class AiOpenCursorHub:
             await ws.send_text(json.dumps(payload, ensure_ascii=False))
         except RECOVERABLE_ERRORS as err:
             self._pending.pop(req_id, None)
+            self._pending_sessions.pop(req_id, None)
             await self.disconnect(target)
             return {"success": False, "message": f"指令下发失败：{err}"}
         try:
@@ -121,14 +147,15 @@ class AiOpenCursorHub:
             }
         finally:
             self._pending.pop(req_id, None)
+            self._pending_sessions.pop(req_id, None)
         if isinstance(result, dict):
             result.setdefault("success", True)
             result.setdefault("session_id", target)
             return result
         return {"success": True, "session_id": target, "result": result}
 
-    def handle_client_message(self, raw: str) -> bool:
-        """处理 screen 端回传的消息；命中 pending 回执返回 True。"""
+    def handle_client_message(self, raw: str, *, session_id: str) -> bool:
+        """Only the originating screen may acknowledge its own pending command."""
         try:
             msg = json.loads(raw)
         except (ValueError, TypeError):
@@ -137,7 +164,7 @@ class AiOpenCursorHub:
             return False
         req_id = str(msg.get("id") or "")
         fut = self._pending.get(req_id)
-        if fut is None or fut.done():
+        if self._pending_sessions.get(req_id) != session_id or fut is None or fut.done():
             return False
         fut.set_result(msg.get("result") if isinstance(msg.get("result"), dict) else msg)
         return True
@@ -151,7 +178,11 @@ class AiOpenCursorHub:
             del self._command_log[:overflow]
 
     def recent_commands(self, limit: int = 50) -> list[dict[str, Any]]:
-        return list(self._command_log[-max(1, int(limit)) :])
+        principal = current_screen_principal()
+        owned = [
+            entry for entry in self._command_log if principal is not None and principal.owns(entry)
+        ]
+        return [dict(entry) for entry in owned[-max(1, int(limit)) :]]
 
 
 aiopen_cursor_hub = AiOpenCursorHub()

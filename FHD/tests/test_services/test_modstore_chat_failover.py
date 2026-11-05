@@ -8,7 +8,21 @@ def test_failoverable_status_and_markers():
     assert is_market_chat_failoverable(429, "insufficient_quota")
     assert is_market_chat_failoverable(None, "平台错误(402): 余额不足")
     assert is_market_chat_failoverable(403, "配额不足")
+    assert is_market_chat_failoverable(404, "当前模型或模型服务入口不可用")
     assert not is_market_chat_failoverable(401, "凭证无效")
+
+
+def test_gateway_5xx_and_transport_failures_are_failoverable():
+    assert is_market_chat_failoverable(500, "Internal Server Error")
+    assert is_market_chat_failoverable(503, "Service Unavailable")
+    assert is_market_chat_failoverable(None, "ReadTimeout: timed out")
+    assert is_market_chat_failoverable(None, "ConnectError: connection refused")
+
+
+def test_wallet_dependency_failure_is_not_failoverable():
+    assert not is_market_chat_failoverable(
+        502, "Java 支付服务不可用: cannot connect (JAVA_PAYMENT_SERVICE_URL=...)"
+    )
 
 
 def test_build_candidates_orders_primary_then_status():

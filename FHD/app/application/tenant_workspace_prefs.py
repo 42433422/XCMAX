@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app.infrastructure.auth.dependencies import session_id_from_request
+from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -66,12 +66,17 @@ def resolve_workspace_owner_id(request: Request, user: Any) -> str | None:
     return None
 
 
+def session_workspace_owner_id(request: Request) -> str | None:
+    user = resolve_session_user(request)
+    return resolve_workspace_owner_id(request, user) if user is not None else None
+
+
 def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
     owner = str(owner_id or "").strip()
     if not owner:
         return {}
     try:
-        from app.services.user_preference_service import get_user_preference_service
+        from app.domain.shared_services.user_preference_service import get_user_preference_service
 
         raw = get_user_preference_service().get_preference(owner, WORKSPACE_PREFS_KEY)
         if not raw:
@@ -87,13 +92,31 @@ def _save_workspace_prefs(owner_id: str, prefs: dict[str, Any]) -> None:
     owner = str(owner_id or "").strip()
     if not owner:
         return
-    from app.services.user_preference_service import get_user_preference_service
+    from app.domain.shared_services.user_preference_service import get_user_preference_service
 
     get_user_preference_service().set_preference(
         owner,
         WORKSPACE_PREFS_KEY,
         json.dumps(prefs, ensure_ascii=False),
     )
+
+
+_OWNER_PREF_PREFIX = "user_pref:"
+
+
+def get_owner_preferences(owner_id: str) -> dict[str, str]:
+    """设置页等零散键值偏好，与工作区偏好同库、按工作区归属隔离。"""
+    from app.domain.shared_services.user_preference_service import get_user_preference_service
+
+    rows = get_user_preference_service().get_all_preferences(owner_id)
+    n = len(_OWNER_PREF_PREFIX)
+    return {k[n:]: v for k, v in rows.items() if k.startswith(_OWNER_PREF_PREFIX)}
+
+
+def set_owner_preference(owner_id: str, key: str, value: str) -> None:
+    from app.domain.shared_services.user_preference_service import get_user_preference_service
+
+    get_user_preference_service().set_preference(owner_id, _OWNER_PREF_PREFIX + key, value)
 
 
 def workspace_owner_id_from_user(user: Any) -> str | None:
@@ -171,9 +194,11 @@ def bind_selected_industry_for_user(
     uid = _safe_positive_int(getattr(user, "id", None))
     try:
         if uid is not None:
-            from app.application.entitled_industries_init import init_entitled_industries_for_user
             from app.db.models.user import User
             from app.db.session import get_db
+            from app.domain.app_pure.entitled_industries_init import (
+                init_entitled_industries_for_user,
+            )
 
             with get_db() as db:
                 db_user = db.query(User).filter(User.id == uid).first()

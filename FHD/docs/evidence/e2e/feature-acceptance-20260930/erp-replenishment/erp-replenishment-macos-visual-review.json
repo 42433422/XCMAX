@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-30 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-replenishment",
+  "platform": "macos",
+  "reviewed_at": "2026-09-30",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+  "screenshot_sha256": "f9ad9913785a77d51828089d41931efc89c3b1116ce6910c5a47cba08bee43f0",
+  "visible_content": "库存管理显示暂无库存数据和暂无预警。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-replenishment/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-replenishment/macos/result.png"
+}

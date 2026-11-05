@@ -22,19 +22,34 @@ def upgrade() -> None:
             "autonomy_decision_audit",
             sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
             sa.Column("event_id", sa.String(96), nullable=False),
-            sa.Column("record_type", sa.String(32), nullable=False, server_default="decision"),
+            sa.Column(
+                "record_type", sa.String(32), nullable=False, server_default="decision"
+            ),
             sa.Column("action_id", sa.String(192), nullable=False),
-            sa.Column("action", sa.String(128), nullable=False, server_default="unknown"),
+            sa.Column(
+                "action", sa.String(128), nullable=False, server_default="unknown"
+            ),
             sa.Column("decision", sa.String(16), nullable=False, server_default=""),
             sa.Column("policy", sa.String(128), nullable=False, server_default=""),
-            sa.Column("risk_level", sa.String(16), nullable=False, server_default="blocked"),
-            sa.Column("actor_class", sa.String(32), nullable=False, server_default="unknown"),
+            sa.Column(
+                "risk_level", sa.String(16), nullable=False, server_default="blocked"
+            ),
+            sa.Column(
+                "actor_class", sa.String(32), nullable=False, server_default="unknown"
+            ),
             sa.Column("run_id", sa.String(192), nullable=False, server_default=""),
             sa.Column(
-                "prohibited_rule_hits_json", sa.Text(), nullable=False, server_default="[]"
+                "prohibited_rule_hits_json",
+                sa.Text(),
+                nullable=False,
+                server_default="[]",
             ),
-            sa.Column("posthoc_verdict", sa.String(32), nullable=False, server_default=""),
-            sa.Column("evidence_ref", sa.String(192), nullable=False, server_default=""),
+            sa.Column(
+                "posthoc_verdict", sa.String(32), nullable=False, server_default=""
+            ),
+            sa.Column(
+                "evidence_ref", sa.String(192), nullable=False, server_default=""
+            ),
             sa.Column("source", sa.String(128), nullable=False, server_default=""),
             sa.Column("occurred_at", sa.DateTime(), nullable=False),
             sa.Column(

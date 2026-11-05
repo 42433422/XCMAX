@@ -17,7 +17,7 @@ from app.application import chat_business_safety_leave as leave_safety
 from app.application import chat_business_safety_output as output_safety
 from app.application import chat_business_safety_personnel as personnel_safety
 from app.application import planner_compat_service as planner_compat
-from app.application.chat_business_safety_core import BusinessActorIdentity, BusinessChatIntent
+from app.domain.app_pure.chat_business_safety_core import BusinessActorIdentity, BusinessChatIntent
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 
 
@@ -192,9 +192,18 @@ def test_business_intent_covers_natural_wording(message: str, operation: str) ->
         "请数字员工帮我查一下库存，再生成报价单",
         "智能员工，查询演示商品并告诉我可用数量",
         "请虚拟员工帮我查询客户并生成订单",
+        # 审计 F04 复现用例：AI 员工称谓不得把跨业务请求误路由成 personnel_read。
+        "请 AI 员工帮我查询客户订单",
+        "让 AI 员工查一下库存",
+        "让AI员工导出客户对账单",
     ],
 )
 def test_explanatory_or_general_chat_is_not_intercepted(message: str) -> None:
+    assert safety.classify_business_chat_intent(message) is None
+
+
+def test_explicit_product_defect_is_not_an_attendance_export() -> None:
+    message = "导出考勤表时报错。期望：下载本月考勤。实际：页面提示失败。"
     assert safety.classify_business_chat_intent(message) is None
 
 
@@ -261,6 +270,61 @@ def test_authenticated_server_identity_beats_web_conversation_user_id(
     assert actor["authenticated"] is True
     assert actor["username"] == "1001"
     assert actor["trusted_client_user_id"] == ""
+
+
+@pytest.mark.parametrize("resolver_fails", [False, True])
+@pytest.mark.parametrize(
+    "claimed_identity",
+    [
+        {"authenticated_local_user_id": "u-1001"},
+        {"local_user_id": "u-1001"},
+        {"authenticated_username": "1001"},
+        {"authenticated_display_name": "李四"},
+        {},
+    ],
+)
+def test_failed_http_identity_cannot_read_claimed_personal_attendance(
+    business_db: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    claimed_identity: dict[str, str],
+    resolver_fails: bool,
+) -> None:
+    def resolve_user(_request):
+        if resolver_fails:
+            raise RuntimeError("session unavailable")
+        return None
+
+    monkeypatch.setattr("app.infrastructure.auth.dependencies.resolve_session_user", resolve_user)
+    request = Request({"type": "http", "headers": []})
+    result = safety.try_handle_business_chat_action(
+        "我2026年7月13日有没有迟到？",
+        request=request,
+        runtime_context=claimed_identity,
+        user_id="u-1001",
+    )
+
+    assert result is not None
+    receipt = result["execution_receipt"]
+    assert receipt["executed"] is False
+    assert receipt["reason"] == "current_user_not_mapped"
+    assert receipt["details"]["actor"]["authenticated"] is False
+    assert receipt["details"]["actor"]["trusted_client_user_id"] == ""
+    assert "08:03:00" not in result["response"]
+
+
+@pytest.mark.parametrize(
+    "trusted_identity",
+    [{"authenticated_local_user_id": "u-1001"}, {"authenticated_username": "1001"}],
+)
+def test_internal_identity_still_resolves_personal_attendance(
+    business_db: tuple[Path, Path], trusted_identity: dict[str, str]
+) -> None:
+    result = safety.try_handle_business_chat_action(
+        "我2026年7月13日有没有迟到？", runtime_context=trusted_identity
+    )
+    assert result is not None
+    assert result["execution_receipt"]["verified"] is True
+    assert "08:03:00" in result["response"]
 
 
 def test_leave_write_requires_complete_fields_and_never_calls_llm(
@@ -346,7 +410,10 @@ def test_leave_cancel_is_blocked_instead_of_creating_or_claiming_cancelled(
 
 
 def test_export_creates_verified_downloadable_xlsx(business_db: tuple[Path, Path]) -> None:
-    result = safety.try_handle_business_chat_action("导出2026年7月13日考勤表")
+    result = safety.try_handle_business_chat_action(
+        "导出2026年7月13日考勤表",
+        runtime_context={"authenticated_local_user_id": "1", "tenant_id": 11},
+    )
     assert result is not None
     receipt = result["execution_receipt"]
     assert receipt["status"] == "completed"
@@ -355,9 +422,15 @@ def test_export_creates_verified_downloadable_xlsx(business_db: tuple[Path, Path
     artifact = receipt["artifacts"][0]
     exported = Path(artifact["path"])
     assert exported.is_file()
+    from app.mod_sdk.owner_workspace import owner_workspace
+
+    assert (
+        exported.parent == owner_workspace("attendance-artifacts", owner_id="tenant:11|user:1").root
+    )
     assert artifact["download_url"].startswith(
         "/api/mod/taiyangniao-pro/attendance/download?relpath="
     )
+    assert "/mod-workspaces/" in exported.as_posix()
     wb = openpyxl.load_workbook(exported, read_only=True, data_only=True)
     try:
         assert wb.active.max_row == 3
@@ -402,7 +475,10 @@ def test_print_reports_submitted_only_after_backend_accepts_job(
 ) -> None:
     printer = _AcceptedPrinterService()
     monkeypatch.setattr(safety, "_get_printer_service", lambda: printer)
-    result = safety.try_handle_business_chat_action("打印2026年7月13日的考勤表")
+    result = safety.try_handle_business_chat_action(
+        "打印2026年7月13日的考勤表",
+        runtime_context={"authenticated_local_user_id": "1"},
+    )
     assert result is not None
     assert result["execution_receipt"]["status"] == "submitted"
     assert result["execution_receipt"]["executed"] is True
@@ -420,6 +496,10 @@ def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
         raise AssertionError("legacy planner must not run for protected business actions")
 
     monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda _request: SimpleNamespace(id=77, username="1001", display_name="李四"),
+    )
     monkeypatch.setattr(
         "app.application.get_ai_chat_app_service",
         lambda: SimpleNamespace(_pending_workflows={}),
@@ -489,6 +569,10 @@ async def test_batch_path_applies_receipt_policy_to_every_protected_message(
 ) -> None:
     monkeypatch.setattr(planner_compat, "assert_p2_elevated_claim_or_raise", lambda _request: None)
     monkeypatch.setattr(planner_compat, "resolve_ai_tier", lambda _request: "P0")
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda _request: SimpleNamespace(id=77, username="1001", display_name="李四"),
+    )
     monkeypatch.setattr(
         planner_compat,
         "run_agent_chat",

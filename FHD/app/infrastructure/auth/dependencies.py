@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import Header, HTTPException, Request
+from starlette.requests import HTTPConnection
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -86,7 +87,7 @@ def require_identified_user(
     return user
 
 
-def session_id_from_request(request: Request) -> str:
+def session_id_from_request(request: HTTPConnection) -> str:
     headers = getattr(request, "headers", {}) or {}
     cookies = getattr(request, "cookies", {}) or {}
     # 移动端 AuthInterceptor 显式发 X-Session-ID；优先用，避免把 JWT 当 session_id 解析失败。
@@ -109,7 +110,7 @@ def session_id_from_request(request: Request) -> str:
     return cookie_sid
 
 
-def resolve_session_user(request: Request) -> Any | None:
+def resolve_session_user(request: HTTPConnection) -> Any | None:
     from app.application.facades.session_facade import get_session_service
 
     sid = session_id_from_request(request)

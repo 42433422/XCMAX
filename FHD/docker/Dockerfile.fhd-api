@@ -1,3 +1,4 @@
+# experimental — 非签约部署主路径（主路径=桌面私有化 + 现网单 CVM 滚动；见 FHD/docs/architecture/DEPLOY_PATH_SSOT.md / ADR-route-a）。本文件保留供容器实验；阶段三前不删、不强制迁 extras。
 # Full-stack FHD / XCAGI API (FastAPI via Gunicorn + UvicornWorker).
 # Build from repository root (uses root .dockerignore):
 #   docker build -f docker/Dockerfile.fhd-api -t xcagi-fhd-api .
@@ -25,7 +26,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     && pip install --no-cache-dir --target /opt/site-packages --upgrade \
         'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'setuptools>=78.0.0'
 
-FROM cgr.dev/chainguard/wolfi-base@sha256:96ff486b326d15db16aa1fbd41a17043a557bebf76d2c0ac932e717534025940 AS production
+FROM cgr.dev/chainguard/wolfi-base@sha256:81211e15a86ea1d5357f284482af45730c51de45eaf10ad9ce205d6bfc2df323 AS production
 
 ARG XCAGI_GIT_SHA=""
 
@@ -42,8 +43,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/opt/site-packages \
     XCAGI_GIT_SHA=${XCAGI_GIT_SHA}
 
-RUN apk upgrade --no-cache \
-    && apk add --no-cache python-3.11 curl \
+RUN for attempt in 1 2 3; do \
+      apk upgrade --no-cache \
+        && apk add --no-cache python-3.11 curl 'ca-certificates-bundle>=20260909-r3' \
+          'libbrotlicommon1>=1.2.0-r7' 'libbrotlidec1>=1.2.0-r7' 'libbrotlienc1>=1.2.0-r7' \
+        && break; \
+      if [ "$attempt" -eq 3 ]; then exit 1; fi; sleep "$((attempt * 5))"; \
+    done \
     && addgroup -S appuser \
     && adduser -S -G appuser -h /home/appuser -s /bin/sh appuser
 

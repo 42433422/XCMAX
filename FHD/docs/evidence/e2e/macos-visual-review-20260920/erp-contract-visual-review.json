@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "erp-contract",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "fea41870576c33b8f6881ace59558211508207267d9f2cf42942b3cc6f1a5f0b",
+  "visible_content": "客户管理列表，客户名称多为部门名称；没有合同内容、编号或生命周期操作。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/erp-contract.png"
+}

@@ -1,4 +1,4 @@
-"""Tests for app.services.document_templates.renderer — pure helper functions."""
+"""Tests for app.domain.shared_services.document_templates.renderer — pure helper functions."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from app.services.document_templates.renderer import (
+from app.domain.shared_services.document_templates.renderer import (
     _is_unreadable_workbook_error,
     _parse_json_dict,
     _parse_json_list,

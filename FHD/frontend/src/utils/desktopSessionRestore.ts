@@ -2,6 +2,7 @@ import { validateEnterpriseSessionCached } from '@/utils/authSessionCache'
 
 export type DesktopProfileHydrator = {
   loaded: boolean
+  sessionCheckUnavailable?: boolean
   refreshFromServer: () => Promise<void>
 }
 
@@ -24,10 +25,8 @@ export function refreshDesktopSessionInBackground(router: DesktopSessionRouter, 
         await router.replace({ name: 'login', query: { redirect } })
         return
       }
+      // validate already returned success. A slow or restarted hydration must not log the user out.
       await profile.refreshFromServer()
-      if (!profile.loaded) {
-        await router.replace({ name: 'login', query: { redirect } })
-      }
     })
     .catch(() => {
       // Network trouble must not discard a previously working local shell.

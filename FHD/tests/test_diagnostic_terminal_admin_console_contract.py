@@ -9,8 +9,13 @@ def test_diagnostic_terminal_is_cli_only_in_admin_console() -> None:
     routes = (ADMIN_CONSOLE / "adminHostRoutes.ts").read_text(encoding="utf-8")
     navigation = (ADMIN_CONSOLE / "constants" / "adminOperatorNav.ts").read_text(encoding="utf-8")
     api = (ADMIN_CONSOLE / "api" / "xcmaxAdmin.ts").read_text(encoding="utf-8")
-    proxy = (FHD_ROOT / "app" / "fastapi_routes" / "xcmax_admin_part02_part02.py").read_text(
-        encoding="utf-8"
+    routes_root = FHD_ROOT / "app" / "fastapi_routes"
+    proxy = "\n".join(
+        source.read_text(encoding="utf-8")
+        for source in [
+            routes_root / "xcmax_admin.py",
+            *sorted((routes_root / "admin_control").glob("*.py")),
+        ]
     )
 
     assert "diagnostic-terminal" not in routes

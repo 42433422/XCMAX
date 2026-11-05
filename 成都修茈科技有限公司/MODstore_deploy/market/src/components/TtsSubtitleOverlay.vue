@@ -8,7 +8,7 @@
           </svg>
         </button>
         <div class="tts-sub__stack">
-          <p class="tts-sub__zh">{{ current.zh }}</p>
+          <p class="tts-sub__line tts-sub__line--cur tts-sub__zh">{{ current.zh }}</p>
         </div>
       </div>
     </Transition>

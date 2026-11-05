@@ -8,10 +8,10 @@ import pytest
 
 from app.application.shipment_app_service import ShipmentApplicationService
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
+from app.domain.shipment.value_objects import ContactInfo, Money, Quantity
 from app.infrastructure.documents.shipment_document_generator_impl import (
     LegacyShipmentDocumentGenerator,
 )
-from app.legacy.domain.legacy_vo import ContactInfo, Money, Quantity
 
 
 class DummyRepo:
@@ -118,7 +118,7 @@ class TestShipmentApplicationService:
 
         result = app_service.generate_shipment_document(
             unit_name="测试单位",
-            products=[{"product_name": "产品A", "quantity": 1}],
+            products=[{"product_name": "产品A", "quantity_kg": 1}],
         )
 
         assert result["success"] is True
@@ -211,7 +211,7 @@ class TestShipmentAppServiceGenerate:
         )
         result = app_service.generate_shipment_document(
             unit_name="测试单位",
-            products=[{"product_name": "产品A", "quantity": 1}],
+            products=[{"product_name": "产品A", "quantity_kg": 1}],
         )
 
         assert result["success"] is True

@@ -4,7 +4,7 @@
 使用哪个后端作为订单/权益的唯一事实来源：
 
 - ``json``（默认）：本地 JSON 落盘（见 ``order_store.py``），直连支付宝；单机/沙箱够用。
-- ``postgres``：FHD PostgreSQL 订单表（生产推荐）。
+- ``postgres``：预留配置；当前没有本地 PostgreSQL 订单实现，受保护操作拒绝回退 JSON。
 - ``modstore``：代理到修茈市场（MODstore）统一收银台（``/api/market/payment/*``）。
 
 本模块**仅做"当前用哪个后端"的判定**，不含任何扣款、验签或发货逻辑；
@@ -45,7 +45,7 @@ def is_modstore_payment_sot() -> bool:
 
 
 def is_fhd_postgres_payment_sot() -> bool:
-    """是否由 FHD PostgreSQL 订单表作为支付 SOT。"""
+    """是否选择预留 PostgreSQL 配置；不表示订单存储已实现。"""
     return model_payment_backend() == "postgres"
 
 

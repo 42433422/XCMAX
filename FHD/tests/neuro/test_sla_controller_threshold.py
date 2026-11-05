@@ -21,7 +21,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.neuro_bus.sla_controller import (
     SLAConfig,
     SLAController,

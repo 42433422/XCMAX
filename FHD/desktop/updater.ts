@@ -11,6 +11,7 @@ import {
   type ReleaseMediaSlide,
 } from './release-media.js'
 import { appendUpdaterEvent, discardPendingUpdateInstallReceipt } from './update-install-receipts.js'
+import { installResumableUpdaterDownload } from './resumable-download.js'
 
 let updateDownloaded = false
 let downloadedVersion = ''
@@ -324,6 +325,7 @@ export function configureUpdater(
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
   ;(autoUpdater as unknown as { allowDowngrade?: boolean }).allowDowngrade = false
+  installResumableUpdaterDownload()
   if (process.env.XCAGI_DESKTOP_TEST !== '1') {
     void ensureUpdaterNetSession()
   }
@@ -383,7 +385,7 @@ export function configureUpdater(
   autoUpdater.on('download-progress', progress => send('download-progress', progress))
   autoUpdater.on('update-downloaded', info => {
     updateDownloaded = true
-    downloadedVersion = String(info.version || '').trim()
+    downloadedVersion = remoteProductVersion || String(info.version || '').trim()
     downloadedBuildSha = String(
       (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || '',
     ).trim()

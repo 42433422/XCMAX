@@ -17,7 +17,7 @@ from app.domain.neuro.processors.coordinator import get_processor_coordinator
 from app.mod_sdk.neuro_bus_runtime import get_neuro_bus_health_runtime
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.bus_setup import get_neuro_bus_manager
-from app.neuro_bus.domains.base import get_domain_registry
+from app.neuro_bus.domains.domains_base import get_domain_registry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

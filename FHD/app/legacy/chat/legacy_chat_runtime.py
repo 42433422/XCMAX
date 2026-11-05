@@ -3,14 +3,147 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
+from types import SimpleNamespace
 from typing import Any
+
+from app.domain.app_pure.document_employee_routing import forced_document_tool_choice
+from app.infrastructure.chat_stream_lifetime import check_stream_active, owned_model_read
+from app.infrastructure.llm.client import llm_client_scope
 
 
 def _facade() -> Any:
     from app.legacy.chat import legacy_chat_adapter
 
     return legacy_chat_adapter
+
+
+def _opening_tool_choice(
+    user_message: str, tools: list[Any], runtime_context: dict[str, Any] | None
+) -> Any:
+    from app.application.agent_orchestrator.business_harness import forced_order_tool_choice
+
+    return (
+        forced_document_tool_choice(user_message, tools, runtime_context)
+        or forced_order_tool_choice(user_message, tools)
+        or "auto"
+    )
+
+
+def _approval_wait_text() -> str:
+    for record in _facade().get_last_tool_records():
+        output = record.get("output") or {}
+        if isinstance(output, dict) and output.get("pending_approval") is True:
+            return str(output.get("message") or "审批请求已创建，请在业务审批中处理；尚未执行。")
+    return ""
+
+
+_BACKUP_KEY = ("execute_erp_capability", "system_maintenance", "backup_database")
+_BACKUP_NOT_EXECUTED = "数据库备份未执行，未创建备份或提交审批；请重试。"
+
+
+def _backup_reply() -> dict[str, Any] | None:
+    for row in _facade().get_last_tool_records():
+        params, output = row.get("params") or {}, row.get("output") or {}
+        tool_id = params.get("tool_id") or params.get("capability_id")
+        if (row.get("tool_name"), tool_id, params.get("action")) != _BACKUP_KEY:
+            continue
+        if output.get("success") is True or output.get("pending_approval") is True:
+            text = str(output.get("message") or json.dumps(output, ensure_ascii=False))
+            reply: dict[str, Any] = {"response": text, "text": text}
+            reply["pending_approval"] = output.get("pending_approval") is True
+            _facade()._attach_last_tool_records(reply)
+            return reply
+    return None
+
+
+def _format_tool_calls(tool_calls: list[Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": str(getattr(tc, "id", "") or ""),
+            "type": "function",
+            "function": {
+                "name": str(getattr(getattr(tc, "function", None), "name", "") or ""),
+                "arguments": str(getattr(getattr(tc, "function", None), "arguments", "") or ""),
+            },
+        }
+        for tc in tool_calls
+    ]
+
+
+_EMPTY_RESPONSE = "模型未返回可显示的正文，已停止重复请求。请检查模型服务后重试。"
+_NO_PROGRESS = "模型重复请求相同工具且没有新进展，已停止。请核对工具记录，勿重复执行已完成的操作。"
+_ITERATION_LIMIT = "对话达到最大迭代次数，未完成。"
+
+
+def _failed_reply(message: str, error: str) -> dict[str, Any]:
+    reply = _facade()._attach_last_tool_records(
+        {
+            "success": False,
+            "error": error,
+            "message": message,
+            "response": message,
+            "text": message,
+            "thinking_steps": None,
+        }
+    )
+    if not isinstance(reply, dict):
+        raise TypeError("legacy tool record attachment must return a dict")
+    return reply
+
+
+def _tool_payloads(messages: list[dict[str, Any]], count: int) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
+    for message in messages[-count:] if count else []:
+        if message.get("role") != "tool":
+            continue
+        try:
+            value = json.loads(str(message.get("content") or "{}"))
+        except json.JSONDecodeError:
+            value = {}
+        payloads.append(value if isinstance(value, dict) else {})
+    return payloads
+
+
+def _no_tool_progress(payloads: list[dict[str, Any]], count: int) -> bool:
+    return (
+        bool(count)
+        and len(payloads) == count
+        and all(payload.get("error") == "duplicate_tool_call" for payload in payloads)
+    )
+
+
+def _prepare_chat(user_message, runtime_context, system_prompt, client, model):
+    facade = _facade()
+    sys = facade.merge_system_prompt(system_prompt, runtime_context)
+    content = facade.build_openai_user_content(user_message, runtime_context)
+    messages = [{"role": "user", "content": content}]
+    if sys:
+        messages.insert(0, {"role": "system", "content": sys})
+    has_image_input = facade.messages_have_image_parts(messages)
+    cli = client
+    if cli is None:
+        facade.require_api_key()
+        cli = facade.get_openai_compatible_client()
+    mdl = facade._resolve_chat_model_for_client(cli, model)
+    tools = facade._get_workflow_tool_registry()
+
+    backup_required = re.search(
+        r"(?:请|帮我|立即|手动|现在|执行|生成|创建|做一次).{0,60}(?:备份.{0,12}数据库|数据库.{0,12}备份)",
+        user_message,
+    ) and not re.search(
+        r"(?:不要|勿|别|无需|不需要|禁止).{0,8}备份|(?:如何|怎么|解释|介绍|查看|列出|查询|检查|读取|打开|下载|删除|恢复).{0,12}备份|备份(?:文件)?(?:进行)?(?:删除|恢复)",
+        user_message,
+    )
+    tool_choice = _opening_tool_choice(user_message, tools, runtime_context)
+    if backup_required:
+        if not any(
+            (tool.get("function") or {}).get("name") == "execute_erp_capability" for tool in tools
+        ):
+            raise RuntimeError("数据库备份工具不可用，未执行备份或提交审批。")
+        tool_choice = {"type": "function", "function": {"name": "execute_erp_capability"}}
+    return messages, has_image_input, cli, mdl, tools, tool_choice, backup_required
 
 
 def chat(
@@ -25,29 +158,10 @@ def chat(
     client: Any | None = None,
 ) -> Any:
     _facade().reset_planner_tool_dedup_state()
-    if max_iterations is None:
-        max_iterations = 8
-    sys = _facade().merge_system_prompt(system_prompt, runtime_context)
-    messages: list[dict[str, Any]] = []
-    if sys:
-        messages.append({"role": "system", "content": sys})
-    messages.append(
-        {
-            "role": "user",
-            "content": _facade().build_openai_user_content(user_message, runtime_context),
-        }
+    max_iterations = 8 if max_iterations is None else max_iterations
+    messages, has_image_input, cli, mdl, tools, tool_choice, backup_required = _prepare_chat(
+        user_message, runtime_context, system_prompt, client, model
     )
-    has_image_input = _facade().messages_have_image_parts(messages)
-    if client is None:
-        _facade().require_api_key()
-        cli = _facade().get_openai_compatible_client()
-    else:
-        cli = client
-    mdl = _facade()._resolve_chat_model_for_client(cli, model)
-    tools = _facade()._get_workflow_tool_registry()
-    from app.application.document_employee_routing import forced_document_tool_choice
-
-    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
     tool_outputs: list[str] = []
     for _ in range(max_iterations):
         c = cli.chat.completions.create(
@@ -56,23 +170,11 @@ def chat(
             tools=tools if tools else None,
             tool_choice=tool_choice if tools else None,
         )
+        if not getattr(c, "choices", None):
+            return _failed_reply(_EMPTY_RESPONSE, "planner_empty_response")
         msg = c.choices[0].message
         tcs = getattr(msg, "tool_calls", None) or []
-        formatted_tool_calls = None
-        if tcs:
-            formatted_tool_calls = [
-                {
-                    "id": str(getattr(tc, "id", "") or ""),
-                    "type": "function",
-                    "function": {
-                        "name": str(getattr(getattr(tc, "function", None), "name", "") or ""),
-                        "arguments": str(
-                            getattr(getattr(tc, "function", None), "arguments", "") or ""
-                        ),
-                    },
-                }
-                for tc in tcs
-            ]
+        formatted_tool_calls = _format_tool_calls(tcs) if tcs else None
         messages.append(
             {"role": "assistant", "content": msg.content or "", "tool_calls": formatted_tool_calls}
         )
@@ -82,13 +184,14 @@ def chat(
                 tool_name = str(getattr(fn, "name", "") or "").strip()
                 if tool_name:
                     tool_outputs.append(f"[调用工具: {tool_name}]")
-            token_request = _facade().append_tool_messages(
-                messages,
-                tcs,
-                workspace_root=workspace_root,
-                runtime_context=runtime_context,
-                db_write_token=db_write_token,
-            )
+            with llm_client_scope(cli, mdl):
+                token_request = _facade().append_tool_messages(
+                    messages,
+                    tcs,
+                    workspace_root=workspace_root,
+                    runtime_context=runtime_context,
+                    db_write_token=db_write_token,
+                )
             if token_request and token_request.get("requires_token"):
                 return json.dumps(
                     _facade()._attach_last_tool_records(
@@ -102,13 +205,27 @@ def chat(
                     ),
                     ensure_ascii=False,
                 )
+            if backup_required:
+                if reply := _backup_reply():
+                    return reply
+                raise RuntimeError(_BACKUP_NOT_EXECUTED)
+            if waiting := _approval_wait_text():
+                return _facade()._attach_last_tool_records(
+                    {"response": waiting, "text": waiting, "pending_approval": True}
+                )
+            if _no_tool_progress(_tool_payloads(messages, len(tcs)), len(tcs)):
+                return _failed_reply(_NO_PROGRESS, "planner_no_progress")
             tool_choice = "auto"
             continue
+        if backup_required:
+            raise RuntimeError(_BACKUP_NOT_EXECUTED)
         result = str(msg.content or "").strip()
         if has_image_input and (not result):
             raise _facade().EmptyMultimodalResponseError(
                 f"模型 {mdl} 完成了图片处理请求，但没有返回可显示的正文。系统已停止重复空请求，请重试或切换视觉模型。"
             )
+        if not result:
+            return _failed_reply(_EMPTY_RESPONSE, "planner_empty_response")
         full_response = result
         if tool_outputs:
             full_response = "\n".join(tool_outputs) + "\n\n" + result
@@ -119,13 +236,7 @@ def chat(
                 "text": result,
             }
         )
-    return _facade()._attach_last_tool_records(
-        {
-            "response": "对话达到最大迭代次数，未完成。",
-            "thinking_steps": None,
-            "text": "对话达到最大迭代次数，未完成。",
-        }
-    )
+    return _failed_reply(_ITERATION_LIMIT, "planner_iteration_limit")
 
 
 def chat_stream_text(
@@ -140,30 +251,12 @@ def chat_stream_text(
     client: Any | None = None,
 ) -> Iterable[str | dict[str, Any]]:
     _facade().reset_planner_tool_dedup_state()
-    if max_iterations is None:
-        max_iterations = 8
-    sys = _facade().merge_system_prompt(system_prompt, runtime_context)
-    messages: list[dict[str, Any]] = []
-    if sys:
-        messages.append({"role": "system", "content": sys})
-    messages.append(
-        {
-            "role": "user",
-            "content": _facade().build_openai_user_content(user_message, runtime_context),
-        }
+    max_iterations = 8 if max_iterations is None else max_iterations
+    messages, has_image_input, cli, mdl, tools, tool_choice, backup_required = _prepare_chat(
+        user_message, runtime_context, system_prompt, client, model
     )
-    has_image_input = _facade().messages_have_image_parts(messages)
-    if client is None:
-        _facade().require_api_key()
-        cli = _facade().get_openai_compatible_client()
-    else:
-        cli = client
-    mdl = _facade()._resolve_chat_model_for_client(cli, model)
-    tools = _facade()._get_workflow_tool_registry()
-    from app.application.document_employee_routing import forced_document_tool_choice
-
-    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
     for _ in range(max_iterations):
+        check_stream_active()
         stream = cli.chat.completions.create(
             model=mdl,
             messages=messages,
@@ -174,39 +267,39 @@ def chat_stream_text(
         text_parts: list[str] = []
         tool_calls_by_idx: dict[int, Any] = {}
         finish_reason = None
-        has_tool_call = False
-        for chunk in stream:
-            choice = chunk.choices[0]
-            finish_reason = getattr(choice, "finish_reason", None)
-            delta = getattr(choice, "delta", None)
-            if delta is None:
-                continue
-            content = getattr(delta, "content", None)
-            if content:
-                text_parts.append(str(content))
-                yield str(content)
-            tc_list = getattr(delta, "tool_calls", None) or []
-            for tc in tc_list:
-                idx = int(getattr(tc, "index", 0) or 0)
-                cur = tool_calls_by_idx.get(idx)
-                if cur is None:
-                    cur = {
-                        "id": getattr(tc, "id", None),
-                        "function": {
-                            "name": getattr(getattr(tc, "function", None), "name", None),
-                            "arguments": getattr(getattr(tc, "function", None), "arguments", "")
-                            or "",
+        with owned_model_read(stream):
+            for chunk in stream:
+                check_stream_active()
+                choices = getattr(chunk, "choices", None)
+                if not choices:  # Usage/accounting frames carry no assistant delta.
+                    continue
+                choice = choices[0]
+                finish_reason = getattr(choice, "finish_reason", None)
+                delta = getattr(choice, "delta", None)
+                if delta is None:
+                    continue
+                content = getattr(delta, "content", None)
+                if content:
+                    text_parts.append(str(content))
+                    if not backup_required:
+                        yield str(content)
+                tc_list = getattr(delta, "tool_calls", None) or []
+                for position, tc in enumerate(tc_list):
+                    index = getattr(tc, "index", None)
+                    idx = position if index is None else int(index)
+                    cur = tool_calls_by_idx.setdefault(
+                        idx,
+                        {
+                            "id": getattr(tc, "id", None),
+                            "function": {"name": None, "arguments": ""},
                         },
-                    }
-                    tool_calls_by_idx[idx] = cur
-                else:
+                    )
                     fn = getattr(tc, "function", None)
-                    fn_name = getattr(fn, "name", None)
-                    if fn_name:
+                    if fn_name := getattr(fn, "name", None):
                         cur["function"]["name"] = fn_name
                     cur["function"]["arguments"] += str(getattr(fn, "arguments", "") or "")
-                has_tool_call = True
-        if has_tool_call and tool_calls_by_idx:
+        check_stream_active()
+        if tool_calls_by_idx:
             for v in tool_calls_by_idx.values():
                 tool_name = str(v.get("function", {}).get("name", "") or "")
                 raw_args = str(v.get("function", {}).get("arguments") or "")
@@ -217,44 +310,34 @@ def chat_stream_text(
                     if slow:
                         yield slow
         if finish_reason == "tool_calls" or tool_calls_by_idx:
-
-            class _Fn:
-                def __init__(self, name: str, arguments: str) -> None:
-                    self.name = name
-                    self.arguments = arguments
-
-            class _Tc:
-                def __init__(self, tc_id: str, name: str, arguments: str) -> None:
-                    self.id = tc_id
-                    self.function = _Fn(name, arguments)
-
-            tcs = []
-            for v in tool_calls_by_idx.values():
-                tcs.append(
-                    _Tc(
-                        v.get("id") or "",
-                        v.get("function", {}).get("name") or "",
-                        v.get("function", {}).get("arguments") or "",
-                    )
+            tcs = [
+                SimpleNamespace(
+                    id=v.get("id") or "",
+                    function=SimpleNamespace(**v["function"]),
                 )
-            formatted_tool_calls = [
-                {
-                    "id": t.id,
-                    "type": "function",
-                    "function": {"name": t.function.name, "arguments": t.function.arguments},
-                }
-                for t in tcs
+                for v in tool_calls_by_idx.values()
             ]
+            if not tcs:
+                yield {
+                    "_planner_sse": "error",
+                    "error": "planner_invalid_tool_call",
+                    "message": "模型未提供可执行的工具调用，已停止。",
+                }
+                return
+            formatted_tool_calls = _format_tool_calls(tcs)
             messages.append(
                 {"role": "assistant", "content": "", "tool_calls": formatted_tool_calls}
             )
-            token_request = _facade().append_tool_messages(
-                messages,
-                tcs,
-                workspace_root=workspace_root,
-                runtime_context=runtime_context,
-                db_write_token=db_write_token,
-            )
+            check_stream_active()
+            with llm_client_scope(cli, mdl):
+                token_request = _facade().append_tool_messages(
+                    messages,
+                    tcs,
+                    workspace_root=workspace_root,
+                    runtime_context=runtime_context,
+                    db_write_token=db_write_token,
+                )
+            check_stream_active()
             if token_request and token_request.get("requires_token"):
                 yield {
                     "_planner_sse": "requires_token",
@@ -265,34 +348,44 @@ def chat_stream_text(
                     "message": token_request.get("message"),
                 }
                 return
-            n_tail = len(tcs)
-            tool_payloads: list[dict[str, Any]] = []
-            if n_tail:
-                collected: list[dict[str, Any]] = []
-                for j in range(len(messages) - 1, -1, -1):
-                    m = messages[j]
-                    if m.get("role") != "tool":
-                        break
-                    try:
-                        collected.append(json.loads(str(m.get("content") or "{}")))
-                    except json.JSONDecodeError:
-                        collected.append({})
-                    if len(collected) >= n_tail:
-                        break
-                collected.reverse()
-                tool_payloads = collected
-                while len(tool_payloads) < n_tail:
-                    tool_payloads.append({})
+            if backup_required:
+                reply = _backup_reply()
+                yield (
+                    reply["text"]
+                    if reply
+                    else {"_planner_sse": "error", "message": _BACKUP_NOT_EXECUTED}
+                )
+                return
+            if waiting := _approval_wait_text():
+                yield waiting
+                return
+            tool_payloads = _tool_payloads(messages, len(tcs))
+            if _no_tool_progress(tool_payloads, len(tcs)):
+                yield {
+                    "_planner_sse": "error",
+                    "error": "planner_no_progress",
+                    "message": _NO_PROGRESS,
+                }
+                return
             yield _facade()._post_tool_round_hint(tcs, tool_payloads)
             tool_choice = "auto"
             continue
-        if text_parts:
+        if backup_required:
+            yield {"_planner_sse": "error", "message": _BACKUP_NOT_EXECUTED}
+            return
+        if "".join(text_parts).strip():
             return
         if has_image_input:
             raise _facade().EmptyMultimodalResponseError(
                 f"模型 {mdl} 完成了图片处理请求，但没有返回可显示的正文。系统已停止重复空请求，请重试或切换视觉模型。"
             )
-    return
+        yield {
+            "_planner_sse": "error",
+            "error": "planner_empty_response",
+            "message": _EMPTY_RESPONSE,
+        }
+        return
+    yield {"_planner_sse": "error", "error": "planner_iteration_limit", "message": _ITERATION_LIMIT}
 
 
 def chat_stream_sse_events(
@@ -306,23 +399,39 @@ def chat_stream_sse_events(
     model: str | None = None,
     client: Any | None = None,
 ):
-    for item in _facade().chat_stream_text(
-        user_message,
-        runtime_context=runtime_context,
-        system_prompt=system_prompt,
-        workspace_root=workspace_root,
-        max_iterations=max_iterations,
-        db_write_token=db_write_token,
-        model=model,
-        client=client,
-    ):
-        if isinstance(item, dict) and item.get("_planner_sse") == "requires_token":
-            td = str(
-                item.get("token_description") or item.get("message") or "数据库写入授权令牌"
-            ).strip()
-            tn = str(item.get("token_name") or "DB_WRITE_TOKEN").strip()
-            yield {"type": "token", "text": f"\n[需要授权: {td}]\n"}
-            yield {"type": "requires_token", "token_name": tn, "token_description": td}
-            return
-        yield {"type": "token", "text": str(item)}
-    yield {"type": "done"}
+    with owned_model_read(
+        _facade().chat_stream_text(
+            user_message,
+            runtime_context=runtime_context,
+            system_prompt=system_prompt,
+            workspace_root=workspace_root,
+            max_iterations=max_iterations,
+            db_write_token=db_write_token,
+            model=model,
+            client=client,
+        )
+    ) as stream:
+        for item in stream:
+            if isinstance(item, dict) and item.get("_planner_sse") == "error":
+                yield {
+                    "type": "error",
+                    "message": item["message"],
+                    "error": item.get("error") or "planner_failed",
+                    "result": _failed_reply(item["message"], item.get("error") or "planner_failed"),
+                }
+                return
+            if isinstance(item, dict) and item.get("_planner_sse") == "requires_token":
+                td = str(
+                    item.get("token_description") or item.get("message") or "数据库写入授权令牌"
+                ).strip()
+                tn = str(item.get("token_name") or "DB_WRITE_TOKEN").strip()
+                yield {"type": "token", "text": f"\n[需要授权: {td}]\n"}
+                yield {
+                    "type": "requires_token",
+                    "token_name": tn,
+                    "token_description": td,
+                    "result": _facade()._attach_last_tool_records({}),
+                }
+                return
+            yield {"type": "token", "text": str(item)}
+    yield {"type": "done", "result": _facade()._attach_last_tool_records({})}

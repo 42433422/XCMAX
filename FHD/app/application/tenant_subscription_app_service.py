@@ -9,7 +9,7 @@ from typing import Any
 
 from app.db.models.tenant import Tenant
 from app.db.models.user import User
-from app.db.session import get_db
+from app.db.session import get_host_db as get_db
 from app.infrastructure.billing.saas_plans import is_saas_plan_id, plan_by_id, trial_days
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
@@ -91,6 +91,8 @@ def sync_tenant_display_name(*, user_id: int, company_brand: str, db: Any = None
         )
         if tenant is None:
             raise ValueError("当前账号尚未建立工作区，请重新登录")
+        if tenant.owner_user_id is not None and tenant.owner_user_id != user.id:
+            raise ValueError("只有企业所有者可以修改企业名称")
         tenant.name = brand[:256]
         return str(tenant.name)
     with get_db() as db:
@@ -100,6 +102,8 @@ def sync_tenant_display_name(*, user_id: int, company_brand: str, db: Any = None
         tenant = db.query(Tenant).filter(Tenant.id == int(user.tenant_id)).first()
         if tenant is None:
             return brand
+        if tenant.owner_user_id is not None and tenant.owner_user_id != user.id:
+            return str(tenant.name or brand)
         if (tenant.name or "").strip() != brand:
             tenant.name = brand[:256]
             db.commit()

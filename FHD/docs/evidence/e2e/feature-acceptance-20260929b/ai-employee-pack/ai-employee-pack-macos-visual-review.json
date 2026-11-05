@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-employee-pack",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "870fe659172dbcbe38db5c7ec716806d5280397cc75e9b38a5537664fa145ddf",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。工具表，与 Excel 工具同一画面，列出 excel_analysis、import_excel_to_database、generate_office_document 等 AI Planner 卡片。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-employee-pack/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-employee-pack/macos/result.png"
+}

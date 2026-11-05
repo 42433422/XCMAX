@@ -373,4 +373,24 @@ describe('FieldEditor.vue functions', () => {
       expect(badges[0].text()).toBe('可变')
     })
   })
+  it('propagates inline and modal field edits with click isolation and immutable save payloads', async () => {
+    const wrapper = mountFieldEditor()
+    const item = wrapper.findAll('.field-item')[0]
+    for (const [index, value] of ['客户', '示例客户'].entries()) {
+      await item.findAll('input')[index].trigger('click')
+      await item.findAll('input')[index].setValue(value)
+    }
+    expect(wrapper.vm.editingIndex).toBeNull()
+    expect(wrapper.emitted('fields-change')!.at(-1)![0]).toEqual(expect.arrayContaining([expect.objectContaining({ label: '客户', value: '示例客户' })]))
+    await item.get('[title="编辑"]').trigger('click')
+    await wrapper.get('input[placeholder="例如：品名"]').setValue('采购方')
+    await wrapper.get('input[placeholder="例如：运动鞋"]').setValue('甲公司')
+    for (const type of ['fixed', 'dynamic']) await wrapper.get(`input[type="radio"][value="${type}"]`).setValue(true)
+    await wrapper.get('.modal-footer .btn-primary').trigger('click')
+    expect(wrapper.emitted('update-field')!.at(-1)).toEqual([0, { label: '采购方', value: '甲公司', type: 'dynamic' }])
+    expect(wrapper.props('fields')[0]).toMatchObject({ label: '客户', value: '示例客户' })
+    expect(wrapper.find('.field-edit-modal').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
 })

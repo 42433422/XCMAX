@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,19 +9,20 @@ from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import shipment_orders
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch, actor) -> TestClient:
     monkeypatch.setattr(shipment_orders, "_svc", lambda: fake_service)
     app = FastAPI()
     app.include_router(shipment_orders.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
 
 
 def _assert_shipment_order_run(repo: InMemoryAgentRunRepository, run_id: str, action: str) -> None:
     run = repo.get(run_id)
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "17"
     assert run.status == "completed"
     assert run.intent == f"shipment_orders_{action}"
     assert run.tool_calls[0].tool_id == "shipment_orders"
@@ -33,13 +35,14 @@ def _assert_shipment_order_run(repo: InMemoryAgentRunRepository, run_id: str, ac
 
 
 def test_shipment_order_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    shipment_outputs = tmp_path / "shipment_outputs"
-    shipment_outputs.mkdir()
+    from app.utils.path_io.path_utils import get_shipment_output_dir
+
+    shipment_outputs = Path(get_shipment_output_dir())
+    shipment_outputs.mkdir(parents=True)
     shipment_file = shipment_outputs / "shipment.xlsx"
     shipment_file.write_bytes(b"fake")
     svc = MagicMock()
@@ -54,7 +57,7 @@ def test_shipment_order_routes_execute_through_agent_orchestrator(
     svc.reset_order_sequence.return_value = {"success": True, "sequence": 1}
     svc.clear_all_orders.return_value = {"success": True, "deleted_count": 5}
     svc.delete_shipment.return_value = {"success": True}
-    client = _client(svc, monkeypatch)
+    client = _client(svc, monkeypatch, trusted_actor(user_id=17, tenant_id=None))
 
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")

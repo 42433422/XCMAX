@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.domain.neuro.processors.coordinator import ProcessorType
+from app.domain.shared_services.unified_intent_recognizer import RecognizerResult
 from app.neuro_bus.integrations.intent_integration import NeuroIntentRecognizer
 from app.neuro_bus.register_all_domains_complete import register_domain_handlers_only
-from app.services.unified_intent_recognizer import RecognizerResult
 
 
 @pytest.mark.asyncio

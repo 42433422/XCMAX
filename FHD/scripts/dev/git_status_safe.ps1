@@ -1,4 +1,4 @@
-# 在 FHD 仓库根输出可读的 git 状态（避免 worktree 路径混淆）
+﻿# 在 FHD 仓库根输出可读的 git 状态（避免 worktree 路径混淆）
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $root

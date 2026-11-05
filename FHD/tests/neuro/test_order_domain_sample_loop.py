@@ -15,7 +15,7 @@ from app.neuro_bus import event_store as event_store_mod
 from app.neuro_bus.domains import order_domain as od
 from app.neuro_bus.domains import order_domain_handlers as odh
 from app.neuro_bus.event_store import EventStore
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 
 @pytest.fixture(autouse=True)

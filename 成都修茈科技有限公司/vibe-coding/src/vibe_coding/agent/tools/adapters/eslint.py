@@ -65,8 +65,10 @@ class ESLintAdapter:
         if cmd is None:
             return ToolReport(
                 tool=self.name,
-                passed=True,
-                error="eslint not available; skipped",
+                passed=False,
+                executed=False,
+                exit_code=-1,
+                error="eslint not available; verification not executed",
             )
         res = sandbox.execute(
             SandboxJob(

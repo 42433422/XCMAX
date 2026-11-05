@@ -1,0 +1,67 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。账号仅记录用户名。",
+  "kind": "feature-acceptance",
+  "feature": "mods-webhook",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929b",
+  "status": "failed",
+  "verdict": "FAIL",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "app_version": "1.0.0.5",
+  "account": "SUNBIRD",
+  "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 2,
+  "failed": 1,
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。failed。AI 员工市场宿主基础能力共 0 件，与商店空态同一画面。 未通过明细：M1 failed：HTTP 403 49ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"该旧业务接口尚未提供安全的租户数据隔离\", \"path\": \"/api/orders/webhooks\"}",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/orders/webhooks",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/orders/webhooks（写操作自动附带 CSRF）：订单事件 Webhook 配置",
+      "expected": "订单事件 Webhook 配置：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 403 49ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"该旧业务接口尚未提供安全的租户数据隔离\", \"path\": \"/api/orders/webhooks\"}",
+      "result": "failed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/mods/comms/endpoints",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mods/comms/endpoints（写操作自动附带 CSRF）：通信端点",
+      "expected": "通信端点：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 45ms；{\"success\": true, \"data\": []}",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "界面路由 /mod-store",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod-store，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod-store，页面可见 ，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod-store；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "mods-webhook",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/mods-webhook/macos/result.png",
+      "sha256": "24f7bc9214e382611d7e300ed6b0ef37c766103db75e5542fe3fcc07b4d33e58",
+      "visual_review": "accepted",
+      "visible_result": "AI 员工市场宿主基础能力共 0 件，与商店空态同一画面。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-webhook",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/mods-webhook/macos/operation.webm",
+      "sha256": "20b004f798ace24fda84e7aecf67fbf1465e622dbba4e668e0d3c49fea8ce0b4",
+      "visual_review": "accepted",
+      "visible_result": "录屏结束停在上述结果画面。AI 员工市场宿主基础能力共 0 件，与商店空态同一画面。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/mods-webhook/macos/run.log",
+    "sha256": "501305aa08b829354a555789685d48a43b2e347da13d2bc0018756348526116e",
+    "bytes": 1284
+  }
+}

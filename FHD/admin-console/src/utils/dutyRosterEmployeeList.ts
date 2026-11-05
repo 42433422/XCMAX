@@ -23,15 +23,15 @@ export function buildDutyRosterRows(health: Record<string, unknown>): DutyRoster
     asIdList(health.registered_employee_ids ?? staffing.registered_employee_ids),
   )
   const planned = new Set(asIdList(health.planned_employee_ids ?? staffing.planned_employee_ids))
-  const localCount = Number(health.planned_local_installed_count ?? 0)
+  const installed = new Set(asIdList(health.local_employee_pack_ids))
 
   const ids = new Set<string>([...ALL_PLANNED_YUANGON_PKG_IDS, ...missing, ...registered, ...planned])
 
   return [...ids].sort().map((pkgId) => {
     let status: DutyRosterRowStatus = 'planned'
     if (missing.has(pkgId)) status = 'missing'
+    else if (installed.has(pkgId)) status = 'installed'
     else if (registered.has(pkgId)) status = 'registered'
-    else if (planned.has(pkgId) && localCount > 0) status = 'installed'
     return { pkgId, status }
   })
 }

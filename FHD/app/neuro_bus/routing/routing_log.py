@@ -10,10 +10,9 @@ from typing import Any
 
 
 def _default_log_path() -> Path:
-    root = Path(__file__).resolve().parents[3]
-    d = root / "resources" / "routing_policies"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "routing_decisions.jsonl"
+    from app.neuro_bus.routing.policy_paths import resolve_policy_file
+
+    return resolve_policy_file("routing_decisions.jsonl", for_write=True)
 
 
 def append_routing_decision(

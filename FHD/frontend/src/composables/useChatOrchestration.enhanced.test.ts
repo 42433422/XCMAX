@@ -527,11 +527,14 @@ describe('useChatOrchestration – copyAssistantPushContent', () => {
     expect(api.pushCopied.value).toBe(false)
   })
 
-  it('sets pushCopied when content exists', async () => {
+  it('sets pushCopied only after writing content to the clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     const api = createApi()
     api.latestAssistantPush.value = { title: '测试', description: '描述' }
     await api.copyAssistantPushContent()
     expect(api.pushCopied.value).toBe(true)
+    expect(writeText).toHaveBeenCalledWith('测试\n描述')
   })
 })
 

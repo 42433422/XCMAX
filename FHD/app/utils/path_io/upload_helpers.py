@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from app.utils.path_io.path_utils import get_upload_dir
 from app.utils.security.secure_filename import secure_filename
@@ -19,14 +19,8 @@ async def save_upload_file(upload: UploadFile, *, subdir: str) -> str:
     """
     if not upload.filename:
         raise ValueError("上传文件缺少文件名")
-    filename = secure_filename(upload.filename)
-    upload_dir = os.path.join(get_upload_dir(), subdir)
-    os.makedirs(upload_dir, exist_ok=True)
-    resolved_path = os.path.join(upload_dir, filename)
     body = await upload.read()
-    with open(resolved_path, "wb") as f:
-        f.write(body)
-    return resolved_path
+    return await run_in_threadpool(save_upload_bytes, body, subdir=subdir, filename=upload.filename)
 
 
 def save_upload_bytes(content: bytes, *, subdir: str, filename: str) -> str:

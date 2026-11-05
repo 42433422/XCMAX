@@ -1,7 +1,5 @@
 """Agent API domain."""
 
-from __future__ import annotations
+from . import agent_routes as routes
 
-from app.fastapi_routes.domains.agent.routes import router
-
-__all__ = ["router"]
+__all__ = ["routes"]

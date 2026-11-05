@@ -1,0 +1,65 @@
+{
+  "schema": "xcagi.release_gate.v1",
+  "gate": "G3-macos-security",
+  "platform": "macos",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "artifact": {
+    "filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "size": 298366428,
+    "sha256": "6d127de45f58d86ebfb015b4216be8064bf70321e112bde6da35a2cf92ea0464",
+    "public_url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "public_manifest": "https://xiu-ci.com/xcagi-v1.0.0.5/manifest.json",
+    "manifest_sha256_matches_local": true,
+    "manifest_size_matches_local": true,
+    "manifest_generated_at": "2026-09-18T09:57:25.247380+00:00"
+  },
+  "hdiutil_verify": {
+    "command": "hdiutil verify XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "result": "checksum VALID",
+    "verdict": "PASS"
+  },
+  "codesign": {
+    "command": "codesign --verify --deep --strict --verbose=2 XCAGI.app",
+    "result": "valid on disk / satisfies its Designated Requirement",
+    "identifier": "com.xcagi.desktop.enterprise",
+    "team_identifier": "G26WSH472M",
+    "authority": "Developer ID Application: jialong Li (G26WSH472M)",
+    "verdict": "PASS"
+  },
+  "gatekeeper": {
+    "command": "spctl --assess --type execute -vv XCAGI.app",
+    "result": "accepted",
+    "source": "Notarized Developer ID",
+    "origin": "Developer ID Application: jialong Li (G26WSH472M)",
+    "verdict": "PASS"
+  },
+  "notarization_stapling": {
+    "command": "xcrun stapler validate XCAGI.app",
+    "result": "The validate action worked!",
+    "verdict": "PASS"
+  },
+  "dmg_app_build_info": {
+    "schema_version": 1,
+    "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+    "builtAt": "2026-09-18T07:39:47.185Z"
+  },
+  "dmg_app_hashes": {
+    "app.asar.sha256": "875ca9a25415beee6201dcf8b81933486d2e1f93feb6147836a3518446e0a8b9",
+    "Contents/MacOS/XCAGI.sha256": "f748ea537323473dbca648d574dee4a624375ee479410959e93850ee3d165248"
+  },
+  "installed_1_0_0_4_hashes_for_diff": {
+    "app.asar.sha256": "875ca9a25415beee6201dcf8b81933486d2e1f93feb6147836a3518446e0a8b9",
+    "Contents/MacOS/XCAGI.sha256": "e63f5f58d937d169745b460a60aa1b7060e2282a2cf45feba4b3130b6dc34151",
+    "Contents/Resources/backend/xcagi-backend.sha256": "7e37b755fe63d1f8681e0a5316010b0a36f754e5ce1a71b0a29d2fdc90c81b1a"
+  },
+  "observation": {
+    "app_asar_identical_to_1_0_0_4": true,
+    "note": "1.0.0.5 与 1.0.0.4 的 app.asar 逐字节相同（sha256 均为 875ca9a2…），即 Electron 外壳 JS 未变更；本次发布变更落在主可执行（e63f5f58…→f748ea53…）与后端运行时。因此 G9 的自动退出/自动重启行为在 JS 层面与上一轮同源，须以实机结果判定，不得以代码推断代替。"
+  },
+  "verdict": "PASS"
+}

@@ -7,16 +7,17 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
-from app.application.workflow.types import normalize_workflow_risk
+from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.fastapi_routes.xcagi_compat_product_actions import (
     execute_product_action,
     price_list_word_response,
 )
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.infrastructure.auth.db_token import verify_db_read_token_header
-from app.infrastructure.persistence.compat_db.base import (
+from app.infrastructure.persistence.compat_db.compat_db_base import (
     _business_mod_json_block,
     _product_parse_id,
     _product_parse_is_active,
@@ -30,6 +31,7 @@ from app.infrastructure.persistence.compat_db.product_queries import (
 from app.infrastructure.persistence.compat_db.queries import (
     _merged_purchase_unit_entries,
     _products_units_for_select,
+    _shipment_units_for_select,
 )
 from app.infrastructure.persistence.compat_db.writes import (
     products_pg_batch_delete_rows,
@@ -39,7 +41,10 @@ from app.infrastructure.persistence.compat_db.writes import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-router = APIRouter(tags=["xcagi-compat"])
+router = APIRouter(
+    tags=["xcagi-compat"],
+    dependencies=[Depends(require_scoped_business_permission("product.view", "product.edit"))],
+)
 logger = logging.getLogger(__name__)
 
 
@@ -77,14 +82,10 @@ def _products_compat_agent_user_id(request: Request, payload: dict[str, Any]) ->
 def _products_compat_status_code(result: dict[str, Any]) -> int:
     if result.get("success"):
         return 200
-    status_code = result.get("status_code")
-    if status_code is None:
+    try:
+        parsed = int(result.get("status_code") or 0)
+    except RECOVERABLE_ERRORS:
         parsed = 0
-    else:
-        try:
-            parsed = int(status_code)
-        except RECOVERABLE_ERRORS:
-            parsed = 0
     if 400 <= parsed < 600:
         return parsed
     if str(result.get("error_code") or "") in {"tool_exception", "http_exception"}:
@@ -177,7 +178,7 @@ def _run_products_compat_agent(
     route_path: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
@@ -263,14 +264,14 @@ def products_units(request: Request) -> dict:
 @router.get("/shipment/shipment-records/units")
 @router.get("/shipment/shipment-records/units/")
 def shipment_records_units() -> dict:
-    return cast("dict[Any, Any]", _products_units_for_select())
+    return _shipment_units_for_select()
 
 
 @router.get("/mod/taiyangniao-pro/shipment/shipment-records/units")
 @router.get("/mod/taiyangniao-pro/shipment/shipment-records/units/")
 def taiyangniao_shipment_records_units_host_alias() -> dict:
     """Stable host alias for desktop clients with independently updated private Mods."""
-    from app.application.attendance_reference_data import attendance_unit_names
+    from app.domain.app_pure.attendance_reference_data import attendance_unit_names
 
     units = attendance_unit_names(_products_units_for_select())
     return {"success": True, "data": units, "units": units, "source": "host_compat"}

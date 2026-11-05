@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ops-customer-value",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-080227",
+  "generated_at": "2026-09-29 08:02:53",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端完成：管理员登录 → 「创始人自治驾驶舱」页真实渲染「客户状态」卡片（0% · 能力早期 · 还差 100% · 权威价值账本 · 查看 0/6 项证据门槛）→ GET /api/xcmax/ops/founder-autonomy 返回客户价值 6 项门禁（value_ledger/paid/goals/delivered/capacity/outcome）与 57 项行动事项 attention → 审批/审计总览接口以管理会话应答 → 无会话访问客户价值接口被拒（401）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 16320,
+        "processed": 16320,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.search",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "error.occurred",
+                "evolution.index"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/ops-customer-value/ops-customer-value-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ops-customer-value",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-customer-value/shot/00-login-form.png",
+      "sha256": "9ff705a3d22898023247e3c0b22e1bbd4ce914723115c04bafd2e4b692bf033c",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点「登 录」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-customer-value",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-customer-value/shot/CV1-founder-autonomy-customer.png",
+      "sha256": "629f0142e4a1aba4bb8e2b4281e0a796670ba89d86b8788fae5389270e090d94",
+      "visual_review": "accepted",
+      "visible_result": "「创始人自治驾驶舱」页已滚动到「七项真实进度」区：「客户状态 0% · 能力早期」，副标「客户为可验证产出付费」，缺口「接入可排除测试、内部与退款记录的权威价值账本」，「查看 0/6 项证据门槛」；同屏可见 创始人状态 40%、系统/代码/故障/进化状态 0%（进化 0/7）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-customer-value",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-customer-value/shot/CV2-customer-gates-api.png",
+      "sha256": "1a98d42f4f8e7e1b046e87233dccdc1c7e48be6a96a3c2d70ac1fb55edaea49f",
+      "visual_review": "accepted",
+      "visible_result": "本工具在真实浏览器中渲染的本轮响应：GET /api/xcmax/ops/founder-autonomy → 200；customer 门禁 6 项 value_ledger/paid/goals/delivered/capacity/outcome，progress 0、total_gate_count 6、attention_total 57。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-customer-value",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-customer-value/shot/CV3-unauth-denied.png",
+      "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+      "visual_review": "accepted",
+      "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何客户价值数据。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-customer-value",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-customer-value/shot/CV4-autonomy-overview.png",
+      "sha256": "a88aca332bea3dd65b610f82eadf0f1eb390cb595c76877da35105c6c351bfd8",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/xcmax/admin/autonomy/overview → 200，ok=true，health ok，pending.count=0、items_len=0，audit_items=1，审计样本 decision=config_loaded、risk_level=LOW。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-customer-value",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-customer-value/video/ops-customer-value-web-20260929-080227.webm",
+      "sha256": "fa05da62478e396bbcf0d8673c2993265dc6274bb58d5d6841c4d1cf8c9cab25",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，25.12s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 创始人自治驾驶舱客户状态卡片 → 客户价值门禁接口 → 无会话被拒 → 自治总览。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "CV1",
+      "title": "「创始人自治驾驶舱」页真实渲染客户状态卡片",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器导航到 /admin/founder-autonomy，等待 SPA 渲染后读取标题与正文。",
+      "expected": "渲染出「客户状态」并含「客户为可验证产出付费」「权威价值账本」「0/6 项证据门槛」。",
+      "observed": "{\"final_url\": \"http://127.0.0.1:42423/admin/founder-autonomy\", \"title\": \"创始人自治驾驶舱 - XCAGI\", \"has_customer_dim\": true, \"has_customer_target\": true, \"has_value_ledger_gap\": true, \"has_gate_count\": true, \"text_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能力未就绪 版本检测中 平台运维 · 系统管理 创始人自治驾驶舱 副窗 ◈ 工作区 3  FOUNDER MODE · STRATEGIC ONLY  创始人自治驾驶舱  日常运营交给 AI 员工与 Loops；这里只保留战略方向、少量例外与 veto。  证据时间 2026/9/\"}",
+      "result": "passed"
+    },
+    {
+      "id": "CV2",
+      "title": "客户价值 6 项门禁与行动事项真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/xcmax/ops/founder-autonomy。",
+      "expected": "200 且 success=true；dimensions[customer] 门禁 key 与 impl 顺序一致（6 项）；attention.total 为整数。",
+      "observed": "{\"status\": 200, \"success\": true, \"gate_keys\": [\"value_ledger\", \"paid\", \"goals\", \"delivered\", \"capacity\", \"outcome\"], \"total_gate_count\": 6, \"progress\": 0, \"attention_total\": 57}",
+      "result": "passed"
+    },
+    {
+      "id": "CV3",
+      "title": "无会话访问客户价值接口被拒（负例）",
+      "input": "全新的无会话浏览器上下文。",
+      "actions": "在无 cookie 的上下文中 fetch GET /api/xcmax/ops/founder-autonomy。",
+      "expected": "被拒绝（401/403），success=false，不返回客户价值数据。",
+      "observed": "{\"status\": 401, \"body\": {\"success\": false, \"message\": \"请先登录\"}}",
+      "result": "passed"
+    },
+    {
+      "id": "CV4",
+      "title": "自治审批总览与只追加审计真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/xcmax/admin/autonomy/overview。",
+      "expected": "200 且 ok=true；pending.count 与 items 长度一致；audit.items 为列表。",
+      "observed": "{\"status\": 200, \"ok\": true, \"pending_count\": 0, \"pending_items\": 0, \"audit_items\": 1}",
+      "result": "passed"
+    }
+  ]
+}

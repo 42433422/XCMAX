@@ -108,67 +108,14 @@ describe('ShipmentPrintPreview', () => {
   })
 
   describe('calculateAmount(product)', () => {
-    it('calculates amount for valid product', () => {
+    it.each([
+      ['valid product', 5, 100, '500.00'], ['zero quantity', 0, 100, '0.00'],
+      ['zero price', 5, 0, '0.00'], ['numeric strings', '5', '100', '500.00'],
+      ['null/undefined', null, undefined, '0.00'], ['NaN', NaN, NaN, '0.00'],
+      ['decimals', 2.5, 3.4, '8.50'],
+    ])('calculates amount for %s', (_name, quantity, unit_price, expected) => {
       const wrapper = mountComponent()
-      const result = (wrapper.vm as any).calculateAmount({
-        quantity: 5,
-        unit_price: 100,
-      })
-      expect(result).toBe('500.00')
-    })
-
-    it('returns 0.00 for zero quantity', () => {
-      const wrapper = mountComponent()
-      const result = (wrapper.vm as any).calculateAmount({
-        quantity: 0,
-        unit_price: 100,
-      })
-      expect(result).toBe('0.00')
-    })
-
-    it('returns 0.00 for zero price', () => {
-      const wrapper = mountComponent()
-      const result = (wrapper.vm as any).calculateAmount({
-        quantity: 5,
-        unit_price: 0,
-      })
-      expect(result).toBe('0.00')
-    })
-
-    it('handles string numeric values', () => {
-      const wrapper = mountComponent()
-      const result = (wrapper.vm as any).calculateAmount({
-        quantity: '5',
-        unit_price: '100',
-      })
-      expect(result).toBe('500.00')
-    })
-
-    it('handles null/undefined values as zero', () => {
-      const wrapper = mountComponent()
-      const result = (wrapper.vm as any).calculateAmount({
-        quantity: null,
-        unit_price: undefined,
-      })
-      expect(result).toBe('0.00')
-    })
-
-    it('handles NaN values as zero', () => {
-      const wrapper = mountComponent()
-      const result = (wrapper.vm as any).calculateAmount({
-        quantity: NaN,
-        unit_price: NaN,
-      })
-      expect(result).toBe('0.00')
-    })
-
-    it('handles decimal values', () => {
-      const wrapper = mountComponent()
-      const result = (wrapper.vm as any).calculateAmount({
-        quantity: 2.5,
-        unit_price: 3.4,
-      })
-      expect(result).toBe('8.50')
+      expect((wrapper.vm as any).calculateAmount({ quantity, unit_price })).toBe(expected)
     })
   })
 
@@ -339,6 +286,7 @@ describe('ShipmentPrintPreview', () => {
   describe('watchers', () => {
     it('shipmentData watcher merges new data into localData', async () => {
       const wrapper = mountComponent()
+      await wrapper.findAll('.info-item input')[0].setValue('未保存的本地客户')
       const vm = wrapper.vm as any
       await wrapper.setProps({
         shipmentData: makeShipmentData({
@@ -426,4 +374,32 @@ describe('ShipmentPrintPreview', () => {
       expect(vm.loading).toBe(false)
     })
   })
+  it.each([true, false])('exports edits without mutating props (headers first: %s)', async (headersFirst) => {
+    const shipmentData = makeShipmentData()
+    const wrapper = mountComponent({ shipmentData })
+    const row = wrapper.findAll('.product-table tbody tr')[0]
+    const editProducts = async () => {
+      for (const [selector, value] of [['.col-product input', '新品'], ['.col-spec input', '大号'], ['.col-quantity input', 4], ['.col-price input', 25], ['select', '件']] as const) {
+        await row.get(selector).setValue(value)
+      }
+    }
+    const editHeaders = async () => {
+      for (const [index, value] of ['新客户', '2026-10-15', 'SO-002'].entries()) {
+        await wrapper.findAll('.info-item input')[index].setValue(value)
+      }
+      await wrapper.get('textarea').setValue('请轻放')
+      for (const [index, value] of ['审批甲', '会计乙', '经理丙', '仓库丁'].entries()) {
+        await wrapper.findAll('.sig-input')[index].setValue(value)
+      }
+    }
+    for (const edit of headersFirst ? [editHeaders, editProducts] : [editProducts, editHeaders]) await edit()
+    expect(shipmentData).toEqual(makeShipmentData())
+    expect(wrapper.get('.total-amount .value').text()).toBe('¥700.00元')
+    await wrapper.get('.btn-success').trigger('click')
+    expect(wrapper.emitted('download')!.slice(-1)[0]![0]).toMatchObject({ customer_name: '新客户', date: '2026-10-15', order_number: 'SO-002', notes: '请轻放', total_quantity: 7, total_amount: 700,
+      signatures: { approver: '审批甲', accountant: '会计乙', manager: '经理丙', warehouse: '仓库丁' },
+      products: [expect.objectContaining({ name: '新品', spec: '大号', quantity: 4, unit_price: 25, unit: '件' }), expect.any(Object)] })
+    wrapper.unmount()
+  })
+
 })

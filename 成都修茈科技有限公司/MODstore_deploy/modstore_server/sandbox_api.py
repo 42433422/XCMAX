@@ -4,13 +4,14 @@ from __future__ import annotations
 import logging
 import os
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from httpx import URL, InvalidURL
 from pydantic import BaseModel
 
-from modstore_server.api.auth_deps import require_user
+from modstore_server.api.auth_deps import assert_user_owns_mod, require_user
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -54,11 +55,51 @@ def _normalize_url(raw: str) -> str:
     return value.rstrip("/")
 
 
+def _validated_base(raw: str) -> str | None:
+    if raw.strip().startswith("//"):
+        return None
+    value = _normalize_url(raw)
+    if (
+        "\\" in value
+        or "?" in value
+        or "#" in value
+        or any(ord(c) < 32 or ord(c) == 127 for c in value)
+    ):
+        return None
+    try:
+        parts = urlsplit(value)
+        if (
+            parts.scheme not in {"http", "https"}
+            or not parts.hostname
+            or parts.username is not None
+        ):
+            return None
+        # Match the HTTP client's IDNA and URL rules, not Python's IDNA2003 codec.
+        return str(URL(value)).rstrip("/")
+    except (ValueError, InvalidURL):
+        return None
+
+
+def _trusted_sandbox_url(raw: str) -> str:
+    """Only server-configured bases may receive packages and the server bearer."""
+    from modstore_server.infrastructure import library_paths
+
+    requested = _validated_base(raw)
+    configured = library_paths.resolved_xcagi_backend_url(library_paths.cfg())
+    for candidate in (configured, "/sandbox"):
+        trusted = _validated_base(candidate)
+        if trusted is not None and requested == trusted:
+            return trusted
+    raise HTTPException(403, "Sandbox destination is not configured by an administrator")
+
+
 @router.post("/connect")
 def api_sandbox_connect(body: ConnectRequest, _user=Depends(require_user)):
-    url = _normalize_url(body.host_url)
+    url = _trusted_sandbox_url(body.host_url)
     try:
-        with httpx.Client(timeout=(_CONNECT_TIMEOUT, _READ_TIMEOUT)) as client:
+        with httpx.Client(
+            timeout=(_CONNECT_TIMEOUT, _READ_TIMEOUT), follow_redirects=False
+        ) as client:
             health = client.get(f"{url}/api/health")
             health.raise_for_status()
             health_data = health.json()
@@ -68,7 +109,9 @@ def api_sandbox_connect(body: ConnectRequest, _user=Depends(require_user)):
 
     mods_info: dict[str, Any] = {}
     try:
-        with httpx.Client(timeout=(_CONNECT_TIMEOUT, _READ_TIMEOUT)) as client:
+        with httpx.Client(
+            timeout=(_CONNECT_TIMEOUT, _READ_TIMEOUT), follow_redirects=False
+        ) as client:
             resp = client.get(f"{url}/api/mods/loading-status")
             if resp.status_code == 200:
                 mods_info = resp.json()
@@ -85,8 +128,9 @@ def api_sandbox_connect(body: ConnectRequest, _user=Depends(require_user)):
 
 @router.post("/push-and-test")
 def api_sandbox_push_and_test(body: PushAndTestRequest, _user=Depends(require_user)):
-    url = _normalize_url(body.host_url)
+    url = _trusted_sandbox_url(body.host_url)
     mod_id = body.mod_id.strip()
+    assert_user_owns_mod(_user, mod_id)
 
     from modstore_server.infrastructure import library_paths
 
@@ -110,7 +154,7 @@ def api_sandbox_push_and_test(body: PushAndTestRequest, _user=Depends(require_us
                     zf.write(full, arcname)
 
         try:
-            with httpx.Client(timeout=(_CONNECT_TIMEOUT, 30.0)) as client:
+            with httpx.Client(timeout=(_CONNECT_TIMEOUT, 30.0), follow_redirects=False) as client:
                 with open(zip_path, "rb") as f:
                     resp = client.post(
                         f"{url}/api/mod-store/install",
@@ -135,14 +179,15 @@ def api_sandbox_push_and_test(body: PushAndTestRequest, _user=Depends(require_us
 def api_sandbox_host_status(_user=Depends(require_user)):
     from modstore_server.infrastructure import library_paths
 
-    cfg = library_paths.cfg()
-    backend_url = cfg.get("xcagi_backend_url", "")
+    backend_url = library_paths.resolved_xcagi_backend_url(library_paths.cfg())
     if not backend_url:
         return {"ok": False, "error": "xcagi_backend_url not configured"}
 
-    url = _normalize_url(backend_url)
+    url = _trusted_sandbox_url(backend_url)
     try:
-        with httpx.Client(timeout=(_CONNECT_TIMEOUT, _READ_TIMEOUT)) as client:
+        with httpx.Client(
+            timeout=(_CONNECT_TIMEOUT, _READ_TIMEOUT), follow_redirects=False
+        ) as client:
             resp = client.get(f"{url}/api/mods/loading-status")
             resp.raise_for_status()
             return {"ok": True, "data": resp.json()}

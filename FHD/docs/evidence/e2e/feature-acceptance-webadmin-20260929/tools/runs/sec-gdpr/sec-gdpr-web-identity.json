@@ -1,0 +1,242 @@
+{
+  "_comment": "Web 管理端（自托管）真机验收的站点身份/版本/SHA 侦察快照，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。",
+  "kind": "web-admin-identity",
+  "feature": "sec-gdpr",
+  "platform": "web",
+  "captured_at": "2026-09-29 08:26:04",
+  "entry_url": "http://127.0.0.1:42423/admin/login",
+  "site_health": {
+    "status": "degraded",
+    "version": "1.0.0.5",
+    "service": "xcagi-fastapi",
+    "degradedReasons": [
+      "LLM_RUNTIME_UNAVAILABLE"
+    ],
+    "build": {
+      "admin_console_sha256": "",
+      "admin_console_git_sha": "",
+      "artifact_sha256": "",
+      "built_at": "",
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "image_digest": "",
+      "product_version": "",
+      "release_id": ""
+    },
+    "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+    "release_id": "",
+    "neuro": {
+      "status": "healthy",
+      "running": true,
+      "published": 25600,
+      "processed": 25600,
+      "errors": 0,
+      "dropped": 0,
+      "queue_size": 0,
+      "handlers": 136,
+      "global_handlers": 0,
+      "reliability": {
+        "fhd_env": "",
+        "dedup": false,
+        "rate_limit": false,
+        "circuit_breaker": false,
+        "lifeline": false,
+        "tracer": false,
+        "sla_log": false,
+        "sla_controller": false,
+        "retry": false,
+        "dlq_auto": false,
+        "redis_pubsub": false,
+        "trace_sample_rate": null
+      },
+      "components": {
+        "bus_running": true,
+        "queue_size": 0,
+        "domains": [
+          "intent",
+          "order",
+          "inventory",
+          "product",
+          "customer",
+          "ai_service",
+          "print",
+          "ocr",
+          "payment",
+          "safety",
+          "shipment"
+        ]
+      },
+      "processors": {
+        "coordinator": {
+          "reflex": 0,
+          "subconscious": 0,
+          "conscious": 0,
+          "total": 0,
+          "fallbacks": 0,
+          "errors": 0,
+          "reflex_rate": 0.0,
+          "fallback_rate": 0.0
+        },
+        "reflex": {
+          "cache_size": 0,
+          "max_cache_size": 1000,
+          "hits": 0,
+          "misses": 0,
+          "hit_rate": 0.0,
+          "timeouts": 0,
+          "patterns": 5
+        },
+        "subconscious": {
+          "processed": 0,
+          "batched": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "avg_latency_ms": 0.0,
+          "handlers": 1,
+          "batch_handlers": 0,
+          "running": false
+        },
+        "conscious": {
+          "processed": 0,
+          "success": 0,
+          "errors": 0,
+          "deduplicated": 0,
+          "circuit_open": 0,
+          "sandbox_rejected": 0,
+          "sla_violations": 0,
+          "success_rate": 0.0,
+          "handlers": 7,
+          "reliability_enabled": true
+        }
+      },
+      "cognition": {
+        "enabled": true,
+        "conscious_processor": {
+          "processed": 0,
+          "success": 0,
+          "errors": 0,
+          "deduplicated": 0,
+          "circuit_open": 0,
+          "sandbox_rejected": 0,
+          "sla_violations": 0,
+          "success_rate": 0.0,
+          "handlers": 7,
+          "reliability_enabled": true
+        },
+        "subconscious_processor": {
+          "processed": 0,
+          "batched": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "avg_latency_ms": 0.0,
+          "handlers": 1,
+          "batch_handlers": 0,
+          "running": false
+        },
+        "cognition": {
+          "llm_port_available": false
+        },
+        "subconscious_ml": {
+          "anomaly_detector": {
+            "total_samples": 0,
+            "total_predictions": 0,
+            "anomalies_detected": 0,
+            "anomaly_rate": 0.0,
+            "model_ready": false,
+            "samples_since_fit": 0
+          },
+          "pattern_predictor": {
+            "total_observations": 0,
+            "ngram_order": 3,
+            "ngram_patterns": 0,
+            "markov_states": 0,
+            "history_size": 0
+          },
+          "local_embedder": {
+            "cache_size": 65
+          }
+        },
+        "evolution": {
+          "handler": {
+            "total_handled": 0,
+            "total_success": 0,
+            "success_rate": 0.0,
+            "supported_events": [
+              "evolution.search",
+              "evolution.export",
+              "evolution.mine",
+              "evolution.reflect",
+              "error.occurred",
+              "evolution.index"
+            ],
+            "kb_stats": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "miner_stats": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "fixer_stats": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          },
+          "kb_retriever": {
+            "total_entries": 65,
+            "by_kind": {
+              "pattern": 13,
+              "fix": 52
+            },
+            "indexed": true,
+            "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+          },
+          "reflex_pattern_miner": {
+            "log_path": "routing_decisions.jsonl",
+            "log_exists": false,
+            "records_scanned": 0,
+            "min_occurrences": 3,
+            "min_confidence": 0.8
+          },
+          "runtime_self_fix": {
+            "total_proposals": 0,
+            "actionable_proposals": 0,
+            "actionable_rate": 0.0,
+            "min_score": 0.3,
+            "kb_stats": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            }
+          }
+        }
+      }
+    }
+  },
+  "site_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "site_version": "1.0.0.5",
+  "site_release_id": "",
+  "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368"
+}

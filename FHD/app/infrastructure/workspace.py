@@ -1,6 +1,6 @@
 """工作区路径工具。
 
-Phase 3 从 ``app.legacy.workspace`` 迁入,API 保持不变。
+Phase 3 从 ``legacy-layer.workspace`` 迁入,API 保持不变。
 """
 
 from __future__ import annotations

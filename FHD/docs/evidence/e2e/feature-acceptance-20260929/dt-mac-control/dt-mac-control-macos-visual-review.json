@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "dt-mac-control",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+  "visible_content": "控制输入最新状态与自动化驱动状态（mac=false）可读；桌面运行时页可见。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-mac-control/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-mac-control/macos/result.png"
+}

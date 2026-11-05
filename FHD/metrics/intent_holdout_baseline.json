@@ -1,0 +1,155 @@
+{
+  "total": 142,
+  "source_sha": "a83f2e2b65d8b8a4913f850656bee0823519d160",
+  "dataset_sha256": "0b36004072c4649da9dc8dcd4686f2b1174e55b3bbc3beed88947a5eed689c20",
+  "measured_at": "2026-09-09T06:09:14.747123+00:00",
+  "repeat": 1,
+  "round_agreement": 1.0,
+  "accuracy_overall": 0.6549,
+  "accuracy_by_tier": {
+    "core": 0.8,
+    "semantic": 0.5876
+  },
+  "accuracy_by_domain": {
+    "customers": {
+      "correct": 8,
+      "total": 10,
+      "accuracy": 0.8
+    },
+    "data": {
+      "correct": 7,
+      "total": 10,
+      "accuracy": 0.7
+    },
+    "finance": {
+      "correct": 4,
+      "total": 10,
+      "accuracy": 0.4
+    },
+    "greeting": {
+      "correct": 7,
+      "total": 10,
+      "accuracy": 0.7
+    },
+    "inventory": {
+      "correct": 8,
+      "total": 10,
+      "accuracy": 0.8
+    },
+    "out_of_scope": {
+      "correct": 11,
+      "total": 11,
+      "accuracy": 1.0
+    },
+    "print": {
+      "correct": 9,
+      "total": 10,
+      "accuracy": 0.9
+    },
+    "products": {
+      "correct": 4,
+      "total": 10,
+      "accuracy": 0.4
+    },
+    "rejection": {
+      "correct": 7,
+      "total": 11,
+      "accuracy": 0.6364
+    },
+    "reports": {
+      "correct": 5,
+      "total": 10,
+      "accuracy": 0.5
+    },
+    "sales": {
+      "correct": 4,
+      "total": 10,
+      "accuracy": 0.4
+    },
+    "shipment": {
+      "correct": 5,
+      "total": 10,
+      "accuracy": 0.5
+    },
+    "system": {
+      "correct": 5,
+      "total": 10,
+      "accuracy": 0.5
+    },
+    "wechat": {
+      "correct": 9,
+      "total": 10,
+      "accuracy": 0.9
+    }
+  },
+  "confusion_matrix": {
+    "customers": {
+      "customers": 9,
+      "unknown": 1
+    },
+    "products": {
+      "products": 5,
+      "unknown": 5
+    },
+    "sales": {
+      "sales": 4,
+      "shipment": 1,
+      "unknown": 3,
+      "customers": 1,
+      "products": 1
+    },
+    "inventory": {
+      "inventory": 8,
+      "unknown": 2
+    },
+    "finance": {
+      "finance": 4,
+      "print": 2,
+      "products": 2,
+      "customers": 1,
+      "unknown": 1
+    },
+    "reports": {
+      "reports": 1,
+      "customers": 4,
+      "unknown": 1,
+      "shipment": 4
+    },
+    "shipment": {
+      "shipment": 5,
+      "unknown": 3,
+      "data": 2
+    },
+    "wechat": {
+      "wechat": 9,
+      "unknown": 1
+    },
+    "print": {
+      "print": 10
+    },
+    "system": {
+      "system": 5,
+      "unknown": 4,
+      "inventory": 1
+    },
+    "data": {
+      "data": 7,
+      "products": 1,
+      "shipment": 1,
+      "unknown": 1
+    },
+    "rejection": {
+      "unknown": 6,
+      "rejection": 2,
+      "customers": 1,
+      "inventory": 1,
+      "print": 1
+    },
+    "out_of_scope": {
+      "unknown": 11
+    },
+    "greeting": {
+      "greeting": 10
+    }
+  }
+}

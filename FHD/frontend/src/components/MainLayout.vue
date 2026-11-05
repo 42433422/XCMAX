@@ -1,7 +1,7 @@
 <template>
   <div class="main-container">
     <div class="sidebar-shell" :class="{ collapsed: sidebarCollapsed }" :style="sidebarShellStyle" @mouseenter="onSidebarMouseEnter">
-      <Sidebar :active-view="currentRouteName" @change-view="handleViewChange" />
+      <Sidebar :active-view="displayedActiveView" @change-view="handleViewChange" />
       <PaneResizeHandle
         v-if="isSidebarFeatureEnabled && !sidebarCollapsed"
         orientation="vertical"
@@ -52,7 +52,10 @@
           <GlobalTaskCenter />
         </div>
       </div>
-      <slot></slot>
+      <div class="route-content">
+        <RouteLoadingFeedback :key="pendingSidebarView || failedSidebarView" :active="!!pendingSidebarView" :failed="!!failedSidebarView" :stage="pendingViewStage" class="route-nav-feedback" data-testid="route-nav-feedback" @retry="handleViewChange(failedSidebarView)" />
+        <slot></slot>
+      </div>
     </div>
     <DocumentPreviewPictureInPicture />
     <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" :male-avatar="adminConsoleSpa" />
@@ -79,10 +82,12 @@ import { appAlert } from '@/utils/appDialog'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { getIndustryPreset } from '@/constants/industryPresets'
-import { resolveCoreNavLabel, INDUSTRY_MENU_LABELS } from '@/utils/coreNavLabel'
+import { resolveCoreNavLabel, INDUSTRY_MENU_LABELS, MENU_DEFAULT_NAMES } from '@/utils/coreNavLabel'
 import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
+import { isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
+import RouteLoadingFeedback from './shell/RouteLoadingFeedback.vue'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
 import DocumentPreviewPictureInPicture from './DocumentPreviewPictureInPicture.vue'
@@ -192,38 +197,7 @@ const modPathToSidebarKey = computed(() => {
 })
 
 const viewTitlesBase = {
-  chat: '智能对话',
-  'ai-ecosystem': '智能生态',
-  'model-payment': '模型服务',
-  'kitten-finance': '财务分析',
-  'mod-store': '能力库',
-  products: '业务对象',
-  'materials-list': '资源库',
-  materials: '资源库',
-  'traditional-mode': '表格模式',
-  'business-docking': '数据对接中心',
-  orders: '业务单据',
-  'orders-create': '新建业务单据',
-  'shipment-records': '业务记录',
-  customers: '组织管理',
-  'data-sources': '数据来源',
-  print: '模板与打印',
-  'printer-list': '打印机列表',
-  'template-preview': '模板库',
-  console: '模板库',
-  settings: '系统设置',
-  im: '信息',
-  tools: '工具表',
-  'other-tools': '员工视图',
-  'employee-workflow': '员工工作台',
-  'workflow-employee-space': '员工空间',
-  'workflow-visualization': '流程可视化',
-  purchase: '耗材申领',
-  'label-editor': '模板编辑器',
-  'batch-analyze': '批量分析',
-  'chat-debug': '对话调试',
-  'enterprise-customer-service': '信息',
-  'internal-customer-service': '信息',
+  ...MENU_DEFAULT_NAMES,
   'admin-entitlements': '账号权益',
   'xcmax-admin': '服务器后台总览',
   'delivery-center': '客户交付中心',
@@ -234,8 +208,11 @@ const viewTitlesBase = {
 }
 
 const routeNameMap = SIDEBAR_ROUTE_NAME_MAP
+const UNMATCHED_ROUTE_KEY = '__route-not-found__'
 
 const currentRouteName = computed(() => {
+  // 无匹配页面时不回落成「对话」高亮，避免空白页被误认成运维对话
+  if (isUnmatchedRoute(route)) return UNMATCHED_ROUTE_KEY
   const modKey = modPathToSidebarKey.value[route.path]
   let raw = modKey || routeNameMap[route.path] || ''
   if (!raw) {
@@ -250,8 +227,26 @@ const currentRouteName = computed(() => {
   return normalizeSidebarActiveKey(raw, route)
 })
 
-/** 侧栏选中「智能对话」时隐藏悬浮入口（含 Mod 门面 /mod/.../chat） */
-const shouldShowFloatingChatAssistant = computed(() => !isChatSidebarActive(currentRouteName.value, route) && !documentPreviewPip.visible)
+/** Optimistic sidebar highlight: paint target immediately while router/chunk catches up. */
+const pendingSidebarView = ref('')
+const failedSidebarView = ref('')
+let routeNavGeneration = 0
+const displayedActiveView = computed(() => pendingSidebarView.value || currentRouteName.value)
+
+function syncPendingSidebarWithRoute() {
+  if (!pendingSidebarView.value) return
+  if (pendingSidebarView.value === currentRouteName.value || routeChunkErrorPath.value) {
+    pendingSidebarView.value = ''
+  }
+}
+
+watch([currentRouteName, routeChunkErrorPath], () => {
+  failedSidebarView.value = ''
+  syncPendingSidebarWithRoute()
+})
+
+/** 对话与信息页收起悬浮入口，避免遮挡客服和员工的输入工具条。 */
+const shouldShowFloatingChatAssistant = computed(() => !isChatSidebarActive(currentRouteName.value, route) && currentRouteName.value !== 'im' && !documentPreviewPip.visible)
 
 const {
   paneStyle: sidebarShellStyle,
@@ -289,6 +284,7 @@ const viewTitles = computed(() => {
 
 const currentViewTitle = computed(() => {
   const key = currentRouteName.value
+  if (key === UNMATCHED_ROUTE_KEY) return '页面不存在'
   const industryId = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID)
   const fromNav = resolveCoreNavLabel(key, industryId, modsForUi.value)
   if (fromNav) return fromNav
@@ -298,16 +294,38 @@ const currentViewTitle = computed(() => {
   if (typeof metaTitle === 'string' && metaTitle.trim()) return metaTitle
   return '未知页面'
 })
+const pendingViewStage = computed(() => {
+  const key = pendingSidebarView.value
+  const title = resolveCoreNavLabel(key, industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID, modsForUi.value) || viewTitles.value[key]
+  return title ? `正在打开「${title}」` : '正在打开页面'
+})
 
 async function navigateToView(viewKey) {
-  await navigateFromSidebarKey(router, viewKey, {
-    modMenuItems: modMenuItems.value,
-    routeNameMap,
-    getModRoutes: () => modsStore.modRoutes,
-  })
+  const normalized = String(viewKey || '').trim()
+  if (!normalized || pendingSidebarView.value === normalized) return
+  const generation = ++routeNavGeneration
+  // Optimistic: highlight immediately so cold chunk / mod-route wait does not look like a dead click.
+  pendingSidebarView.value = normalized
+  failedSidebarView.value = ''
+  try {
+    const applied = await navigateFromSidebarKey(router, normalized, {
+      modMenuItems: modMenuItems.value,
+      routeNameMap,
+      getModRoutes: () => modsStore.modRoutes,
+    })
+    if (!applied && generation === routeNavGeneration && !routeChunkErrorPath.value) failedSidebarView.value = normalized
+  } catch (error) {
+    if (generation === routeNavGeneration && !routeChunkErrorPath.value) failedSidebarView.value = normalized
+    console.warn('[MainLayout] 页面切换失败', error)
+  } finally {
+    if (generation === routeNavGeneration) {
+      pendingSidebarView.value = ''
+    }
+  }
 }
 
 const handleViewChange = (viewKey) => {
+  // Fire-and-forget: do not serialize UI behind a prior slow navigate promise.
   void navigateToView(viewKey)
 }
 
@@ -472,3 +490,7 @@ onBeforeUnmount(() => {
 <style scoped src="./main-layout/main-layout.css"></style>
 
 <style scoped src="./MainLayoutActions.css"></style>
+
+<style scoped>
+.route-content { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+</style>

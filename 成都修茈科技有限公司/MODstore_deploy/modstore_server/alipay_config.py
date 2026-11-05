@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 _warned_notify_url = False
@@ -110,8 +111,7 @@ def build_client():
         raise RuntimeError(missing_sdk)
     if not credentials_ready():
         raise RuntimeError(
-            "支付宝配置不完整：需要 ALIPAY_APP_ID、ALIPAY_APP_PRIVATE_KEY（或 ALIPAY_APP_PRIVATE_KEY_PATH）、"
-            "以及 ALIPAY_ALIPAY_PUBLIC_KEY / ALIPAY_ALIPAY_PUBLIC_KEY_PATH"
+            "支付宝配置不完整：需要 ALIPAY_APP_ID、ALIPAY_APP_PRIVATE_KEY（或 ALIPAY_APP_PRIVATE_KEY_PATH）、以及 ALIPAY_ALIPAY_PUBLIC_KEY / ALIPAY_ALIPAY_PUBLIC_KEY_PATH"
         )
     from alipay import AliPay
 
@@ -123,3 +123,46 @@ def build_client():
         sign_type="RSA2",
         debug=alipay_debug(),
     )
+
+
+def diagnostics_snapshot() -> dict[str, Any]:
+    sdk_err = sdk_import_error()
+    notify_url = notify_url_default()
+    return {
+        "alipay_configured": alipay_ui_ready(),
+        "sdk_installed": sdk_err is None,
+        "sdk_import_error": sdk_err,
+        "app_id_set": bool(alipay_app_id()),
+        "private_key_source": private_key_source(),
+        "public_key_source": public_key_source(),
+        "notify_url": notify_url,
+        "notify_url_path_ok": notify_url_path_ok(notify_url),
+        "debug_mode": alipay_debug(),
+    }
+
+
+def private_key_source() -> str:
+    if pem_from_env("ALIPAY_APP_PRIVATE_KEY"):
+        return "env"
+    if env("ALIPAY_APP_PRIVATE_KEY_PATH") and read_file_from_env("ALIPAY_APP_PRIVATE_KEY_PATH"):
+        return "path"
+    return "missing"
+
+
+def public_key_source() -> str:
+    if pem_from_env("ALIPAY_ALIPAY_PUBLIC_KEY"):
+        return "env"
+    if env("ALIPAY_ALIPAY_PUBLIC_KEY_PATH") and read_file_from_env("ALIPAY_ALIPAY_PUBLIC_KEY_PATH"):
+        return "path"
+    if default_bundled_alipay_public_key():
+        return "bundled"
+    return "missing"
+
+
+def notify_url_path_ok(url: str | None) -> bool:
+    if not url:
+        return False
+    from urllib.parse import urlparse
+
+    path = (urlparse(url).path or "").rstrip("/")
+    return path == "/api/payment/notify/alipay"

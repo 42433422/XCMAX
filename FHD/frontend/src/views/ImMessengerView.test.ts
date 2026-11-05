@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import ImMessengerView from './ImMessengerView.vue'
+import SharedIssueAcceptancePanel from '@/components/SharedIssueAcceptancePanel.vue'
 
 vi.mock('@/components/im/KellaiCustomerInbox.vue', () => ({
+  __isTeleport: false,
   default: { template: '<section class="kellai-inbox-stub">客来来客户会话（只读）</section>' },
 }))
 
@@ -107,7 +109,7 @@ vi.mock('pinia', async (importOriginal) => {
   }
 })
 vi.mock('@/stores/accountProfile', () => ({
-  useAccountProfileStore: () => ({}),
+  useAccountProfileStore: () => ({ marketUserId: null }),
 }))
 vi.mock('@/api/auth', () => ({
   authApi: {
@@ -169,12 +171,38 @@ describe('ImMessengerView.vue', () => {
     await enterpriseCs!.trigger('click')
     await flushPromises()
     expect(fetchEnterpriseCsThread).toHaveBeenCalled()
+    expect(wrapper.get('.im-chat-head').findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
     expect(fetchImMessages).not.toHaveBeenCalled()
 
     await wrapper.find('.im-compose-input').setValue('测试消息')
+    vi.mocked(sendEnterpriseCsMessage).mockRejectedValueOnce(Object.assign(new Error('请重新登录企业账号'), { reconciliationRequired: false }))
+    await wrapper.find('.im-compose').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('重新登录企业账号')
+    expect((wrapper.get('.im-compose-input').element as HTMLInputElement).value).toBe('测试消息')
     await wrapper.find('.im-compose').trigger('submit')
     await flushPromises()
     expect(sendEnterpriseCsMessage).toHaveBeenCalledWith('测试消息')
+    wrapper.unmount()
+  })
+
+  it('shows reconciliation controls while a CS send receipt is pending', async () => {
+    const { sendEnterpriseCsMessage } = await import('@/api/im')
+    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {}
+    let reject!: (error: Error) => void
+    vi.mocked(sendEnterpriseCsMessage).mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail }))
+    const wrapper = mount(ImMessengerView, { global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    await wrapper.findAll('.im-conv-item--pinned').find(item => item.text().includes('企业专属客服'))!.trigger('click')
+    await flushPromises()
+    await wrapper.find('.im-compose-input').setValue('synthetic pending report')
+    await wrapper.find('.im-compose').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('发送结果待核对')
+    expect(wrapper.get('[role="alert"] button').text()).toContain('解除重复发送保护')
+    reject(Object.assign(new Error('unknown receipt'), { reconciliationRequired: true }))
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('unknown receipt')
     wrapper.unmount()
   })
 
@@ -184,6 +212,7 @@ describe('ImMessengerView.vue', () => {
     })
     await flushPromises()
     expect(wrapper.find('.im-messenger').exists()).toBe(true)
+    expect(wrapper.findComponent(SharedIssueAcceptancePanel).exists()).toBe(false)
     expect(wrapper.text()).not.toContain('固定联系人')
     expect(wrapper.text()).toContain('企业专属客服')
     expect(wrapper.text()).not.toContain('还没有会话')
@@ -191,6 +220,10 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
     expect(wrapper.find('.im-channel-entry').exists()).toBe(true)
     expect(wrapper.text()).toContain('客户消息 · 客来来')
+    await wrapper.findAll('.im-conv-item--pinned').find(item => item.text().includes('企业专属客服'))!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.im-chat-head').findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('opens Kellai customer conversations inside the client IM', async () => {

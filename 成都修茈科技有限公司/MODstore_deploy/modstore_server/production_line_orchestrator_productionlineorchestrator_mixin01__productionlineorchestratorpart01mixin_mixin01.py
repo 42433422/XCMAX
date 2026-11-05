@@ -310,10 +310,12 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
 
     async def run_full_pipeline(
         self,
-        line: _facade().LineType = _facade().LineType.PRODUCTION,
+        line=None,
         start_from: _facade().Optional[str] = None,
         context: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
     ) -> _facade().Dict[str, _facade().Any]:
+        if line is None:
+            line = _facade().LineType.PRODUCTION
         self._running = True
         steps = (
             _facade().PRODUCTION_LINE_STEPS

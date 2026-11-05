@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-fields",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "a10bbffd26e0334c068821f78791afc39bd3e118a8e5785921adbf5b6b9462ff",
+  "visible_content": "行业基线与行业配置（units、product_fields、order_types 等）可读，产品页按饰品包装字段渲染。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-fields/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-fields/macos/result.png"
+}

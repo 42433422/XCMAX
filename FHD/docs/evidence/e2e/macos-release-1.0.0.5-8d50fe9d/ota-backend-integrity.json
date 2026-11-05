@@ -1,0 +1,70 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "ota-backend-integrity",
+  "at_utc": "2026-09-21T18:20:17Z",
+  "update_zip": "/Users/a4243342/Library/Caches/xcagi-desktop-updater/update.zip",
+  "installed_app": "/Applications/XCAGI.app",
+  "zip_backend_files": 2140,
+  "checked": 2138,
+  "informational_differing_count": 52,
+  "informational_differing_sample": [
+    {
+      "rel": "_internal/libwebp.7.2.0.dylib",
+      "reason": "content_mismatch"
+    },
+    {
+      "rel": "_internal/libavdevice.62.3.101.dylib",
+      "reason": "content_mismatch"
+    },
+    {
+      "rel": "_internal/libcom_err.3.0.dylib",
+      "reason": "content_mismatch"
+    },
+    {
+      "rel": "_internal/libswscale.9.5.101.dylib",
+      "reason": "content_mismatch"
+    },
+    {
+      "rel": "_internal/libbrotlicommon.1.2.0.dylib",
+      "reason": "content_mismatch"
+    },
+    {
+      "rel": "_internal/libbrotlidec.1.2.0.dylib",
+      "reason": "content_mismatch"
+    },
+    {
+      "rel": "_internal/Python",
+      "reason": "content_mismatch"
+    },
+    {
+      "rel": "_internal/libavformat.62.12.101.dylib",
+      "reason": "content_mismatch"
+    },
+    {
+      "rel": "_internal/libldap.2.dylib",
+      "reason": "content_mismatch"
+    },
+    {
+      "rel": "_internal/libpq.5.dylib",
+      "reason": "content_mismatch"
+    }
+  ],
+  "informational_note": "差异集中在 _internal/*.dylib 等原生二进制：macOS 安装/签名会对 Mach-O 重新签名，属正常，不作为判据。",
+  "shipment_document": {
+    "installed_has_fix": true,
+    "zip_has_fix": true,
+    "installed_md5": "057289697cb7ca6f64c27d30fe86013d",
+    "zip_md5": "057289697cb7ca6f64c27d30fe86013d"
+  },
+  "codesign_output": "",
+  "spctl_output": "/Applications/XCAGI.app: accepted\nsource=Notarized Developer ID\norigin=Developer ID Application: jialong Li (G26WSH472M)",
+  "stapler_output": "Processing: /Applications/XCAGI.app\nThe validate action worked!",
+  "checks": {
+    "codesign_valid": true,
+    "spctl_accepted": true,
+    "stapler_validated": true,
+    "key_source_matches_update_zip": true,
+    "key_source_has_fix": true
+  },
+  "verdict": "PASS"
+}

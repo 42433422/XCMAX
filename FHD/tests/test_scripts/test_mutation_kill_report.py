@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "mutation_kill_report.py"
 
 
@@ -47,3 +49,48 @@ def test_parse_legacy_killed_survived():
     assert c["killed"] == 10
     assert c["survived"] == 2
     assert c["timeout"] == 1
+
+
+def test_progress_includes_skipped_and_type_check_results_in_denominator():
+    mod = _load()
+    counts = mod.parse_results("100/100 🎉 70 🫥 0 ⏰ 0 🤔 0 🙁 0 🔇 20 🧙 10\n")
+    assert mod.compute_kill_rate(counts) == 0.7
+    assert counts["no_tests"] == 20
+    assert counts["timeout"] == 10
+
+
+def test_uncovered_mutants_cannot_inflate_gate_score(tmp_path, monkeypatch):
+    mod = _load()
+    log = tmp_path / "mutations.log"
+    log.write_text("268/268  🎉 94 🫥 168  ⏰ 0  🤔 0  🙁 6  🔇 0  🧙 0\n")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["mutation_kill_report", "--threshold", "80", "--from-file", str(log), "--dry-run"],
+    )
+    assert (
+        abs(
+            mod.compute_kill_rate({"killed": 94, "survived": 6, "timeout": 0, "no_tests": 168})
+            - 94 / 268
+        )
+        < 1e-9
+    )
+    assert mod.main() == 1
+
+
+@pytest.mark.parametrize(
+    "diagnostic",
+    [
+        "Traceback (most recent call last):\nRuntimeError: runner failed",
+        "pytest.PytestUnraisableExceptionWarning: cleanup failed",
+        "ResourceWarning: unclosed scandir iterator",
+    ],
+)
+def test_runner_error_cannot_be_counted_as_success(tmp_path, monkeypatch, diagnostic):
+    mod = _load()
+    log = tmp_path / "run.log"
+    log.write_text(diagnostic + "\n268/268 🎉 262 🫥 0 ⏰ 0 🤔 0 🙁 6 🔇 0 🧙 0\n")
+    history = tmp_path / "history.jsonl"
+    monkeypatch.setattr(mod, "HISTORY_FILE", history)
+    monkeypatch.setattr("sys.argv", ["report", "--threshold", "80", "--from-file", str(log)])
+    assert mod.main() == 2
+    assert not history.exists()

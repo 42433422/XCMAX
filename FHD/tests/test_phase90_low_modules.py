@@ -1,9 +1,8 @@
-"""低覆盖模块的唯一覆盖测试。
+"""低覆盖模块的业务回归测试。
 
 保留的测试函数提供专用测试未覆盖的模块覆盖：
 - client_primary_erp: SQLite 客户列表查询 + mod 桥接调用
 - surface_audit_demo_account: demo 用户种子行创建
-- phase90c: 全包导入/调用 sweep（为大量零覆盖模块提供唯一覆盖）
 
 已删除的冗余测试（被专用测试覆盖）：
 - customer_delivery_seed_* → test_mod_sdk/test_customer_delivery_seed_cov.py
@@ -19,8 +18,6 @@ import sqlite3
 import types
 
 import pytest
-
-from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 def _make_customer_db(path) -> None:
@@ -117,10 +114,10 @@ def test_surface_audit_seed_demo_user_row_creates_user_and_tenant(monkeypatch):
 def test_client_primary_erp_sqlite_customer_list(tmp_path):
     from app.mod_sdk import client_primary_erp as erp
 
-    missing = erp._sqlite_customers_list(
-        tmp_path / "missing.sqlite", page=1, per_page=20, keyword=None
-    )
-    assert missing == {"success": True, "data": [], "total": 0}
+    # M14 回归：私有库缺失时必须**抛出**（由调用方回落宿主服务路径），
+    # 而不是静默返回空列表 —— 否则「客户 0 条」与「库缺失」不可区分。
+    with pytest.raises(FileNotFoundError):
+        erp._sqlite_customers_list(tmp_path / "missing.sqlite", page=1, per_page=20, keyword=None)
 
     db_path = tmp_path / "customers.sqlite"
     _make_customer_db(db_path)
@@ -164,6 +161,38 @@ def test_client_primary_erp_invokes_mod_customer_database(monkeypatch, tmp_path)
     assert result["data"][0]["contact_person"] == "张三"
 
 
+def test_client_primary_erp_falls_back_when_private_db_missing(monkeypatch, tmp_path, caplog):
+    """M14 回归：Mod 私有库不存在时不得返回 200 空列表，须返回 None 以回落宿主路径，
+    并留下可检索的 WARNING 告警。"""
+    import logging
+
+    import app.infrastructure.mods.mod_manager as mod_manager
+    import app.request_active_mod_ctx as active_ctx
+    from app.mod_sdk import client_primary_erp as erp
+
+    monkeypatch.setattr(erp, "PROTECTED_CLIENT_MOD_IDS", {"client-mod"})
+    monkeypatch.setattr(active_ctx, "get_request_active_mod_id", lambda: "client-mod")
+    monkeypatch.setattr(mod_manager, "ensure_mod_api_ready", lambda mod_id: None)
+    monkeypatch.setattr(
+        mod_manager,
+        "get_mod_manager",
+        lambda: types.SimpleNamespace(resolve_mod_directory=lambda mod_id: tmp_path / "client-mod"),
+    )
+    monkeypatch.setattr(
+        mod_manager,
+        "import_mod_backend_py",
+        lambda *_args: types.SimpleNamespace(
+            get_database_path=lambda: tmp_path / "mod_dbs" / "taiyangniao_pro.db"
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger=erp.__name__):
+        result = erp.try_invoke_client_mod_customers_list(page=1, per_page=20, keyword=None)
+
+    assert result is None
+    assert "private sqlite missing" in caplog.text
+
+
 def test_client_primary_erp_returns_none_for_parse_or_runtime_failures(monkeypatch):
     import app.infrastructure.mods.mod_manager as mod_manager
     import app.request_active_mod_ctx as active_ctx
@@ -186,144 +215,3 @@ def test_client_primary_erp_returns_none_for_parse_or_runtime_failures(monkeypat
         lambda _mod_id: (_ for _ in ()).throw(OSError("not ready")),
     )
     assert erp.try_invoke_client_mod_customers_list() is None
-
-
-def test_phase90c_import_and_exercise_safe_app_modules():
-    """Best-effort import/call sweep for low-coverage backend modules."""
-    import importlib
-    import inspect
-    import pkgutil
-    import re
-
-    import app
-
-    skip_module = re.compile(
-        r"(\.tests?|\.migrations?|\.alembic|\.celery|\.gunicorn|\.uvicorn|\.main$|\.server$|\.worker$|\.cli$|"
-        r"desktop_runtime\.migrate|shell\.test_|infrastructure\.skills\.)"
-    )
-    skip_callable = re.compile(
-        r"(^_|run|serve|start|stop|listen|connect|disconnect|delete|drop|remove|migrate|watch|loop|daemon|thread|process|subprocess|socket|sleep|wait|open_browser)",
-        re.I,
-    )
-
-    samples = {
-        "str": "coverage",
-        "int": 1,
-        "float": 1.0,
-        "bool": True,
-        "dict": {},
-        "list": [],
-        "set": set(),
-        "tuple": (),
-        "Path": __import__("pathlib").Path("/tmp/coverage-ramp"),
-    }
-
-    def sample_for(param):
-        if param.default is not inspect._empty:
-            return param.default
-        ann = param.annotation
-        ann_name = getattr(ann, "__name__", "") or str(ann)
-        for key, value in samples.items():
-            if key in ann_name:
-                return value
-        if param.kind is inspect.Parameter.VAR_POSITIONAL:
-            return None
-        if param.kind is inspect.Parameter.VAR_KEYWORD:
-            return None
-        return "coverage"
-
-    def invoke(fn, bound=False):
-        try:
-            sig = inspect.signature(fn)
-        except BOUNDARY_ERRORS:
-            return False
-        args = []
-        kwargs = {}
-        params = list(sig.parameters.values())
-        if bound and params and params[0].name == "self":
-            params = params[1:]
-        required = [
-            p
-            for p in params
-            if p.default is inspect._empty
-            and p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-        ]
-        if len(required) > 2:
-            return False
-        for param in params:
-            if param.kind is inspect.Parameter.VAR_POSITIONAL:
-                continue
-            if param.kind is inspect.Parameter.VAR_KEYWORD:
-                continue
-            value = sample_for(param)
-            if param.kind is inspect.Parameter.KEYWORD_ONLY:
-                kwargs[param.name] = value
-            else:
-                args.append(value)
-        try:
-            result = fn(*args, **kwargs)
-            if inspect.iscoroutine(result):
-                result.close()
-            return True
-        except BOUNDARY_ERRORS:
-            return False
-
-    imported = 0
-    invoked = 0
-    for module_info in pkgutil.walk_packages(app.__path__, app.__name__ + "."):
-        name = module_info.name
-        if skip_module.search(name):
-            continue
-        try:
-            module = importlib.import_module(name)
-            imported += 1
-            continue
-        except BOUNDARY_ERRORS:
-            continue
-
-        for attr_name, value in list(vars(module).items())[:200]:
-            if skip_callable.search(attr_name):
-                continue
-            if inspect.isfunction(value) and getattr(value, "__module__", "") == module.__name__:
-                if invoke(value):
-                    invoked += 1
-                continue
-            if inspect.isclass(value) and getattr(value, "__module__", "") == module.__name__:
-                if skip_callable.search(value.__name__):
-                    continue
-                try:
-                    sig = inspect.signature(value)
-                    required = [
-                        p
-                        for p in sig.parameters.values()
-                        if p.default is inspect._empty
-                        and p.kind
-                        not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-                    ]
-                    if len(required) > 1:
-                        continue
-                    ctor_args = []
-                    ctor_kwargs = {}
-                    for param in sig.parameters.values():
-                        if param.kind in (
-                            inspect.Parameter.VAR_POSITIONAL,
-                            inspect.Parameter.VAR_KEYWORD,
-                        ):
-                            continue
-                        value_arg = sample_for(param)
-                        if param.kind is inspect.Parameter.KEYWORD_ONLY:
-                            ctor_kwargs[param.name] = value_arg
-                        else:
-                            ctor_args.append(value_arg)
-                    instance = value(*ctor_args, **ctor_kwargs)
-                except BOUNDARY_ERRORS:
-                    continue
-                for method_name, method in list(vars(value).items())[:80]:
-                    if skip_callable.search(method_name) or not callable(method):
-                        continue
-                    bound = getattr(instance, method_name, None)
-                    if callable(bound) and invoke(bound, bound=True):
-                        invoked += 1
-
-    assert imported > 20
-    assert invoked >= 0

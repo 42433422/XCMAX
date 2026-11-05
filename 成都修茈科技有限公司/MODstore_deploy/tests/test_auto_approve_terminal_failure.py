@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-import modstore_server.db.base as db_base
+import modstore_server.db.db_base as db_base
 import modstore_server.models as models
 from modstore_server.auto_approve_policy import _mark_change_request_validation_failed
 from modstore_server.db.employee_ops import EmployeeChangeRequest

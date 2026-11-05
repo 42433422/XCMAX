@@ -1,0 +1,1 @@
+﻿post-upgrade business task OK; product=SUNBIRD-loop-round2-post-050624; pre-upgrade product=SUNBIRD-loop-round2-042330 still readable

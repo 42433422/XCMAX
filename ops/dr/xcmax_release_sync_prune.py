@@ -45,7 +45,11 @@ def parse_component_releases(
 
 
 def select_victims(
-    lines: list[str], component: str, target_sha: str, keep: int
+    lines: list[str],
+    component: str,
+    target_sha: str,
+    keep: int,
+    preserve_history: bool = False,
 ) -> list[str]:
     if component not in COMPONENTS:
         raise ValueError("invalid component")
@@ -55,7 +59,7 @@ def select_victims(
         raise ValueError("incoming component keep must be at least 2")
 
     releases = parse_component_releases(lines, component)
-    if any(sha == target_sha for _, sha in releases):
+    if preserve_history or any(sha == target_sha for _, sha in releases):
         return []
 
     remove_count = max(0, len(releases) + 1 - keep)
@@ -67,6 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--component", choices=COMPONENTS, required=True)
     parser.add_argument("--target-sha", required=True)
     parser.add_argument("--keep", type=int, default=2)
+    parser.add_argument("--preserve-history", choices=("0", "1"), default="0")
     return parser.parse_args()
 
 
@@ -78,6 +83,7 @@ def main() -> int:
             args.component,
             args.target_sha,
             args.keep,
+            args.preserve_history == "1",
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)

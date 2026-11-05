@@ -11,7 +11,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from vibe_coding import MockLLM, VibeCoder
+from vibe_coding.agent.tools import ESLintAdapter, PrettierAdapter, ToolRunner, TSCAdapter, VitestAdapter
 from vibe_coding.agent.tools.runner import ToolReport
 
 
@@ -121,3 +124,24 @@ def test_heal_project_max_rounds_exceeded(tmp_path: Path) -> None:
     )
     assert not result.success
     assert len(result.rounds) == 2
+
+
+@pytest.mark.parametrize("adapter_type", [ESLintAdapter, TSCAdapter, PrettierAdapter, VitestAdapter])
+def test_heal_project_rejects_unexecuted_adapter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, adapter_type: Any
+) -> None:
+    project = tmp_path / "proj"
+    (project / "pkg").mkdir(parents=True)
+    old = "    return a + b  # broken\n"
+    (project / "pkg/math.py").write_text("def add(a, b):\n" + old, encoding="utf-8")
+    response = _patch_response("p", old, "    return a + b  # fixed\n")
+    coder = VibeCoder(llm=MockLLM([response]), store_dir=tmp_path / "store", llm_for_repair=False)
+    adapter = adapter_type(npx_fallback=False)
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    monkeypatch.setattr(adapter, "is_available", lambda: True)
+    result = coder.heal_project("fix", root=project, max_rounds=1, tool_runner=ToolRunner(adapters=[adapter]))
+    assert not result.success
+    assert result.rounds[0].apply_result.applied
+    assert not result.rounds[0].success
+    assert result.rounds[0].tool_reports[0]["status"] == "UNAVAILABLE"
+    assert result.error == f"tool_failed: {adapter.name}"

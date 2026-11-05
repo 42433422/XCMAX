@@ -1,0 +1,13 @@
+{"source": "Mac mini para-api devfleet.db（只读查询，2026-10-11 11:33 UTC+8）",
+ "device": {"id":"48acf8c9-3549-442d-8838-0849ee2dc50d","name":"Mac 主设备 MODstore Bridge","status":"online","last_seen":"2026-10-11T03:33:35.028Z"},
+ "tasks": [
+{"ticket":37,"role":"scout","task_id":"9b3d205e-b078-49b7-99c3-7a85058072b8","status":"completed","created_at":"2026-10-11T02:54:15.314Z","completed_at":"2026-10-11T02:55:48.697Z","tool":"cursor"},
+{"ticket":37,"role":"fix","task_id":"2bcca61a-0f4e-4882-b4c0-868f85c4d054","status":"completed","created_at":"2026-10-11T02:57:45.863Z","completed_at":"2026-10-11T03:00:23.565Z","tool":"cursor","branch":"devfleet/cursor/sub-1-c4d054","commit":"6a11ced03","diff":"FHD/scripts/dev/ai_issue_implement.py -1"},
+{"ticket":37,"role":"verify","task_id":"ab94ced6-e841-4549-89ed-479ec28b7bc5","status":"completed","created_at":"2026-10-11T03:00:47.164Z","completed_at":"2026-10-11T03:02:30.479Z","tool":"cursor"},
+{"issue":2234,"role":"ai-issue-implement","mac_control_task":"563d0f4c56f743c792f5f1c866b52077","task_id":"1199e95b-e2de-46a3-958c-dbbf1029886f","status":"completed","created_at":"2026-10-11T03:12:20.493Z","completed_at":"2026-10-11T03:15:23.475Z","tool":"cursor","branch":"devfleet/cursor/sub-1-29886f","head":"1e48bef90867","pr":2277},
+{"ticket":38,"role":"scout","task_id":"b21884ee-4b71-46c1-86ce-929c1e8271a1","status":"failed","tool":"claude_code","last_error":"Claude CLI Not logged in"},
+{"ticket":38,"role":"scout","task_id":"ab20b0e8-beea-455e-b0f9-83e5ce8c9b2e","status":"failed","tool":"trae","last_error":"Trae CLI: Models is required"},
+{"ticket":38,"role":"scout","task_id":"3c021b84-0f51-4ff6-a1bf-f45133abc33a","status":"completed","created_at":"2026-10-11T03:18:44.620Z","completed_at":"2026-10-11T03:23:26.856Z","tool":"cursor"},
+{"ticket":38,"role":"fix","task_id":"44290311-49ec-430d-99c7-e3792f262757","status":"failed","created_at":"2026-10-11T03:25:15.031Z","completed_at":"2026-10-11T03:28:34.652Z","tool":"cursor","last_error":"120000ms 内未检测到有效代码变更"},
+{"ticket":38,"role":"verify","task_id":"226b6d60-8a2f-405b-899c-b38155d62731","status":"completed","created_at":"2026-10-11T03:28:59.821Z","completed_at":"2026-10-11T03:30:44.696Z","tool":"cursor"}
+]}

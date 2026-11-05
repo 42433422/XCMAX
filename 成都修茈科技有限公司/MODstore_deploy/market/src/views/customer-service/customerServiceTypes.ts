@@ -8,6 +8,7 @@ export interface CustomerTicket extends UnknownRecord {
   intent?: unknown
   status?: unknown
   title?: unknown
+  expected_completion_at?: string | null
 }
 
 export type UiMessage = {

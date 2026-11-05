@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-health",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "5a4f0760abaa967e5256c344f24b013799116e53b262ab3de1b30b57f3f07f0c",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页，登录名 SUNBIRD，邮箱 sunbird@xcagi.local，模型服务余额约 ¥97。左下系统正常 v1.0.0.5。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-health/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-health/macos/result.png"
+}

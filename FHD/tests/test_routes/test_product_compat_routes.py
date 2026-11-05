@@ -13,7 +13,6 @@ from app.legacy.routes.product.compat_routes import router
 
 @pytest.fixture
 def app_compat():
-    """Create a FastAPI app with the product compat router mounted."""
     _app = FastAPI()
     _app.include_router(router)
     return _app
@@ -60,7 +59,7 @@ class TestShipmentRecordsUnits:
                 return_value={"success": True, "data": [{"name": "销售部"}]},
             ),
             patch(
-                "app.application.attendance_reference_data.attendance_unit_names",
+                "app.domain.app_pure.attendance_reference_data.attendance_unit_names",
                 return_value=["生产部", "销售部"],
             ),
         ):
@@ -284,7 +283,7 @@ class TestProductsResolveNameHints:
 
 
 class TestProductsUpdate:
-    def test_update_via_service(self, client_compat):
+    def test_update_via_service(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -293,10 +292,12 @@ class TestProductsUpdate:
             patch(
                 "app.mod_sdk.erp_products_facade.products_update",
                 return_value={"success": True, "data": {"id": 1}},
-            ),
+            ) as update_service,
         ):
             r = client_compat.post("/products/update", json={"id": 1, "name": "Updated"})
             assert r.status_code == 200
+            assert r.json()["success"] is True
+            update_service.assert_called_once_with(None, {"id": 1, "name": "Updated"})
 
     def test_update_invalid_id(self, client_compat):
         mock_excel = MagicMock()
@@ -311,12 +312,12 @@ class TestProductsUpdate:
                 "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
-            patch.dict("sys.modules", {"app.application.excel_imports": mock_excel}),
+            patch.dict("sys.modules", {"app.domain.app_pure.excel_imports": mock_excel}),
         ):
             r = client_compat.post("/products/update", json={"id": None})
             assert r.status_code == 400
 
-    def test_update_success(self, client_compat):
+    def test_update_success(self, client_compat, local_tools):
         mock_excel = MagicMock()
         mock_excel._parse_price = MagicMock(return_value=0)
         with (
@@ -334,7 +335,7 @@ class TestProductsUpdate:
                 "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
             ),
-            patch.dict("sys.modules", {"app.application.excel_imports": mock_excel}),
+            patch.dict("sys.modules", {"app.domain.app_pure.excel_imports": mock_excel}),
         ):
             r = client_compat.post("/products/update", json={"id": 1, "name": "Updated"})
             assert r.status_code == 200
@@ -355,7 +356,7 @@ class TestProductsUpdate:
             r = client_compat.post("/products/update", json={"id": 1})
             assert r.json()["success"] is False
 
-    def test_update_pg_failure(self, client_compat):
+    def test_update_pg_failure(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -383,7 +384,7 @@ class TestProductsUpdate:
 
 
 class TestProductsAdd:
-    def test_add_via_service(self, client_compat):
+    def test_add_via_service(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -392,12 +393,17 @@ class TestProductsAdd:
             patch(
                 "app.mod_sdk.erp_products_facade.products_add",
                 return_value={"success": True, "data": {"id": 10}},
-            ),
+            ) as add_service,
         ):
             r = client_compat.post("/products/add", json={"name": "New"})
             assert r.status_code == 200
+            assert r.json()["success"] is True
+            add_service.assert_called_once_with(
+                None,
+                {"name": "New", "product_name": "New", "name_or_model": "New", "unit_name": "个"},
+            )
 
-    def test_add_success(self, client_compat):
+    def test_add_success(self, client_compat, local_tools):
         mock_excel = MagicMock()
         mock_excel._parse_price = MagicMock(return_value=0)
         with (
@@ -414,13 +420,13 @@ class TestProductsAdd:
                 "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                 return_value=10,
             ),
-            patch.dict("sys.modules", {"app.application.excel_imports": mock_excel}),
+            patch.dict("sys.modules", {"app.domain.app_pure.excel_imports": mock_excel}),
         ):
             r = client_compat.post("/products/add", json={"name": "New Product"})
             assert r.status_code == 200
             assert r.json()["data"]["id"] == 10
 
-    def test_add_pg_failure(self, client_compat):
+    def test_add_pg_failure(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -444,7 +450,7 @@ class TestProductsAdd:
 
 
 class TestProductsDelete:
-    def test_delete_via_service(self, client_compat):
+    def test_delete_via_service(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -453,10 +459,12 @@ class TestProductsDelete:
             patch(
                 "app.mod_sdk.erp_products_facade.products_delete",
                 return_value={"success": True},
-            ),
+            ) as delete_service,
         ):
             r = client_compat.post("/products/delete", json={"id": 1})
             assert r.status_code == 200
+            assert r.json()["success"] is True
+            delete_service.assert_called_once_with(None, {"id": 1})
 
     def test_delete_invalid_id(self, client_compat):
         with (
@@ -473,7 +481,7 @@ class TestProductsDelete:
             r = client_compat.post("/products/delete", json={"id": None})
             assert r.status_code == 400
 
-    def test_delete_success(self, client_compat):
+    def test_delete_success(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -494,7 +502,7 @@ class TestProductsDelete:
             assert r.status_code == 200
             assert r.json()["success"] is True
 
-    def test_delete_pg_failure(self, client_compat):
+    def test_delete_pg_failure(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -522,7 +530,7 @@ class TestProductsDelete:
 
 
 class TestProductsBatchDelete:
-    def test_batch_delete_via_service(self, client_compat):
+    def test_batch_delete_via_service(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -531,10 +539,12 @@ class TestProductsBatchDelete:
             patch(
                 "app.mod_sdk.erp_products_facade.products_batch_delete",
                 return_value={"success": True},
-            ),
+            ) as batch_delete_service,
         ):
             r = client_compat.post("/products/batch-delete", json={"ids": [1, 2]})
             assert r.status_code == 200
+            assert r.json()["success"] is True
+            batch_delete_service.assert_called_once_with(None, {"ids": [1, 2]})
 
     def test_batch_delete_invalid_ids(self, client_compat):
         with (
@@ -551,7 +561,7 @@ class TestProductsBatchDelete:
             r = client_compat.post("/products/batch-delete", json={"ids": []})
             assert r.status_code == 400
 
-    def test_batch_delete_success(self, client_compat):
+    def test_batch_delete_success(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -573,7 +583,7 @@ class TestProductsBatchDelete:
             assert body["success"] is True
             assert body["deleted"] == 2
 
-    def test_batch_delete_pg_failure(self, client_compat):
+    def test_batch_delete_pg_failure(self, client_compat, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -624,11 +634,8 @@ class TestProductsPriceListExport:
                 return_value=(MagicMock(is_file=lambda: False), "missing.docx"),
             ),
         ):
-            r = client_compat.get("/products/price-list-export")
+            r = client_compat.get("/products/price-list-export?template_id=customer-missing")
             assert r.status_code == 404
-
-
-# ========================= GET /products/price-list-template-preview =====
 
 
 class TestProductsPriceListTemplatePreview:

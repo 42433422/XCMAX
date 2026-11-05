@@ -27,7 +27,7 @@ import pytest
 
 from app.application.workflow.checkpointer import WorkflowCheckpointer
 from app.application.workflow.engine import DEFAULT_STATE_SCHEMA, WorkflowEngine
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     ApprovalStatus,
     Branch,
     PlanGraph,
@@ -348,7 +348,8 @@ class TestSequential:
         )
         result = _make_engine().run(plan)
         assert result.success is False
-        assert "依赖无法继续解析" in result.message
+        assert "形成环" in result.message
+        assert result.node_results == []
 
 
 # ===========================================================================
@@ -675,13 +676,15 @@ class TestInterruptApproval:
             ApprovalGatedEngine,
             GatedPlanDecision,
         )
-        from app.application.workflow.types import ApprovalRequest
+        from app.application.workflow.workflow_types import ApprovalRequest
 
         class FakeApproval:
             def __init__(self):
                 self.requests: dict[str, ApprovalRequest] = {}
 
-            def create_approval_request(self, plan_id, node, runtime_context=None, plan=None):
+            def create_approval_request(
+                self, plan_id, node, runtime_context=None, plan=None, require_persistence=False
+            ):
                 req = ApprovalRequest(
                     request_id="req-1",
                     plan_id=plan_id,

@@ -44,7 +44,7 @@ class TestQuantity:
         q = Quantity()
         assert q.primary == 0
         assert q.secondary == 0.0
-        assert q.spec == 10.0
+        assert q.spec is None
 
     def test_coating_aliases(self):
         q = Quantity(tins=5, kg=50.0, spec_per_tin=10.0)

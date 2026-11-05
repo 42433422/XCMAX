@@ -6,8 +6,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import stat
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -16,15 +18,52 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-def _guard_under_workspace(workspace_root: str, rel_path: str) -> Optional[str]:
-    """与 mod_employee_agent_runner._guard_path 一致。"""
-    import os
-
-    resolved = os.path.normpath(os.path.join(workspace_root, rel_path))
-    workspace_abs = os.path.abspath(workspace_root)
-    if not resolved.startswith(workspace_abs + os.sep) and resolved != workspace_abs:
+def _guard_under_workspace(workspace_root: str, path: str) -> Optional[str]:
+    """Reject traversal and symlinks, including links within the workspace."""
+    root_path = Path(os.path.abspath(workspace_root))
+    try:
+        if root_path.is_symlink():
+            return None
+        root = str(root_path.parent.resolve() / root_path.name)
+        relative = os.path.relpath(os.path.abspath(os.path.join(root_path, path)), root_path)
+        resolved = os.path.abspath(os.path.join(root, relative))
+        if os.path.commonpath((root, resolved)) != root:
+            return None
+        if any(part.is_symlink() for part in (Path(resolved), *Path(resolved).parents)):
+            return None
+    except (OSError, ValueError):
         return None
     return resolved
+
+
+@contextmanager
+def _workspace_fd(root: str, path: str, *, write: bool = False, directory: bool = False):
+    """Anchor every component to an open directory; never follow a replaced link."""
+    target = _guard_under_workspace(root, path)
+    if target is None or not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd:
+        raise OSError("workspace isolation unavailable or path rejected")
+    parts = Path(target).parts[1:]
+    fd = os.open(os.path.sep, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for index, part in enumerate(parts):
+            final = index == len(parts) - 1
+            if write and not final:
+                try:
+                    os.mkdir(part, dir_fd=fd)
+                except FileExistsError:
+                    pass
+            flags = os.O_NOFOLLOW | os.O_NONBLOCK
+            flags |= (os.O_WRONLY | os.O_CREAT) if write and final else os.O_RDONLY
+            if not final or directory:
+                flags |= os.O_DIRECTORY
+            child = os.open(part, flags, 0o600, dir_fd=fd)
+            os.close(fd)
+            fd = child
+        if not directory and not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError("workspace target must be a regular file")
+        yield fd
+    finally:
+        os.close(fd)
 
 
 def _git_suggestions(

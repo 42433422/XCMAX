@@ -7,6 +7,7 @@ MCP JSON-RPC（initialize → tools/list → tools/call）、
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -19,14 +20,21 @@ from app.application.aiopen.service import AIOPEN_STATE
 from app.fastapi_routes.ai_open import router as ai_open_router
 from app.fastapi_routes.ai_qclaw import _QCLOW_RUNTIME_STATE
 from app.fastapi_routes.ai_qclaw import router as ai_qclaw_router
+from app.infrastructure.auth.dependencies import require_admin_user
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     app = FastAPI()
     app.include_router(ai_open_router)
     app.include_router(ai_qclaw_router)
-    return TestClient(app)
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        id=73,
+        tier="admin",
+        role="admin",
+    )
+    return TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"})
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +55,9 @@ def test_manifest_public(client):
     data = resp.json()
     assert data["success"] is True
     assert data["name"] == "AIOPEN"
-    assert data["version"] == "1.0.0.1"
+    from app.infrastructure.mods.manifest import host_xcagi_version
+
+    assert data["version"] == host_xcagi_version()
     assert data["protocol"]["guide"] == "/api/aiopen/guide"
     tool_names = {t["name"] for t in data["tools"]}
     assert {"api_catalog", "api_call", "chat", "ui_snapshot", "ui_click", "ui_type"} <= tool_names
@@ -89,16 +99,15 @@ def test_invoke_requires_key_when_configured(client, monkeypatch):
     assert resp.json()["success"] is True
 
 
-def test_invoke_open_when_no_keys(client, monkeypatch):
+def test_invoke_denied_when_no_keys(client, monkeypatch):
     monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
     resp = client.post("/api/aiopen/invoke", json={"tool": "api_catalog", "args": {}})
-    assert resp.status_code == 200
-    routes = {r["path"] for r in resp.json()["routes"]}
-    assert "/api/ai/unified_chat" in routes
+    assert resp.status_code == 401
+    assert resp.json()["code"] == "AIOPEN_KEY_INVALID"
 
 
 def test_aiopen_invoke_attaches_agent_run_for_tool_call(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     repo = InMemoryAgentRunRepository()
 
     with patch(
@@ -116,7 +125,7 @@ def test_aiopen_invoke_attaches_agent_run_for_tool_call(client, monkeypatch):
     assert body["agent_run_id"] == run_id
     run = repo.get(run_id)
     assert run is not None
-    assert run.user_id == "aiopen-rest-user"
+    assert run.user_id == "aiopen-api-key"  # body user_id must not spoof
     assert run.intent == "aiopen_tool_call"
     assert run.metadata["channel"] == "aiopen_invoke"
     assert run.metadata["runtime_context"]["route"] == "/api/aiopen/invoke"
@@ -127,7 +136,7 @@ def test_aiopen_invoke_attaches_agent_run_for_tool_call(client, monkeypatch):
 
 
 def test_invoke_api_call_blocked_outside_whitelist(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     resp = client.post(
         "/api/aiopen/invoke",
         json={"tool": "api_call", "args": {"path": "/api/not/whitelisted"}},
@@ -137,7 +146,7 @@ def test_invoke_api_call_blocked_outside_whitelist(client, monkeypatch):
 
 
 def test_invoke_unknown_tool(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     resp = client.post("/api/aiopen/invoke", json={"tool": "nope", "args": {}})
     assert resp.status_code == 404
 
@@ -163,6 +172,8 @@ def test_runtime_key_lifecycle(client, monkeypatch):
     assert resp.json()["revoked"] is True
     assert resp.json()["run_id"] == resp.json()["agent_run_id"]
     assert aiopen_service.list_api_keys() == []
+    # Revoking the last key must not reopen the API to unauthenticated clients.
+    assert client.post("/api/aiopen/invoke", json={"tool": "api_catalog"}).status_code == 401
 
 
 def test_aiopen_key_lifecycle_traces_without_key_leak(client, monkeypatch):
@@ -182,7 +193,7 @@ def test_aiopen_key_lifecycle_traces_without_key_leak(client, monkeypatch):
 
     create_run = repo.get(created["run_id"])
     assert create_run is not None
-    assert create_run.user_id == "key-admin"
+    assert create_run.user_id == "73"  # verified admin id, not body user_id
     assert create_run.intent == "aiopen_control_update"
     assert create_run.metadata["channel"] == "aiopen_control"
     assert create_run.metadata["runtime_context"]["route"] == "/api/aiopen/keys"
@@ -234,7 +245,7 @@ def test_aiopen_control_routes_attach_agent_runs(client):
 
 
 def test_mcp_initialize_list_call(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
 
     init = client.post(
         "/api/aiopen/mcp",
@@ -282,7 +293,7 @@ def test_mcp_initialize_list_call(client, monkeypatch):
 
 
 def test_aiopen_mcp_tools_call_attaches_agent_run_meta(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     repo = InMemoryAgentRunRepository()
 
     with patch(
@@ -314,7 +325,7 @@ def test_aiopen_mcp_tools_call_attaches_agent_run_meta(client, monkeypatch):
 
 
 def test_mcp_get_probe(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     resp = client.get("/api/aiopen/mcp")
     assert resp.status_code == 200
     data = resp.json()
@@ -341,7 +352,7 @@ def test_install_bundle(client):
 
 
 def test_mcp_initialize_session_header(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     resp = client.post(
         "/api/aiopen/mcp",
         json={
@@ -359,20 +370,21 @@ def test_mcp_initialize_session_header(client, monkeypatch):
 
 
 def test_ui_tool_without_session(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    """Env/unbound keys authenticate the service but cannot operate screens."""
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     AIOPEN_STATE["remote_control_enabled"] = True
     resp = client.post(
         "/api/aiopen/invoke",
         json={"tool": "ui_snapshot", "args": {}},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 403
     body = resp.json()
     assert body["success"] is False
-    assert "虚拟光标会话" in body["message"]
+    assert body["code"] == "SCREEN_PRINCIPAL_REQUIRED"
 
 
 def test_ui_tool_blocked_when_remote_control_off(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     AIOPEN_STATE["remote_control_enabled"] = False
     try:
         resp = client.post("/api/aiopen/invoke", json={"tool": "ui_click", "args": {}})
@@ -403,7 +415,8 @@ def test_legacy_qclaw_urls_share_state(client):
     AIOPEN_STATE["openclaw_base"] = "http://localhost:28789"
 
 
-def test_qclaw_control_and_test_route_attach_agent_runs():
+def test_qclaw_control_and_test_route_attach_agent_runs(monkeypatch):
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     app = FastAPI()
 
     @app.get("/api/qclaw/smoke")
@@ -412,10 +425,15 @@ def test_qclaw_control_and_test_route_attach_agent_runs():
 
     app.include_router(ai_open_router)
     app.include_router(ai_qclaw_router)
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        id=73,
+        tier="admin",
+        role="admin",
+    )
     repo = InMemoryAgentRunRepository()
 
     with (
-        TestClient(app) as local_client,
+        TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"}) as local_client,
         patch(
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
@@ -492,7 +510,7 @@ def test_aiopen_openclaw_chat_attaches_agent_run(client):
     run = repo.get(run_id)
     assert run is not None
     assert run.status == "completed"
-    assert run.user_id == "aiopen-user"
+    assert run.user_id == "aiopen-api-key"  # body user_id must not spoof
     assert run.intent == "external_openclaw_chat"
     assert run.metadata["channel"] == "aiopen_openclaw"
     assert run.metadata["source"] == "aiopen"
@@ -526,24 +544,43 @@ def test_qclaw_openclaw_chat_attaches_agent_run(client):
     run = repo.get(run_id)
     assert run is not None
     assert run.status == "completed"
-    assert run.user_id == "qclaw-user"
+    assert run.user_id == "aiopen-api-key"  # body user_id must not spoof
     assert run.intent == "external_openclaw_chat"
     assert run.metadata["channel"] == "qclaw_openclaw"
     assert run.metadata["source"] == "qclaw"
     assert run.metadata["runtime_context"]["route"] == "/api/ai/qclaw/openclaw/chat"
 
 
-def test_screen_ws_command_roundtrip(client):
-    """screen 端 WS 收到指令并回执 → ui 工具拿到结果。"""
+def test_screen_ws_command_roundtrip(client, monkeypatch):
+    """A trusted authenticated screen is visible only to a matching bound key."""
+    from app.application.aiopen.service import generate_api_key
+    from app.domain.aiopen.principal import ScreenPrincipal
+    from app.fastapi_routes import ai_open as ai_open_routes
+
     AIOPEN_STATE["remote_control_enabled"] = True
-    with client.websocket_connect("/api/aiopen/ws?session_id=test_screen&label=pytest") as ws:
+    owner = ScreenPrincipal.from_ids(27, 42)
+    assert owner is not None
+    issued = generate_api_key("pytest-screen", principal=owner)["key"]
+    monkeypatch.setattr(
+        ai_open_routes,
+        "resolve_session_user",
+        lambda ws: SimpleNamespace(id=27, tenant_id=42, is_active=True),
+    )
+    with client.websocket_connect(
+        "/api/aiopen/ws?session_id=attacker_supplied&label=pytest",
+        headers={"Origin": "http://testserver"},
+    ) as ws:
         hello = ws.receive_json()
-        assert hello == {"type": "hello", "session_id": "test_screen"}
+        session_id = hello["session_id"]
+        assert session_id.startswith("screen_")
+        assert session_id != "attacker_supplied"
 
         sessions = client.post(
-            "/api/aiopen/invoke", json={"tool": "ui_sessions", "args": {}}
+            "/api/aiopen/invoke",
+            json={"tool": "ui_sessions", "args": {}},
+            headers={"X-AIOPEN-Key": issued},
         ).json()
-        assert any(s["session_id"] == "test_screen" for s in sessions["sessions"])
+        assert any(s["session_id"] == session_id for s in sessions["sessions"])
 
 
 def test_aiopen_source_alias():
@@ -553,3 +590,61 @@ def test_aiopen_source_alias():
     assert is_qclaw_source("qclaw")
     assert is_qclaw_source("lobster")
     assert not is_qclaw_source("pro")
+
+
+def test_aiopen_and_qclaw_management_denied_without_admin_session(monkeypatch):
+    """Anonymous clients cannot create keys or change global policy via either URL family."""
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    app = FastAPI()
+    app.include_router(ai_open_router)
+    app.include_router(ai_qclaw_router)
+    routes = [
+        ("GET", "/api/aiopen/keys"),
+        ("POST", "/api/aiopen/keys"),
+        ("DELETE", "/api/aiopen/keys"),
+        ("GET", "/api/aiopen/panel"),
+        ("POST", "/api/aiopen/whitelist"),
+        ("POST", "/api/aiopen/whitelist/seed"),
+        ("POST", "/api/aiopen/config"),
+        ("POST", "/api/aiopen/control"),
+        ("GET", "/api/ai/qclaw/panel"),
+        ("POST", "/api/ai/qclaw/wechat-gateway"),
+        ("POST", "/api/ai/qclaw/openclaw/config"),
+        ("POST", "/api/ai/qclaw/whitelist"),
+        ("POST", "/api/ai/qclaw/test-route"),
+    ]
+    with TestClient(app) as unauthenticated:
+        for method, path in routes:
+            response = unauthenticated.request(method, path, json={} if method != "GET" else None)
+            assert response.status_code == 401, (method, path, response.text)
+
+
+def test_non_admin_cannot_manage_aiopen(monkeypatch):
+    """A verified ordinary user must not become an AIOPEN administrator."""
+    from app.infrastructure.auth import dependencies
+
+    app = FastAPI()
+    app.include_router(ai_open_router)
+    monkeypatch.setattr(
+        dependencies,
+        "get_logged_in_user",
+        lambda request: SimpleNamespace(tier="normal", role="user", is_active=True),
+    )
+    with TestClient(app) as ordinary:
+        assert ordinary.post("/api/aiopen/keys", json={"label": "forbidden"}).status_code == 403
+        assert ordinary.post("/api/aiopen/control", json={"enabled": True}).status_code == 403
+
+
+def test_direct_aiopen_and_legacy_qclaw_tools_require_key(monkeypatch):
+    """Unauthenticated probes and chat proxies cannot bypass /invoke protection."""
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    app = FastAPI()
+    app.include_router(ai_open_router)
+    app.include_router(ai_qclaw_router)
+    with TestClient(app) as unauthenticated:
+        for path in (
+            "/api/aiopen/loop/verify",
+            "/api/aiopen/openclaw/chat",
+            "/api/ai/qclaw/openclaw/chat",
+        ):
+            assert unauthenticated.post(path, json={"message": "test"}).status_code == 401

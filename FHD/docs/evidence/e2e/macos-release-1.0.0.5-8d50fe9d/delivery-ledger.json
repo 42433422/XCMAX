@@ -1,0 +1,415 @@
+{
+  "schema": "xcagi.delivery.ledger/v1",
+  "generated_at_utc": "2026-09-21T18:22:19Z",
+  "goal": "一个完全不懂项目的真实用户，不问任何人，自行跑通：下载→安装→首启→登录绑定→权益→行业 Mod 准备→核心功能加载→真实业务出正确结果→保存→导出成果→重启恢复→OTA 升级后数据还在且能继续用；全程走产品 UI",
+  "platform": "macOS arm64 (Apple Silicon)",
+  "release": {
+    "version": "1.0.0.5",
+    "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+    "release_id": "xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f",
+    "main_merge_pr": "https://github.com/42433422/XCMAX/pull/2000"
+  },
+  "artifacts": {
+    "official_dmg": {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "sha256": "55a873779aa316fe1e2393ff043978187911b3e052b9762deaefdd6d4817e32f",
+      "size": 301669921,
+      "download_http": 200,
+      "gatekeeper": "accepted (Notarized Developer ID)",
+      "codesign": "ok",
+      "stapler": "validated",
+      "build_info_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f"
+    },
+    "prior_official_dmg": {
+      "sha256": "89592fdaff3b1731fae016ec56619c7e7b0d3514e2036705cdad132eedf63343",
+      "size": 304193412,
+      "build_info_sha": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d"
+    },
+    "update_feed": {
+      "latest_mac_yml": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml",
+      "buildSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+      "public_copy": "public-latest-mac.yml"
+    },
+    "download_pointer": {
+      "url": "https://xiu-ci.com/download-release.json",
+      "version_lock": "1.0.0.5",
+      "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+      "release_ready": false,
+      "note": "按既有口径：release_ready=false 期间对外已发布版本以线上指针与官网文件为准"
+    },
+    "security_scan_pair": {
+      "release_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+      "passed": true,
+      "current_run": 35577912714,
+      "previous_run": 35574886166,
+      "file": "security-scan-pair-verify.json"
+    }
+  },
+  "fixed_this_round": {
+    "defect": "客户自带标准送货单模板（含合并单元格）在「新建发货单」出单必然 500：生成器把金额合计写死在 D16，而 D16 落在人民币大写合并区 B16:G16 内，openpyxl 对 MergedCell 赋值抛 \"attribute 'value' is read-only\"，界面只显示「生成失败: 服务器内部错误」。",
+    "before_real_machine": {
+      "build": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d（上一版正式包，本机安装运行）",
+      "probe_file": "before-fix-merged-template-probe.json",
+      "probe_result": "generate: HTTP 500 服务器内部错误（verdict=BLOCKED）",
+      "template_merged_cells": [
+        "A1:J1",
+        "A2:J2",
+        "A3:C3",
+        "A4:C4",
+        "A15:D15",
+        "B16:G16"
+      ],
+      "ui_evidence": "before-fix-ui-500.png（旧包在产品 UI 点「生成发货单」后的失败界面）",
+      "backend_log": "'MergedCell' object attribute 'value' is read-only - Path: /api/shipment/generate (HTTP 500)"
+    },
+    "fix": [
+      "resources/tools_legacy/AI助手/shipment_document.py：新增合并安全写入 _write_cell（合并区非锚点跳过，不再中断整单）",
+      "合计行按表头列补回「数量/件」「数量/KG」合计与「合计」标签，金额列保留模板自带 SUM 公式",
+      "新建发货单页：无可用模板时给出可见指引；生成提示由「请选择发货单模板」改为指向「模板编辑」的可执行说明"
+    ],
+    "regression_test": "FHD/tests/test_legacy/test_legacy_shipment_template_merge.py",
+    "after_real_machine": {
+      "build": "8d50fe9d043391d5ba8857094a366a59a34ae43f（本正式包）",
+      "doc": "发货单_26-09-00001A_20260921_184455.xlsx",
+      "bytes": 6108,
+      "xlsx_magic": true,
+      "layout_verified": {
+        "r2": "购货单位/日期/订单编号",
+        "r3": "表头 产品型号|产品名称|数量/件|规格/KG|数量/KG|单价/元|金额/元|备注",
+        "r4": [
+          "UI-0921-A",
+          "",
+          "",
+          "UI验收商品-0921",
+          "24",
+          "25",
+          "600",
+          "3.5",
+          "2100",
+          ""
+        ],
+        "r15": "合计 | 24 | 600"
+      },
+      "ui_hint_shipped": true
+    }
+  },
+  "chain_1_official_download_and_ui": {
+    "scope": "官网下载正式包 → 安装 → 首启 → 真实 UI 登录 → 建模板/建产品/建客户 → 出单 → 下载 → 重启恢复",
+    "data_root": "/private/tmp/xcagi-custchain/userdata-final-8d50fe9d",
+    "verdict": "PASS",
+    "steps": {
+      "official_download_identity": {
+        "sha256": "55a873779aa316fe1e2393ff043978187911b3e052b9762deaefdd6d4817e32f",
+        "size": 301669921,
+        "verdict": "PASS"
+      },
+      "install_identity": {
+        "spctl": "accepted/Notarized Developer ID",
+        "codesign": "ok",
+        "stapler": "validated",
+        "installed_gitSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+        "verdict": "PASS"
+      },
+      "first_launch_health": {
+        "top_status": "healthy",
+        "components": "37/37 ok",
+        "required_failed": [],
+        "verdict": "PASS"
+      },
+      "ui_login": {
+        "workspace_visible": true,
+        "verdict": "PASS",
+        "independent_reproduction": {
+          "evidence": "gui-login.json + gui-login-01-form.png / gui-login-02-filled.png / gui-login-03-workspace.png",
+          "detail": "独立全新数据根（userdata-login）实测：登录页渲染表单 → 键入 SUNBIRD/密码 → 点击真实提交按钮 button.login-submit（文本「登 录」）→ 应用经 splash 后落到工作区。",
+          "pitfall": "登录页另有「扫码登录」按钮；按文本包含「登录」做模糊匹配会点错到它。",
+          "evidence_file": "gui-login.json",
+          "raw": {
+            "verdict": "PASS"
+          }
+        }
+      },
+      "core_function_entry_gui": {
+        "verdict": "PASS",
+        "detail": "全新数据根 + 真实 GUI：整页加载 onboarding 配置步，主按钮「进入我的工作空间」disabled=false；页面无「仍缺必需项」；真实点击后 URL 落到工作区，侧栏渲染完成。",
+        "evidence": "chain1-gui-entry.json + gui-entry-01-hostpack.png / gui-entry-02-after-click.png",
+        "raw": {
+          "verdict": "PASS",
+          "entry_ready_gui": null
+        }
+      },
+      "ui_template_empty_state_hint": {
+        "has_hint": true,
+        "created": "客户送货单模板-UI",
+        "scope": "orders",
+        "verdict": "PASS"
+      },
+      "ui_product_create": {
+        "created": {
+          "id": 1,
+          "name": "UI验收商品-0921",
+          "model": "UI-0921-A",
+          "price": "3.50"
+        },
+        "verdict": "PASS"
+      },
+      "ui_customer_create": {
+        "created": [
+          "UI客户-0921"
+        ],
+        "verdict": "PASS"
+      },
+      "ui_generate": {
+        "doc": "发货单_26-09-00001A_20260921_184455.xlsx",
+        "verdict": "PASS"
+      },
+      "ui_download": {
+        "dir": "/Users/a4243342/Downloads",
+        "file": "发货单_26-09-00001A_20260921_184455.xlsx",
+        "bytes": 6108,
+        "sha256": "69a83efbf7704452de0ef717ddc41d5e8d4ca9ab71550d3a0f10abe60b98b6a3",
+        "verdict": "PASS"
+      },
+      "ui_records": {
+        "rows": [
+          "1UI客户-0921UI验收商品-0921UI-0921-A60024253.52100未打印2026-09-21T18:44:56.005230编辑删除"
+        ],
+        "verdict": "PASS"
+      },
+      "restart_continuity": {
+        "verdict": "PASS",
+        "checks": {
+          "ui_evidence": {
+            "template_created_by_ui": "客户送货单模板-UI",
+            "doc_from_ui": "发货单_26-09-00001A_20260921_184455.xlsx",
+            "unit_from_ui": "UI客户-0921"
+          },
+          "relogin": {
+            "status": 200,
+            "success": true,
+            "me_status": 200,
+            "username": "SUNBIRD",
+            "has_shipment_edit": true
+          },
+          "template_present": {
+            "status": 200,
+            "probe": "客户送货单模板-UI",
+            "found": true
+          },
+          "unit_present": {
+            "status": 200,
+            "probe": "UI客户-0921",
+            "found": true
+          },
+          "prior_document": {
+            "doc_name": "发货单_26-09-00001A_20260921_184455.xlsx",
+            "status": 200,
+            "bytes": 6108,
+            "xlsx_magic": true,
+            "sha256": "69a83efbf7704452de0ef717ddc41d5e8d4ca9ab71550d3a0f10abe60b98b6a3"
+          }
+        },
+        "independent_reproduction": {
+          "evidence": "chain1-restart-recovery-gui.json",
+          "detail": "另用同一数据根（userdata-final-8d50fe9d）独立复跑一次「退出→LaunchServices 重新启动」：重新登录 200（SUNBIRD）；模板/客户仍在；重启前单据仍可下载（200, xlsx_magic=true）。",
+          "raw": {
+            "verdict": "PASS"
+          }
+        }
+      },
+      "offline_data_check": {
+        "shipment_outputs": [
+          "labels",
+          "发货单_26-09-00001A_20260921_184455.xlsx"
+        ],
+        "db_row_counts": {
+          "xcagi.db:customers": 0,
+          "xcagi.db:purchase_units": 1,
+          "xcagi.db:shipment_records": 1,
+          "xcagi.db:templates": 1
+        },
+        "latest_doc": {
+          "name": "发货单_26-09-00001A_20260921_184455.xlsx",
+          "bytes": 6108,
+          "xlsx_magic": true,
+          "sha256": "69a83efbf7704452de0ef717ddc41d5e8d4ca9ab71550d3a0f10abe60b98b6a3"
+        }
+      },
+      "digest_fresh": {
+        "xcagi.db.bytes": 1445888,
+        "uploads.files": 0,
+        "mods.files": 426,
+        "models.files": 0,
+        "backups.files": 0,
+        "backups.latest": ""
+      },
+      "digest_after_restart": {
+        "xcagi.db.bytes": 1822720,
+        "uploads.files": 1,
+        "mods.files": 430,
+        "models.files": 0,
+        "backups.files": 1,
+        "backups.latest": "xcagi-unknown-20260921104352.db"
+      }
+    }
+  },
+  "chain_2_ota_upgrade": {
+    "scope": "上一版正式包（aec61e7e）→ 真实 feed 检查更新/下载/安装 → 新版（8d50fe9d0）→ 数据/登录态/单据保留 → 新版继续用 UI 出单（客户标准送货单模板，含合并单元格）",
+    "data_root": "/private/tmp/xcagi-custchain/userdata-ota",
+    "verdict": "PASS",
+    "steps": {
+      "prior_build_installed": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d",
+      "prior_install_identity": {
+        "dmg_sha256": "89592fdaff3b1731fae016ec56619c7e7b0d3514e2036705cdad132eedf63343",
+        "dmg_size": 304193412,
+        "spctl": "/private/tmp/xcagi-custchain/mnt/ota/XCAGI.app: accepted\nsource=Notarized Developer ID\norigin=Developer ID Application: jialong Li (G26WSH472M)",
+        "codesign_ok": true,
+        "stapler": "The validate action worked!",
+        "build_info_sha": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d",
+        "verdict": "PASS",
+        "evidence": "ota-prior-install.json"
+      },
+      "ota_check": {
+        "isUpdateAvailable": true,
+        "target_buildSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+        "target_zip_size": 264820602,
+        "target_zip_sha512": "dqAdP5FxcvRLPOb0794yptm/jCe/Wxhm5rdmrRW98HevVElO11V/4TmOHgl1oJ699EgBRwPLLrcS+EMgehRgmw==",
+        "signature": "ed25519:q1FmifcqpHz7nxsO19j7pqC65Q20csMcrs5KSDogSDBsn4YmcD0MxUz/PWuC6LTyfPQw4rN3DpweX5VXGjc2BA==",
+        "evidence": "ota-check.json（应用内 IPC checkForUpdates 的真实返回）",
+        "verdict": "PASS"
+      },
+      "ota_download": {
+        "downloaded_file": "/Users/a4243342/Library/Caches/xcagi-desktop-updater/pending/XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
+        "event": "update-downloaded",
+        "poll_samples": 1,
+        "evidence": "ota-download.json + ota-status-poll.jsonl",
+        "verdict": "PASS"
+      },
+      "ota_install": {
+        "shipit_markers": {
+          "installation_completed": true,
+          "launched_after_install": true,
+          "shipit_status_0": true,
+          "bundle_replaced_to_target": true,
+          "post_install_health": true
+        },
+        "installed_buildSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+        "post_install_health": "healthy",
+        "evidence": "ota-install.json（ShipIt 真实日志 + 替换后 build-info + health）",
+        "verdict": "PASS"
+      },
+      "observation_commit": {
+        "rollback_marker_present": false,
+        "rollback_applied_present": false,
+        "note": "更新后首次启动进入观察期；观察期内重启会触发应用按设计回滚 backend（本轮 harness 已按此修正）。",
+        "evidence": "ota-observation.json",
+        "verdict": "PASS"
+      },
+      "backend_integrity": {
+        "update_zip": "/Users/a4243342/Library/Caches/xcagi-desktop-updater/update.zip",
+        "checks": {
+          "codesign_valid": true,
+          "spctl_accepted": true,
+          "stapler_validated": true,
+          "key_source_matches_update_zip": true,
+          "key_source_has_fix": true
+        },
+        "informational_differing_count": 52,
+        "shipment_document": {
+          "installed_has_fix": true,
+          "zip_has_fix": true,
+          "installed_md5": "057289697cb7ca6f64c27d30fe86013d",
+          "zip_md5": "057289697cb7ca6f64c27d30fe86013d"
+        },
+        "evidence": "ota-backend-integrity.json（codesign/spctl/stapler + 关键源码与更新包一致）",
+        "verdict": "PASS"
+      },
+      "post_ota_build": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+      "post_ota_health": {
+        "status": "healthy",
+        "version": "1.0.0.5"
+      },
+      "continuity_ui": {
+        "verdict": "PASS",
+        "checks": {
+          "ui_evidence": {
+            "template_created_by_ui": "客户发货单模板-简版",
+            "doc_from_ui": "发货单_26-09-00001A_20260922_021927.xlsx",
+            "unit_from_ui": "UI客户-0921"
+          },
+          "relogin": {
+            "status": 200,
+            "success": true,
+            "me_status": 200,
+            "username": "SUNBIRD",
+            "has_shipment_edit": true
+          },
+          "template_present": {
+            "status": 200,
+            "probe": "客户发货单模板-简版",
+            "found": true
+          },
+          "unit_present": {
+            "status": 200,
+            "probe": "UI客户-0921",
+            "found": true
+          },
+          "prior_document": {
+            "doc_name": "发货单_26-09-00001A_20260922_021927.xlsx",
+            "status": 200,
+            "bytes": 5179,
+            "xlsx_magic": true,
+            "sha256": "51784d440bc36c6178cdb2ee0deb757038963dbbdbf42759e4f0fab1c491ad97"
+          }
+        },
+        "evidence": "chain2-continuity-ui.json"
+      },
+      "post_ota_real_template_generate": {
+        "doc": {
+          "doc": "发货单_26-09-00002A_20260922_022059.xlsx",
+          "text": " 生成结果文件名: 发货单_26-09-00002A_20260922_022059.xlsx 下载发货单 新建发货单 "
+        },
+        "download": "发货单_26-09-00002A_20260922_022059.xlsx",
+        "download_bytes": 6108,
+        "download_xlsx_magic": true,
+        "verdict": "PASS",
+        "evidence": "ui-post-ota-step3.json + ui-post-ota-step4.json"
+      },
+      "merged_template_probe": {
+        "generate_status": 200,
+        "verdict": "PASS",
+        "first_real_breakpoint": null,
+        "evidence": "phase-c-real-template.json"
+      },
+      "screenshots": {
+        "pre_ota": {
+          "file": "chain2-01-pre-ota.png",
+          "bytes": 350159
+        },
+        "post_ota": {
+          "file": "chain2-02-post-ota.png",
+          "bytes": 346951
+        },
+        "continue": {
+          "file": "chain2-03-continue.png",
+          "bytes": 262589
+        }
+      }
+    }
+  },
+  "known_boundaries": [
+    "平台范围：本闭环仅在 macOS arm64（Apple Silicon）上完成真实运行验证。Windows 安装包（XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe）仍为未签名状态、未做真机验证，故官网 download-release.json 的 release_ready 保持 false；按项目「双平台平级、任一端未验证不得发布」的约束，整体发布指针不得置 ready。本文件不主张 Windows 已通过。",
+    "发货单模板的落位契约：生成器按标准送货单版式写入（第2行购货单位、第3行表头、第4行起数据、第15行合计）。客户模板遵循该版式（必含 产品型号/产品名称/数量/单价/金额 词条）即完全正确；版式差异较大的自定义模板仍按标准列位写入，本轮未改为「按表头自适应落位」，作为已知边界记录。",
+    "GitHub runner → CVM 上传通道极慢（实测约 39KB/s，301MB 需 2 小时以上），本轮在构建/公证/上传恢复产物完成后由本机完成官方目录与 stable feed 的发布（rsync + publish-macos-download-center.sh），并用 sha256 逐字节复核两处文件与公开 URL。"
+  ],
+  "outstanding_external_dependency": {
+    "item": "SUNBIRD 账号定制私有交付 taiyangniao-pro",
+    "state": "未交付（市场侧 intent=custom_delivery 工单 0 条；主机无 customer-delivery-artifacts/29/）",
+    "blocking": false,
+    "reason": "进入就绪判定已收敛为产品侧可安装项（core+host），L3 未交付不阻塞客户进入工作空间",
+    "unblock": "经市场自身生产—验收流程产出并落 customer-delivery-artifacts/29/（验收只认客户本人 accepted）"
+  },
+  "verdict": "PASS",
+  "verdict_scope": "macOS arm64 客户闭环（Windows 未验证，见 known_boundaries）",
+  "verdict_note": "chain_1：在官网正式安装包（8d50fe9d0，sha256 55a87377…）上，真实客户以产品 UI 独立完成下载→安装→首启→登录→建模板→建产品→建客户→出单（客户自带合并单元格送货单模板）→下载 xlsx→重启后模板/客户/单据仍在且可下载。chain_2（OTA）：上一版正式包 aec61e7e → 真实 feed 检查更新/下载/安装（ShipIt 真实日志：Installation completed successfully / ShipIt status 0）→ 新版本落地；更新后首次启动进入观察期并成功提交（rollback marker 删除、未触发 backend 回滚）；安装后 bundle 的 codesign/spctl/stapler 全部通过，关键源码 shipment_document.py 与更新包逐字节一致且含合并安全写入修复；升级前 UI 产出的模板/客户/单据升级后仍在且可下载；新版上以客户自带含合并单元格模板再次出单成功。"
+}

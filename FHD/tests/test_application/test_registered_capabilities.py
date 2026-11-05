@@ -3,6 +3,42 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
+from unittest.mock import Mock
+
+import pytest
+
+
+@pytest.mark.parametrize("persisted", [False, True])
+def test_capability_only_reports_durable_approval(monkeypatch, persisted: bool) -> None:
+    from app.application.tools.registered_capabilities import execute_registered_capability
+    from app.application.workflow.approval_service import ApprovalService
+
+    service = ApprovalService()
+    monkeypatch.setattr(
+        service, "_persist_request_to_db", lambda *a, **k: {"id": 1} if persisted else None
+    )
+    monkeypatch.setattr(
+        "app.application.workflow.approval_gated_engine.get_approval_service", lambda: service
+    )
+    dispatch = Mock()
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities._dispatch_registered_tool", dispatch
+    )
+    result = json.loads(
+        execute_registered_capability(
+            {
+                "tool_id": "generate_office_document",
+                "action": "execute",
+                "params": {"user_request": "文档验收", "output_format": "docx"},
+            },
+            runtime_context={"local_user_id": 3, "tenant_id": 2},
+        )
+    )
+    assert bool(result.get("pending_approval")) is persisted
+    assert result["success"] is False
+    assert len(service._pending_requests) == int(persisted)
+    dispatch.assert_not_called()
 
 
 def test_capability_catalog_matches_workflow_registry_ssot() -> None:
@@ -81,3 +117,19 @@ def test_workflow_registry_and_dispatch_include_capability_tool(monkeypatch) -> 
         workspace_root="/tmp/workspace",
     )
     assert json.loads(raw)["success"] is True
+
+
+def test_business_read_keeps_decimal_price_serializable(monkeypatch):
+    from app.application.tools import workflow
+
+    monkeypatch.setattr(
+        workflow,
+        "try_execute_business_db_tool",
+        lambda *args: {
+            "success": True,
+            "data": [{"model_number": "P002", "price": Decimal("10.25")}],
+        },
+    )
+    result = json.loads(workflow.execute_workflow_tool("business_db_read", {"entity": "products"}))
+    assert result["success"] is True
+    assert result["data"] == [{"model_number": "P002", "price": 10.25}]

@@ -1,0 +1,16 @@
+[
+  {
+    "name": "session_id",
+    "value": "3467afdd-5382-4d37-83c6-8c1aae57b0f9",
+    "domain": "127.0.0.1",
+    "path": "/",
+    "httpOnly": true
+  },
+  {
+    "name": "csrf_token",
+    "value": "3e7098c1b04fa82209199fe2bd5d6c8777d95b3e1b48938b2592a2e289d7a97d",
+    "domain": "127.0.0.1",
+    "path": "/",
+    "httpOnly": false
+  }
+]

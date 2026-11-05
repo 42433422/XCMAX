@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-30 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-excel-io",
+  "platform": "macos",
+  "reviewed_at": "2026-09-30",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+  "screenshot_sha256": "cb5c67378f61d2e66bb1e8402c8d028faba8424ea263bc4ffa9a918c22b82e06",
+  "visible_content": "业务对象页是饰品包装品管理表，可见导入导出和产品行。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-excel-io/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-excel-io/macos/result.png"
+}

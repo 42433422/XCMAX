@@ -1,0 +1,8 @@
+[13:52:29] feature=base-settings platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-settings
+[13:52:41] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:52:42] case S1: passed - 工作区级设置真实读取
+[13:52:42] case S2: passed - 工作区级设置真实写入
+[13:52:42] case S3: passed - 用户偏好真实写入并回读
+[13:52:43] case S4: passed - 空 key 的偏好写入被拒（负例/边界）
+[13:52:43] video: base-settings-web-20260929-135229.webm (1030790 bytes)
+[13:52:43] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-settings/log/base-settings-web-20260929-135229.log

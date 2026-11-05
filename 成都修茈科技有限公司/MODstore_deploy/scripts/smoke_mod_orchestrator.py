@@ -27,7 +27,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
-def _http_json(method: str, url: str, body: Optional[Dict[str, Any]] = None) -> Tuple[int, str]:
+def _http_json(
+    method: str, url: str, body: Optional[Dict[str, Any]] = None
+) -> Tuple[int, str]:
     data = None
     headers = {"Accept": "application/json"}
     if body is not None:
@@ -48,7 +50,9 @@ async def _watch_steps(sid: str, stop: asyncio.Event) -> None:
     while not stop.is_set():
         sess = WORKBENCH_SESSIONS.get(sid) or {}
         steps = sess.get("steps") or []
-        line = " | ".join(f"{s.get('id')}:{s.get('status')}" for s in steps if isinstance(s, dict))
+        line = " | ".join(
+            f"{s.get('id')}:{s.get('status')}" for s in steps if isinstance(s, dict)
+        )
         print(f"[poll] status={sess.get('status')} steps={line[:200]}...")
         await asyncio.sleep(3)
 
@@ -182,7 +186,10 @@ async def _main(user_id: Optional[int]) -> int:
     with sf() as db2:
         rows = (
             db2.query(CatalogItem)
-            .filter(CatalogItem.pkg_id.like(f"{mod_id}-%"), CatalogItem.artifact == "employee_pack")
+            .filter(
+                CatalogItem.pkg_id.like(f"{mod_id}-%"),
+                CatalogItem.artifact == "employee_pack",
+            )
             .all()
         )
         print(f"catalog employee_pack rows for prefix {mod_id}-*: {len(rows)}")
@@ -194,7 +201,9 @@ async def _main(user_id: Optional[int]) -> int:
     with sf() as db3:
         user3 = db3.query(User).filter(User.id == uid).first()
         readiness = analyze_mod_employee_readiness(db3, user3, mod_dir)  # type: ignore[arg-type]
-    print(f"\nemployee_readiness ok={readiness.get('ok')} summary={readiness.get('summary')}")
+    print(
+        f"\nemployee_readiness ok={readiness.get('ok')} summary={readiness.get('summary')}"
+    )
     if readiness.get("gaps"):
         for g in (readiness.get("gaps") or [])[:8]:
             print(f"  gap: {g}")

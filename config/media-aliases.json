@@ -1,0 +1,25 @@
+{
+  "schema": "xcmax.media-aliases/v1",
+  "note": "Only exact publication/build aliases. Canonical product media remain tracked; acceptance evidence uses its separate reviewed manifest.",
+  "aliases": {
+    "FHD/frontend/public/startup/xc-logo-base.jpg": {"scope":"frontend","source":"FHD/frontend/public/brand-xc-logo.jpg","sha256":"96716cc3010a6712767bbb44a37b26ec2bc76906406572fa42fa397bce0c222a","size":74665},
+    "FHD/frontend/public/yuangong/staff-busy.png": {"scope":"frontend","source":"FHD/frontend/public/yuangong/staff.png","sha256":"ec5634814d6bbef47608943362f4b046fb53a299f5563d4da0f8055fba1ca1b8","size":2105461},
+    "appstore-screenshots/live/ipad-01-messages-live.png": {"scope":"appstore","source":"appstore-screenshots/2.3.3-accurate-metadata/ipad-13/ipad-01-messages-live.png","sha256":"93f8f8accc5797a59746637108413953d9da471c203f95fbac0777d470503716","size":427065},
+    "appstore-screenshots/live/ipad-02-contacts-live.png": {"scope":"appstore","source":"appstore-screenshots/2.3.3-accurate-metadata/ipad-13/ipad-02-contacts-live.png","sha256":"fe3fc7be1fd64ad9b4c199a8950e9940b75c210577f880764359c345c3b34ed8","size":1093326},
+    "appstore-screenshots/live/ipad-03-discover-live.png": {"scope":"appstore","source":"appstore-screenshots/2.3.3-accurate-metadata/ipad-13/ipad-03-discover-live.png","sha256":"65064708367f94c1aa2b362040c1bbde7871f1c9e78184a4e966ec7d4b6bd629","size":265756},
+    "appstore-screenshots/live/ipad-04-profile-live.png": {"scope":"appstore","source":"appstore-screenshots/2.3.3-accurate-metadata/ipad-13/ipad-04-profile-live.png","sha256":"d3cd813b248e801d900fe0fc63258db062853dcf0f45dc823a8f14c86b196e77","size":863932},
+    "appstore-screenshots/live/iphone-01-messages-live.png": {"scope":"appstore","source":"appstore-screenshots/2.3.3-accurate-metadata/iphone-6.5/iphone-01-messages-live.png","sha256":"12c790a72b5c7a052f7a7bd386aa24eb6afc71534a2475ad8fcae66965771665","size":665300},
+    "appstore-screenshots/live/iphone-02-contacts-live.png": {"scope":"appstore","source":"appstore-screenshots/2.3.3-accurate-metadata/iphone-6.5/iphone-02-contacts-live.png","sha256":"9f006ace3c7c7362c26692a768e2f2029e45fa778036e7a6e5c0a16e925ab436","size":852391},
+    "appstore-screenshots/live/iphone-03-discover-live.png": {"scope":"appstore","source":"appstore-screenshots/2.3.3-accurate-metadata/iphone-6.5/iphone-03-discover-live.png","sha256":"75ef067ab9bb92a2514f2d11fe3441917e60e3285a7cedf3225e789282e5c2cb","size":340366},
+    "appstore-screenshots/live/iphone-04-profile-live.png": {"scope":"appstore","source":"appstore-screenshots/2.3.3-accurate-metadata/iphone-6.5/iphone-04-profile-live.png","sha256":"505b82151c58db5ac634078216c210eb84d4b0333614553bf12df730b1f9126a","size":795418},
+    "成都修茈科技有限公司/MODstore_deploy/market/public/ai-butler-female-avatar-v1.png": {"scope":"market","source":"FHD/frontend/public/ai-butler-female-avatar-v1.png","sha256":"f2472148ec207cbdd56f5e0d5b3f83b81937c1ec400806880aad98cb210656f9","size":490483},
+    "成都修茈科技有限公司/MODstore_deploy/market/public/ai-butler-male-avatar-v1.jpg": {"scope":"market","source":"FHD/frontend/public/ai-butler-male-avatar-v1.jpg","sha256":"a083c5baee710c18c5f184a07ac85f0cdeb6605b0eb3d741f7fb4f1ccf213785","size":108440},
+    "成都修茈科技有限公司/MODstore_deploy/market/public/brand-xc-logo.jpg": {"scope":"market","source":"FHD/frontend/public/brand-xc-logo.jpg","sha256":"96716cc3010a6712767bbb44a37b26ec2bc76906406572fa42fa397bce0c222a","size":74665},
+    "成都修茈科技有限公司/assets/optimized/ai-intent-03-product-exists.webp": {"scope":"marketing","source":"成都修茈科技有限公司/assets/optimized/ai-chat-core-03-product-exists.webp","sha256":"16040fb35c875bb6227781d94583c600d094ce37fe85345da89f49b7e07521f2","size":29136},
+    "成都修茈科技有限公司/assets/optimized/ai-intent-05-query-failure-visible.webp": {"scope":"marketing","source":"成都修茈科技有限公司/assets/optimized/ai-chat-core-05-query-failure-visible.webp","sha256":"e8662b82526ead522615e27049e132526c29daa87cb5637916a22f314d785129","size":40528},
+    "成都修茈科技有限公司/corp-butler/ai-butler-female-avatar-v1.png": {"scope":"marketing","source":"FHD/frontend/public/ai-butler-female-avatar-v1.png","sha256":"f2472148ec207cbdd56f5e0d5b3f83b81937c1ec400806880aad98cb210656f9","size":490483},
+    "成都修茈科技有限公司/corp-butler/ai-butler-male-avatar-v1.jpg": {"scope":"marketing","source":"FHD/frontend/public/ai-butler-male-avatar-v1.jpg","sha256":"a083c5baee710c18c5f184a07ac85f0cdeb6605b0eb3d741f7fb4f1ccf213785","size":108440},
+    "成都修茈科技有限公司/corp-butler/brand-xc-logo.jpg": {"scope":"marketing","source":"FHD/frontend/public/brand-xc-logo.jpg","sha256":"96716cc3010a6712767bbb44a37b26ec2bc76906406572fa42fa397bce0c222a","size":74665},
+    "成都修茈科技有限公司/marketing-assets/xc-brand-film/assets/logo-source.png": {"scope":"marketing","source":"成都修茈科技有限公司/assets/xiu-ci-logo.png","sha256":"cd472de60c0bc58ade8a742973e6fbbd571c4d53e7437dc87bdf596117a4b85e","size":342048}
+  }
+}

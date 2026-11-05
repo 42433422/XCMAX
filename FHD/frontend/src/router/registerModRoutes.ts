@@ -156,6 +156,21 @@ export async function registerAllModRoutesFromGlob(router: Router): Promise<void
   }
 }
 
+const globRegistrations = new WeakMap<Router, Promise<void>>()
+
+/** 首屏与守卫共用路由注册，避免业务页在 addRoute 前落到设置页。 */
+export function ensureGlobModRoutes(router: Router): Promise<void> {
+  let registration = globRegistrations.get(router)
+  if (!registration) {
+    registration = registerAllModRoutesFromGlob(router).catch((error) => {
+      globRegistrations.delete(router)
+      throw error
+    })
+    globRegistrations.set(router, registration)
+  }
+  return registration
+}
+
 /**
  * Registers mod Vue routes (from mods/<id>/frontend/routes.js) on the app router.
  * Must run after router is created and before navigating to mod paths.

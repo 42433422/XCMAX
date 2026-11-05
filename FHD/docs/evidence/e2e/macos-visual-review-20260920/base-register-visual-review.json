@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "base-register",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "6681c1cb6cdef7bfcf62a82b70fe79aa5b01ff76fa50c619566237f6c299faff",
+  "visible_content": "聊天首页与问候语，没有注册、找回账户或二维码扫码过程。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/base-register.png"
+}

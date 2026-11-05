@@ -21,7 +21,8 @@ function mountView(section: 'personnel' | 'departments' | 'schedules' | 'records
     props: { section },
     global: {
       stubs: {
-        RouterLink: { template: '<a><slot /></a>' },
+        TransitionGroup: false,
+        RouterLink: { props: ['to'], template: '<a :data-route="to.name"><slot /></a>' },
       },
     },
   })
@@ -32,6 +33,41 @@ describe('AttendanceManagementView', () => {
     apiFetch.mockReset()
     HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
     HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
+  })
+
+  it('guides empty attendance records to import and clears a no-match filter', async () => {
+    apiFetch.mockReturnValue(response({ items: [], total: 0, months: [] }))
+    const wrapper = mountView('records')
+    await flushPromises()
+    expect(wrapper.get('.empty-state a').attributes('data-route')).toBe('business-docking')
+    expect(wrapper.get('.empty-state').text()).toContain('考勤表')
+    await wrapper.get('.toolbar-card input').setValue('不存在的姓名')
+    await wrapper.findAll('button').find(button => button.text() === '查询')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.empty-state').text()).toContain('没有符合筛选条件')
+    await wrapper.get('.empty-state button').trigger('click')
+    await flushPromises()
+    expect(apiFetch.mock.lastCall?.[0]).toMatch(/search=$/)
+    expect(wrapper.get('.empty-state a').text()).toBe('导入考勤资料')
+    wrapper.unmount()
+  })
+
+  it('moves a searched person to an absolute roster position and reloads saved order', async () => {
+    apiFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'POST') return response({ position: 1 })
+      return response({ items: [{ id: 68, employee_name: '尾排', order_position: 68 }], total: 1, roster_total: 68, order_revision: 'saved-revision' })
+    })
+    const wrapper = mountView('personnel')
+    await flushPromises()
+    const control = wrapper.find('tbody input[type="number"]')
+    expect(control.attributes('max')).toBe('68')
+    await control.setValue(1)
+    await flushPromises()
+    expect(apiFetch).toHaveBeenCalledWith('/api/mod/attendance-industry/employees/68/move', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ position: 1, revision: 'saved-revision' }),
+    }))
+    expect(apiFetch.mock.calls.filter(([url]) => url.includes('/employees?')).length).toBe(2)
+    wrapper.unmount()
   })
 
   it.each(['personnel', 'departments'] as const)('edits %s in a modal and cancels without changing the list', async (section) => {

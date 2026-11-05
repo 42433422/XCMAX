@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from threading import Lock
 from typing import Any, Optional
 
-from modstore_server.domain.notification.types import NotificationType
+from modstore_server.domain.notification.notification_types import NotificationType
 
 
 class NotificationClient(ABC):

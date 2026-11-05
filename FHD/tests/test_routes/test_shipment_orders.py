@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,69 +10,57 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes import shipment_orders
+from app.utils.path_io.path_utils import get_shipment_output_dir
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(trusted_actor) -> TestClient:
     app = FastAPI()
     app.include_router(shipment_orders.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(
+        app, raise_server_exceptions=False, headers=trusted_actor(tenant_id=None).headers
+    )
 
 
 @pytest.fixture(autouse=True)
 def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
     """默认 mock shipment application service。"""
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    (tmp_path / "shipment_outputs").mkdir(exist_ok=True)
+    Path(get_shipment_output_dir()).mkdir(parents=True, exist_ok=True)
     mock = MagicMock()
     with patch.object(shipment_orders, "_svc", return_value=mock):
         yield mock
 
 
-# ---------------------------------------------------------------------------
 # next_number
-# ---------------------------------------------------------------------------
 
 
 class TestOrdersNextNumber:
-    def test_root_path(self, client: TestClient):
-        with patch.object(shipment_orders, "query_service") as mock_q:
-            mock_q.count.return_value = 5
-            r = client.get("/orders/next_number")
-            assert r.status_code == 200
-            data = r.json()["data"]
-            assert "order_number" in data
-            assert data["sequence"] == 6
+    @pytest.mark.parametrize(
+        "path",
+        ["/orders/next_number", "/api/orders/next_number", "/api/shipment/orders/next_number"],
+    )
+    def test_shared_reservation(self, client, path, _mock_svc):
+        reserve = _mock_svc.reserve_order_number
+        reserve.return_value = {"order_number": "26-10-00006B", "sequence": 6}
+        response = client.get(path, params={"suffix": "B"})
+        assert response.status_code == 200
+        assert response.json()["data"] == reserve.return_value
+        reserve.assert_called_once_with("B")
 
-    def test_under_api(self, client: TestClient):
-        with patch.object(shipment_orders, "query_service") as mock_q:
-            mock_q.count.return_value = 0
-            r = client.get("/api/orders/next_number")
-            assert r.status_code == 200
-            assert r.json()["data"]["sequence"] == 1
-
-    def test_under_shipment_validates_suffix(self, client: TestClient):
-        with patch.object(shipment_orders, "query_service") as mock_q:
-            mock_q.count.return_value = 0
-            r = client.get("/api/shipment/orders/next_number", params={"suffix": "B"})
-            assert r.status_code == 200
-            assert r.json()["data"]["order_number"].endswith("B")
-
-    def test_under_shipment_invalid_suffix_fallback(self, client: TestClient):
-        with patch.object(shipment_orders, "query_service") as mock_q:
-            mock_q.count.return_value = 0
-            r = client.get("/api/shipment/orders/next_number", params={"suffix": "12"})
-            assert r.status_code == 200
-            assert r.json()["data"]["order_number"].endswith("A")
+    def test_allocation_failure(self, client, _mock_svc):
+        _mock_svc.reserve_order_number.side_effect = OSError("disk")
+        response = client.get("/orders/next_number")
+        assert response.status_code == 503
+        assert "取号失败" in response.json()["detail"]
 
 
-# ---------------------------------------------------------------------------
 # shipment generate
-# ---------------------------------------------------------------------------
 
 
 class TestShipmentGenerate:
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
+    def test_success(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.generate_shipment_document.return_value = {
             "success": True,
             "file_path": "/tmp/out.xlsx",
@@ -99,7 +88,7 @@ class TestShipmentGenerate:
 
 
 class TestShipmentGenerateBatch:
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
+    def test_success(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.generate_shipment_document.return_value = {"success": True}
         r = client.post(
             "/api/shipment/generate-batch",
@@ -130,11 +119,6 @@ class TestShipmentGenerateBatch:
         assert len(r.json()["data"]["errors"]) > 0
 
 
-# ---------------------------------------------------------------------------
-# shipment print
-# ---------------------------------------------------------------------------
-
-
 class TestShipmentPrint:
     def test_empty_file_path(self, client: TestClient, _mock_svc: MagicMock):
         r = client.post("/api/shipment/print", json={})
@@ -144,22 +128,22 @@ class TestShipmentPrint:
         r = client.post("/api/shipment/print", json={"file_path": "/nonexistent/file.xlsx"})
         assert r.status_code == 404
 
-    def test_with_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
+    def test_with_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path, local_tools):
+        test_file = Path(get_shipment_output_dir()) / "test.xlsx"
         test_file.write_bytes(b"fake")
         _mock_svc.mark_as_printed.return_value = {"success": True}
         r = client.post("/api/shipment/print", json={"file_path": str(test_file), "order_id": 1})
         assert r.status_code == 200
 
     def test_without_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
+        test_file = Path(get_shipment_output_dir()) / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post("/api/shipment/print", json={"file_path": str(test_file)})
         assert r.status_code == 200
         assert r.json()["updated"] is False
 
     def test_invalid_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
+        test_file = Path(get_shipment_output_dir()) / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post(
             "/api/shipment/print", json={"file_path": str(test_file), "order_id": "abc"}
@@ -175,59 +159,96 @@ class TestShipmentPrint:
         assert r.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# shipment download
-# ---------------------------------------------------------------------------
-
-
 class TestShipmentDownload:
-    def test_file_not_found(self, client: TestClient, _mock_svc: MagicMock, monkeypatch):
-        monkeypatch.setenv("WORKSPACE_ROOT", "/nonexistent_xcmax_test")
-        r = client.get("/api/shipment/download/nonexistent.xlsx")
-        assert r.status_code == 404
+    def test_unicode_download_stays_inside_outputs(self, client: TestClient, tmp_path):
+        outputs = Path(get_shipment_output_dir())
+        from openpyxl import load_workbook
+
+        from app.legacy.documents.legacy_shipment_document import (
+            load_legacy_shipment_document_generator,
+        )
+
+        legacy = load_legacy_shipment_document_generator(caller_file=__file__)
+        generator = legacy.ShipmentDocumentGenerator(
+            db_path=str(tmp_path / "db.sqlite"), output_dir=str(outputs)
+        )
+        template = Path(__file__).parents[1] / "fixtures/shipment_etl/闭环测试_送货单模板.xlsx"
+        doc = generator.generate_document(
+            "",
+            {
+                "date": "2026-08-01",
+                "products": [
+                    {
+                        "name": "验收清漆",
+                        "model_number": "RX",
+                        "quantity_tins": 2,
+                        "tin_spec": 25,
+                        "quantity_kg": 50,
+                        "unit_price": 18,
+                        "amount": 900,
+                    }
+                ],
+            },
+            purchase_unit=legacy.PurchaseUnitInfo(name="验收客户"),
+            template_name=str(template),
+            custom_order_number="ACCEPT-42",
+        )
+        document = Path(doc.filepath)
+        workbook = load_workbook(document, data_only=True)
+        assert workbook.sheetnames == ["送货甲"]
+        assert workbook.active["I4"].value == 900
+        assert "2026年8月1日" in workbook.active["A2"].value
+        workbook.close()
+        response = client.get(f"/api/shipment/download/{document.name}")
+        assert response.status_code == 200
+        assert response.content == document.read_bytes()
+        assert "filename*=utf-8''" in response.headers["content-disposition"]
+        outside = tmp_path / "private.xlsx"
+        outside.write_bytes(b"private")
+        (outputs / "link.xlsx").symlink_to(outside)
+        assert client.get("/api/shipment/download/link.xlsx").status_code == 404
+        assert client.get("/api/shipment/download/%2e%2e%2fprivate.xlsx").status_code == 400
+        assert client.get("/api/shipment/download/missing.xlsx").status_code == 404
 
 
-# ---------------------------------------------------------------------------
 # shipment orders list / search / latest
-# ---------------------------------------------------------------------------
 
 
-class TestShipmentOrdersList:
-    def test_list(self, client: TestClient, _mock_svc: MagicMock):
+@pytest.mark.parametrize("prefix", ["/api/shipment/orders", "/api/orders"])
+class TestOrdersList:
+    def test_list(self, client, _mock_svc, prefix):
         _mock_svc.get_orders.return_value = [{"id": 1, "order_number": "25-06-00001A"}]
-        r = client.get("/api/shipment/orders")
-        assert r.status_code == 200
-        assert r.json()["success"] is True
+        response = client.get(prefix)
+        assert response.status_code == 200
+        assert response.json()["success"] is True
 
-    def test_search_empty(self, client: TestClient, _mock_svc: MagicMock):
-        r = client.get("/api/shipment/orders/search")
-        assert r.json()["data"] == []
-
-    def test_search_with_query(self, client: TestClient, _mock_svc: MagicMock):
+    def test_search(self, client, _mock_svc, prefix):
         _mock_svc.search_orders.return_value = [{"id": 1}]
-        r = client.get("/api/shipment/orders/search", params={"q": "测试"})
-        assert r.json()["count"] == 1
+        assert client.get(prefix + "/search", params={"q": "测试"}).json()["count"] == 1
+        assert client.get(prefix + "/search").json()["data"] == []
 
-    def test_latest(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.get_orders.return_value = [{"id": 1}]
-        r = client.get("/api/shipment/orders/latest")
-        assert r.json()["success"] is True
+    @pytest.mark.parametrize("rows", [[], [{"id": 1}]])
+    def test_latest(self, client, _mock_svc, prefix, rows):
+        _mock_svc.get_orders.return_value = rows
+        assert client.get(prefix + "/latest").json()["success"] is True
 
 
-class TestShipmentOrdersGet:
-    def test_found(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.get_order.return_value = {"id": 1, "order_number": "25-06-00001A"}
-        r = client.get("/api/shipment/orders/25-06-00001A")
-        assert r.status_code == 200
-
-    def test_not_found(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.get_order.return_value = None
-        r = client.get("/api/shipment/orders/999")
-        assert r.status_code == 404
+@pytest.mark.parametrize(
+    "url,record,status",
+    [
+        ("/api/shipment/orders/25-06-00001A", {"id": 1, "order_number": "25-06-00001A"}, 200),
+        ("/api/shipment/orders/999", None, 404),
+        ("/api/orders/1", {"id": 1}, 200),
+        ("/api/orders/999", None, 404),
+    ],
+)
+def test_order_readback(client, _mock_svc, url, record, status):
+    _mock_svc.get_order.return_value = record
+    assert client.get(url).status_code == status
 
 
 class TestShipmentOrdersDelete:
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
+    def test_success(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.delete_shipment.return_value = {"success": True}
         r = client.delete("/api/shipment/orders/1")
         assert r.status_code == 200
@@ -242,39 +263,23 @@ class TestShipmentOrdersDelete:
         assert r.status_code == 400
 
 
-# ---------------------------------------------------------------------------
 # api/orders (mirror routes)
-# ---------------------------------------------------------------------------
 
 
 class TestApiOrdersList:
-    def test_list(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.get_orders.return_value = [{"id": 1}]
-        r = client.get("/api/orders")
-        assert r.json()["success"] is True
-
-    def test_latest(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.get_orders.return_value = []
-        r = client.get("/api/orders/latest")
-        assert r.json()["success"] is True
-
-    def test_search(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.search_orders.return_value = [{"id": 1}]
-        r = client.get("/api/orders/search", params={"q": "test"})
-        assert r.json()["count"] == 1
-
-    def test_search_empty(self, client: TestClient, _mock_svc: MagicMock):
-        r = client.get("/api/orders/search")
-        assert r.json()["data"] == []
-
-    def test_create(self, client: TestClient, _mock_svc: MagicMock):
+    def test_create(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.create_shipment.return_value = {
             "success": True,
             "shipment": {"id": 1, "purchase_unit": "单位A"},
         }
         r = client.post(
             "/api/orders",
-            json={"purchase_unit": "单位A", "products": [{"product_name": "产品A"}]},
+            json={
+                "purchase_unit": "单位A",
+                "products": [
+                    {"product_name": "产品A", "quantity_tins": 1, "tin_spec": 10, "unit_price": 2}
+                ],
+            },
         )
         assert r.status_code == 201
         assert r.json()["success"] is True
@@ -285,21 +290,11 @@ class TestApiOrdersList:
 
 
 class TestApiOrdersGet:
-    def test_found(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.get_order.return_value = {"id": 1}
-        r = client.get("/api/orders/1")
-        assert r.status_code == 200
-
-    def test_not_found(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.get_order.return_value = None
-        r = client.get("/api/orders/999")
-        assert r.status_code == 404
-
     def test_invalid_number(self, client: TestClient, _mock_svc: MagicMock):
         r = client.get("/api/orders/abc")
         assert r.status_code == 404
 
-    def test_update(self, client: TestClient, _mock_svc: MagicMock):
+    def test_update(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.update_shipment_record.return_value = {"success": True}
         _mock_svc.get_order.return_value = {
             "id": 1,
@@ -381,9 +376,7 @@ class TestApiOrdersClearAll:
         assert r.status_code == 200
 
 
-# ---------------------------------------------------------------------------
 # shipment records
-# ---------------------------------------------------------------------------
 
 
 class TestShipmentRecordsDashboardAlias:
@@ -398,44 +391,35 @@ class TestShipmentRecordsDashboardAlias:
         assert r.json()["success"] is True
 
 
-class TestShipmentRecordsCreate:
-    def test_missing_unit_name(self, client: TestClient, _mock_svc: MagicMock):
-        r = client.post("/api/shipment/shipment-records/record", json={})
-        assert r.status_code == 400
-
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.create_shipment.return_value = {"success": True}
-        r = client.post(
-            "/api/shipment/shipment-records/record",
-            json={"unit_name": "A", "products": [{"name": "X"}]},
-        )
-        assert r.status_code == 200
-
-
-class TestShipmentRecordsPatch:
-    def test_missing_id(self, client: TestClient, _mock_svc: MagicMock):
-        r = client.patch("/api/shipment/shipment-records/record", json={})
-        assert r.status_code == 400
-
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.update_shipment_record.return_value = {"success": True}
-        r = client.patch("/api/shipment/shipment-records/record", json={"id": 1})
-        assert r.status_code == 200
-
-
-class TestShipmentRecordsDelete:
-    def test_missing_id(self, client: TestClient, _mock_svc: MagicMock):
-        r = client.request("DELETE", "/api/shipment/shipment-records/record", json={})
-        assert r.status_code == 400
-
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.delete_shipment_record.return_value = {"success": True}
-        r = client.request("DELETE", "/api/shipment/shipment-records/record", json={"id": 1})
-        assert r.status_code == 200
+@pytest.mark.parametrize("method", ["POST", "PATCH", "DELETE"])
+def test_shipment_record_requires_inputs(client, _mock_svc, method, trusted_actor):
+    client.headers.update(trusted_actor(tenant_id=7).headers)
+    assert (
+        client.request(method, "/api/shipment/shipment-records/record", json={}).status_code == 400
+    )
 
 
 class TestShipmentRecordsExport:
-    def test_no_file(self, client: TestClient, _mock_svc: MagicMock):
+    def test_no_file(self, client: TestClient, _mock_svc: MagicMock, trusted_actor):
+        client.headers.update(trusted_actor(tenant_id=7).headers)
         _mock_svc.export_shipment_records.return_value = {"success": False, "message": "无数据"}
         r = client.get("/api/shipment/shipment-records/export")
         assert r.status_code == 500
+
+
+def test_shipment_write_requires_session(client, _mock_svc):
+    client.headers.pop("X-Session-ID")
+    response = client.post(
+        "/api/shipment/generate", json={"unit_name": "单位", "products": [{"name": "A"}]}
+    )
+    assert response.status_code == 401
+    _mock_svc.generate_shipment_document.assert_not_called()
+
+
+def test_legacy_shipment_write_rejects_tenant_session(client, trusted_actor, _mock_svc):
+    client.headers.update(trusted_actor(tenant_id=7).headers)
+    response = client.post(
+        "/api/shipment/generate", json={"unit_name": "单位", "products": [{"name": "A"}]}
+    )
+    assert response.status_code == 403
+    _mock_svc.generate_shipment_document.assert_not_called()

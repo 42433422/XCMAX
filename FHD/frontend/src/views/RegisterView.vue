@@ -80,7 +80,7 @@ async function sendVerificationCode() {
 }
 
 onMounted(async () => {
-  productSku.value = await fetchProductSku()
+  productSku.value = await fetchProductSku(true)
   document.title = `注册 · ${loginPageTitle(productSku.value).replace(' · 登录', '')}`
 })
 

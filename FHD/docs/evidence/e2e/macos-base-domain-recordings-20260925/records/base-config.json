@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "feature": "base-config",
+  "platform": "macos",
+  "result": "PARTIAL",
+  "status": "partial",
+  "verified_at": "2026-09-25T00:29:55.467Z",
+  "product_version": "1.0.0.5",
+  "git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "source_main_sha": "93b9ad2f68b72103816d4e0b75ff9165f60f9267",
+  "test_method": "ui",
+  "target": "/settings",
+  "scope": "设置页面打开并渲染；未修改配置或断言配置重启后持久化。",
+  "screenshot": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-config.png",
+  "video": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-config.webm",
+  "log": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-config.log",
+  "media": [
+    {
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/screenshots/base-config.png",
+      "sha256": "0589bbbf74f8ed6ece5b298b1368084e8bcdfd2b8cf33dd193c8c1a422fca9c6"
+    },
+    {
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/media/videos/base-config.webm",
+      "sha256": "da5fcadb1438e9ce3ce3356f2bdd13f8e730e6df9a372d4ef76c6ccb6fcd6fce"
+    },
+    {
+      "kind": "log",
+      "path": "FHD/docs/evidence/e2e/macos-base-domain-recordings-20260925/logs/base-config.log",
+      "sha256": "264e06cd183193b9e6e867ce17cf6f74f55c5b025c18b5f2bc5b3fafa86b1aab"
+    }
+  ],
+  "limitations": "Supplementary observation only; this record is not an acceptance PASS."
+}

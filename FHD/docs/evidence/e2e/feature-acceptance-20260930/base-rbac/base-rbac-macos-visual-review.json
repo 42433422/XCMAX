@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-30 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-rbac",
+  "platform": "macos",
+  "reviewed_at": "2026-09-30",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+  "screenshot_sha256": "c535f9acc5a482201c7a501c5ac76e08d601394dc673840362225156e451339f",
+  "visible_content": "角色与权限页列出 MAC验收角色和权限勾选。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-rbac/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-rbac/macos/result.png"
+}

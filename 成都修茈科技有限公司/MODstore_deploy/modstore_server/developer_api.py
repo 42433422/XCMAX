@@ -5,7 +5,7 @@ Token 体验对齐 GitHub PAT：
 - 创建时**仅一次**返回明文（``token`` 字段），客户端必须立刻保管；
 - 之后只能看到掩码 prefix 与元信息，无法重新读出明文；
 - 吊销采用软删除（``revoked_at``），保留审计；
-- 校验路径在 ``application.auth.AuthApplicationService`` 中与 JWT 共管道。
+- 凭证管理要求用户登录 JWT；PAT 仅用于明确支持 scope 的接口，不能自我扩权。
 """
 
 from __future__ import annotations

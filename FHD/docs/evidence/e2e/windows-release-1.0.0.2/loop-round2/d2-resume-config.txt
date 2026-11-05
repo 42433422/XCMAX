@@ -1,0 +1,4 @@
+﻿resume_at=2026-09-14T04:59:03.1999726+08:00
+installed=1.0.0.2@1f7d9f11ecc739cad78d57da86a3c5118b5af3fb
+feed=https://xiu-ci.com/releases/testing/enterprise target=1.0.0.3@4bfb23365c5e9d2c0e05c5d142fa9183aea9e740
+pre_product=SUNBIRD-loop-round2-042330

@@ -212,17 +212,39 @@ def enrich_session_meta_with_tenant(session_id: str, user: Any) -> dict[str, Any
             meta["local_user_id"] = int(uid)
 
     account_kind = str(meta.get("account_kind") or "enterprise").strip() or "enterprise"
+    from app.db.bootstrap.guarded import enabled
+
+    guarded = enabled()
+    if guarded:
+        if user is None or not getattr(user, "is_active", False):
+            raise RuntimeError("guarded authentication account is unavailable")
+        tid = getattr(user, "tenant_id", None)
+        if (
+            meta.get("tenant_id") != tid
+            or (
+                account_kind == "admin"
+                and not (user.role == "admin" and user.tier == "admin" and tid is None)
+            )
+            or (account_kind != "admin" and tid is None)
+        ):
+            raise RuntimeError("guarded authentication requires existing tenant binding")
+        if tid is not None:
+            from app.db.models.tenant import Tenant
+
+            with get_host_db() as db:
+                tenant = db.get(Tenant, int(tid))
+                if tenant is None or not tenant.is_active:
+                    raise RuntimeError("guarded authentication tenant is unavailable")
+                meta["tenant_name"] = tenant.name or ""
     if account_kind == "admin":
         return meta
 
-    tid = meta.get("tenant_id")
-    if tid is None and user is not None:
-        tid = getattr(user, "tenant_id", None)
+    tid = getattr(user, "tenant_id", None) if user is not None else meta.get("tenant_id")
 
     company_brand = str(meta.get("company_brand") or "").strip()
     username = str(getattr(user, "username", None) or "").strip() if user is not None else ""
 
-    if tid is None and meta.get("local_user_id"):
+    if not guarded and tid is None and meta.get("local_user_id"):
         from app.application.enterprise_login_flow import bind_tenant_for_login
 
         tenant_info = bind_tenant_for_login(
@@ -250,7 +272,7 @@ def enrich_session_meta_with_tenant(session_id: str, user: Any) -> dict[str, Any
         if not meta.get("tenant_name") and company_brand:
             meta["tenant_name"] = company_brand
 
-        if sid:
+        if sid and not guarded:
             try:
                 with get_host_db() as db:
                     row = db.query(UserSession).filter(UserSession.session_id == sid).first()

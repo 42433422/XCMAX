@@ -211,7 +211,7 @@ def replace_image_parts_with_ocr_text(
 
     if recognizer is None:
         try:
-            from app.services.ocr_service import get_ocr_service
+            from app.domain.shared_services.ocr_service import get_ocr_service
 
             recognizer = get_ocr_service().recognize_text_from_bytes
         except RECOVERABLE_ERRORS as exc:

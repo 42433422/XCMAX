@@ -1,0 +1,57 @@
+{
+  "mode": "Gui",
+  "candidate_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+  "candidate_on_main": true,
+  "customer_acceptance": "not_verified",
+  "started_at": "2026-10-01T11:03:19.2791680Z",
+  "checks": [
+    {
+      "passed": true,
+      "name": "isolated_runner",
+      "detail": "fresh user data and install path"
+    },
+    {
+      "passed": true,
+      "name": "isolated_tasks",
+      "detail": "no prior daily task"
+    },
+    {
+      "passed": true,
+      "name": "candidate.install",
+      "detail": "exit=0"
+    },
+    {
+      "passed": true,
+      "name": "candidate.exe",
+      "detail": "installed executable exists; build_info={\"version\":\"1.0.0.5\",\"gitSha\":\"91c73f2c576799f42c6d8600871d4bd497f9669a\",\"releaseId\":\"xcagi-1.0.0.5-91c73f2c576799f42c6d8600871d4bd497f9669a\",\"schema_version\":1}\n"
+    },
+    {
+      "passed": true,
+      "name": "candidate.first_start_ready",
+      "detail": "health=healthy; blockers=0; readyForUi=True; pid=9488"
+    },
+    {
+      "passed": true,
+      "name": "candidate.runtime_build_identity",
+      "detail": "installed=91c73f2c576799f42c6d8600871d4bd497f9669a; running=91c73f2c576799f42c6d8600871d4bd497f9669a; legacy_health_identity_missing=False; release=xcagi-1.0.0.5-91c73f2c576799f42c6d8600871d4bd497f9669a"
+    },
+    {
+      "passed": true,
+      "name": "candidate.port_owner",
+      "detail": "pid=8244; exe=D:\\a\\_temp\\xcagi-candidate-Gui\\resources\\backend\\xcagi-backend.exe; actual_data=C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI; expected_data=C:\\Users\\runneradmin\\AppData\\Roaming\\XCAGI"
+    },
+    {
+      "passed": true,
+      "name": "candidate.no_restart",
+      "detail": "original pid=9488"
+    },
+    {
+      "passed": true,
+      "name": "normal_gui_business",
+      "detail": "normal UI must save and read back actual business records"
+    }
+  ],
+  "result": "gui_regression_passed",
+  "candidate_sha256": "f7c5eb4a006267634e758b1abe0af20b6a6cb6643cd8964a4f6f928f340b7733",
+  "finished_at": "2026-10-01T11:06:14.2254381Z"
+}

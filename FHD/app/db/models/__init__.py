@@ -4,6 +4,7 @@ from app.db.models.agent import (
     AgentTaskExecutionRecord,
     AgentTaskRecord,
 )
+from app.db.models.agent_approval import AgentApprovalConsumption
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.employee_run_log import EmployeeRunLog
@@ -47,14 +48,15 @@ from app.db.models.mrp import (
     ManufacturingOrder,
     ManufacturingOrderLine,
 )
-from app.db.models.etl import (
-    EtlRun,
-    EtlRunRow,
-    EtlTargetConfig,
-    EtlTemplate,
-    EtlTemplateVersion,
-    EtlUpload,
+from app.db.models.elt import (
+    EltRun,
+    EltRunRow,
+    EltTargetConfig,
+    EltTemplate,
+    EltTemplateVersion,
+    EltUpload,
 )
+from app.db.models.elt_archive import EltArchiveAsset, EltArchiveQuota, EltArchiveVersion
 from app.db.models.finance import FinancialTransaction
 from app.db.models.inventory import (
     InventoryLedger,
@@ -81,6 +83,7 @@ from app.db.models.service_request import ServiceBridgeConfig, ServiceRequest
 from app.db.models.shipment import ShipmentRecord
 from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
 from app.db.models.tenant import Tenant
+from app.db.models.tenant_invitation import TenantInvitation
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
@@ -106,6 +109,7 @@ __all__ = [
     "UomUnit",
     "SALES_ORDER_STATUS_FLOW",
     "AgentRunRecord",
+    "AgentApprovalConsumption",
     "AgentTaskRecord",
     "AgentTaskCommandRecord",
     "AgentTaskExecutionRecord",
@@ -129,12 +133,12 @@ __all__ = [
     "BomLine",
     "ManufacturingOrder",
     "ManufacturingOrderLine",
-    "EtlUpload",
-    "EtlTemplate",
-    "EtlTemplateVersion",
-    "EtlRun",
-    "EtlRunRow",
-    "EtlTargetConfig",
+    "EltUpload",
+    "EltTemplate",
+    "EltTemplateVersion",
+    "EltRun",
+    "EltRunRow",
+    "EltTargetConfig",
     "FinancialTransaction",
     "ChartOfAccount",
     "JournalEntry",
@@ -142,6 +146,7 @@ __all__ = [
     "ACCOUNT_TYPES",
     "User",
     "Tenant",
+    "TenantInvitation",
     "TutorialWorkspace",
     "TutorialRun",
     "TutorialStepEvidence",

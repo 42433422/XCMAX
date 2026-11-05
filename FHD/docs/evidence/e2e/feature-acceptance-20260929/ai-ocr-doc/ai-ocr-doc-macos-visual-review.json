@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-ocr-doc",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "ebff0cdaeb9c2bbefc0089489d358ed419107fa49336718fff907f3521dc535c",
+  "visible_content": "macOS Vision 后端识别两张单据图片(20260929 与 8888)；边界：未提供 image 返回 400「请提供图像文件或文件路径」。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-ocr-doc/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-ocr-doc/macos/result.png"
+}

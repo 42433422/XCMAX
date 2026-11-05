@@ -50,9 +50,7 @@ class InProcessOpenApiConnectorClient(OpenApiConnectorClient):
     """
 
     def call_operation(self, call: ConnectorOperationCall) -> ConnectorOperationResult:
-        from modstore_server.openapi_connector_runtime import (
-            call_generated_operation,
-        )
+        from modstore_server.openapi_connector_runtime import call_generated_operation
 
         result = call_generated_operation(
             connector_id=call.connector_id,

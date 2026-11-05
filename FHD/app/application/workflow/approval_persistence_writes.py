@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from app.application.workflow.types import ApprovalRequest, PlanGraph
+from app.application.workflow.workflow_types import ApprovalRequest, PlanGraph
 
 
 def persist_workflow_approval(

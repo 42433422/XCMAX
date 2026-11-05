@@ -1,11 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi, type AccountKind, type AccountTier } from '@/api/auth'
-import { invalidateEnterpriseSessionCache, validateEnterpriseSessionCached } from '@/utils/authSessionCache'
+import { captureAuthSession, getAuthSessionEpoch, invalidateEnterpriseSessionCache, validateEnterpriseSessionCached } from '@/utils/authSessionCache'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import type { TenantStorageScopeInput } from '@/utils/tenantStorageScope'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+
+const SCOPE_MOVED = '登录工作空间已改变，请重试'
+
+function scopeMoved(error: unknown): boolean {
+  return error instanceof Error && error.message === SCOPE_MOVED
+}
 
 function buildScopeInput(
   tenantId: number | null,
@@ -32,10 +39,20 @@ async function syncTenantScopedStoresFromProfile(
 ): Promise<void> {
   const input = buildScopeInput(tenantId, marketUserId, localUserId, accountKind, marketUsername)
   setRuntimeTenantStorageScopeInput(input)
-  await refreshTenantScopedClientStores(input)
+  const refreshing = refreshTenantScopedClientStores(input)
+  const epoch = productReadAccountEpoch.value
+  await refreshing
+  // A newer profile owns the scope; this hydration must not publish readiness.
+  if (epoch !== productReadAccountEpoch.value) throw new Error(SCOPE_MOVED)
   if (tenantId !== null || localUserId !== null || marketUserId !== null) {
     const { useIndustryStore } = await import('@/stores/industry')
-    await useIndustryStore().loadFromServer()
+    try {
+      await useIndustryStore().loadFromServer(accountKind !== 'admin')
+    } catch (error) {
+      if (scopeMoved(error)) throw new Error(SCOPE_MOVED)
+      throw error
+    }
+    if (epoch !== productReadAccountEpoch.value) throw new Error(SCOPE_MOVED)
   }
 }
 
@@ -56,7 +73,18 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const budgetRange = ref('')
   const entitledIndustries = ref<string[]>([])
   const marketMembershipTier = ref<string | null>(null)
+  const permissions = ref<string[]>([])
+  const tenantIsOwner = ref(false)
+  const userRole = ref('')
   const loaded = ref(false)
+  const sessionCheckUnavailable = ref(false)
+  const workspaceEpoch = ref(-1)
+  const workspaceHydrationReady = ref(false)
+  // A previously verified workspace stays visible only while its scope remains current.
+  const workspaceReady = computed(() => loaded.value && workspaceEpoch.value === productReadAccountEpoch.value)
+  let hydrationEpoch = 0
+  let clearedEpoch = 0
+  let latestHydration: { epoch: number; promise: Promise<void> } | null = null
 
   const isAdminAccount = computed(() => accountKind.value === 'admin' && marketIsAdmin.value)
 
@@ -69,6 +97,9 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   })
 
   function applySessionFields(data: Record<string, unknown>): Promise<void> {
+    sessionCheckUnavailable.value = false
+    const epoch = ++hydrationEpoch
+    workspaceHydrationReady.value = false
     const kind = String(data.account_kind || 'enterprise').trim()
     if (kind === 'personal' || kind === 'enterprise' || kind === 'admin') {
       accountKind.value = kind
@@ -76,8 +107,12 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     companyBrand.value = String(data.company_brand || '').trim()
     marketIsAdmin.value = Boolean(data.market_is_admin)
     marketIsEnterprise.value = Boolean(data.market_is_enterprise)
-    const tid = data.tenant_id
-    tenantId.value = tid === null || tid === undefined || tid === '' ? null : Number(tid)
+    // 会话校验与登录等局部载荷不含租户/权限键；缺失键必须保留已知状态，否则会把设置页里
+    // 依赖权限的入口（如「角色与权限」）清掉（显式 null 仍然表示“无”）。
+    if ('tenant_id' in data) {
+      const tid = data.tenant_id
+      tenantId.value = tid === null || tid === undefined || tid === '' ? null : Number(tid)
+    }
     tenantName.value = String(data.tenant_name || data.company_brand || '').trim()
     const mid = data.market_user_id
     marketUserId.value = mid === null || mid === undefined || mid === '' ? null : Number(mid)
@@ -102,14 +137,58 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     entitledIndustries.value = Array.isArray(data.entitled_industries) ? (data.entitled_industries as unknown[]).map((x) => String(x)) : []
     const mmt = data.market_membership_tier
     marketMembershipTier.value = mmt === null || mmt === undefined || mmt === '' ? null : String(mmt).trim()
+    if (Array.isArray(data.permissions)) permissions.value = (data.permissions as unknown[]).map(String)
+    if ('tenant_is_owner' in data) tenantIsOwner.value = data.tenant_is_owner === true
+    const nestedUser = data.user
+    userRole.value = nestedUser && typeof nestedUser === 'object' && !Array.isArray(nestedUser)
+      ? String((nestedUser as Record<string, unknown>).role || '') : ''
     loaded.value = true
-    return syncTenantScopedStoresFromProfile(
+    const hydration = syncTenantScopedStoresFromProfile(
       tenantId.value,
       marketUserId.value,
       localUserId.value,
       accountKind.value,
       impersonatingUsername.value,
     )
+    // The synchronous scope update above establishes the owner of this hydration.
+    const ownerEpoch = productReadAccountEpoch.value
+    const scopeCurrent = captureAuthSession()
+    const authAtStart = getAuthSessionEpoch()
+    const cleared = clearedEpoch
+    function publishReady() {
+      if (ownerEpoch !== productReadAccountEpoch.value) throw new Error(SCOPE_MOVED)
+      workspaceEpoch.value = productReadAccountEpoch.value
+      workspaceHydrationReady.value = true
+    }
+    async function finish(error?: unknown, failed = false): Promise<void> {
+      let observed = epoch
+      while (scopeCurrent() && cleared === clearedEpoch) {
+        const latest = latestHydration
+        if (latest && latest.epoch > observed) {
+          observed = latest.epoch
+          try { await latest.promise; failed = false }
+          catch (newerError) { error = newerError; failed = true }
+          continue
+        }
+        if (observed !== hydrationEpoch) break
+        if (failed) throw error
+        // Earlier same-owner reads join the newest result; only its own read publishes readiness.
+        if (epoch === hydrationEpoch) publishReady()
+        return
+      }
+      // A scope-generation bump from a concurrent refresh is not a new login.
+      // The latest read adopts the current generation; superseded reads still fail.
+      if (cleared !== clearedEpoch || authAtStart !== getAuthSessionEpoch()) throw new Error(SCOPE_MOVED)
+      if (epoch === hydrationEpoch && (!failed || scopeMoved(error))) {
+        publishReady()
+        return
+      }
+      if (failed) throw error
+      throw new Error(SCOPE_MOVED)
+    }
+    const promise = hydration.then(() => finish(), error => finish(error, true))
+    latestHydration = { epoch, promise }
+    return promise
   }
 
   function applyFromMeData(data: Record<string, unknown> | null | undefined): Promise<void> {
@@ -123,6 +202,24 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   }
 
   async function refreshFromServer() {
+    const retryUnavailable = sessionCheckUnavailable.value
+    let requestEpoch = hydrationEpoch
+    const authEpoch = getAuthSessionEpoch(), cleared = clearedEpoch
+    let scopeCurrent = captureAuthSession()
+    const current = () => scopeCurrent() && authEpoch === getAuthSessionEpoch() && cleared === clearedEpoch
+    async function followLatestHydration() {
+      let error: unknown, failed = false
+      while (current()) {
+        const latest = latestHydration
+        if (!latest || latest.epoch <= requestEpoch) {
+          if (failed) throw error
+          return
+        }
+        requestEpoch = latest.epoch
+        try { await latest.promise; failed = false }
+        catch (newerError) { error = newerError; failed = true }
+      }
+    }
     try {
       let sku = 'generic'
       try {
@@ -131,26 +228,56 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
         /* ignore */
       }
       if (isEnterpriseEdition(sku)) {
-        const valid = await validateEnterpriseSessionCached()
+        const valid = await validateEnterpriseSessionCached(retryUnavailable)
+        if (!current()) return
+        if (requestEpoch !== hydrationEpoch) {
+          while (current() && requestEpoch !== hydrationEpoch) await followLatestHydration()
+          return
+        }
         if (!valid) {
           clear()
           return
         }
       }
       const res = await authApi.getCurrentUser()
+      if (!current()) return
+      if (requestEpoch !== hydrationEpoch) {
+        while (current() && requestEpoch !== hydrationEpoch) await followLatestHydration()
+        return
+      }
       if (res?.success && res.data) {
-        await applyFromMeData(res.data as Record<string, unknown>)
+        const hydration = applyFromMeData(res.data as Record<string, unknown>)
+        requestEpoch = hydrationEpoch
+        scopeCurrent = captureAuthSession()
+        await hydration
         return
       }
       invalidateEnterpriseSessionCache()
       clear()
-    } catch {
+    } catch (caughtError) {
+      let error = caughtError
+      while (current() && requestEpoch !== hydrationEpoch) {
+        try {
+          await followLatestHydration()
+          if (current() && requestEpoch === hydrationEpoch) return
+        } catch (newerError) { error = newerError }
+      }
+      if (!current()) return
+      // 仅当服务端明确判定会话失效（401/403）才清空资料；超时/被取代/网络抖动属瞬时失败，清空会隐藏依赖权限的入口。
+      const status = (error as { status?: unknown } | null | undefined)?.status
+      if (status !== 401 && status !== 403) { sessionCheckUnavailable.value = true; return }
       invalidateEnterpriseSessionCache()
       clear()
     }
   }
 
-  function clear() {
+  function clear(hydrate = true) {
+    hydrationEpoch++
+    clearedEpoch++
+    latestHydration = null
+    sessionCheckUnavailable.value = false
+    workspaceEpoch.value = -1
+    workspaceHydrationReady.value = false
     accountKind.value = 'enterprise'
     companyBrand.value = ''
     marketIsAdmin.value = false
@@ -166,9 +293,12 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     budgetRange.value = ''
     entitledIndustries.value = []
     marketMembershipTier.value = null
+    permissions.value = []
+    tenantIsOwner.value = false
+    userRole.value = ''
     loaded.value = false
     setRuntimeTenantStorageScopeInput(null)
-    refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' })
+    void refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' }, hydrate)
   }
 
   return {
@@ -187,13 +317,19 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     budgetRange,
     entitledIndustries,
     marketMembershipTier,
+    permissions,
+    tenantIsOwner,
+    userRole,
     loaded,
+    workspaceReady,
+    workspaceHydrationReady,
     isAdminAccount,
     isImpersonating,
     displayBrand,
     applyFromMeData,
     applyFromLoginPayload,
     refreshFromServer,
+    sessionCheckUnavailable,
     clear,
   }
 })

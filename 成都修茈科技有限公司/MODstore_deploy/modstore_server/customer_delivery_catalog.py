@@ -257,7 +257,9 @@ def issue_release_download(record: dict[str, Any], raw: bytes) -> dict[str, str]
             }
         )
         evidence["download_grants"] = grants[-20:]
-        from modstore_server.customer_delivery_entitlements import grant_verified_delivery_access
+        from modstore_server.customer_delivery_entitlements import (
+            grant_verified_delivery_access,
+        )
 
         grant_verified_delivery_access(
             db, ticket, evidence, manifest, owner_id=record["owner_user_id"]

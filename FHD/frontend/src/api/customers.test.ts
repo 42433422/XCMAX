@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { customersApi } from './customers'
+import { mount, flushPromises } from '@vue/test-utils'
+import { defineComponent, ref } from 'vue'
+import { useCustomers } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/customers/useCustomers'
 
 vi.mock('./core', () => ({
   api: {
@@ -15,61 +18,54 @@ vi.mock('@/utils/erpDomainPaths', () => ({
   resolveErpApiBase: vi.fn().mockReturnValue('/api/erp'),
 }))
 
+vi.mock('@/composables/useCoreNavLabel', () => ({ useCoreNavLabel: (key: string) => ({ value: key }) }))
+vi.mock('@/api/orders', () => ({ default: { getShipmentRecordUnits: vi.fn().mockResolvedValue({ success: true, data: [] }) } }))
+vi.mock('@/api/templatePreview', () => ({ default: { listTemplates: vi.fn().mockResolvedValue({ success: true, templates: [] }) } }))
+
 describe('customersApi', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
-
-  it('getCustomers calls GET /customers/list', async () => {
-    await customersApi.getCustomers({ page: 1 })
-    const { api } = await import('./core')
-    expect(api.get).toHaveBeenCalledWith('/api/erp/customers/list', { page: 1 })
+  it('refreshes customer readback when returning from approval', async () => {
+    const { api } = await import('./core'), visible = ref(true)
+    const CustomerHarness = defineComponent({ setup: useCustomers, template: '<p v-for="row in customers">{{ row.customer_name }}</p>' })
+    vi.mocked(api.get).mockResolvedValue({ success: true, data: [{ id: 1, customer_name: '原客户' }] })
+    const wrapper = mount(defineComponent({ components: { CustomerHarness }, setup: () => ({ visible }), template: '<KeepAlive><CustomerHarness v-if="visible" /></KeepAlive>' }))
+    await flushPromises(); expect(wrapper.text()).toBe('原客户')
+    visible.value = false; await flushPromises()
+    vi.mocked(api.get).mockResolvedValue({ success: true, data: [{ id: 2, customer_name: 'AI客户' }] })
+    visible.value = true; await flushPromises(); expect(wrapper.text()).toBe('AI客户')
+    wrapper.unmount()
   })
 
-  it('getCustomer calls GET /customers/:id', async () => {
-    await customersApi.getCustomer(42)
+  it.each(['data', 'customers'])('renders customer records from the %s list envelope', async (key) => {
+    const row = { id: 77, customer_name: 'WIN-READBACK', contact_person: '验收员', contact_phone: '13800000001', contact_address: '隔离地址' }
     const { api } = await import('./core')
-    expect(api.get).toHaveBeenCalledWith('/api/erp/customers/42')
+    vi.mocked(api.get).mockResolvedValueOnce({ success: true, [key]: [row], total: 1 })
+    const wrapper = mount(defineComponent({ setup: useCustomers, template: '<div><p v-for="row in customers" :key="row.id">{{ row.customer_name }} {{ row.contact_person }} {{ row.contact_phone }} {{ row.contact_address }}</p><span>{{ totalCustomers }}</span></div>' }))
+    await flushPromises()
+    expect(wrapper.find('p').text()).toBe('WIN-READBACK 验收员 13800000001 隔离地址')
+    expect(wrapper.find('span').text()).toBe('1')
+    wrapper.unmount()
   })
 
-  it('createCustomer calls POST /customers', async () => {
-    const data = { name: 'Test' } as any
-    await customersApi.createCustomer(data)
+  it.each([
+    ['list', () => customersApi.getCustomers({ page: 1 }), 'get', ['/api/erp/customers/list', { page: 1 }]],
+    ['detail', () => customersApi.getCustomer(42), 'get', ['/api/erp/customers/42']],
+    ['create', () => customersApi.createCustomer({ name: 'Test' } as any), 'post', ['/api/erp/customers', { name: 'Test' }]],
+    ['update', () => customersApi.updateCustomer(42, { name: 'Updated' } as any), 'put', ['/api/erp/customers/42', { name: 'Updated' }]],
+    ['delete', () => customersApi.deleteCustomer(42), 'delete', ['/api/erp/customers/42']],
+    ['batch delete', () => customersApi.batchDeleteCustomers([1, 2, 3]), 'post', ['/api/erp/customers/batch-delete', { ids: [1, 2, 3] }]],
+  ] as const)('%s uses the customer API contract', async (_name, call, method, args) => {
+    await call()
     const { api } = await import('./core')
-    expect(api.post).toHaveBeenCalledWith('/api/erp/customers', data)
+    expect(api[method]).toHaveBeenCalledWith(...args)
   })
 
-  it('updateCustomer calls PUT /customers/:id', async () => {
-    const data = { name: 'Updated' } as any
-    await customersApi.updateCustomer(42, data)
+  it.each([undefined, 'tmpl-1'])('exports with optional template %s', async (template) => {
+    await customersApi.exportCustomersXlsx(template)
     const { api } = await import('./core')
-    expect(api.put).toHaveBeenCalledWith('/api/erp/customers/42', data)
-  })
-
-  it('deleteCustomer calls DELETE /customers/:id', async () => {
-    await customersApi.deleteCustomer(42)
-    const { api } = await import('./core')
-    expect(api.delete).toHaveBeenCalledWith('/api/erp/customers/42')
-  })
-
-  it('batchDeleteCustomers calls POST /customers/batch-delete', async () => {
-    await customersApi.batchDeleteCustomers([1, 2, 3])
-    const { api } = await import('./core')
-    expect(api.post).toHaveBeenCalledWith('/api/erp/customers/batch-delete', { ids: [1, 2, 3] })
-  })
-
-  it('exportCustomersXlsx calls download with template_id when provided', async () => {
-    await customersApi.exportCustomersXlsx('tmpl-1')
-    const { api } = await import('./core')
-    expect(api.download).toHaveBeenCalledWith('/api/erp/customers/export', {
-      template_id: 'tmpl-1',
-    })
-  })
-
-  it('exportCustomersXlsx calls download without template_id', async () => {
-    await customersApi.exportCustomersXlsx()
-    const { api } = await import('./core')
-    expect(api.download).toHaveBeenCalledWith('/api/erp/customers/export', {})
+    expect(api.download).toHaveBeenCalledWith('/api/erp/customers/export', template ? { template_id: template } : {})
   })
 
   it('importCustomersExcel calls POST /customers/import', async () => {

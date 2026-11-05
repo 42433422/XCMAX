@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from app.application.workflow.checkpointer import WorkflowCheckpointer
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
 def _sequential_plan(n: int = 5, plan_id: str = "p_cp") -> PlanGraph:

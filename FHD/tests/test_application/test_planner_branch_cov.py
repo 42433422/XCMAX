@@ -19,11 +19,21 @@ from app.application.workflow.planner import (
     LLMWorkflowPlanner,
     _execute_import_excel_tool,
     _filter_tool_registry_for_profile,
-    _get_planner_http_client,
     execute_tool,
 )
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+@pytest.fixture
+def memory_actor(trusted_actor):
+    from app.application.agent_task_context import scoped_conversation_user_id
+
+    actor = trusted_actor(user_id=7, tenant_id=2)
+    context = {**actor.context, "session_id": "memory-error-regression"}
+    return scoped_conversation_user_id("7", context), context
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1069,23 +1079,25 @@ class TestFallbackPlanBranches:
         assert not any(n.tool_id == "customers" for n in result.nodes)
 
     def test_default_fallback_to_products_query(self) -> None:
-        """无匹配意图时默认查询产品。"""
+        """无匹配意图时不再静默查询产品，改为 clarify.ask 反问。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "随便看看", _sample_registry())
-        assert any(n.tool_id == "products" for n in result.nodes)
+        assert result.intent == "clarify_ask"
+        assert any(n.tool_id == "clarify" for n in result.nodes)
 
     def test_default_fallback_to_customers_when_no_products(self) -> None:
-        """无 products 工具时回退查询客户。"""
+        """命中 customers 意图时按 tool_key 路由到 customers.query。"""
         planner = _make_planner()
         reg = {"customers": _sample_registry()["customers"]}
-        result = planner._fallback_plan("pid", "随便看看", reg)
+        result = planner._fallback_plan("pid", "客户列表", reg)
         assert any(n.tool_id == "customers" for n in result.nodes)
 
     def test_default_fallback_empty_registry(self) -> None:
-        """空注册表时返回空节点图。"""
+        """空注册表且意图未命中时返回 clarify 节点。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "随便看看", {})
-        assert len(result.nodes) == 0
+        assert len(result.nodes) == 1
+        assert result.nodes[0].tool_id == "clarify"
         assert result.risk_level == "low"
 
     def test_employee_keyword_english(self) -> None:
@@ -1660,7 +1672,7 @@ class TestCriticRepairWithLLM:
         return planner
 
     def test_no_api_key_returns_none(self) -> None:
-        """无 api_key 时返回 None。"""
+        """无可用模型通道时返回 None。"""
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_svc:
             ai = MagicMock()
             ai.api_key = ""
@@ -1668,25 +1680,29 @@ class TestCriticRepairWithLLM:
             planner = LLMWorkflowPlanner()
 
         invalid_plan = PlanGraph(plan_id="pid", intent="i", nodes=[])
-        result = planner._critic_repair_with_llm(
-            plan_id="pid",
-            user_id="u1",
-            message="test",
-            tool_registry={},
-            context={},
-            error="err",
-            invalid_plan=invalid_plan,
-        )
+        with patch(
+            "app.application.workflow.planner.request_planner_completion",
+            return_value=None,
+        ):
+            result = planner._critic_repair_with_llm(
+                plan_id="pid",
+                user_id="u1",
+                message="test",
+                tool_registry={},
+                context={},
+                error="err",
+                invalid_plan=invalid_plan,
+            )
         assert result is None
 
     def test_http_error_returns_none(self) -> None:
         """HTTP 错误时返回 None。"""
         planner = self._make_planner_with_fence()
         invalid_plan = PlanGraph(plan_id="pid", intent="i", nodes=[])
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 500
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1702,11 +1718,11 @@ class TestCriticRepairWithLLM:
         """空响应返回 None。"""
         planner = self._make_planner_with_fence()
         invalid_plan = PlanGraph(plan_id="pid", intent="i", nodes=[])
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1722,11 +1738,11 @@ class TestCriticRepairWithLLM:
         """无效 JSON 返回 None。"""
         planner = self._make_planner_with_fence()
         invalid_plan = PlanGraph(plan_id="pid", intent="i", nodes=[])
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": "not json{"}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1742,11 +1758,11 @@ class TestCriticRepairWithLLM:
         """ValueError 返回 None。"""
         planner = self._make_planner_with_fence()
         invalid_plan = PlanGraph(plan_id="pid", intent="i", nodes=[])
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.side_effect = ValueError("bad json")
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1762,8 +1778,8 @@ class TestCriticRepairWithLLM:
         """RuntimeError 返回 None。"""
         planner = self._make_planner_with_fence()
         invalid_plan = PlanGraph(plan_id="pid", intent="i", nodes=[])
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-            mock_client.return_value.post.side_effect = RuntimeError("conn fail")
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
+            completion.side_effect = RuntimeError("conn fail")
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1796,11 +1812,11 @@ class TestCriticRepairWithLLM:
                 }
             ],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1824,11 +1840,11 @@ class TestCriticRepairWithLLM:
             "nodes": [],
         }
         content = f"```json\n{json.dumps(payload)}\n```"
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": content}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1854,11 +1870,11 @@ class TestCriticRepairWithLLM:
                 },
             }
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1881,8 +1897,8 @@ class TestPlanWithLLMErrorPaths:
     def test_value_error_returns_none(self) -> None:
         """ValueError 返回 None。"""
         planner = _make_planner()
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-            mock_client.return_value.post.side_effect = ValueError("bad")
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
+            completion.side_effect = ValueError("bad")
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1895,8 +1911,8 @@ class TestPlanWithLLMErrorPaths:
     def test_runtime_error_returns_none(self) -> None:
         """RuntimeError 返回 None。"""
         planner = _make_planner()
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-            mock_client.return_value.post.side_effect = RuntimeError("bad")
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
+            completion.side_effect = RuntimeError("bad")
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1909,11 +1925,11 @@ class TestPlanWithLLMErrorPaths:
     def test_invalid_json_returns_none(self) -> None:
         """无效 JSON 返回 None。"""
         planner = _make_planner()
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": "not json{"}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1926,11 +1942,11 @@ class TestPlanWithLLMErrorPaths:
     def test_empty_content_returns_none(self) -> None:
         """空 content 返回 None。"""
         planner = _make_planner()
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -1974,11 +1990,11 @@ class TestPlanWithLLMErrorPaths:
                 "not_a_dict",  # 非dict项被跳过
             ],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2001,11 +2017,11 @@ class TestPlanWithLLMErrorPaths:
             "nodes": [],
         }
         context = {"user_memory_rag": "not_a_dict"}
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2026,11 +2042,11 @@ class TestPlanWithLLMErrorPaths:
             "nodes": [],
         }
         context = {"memory_v2": "not_a_dict"}
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2050,11 +2066,11 @@ class TestPlanWithLLMErrorPaths:
             "nodes": [],
         }
         context = {"tool_probe_outputs": "not_a_list"}
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2074,11 +2090,11 @@ class TestPlanWithLLMErrorPaths:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2098,11 +2114,11 @@ class TestPlanWithLLMErrorPaths:
             "nodes": [],
         }
         content = f"```json\n{json.dumps(payload)}\n```"
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": content}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2122,11 +2138,11 @@ class TestPlanWithLLMErrorPaths:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2156,11 +2172,11 @@ class TestPlanWithLLMErrorPaths:
                 }
             ],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2190,11 +2206,11 @@ class TestPlanWithLLMErrorPaths:
                 }
             ],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2213,11 +2229,11 @@ class TestPlanWithLLMErrorPaths:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2227,54 +2243,6 @@ class TestPlanWithLLMErrorPaths:
             )
             assert result is not None
             assert result.intent == "dynamic_workflow"
-
-
-# ---------------------------------------------------------------------------
-# _get_planner_http_client — singleton
-# ---------------------------------------------------------------------------
-
-
-class TestGetPlannerHttpClient:
-    def test_returns_client_instance(self) -> None:
-        """返回 httpx.Client 实例。"""
-        # 重置全局单例
-        import app.application.workflow.planner as planner_mod
-
-        original = planner_mod._planner_http_client
-        planner_mod._planner_http_client = None
-        try:
-            client = _get_planner_http_client()
-            assert client is not None
-        finally:
-            if original is not None:
-                planner_mod._planner_http_client = original
-            else:
-                # 清理创建的客户端
-                try:
-                    client.close()  # type: ignore[possibly-undefined]
-                except BOUNDARY_ERRORS:
-                    pass
-                planner_mod._planner_http_client = None
-
-    def test_singleton_reuses_instance(self) -> None:
-        """重复调用返回同一实例。"""
-        import app.application.workflow.planner as planner_mod
-
-        original = planner_mod._planner_http_client
-        planner_mod._planner_http_client = None
-        try:
-            client1 = _get_planner_http_client()
-            client2 = _get_planner_http_client()
-            assert client1 is client2
-        finally:
-            if original is not None:
-                planner_mod._planner_http_client = original
-            else:
-                try:
-                    client1.close()  # type: ignore[possibly-undefined]
-                except BOUNDARY_ERRORS:
-                    pass
-                planner_mod._planner_http_client = None
 
 
 # ---------------------------------------------------------------------------
@@ -2396,8 +2364,9 @@ class TestPlanIntegration:
                     )
                     assert result is not None
 
-    def test_plan_user_memory_rag_import_error_handled(self) -> None:
+    def test_plan_user_memory_rag_import_error_handled(self, memory_actor) -> None:
         """用户记忆 RAG ImportError 不阻断主流程。"""
+        namespace, context = memory_actor
         planner = _make_planner()
         valid_plan = PlanGraph(
             plan_id="pid",
@@ -2415,30 +2384,35 @@ class TestPlanIntegration:
                 return_value=_sample_registry(),
             ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
-                    # 让 get_user_memory_rag_app_service 导入失败
-                    import sys
+                    # Fail at the import boundary, including when the public
+                    # service is exported lazily instead of stored in __dict__.
+                    import builtins
 
-                    original = sys.modules.get("app.application")
-                    if original is not None:
-                        original_getattr = getattr(
-                            original, "get_user_memory_rag_app_service", None
-                        )
-                        if original_getattr:
-                            del original.get_user_memory_rag_app_service  # type: ignore[attr-defined]
-                    try:
+                    original_import = builtins.__import__
+                    blocked = []
+
+                    def unavailable_memory(name, globals=None, locals=None, fromlist=(), level=0):
+                        if (
+                            name == "app.application"
+                            and "get_user_memory_rag_app_service" in fromlist
+                        ):
+                            blocked.append(name)
+                            raise ImportError("user memory RAG unavailable")
+                        return original_import(name, globals, locals, fromlist, level)
+
+                    with patch("builtins.__import__", side_effect=unavailable_memory):
                         result = planner.plan(
-                            user_id="u1",
+                            user_id=namespace,
                             message="test",
                             tool_registry=_sample_registry(),
-                            context={},
+                            context=context,
                         )
                         assert result is not None
-                    finally:
-                        if original is not None and original_getattr is not None:
-                            original.get_user_memory_rag_app_service = original_getattr  # type: ignore[attr-defined]
+                    assert blocked == ["app.application"]
 
-    def test_plan_user_memory_rag_recoverable_error_handled(self) -> None:
+    def test_plan_user_memory_rag_recoverable_error_handled(self, memory_actor) -> None:
         """用户记忆 RAG RECOVERABLE_ERRORS 不阻断主流程。"""
+        namespace, context = memory_actor
         planner = _make_planner()
         valid_plan = PlanGraph(
             plan_id="pid",
@@ -2459,17 +2433,19 @@ class TestPlanIntegration:
                     with patch(
                         "app.application.get_user_memory_rag_app_service",
                         side_effect=RuntimeError("rag fail"),
-                    ):
+                    ) as unavailable:
                         result = planner.plan(
-                            user_id="u1",
+                            user_id=namespace,
                             message="test",
                             tool_registry=_sample_registry(),
-                            context={},
+                            context=context,
                         )
                         assert result is not None
+                        unavailable.assert_called_once_with()
 
-    def test_plan_memory_v2_import_error_handled(self) -> None:
+    def test_plan_memory_v2_import_error_handled(self, memory_actor) -> None:
         """Memory v2 ImportError 不阻断主流程。"""
+        namespace, context = memory_actor
         planner = _make_planner()
         valid_plan = PlanGraph(
             plan_id="pid",
@@ -2487,28 +2463,33 @@ class TestPlanIntegration:
                 return_value=_sample_registry(),
             ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
-                    # 让 user_memory_service 导入失败
-                    import sys
+                    import builtins
 
-                    original = sys.modules.get("app.services.user_memory_service")
-                    if original is not None:
-                        sys.modules["app.services.user_memory_service"] = None  # type: ignore[assignment]
-                    try:
+                    original_import = builtins.__import__
+                    blocked = []
+
+                    def unavailable_memory(name, globals=None, locals=None, fromlist=(), level=0):
+                        if (
+                            name == "app.domain.shared_services.user_memory_service"
+                            and "get_user_memory_service" in fromlist
+                        ):
+                            blocked.append(name)
+                            raise ImportError("memory v2 unavailable")
+                        return original_import(name, globals, locals, fromlist, level)
+
+                    with patch("builtins.__import__", side_effect=unavailable_memory):
                         result = planner.plan(
-                            user_id="u1",
+                            user_id=namespace,
                             message="test",
                             tool_registry=_sample_registry(),
-                            context={},
+                            context=context,
                         )
                         assert result is not None
-                    finally:
-                        if original is not None:
-                            sys.modules["app.services.user_memory_service"] = original
-                        else:
-                            sys.modules.pop("app.services.user_memory_service", None)
+                    assert blocked == ["app.domain.shared_services.user_memory_service"]
 
-    def test_plan_memory_v2_recoverable_error_handled(self) -> None:
+    def test_plan_memory_v2_recoverable_error_handled(self, memory_actor) -> None:
         """Memory v2 RECOVERABLE_ERRORS 不阻断主流程。"""
+        namespace, context = memory_actor
         planner = _make_planner()
         valid_plan = PlanGraph(
             plan_id="pid",
@@ -2527,13 +2508,14 @@ class TestPlanIntegration:
             ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
-                        "app.services.user_memory_service.get_user_memory_service",
+                        "app.domain.shared_services.user_memory_service.get_user_memory_service",
                         side_effect=RuntimeError("v2 fail"),
-                    ):
+                    ) as unavailable:
                         result = planner.plan(
-                            user_id="u1",
+                            user_id=namespace,
                             message="test",
                             tool_registry=_sample_registry(),
-                            context={},
+                            context=context,
                         )
                         assert result is not None
+                        unavailable.assert_called_once_with()

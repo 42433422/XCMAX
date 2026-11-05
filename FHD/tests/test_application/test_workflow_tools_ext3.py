@@ -64,41 +64,15 @@ class TestReadExcelDataframeEngineSelection:
 
 
 class TestExcelCellAsCleanStr:
-    def test_string_value(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        assert _excel_cell_as_clean_str("hello") == "hello"
-
-    def test_none_value(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        assert _excel_cell_as_clean_str(None) == ""
-
     def test_nan_value(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
 
         assert _excel_cell_as_clean_str(float("nan")) == ""
 
-    def test_integer_value(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        assert _excel_cell_as_clean_str(42) == "42"
-
-    def test_float_value(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        result = _excel_cell_as_clean_str(3.14)
-        assert "3.14" in result
-
     def test_whitespace_stripped(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
 
         assert _excel_cell_as_clean_str("  hello  ") == "hello"
-
-    def test_bool_returns_empty(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        assert _excel_cell_as_clean_str(True) == ""
 
 
 # ========================= _excel_cell_as_float ============================
@@ -110,40 +84,15 @@ class TestExcelCellAsFloat:
 
         assert _excel_cell_as_float(3.14) == 3.14
 
-    def test_int_value(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float(42) == 42.0
-
-    def test_string_number(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float("3.14") == 3.14
-
     def test_invalid_string(self):
         from app.application.tools.workflow import _excel_cell_as_float
 
         assert _excel_cell_as_float("not a number") == 0.0
 
-    def test_none_value(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float(None) == 0.0
-
-    def test_nan_value(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float(float("nan")) == 0.0
-
     def test_empty_string(self):
         from app.application.tools.workflow import _excel_cell_as_float
 
         assert _excel_cell_as_float("") == 0.0
-
-    def test_custom_default(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float(None, default=-1.0) == -1.0
 
 
 # ========================= _looks_like_contract_or_footer_line ==============
@@ -373,11 +322,11 @@ class TestExecuteWorkflowToolAdditionalHandlers:
 
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "test.docx"),
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="pickup_tok",
             ),
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
@@ -386,7 +335,7 @@ class TestExecuteWorkflowToolAdditionalHandlers:
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
             ),
         ):

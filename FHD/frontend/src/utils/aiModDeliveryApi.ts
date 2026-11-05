@@ -1,5 +1,6 @@
 import { apiFetch } from '@/utils/apiBase'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 
 export type AiModDeliveryProgress = {
   sessionId: string
@@ -16,8 +17,8 @@ export type AiModDeliveryResult = {
 }
 
 const AI_MOD_PATTERNS = [
-  /(?:帮我|给我|为我)?(?:做|生成|创建|开发|定制).{0,18}(?:mod|MOD|模块|小程序|工具|应用|系统|审批流|工作流)/,
-  /(?:mod|MOD|模块|审批流|工作流).{0,18}(?:做|生成|创建|开发|定制)/,
+  /(?:^|[，,。！？!?；;\n])\s*(?:请(?:帮我|给我|为我)?|帮我|给我|为我|我想|我需要)?(?:做|生成|创建|开发|定制)[^，,。！？!?；;：:\n]{0,18}(?:mod|模块|小程序|工具|应用|系统|审批流|工作流)(?=$|[\s，,。！？!?；;：:])/i,
+  /(?:^|[，,。！？!?；;\n])\s*(?:mod|模块|审批流|工作流)(?:请|帮我|给我|为我|需要|要|的|来|\s){0,18}(?:做|生成|创建|开发|定制)(?=$|[\s，,。！？!?；;：:])/i,
 ]
 
 export function aiModBriefFromChat(text: string): string {
@@ -83,14 +84,22 @@ export async function generateAndInstallAiMod(
     intervalMs?: number
     maxRounds?: number
     onProgress?: (progress: AiModDeliveryProgress) => void
+    isCurrent?: () => boolean
   } = {},
 ): Promise<AiModDeliveryResult> {
+  const identity = resolveChatIdentity()
+  const ensureCurrent = () => {
+    if (identity !== resolveChatIdentity() || options.isCurrent?.() === false) throw new Error('账号或 MOD 已切换，生成会话已保留，请返回原账号继续')
+  }
+  ensureCurrent()
   const { sessionId } = await startAiModDelivery(brief)
   const intervalMs = Math.max(10, options.intervalMs ?? 2000)
   const maxRounds = Math.max(1, options.maxRounds ?? 300)
   let latest: AiModDeliveryProgress | null = null
   for (let round = 0; round < maxRounds; round += 1) {
+    ensureCurrent()
     latest = await getAiModDeliveryProgress(sessionId)
+    ensureCurrent()
     options.onProgress?.(latest)
     if (latest.status === 'done') break
     if (latest.status === 'error' || latest.status === 'failed') {
@@ -102,6 +111,7 @@ export async function generateAndInstallAiMod(
   const artifact = asRecord(latest.snapshot.artifact)
   const modId = asString(artifact.mod_id).trim()
   if (!modId) throw new Error('MOD 生成结果缺少 mod_id')
+  ensureCurrent()
   const installed = await installAiModDelivery(sessionId)
   return {
     sessionId,

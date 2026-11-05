@@ -1,13 +1,13 @@
 """Employee bounded context."""
 
-from modstore_server.domain.employee.ports import (
-    EmployeeMetricsRepository,
-    EmployeeRepository,
-)
-from modstore_server.domain.employee.types import (
+from modstore_server.domain.employee.employee_types import (
     Employee,
     EmployeeExecution,
     EmployeePack,
+)
+from modstore_server.domain.employee.port_contracts import (
+    EmployeeMetricsRepository,
+    EmployeeRepository,
 )
 
 __all__ = [

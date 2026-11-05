@@ -22,12 +22,11 @@ if TYPE_CHECKING:
     from app.application.shipment_app_service import ShipmentApplicationService
     from app.application.template_app_service import TemplateApplicationService
     from app.application.unit_products_import_app_service import UnitProductsImportService
-    from app.application.workflow.ports.checkpoint import CheckpointStore
-    from app.application.workflow.ports.runtime import WorkflowRuntime
-    from app.services.extract_log_service import ExtractLogService
-    from app.services.materials_service import MaterialsService
-    from app.services.product_import_service import ProductImportService
-    from app.services.products_service import ProductsService
+    from app.application.workflow.ports import CheckpointStore, WorkflowRuntime
+    from app.domain.shared_services.extract_log_service import ExtractLogService
+    from app.domain.shared_services.materials_service import MaterialsService
+    from app.domain.shared_services.product_import_service import ProductImportService
+    from app.domain.shared_services.products_service import ProductsService
 
 # Intent recognition is now provided by domain layer - see get_intent_recognition_service()
 # in app/domain/services/intent_recognition_service.py

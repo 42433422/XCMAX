@@ -1,0 +1,57 @@
+{
+  "result": "PASS",
+  "time": "2026-10-15T21:48:45.841152+08:00",
+  "scope": "Current local report references only. No acceptance rerun.",
+  "checks": [
+    {
+      "report": "node13-joint-verification-final.json",
+      "field": "macActual.dmg.sha256",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "matches": true
+    },
+    {
+      "report": "node13-joint-verification-final.json",
+      "field": "macActual.zip.sha256",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/incoming/artifact/mac-acceptance-c5e066acff7f50edf5f1e506abcca33372cc6033-arm64/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "matches": true
+    },
+    {
+      "report": "node13-joint-verification-final.json",
+      "field": "macActual.reportSha256",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/mac-c5-lifecycle-final.json",
+      "matches": true
+    },
+    {
+      "report": "node13-joint-verification-final.json",
+      "field": "evidenceProvenance.primaryReceipts.0.sha256",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6190996826.json",
+      "matches": true
+    },
+    {
+      "report": "node13-joint-verification-final.json",
+      "field": "evidenceProvenance.primaryReceipts.1.sha256",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-published-receipt-6191186660.json",
+      "matches": true
+    },
+    {
+      "report": "node13-joint-verification-final.json",
+      "field": "supportingAudits.0.sha256",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/mac-c5-completion-audit.json",
+      "matches": true
+    },
+    {
+      "report": "node13-joint-verification-final.json",
+      "field": "supportingAudits.1.sha256",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/windows-existing-acceptance-joint-audit.json",
+      "matches": true
+    },
+    {
+      "report": "node12-node13-candidate-reconciliation.json",
+      "field": "finalJointReportSha256",
+      "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node13-joint-verification-final.json",
+      "matches": true
+    }
+  ],
+  "jointReportSha256": "ab40b1c8d0fcc054ad411620f7eef5fc3c1e584a38acbb359aeb73e55fd10257",
+  "reconciliationSha256": "8957f5f62646b0924d848465e54751d03af3f73428bef8bb02b965dea4b705d1"
+}

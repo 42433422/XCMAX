@@ -740,6 +740,8 @@ class TestDeterministicAnswerBoundary:
         assert "query" in result
         assert "short text" in result
         assert "[1]" in result
+        assert result.startswith("根据知识库资料，关于「query」：")
+        assert "Based on the retrieved" not in result
 
     def test_long_excerpt_truncated(self):
         long_text = "x" * 500
@@ -753,6 +755,7 @@ class TestDeterministicAnswerBoundary:
         result = _deterministic_answer("", [chunk])
         assert "some text" in result
         assert "[1]" in result
+        assert result.startswith("根据知识库资料：")
 
     def test_newlines_replaced(self):
         chunk = _make_chunk(text="line1\nline2\nline3")
@@ -1641,6 +1644,8 @@ class TestGetRebuildJobBoundary:
 
     def test_dataset_not_found(self, tmp_path):
         svc = _make_svc(tmp_path)
+        with svc._lock:
+            svc._persist_locked()  # An existing empty snapshot differs from unavailable storage.
         result = svc.get_rebuild_job("nonexistent", "job1")
         assert result["success"] is False
         assert "not found" in result["message"]
@@ -2263,6 +2268,32 @@ class TestRunRebuildJobBoundary:
         svc._run_rebuild_job("ds1", job_id)
         with svc._lock:
             assert svc._datasets["ds1"].rebuild_jobs[job_id].status == "completed"
+
+    def test_late_rebuild_error_only_retries_current_owner(self, tmp_path):
+        for replacement in (False, True):
+            svc = _make_svc(tmp_path / str(replacement), workers=False)
+            _ingest(svc)
+            job = svc.start_rebuild_index(dataset_id="ds1", background=True, max_attempts=2)["job"]
+            job_id = job["job_id"]
+
+            def fail_after_embedding(state):
+                if replacement:
+                    current = svc._datasets["ds1"].rebuild_jobs[job_id]
+                    current.status = "cancelled"
+                    current.worker_id = "replacement-owner"
+                raise RuntimeError("late rebuild failure")
+
+            svc._renumber_chunks = fail_after_embedding
+            svc._run_rebuild_job("ds1", job_id, schedule_next=False)
+            with svc._lock:
+                current = svc._datasets["ds1"].rebuild_jobs[job_id]
+                if replacement:
+                    assert current.status == "cancelled"
+                    assert current.worker_id == "replacement-owner"
+                    assert current.error == ""
+                else:
+                    assert current.status == "queued"
+                    assert current.error == "late rebuild failure"
 
     def test_rebuild_with_metadata_filter(self, tmp_path):
         svc = _make_svc(tmp_path, workers=False)

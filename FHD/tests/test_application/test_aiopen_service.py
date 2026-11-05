@@ -58,13 +58,12 @@ class TestEnvApiKey:
 
 
 class TestVerifyApiKey:
-    def test_no_keys_configured_allows_access(self):
-        with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("AIOPEN_API_KEY", None)
+    def test_no_keys_configured_denies_access(self):
         saved = AIOPEN_STATE.pop("runtime_keys", None)
         try:
-            assert verify_api_key(None) is True
-            assert verify_api_key("anything") is True
+            with patch.dict(os.environ, {}, clear=True):
+                assert verify_api_key(None) is False
+                assert verify_api_key("anything") is False
         finally:
             if saved is not None:
                 AIOPEN_STATE["runtime_keys"] = saved
@@ -436,7 +435,9 @@ class TestAiopenManifest:
         m = aiopen_manifest()
         assert m["name"] == AIOPEN_PRODUCT_NAME
         assert m["tagline"] == AIOPEN_PRODUCT_TAGLINE
-        assert m["version"] == "1.0.0.1"
+        from app.infrastructure.mods.manifest import host_xcagi_version
+
+        assert m["version"] == host_xcagi_version()
         assert "protocol" in m
         assert "tools" in m
         assert len(m["tools"]) == len(TOOL_DEFINITIONS)

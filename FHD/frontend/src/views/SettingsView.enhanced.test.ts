@@ -5,7 +5,7 @@
  * session 处理、Mod 管理、行业切换
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref, type Ref, nextTick } from 'vue'
@@ -14,7 +14,7 @@ import { ref, type Ref, nextTick } from 'vue'
 const mockApiGet = vi.fn().mockResolvedValue({ data: {}, success: false })
 const mockApiPost = vi.fn().mockResolvedValue({ success: true })
 const mockApiPut = vi.fn().mockResolvedValue({ success: true })
-const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: false })
+const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: true, valid: false })
 const mockAuthApiGetCurrentUser = vi.fn().mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
 const mockAuthApiLogout = vi.fn().mockResolvedValue({})
 const mockAuthApiUpdateCompanyBrand = vi.fn().mockResolvedValue({ success: true })
@@ -159,7 +159,7 @@ const mockAccountProfileStore = {
   isImpersonating: false,
   refresh: vi.fn().mockResolvedValue(undefined),
   refreshFromServer: vi.fn().mockResolvedValue(undefined),
-  applyFromMeData: vi.fn(),
+  applyFromMeData: vi.fn().mockResolvedValue(undefined),
   clear: vi.fn(),
 }
 
@@ -219,10 +219,6 @@ vi.mock('@/api', () => ({
   ApiError: class ApiError extends Error {},
 }))
 
-vi.mock('../../package.json', () => ({
-  default: { version: '1.0.0' },
-}))
-
 /* ── global stubs ── */
 const globalStubs = {
   RouterLink: { template: '<a><slot /></a>' },
@@ -234,6 +230,22 @@ const i18nMock = {
   install(app: { config: { globalProperties: Record<string, unknown> } }) {
     app.config.globalProperties.$t = (k: string) => k
   },
+}
+
+function resetSettingsMocks() {
+  setActivePinia(createPinia())
+  localStorage.clear()
+  vi.clearAllMocks()
+  mockIndustryStore.industries = []
+  mockIndustryStore.currentIndustry = null
+  mockIndustryStore.isLoaded = false
+  mockModsStore.mods = []
+  mockModsStore.isLoaded = true
+  mockModsStore.modRoutes = []
+  mockModsStore.clientModsUiOff = false
+  mockAccountProfileStore.companyBrand = ''
+  mockAccountProfileStore.displayBrand = ''
+  mockAccountProfileStore.accountKind = 'personal'
 }
 
 async function mountSettings() {
@@ -258,81 +270,33 @@ async function mountSettings() {
 
 describe('SettingsView.vue – component structure', () => {
   beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    // Reset store mocks
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
+    resetSettingsMocks()
     mockModsStore.activeModId = ''
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
   })
 
-  it('mounts and renders settings content', async () => {
+  it.each([
+    '#view-settings', '.settings-profile', '.settings-layout', '.settings-list', '.settings-page__title',
+  ])('renders settings element %s', async (selector) => {
     const wrapper = await mountSettings()
-    expect(wrapper.find('#view-settings').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('contains settings profile section', async () => {
-    const wrapper = await mountSettings()
-    expect(wrapper.find('.settings-profile').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('contains settings layout', async () => {
-    const wrapper = await mountSettings()
-    expect(wrapper.find('.settings-layout').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('contains settings list', async () => {
-    const wrapper = await mountSettings()
-    expect(wrapper.find('.settings-list').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('contains page title', async () => {
-    const wrapper = await mountSettings()
-    expect(wrapper.find('.settings-page__title').exists()).toBe(true)
+    expect(wrapper.find(selector).exists()).toBe(true)
     wrapper.unmount()
   })
 })
 
 describe('SettingsView.vue – profile section', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
-  it('shows login link when not logged in', async () => {
+  it('offers account retry when the required profile cannot be verified', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: false,
       data: { user: null, permissions: [] },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
-    // When not logged in, should show login link (router-link with primary btn class)
-    const loginBtn = wrapper.find('.settings-profile__btn--primary')
-    expect(loginBtn.exists()).toBe(true)
+    await flushPromises()
+    expect((wrapper.vm as any).accountError).toBe(true)
+    expect(wrapper.find('.settings-profile__actions button.settings-profile__btn').exists()).toBe(true)
+    expect(wrapper.find('.settings-profile__btn--primary').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -399,21 +363,7 @@ describe('SettingsView.vue – profile section', () => {
 })
 
 describe('SettingsView.vue – basic settings', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
   it('renders sidebar theme select', async () => {
     const wrapper = await mountSettings()
@@ -480,21 +430,7 @@ describe('SettingsView.vue – basic settings', () => {
 })
 
 describe('SettingsView.vue – intent showcase', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
   it('renders intent section', async () => {
     const wrapper = await mountSettings()
@@ -529,21 +465,7 @@ describe('SettingsView.vue – intent showcase', () => {
 })
 
 describe('SettingsView.vue – model service section', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
   it('renders model service section', async () => {
     const wrapper = await mountSettings()
@@ -567,21 +489,7 @@ describe('SettingsView.vue – model service section', () => {
 })
 
 describe('SettingsView.vue – extensions & mods section', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
   it('renders extensions section when clientModsUiOff is false', async () => {
     mockModsStore.clientModsUiOff = false
@@ -610,21 +518,7 @@ describe('SettingsView.vue – extensions & mods section', () => {
 })
 
 describe('SettingsView.vue – persistence', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
   it('survives remount with persisted sidebar theme', async () => {
     localStorage.setItem('xcagi_sidebar_theme', 'dark')
@@ -649,21 +543,7 @@ describe('SettingsView.vue – persistence', () => {
 })
 
 describe('SettingsView.vue – session handling', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
   it('handles session validation failure gracefully', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
@@ -713,21 +593,7 @@ describe('SettingsView.vue – session handling', () => {
 })
 
 describe('SettingsView.vue – computed properties', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
   it('systemDisplayName defaults to generic host shell', async () => {
     const wrapper = await mountSettings()
@@ -760,11 +626,21 @@ describe('SettingsView.vue – computed properties', () => {
     wrapper.unmount()
   })
 
-  it('appVersionLabel comes from package.json', async () => {
+  it.each([
+    [undefined, '—'],
+    [{ getAppIdentity: async () => ({ version: '1.0.0.5' }) }, '1.0.0.5'],
+    [{ getAppIdentity: async () => ({}) }, '—'],
+    [{ getAppIdentity: async () => { throw new Error('IPC unavailable') } }, '—'],
+  ])('shows the installed version or an unknown marker for desktop identity %j', async (desktop, expected) => {
+    vi.stubGlobal('xcagiDesktop', desktop)
     const wrapper = await mountSettings()
-    const vm = wrapper.vm as Record<string, unknown>
-    expect(vm.appVersionLabel).toBe('1.0.0')
-    wrapper.unmount()
+    try {
+      await flushPromises()
+      expect((wrapper.vm as Record<string, unknown>).appVersionLabel).toBe(expected)
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+    }
   })
 
   it('isLoggedIn is false when no user', async () => {
@@ -772,7 +648,7 @@ describe('SettingsView.vue – computed properties', () => {
       success: false,
       data: { user: null, permissions: [] },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as Record<string, unknown>
     expect(vm.isLoggedIn).toBe(false)
@@ -797,21 +673,7 @@ describe('SettingsView.vue – computed properties', () => {
 })
 
 describe('SettingsView.vue – API error handling', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
   it('handles getIndustries failure gracefully', async () => {
     mockSystemApiGetIndustries.mockRejectedValueOnce(new Error('Server error'))
@@ -856,41 +718,30 @@ describe('SettingsView.vue – API error handling', () => {
 
 describe('SettingsView.vue – industry loading', () => {
   beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
+    resetSettingsMocks()
+    mockAuthApiGetCurrentUser.mockReset().mockResolvedValue({ success: true, data: { user: {
+      id: 1, username: 'synthetic-settings-user', display_name: 'Settings User', role: 'user',
+    } } })
+    mockSystemApiGetIndustries.mockReset().mockResolvedValue({ success: true, data: [] })
+    mockSystemApiGetCurrentIndustry.mockReset().mockResolvedValue({ success: true, data: { id: 'default' } })
   })
 
-  it('calls industryStore.initialize on mount', async () => {
+  it('loads verified current industry details on mount', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 100))
-    expect(mockIndustryStore.initialize).toHaveBeenCalled()
+    await flushPromises()
+    expect(mockSystemApiGetCurrentIndustry).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
 
   it('calls systemApi.getIndustries on mount', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     expect(mockSystemApiGetIndustries).toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('populates industries from API response', async () => {
-    mockSystemApiGetIndustries.mockResolvedValueOnce({
+  it('adopts the current industry from API response', async () => {
+    mockSystemApiGetIndustries.mockResolvedValue({
       success: true,
       data: {
         industries: [{ id: 'manufacturing', name: '制造业', code: 'mfg' }],
@@ -898,36 +749,22 @@ describe('SettingsView.vue – industry loading', () => {
       },
     })
     const wrapper = await mountSettings()
-    // Wait for async operations
-    await new Promise((r) => setTimeout(r, 50))
-    expect(wrapper.exists()).toBe(true)
+    await flushPromises()
+    await (wrapper.vm as any).loadIndustries()
+    expect((wrapper.vm as any).currentIndustry).toBe('manufacturing')
     wrapper.unmount()
   })
 })
 
 describe('SettingsView.vue – audit logs', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
-  })
+  beforeEach(resetSettingsMocks)
 
   it('does not show audit logs for non-admin users', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: false,
       data: { user: null, permissions: [] },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
     expect(wrapper.find('[data-tutorial-id="settings-audit-logs"]').exists()).toBe(false)
     wrapper.unmount()

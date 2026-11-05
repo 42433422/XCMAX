@@ -1,0 +1,48 @@
+{
+  "round": "2026-09-17 real-machine acceptance round (installed 1.0.0.4)",
+  "gate": "G12 pre-reboot state",
+  "captured_at": "2026-09-17T01:04:01.463470+08:00",
+  "kern.boottime": "{ sec = 1789365455, usec = 407653 } Mon Sep 14 13:57:35 2026",
+  "note_no_reboot_since": "本次抓取前最后一次开机为 { sec = 1789365455, usec = 407653 } Mon Sep 14 13:57:35 2026",
+  "running_app_processes": [
+    "3027 01-09:45:58 /Applications/XCAGI.app/Contents/MacOS/XCAGI",
+    "3030 01-09:45:57 /Applications/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Helpers/chrome_crashpad_handler --no-rate-limit --monitor-self-annotat",
+    "3031 01-09:45:57 /Applications/XCAGI.app/Contents/Frameworks/XCAGI Helper.app/Contents/MacOS/XCAGI Helper --type=gpu-process --user-data-dir=/Users/a4243342/Lib"
+  ],
+  "login_items": "(空) — 系统登录项中无 XCAGI，重启后不会自动启动",
+  "armed_post_reboot_job": {
+    "plist": "~/Library/LaunchAgents/com.xcagi.t6-postreboot.plist (RunAtLoad=true)",
+    "runner": "/Users/Shared/xcagi-t6-tools/t6-onboot.sh",
+    "creds_file": "/Users/Shared/xcagi-t6-tools/.t6-creds (chmod 600, demo tenant)",
+    "poll_window": "48 x 15s ≈ 12 min for backend health",
+    "caveat": "需要用户在登录后启动 /Applications/XCAGI.app，否则 12 分钟内后端不会 healthy"
+  },
+  "pre_reboot_digest": {
+    "xcagi.db.bytes": 987168768,
+    "xcagi.db.wal.bytes": 2537952,
+    "excel_vectors.db.bytes": -1,
+    "mod_dbs.files": 0,
+    "uploads.files": 166,
+    "uploads.templates.files": 20,
+    "routing_policies.files": 1,
+    "mods.files": 1257,
+    "models.files": 1,
+    "backups.files": 5,
+    "backups.latest": "xcagi-unknown-20260916161910.db",
+    "rows.templates": 21,
+    "rows.sales_orders": 0,
+    "rows.manufacturing_orders": 0,
+    "rows.customers": 0,
+    "rows.users": 6
+  },
+  "g11_business_artifact": {
+    "doc_name": "发货单_26-0900001A_20260917_010152.xlsx",
+    "download_sha256": "9b1eae31bf34c55daf646e69d0a63892c9c46ba54ab1458a25bc0573c21c80fb",
+    "download_bytes": 5192,
+    "template_id": "db:21"
+  },
+  "health_before_reboot": {
+    "version": "1.0.0.4",
+    "git_sha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67"
+  }
+}

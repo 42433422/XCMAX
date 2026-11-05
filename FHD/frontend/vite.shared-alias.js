@@ -120,6 +120,14 @@ export function createResolveAlias(frontendDir, opts = {}) {
       replacement: path.join(adminSrc, 'utils/dutyRosterEmployeeList.ts'),
     },
     {
+      find: '@/utils/automationPolicyLines',
+      replacement: path.join(adminSrc, 'utils/automationPolicyLines.ts'),
+    },
+    {
+      find: '@/utils/marketOverviewMetrics',
+      replacement: path.join(adminSrc, 'utils/marketOverviewMetrics.ts'),
+    },
+    {
       find: '@/constants/hostViewGlob',
       replacement: path.join(constantsDir, `hostViewGlob.${editionSuffix}.ts`),
     },

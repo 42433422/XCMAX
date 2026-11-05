@@ -1,0 +1,45 @@
+{
+ "phase": "G6-Mod/AI员工加载（1.0.0.4 OTA 后登录态）",
+ "date": "2026-09-15T15:28:28",
+ "login": {
+  "status": 200,
+  "success": true,
+  "user": "xcagi-enterprise-demo"
+ },
+ "health": {
+  "status": 200,
+  "version": "1.0.0.4"
+ },
+ "mods": {
+  "status": 200,
+  "count": 62,
+  "attendance_industry": {
+   "id": "attendance-industry",
+   "version": "1.0.1",
+   "primary": true
+  }
+ },
+ "employees": {
+  "status": 200,
+  "catalog_schema": 1,
+  "split_mod_entries": 6,
+  "legacy_employee_ids": [
+   "label_print",
+   "shipment_mgmt",
+   "receipt_confirm",
+   "wechat_msg"
+  ],
+  "split_ids": [
+   "label_print",
+   "real_phone",
+   "receipt_confirm",
+   "shipment_mgmt",
+   "wechat_msg",
+   "wechat_phone"
+  ]
+ },
+ "loading_status": {
+  "status": 200,
+  "summary": "ok"
+ }
+}

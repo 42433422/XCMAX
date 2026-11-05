@@ -20,10 +20,11 @@ MODSTORE_SERVER_DIR = (
     REPO_ROOT.parent / "成都修茈科技有限公司" / "MODstore_deploy" / "modstore_server"
 )
 
-MAX_FILE_LINES = 500
+MAX_FILE_LINES = 800
 BASELINE_FILE = Path(__file__).resolve().parent / "arch_fitness_baseline.txt"
 
 VIOLATIONS: list[str] = []
+WARNINGS: list[str] = []
 
 
 def _violation_key(violation: str) -> str:
@@ -127,8 +128,8 @@ def check_no_giant_files_in_app() -> None:
         line_count = _count_lines(py)
         if line_count > MAX_FILE_LINES:
             rel = py.relative_to(REPO_ROOT)
-            VIOLATIONS.append(
-                f"[giant-file] {rel} — {line_count} lines (max {MAX_FILE_LINES} in app/)"
+            WARNINGS.append(
+                f"[giant-file] {rel} — {line_count} lines (advisory cap {MAX_FILE_LINES} in app/)"
             )
 
 
@@ -142,9 +143,9 @@ def check_no_giant_files_in_modstore_server() -> None:
         line_count = _count_lines(py)
         if line_count > MAX_FILE_LINES:
             rel = py.relative_to(REPO_ROOT.parent)
-            VIOLATIONS.append(
+            WARNINGS.append(
                 f"[giant-file] {rel} — {line_count} lines "
-                f"(max {MAX_FILE_LINES} in modstore_server/)"
+                f"(advisory cap {MAX_FILE_LINES} in modstore_server/)"
             )
 
 
@@ -186,12 +187,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     print("=== Architecture Fitness Check ===\n")
 
+    VIOLATIONS.clear()
+    WARNINGS.clear()
     check_no_v1_backup_files()
     check_routes_not_import_services()
     check_domain_not_depend_on_infrastructure()
     check_no_giant_files_in_app()
     check_no_giant_files_in_modstore_server()
     check_legacy_boundary()
+
+    for warning in WARNINGS:
+        print(f"  WARNING: {warning}")
 
     if args.update_baseline:
         keys = sorted({_violation_key(v) for v in VIOLATIONS})

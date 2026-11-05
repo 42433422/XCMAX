@@ -126,13 +126,15 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
    * 数据来源：useAgentRunEvents.ts 的 buildAgentRunTaskUpdate 会把 events
    * 塞进 TaskItem.payload.agentEvents；这里消费它，零后端改动。
    */
-  function attachAgentRunTraceToLastAiMessage(): void {
+  function attachAgentRunTraceToLastAiMessage(expectedRunId: string): void {
     const messageRef = getLastAiMessageRef()
-    if (!messageRef) return
+    if (!messageRef || !expectedRunId) return
     const target = taskList.value.find((t) => {
       if (t.type !== 'agent_run' && t.type !== 'agent_task') return false
-      if (t.messageRef && t.messageRef !== messageRef) return false
-      const events = asArray(asRecord(t.payload).agentEvents)
+      if (t.messageRef !== messageRef) return false
+      const payload = asRecord(t.payload)
+      if (asString(payload.activeRunId || payload.agentRunId) !== expectedRunId) return false
+      const events = asArray(payload.agentEvents)
       return events.length > 0
     })
     if (!target) return

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -71,8 +72,8 @@ class TestUploadTemp:
         data = {"file": ("", BytesIO(b""), "image/png")}
         with patch("app.fastapi_routes.upload._ensure_upload_folder"):
             resp = client.post("/api/upload/temp", files=data)
-        # empty filename → 400
-        assert resp.status_code in (400, 200)  # depends on ASGI handling
+        assert resp.status_code == 400
+        assert resp.json() == {"success": False, "message": "没有上传文件"}
 
     def test_disallowed_extension(self):
         client = _make_client()
@@ -141,8 +142,14 @@ class TestUploadTemp:
                 "/api/upload/temp",
                 files={"file": ("photo.png", BytesIO(content), "image/png")},
             )
-        # should still succeed with fallback name
-        assert resp.status_code in (200, 500)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["success"] is True and body["filename"] == "uploaded_file"
+        saved = tmp_path / Path(body["file_path"]).name
+        assert saved.suffix == ".png" and saved.read_bytes() == content
+        assert body["size"] == len(content)
+        assert body["url"] == f"/uploads/temp/{saved.name}"
+        assert list(tmp_path.iterdir()) == [saved]
 
 
 class TestDeleteTempFile:

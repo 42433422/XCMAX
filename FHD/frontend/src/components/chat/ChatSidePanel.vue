@@ -27,6 +27,9 @@
       v-if="activeTab === 'task'"
       :current-task="currentTask"
       :task-list="taskList"
+      :task-control-states="taskControlStates"
+      :task-sync-state="taskSyncState"
+      @refresh-tasks="$emit('refresh-tasks')"
       :filtered-task-list="filteredTaskList"
       :active-task-id="activeTaskId"
       :expanded-task-ids="expandedTaskIds"
@@ -70,6 +73,9 @@
       :current-session-id="currentSessionId"
       :loading="historyLoading"
       :error="historyError"
+      :has-more="historyHasMore"
+      :loading-more="historyLoadingMore"
+      @load-more="$emit('load-more-history')"
       @new="$emit('new-conversation')"
       @refresh="$emit('refresh-history')"
       @clear="$emit('clear-history-sessions')"
@@ -85,6 +91,7 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
+import type { TaskControlState, TaskSyncState } from '@/composables/useAgentTaskWorkspace'
 import type { HistorySessionItem } from '@/composables/useChatSessionHistory'
 import ChatTaskPanel from './ChatTaskPanel.vue'
 import ChatConversationPanel from './ChatConversationPanel.vue'
@@ -95,6 +102,8 @@ useI18n()
 
 const props = defineProps<{
   currentTask: ShipmentTask | null
+  taskControlStates?: Record<string, TaskControlState>
+  taskSyncState?: TaskSyncState
   taskList: TaskItem[]
   filteredTaskList: TaskItem[]
   activeTaskId: string
@@ -114,10 +123,13 @@ const props = defineProps<{
   historySessions: HistorySessionItem[]
   currentSessionId: string
   historyLoading: boolean
+  historyHasMore?: boolean
+  historyLoadingMore?: boolean
   historyError: string
 }>()
 
 const emit = defineEmits<{
+  'refresh-tasks': []
   'confirm-task': []
   'cancel-task': []
   'refetch-order-number': []
@@ -139,6 +151,7 @@ const emit = defineEmits<{
   'copy-assistant-push': []
   'open-assistant-float': []
   'new-conversation': []
+  'load-more-history': []
   'refresh-history': []
   'clear-history-sessions': []
   'load-session': [sessionId: string]

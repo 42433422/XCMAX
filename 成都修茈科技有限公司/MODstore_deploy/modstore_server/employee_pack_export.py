@@ -240,11 +240,13 @@ def _render_employee_py_for_manifest(
                 "default_output_relpath", "outputs/employee_output.xlsx"
             )
             rule_spec["default_template_relpath"] = direct_cfg.get("default_template_relpath", "")
-        return render_direct_python_asset_worker(
-            employee_id=employee_id,
-            label=label,
-            runtime_module=runtime_mod,
-            rule_spec=rule_spec,
+        return str(
+            render_direct_python_asset_worker(
+                employee_id=employee_id,
+                label=label,
+                runtime_module=runtime_mod,
+                rule_spec=rule_spec,
+            )
         )
     return render_employee_pack_employee_py(employee_id=employee_id, stem=stem, label=label)
 
@@ -336,9 +338,7 @@ def _build_employee_pack_zip_with_source(
             for mod_name, mod_src in vendor_modules.items():
                 zf.writestr(f"{pack_id}/backend/vendor/{runtime_mod_name}/{mod_name}", mod_src)
         elif is_direct_python:
-            from modstore_server.employee_asset_pipeline import (
-                render_runtime_modules,
-            )
+            from modstore_server.employee_asset_pipeline import render_runtime_modules
 
             direct_cfg = (
                 actions.get("direct_python")

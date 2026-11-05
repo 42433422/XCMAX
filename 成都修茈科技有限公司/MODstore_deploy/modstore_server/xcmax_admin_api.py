@@ -73,7 +73,7 @@ def _resolve_sync_db_path() -> Path:
         p = Path(raw).expanduser().resolve()
     else:
         try:
-            from modstore_server.db.base import default_db_path
+            from modstore_server.db.db_base import default_db_path
 
             p = default_db_path().parent / "xcmax_sync.db"
         except RECOVERABLE_ERRORS:
@@ -320,8 +320,13 @@ async def scheduler_health() -> dict[str, Any]:
                         "trigger": str(j.trigger),
                     }
                 )
-        except RECOVERABLE_ERRORS:
-            logger.exception("scheduler_health: get_jobs failed")
+        except RECOVERABLE_ERRORS as exc:
+            from modstore_server.scheduler_runtime import public_exception_type
+
+            logger.error(
+                "scheduler_health: get_jobs failed: error_type=%s",
+                public_exception_type(exc),
+            )
 
         running = bool(getattr(_scheduler, "running", False))
         integrity = scheduler_integrity_status()
@@ -348,8 +353,13 @@ async def scheduler_health() -> dict[str, Any]:
                 "reported_at": datetime.now(UTC).isoformat(),
             },
         }
-    except RECOVERABLE_ERRORS:
-        logger.exception("scheduler_health endpoint failed")
+    except RECOVERABLE_ERRORS as exc:
+        from modstore_server.scheduler_runtime import public_exception_type
+
+        logger.error(
+            "scheduler_health endpoint failed: error_type=%s",
+            public_exception_type(exc),
+        )
         return {
             "success": False,
             "ok": False,
@@ -380,7 +390,7 @@ async def xcmax_admin_loop_memory_evict(
     """
 
     try:
-        from modstore_server.self_maintenance_loop_runner import evict_loop_memory_items
+        from modstore_server.maintenance_loop.memory import evict_loop_memory_items
 
         result = evict_loop_memory_items(
             actor="manual",

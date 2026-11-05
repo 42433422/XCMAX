@@ -4,7 +4,7 @@ publish 脚本无 --check 模式且会写文件；MVP check 采用只读 header 
 验证根仓每个 fhd-*.yml / modstore-*.yml 含 "# CI SSOT: generated from" 头。
 完整内容漂移检测留待后续（需 publish 支持 --dry-run）。
 
-注意：本文件既被当作模块 import（from .base import ...），
+注意：本文件既被当作模块 import（from .plugin_base import ...），
 也被当作脚本直接运行（注册表 check 命令 python .../ci_workflows.py check）。
 故用绝对 import + sys.path 兜底，兼容两种调用方式。
 """
@@ -20,7 +20,7 @@ _FHD_ROOT = Path(__file__).resolve().parents[3]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
 
-from scripts.dev.ssot_plugins.base import run_command  # noqa: E402
+from scripts.dev.ssot_plugins.plugin_base import run_command  # noqa: E402
 
 REPO_ROOT = _FHD_ROOT.parent  # 仓根（publish 脚本在 scripts/dev/ 而非 FHD/scripts/dev/）
 GENERATED_PREFIX = "fhd-"

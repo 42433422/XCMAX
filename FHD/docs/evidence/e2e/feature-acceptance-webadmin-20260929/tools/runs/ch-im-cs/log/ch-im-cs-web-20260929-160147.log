@@ -1,0 +1,7 @@
+[16:01:47] feature=ch-im-cs platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-im-cs
+[16:02:00] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[16:02:01] case C1: passed - 客服收件箱会话工作台真实读取
+[16:02:01] case C2: passed - 发送空消息被校验拒绝（负例）
+[16:02:02] case C3: passed - 不存在会话的消息读取 fail-closed（边界/负例）
+[16:02:02] video: ch-im-cs-web-20260929-160147.webm (1097805 bytes)
+[16:02:02] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-im-cs/log/ch-im-cs-web-20260929-160147.log

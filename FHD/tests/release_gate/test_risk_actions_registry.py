@@ -9,7 +9,7 @@ import pytest
 
 from app.application.employee_runtime.write_approval import build_write_approval_gate
 from app.application.workflow.risk_gate import HybridRiskGate
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.services.tools_execution.registry import get_workflow_tool_registry
 from resources.config.risk_actions_loader import load_risk_registry
 

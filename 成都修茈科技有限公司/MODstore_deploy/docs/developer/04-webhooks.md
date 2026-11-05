@@ -108,3 +108,9 @@ curl -X POST https://<host>/api/workflow/<wid>/webhook-run \
 - **手动重试**：UI **投递日志** 抽屉里每条失败记录都能 retry；
 - **查看 payload**：UI 抽屉的 "查看 Payload" 显示原始请求体与响应体（截断 1KB），方便对比 mismatch；
 - **本地调试**：用 [smee.io](https://smee.io) 或 [ngrok](https://ngrok.com) 把本地 4000 端口暴露成公网 URL，立即收到事件。
+
+## 入站任务 Webhook 的认证边界
+
+本节与上面的出站订阅协议不同。`/api/inbound/webhooks/{provider}` 的四个固定接收器及 `/api/workflow-hooks/webhook/{trigger_key}` 仅对无 Cookie 的 POST 使用协议认证；路由仍必须验签或验证专用 token。除既有已验证 Bearer 分支外，携带浏览器 Cookie 的请求仍需原 CSRF 校验，不以路径名称当作身份。
+
+钉钉入口必须同时提供 `timestamp`（毫秒）和 `sign`，保持既有签名算法并使用常量时间比较；本地接受窗口为服务器时间前后一小时。既有钉钉签名只绑定时间戳与密钥，不绑定请求体；窗口不提供持久化重复投递去重，也不保证一次性语义。签名应作为短期凭据保护且不得写日志，应确保服务器时钟正确。工作流必须配置触发器 `secret` 或 `WORKFLOW_WEBHOOK_DEFAULT_SECRET`，未配置返回 503，缺签名返回 401，错误签名返回 403。旧无签名集成不会自动降级放行，需在上线前协调对接方。

@@ -14,7 +14,7 @@ from modstore_server.auth_service import (
     decode_refresh_token,
     generate_pat,
     get_user_by_id,
-    resolve_user_from_pat,
+    resolve_pat_identity,
 )
 from modstore_server.developer_scopes import validate_scopes_or_raise
 from modstore_server.models import DeveloperToken, User, get_session_factory
@@ -22,6 +22,10 @@ from modstore_server.models import DeveloperToken, User, get_session_factory
 
 class AuthenticationError(Exception):
     """Raised when credentials are missing or invalid (API maps to 401)."""
+
+
+class ScopeAuthorizationError(AuthenticationError):
+    """A valid scoped credential cannot be promoted to an unrestricted user."""
 
 
 class AuthApplicationService:
@@ -34,10 +38,10 @@ class AuthApplicationService:
         token = raw[7:].strip()
 
         if token.startswith(PAT_PREFIX):
-            user = resolve_user_from_pat(token)
-            if not user:
+            identity = resolve_pat_identity(token)
+            if not identity:
                 raise AuthenticationError("API Token 无效、已吊销或已过期")
-            return user
+            raise ScopeAuthorizationError("此入口未声明 PAT 权限，请使用明确支持对应 scope 的接口")
 
         payload = decode_access_token(token)
         if not payload:

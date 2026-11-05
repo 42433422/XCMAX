@@ -1,4 +1,4 @@
-"""Tests for app.services.intent_service — intent service coverage ramp.
+"""Tests for app.domain.shared_services.intent_service — intent service coverage ramp.
 
 Extends the existing test_intent_service.py with comprehensive coverage for:
 - recognize_intents / _recognize_intents_impl
@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.intent_service import (
+from app.domain.shared_services.intent_service import (
     _APPEND_KEYWORDS,
     _CONTEXT_INHERIT_PATTERNS,
     QUICK_COMMAND_MAP,
@@ -123,7 +123,7 @@ class TestRecognizeIntents:
 
     def test_returns_fallback_on_exception(self):
         with patch(
-            "app.services.intent_service._recognize_intents_impl",
+            "app.domain.shared_services.intent_service._recognize_intents_impl",
             side_effect=OSError("test error"),
         ):
             result = recognize_intents("测试")
@@ -164,7 +164,7 @@ class TestRecognizeIntents:
 
     def test_reflex_failure_fallback(self):
         with patch(
-            "app.services.intent_service._reflex_basic_intents",
+            "app.domain.shared_services.intent_service._reflex_basic_intents",
             side_effect=ValueError("reflex error"),
         ):
             result = recognize_intents("开单")

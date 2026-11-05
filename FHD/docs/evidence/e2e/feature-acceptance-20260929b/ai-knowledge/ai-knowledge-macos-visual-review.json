@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-knowledge",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "e9ac21609ce11ee3ef59127391284fb6d3f483904ca09b75089a79d964f4862e",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。failed。企业知识网络图谱。可见 Persy 核心、内容与关系节点，底部提问「客户续约需要谁审批?」。 未通过明细：M2 failed：HTTP 403 40ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"旧知识索引未提供租户隔离\", \"path\": \"/api/knowledge/v1/ingest\"}；M3 failed：HTTP 403 37ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"旧知识索引未提供租户隔离\", \"path\": \"/api/knowledge/v1/query\"}",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-knowledge/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-knowledge/macos/result.png"
+}

@@ -1,0 +1,29 @@
+{
+  "_comment": "macOS 交付物台账（现场重算）：本轮重新计算 DMG 的 SHA-256，版本与 SHA 取自已安装客户端 build-info。",
+  "kind": "macos-delivery-artifact",
+  "feature": "base-mac-client",
+  "platform": "macos",
+  "captured_at": "2026-09-29 09:59:57",
+  "release": {
+    "version": "1.0.0.5",
+    "git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+    "release_id": "xcagi-1.0.0.5-37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e"
+  },
+  "installed_app": {
+    "bundle": "/Applications/XCAGI.app",
+    "build_info": {
+      "schema_version": 1,
+      "gitSha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+      "builtAt": "2026-09-28T01:42:42.396Z"
+    }
+  },
+  "artifacts": {
+    "official_dmg": {
+      "path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/artifact/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "sha256": "a05a482e4936d11e64d475cca6e0cffab3abfb84db13801df8bb2e531875dcf7",
+      "size_bytes": 304586120
+    }
+  }
+}

@@ -1,0 +1,216 @@
+# CI SSOT: generated from FHD/.github/workflows/windows-candidate-acceptance.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Windows Candidate Acceptance
+run-name: "Windows candidate ${{ inputs.candidate_sha }} · isolated lifecycle"
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: "Release Desktop run containing the private candidate artifact"
+        required: true
+        type: string
+      candidate_sha:
+        description: "Exact 40-character source SHA embedded in the candidate"
+        required: true
+        type: string
+      baseline_version:
+        description: "Frozen official baseline; customer installed SHA must be verified separately"
+        required: true
+        default: "1.0.0.6"
+        type: choice
+        options:
+          - "1.0.0.6"
+          - "1.0.0.5"
+      only:
+        description: "Empty runs all five modes. Lifecycle runs Clean/Upgrade/Rollback. Rollback runs only rollback."
+        required: false
+        default: ""
+        type: string
+      account_mode:
+        description: "Shared credentials run serially; parallel requires five dedicated business identities"
+        required: true
+        default: shared-serial
+        type: choice
+        options:
+          - shared-serial
+          - isolated-parallel
+
+# Both modes reuse persistent business identities; never overlap acceptance runs.
+concurrency:
+  group: windows-candidate-acceptance-accounts
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  select-modes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+      parallel: ${{ steps.set.outputs.parallel }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - id: set
+        working-directory: ${{ github.workspace }}
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+          ACCOUNT_MODE: ${{ inputs.account_mode }}
+          XCAGI_TEST_USER: ${{ secrets.XCAGI_TEST_USER }}
+          XCAGI_TEST_PASS: ${{ secrets.XCAGI_TEST_PASS }}
+          XCAGI_TEST_CLEAN_USER: ${{ secrets.XCAGI_TEST_CLEAN_USER }}
+          XCAGI_TEST_CLEAN_PASS: ${{ secrets.XCAGI_TEST_CLEAN_PASS }}
+          XCAGI_TEST_CLEAN_MARKET_USER_ID: ${{ vars.XCAGI_TEST_CLEAN_MARKET_USER_ID }}
+          XCAGI_TEST_UPGRADE_USER: ${{ secrets.XCAGI_TEST_UPGRADE_USER }}
+          XCAGI_TEST_UPGRADE_PASS: ${{ secrets.XCAGI_TEST_UPGRADE_PASS }}
+          XCAGI_TEST_UPGRADE_MARKET_USER_ID: ${{ vars.XCAGI_TEST_UPGRADE_MARKET_USER_ID }}
+          XCAGI_TEST_GUI_USER: ${{ secrets.XCAGI_TEST_GUI_USER }}
+          XCAGI_TEST_GUI_PASS: ${{ secrets.XCAGI_TEST_GUI_PASS }}
+          XCAGI_TEST_GUI_MARKET_USER_ID: ${{ vars.XCAGI_TEST_GUI_MARKET_USER_ID }}
+          XCAGI_TEST_RECOVERY_USER: ${{ secrets.XCAGI_TEST_RECOVERY_USER }}
+          XCAGI_TEST_RECOVERY_PASS: ${{ secrets.XCAGI_TEST_RECOVERY_PASS }}
+          XCAGI_TEST_RECOVERY_MARKET_USER_ID: ${{ vars.XCAGI_TEST_RECOVERY_MARKET_USER_ID }}
+          XCAGI_TEST_ROLLBACK_USER: ${{ secrets.XCAGI_TEST_ROLLBACK_USER }}
+          XCAGI_TEST_ROLLBACK_PASS: ${{ secrets.XCAGI_TEST_ROLLBACK_PASS }}
+          XCAGI_TEST_ROLLBACK_MARKET_USER_ID: ${{ vars.XCAGI_TEST_ROLLBACK_MARKET_USER_ID }}
+        run: |
+          node FHD/scripts/package/windows-acceptance-accounts.mjs
+  isolated-install:
+    needs: select-modes
+    name: "${{ matrix.mode }} install on isolated Windows runner"
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJson(needs.select-modes.outputs.parallel) }}
+      matrix:
+        include: ${{ fromJson(needs.select-modes.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Verify candidate belongs to the selected regression checkout
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git merge-base --is-ancestor "$CANDIDATE_SHA" HEAD
+      - uses: actions/github-script@v7
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        with:
+          script: |
+            const { CANDIDATE_RUN_ID: runId, CANDIDATE_SHA: sha } = process.env;
+            if (!/^\d+$/.test(runId) || !/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid candidate identity');
+            const run = (await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: runId })).data;
+            if (run.head_sha !== sha || run.conclusion !== 'success' || run.path !== '.github/workflows/fhd-release-desktop.yml' || run.head_branch !== 'main') throw new Error('Candidate run provenance mismatch');
+      - uses: actions/download-artifact@v8
+        with:
+          name: xcagi-windows-installer-${{ inputs.candidate_sha }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+          path: FHD/candidate
+      - name: Fetch original immutable 1.0.0.5 artifact
+        if: (matrix.mode == 'Upgrade' || matrix.mode == 'Rollback') && inputs.baseline_version == '1.0.0.5'
+        uses: actions/download-artifact@v8
+        with:
+          name: xcagi-windows-installer-83939363ca2ccf7776c97f5c7895e29c1e5bc453
+          run-id: 36661745977
+          github-token: ${{ github.token }}
+          path: FHD/old-candidate
+      - name: Verify original installer provenance and bytes
+        if: (matrix.mode == 'Upgrade' || matrix.mode == 'Rollback') && inputs.baseline_version == '1.0.0.5'
+        shell: pwsh
+        run: |
+          $receipt = Get-Content old-candidate/delivery-receipt.json -Raw | ConvertFrom-Json
+          $installer = Get-Item old-candidate/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($receipt.git_sha -ne '83939363ca2ccf7776c97f5c7895e29c1e5bc453' -or $receipt.version -ne '1.0.0.5' -or $receipt.size -ne 250126772 -or $installer.Length -ne $receipt.size -or $hash -ne $receipt.sha256 -or $hash -ne '92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf') { throw 'Original 1.0.0.5 artifact provenance mismatch' }
+          Move-Item -LiteralPath $installer.FullName -Destination candidate/old-installer.exe
+      - name: Fetch and verify published 1.0.0.6 upgrade and rollback baseline
+        if: (matrix.mode == 'Upgrade' || matrix.mode == 'Rollback') && inputs.baseline_version == '1.0.0.6'
+        shell: pwsh
+        run: |
+          # Frozen official download-windows-hotfix.json readback: 2026-10-26; not proof of customer installed identity.
+          $baseline = (Get-Content config/download_release.json -Raw | ConvertFrom-Json).windows_acceptance_baselines.'1.0.0.6'
+          $url = $baseline.url
+          $path = 'candidate/old-installer.exe'
+          Invoke-WebRequest -Uri $url -OutFile $path -TimeoutSec 900
+          $installer = Get-Item -LiteralPath $path
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($installer.Length -ne $baseline.size -or $hash -ne $baseline.sha256) { throw 'Published 1.0.0.6 baseline bytes mismatch' }
+          $signature = Get-AuthenticodeSignature -LiteralPath $path
+          if ($signature.Status -ne $baseline.authenticode) { throw "Frozen 1.0.0.6 baseline signature mismatch: $($signature.Status)" }
+          Write-Warning 'Historical 1.0.0.6 baseline is explicitly NotSigned; isolated CI acceptance only.'
+      - uses: actions/setup-node@v7
+        if: matrix.mode != 'Clean'
+        with:
+          node-version: '22'
+      - name: Install UI automation dependencies on the test runner
+        if: matrix.mode != 'Clean'
+        shell: pwsh
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci --prefix frontend --registry=https://registry.npmjs.org
+      - uses: actions/setup-python@v7
+        if: matrix.mode == 'Upgrade' || matrix.mode == 'Rollback'
+        with:
+          python-version: '3.11'
+      - name: Sign private loopback feed with existing release key
+        if: matrix.mode == 'Upgrade' || matrix.mode == 'Rollback'
+        shell: pwsh
+        env:
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          $installer = Get-ChildItem candidate -Filter 'XCAGI-Enterprise-Setup-*.exe' -File | Select-Object -First 1
+          node scripts/package/windows-lifecycle-update.mjs prepare candidate $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Private feed preparation failed; signature checks must not be bypassed' }
+      - name: Verify candidate and run customer installation path
+        shell: pwsh
+        env:
+          XCAGI_TEST_USER: ${{ secrets[matrix.user_secret] }}
+          XCAGI_TEST_PASS: ${{ secrets[matrix.pass_secret] }}
+          XCAGI_TEST_MARKET_USER_ID: ${{ matrix.market_user_id }}
+          XCAGI_ACCEPTANCE_ACCOUNT_MODE: ${{ inputs.account_mode }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          MODE: ${{ matrix.mode }}
+          BASELINE_VERSION: ${{ inputs.baseline_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $receipt = Get-Content candidate/delivery-receipt.json -Raw | ConvertFrom-Json
+          if ($receipt.git_sha -ne $env:CANDIDATE_SHA) { throw 'Candidate receipt SHA mismatch' }
+          $installer = Get-ChildItem candidate -Filter 'XCAGI-Enterprise-Setup-*.exe' -File | Select-Object -First 1
+          if (-not $installer) { throw 'Candidate installer missing' }
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $receipt.sha256) { throw 'Candidate file SHA-256 mismatch' }
+          $args = @{
+            Mode = $env:MODE
+            CandidatePath = $installer.FullName
+            CandidateSha = $env:CANDIDATE_SHA
+            EvidenceDir = "candidate/evidence-$env:MODE"
+          }
+          if ($env:MODE -in @('Upgrade','Rollback')) { $args.OldPath = (Resolve-Path candidate/old-installer.exe).Path; $args.BaselineVersion = $env:BASELINE_VERSION }
+          scripts/package/accept-windows-candidate.ps1 @args
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-candidate-evidence-${{ matrix.mode }}-${{ inputs.candidate_sha }}
+          path: FHD/candidate/evidence-${{ matrix.mode }}/
+          if-no-files-found: warn
+          retention-days: 30

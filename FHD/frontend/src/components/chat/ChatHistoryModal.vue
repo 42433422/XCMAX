@@ -28,17 +28,17 @@
       </div>
       <div class="modal-body history-modal-body">
         <div v-if="historyLoading" class="empty-state">{{ $t('chat.historyLoading') }}</div>
-        <div v-else-if="historyError" class="history-error-wrap">
+        <div v-if="historyError" class="history-error-wrap">
           <div class="history-error-text">{{ historyError }}</div>
           <button type="button" class="btn btn-secondary btn-sm" @click="$emit('refresh')">
             {{ $t('chat.retry') }}
           </button>
         </div>
-        <div v-else-if="historySessions.length === 0" class="empty-state">
+        <div v-if="!historyLoading && !historyError && historySessions.length === 0" class="empty-state">
           {{ $t('chat.historyEmpty') }}
           <div class="history-empty-tip">{{ $t('chat.historyEmptyTip') }}</div>
         </div>
-        <template v-else>
+        <template v-if="!historyLoading && historySessions.length">
           <button
             v-for="session in historySessions"
             :key="session.session_id"
@@ -60,6 +60,8 @@
               <span v-if="session.is_local_only">{{ $t('chat.localOnly') }}</span>
             </div>
           </button>
+          <button v-if="historyHasMore" type="button" class="btn btn-secondary btn-sm" :disabled="historyLoadingMore" @click="$emit('load-more')">{{ historyLoadingMore ? '正在加载…' : '加载更早的会话' }}</button>
+          <p v-else-if="!historyError" class="history-empty-tip">已显示全部可用会话</p>
         </template>
       </div>
     </div>
@@ -82,6 +84,8 @@ defineProps<{
     is_local_only?: boolean
   }>
   historyLoading: boolean
+  historyHasMore?: boolean
+  historyLoadingMore?: boolean
   historyError: string
   currentSessionId: string
 }>()
@@ -89,6 +93,7 @@ defineProps<{
 defineEmits<{
   close: []
   refresh: []
+  'load-more': []
   clear: []
   'load-session': [sessionId: string]
 }>()

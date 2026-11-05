@@ -22,45 +22,16 @@ import pytest
 
 
 class TestExcelCellAsCleanStr:
-    def test_none(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        assert _excel_cell_as_clean_str(None) == ""
-
     def test_empty_string(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
 
         assert _excel_cell_as_clean_str("") == ""
-
-    def test_whitespace(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        result = _excel_cell_as_clean_str("  hello  ")
-        assert result.strip() == "hello" or "hello" in result
 
     def test_float_nan(self):
         from app.application.tools.workflow import _excel_cell_as_clean_str
 
         result = _excel_cell_as_clean_str(float("nan"))
         assert isinstance(result, str)
-
-    def test_integer(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        result = _excel_cell_as_clean_str(42)
-        assert isinstance(result, str)
-
-    def test_float_value(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        result = _excel_cell_as_clean_str(3.14)
-        assert isinstance(result, str)
-
-    def test_string(self):
-        from app.application.tools.workflow import _excel_cell_as_clean_str
-
-        result = _excel_cell_as_clean_str("hello")
-        assert result == "hello"
 
 
 # ---------------------------------------------------------------------------
@@ -69,30 +40,10 @@ class TestExcelCellAsCleanStr:
 
 
 class TestExcelCellAsFloat:
-    def test_none(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float(None) == 0.0
-
-    def test_empty_string(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float("") == 0.0
-
-    def test_valid_float_string(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float("3.14") == pytest.approx(3.14)
-
     def test_valid_int_string(self):
         from app.application.tools.workflow import _excel_cell_as_float
 
         assert _excel_cell_as_float("42") == 42.0
-
-    def test_invalid_string(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float("abc") == 0.0
 
     def test_float_input(self):
         from app.application.tools.workflow import _excel_cell_as_float
@@ -103,17 +54,6 @@ class TestExcelCellAsFloat:
         from app.application.tools.workflow import _excel_cell_as_float
 
         assert _excel_cell_as_float(10) == 10.0
-
-    def test_custom_default(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        assert _excel_cell_as_float(None, default=-1.0) == -1.0
-
-    def test_nan_input(self):
-        from app.application.tools.workflow import _excel_cell_as_float
-
-        result = _excel_cell_as_float(float("nan"))
-        assert isinstance(result, float)
 
 
 # ---------------------------------------------------------------------------

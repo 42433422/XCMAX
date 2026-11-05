@@ -9,6 +9,7 @@ import {
   marketForgotPasswordUrl,
 } from '@/constants/loginBranding'
 import { fetchProductSku } from '@/utils/productSku'
+import ConnectionRecovery from '@/components/login/ConnectionRecovery.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -41,6 +42,8 @@ function goBackToLogin() {
 
       <h1 id="login-help-title" class="login-help-title">{{ LOGIN_HELP_PAGE_TITLE }}</h1>
       <p class="login-help-intro">常见问题如下；仍无法登录请联系管理员。</p>
+
+      <ConnectionRecovery />
 
       <div class="login-help-sections">
         <article v-for="section in LOGIN_HELP_SECTIONS" :key="section.title" class="login-help-section">

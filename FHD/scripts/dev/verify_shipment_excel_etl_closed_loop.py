@@ -160,7 +160,7 @@ def main() -> int:
 
         bootstrap.get_shipment_app_service = lambda: fake  # type: ignore
 
-        import app.services.tools_workflow_registered as tw
+        import app.domain.shared_services.tools_workflow_registered as tw
 
         tw._execute_excel_import_records = lambda records: {  # type: ignore
             "success": True,

@@ -1,7 +1,7 @@
 """工具执行与订单解析服务。
 
 Phase 4 由 ``app.services.archive_tools_legacy`` 更名而来,内容不变,
-只是摆脱 "archive_" 命名噪音。后续 (Phase 4B) 计划与 ``app.legacy.tools``
+只是摆脱 "archive_" 命名噪音。后续 (Phase 4B) 计划与 ``legacy-layer.tools``
 去重合并到 ``app.application.tools.*``。
 """
 
@@ -37,7 +37,7 @@ from app.services.tools_execution.registry import (
     _validate_required_params,
     get_workflow_tool_registry,
 )
-from app.services.tools_workflow_registered import execute_registered_workflow_tool
+from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
 
 __all__ = [
     "set_tool_execute_headers",

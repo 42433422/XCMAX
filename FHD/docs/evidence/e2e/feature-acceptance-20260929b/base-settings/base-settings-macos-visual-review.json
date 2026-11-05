@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-settings",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "e6c9c2c2124946167276c0df58432c4b572d5d1c1a15aacaab3fc9b346f6890d",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页已展开。展示名称和登录名都是 SUNBIRD，邮箱 sunbird@xcagi.local，登录名不可修改。余额 ¥97.06。有退出登录按钮。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-settings/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/base-settings/macos/result.png"
+}

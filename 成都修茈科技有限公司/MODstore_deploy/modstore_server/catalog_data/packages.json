@@ -1,33 +1,6 @@
 {
   "packages": [
     {
-      "id": "taiyangniao-attendance-employee",
-      "name": "太阳鸟考勤员",
-      "version": "1.0.0",
-      "description": "纯 Python 脚本型员工：直接导入 taiyangniao-pro 的考勤转换模块，把钉钉考勤 Excel 转为太阳鸟考勤模板结果。",
-      "artifact": "employee_pack",
-      "industry": "attendance-admin",
-      "release_channel": "stable",
-      "commerce": {
-        "mode": "free",
-        "price": 0
-      },
-      "license": {
-        "type": "internal",
-        "verify_url": null
-      },
-      "probe_mod_id": "taiyangniao-pro",
-      "sha256": "563bcc01bd0f2d9f6dcd4d57b37f9d23dbeb2616f36162e9efba502c8bbc2c36",
-      "file_size": 8768,
-      "stored_filename": "taiyangniao-attendance-employee-1.0.0.xcemp",
-      "employee_scope": "store",
-      "employee_source": "market_catalog",
-      "is_duty_employee": false,
-      "is_store_employee": true,
-      "yuangon_area": null,
-      "market_visible": true
-    },
-    {
       "id": "asset-worker-employee",
       "name": "文件处理员工",
       "version": "1.0.0",
@@ -604,32 +577,6 @@
       "sha256": "6c5d610a296a2e18d2f5ca393f241b40fa324a367a7398f3f9b9923fe778692f",
       "file_size": 18132,
       "stored_filename": "trademark-generation-employee-1.0.0.xcemp"
-    },
-    {
-      "id": "sunbird-delivery-seed",
-      "version": "1.0.0",
-      "artifact": "customer_delivery_seed",
-      "name": "太阳鸟交付种子数据",
-      "description": "SUNBIRD 通用包迁移交付数据：花名册、太阳鸟 Mod 侧库、2026 年 3 月考勤模板。",
-      "author": "成都修茈科技有限公司",
-      "industry": "考勤",
-      "customer_account": "SUNBIRD",
-      "delivery_id": "customer-taiyangniao",
-      "account_mod_id": "taiyangniao-pro",
-      "stored_filename": "sunbird-delivery-seed-1.0.0.zip",
-      "sha256": "68b412e7204996b9e439cbad544c984d41673bdb3d5b4f5070af7857fb8b8510",
-      "file_size": 245745,
-      "download_path": "/v1/packages/sunbird-delivery-seed/1.0.0/download",
-      "commerce": {
-        "mode": "free",
-        "product_id": null,
-        "sku": null
-      },
-      "license": {
-        "type": "account_entitlement",
-        "verify_url": null
-      },
-      "created_at": "2026-07-04T05:40:52.707874+00:00"
     },
     {
       "id": "fhd-core-maintainer",

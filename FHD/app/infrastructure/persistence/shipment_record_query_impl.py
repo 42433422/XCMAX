@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import inspect as sa_inspect
 
-from app.application.ports.shipment_record_query import ShipmentRecordQueryPort
 from app.db.models import ShipmentRecord
 from app.db.session import get_db
+from app.domain.shipment.ports import ShipmentRecordQueryPort
 from app.infrastructure.lookups import resolve_purchase_unit
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -25,6 +26,18 @@ def _record_to_dict(record: Any) -> dict[str, Any]:
     for column in columns:
         row_dict[column.name] = getattr(record, column.name)
     if row_dict:
+        try:
+            parsed = json.loads(row_dict.get("parsed_data") or "{}")
+        except (TypeError, ValueError):
+            parsed = {}
+        document = parsed.get("document") if isinstance(parsed, dict) else None
+        if isinstance(document, dict):
+            row_dict.update(
+                order_number=document.get("order_number"),
+                date=document.get("date") or str(row_dict.get("created_at") or "")[:10],
+                total_amount=document.get("total_amount"),
+                total_quantity=document.get("total_quantity"),
+            )
         return row_dict
     raw = getattr(record, "__dict__", {}) or {}
     for key, value in raw.items():

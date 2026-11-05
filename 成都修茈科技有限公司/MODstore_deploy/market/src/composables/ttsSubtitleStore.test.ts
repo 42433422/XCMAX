@@ -19,6 +19,8 @@ describe('ttsSubtitleStore', () => {
     const store = useTtsSubtitleStore()
     expect(store.visible.value).toBe(true)
     expect(store.current.value?.zh).toBe('你好。')
+    expect(store).not.toHaveProperty('prev')
+    expect(store).not.toHaveProperty('next')
     setTtsSubtitleIndex(1, gen)
     expect(store.current.value?.zh).toBe('我是小C。')
   })

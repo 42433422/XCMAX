@@ -6,11 +6,22 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from modstore_server.platform_model_transport import llm_http_response, redact_key
+
 
 def _facade() -> Any:
     from modstore_server import llm_chat_proxy
 
     return llm_chat_proxy
+
+
+def _json_dict(text: str) -> Optional[Dict[str, Any]]:
+    """上游 200 但返回 HTML/空包时不要抛异常（否则网关直接 500）。"""
+    try:
+        data = json.loads(text)
+    except (TypeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 async def chat_openai_compatible(
@@ -32,16 +43,34 @@ async def chat_openai_compatible(
         max_tokens=max_tokens,
         response_format=response_format,
     )
-    async with _facade().httpx.AsyncClient(
-        timeout=_facade()._LLM_TIMEOUT, limits=_facade()._LLM_LIMITS
-    ) as client:
-        r = await client.post(
-            url, headers=_facade()._openai_request_headers(provider, api_key), json=body
-        )
-        text = r.text
-    if r.status_code >= 400:
-        return {"ok": False, "status": r.status_code, "error": text[:2000]}
-    data = r.json()
+    async with llm_http_response(
+        url,
+        api_key,
+        _facade()._openai_request_headers(provider, api_key),
+        body,
+        timeout=_facade()._LLM_TIMEOUT,
+        limits=_facade()._LLM_LIMITS,
+    ) as r:
+        text = r.text if r.status_code < 300 else ""
+        data = redact_key(_json_dict(text), api_key) if text else None
+    if r.status_code >= 300:
+        return {
+            "ok": False,
+            "status": r.status_code,
+            "error": "模型供应商请求失败，请检查密钥、模型、额度或服务状态",
+        }
+    if data is None:
+        return {
+            "ok": False,
+            "status": 502,
+            "error": f"上游返回非 JSON 响应: {text[:500]}",
+        }
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("choices"), list)
+        or not data["choices"]
+    ):
+        return {"ok": False, "error": "模型供应商未返回有效的对话响应"}
     choice0 = (data.get("choices") or [{}])[0]
     msg = choice0.get("message") or {}
     content, reasoning_trace = _facade()._openai_assistant_message_parts(msg)
@@ -100,74 +129,75 @@ async def stream_openai_compatible(
         tools=tools,
         tool_choice=tool_choice,
     )
-    async with _facade().httpx.AsyncClient(timeout=None, limits=_facade()._STREAM_LIMITS) as client:
-        async with client.stream(
-            "POST",
-            url,
-            headers=_facade()._openai_request_headers(provider, api_key),
-            json=body,
-        ) as r:
-            if r.status_code >= 400:
-                text = await r.aread()
-                yield {
-                    "type": "error",
-                    "status": r.status_code,
-                    "error": text.decode("utf-8", errors="ignore")[:2000],
-                }
-                return
-            tool_calls_accum: dict[int, dict[str, Any]] = {}
-            async for line in r.aiter_lines():
-                if not line:
+    async with llm_http_response(
+        url,
+        api_key,
+        _facade()._openai_request_headers(provider, api_key),
+        body,
+        timeout=_facade()._STREAM_TIMEOUT,
+        limits=_facade()._STREAM_LIMITS,
+        stream=True,
+    ) as r:
+        if r.status_code >= 300:
+            yield {
+                "type": "error",
+                "status": r.status_code,
+                "error": "模型供应商请求失败，请检查密钥、模型、额度或服务状态",
+            }
+            return
+        tool_calls_accum: dict[int, dict[str, Any]] = {}
+        async for line in r.aiter_lines():
+            if not line:
+                continue
+            if not line.startswith("data:"):
+                continue
+            raw = line[5:].strip()
+            if not raw:
+                continue
+            if raw == "[DONE]":
+                break
+            try:
+                data = redact_key(json.loads(raw), api_key)
+            except json.JSONDecodeError:
+                continue
+            if data.get("usage"):
+                yield {"type": "usage", "usage": data.get("usage") or {}}
+            choice0 = (data.get("choices") or [{}])[0] or {}
+            delta = choice0.get("delta") or {}
+            content = delta.get("content")
+            if content:
+                yield {"type": "delta", "delta": str(content)}
+            for tc in delta.get("tool_calls") or []:
+                if not isinstance(tc, dict):
                     continue
-                if not line.startswith("data:"):
-                    continue
-                raw = line[5:].strip()
-                if not raw:
-                    continue
-                if raw == "[DONE]":
-                    break
-                try:
-                    data = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                if data.get("usage"):
-                    yield {"type": "usage", "usage": data.get("usage") or {}}
-                choice0 = (data.get("choices") or [{}])[0] or {}
-                delta = choice0.get("delta") or {}
-                content = delta.get("content")
-                if content:
-                    yield {"type": "delta", "delta": str(content)}
-                for tc in delta.get("tool_calls") or []:
-                    if not isinstance(tc, dict):
-                        continue
-                    idx = int(tc.get("index") or 0)
-                    cur = tool_calls_accum.get(idx)
-                    if cur is None:
-                        cur = {
-                            "id": tc.get("id") or "",
-                            "type": tc.get("type") or "function",
-                            "function": {"name": "", "arguments": ""},
-                        }
-                        tool_calls_accum[idx] = cur
-                    fn = tc.get("function") or {}
-                    if fn.get("name"):
-                        cur["function"]["name"] = str(fn["name"])
-                    if fn.get("arguments"):
-                        cur["function"]["arguments"] += str(fn["arguments"])
-                    if tc.get("id"):
-                        cur["id"] = str(tc["id"])
-                if choice0.get("finish_reason") == "tool_calls" and tool_calls_accum:
-                    ordered = [tool_calls_accum[i] for i in sorted(tool_calls_accum)]
-                    yield {
-                        "type": "toolcall",
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {"tool_calls": ordered},
-                                "finish_reason": "tool_calls",
-                            }
-                        ],
+                idx = int(tc.get("index") or 0)
+                cur = tool_calls_accum.get(idx)
+                if cur is None:
+                    cur = {
+                        "id": tc.get("id") or "",
+                        "type": tc.get("type") or "function",
+                        "function": {"name": "", "arguments": ""},
                     }
+                    tool_calls_accum[idx] = cur
+                fn = tc.get("function") or {}
+                if fn.get("name"):
+                    cur["function"]["name"] = str(fn["name"])
+                if fn.get("arguments"):
+                    cur["function"]["arguments"] += str(fn["arguments"])
+                if tc.get("id"):
+                    cur["id"] = str(tc["id"])
+            if choice0.get("finish_reason") == "tool_calls" and tool_calls_accum:
+                ordered = [tool_calls_accum[i] for i in sorted(tool_calls_accum)]
+                yield {
+                    "type": "toolcall",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"tool_calls": ordered},
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                }
 
 
 def _oai_to_anthropic(
@@ -209,22 +239,32 @@ async def chat_anthropic_compatible(
     body: Dict[str, Any] = {"model": model, "max_tokens": max_tokens, "messages": msgs}
     if system:
         body["system"] = system
-    async with _facade().httpx.AsyncClient(
-        timeout=_facade()._LLM_TIMEOUT, limits=_facade()._LLM_LIMITS
-    ) as client:
-        r = await client.post(
-            url,
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json=body,
-        )
-        text = r.text
-    if r.status_code >= 400:
-        return {"ok": False, "status": r.status_code, "error": text[:2000]}
-    data = r.json()
+    async with llm_http_response(
+        url,
+        api_key,
+        {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        body,
+        timeout=_facade()._LLM_TIMEOUT,
+        limits=_facade()._LLM_LIMITS,
+    ) as r:
+        text = r.text if r.status_code < 300 else ""
+        data = redact_key(_json_dict(text), api_key) if text else None
+    if r.status_code >= 300:
+        return {
+            "ok": False,
+            "status": r.status_code,
+            "error": "模型供应商请求失败，请检查密钥、模型、额度或服务状态",
+        }
+    if data is None:
+        return {
+            "ok": False,
+            "status": 502,
+            "error": f"上游返回非 JSON 响应: {text[:500]}",
+        }
     blocks = data.get("content") or []
     parts: List[str] = []
     for b in blocks:
@@ -266,11 +306,21 @@ async def chat_google(api_key: str, model: str, messages: List[Dict[str, str]]) 
         text = r.text
     if r.status_code >= 400:
         return {"ok": False, "status": r.status_code, "error": text[:2000]}
-    data = r.json()
+    data = _json_dict(text)
+    if data is None:
+        return {
+            "ok": False,
+            "status": 502,
+            "error": f"上游返回非 JSON 响应: {text[:500]}",
+        }
     cands = data.get("candidates") or []
     if not cands:
         return {"ok": False, "error": "no candidates", "raw": data}
-    parts = ((cands[0] or {}).get("content") or {}).get("parts") or []
+    first = cands[0] if isinstance(cands[0], dict) else {}
+    content_block: Dict[str, Any] = first.get("content") or {}
+    if not isinstance(content_block, dict):
+        content_block = {}
+    parts = content_block.get("parts") or []
     texts = [str(p.get("text") or "") for p in parts if isinstance(p, dict)]
     usage = data.get("usageMetadata") or data.get("usage") or {}
     return {"ok": True, "content": "\n".join(texts), "usage": usage, "raw": data}

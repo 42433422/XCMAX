@@ -453,7 +453,7 @@ class TestWatchdogLoopDeep:
                 # _build_snapshot() in the loop body will see it.
                 with open(os.path.join(temp_root, "newfile.txt"), "w") as f:
                     f.write("data")
-            elif call_count["n"] >= 2:
+            elif call_count["n"] >= 3:
                 tmf._watchdog_running = False
             return True
 
@@ -470,6 +470,7 @@ class TestWatchdogLoopDeep:
         assert not client_q.empty()
         msg = client_q.get_nowait()
         assert "changed" in msg
+        assert client_q.empty()  # An unchanged second cycle must not emit a notification.
 
         # Cleanup
         with tmf._watch_clients_lock:

@@ -1,0 +1,14 @@
+{
+  "at": "2026-09-13T07:52:35.759817+00:00",
+  "status": "healthy",
+  "build": {
+    "admin_console_sha256": "",
+    "admin_console_git_sha": "",
+    "artifact_sha256": "",
+    "built_at": "2026-09-13T02:13:17.009Z",
+    "git_sha": "6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "image_digest": "",
+    "product_version": "1.0.0.2",
+    "release_id": "xcagi-1.0.0.2-6eda2203df27c53958b9d7af0e6db26d22b560c4"
+  }
+}

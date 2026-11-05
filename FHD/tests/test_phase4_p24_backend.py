@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -49,6 +49,24 @@ def test_initialize_databases_skips_existing(tmp_path, monkeypatch: pytest.Monke
     monkeypatch.setattr(init_db_mod, "get_app_data_dir", lambda: str(work_dir))
     init_db_mod.initialize_databases(db_files=["products.db"])
     assert existing.read_bytes() == b"keep"
+
+
+def test_missing_error_collection_seed_is_created_for_mod_copies(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work_dir = tmp_path / "appdata"
+    monkeypatch.setattr(init_db_mod, "get_app_data_dir", lambda: str(work_dir))
+    monkeypatch.setattr(init_db_mod, "get_resource_path", lambda *a, **k: str(tmp_path / "empty"))
+    monkeypatch.setattr(init_db_mod, "get_base_dir", lambda: str(tmp_path / "empty"))
+    init_db_mod.initialize_databases(db_files=["error_collection.db"])
+    assert (work_dir / "error_collection.db").is_file()
+    init_db_mod.ensure_sqlite_per_mod_database_copies(
+        ["erp_demo"], db_files=["error_collection.db"]
+    )
+    copied = work_dir / "error_collection__erp_demo.db"
+    assert copied.is_file()
+    with sqlite3.connect(copied) as connection:
+        assert connection.execute("SELECT 1").fetchone()[0] == 1
 
 
 def test_initialize_databases_missing_seed_warns(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -259,6 +277,14 @@ def test_printer_utils_get_printer_status_codes() -> None:
 def mobile_ext_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     from app.fastapi_routes.mobile_api import get_mobile_user
 
+    monkeypatch.setattr(
+        mobile_ext,
+        "_load_market_ai_employee_profile_index",
+        AsyncMock(return_value=({}, False, "")),
+    )
+    monkeypatch.setattr(
+        "app.domain.app_pure.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+    )
     app = FastAPI()
     app.include_router(mobile_ext.extension_router)
     app.dependency_overrides[get_mobile_user] = lambda: SimpleNamespace(id=1, username="mobile")
@@ -407,6 +433,10 @@ def test_mobile_pairing_exchange_invalid(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(mobile_ext, "consume_by_shortcode", lambda c: None)
     app = FastAPI()
     app.include_router(mobile_ext.extension_router)
+    # 交换接口要求已登录移动用户；本用例只验证无效配对码分支，须先通过鉴权。
+    app.dependency_overrides[mobile_ext.get_mobile_user] = lambda: SimpleNamespace(
+        id=7, is_active=True, role="enterprise"
+    )
     client = TestClient(app, raise_server_exceptions=False)
     r = client.post("/pairing/exchange", json={"nonce": "bad", "code": "000000"})
     assert r.status_code in (400, 404)

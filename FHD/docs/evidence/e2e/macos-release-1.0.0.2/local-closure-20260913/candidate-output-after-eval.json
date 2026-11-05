@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "checks": [
+        {
+          "evidence": "expected=1, actual=1",
+          "name": "parsed row count",
+          "passed": true
+        },
+        {
+          "evidence": "all 1 rows match",
+          "name": "all rows share customer_name",
+          "passed": true
+        },
+        {
+          "evidence": "no forbidden-sheet rows",
+          "name": "forbidden sheets excluded",
+          "passed": true
+        }
+      ],
+      "file_sha256": "180169c6ebe5122f105ec27a49b04db5dd8569e66e66f1d95d9aa0cc15475736",
+      "headers": [
+        "amount",
+        "contact_person",
+        "customer_name",
+        "model_number",
+        "name",
+        "price",
+        "quantity_kg",
+        "quantity_tins",
+        "specification"
+      ],
+      "name": "generated-shipment-current-customer-only",
+      "parsed_rows": 1,
+      "passed": true,
+      "target_type": "customer_products",
+      "warning_codes": [
+        "ETL_MULTI_REGION_WORKBOOK_PLANNED"
+      ]
+    }
+  ],
+  "read_only": true,
+  "runtime_profile": "desktop",
+  "schema_version": 1,
+  "summary": {
+    "cases": 1,
+    "checks": 3,
+    "pass_rate": 1.0,
+    "passed_cases": 1,
+    "passed_checks": 3
+  }
+}

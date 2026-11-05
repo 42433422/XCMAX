@@ -3,61 +3,40 @@
 端口读取顺序（与 FHD/.env.example 约定一致）：
   1. ``FASTAPI_PORT``（与 FHD/docker compose、second-local-tree 配置同名）
   2. ``XCAGI_API_PORT``（保留兼容老 .env 习惯写法）
-  3. 默认 ``5000``——macOS 上 AirPlay / ControlCe 可能占用 :5000（commplex-main）。
+  3. ``PORT``，然后开发入口默认 ``42422``。桌面入口默认 ``5000``。
 
 首选端口被占用时，会自动向后寻找下一个可用端口（最多尝试 100 个），
-无需手动改环境变量。如需固定端口，仍可通过 ``FASTAPI_PORT`` 显式指定。
+无需手动改环境变量。可通过 ``FASTAPI_PORT`` 指定首选端口；桌面入口保留指定端口。
 """
 
 from __future__ import annotations
 
 import os
-import socket
 
 from app.fastapi_app import get_fastapi_app
+from app.utils.device_system.listen_port import (
+    DEVELOPMENT_API_PORT,
+    find_available_port,
+    publish_listen_address,
+    resolve_listen_host,
+    resolve_listen_port,
+)
 
 app = get_fastapi_app()
 
 
-def _is_port_available(host: str, port: int) -> bool:
-    """检测端口是否可 bind（近似可用性判断，存在竞态但实用）。"""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind((host, port))
-            return True
-        except OSError:
-            return False
-
-
 def _resolve_host() -> str:
-    return os.environ.get("FASTAPI_HOST", "127.0.0.1")
+    return resolve_listen_host()
 
 
 def _resolve_port(host: str) -> int:
     """解析监听端口；首选端口被占用时自动寻找下一个可用端口。"""
-    preferred = 42422
-    for key in ("FASTAPI_PORT", "XCAGI_API_PORT", "PORT"):
-        raw = os.environ.get(key)
-        if raw and raw.strip().isdigit():
-            port = int(raw.strip())
-            if 1 <= port <= 65535:
-                preferred = port
-                break
-
-    if _is_port_available(host, preferred):
-        return preferred
-
-    upper = min(preferred + 100, 65535)
-    for candidate in range(preferred + 1, upper + 1):
-        if _is_port_available(host, candidate):
-            print(
-                f"[run.py] 端口 {preferred} 被占用，自动切换到可用端口 {candidate}。"
-                f"如需固定端口请设置 FASTAPI_PORT 环境变量。",
-                flush=True,
-            )
-            return candidate
-    raise RuntimeError(f"在 {preferred}~{upper} 范围内未找到可用端口")
+    preferred = resolve_listen_port(DEVELOPMENT_API_PORT)
+    selected = find_available_port(host, preferred, range(preferred + 1, preferred + 101))
+    if selected != preferred:
+        print(f"[run.py] 端口 {preferred} 被占用，切换到 {selected}。", flush=True)
+    publish_listen_address(host, selected)
+    return selected
 
 
 def _write_runtime_port(port: int) -> None:

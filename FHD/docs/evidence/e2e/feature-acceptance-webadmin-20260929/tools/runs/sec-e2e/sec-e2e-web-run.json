@@ -1,0 +1,327 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "sec-e2e",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-135825",
+  "generated_at": "2026-09-29 13:58:42",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取 e2e 套件说明与矩阵 → 逐个读取 16 个 Playwright 场景文件 → 浏览器直接渲染实机留档截图（登录/订单/出货/OCR/Mod 等）→ 以真实 404 证明不存在的场景文件被拒（边界/负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 32633,
+        "processed": 32625,
+        "errors": 0,
+        "dropped": 6,
+        "queue_size": 2,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 2,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 1,
+            "max_cache_size": 1000,
+            "hits": 16,
+            "misses": 1,
+            "hit_rate": 0.9411764705882353,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-e2e/sec-e2e-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "sec-e2e",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-e2e/shot/00-login-form.png",
+      "sha256": "64315d9990a5186524e0713801f14456248f3c2273154e990ddaa84e0fafa6df",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「管理员登录 / XCMAX 服务器后台 · 平台运维 · 系统管理」：左侧蓝色品牌栏写「企业级 AI 对话与智能体 / 审批工作流与 ERP 集成 / 即时通讯与团队协作」，右侧账号框已填 admin、密码框为掩码（••••••••），可点蓝色「登 录 →」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-e2e",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-e2e/shot/E1-e2e-readme.png",
+      "sha256": "4262ef3719c732254beded0101ab3d47312e2bb740aeb8553cc4ea7c8b083caa",
+      "visual_review": "accepted",
+      "visible_result": "卡片「E1 · e2e 套件说明与矩阵真实可读」：GET /xcmax-dashboard/FHD/frontend/e2e/README.md，200，{\"status\":200,\"content_type\":\"text/markdown; charset=utf-8\",\"has_matrix\":true,\"text_head\":\"# Playwright E2E（P0 关键链路）\\n\\n## 套件矩阵\\n\\n| 套件 | 用例 | 条件 |\\n| --- | --- | --- |…\"}。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-e2e",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-e2e/shot/E3-e2e-evidence-login.png",
+      "sha256": "38caafb3cab608000ea5caf8519adb59096de10b9b27047dccbe9bbf5eaf60b9",
+      "visual_review": "accepted",
+      "visible_result": "浏览器直接渲染 e2e 留档 01-login.png：可见「通用助手 / 通用系统」界面，左侧导航「智能对话 / 信息 / 智能生态 / 员工工作台」，底部「系统设置」「系统正常 v1.0.0」，主区「通用工作台 · 智能对话」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-e2e",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-e2e/video/sec-e2e-web-20260929-135825.webm",
+      "sha256": "1bc2572e0f784039bcdaefe5ce82d76e12aff67fab1dd674256a3b205b896bc7",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，15.56s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → e2e 套件说明 → 16 个场景文件 → 留档截图渲染 → 不存在场景 404。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "E1",
+      "title": "e2e 套件说明与矩阵真实可读",
+      "input": "已建立的管理员会话。",
+      "actions": "在页面上下文 fetch GET /xcmax-dashboard/FHD/frontend/e2e/README.md。",
+      "expected": "HTTP 200，正文含「套件矩阵」与 Playwright。",
+      "observed": "{\"status\": 200, \"content_type\": \"text/markdown; charset=utf-8\", \"has_matrix\": true, \"text_head\": \"# Playwright E2E（P0 关键链路）\\n\\n## 套件矩阵\\n\\n| 套件                                  | 用例 | 条件                  |\\n| ------------------------------------- | ---- | --------------------- |\\n| `smoke.spec.ts`       \"}",
+      "result": "passed"
+    },
+    {
+      "id": "E2",
+      "title": "16 个 Playwright 场景文件真实可读",
+      "input": "同上。",
+      "actions": "逐个 fetch 16 个 *.spec.ts（经运行中后端的 /xcmax-dashboard 静态挂载）。",
+      "expected": "16 个场景文件全部 200 且内容含测试代码。",
+      "observed": "{\"spec_total\": 16, \"spec_ok\": 16, \"status_map\": {\"login-flow.spec.ts\": 200, \"smoke.spec.ts\": 200, \"navigation.spec.ts\": 200, \"critical-paths.spec.ts\": 200, \"core-business.spec.ts\": 200, \"plan2026-skeleton.spec.ts\": 200, \"sla-perf.spec.ts\": 200, \"desktop-shell.spec.ts\": 200, \"im-v0-two-user.spec.ts\": 200, \"mod-pilot-evidence.spec.ts\": 200, \"onboarding-empty-enterprise.spec.ts\": 200, \"ai-chat-multi-turn.spec.ts\": 200, \"mod-install-uninstall.spec.ts\": 200, \"cross-device-session.spec.ts\": 200, \"admin-display.spec.ts\": 200, \"desktop-resilience.spec.ts\": 200}}",
+      "result": "passed"
+    },
+    {
+      "id": "E3",
+      "title": "实机留档截图真实可读并在浏览器渲染",
+      "input": "同上。",
+      "actions": "逐个 fetch 7 张 e2e 留档 PNG，并在浏览器直接打开 01-login.png。",
+      "expected": "7 张留档 PNG 均 200 且体积>1KB（真实图片），浏览器可渲染。",
+      "observed": "{\"image_total\": 7, \"image_ok\": 7, \"images\": {\"01-login.png\": {\"status\": 200, \"size\": 314931, \"type\": \"image/png\"}, \"02-order.png\": {\"status\": 200, \"size\": 316912, \"type\": \"image/png\"}, \"03-shipment.png\": {\"status\": 200, \"size\": 314776, \"type\": \"image/png\"}, \"04-ocr.png\": {\"status\": 200, \"size\": 316912, \"type\": \"image/png\"}, \"05-mod.png\": {\"status\": 200, \"size\": 314776, \"type\": \"image/png\"}, \"06-order-data-loop.png\": {\"status\": 200, \"size\": 339484, \"type\": \"image/png\"}, \"07-material-data-loop.png\": {\"status\": 200, \"size\": 267701, \"type\": \"image/png\"}}}",
+      "result": "passed"
+    },
+    {
+      "id": "E4",
+      "title": "不存在的场景文件被拒（负例/边界）",
+      "input": "同上。",
+      "actions": "在页面上下文 fetch GET .../not-a-real-scenario.spec.ts。",
+      "expected": "HTTP 404。",
+      "observed": "{\"status\": 404, \"text_head\": \"{\\\"success\\\":false,\\\"error_code\\\":\\\"http_404\\\",\\\"message\\\":\\\"Not Found\\\",\\\"path\\\":\\\"/xcmax-dashboard/FHD/frontend/e2e/not-a-real-scenario.spec.ts\\\"}\"}",
+      "result": "passed"
+    }
+  ]
+}

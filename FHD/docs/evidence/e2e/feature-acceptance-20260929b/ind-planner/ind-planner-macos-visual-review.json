@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-planner",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "ebd59ad597d06a240cc2690edac324ae9f4303467fd146562187392002fe074c",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-planner/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ind-planner/macos/result.png"
+}

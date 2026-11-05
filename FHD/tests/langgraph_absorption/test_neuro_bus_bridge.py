@@ -16,19 +16,19 @@ from pathlib import Path
 
 import pytest
 
-from app.application.workflow.ports.events import (
+from app.application.workflow.ports import (
     EventBusPort,
     StateEventPublisher,
     StateUpdateEvent,
     StateUpdatePayload,
 )
 from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
-# Reviewed with the production NeuroBus delivery SLI instrumentation.  Any
-# future bus change must update this only after the full NeuroBus regression.
-_BUS_SHA256 = "58b120f5edf59019606fc814615524647ed265b025bc42f12c2bde247d57659b"
+# Reviewed with PR #2749 bounded entity dispatch, plus the desktop cap that drops
+# the oldest half of the event buffer once it passes 2000 entries.
+_BUS_SHA256 = "73c710bde9097bd503cedd307080fedd07b336e9f09dd36c374290e6413744cb"
 
 
 class RecordingBus:

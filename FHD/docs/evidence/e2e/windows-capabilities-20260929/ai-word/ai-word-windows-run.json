@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "ai-word",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 ai-word 对应的 Windows 客户端页面 /mod/xcagi-office-employee-pack-bridge/other-tools",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「员工工作流 - XCAGI」，主标题「员工工作流」，地址 /mod/xcagi-office-employee-pack-bridge/other-tools。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 员工工作流 SUNBIRD 副窗 ◈ 工作区 员工工作流管理 流程与员工 在此查看与管理副窗中的固定六类与当前 manifest 已声明的扩展工作流员工；开关样式与侧栏「",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=743031 mp4=236380 title=员工工作流 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word.log",
+    "sha256": "069bc448128de6f0d6131f8216200809cfc351cb58dc449228a72e0a09c990a2",
+    "bytes": 2033
+  },
+  "media": [
+    {
+      "feature": "ai-word",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word.png",
+      "sha256": "71387aadbf13a6e64824cd745ecbd99b980c80855c7746394bbb6fab2d864b4d",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「员工工作流 - XCAGI」，主标题「员工工作流」，地址 /mod/xcagi-office-employee-pack-bridge/other-tools。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 员工工作流 SUNBIRD 副窗 ◈ 工作区 员工工作流管理 流程与员工 在此查看与管理副窗中的固定六类与当前 manifest 已声明的扩展工作流员工；开关样式与侧栏「",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ai-word",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word.mp4",
+      "sha256": "247ad17a1785150b26f3732aa0eeded4e3ce89a913de81798bc694622394e7f8",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「员工工作流 - XCAGI」，主标题「员工工作流」，地址 /mod/xcagi-office-employee-pack-bridge/other-tools。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 员工工作流 SUNBIRD 副窗 ◈ 工作区 员工工作流管理 流程与员工 在此查看与管理副窗中的固定六类与当前 manifest 已声明的扩展工作流员工；开关样式与侧栏「",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

@@ -20,7 +20,7 @@ from app.fastapi_routes.private_mod_delivery_context import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["mod-store", "private-delivery"])
+router: APIRouter = APIRouter(tags=["mod-store", "private-delivery"])
 
 
 async def _market_token(request: Request) -> str:
@@ -176,8 +176,11 @@ async def mod_store_create_private_delivery_request(
     title = _safe_text(payload.get("title"))
     requirements = _safe_text(payload.get("requirements"))
     acceptance_criteria = _safe_text(payload.get("acceptance_criteria"))
+    source_mode = _safe_text(payload.get("source_mode")) or "generated"
     if kind not in {"module", "employee", "bundle"}:
         raise HTTPException(status_code=400, detail="kind 必须是 module、employee 或 bundle")
+    if source_mode not in {"generated", "versioned_main"}:
+        raise HTTPException(status_code=400, detail="source_mode 无效")
     if len(title) < 2 or len(requirements) < 8 or len(acceptance_criteria) < 4:
         raise HTTPException(status_code=400, detail="请完整填写需求名称、需求说明和验收标准")
     token = await _market_token(request)
@@ -196,6 +199,7 @@ async def mod_store_create_private_delivery_request(
                 "requirements": requirements,
                 "acceptance_criteria": acceptance_criteria,
                 "suggested_id": _safe_text(payload.get("suggested_id")) or None,
+                "source_mode": source_mode,
             },
         )
     except PermissionError as exc:
@@ -232,7 +236,11 @@ async def mod_store_decide_private_delivery_request(
             token,
             f"/api/customer-service/custom-deliveries/{int(ticket_id)}/decision",
             method="POST",
-            payload={"action": action, "note": note},
+            payload={
+                "action": action,
+                "note": note,
+                **({"source_mode": payload["source_mode"]} if payload.get("source_mode") else {}),
+            },
         )
     except (ConnectionError, RuntimeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -288,10 +296,3 @@ async def mod_store_install_private_delivery_request(
         message=str(data.get("message") or "定制产物已安装"),
         data=data,
     )
-
-
-from app.fastapi_routes.private_mod_delivery_progress_routes import (
-    router as progress_router,
-)
-
-router.include_router(progress_router)

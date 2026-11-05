@@ -60,7 +60,7 @@ _EXTERNAL_OR_PRODUCTION_PREFIXES = (
     "/api/settings",
     "/api/internal-im",
     "/api/employee-im",
-    "/api/etl/targets",
+    "/api/elt/targets",
 )
 _READ_BUSINESS_PREFIXES = (
     "/api/agent",
@@ -73,7 +73,7 @@ _READ_BUSINESS_PREFIXES = (
     "/api/mod/xcagi-erp-domain-bridge",
     "/api/mod/xcagi-approval-bridge",
     "/api/approval",
-    "/api/etl",
+    "/api/elt",
     "/api/products",
     "/products",
     "/customers",
@@ -113,7 +113,7 @@ _COURSE_WRITE_PREFIXES = {
         "/api/approval",
         "/api/mod/xcagi-approval-bridge",
     ),
-    "data-import": ("/api/etl", "/api/platform-shell/office-sample-upload"),
+    "data-import": ("/api/elt", "/api/platform-shell/office-sample-upload"),
     "evidence-trace": (),
 }
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}

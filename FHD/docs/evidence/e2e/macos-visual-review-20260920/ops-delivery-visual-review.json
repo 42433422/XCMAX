@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ops-delivery",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "fb1362c881ea203c701b966b9d80588835b429d2c9896157159c40f2d7013176",
+  "visible_content": "客户私有 Mod 页仍显示“同步中”“正在读取客户私有 Mod”，未加载交付数据。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ops-delivery.png"
+}

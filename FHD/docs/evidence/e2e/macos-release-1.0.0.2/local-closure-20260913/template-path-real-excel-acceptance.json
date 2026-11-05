@@ -1,0 +1,550 @@
+{
+  "status": 200,
+  "result": {
+    "success": true,
+    "task_id": "0cf76b9405464f56a877cfc9be91a17d",
+    "template_name": "readonly-bundle-acceptance",
+    "template_type": "excel",
+    "fields": [
+      {
+        "label": "产品型号",
+        "value": "",
+        "type": "dynamic"
+      },
+      {
+        "label": "产品名称",
+        "value": "",
+        "type": "dynamic"
+      },
+      {
+        "label": "数量/件",
+        "value": "",
+        "type": "dynamic"
+      },
+      {
+        "label": "规格/KG",
+        "value": "",
+        "type": "dynamic"
+      },
+      {
+        "label": "数量/KG",
+        "value": "",
+        "type": "dynamic"
+      },
+      {
+        "label": "单价/元",
+        "value": "",
+        "type": "dynamic"
+      },
+      {
+        "label": "金额/元",
+        "value": "",
+        "type": "dynamic"
+      }
+    ],
+    "preview_data": {
+      "cells": {},
+      "editable_ranges": [],
+      "merged_cells": [],
+      "sample_rows": [
+        {
+          "产品型号": "RX-LOOP",
+          "产品名称": "PU哑光清漆",
+          "数量/件": 2,
+          "规格/KG": 25,
+          "数量/KG": 50,
+          "单价/元": 18,
+          "金额/元": 900
+        },
+        {
+          "产品型号": "GS621",
+          "产品名称": "PE白底漆",
+          "数量/件": 1,
+          "规格/KG": 28,
+          "数量/KG": 28,
+          "单价/元": 8.5,
+          "金额/元": 238
+        },
+        {
+          "产品型号": "大 写：测试联",
+          "产品名称": null,
+          "数量/件": null,
+          "规格/KG": null,
+          "数量/KG": null,
+          "单价/元": null,
+          "金额/元": null
+        }
+      ],
+      "structure": {
+        "max_row": 7,
+        "max_col": 9,
+        "max_col_letter": "I"
+      },
+      "sheet_name": "送货甲",
+      "grid_preview": {
+        "sheet_name": "送货甲",
+        "rows": [
+          [
+            {
+              "row": 1,
+              "col": 1,
+              "text": "成都修茈测试工厂送货单",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 1,
+              "col": 2,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 1,
+              "col": 3,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 1,
+              "col": 4,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 1,
+              "col": 5,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 1,
+              "col": 6,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 1,
+              "col": 7,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 1,
+              "col": 8,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 1,
+              "col": 9,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            }
+          ],
+          [
+            {
+              "row": 2,
+              "col": 1,
+              "text": "购货单位（乙方）：闭环测试客户甲     联系人：王工        日期：2026年07月24日         订单编号：LOOP-1001",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 2,
+              "col": 2,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 2,
+              "col": 3,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 2,
+              "col": 4,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 2,
+              "col": 5,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 2,
+              "col": 6,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 2,
+              "col": 7,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 2,
+              "col": 8,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 2,
+              "col": 9,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            }
+          ],
+          [
+            {
+              "row": 3,
+              "col": 1,
+              "text": "产品型号",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 3,
+              "col": 2,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 3,
+              "col": 3,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 3,
+              "col": 4,
+              "text": "产品名称",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 3,
+              "col": 5,
+              "text": "数量/件",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 3,
+              "col": 6,
+              "text": "规格/KG",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 3,
+              "col": 7,
+              "text": "数量/KG",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 3,
+              "col": 8,
+              "text": "单价/元",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 3,
+              "col": 9,
+              "text": "金额/元",
+              "rowspan": 1,
+              "colspan": 1
+            }
+          ],
+          [
+            {
+              "row": 4,
+              "col": 1,
+              "text": "RX-LOOP",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 4,
+              "col": 2,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 4,
+              "col": 3,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 4,
+              "col": 4,
+              "text": "PU哑光清漆",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 4,
+              "col": 5,
+              "text": "2",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 4,
+              "col": 6,
+              "text": "25",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 4,
+              "col": 7,
+              "text": "50",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 4,
+              "col": 8,
+              "text": "18",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 4,
+              "col": 9,
+              "text": "900",
+              "rowspan": 1,
+              "colspan": 1
+            }
+          ],
+          [
+            {
+              "row": 5,
+              "col": 1,
+              "text": "GS621",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 5,
+              "col": 2,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 5,
+              "col": 3,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 5,
+              "col": 4,
+              "text": "PE白底漆",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 5,
+              "col": 5,
+              "text": "1",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 5,
+              "col": 6,
+              "text": "28",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 5,
+              "col": 7,
+              "text": "28",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 5,
+              "col": 8,
+              "text": "8.5",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 5,
+              "col": 9,
+              "text": "238",
+              "rowspan": 1,
+              "colspan": 1
+            }
+          ],
+          [
+            {
+              "row": 6,
+              "col": 1,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 6,
+              "col": 2,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 6,
+              "col": 3,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 6,
+              "col": 4,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 6,
+              "col": 5,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 6,
+              "col": 6,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 6,
+              "col": 7,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 6,
+              "col": 8,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 6,
+              "col": 9,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            }
+          ],
+          [
+            {
+              "row": 7,
+              "col": 1,
+              "text": "大 写：测试联",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 7,
+              "col": 2,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 7,
+              "col": 3,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 7,
+              "col": 4,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 7,
+              "col": 5,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 7,
+              "col": 6,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 7,
+              "col": 7,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 7,
+              "col": 8,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            },
+            {
+              "row": 7,
+              "col": 9,
+              "text": "",
+              "rowspan": 1,
+              "colspan": 1
+            }
+          ]
+        ]
+      },
+      "file_path": "/Users/a4243342/XCMAX-runtime/mac-closure-20260913/template-path-acceptance/uploads/templates/7443539186f84f3c91b8d112938ea3ff.xlsx",
+      "original_filename": "shipment-template.xlsx"
+    }
+  },
+  "source_sha": "6c50eef9f92bbc4e18d1c22e8f6f04646ad458ed",
+  "scope": "real Excel analysis under source runtime, simulated installed module location; not installed acceptance"
+}

@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_models import AgentTask, TaskControlCommand
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode, normalize_workflow_risk
+from app.application.workflow.workflow_types import (
+    Branch,
+    PlanGraph,
+    WorkflowNode,
+    normalize_workflow_risk,
+)
 
 
 class UnifiedTaskPlanMixin:
@@ -56,6 +61,7 @@ class UnifiedTaskPlanMixin:
         tenant_id: str | None = None,
         limit: int = 50,
         include_archived: bool = False,
+        offset: int = 0,
     ) -> list[AgentTask]:
         return cast(
             "list[AgentTask]",
@@ -64,6 +70,7 @@ class UnifiedTaskPlanMixin:
                 tenant_id=tenant_id,
                 limit=limit,
                 include_archived=include_archived,
+                offset=offset,
             ),
         )
 

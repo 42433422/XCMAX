@@ -85,7 +85,7 @@ except Exception:
 
 | 探针 | 命令 |
 |------|------|
-| Health 延迟 | `pytest tests/test_sla_health_probe.py`（nightly [`sla-probe.yml`](../.github/workflows/sla-probe.yml)） |
+| Health 延迟 | `pytest tests/test_sla_health_probe.py`；真实 HTTP、前端预算与合成业务规模回归见 [`performance-smoke.yml`](../.github/workflows/performance-smoke.yml)，原始证据上传为 `performance-<源码SHA>`，不替代生产观察窗口 |
 | 前端 SLA | `npm run test:e2e:sla` |
 | Prometheus 采集 | `python scripts/observability/collect_slo_metrics.py --window 30d` |
 | 7 天验收 | `bash scripts/observability/run_staging_7d_acceptance.sh` |

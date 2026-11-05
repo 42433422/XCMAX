@@ -1,0 +1,23 @@
+{
+  "schema": "windows-package-resources/v1",
+  "release_sha": "5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30",
+  "build_info": {
+    "version": "1.0.0.5",
+    "schema_version": 1,
+    "gitSha": "5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30",
+    "releaseId": "xcagi-1.0.0.5-5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30"
+  },
+  "mods": [
+    {
+      "path": "C:\\xcagi-delivery-closeout\\candidate-5197dd66-36839932318\\inspection\\resources\\backend\\_internal\\industry-seeds\\xcagi-erp-domain-bridge\\manifest.json",
+      "version": "1.0.0.3",
+      "sha256": "b6c31713c2ca2dd6b934aba168b5e44a772b6b0d8fe0667494c24ec3eb7e8691"
+    },
+    {
+      "path": "C:\\xcagi-delivery-closeout\\candidate-5197dd66-36839932318\\inspection\\resources\\backend\\_internal\\mods\\xcagi-erp-domain-bridge\\manifest.json",
+      "version": "1.0.0.3",
+      "sha256": "b6c31713c2ca2dd6b934aba168b5e44a772b6b0d8fe0667494c24ec3eb7e8691"
+    }
+  ],
+  "backup_script_sha256": "3de480f8bb2ca086a9352af1e5c689336f0a0db72a0986baf50ad1a0143312e7"
+}

@@ -84,7 +84,7 @@ describe('usePerformanceMonitor - coverage ramp', () => {
     originalPerformanceObserver = globalThis.PerformanceObserver
     vi.stubGlobal(
       'PerformanceObserver',
-      vi.fn((cb: (list: { getEntries: () => PerformanceEntry[] }) => void) => {
+      vi.fn(function (cb: (list: { getEntries: () => PerformanceEntry[] }) => void) {
         observerCallback = cb
         return { observe: observerObserve }
       }),
@@ -247,7 +247,7 @@ describe('usePerformanceMonitor - coverage ramp', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       vi.stubGlobal(
         'PerformanceObserver',
-        vi.fn(() => {
+        vi.fn(function () {
           throw new Error('not supported')
         }),
       )

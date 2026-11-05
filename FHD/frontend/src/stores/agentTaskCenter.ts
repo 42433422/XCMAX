@@ -1,15 +1,23 @@
+import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import agentRunsApi from '@/api/agentRuns'
+import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import type { AgentRun, AgentTaskRuntime, AgentTaskSummary } from '@/api/agentRuns'
 import { buildFullApiUrl } from '@/api/core'
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled'])
+let sessionUnauthorizedBound = false
 type TaskControlAction = 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
   return '工作区列表暂时不可用'
+}
+
+function isUnauthorized(error: unknown): boolean {
+  const status = Number((error as { status?: number } | null)?.status || 0)
+  return status === 401 || status === 403
 }
 
 export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
@@ -22,11 +30,13 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   const connected = ref(false)
   const error = ref('')
   const runtime = ref<AgentTaskRuntime>({ running: false, max_workers: 4, active_count: 0 })
-  let stream: EventSource | null = null
+  let stream: AuthenticatedEventStream | null = null
   let reconnectTimer: number | null = null
   let fallbackTimer: number | null = null
   let started = false
+  let authPaused = false
   let scopeVersion = 0
+  let detailRequestVersion = 0
 
   const attentionCount = computed(() => tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed'].includes(task.status)).length)
   const unreadCount = computed(() =>
@@ -64,6 +74,10 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
       error.value = ''
     } catch (reason) {
       if (requestedScopeVersion !== scopeVersion) return
+      if (isUnauthorized(reason)) {
+        pauseForLoggedOutSession()
+        return
+      }
       error.value = errorMessage(reason)
     } finally {
       if (requestedScopeVersion === scopeVersion) loading.value = false
@@ -72,11 +86,17 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
 
   async function refreshDetail(): Promise<void> {
     if (!selectedTaskId.value) return
+    const requestedTaskId = selectedTaskId.value
+    const requestedScopeVersion = scopeVersion
+    const requestVersion = ++detailRequestVersion
+    const isCurrent = () => requestedScopeVersion === scopeVersion && requestedTaskId === selectedTaskId.value && requestVersion === detailRequestVersion
     try {
-      const response = await agentRunsApi.getTask(selectedTaskId.value)
+      const response = await agentRunsApi.getTask(requestedTaskId)
+      if (!isCurrent()) return
       selectedTask.value = response.data || null
       error.value = ''
     } catch (reason) {
+      if (!isCurrent()) return
       error.value = errorMessage(reason)
     }
   }
@@ -91,8 +111,10 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   async function markTaskRead(taskId: string): Promise<void> {
     const id = String(taskId || '').trim()
     if (!id) return
+    const requestedScopeVersion = scopeVersion
     try {
       const response = await agentRunsApi.markTaskRead(id)
+      if (requestedScopeVersion !== scopeVersion) return
       const updated = response.data
       if (updated) {
         tasks.value = tasks.value.map((task) => (task.task_id === id ? { ...task, ...updated } : task))
@@ -100,6 +122,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
       }
       error.value = ''
     } catch (reason) {
+      if (requestedScopeVersion !== scopeVersion) return
       error.value = errorMessage(reason)
     }
   }
@@ -120,15 +143,12 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     return runs.find((run) => run.run_id === task.active_run_id) || runs[runs.length - 1] || null
   }
 
-  async function applyControl(task: AgentTaskSummary, action: TaskControlAction): Promise<void> {
+  async function applyControl(task: AgentTaskSummary, action: TaskControlAction, requestedScopeVersion: number): Promise<void> {
+    if (requestedScopeVersion !== scopeVersion) return
     const runId = activeRunOf(task)?.run_id || task.active_run_id
     if (!runId) throw new Error('工作区当前没有可控制的运行')
-    if (action === 'approve') {
-      const snapshot = await agentRunsApi.getRun(runId)
-      const grant = snapshot.approval?.grant
-      if (!grant) throw new Error('任务当前没有可用的审批凭证')
-      await agentRunsApi.continueRun(runId, { approval_grant: grant })
-    } else if (action === 'pause') await agentRunsApi.pauseRun(runId)
+    if (action === 'approve') await approveRunWithFreshGrant(runId, { isCurrent: () => requestedScopeVersion === scopeVersion })
+    else if (action === 'pause') await agentRunsApi.pauseRun(runId)
     else if (action === 'cancel') await agentRunsApi.cancelRun(runId)
     else if (action === 'resume') await agentRunsApi.resumeRun(runId)
     else await agentRunsApi.retryRun(runId)
@@ -137,90 +157,125 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   async function controlTask(taskId: string, action: TaskControlAction): Promise<void> {
     const id = String(taskId || '').trim()
     if (!id || actionPending.value) return
+    const requestedScopeVersion = scopeVersion
     actionPending.value = action
+    error.value = ''
     try {
       const response = await agentRunsApi.getTask(id)
+      if (requestedScopeVersion !== scopeVersion) return
       const task = response.data
       if (!task) throw new Error('工作区任务不存在')
-      await applyControl(task, action)
+      await applyControl(task, action, requestedScopeVersion)
+      if (requestedScopeVersion !== scopeVersion) return
       await Promise.all([refresh(), selectedTaskId.value ? refreshDetail() : Promise.resolve()])
     } catch (reason) {
+      if (requestedScopeVersion !== scopeVersion) return
       error.value = errorMessage(reason)
     } finally {
-      actionPending.value = ''
+      if (requestedScopeVersion === scopeVersion) actionPending.value = ''
     }
   }
 
   async function control(action: TaskControlAction): Promise<void> {
     const task = selectedTask.value
     if (!task || actionPending.value) return
+    const requestedScopeVersion = scopeVersion
     actionPending.value = action
     try {
-      await applyControl(task, action)
+      await applyControl(task, action, requestedScopeVersion)
+      if (requestedScopeVersion !== scopeVersion) return
       await Promise.all([refresh(), refreshDetail()])
     } catch (reason) {
+      if (requestedScopeVersion !== scopeVersion) return
       error.value = errorMessage(reason)
     } finally {
-      actionPending.value = ''
+      if (requestedScopeVersion === scopeVersion) actionPending.value = ''
     }
   }
 
   async function archiveSelected(): Promise<void> {
     const task = selectedTask.value
     if (!task || !TERMINAL_STATES.has(task.status) || actionPending.value) return
+    const requestedScopeVersion = scopeVersion
     actionPending.value = 'archive'
     try {
       await agentRunsApi.archiveTask(task.task_id)
+      if (requestedScopeVersion !== scopeVersion) return
       selectedTask.value = null
       selectedTaskId.value = ''
       await refresh()
     } catch (reason) {
+      if (requestedScopeVersion !== scopeVersion) return
       error.value = errorMessage(reason)
     } finally {
-      actionPending.value = ''
+      if (requestedScopeVersion === scopeVersion) actionPending.value = ''
     }
   }
 
   function connectStream(): void {
-    if (!started || typeof window === 'undefined' || typeof EventSource === 'undefined') return
+    if (!started || typeof window === 'undefined' || typeof fetch === 'undefined') return
     stream?.close()
-    stream = new EventSource(buildFullApiUrl(agentRunsApi.taskEventStreamPath()), {
-      withCredentials: true,
-    })
+    stream = new AuthenticatedEventStream(buildFullApiUrl(agentRunsApi.taskEventStreamPath()))
+    const connection = stream
+    const requestedScopeVersion = scopeVersion
+    const isCurrent = () => started && stream === connection && requestedScopeVersion === scopeVersion
     stream.addEventListener('task.snapshot', (event) => {
+      if (!isCurrent()) return
       try {
         replaceTasks(JSON.parse((event as MessageEvent).data) as AgentTaskSummary[])
         connected.value = true
         error.value = ''
         if (drawerOpen.value && selectedTaskId.value) void refreshDetail()
         void agentRunsApi.getTaskRuntime().then((response) => {
-          if (response.data) runtime.value = response.data
-        })
+          if (isCurrent() && response.data) runtime.value = response.data
+        }).catch(() => { /* Polling retains the last scoped runtime snapshot. */ })
       } catch {
         error.value = '任务快照格式无效'
       }
     })
+    stream.addEventListener('stream.unauthorized', () => {
+      if (!isCurrent()) return
+      pauseForLoggedOutSession()
+    })
     stream.addEventListener('stream.closed', () => {
+      if (!isCurrent()) return
       connected.value = false
       scheduleReconnect()
     })
     stream.onerror = () => {
+      if (!isCurrent()) return
       connected.value = false
       stream?.close()
       scheduleReconnect()
     }
   }
 
+  function pauseForLoggedOutSession(): void {
+    if (authPaused) return
+    authPaused = true
+    error.value = ''
+    tasks.value = []
+    stop()
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('xcagi:session-unauthorized'))
+    }
+  }
+
   function scheduleReconnect(): void {
-    if (!started || reconnectTimer !== null || typeof window === 'undefined') return
+    if (!started || authPaused || reconnectTimer !== null || typeof window === 'undefined') return
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = null
       connectStream()
     }, 1500)
   }
 
+  function resumeAfterLogin(): void {
+    authPaused = false
+    start()
+  }
+
   function start(): void {
-    if (started) return
+    if (started || authPaused) return
     started = true
     void refresh()
     connectStream()
@@ -244,6 +299,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     const shouldRestart = started
     stop()
     scopeVersion += 1
+    actionPending.value = ''
     tasks.value = []
     selectedTask.value = null
     selectedTaskId.value = ''
@@ -251,6 +307,11 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     loading.value = false
     error.value = ''
     if (shouldRestart) start()
+  }
+
+  if (typeof window !== 'undefined' && !sessionUnauthorizedBound) {
+    sessionUnauthorizedBound = true
+    window.addEventListener('xcagi:session-unauthorized', () => pauseForLoggedOutSession())
   }
 
   return {
@@ -276,6 +337,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     refresh,
     refreshDetail,
     restartForScope,
+    resumeAfterLogin,
     showTaskList,
     start,
     stop,

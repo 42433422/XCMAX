@@ -1,0 +1,432 @@
+{
+  "recorded_at": "2026-10-01T11:02:39.2733301+00:00",
+  "release_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+  "build_run": 36850651269,
+  "files": [
+    {
+      "path": "C:\\xcagi-delivery-closeout\\inspection-91c73f2c-36850651269\\resources\\build-info.json",
+      "size": 162,
+      "sha256": "77b7514710d9d6c2b22ca85accf723f898867ce82958776ea70291f4b0b2177f",
+      "json": {
+        "version": "1.0.0.5",
+        "gitSha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+        "releaseId": "xcagi-1.0.0.5-91c73f2c576799f42c6d8600871d4bd497f9669a",
+        "schema_version": 1
+      }
+    },
+    {
+      "path": "C:\\xcagi-delivery-closeout\\inspection-91c73f2c-36850651269\\resources\\backend\\_internal\\industry-seeds\\xcagi-erp-domain-bridge\\manifest.json",
+      "size": 4772,
+      "sha256": "79a24104c2519dcdc457ba712fe785969644358bb23bc81c965504c21b6a5e0f",
+      "json": {
+        "id": "xcagi-erp-domain-bridge",
+        "name": "XCAGI 通用业务领域门面 Mod",
+        "version": "1.0.0.4",
+        "author": "成都修茈科技有限公司",
+        "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
+        "primary": false,
+        "dependencies": {
+          "xcagi": ">=1.0.0.0"
+        },
+        "backend": {
+          "entry": "blueprints",
+          "init": "mod_init"
+        },
+        "frontend": {
+          "routes": "frontend/routes",
+          "menu": [
+            {
+              "id": "mod-erp-purchase",
+              "label": "采购管理",
+              "icon": "fa-shopping-cart",
+              "path": "/mod/xcagi-erp-domain-bridge/purchase"
+            },
+            {
+              "id": "mod-erp-products",
+              "label": "业务对象",
+              "icon": "fa-cubes",
+              "path": "/mod/xcagi-erp-domain-bridge/products"
+            },
+            {
+              "id": "mod-erp-customers",
+              "label": "组织管理",
+              "icon": "fa-users",
+              "path": "/mod/xcagi-erp-domain-bridge/customers"
+            },
+            {
+              "id": "mod-erp-orders",
+              "label": "业务单据",
+              "icon": "fa-file-text-o",
+              "path": "/mod/xcagi-erp-domain-bridge/orders"
+            },
+            {
+              "id": "mod-erp-shipment-records",
+              "label": "业务记录",
+              "icon": "fa-industry",
+              "path": "/mod/xcagi-erp-domain-bridge/shipment-records"
+            },
+            {
+              "id": "mod-erp-materials",
+              "label": "资源库",
+              "icon": "fa-archive",
+              "path": "/mod/xcagi-erp-domain-bridge/materials"
+            },
+            {
+              "id": "mod-erp-traditional-mode",
+              "label": "表格模式",
+              "icon": "fa-table",
+              "path": "/mod/xcagi-erp-domain-bridge/traditional-mode"
+            },
+            {
+              "id": "mod-erp-data-sources",
+              "label": "数据来源",
+              "icon": "fa-database",
+              "path": "/mod/xcagi-erp-domain-bridge/data-sources"
+            },
+            {
+              "id": "mod-erp-print",
+              "label": "模板与打印",
+              "icon": "fa-print",
+              "path": "/mod/xcagi-erp-domain-bridge/print"
+            },
+            {
+              "id": "mod-erp-printer-list",
+              "label": "打印机列表",
+              "icon": "fa-print",
+              "path": "/mod/xcagi-erp-domain-bridge/printer-list"
+            },
+            {
+              "id": "mod-erp-template-preview",
+              "label": "模板库",
+              "icon": "fa-file-o",
+              "path": "/mod/xcagi-erp-domain-bridge/template-preview"
+            }
+          ],
+          "menu_overrides": [
+            {
+              "key": "products",
+              "hidden": true
+            },
+            {
+              "key": "customers",
+              "hidden": true
+            },
+            {
+              "key": "orders",
+              "hidden": true
+            },
+            {
+              "key": "shipment-records",
+              "hidden": true
+            },
+            {
+              "key": "materials",
+              "hidden": true
+            },
+            {
+              "key": "traditional-mode",
+              "hidden": true
+            },
+            {
+              "key": "business-docking",
+              "hidden": true
+            },
+            {
+              "key": "data-sources",
+              "hidden": true
+            },
+            {
+              "key": "print",
+              "hidden": true
+            },
+            {
+              "key": "printer-list",
+              "hidden": true
+            },
+            {
+              "key": "template-preview",
+              "hidden": true
+            }
+          ]
+        },
+        "hooks": {},
+        "comms": {
+          "exports": []
+        },
+        "config": {
+          "erp_domain_facade": true,
+          "erp_pages_via_mod": true,
+          "erp_extended_pages": true,
+          "erp_domains": {
+            "facade_enabled": true
+          },
+          "mod_domain_handlers": [
+            "products",
+            "shipment",
+            "customers"
+          ],
+          "products_via_service": true,
+          "customers_via_service": true,
+          "wechat_contacts_via_facade": false,
+          "repository_via_mod": true,
+          "repository_phase": "L++",
+          "repository_adapter": "mod_factory",
+          "views_physical": true,
+          "physical_views": [
+            "ProductsView.vue",
+            "CustomersView.vue",
+            "OrdersView.vue",
+            "CreateOrderView.vue",
+            "ShipmentRecordsView.vue",
+            "MaterialsView.vue",
+            "TraditionalModeView.vue",
+            "BusinessDockingView.vue",
+            "DataSourcesView.vue",
+            "PrintView.vue",
+            "PrinterListView.vue",
+            "TemplatePreviewView.vue",
+            "LabelEditorView.vue",
+            "PurchaseView.vue",
+            "InventoryView.vue",
+            "BatchAnalyzeView.vue"
+          ],
+          "legacy_host_prefixes": [
+            "/api/products",
+            "/api/customers",
+            "/api/orders",
+            "/api/shipment"
+          ],
+          "legacy_host_page_paths": [
+            "/products",
+            "/customers",
+            "/orders",
+            "/orders/create",
+            "/shipment-records",
+            "/materials",
+            "/materials-list",
+            "/traditional-mode",
+            "/business-docking",
+            "/data-sources",
+            "/print",
+            "/printer-list",
+            "/template-preview",
+            "/label-editor",
+            "/purchase",
+            "/inventory"
+          ],
+          "phase": "O+"
+        }
+      }
+    },
+    {
+      "path": "C:\\xcagi-delivery-closeout\\inspection-91c73f2c-36850651269\\resources\\backend\\_internal\\mods\\xcagi-erp-domain-bridge\\manifest.json",
+      "size": 4772,
+      "sha256": "79a24104c2519dcdc457ba712fe785969644358bb23bc81c965504c21b6a5e0f",
+      "json": {
+        "id": "xcagi-erp-domain-bridge",
+        "name": "XCAGI 通用业务领域门面 Mod",
+        "version": "1.0.0.4",
+        "author": "成都修茈科技有限公司",
+        "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
+        "primary": false,
+        "dependencies": {
+          "xcagi": ">=1.0.0.0"
+        },
+        "backend": {
+          "entry": "blueprints",
+          "init": "mod_init"
+        },
+        "frontend": {
+          "routes": "frontend/routes",
+          "menu": [
+            {
+              "id": "mod-erp-purchase",
+              "label": "采购管理",
+              "icon": "fa-shopping-cart",
+              "path": "/mod/xcagi-erp-domain-bridge/purchase"
+            },
+            {
+              "id": "mod-erp-products",
+              "label": "业务对象",
+              "icon": "fa-cubes",
+              "path": "/mod/xcagi-erp-domain-bridge/products"
+            },
+            {
+              "id": "mod-erp-customers",
+              "label": "组织管理",
+              "icon": "fa-users",
+              "path": "/mod/xcagi-erp-domain-bridge/customers"
+            },
+            {
+              "id": "mod-erp-orders",
+              "label": "业务单据",
+              "icon": "fa-file-text-o",
+              "path": "/mod/xcagi-erp-domain-bridge/orders"
+            },
+            {
+              "id": "mod-erp-shipment-records",
+              "label": "业务记录",
+              "icon": "fa-industry",
+              "path": "/mod/xcagi-erp-domain-bridge/shipment-records"
+            },
+            {
+              "id": "mod-erp-materials",
+              "label": "资源库",
+              "icon": "fa-archive",
+              "path": "/mod/xcagi-erp-domain-bridge/materials"
+            },
+            {
+              "id": "mod-erp-traditional-mode",
+              "label": "表格模式",
+              "icon": "fa-table",
+              "path": "/mod/xcagi-erp-domain-bridge/traditional-mode"
+            },
+            {
+              "id": "mod-erp-data-sources",
+              "label": "数据来源",
+              "icon": "fa-database",
+              "path": "/mod/xcagi-erp-domain-bridge/data-sources"
+            },
+            {
+              "id": "mod-erp-print",
+              "label": "模板与打印",
+              "icon": "fa-print",
+              "path": "/mod/xcagi-erp-domain-bridge/print"
+            },
+            {
+              "id": "mod-erp-printer-list",
+              "label": "打印机列表",
+              "icon": "fa-print",
+              "path": "/mod/xcagi-erp-domain-bridge/printer-list"
+            },
+            {
+              "id": "mod-erp-template-preview",
+              "label": "模板库",
+              "icon": "fa-file-o",
+              "path": "/mod/xcagi-erp-domain-bridge/template-preview"
+            }
+          ],
+          "menu_overrides": [
+            {
+              "key": "products",
+              "hidden": true
+            },
+            {
+              "key": "customers",
+              "hidden": true
+            },
+            {
+              "key": "orders",
+              "hidden": true
+            },
+            {
+              "key": "shipment-records",
+              "hidden": true
+            },
+            {
+              "key": "materials",
+              "hidden": true
+            },
+            {
+              "key": "traditional-mode",
+              "hidden": true
+            },
+            {
+              "key": "business-docking",
+              "hidden": true
+            },
+            {
+              "key": "data-sources",
+              "hidden": true
+            },
+            {
+              "key": "print",
+              "hidden": true
+            },
+            {
+              "key": "printer-list",
+              "hidden": true
+            },
+            {
+              "key": "template-preview",
+              "hidden": true
+            }
+          ]
+        },
+        "hooks": {},
+        "comms": {
+          "exports": []
+        },
+        "config": {
+          "erp_domain_facade": true,
+          "erp_pages_via_mod": true,
+          "erp_extended_pages": true,
+          "erp_domains": {
+            "facade_enabled": true
+          },
+          "mod_domain_handlers": [
+            "products",
+            "shipment",
+            "customers"
+          ],
+          "products_via_service": true,
+          "customers_via_service": true,
+          "wechat_contacts_via_facade": false,
+          "repository_via_mod": true,
+          "repository_phase": "L++",
+          "repository_adapter": "mod_factory",
+          "views_physical": true,
+          "physical_views": [
+            "ProductsView.vue",
+            "CustomersView.vue",
+            "OrdersView.vue",
+            "CreateOrderView.vue",
+            "ShipmentRecordsView.vue",
+            "MaterialsView.vue",
+            "TraditionalModeView.vue",
+            "BusinessDockingView.vue",
+            "DataSourcesView.vue",
+            "PrintView.vue",
+            "PrinterListView.vue",
+            "TemplatePreviewView.vue",
+            "LabelEditorView.vue",
+            "PurchaseView.vue",
+            "InventoryView.vue",
+            "BatchAnalyzeView.vue"
+          ],
+          "legacy_host_prefixes": [
+            "/api/products",
+            "/api/customers",
+            "/api/orders",
+            "/api/shipment"
+          ],
+          "legacy_host_page_paths": [
+            "/products",
+            "/customers",
+            "/orders",
+            "/orders/create",
+            "/shipment-records",
+            "/materials",
+            "/materials-list",
+            "/traditional-mode",
+            "/business-docking",
+            "/data-sources",
+            "/print",
+            "/printer-list",
+            "/template-preview",
+            "/label-editor",
+            "/purchase",
+            "/inventory"
+          ],
+          "phase": "O+"
+        }
+      }
+    },
+    {
+      "path": "C:\\xcagi-delivery-closeout\\inspection-91c73f2c-36850651269\\resources\\backend\\_internal\\scripts\\backup\\XcagiBackup.ps1",
+      "size": 4608,
+      "sha256": "3de480f8bb2ca086a9352af1e5c689336f0a0db72a0986baf50ad1a0143312e7",
+      "json": null
+    }
+  ]
+}

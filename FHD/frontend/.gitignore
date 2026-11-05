@@ -1,3 +1,7 @@
 node_modules
 dist
 *.local
+
+# Exact generated media aliases; sources and checksums live in config/media-aliases.json.
+/public/startup/xc-logo-base.jpg
+/public/yuangong/staff-busy.png

@@ -25,6 +25,13 @@ from app.domain.context.session_context import (
     planner_workflow_interrupt_reply,
     runtime_context_after_workflow_interrupt,
 )
+from app.domain.shared_services.conversation.handlers import HandlersMixin
+from app.domain.shared_services.kitten_report.docx_export import _html_to_plain, build_kitten_docx
+from app.domain.shared_services.kitten_report.financial_plugins import (
+    FinancialReportPlugin,
+    InventoryValuationPlugin,
+)
+from app.domain.shared_services.kitten_report.service import KittenReportExportService
 from app.infrastructure.cache.intent_cache import IntentCache, _default_should_cache_intent
 from app.infrastructure.payment import alipay as alipay_mod
 from app.infrastructure.payment.order_store import (
@@ -42,13 +49,6 @@ from app.infrastructure.persistence.compat_db.writes import (
 from app.infrastructure.rag.citation_tracker import CitationTracker
 from app.infrastructure.rag.hybrid_retriever import HybridRetriever, RetrievedChunk
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
-from app.services.conversation.handlers import HandlersMixin
-from app.services.kitten_report.docx_export import _html_to_plain, build_kitten_docx
-from app.services.kitten_report.financial_plugins import (
-    FinancialReportPlugin,
-    InventoryValuationPlugin,
-)
-from app.services.kitten_report.service import KittenReportExportService
 
 # ---------------------------------------------------------------------------
 # conversation handlers (hard rules + greeting/goodbye/help)
@@ -442,3 +442,25 @@ def test_find_latest_local_model_returns_none_when_missing(
         lambda _p: False,
     )
     assert _find_latest_local_model() is None
+
+
+def test_financial_report_failure_is_reported():
+    plugin = FinancialReportPlugin()
+    with patch.object(plugin, "_calculate_financial_metrics", side_effect=RuntimeError("db down")):
+        result = plugin.run({})
+    assert result.level == "warn"
+    assert result.details == {"message": "db down"}
+
+
+@pytest.mark.parametrize(
+    "method,expected",
+    [
+        ("_get_material_valuation", {"total_items": 0, "total_value": 0.0, "categories": []}),
+        ("_get_product_valuation", {"total_items": 0, "total_value": 0.0}),
+        ("_get_low_stock_items", {"count": 0, "items": []}),
+    ],
+)
+def test_inventory_database_failure_returns_safe_empty_result(method, expected):
+    with patch("app.db.session.get_db", side_effect=RuntimeError("db down")) as database:
+        assert getattr(InventoryValuationPlugin(), method)() == expected
+    database.assert_called_once_with()

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-pdf",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "f559be9070bb7b3c8dd877626329a95e5d5e4bb21d04c8590660295a80ffaad3",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。failed。工具表列出 generate_office_document 等 AI Planner 卡片。画面里没有打开 PDF 转换产物。 未通过明细：M2 failed：HTTP 200 89ms；{\"success\": true, \"data\": {\"ok\": false, \"summary\": \"转换未生成输出文件：/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790684494/outputs/p；M3 failed：HTTP 200 25ms；{\"success\": true, \"data\": {\"files\": [{\"path\": \"temp_excel/mac0929-ai-pdf-1790684494/outputs/pdf-read.json\", \"kind\": \"text\", \"error\": \"file_not_found\"}]}}",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-pdf/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-pdf/macos/result.png"
+}

@@ -25,7 +25,7 @@ from app.neuro_bus.bus import (
     get_neuro_bus,
     set_neuro_bus,
 )
-from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -741,7 +741,7 @@ class TestRegisteredDomainsException:
     def test_returns_empty_list_on_import_error(self) -> None:
         bus = _make_bus()
         # Directly patch get_domain_registry import to raise
-        with patch.dict("sys.modules", {"app.neuro_bus.domains.base": None}):
+        with patch.dict("sys.modules", {"app.neuro_bus.domains.domains_base": None}):
             result = bus.registered_domains
             assert isinstance(result, list)
 
@@ -1240,7 +1240,7 @@ class TestPriorityEventQueueDuplicateExhausted:
             """Event that always returns the same ID even after remint."""
 
             def __init__(self) -> None:
-                from app.neuro_bus.events.base import EventPriority
+                from app.neuro_bus.events.events_base import EventPriority
 
                 self.metadata = EventMetadata()
                 self.metadata.event_id = "fixed-id"
@@ -1254,7 +1254,7 @@ class TestPriorityEventQueueDuplicateExhausted:
             def is_expired(self) -> bool:
                 return False
 
-        from app.neuro_bus.events.base import NeuroEvent
+        from app.neuro_bus.events.events_base import NeuroEvent
 
         # Put a real event with "fixed-id" first
         real_ev = NeuroEvent(event_type="stub", payload={})

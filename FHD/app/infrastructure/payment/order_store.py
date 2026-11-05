@@ -11,21 +11,18 @@ from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_data_dir
 
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
 
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
 def order_store_path() -> Path:
     custom = (os.environ.get("MODEL_PAYMENT_ORDER_STORE_PATH") or "").strip()
     if custom:
         return Path(custom)
-    return _repo_root() / "data" / "model_payment_orders.json"
+    return Path(get_data_dir()) / "model_payment_orders.json"
 
 
 def _utc_iso() -> str:
@@ -73,6 +70,7 @@ def record_checkout_pending(
     amount_cents: int,
     amount_yuan: str,
     local_user_id: int | None = None,
+    tenant_id: int | None = None,
 ) -> None:
     """预下单成功后写入待支付订单。"""
     with _lock:
@@ -80,6 +78,7 @@ def record_checkout_pending(
         orders: dict[str, Any] = data["orders"]
         row: dict[str, Any] = {
             "out_trade_no": out_trade_no,
+            "tenant_id": tenant_id,
             "plan_id": plan_id,
             "amount_cents": int(amount_cents),
             "amount_yuan": amount_yuan,
@@ -249,6 +248,16 @@ def get_entitlement(plan_id: str) -> dict[str, Any] | None:
     return None
 
 
+def list_orders() -> list[dict[str, Any]]:
+    """本地订单记录快照（按创建时间升序）。"""
+    with _lock:
+        data = _load()
+    orders = data.get("orders")
+    items = [dict(v) for v in (orders or {}).values() if isinstance(v, dict)]
+    items.sort(key=lambda r: str(r.get("created_at") or ""))
+    return items
+
+
 def get_order(out_trade_no: str) -> dict[str, Any] | None:
     """读取本地订单记录快照。"""
     if not out_trade_no:
@@ -277,7 +286,13 @@ def update_order_status(
         o["status"] = status
         o["updated_at"] = _utc_iso()
         if extra:
-            o.update(extra)
+            o.update(
+                {
+                    k: v
+                    for k, v in extra.items()
+                    if k not in {"local_user_id", "tenant_id", "out_trade_no"}
+                }
+            )
         _atomic_write(order_store_path(), data)
         return dict(o)
 
@@ -293,8 +308,7 @@ def count_orders() -> int:
 def json_store_has_unmigrated_orders() -> bool:
     """本地 JSON 订单文件是否仍存有订单。
 
-    在 PostgreSQL 后端下用于提示：JSON 文件里仍有遗留订单待迁移
-    （见 ``scripts/migrate_fhd_json_orders_to_postgres.py``）。
+    历史兼容查询，仅判断本地 JSON，不表示 PostgreSQL 迁移已实现。
     文件不存在或无订单时返回 ``False``。
     """
     if not order_store_path().is_file():

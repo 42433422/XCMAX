@@ -1,0 +1,151 @@
+[20:30:31Z] === Chain2 start (OTA upgrade path) ===
+[20:30:32Z] port_before=
+[20:30:32Z] --- 1) 上一版正式包校验 ---
+prior_dmg_sha256=909bb5773fa94383ea9443844f35fc98a5d749f11946f86956b19172dc9f384a prior_dmg_size=306165005
+[20:30:33Z] --- 2) 挂载 + 核验 + 安装 ---
+--- spctl ---
+/private/tmp/xcagi-custchain/mnt/prior/XCAGI.app: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+--- codesign ---
+codesign_ok=1
+--- stapler ---
+Processing: /private/tmp/xcagi-custchain/mnt/prior/XCAGI.app
+The validate action worked!
+--- prior build-info ---
+{"schema_version":1,"gitSha":"eb07dfcf372532292dc87c187b67c0ee620640b2","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-eb07dfcf372532292dc87c187b67c0ee620640b2","builtAt":"2026-09-20T12:12:30.393Z"}
+
+
+[20:30:42Z] --- 3) 首启 + 建立 OTA 前业务数据 ---
+[20:30:51Z] backend up; bundle_sha=eb07dfcf372532292dc87c187b67c0ee620640b2
+{"health": "PASS", "login_binding": "PASS", "entitlement_mods": "PASS", "business": "PASS"}
+verdict: PASS -> /private/tmp/xcagi-custchain/evidence/pre-ota-business.json
+screenshot: True -> /private/tmp/xcagi-custchain/evidence/chain2-01-pre-ota.png
+{"xcagi.db.bytes": 1445888, "uploads.files": 1, "mods.files": 426, "models.files": 0, "backups.files": 1, "backups.latest": "xcagi-unknown-20260920203101.db"}
+[20:31:11Z] --- 4) 检查更新 ---
+[20:31:16Z] --- 5) 下载更新（约 264MB） ---
+[20:38:46Z] --- 6) 等待 update-downloaded ---
+[20:38:46Z] downloaded
+[20:38:46Z] --- 7) 触发安装（ShipIt 替换并重启） ---
+[20:38:48Z] --- 8) 等待应用退出 + 新版本就绪 ---
+[20:38:58Z] bundle_sha=c8fb73c95235cb5a03733c85512303de3997894f health=000
+[20:39:08Z] bundle_sha=c8fb73c95235cb5a03733c85512303de3997894f health=200
+[20:39:08Z] new bundle + backend up
+[20:39:08Z] --- 9) OTA 后数据摘要 + 语义连续性 ---
+{"xcagi.db.bytes": 1695744, "uploads.files": 1, "mods.files": 426, "models.files": 0, "backups.files": 2, "backups.latest": "xcagi-unknown-20260920203847.db"}
+{"relogin": {"status": 200, "success": true, "me_status": 200, "username": "SUNBIRD"}, "template_present": {"status": 200, "probe": "验收模板-PRE-OTA", "found": true}, "customer_present": {"status": 200, "probe": "验收客户-PRE-OTA", "found": true}, "prior_document": {"doc_name": "发货单_26-0900001A_20260921_043111.xlsx", "status": 200, "bytes": 5186, "xlsx_magic": true, "sha256": "c193c8253c3f249fcbb52890cb7b58dd2e7617a381fbe16afb0b65e4b37eb98e"}}
+verdict: PASS -> /private/tmp/xcagi-custchain/evidence/chain2-continuity.json
+Traceback (most recent call last):
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1348, in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1323, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1369, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1318, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1078, in _send_output
+    self.send(msg)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1016, in send
+    self.connect()
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 982, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 863, in create_connection
+    raise exceptions[0]
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 848, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [Errno 61] Connection refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/chain.py", line 323, in <module>
+    main()
+  File "/private/tmp/xcagi-custchain/chain.py", line 294, in main
+    print("screenshot:", cdp.screenshot(sys.argv[2]), "->", sys.argv[2])
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 57, in screenshot
+    msg = send("Page.captureScreenshot", {"format": "png"})
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
+    t = page_target()
+        ^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 13, in page_target
+    with _OPENER.open(CDP_HTTP + "/json", timeout=10) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 519, in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 536, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 496, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1377, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1351, in do_open
+    raise URLError(err)
+urllib.error.URLError: <urlopen error [Errno 61] Connection refused>
+[20:39:23Z] --- 10) 新版本上继续出单 ---
+{"health": "PASS", "login_binding": "PASS", "entitlement_mods": "PASS", "business": "PASS"}
+verdict: PASS -> /private/tmp/xcagi-custchain/evidence/phase-c-business.json
+Traceback (most recent call last):
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1348, in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1323, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1369, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1318, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1078, in _send_output
+    self.send(msg)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1016, in send
+    self.connect()
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 982, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 863, in create_connection
+    raise exceptions[0]
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 848, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [Errno 61] Connection refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/chain.py", line 323, in <module>
+    main()
+  File "/private/tmp/xcagi-custchain/chain.py", line 294, in main
+    print("screenshot:", cdp.screenshot(sys.argv[2]), "->", sys.argv[2])
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 57, in screenshot
+    msg = send("Page.captureScreenshot", {"format": "png"})
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
+    t = page_target()
+        ^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 13, in page_target
+    with _OPENER.open(CDP_HTTP + "/json", timeout=10) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 519, in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 536, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 496, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1377, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1351, in do_open
+    raise URLError(err)
+urllib.error.URLError: <urlopen error [Errno 61] Connection refused>
+[20:39:42Z] --- 11) 安装身份 ---
+
+[20:39:42Z] === Chain2 done ===

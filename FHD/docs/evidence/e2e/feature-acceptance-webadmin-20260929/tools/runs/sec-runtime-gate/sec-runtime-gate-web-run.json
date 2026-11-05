@@ -1,0 +1,327 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "sec-runtime-gate",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-135752",
+  "generated_at": "2026-09-29 13:58:10",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取会话即时校验结果 → 在页面 JS 中复核会话 Cookie 为 HttpOnly（JS 不可读）→ 在独立上下文真实登录后调用退出，会话立即失效（me 不再通过）→ 以无会话上下文校验被拒证明门控 fail-closed。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 31281,
+        "processed": 31275,
+        "errors": 0,
+        "dropped": 6,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 1,
+            "max_cache_size": 1000,
+            "hits": 16,
+            "misses": 1,
+            "hit_rate": 0.9411764705882353,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-runtime-gate/sec-runtime-gate-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "sec-runtime-gate",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-runtime-gate/shot/00-login-form.png",
+      "sha256": "718f7138eb288ed4ce6eece8e2506f7657c86f349b5f4a830cb52acb686f555b",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「管理员登录 / XCMAX 服务器后台 · 平台运维 · 系统管理」：左侧蓝色品牌栏写「企业级 AI 对话与智能体 / 审批工作流与 ERP 集成 / 即时通讯与团队协作」，右侧账号框已填 admin、密码框为掩码（••••••••），可点蓝色「登 录 →」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-runtime-gate",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-runtime-gate/shot/G1-session-gate.png",
+      "sha256": "7fa7ea133dbebe0708040a3ee09f6d43e5069af016e83ecc8ca4c00568519a4c",
+      "visual_review": "accepted",
+      "visible_result": "卡片「G1 · 会话运行时门控：即时校验通过」：GET /api/auth/session/validate，200，{\"status\":200,\"valid\":true,\"username\":\"admin\",\"expires_at\":\"2036-09-26T05:17:56.120789\",\"account_kind\":\"admin\"}。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-runtime-gate",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-runtime-gate/shot/G2-logout-gate.png",
+      "sha256": "42c14c774edc5d0aa6418f11ca549234eca07f89b41e996bd6e00537a7e3275b",
+      "visual_review": "accepted",
+      "visible_result": "退出后独立上下文回到「管理员登录」页（账号/密码为空占位），会话已失效。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-runtime-gate",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-runtime-gate/video/sec-runtime-gate-web-20260929-135752.webm",
+      "sha256": "35628aedb633d7522ca23d8200d9560330df42675b4336a03ff6534175c0c112",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，16.0s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 会话校验 → HttpOnly 复核 → 独立上下文登录/退出即时失效 → 无会话被拒。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "G1",
+      "title": "会话运行时门控：即时校验通过",
+      "input": "已建立的管理员会话。",
+      "actions": "在页面上下文 fetch GET /api/auth/session/validate。",
+      "expected": "HTTP 200，valid=true，返回 session_id 与过期时间。",
+      "observed": "{\"status\": 200, \"valid\": true, \"username\": \"admin\", \"expires_at\": \"2036-09-26T05:57:56.120739\", \"account_kind\": \"admin\"}",
+      "result": "passed"
+    },
+    {
+      "id": "G2",
+      "title": "会话 Cookie 为 HttpOnly（JS 不可读）",
+      "input": "同上。",
+      "actions": "在页面 JS 中读取 document.cookie。",
+      "expected": "document.cookie 不含 session_id —— 会话凭据不可被前端脚本读取。",
+      "observed": "{\"document_cookie_has_session_id\": false, \"document_cookie_keys\": [\"csrf_token\"], \"note\": \"会话 Cookie 为 HttpOnly，页面 JS 读不到 session_id。\"}",
+      "result": "passed"
+    },
+    {
+      "id": "G3",
+      "title": "真实退出使会话立即失效",
+      "input": "独立浏览器上下文中的管理员账号密码。",
+      "actions": "真实登录 → 校验会话有效 → 调用 /api/auth/logout → 再读 /api/auth/me。",
+      "expected": "退出前 valid=true；退出 200 后 me 返回 success=false。",
+      "observed": "{\"login_success\": true, \"validate_before\": true, \"logout_status\": 200, \"me_success_after\": false, \"me_valid_after\": false}",
+      "result": "passed"
+    },
+    {
+      "id": "G4",
+      "title": "无会话上下文门控 fail-closed（负例/边界）",
+      "input": "全新无 cookie 的浏览器上下文。",
+      "actions": "在其中 fetch GET /api/auth/session/validate。",
+      "expected": "valid=false，不发会有效会话。",
+      "observed": "{\"status\": 200, \"valid\": false, \"success\": false, \"body_head\": \"{'success': False, 'error': {'code': 'NO_SESSION', 'message': '无会话信息'}, 'valid': False}\"}",
+      "result": "passed"
+    }
+  ]
+}

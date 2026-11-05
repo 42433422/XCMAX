@@ -1,0 +1,18 @@
+{
+  "phase": "G10-数据保留（OTA 1.0.0.2→1.0.0.3）",
+  "date": "2026-09-14T04:00+08:00",
+  "method": "升级前后 userData 指标比对（data_digest_10003.py），pre=OTA 前 1.0.0.2 运行态，post=OTA 后 1.0.0.3 运行态",
+  "compare": {
+    "xcagi.db.bytes": {"pre": 987054080, "post": 987054080, "verdict": "保留"},
+    "uploads.files": {"pre": 158, "post": 162, "verdict": "保留 +4（本次 G7 探针上传）"},
+    "uploads.templates.files": {"pre": 12, "post": 16, "verdict": "保留 +4（本次 G7 探针模板）"},
+    "rows.templates": {"pre": 13, "post": 17, "verdict": "保留 +4（含 G7 探针 db:14~17）"},
+    "rows.users": {"pre": 6, "post": 6, "verdict": "保留"},
+    "mods.files": {"pre": 1259, "post": 1257, "verdict": "-2 为 1.0.0.3 mod 包版本更新内容差异，非用户数据"},
+    "backups.files": {"pre": 5, "post": 5, "verdict": "保留（latest 时间戳更新为升级后自动备份）"},
+    "routing_policies.files": {"pre": 1, "post": 1, "verdict": "保留"},
+    "models.files": {"pre": 1, "post": 1, "verdict": "保留"}
+  },
+  "note": "rows.customers=0 为口径差异：客户存储走 mod_session_facade（erp-domain-bridge mod 数据层），主库 customers 表非其存储位；G7 客户 id=26 创建/查重（400 客户名称已存在）均可证存活。",
+  "conclusion": "PASS：用户数据（业务库/上传/模板/备份/模型/路由策略）跨 OTA 全保留"
+}

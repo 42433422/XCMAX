@@ -53,7 +53,9 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
     """调用 LLM 生成 manifest.json 内容。"""
     if not api_key:
         return {"ok": False, "error": "XCAGI_LLM_API_KEY 未配置"}
-    base = os.environ.get("XCAGI_LLM_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
+    base = os.environ.get("XCAGI_LLM_BASE_URL", "https://api.deepseek.com/v1").rstrip(
+        "/"
+    )
     model = os.environ.get("XCAGI_LLM_MODEL", "deepseek-chat")
     body = json.dumps(
         {
@@ -102,7 +104,9 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
         return {"ok": False, "error": f"LLM 调用失败：{exc}"}
 
 
-def _validate_manifest(manifest: dict[str, Any], expected_id: str, expected_name: str) -> list[str]:
+def _validate_manifest(
+    manifest: dict[str, Any], expected_id: str, expected_name: str
+) -> list[str]:
     """校验 manifest 必填字段。返回错误列表（空表示通过）。"""
     errs: list[str] = []
     if str(manifest.get("id") or "").strip() != expected_id:
@@ -165,7 +169,9 @@ def run(args: argparse.Namespace) -> int:
         logger.error("manifest 校验失败：%s", errs)
         print(
             json.dumps(
-                {"ok": False, "errors": errs, "manifest": manifest}, ensure_ascii=False, indent=2
+                {"ok": False, "errors": errs, "manifest": manifest},
+                ensure_ascii=False,
+                indent=2,
             )
         )
         return 2
@@ -173,7 +179,9 @@ def run(args: argparse.Namespace) -> int:
     if args.dry_run:
         print(
             json.dumps(
-                {"ok": True, "manifest": manifest, "dry_run": True}, ensure_ascii=False, indent=2
+                {"ok": True, "manifest": manifest, "dry_run": True},
+                ensure_ascii=False,
+                indent=2,
             )
         )
         return 0
@@ -205,7 +213,9 @@ def run(args: argparse.Namespace) -> int:
     logger.info("xcemp written: %s (%d bytes)", xcemp_path, len(zip_bytes))
 
     # 镜像到 FHD/mods/_employees/（与现有骨架对齐）
-    fhd_mods_dir = Path(__file__).resolve().parents[2] / "FHD" / "mods" / "_employees" / args.id
+    fhd_mods_dir = (
+        Path(__file__).resolve().parents[2] / "FHD" / "mods" / "_employees" / args.id
+    )
     fhd_mods_dir.mkdir(parents=True, exist_ok=True)
     (fhd_mods_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -237,13 +247,19 @@ def main() -> None:
     parser.add_argument("--description", required=True, help="自然语言描述")
     parser.add_argument("--author", default="ai-generator")
     parser.add_argument("--version", default="1.0.0")
-    parser.add_argument("--llm-api-key", default=os.environ.get("XCAGI_LLM_API_KEY", ""))
-    parser.add_argument("--dry-run", action="store_true", help="只输出 manifest，不写盘")
+    parser.add_argument(
+        "--llm-api-key", default=os.environ.get("XCAGI_LLM_API_KEY", "")
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="只输出 manifest，不写盘"
+    )
     parser.add_argument(
         "--apply", action="store_true", help="实际写盘到 modstore library + FHD/mods/"
     )
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
     sys.exit(run(args))
 
 

@@ -29,7 +29,9 @@ def _indexes() -> set[str]:
 def upgrade() -> None:
     columns = _columns()
     if "first_login_at" not in columns:
-        op.add_column("users", sa.Column("first_login_at", sa.DateTime(), nullable=True))
+        op.add_column(
+            "users", sa.Column("first_login_at", sa.DateTime(), nullable=True)
+        )
     if "last_login_at" not in columns:
         op.add_column("users", sa.Column("last_login_at", sa.DateTime(), nullable=True))
     indexes = _indexes()

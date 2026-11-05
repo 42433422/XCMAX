@@ -1,0 +1,62 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-ocr",
+ "name": "OCR 单据识别",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/ocr/test",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/ocr/test（写操作自动附带 CSRF）：OCR 服务",
+   "expected": "OCR 服务：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 19ms；backend=macos_vision",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/ocr/recognize 表单文件 ['image']",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize（写操作自动附带 CSRF）：识别单据文本",
+   "expected": "识别单据文本：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 363ms；{\"success\": true, \"message\": \"识别成功\", \"text\": \"发货单 NO.20260929\\n客户：太阳鸟\\n产品：包装盒 数量：24\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png\", \"artifacts\": [{\"artifact_type\": \"ocr_text\", \"name\": \"o",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /，页面可见 上传附件，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /；命中文本 ['上传附件']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 12 次任务 · 预计节约人工费用 ¥49 |  | 你好，我是饰品包装助手。 - 查产",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-ocr",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-ocr/macos/result.png",
+   "sha256": "649a60c3ab1ffba87949b593f981c985ed7ad5be3753115bd0c65c4157420263",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-ocr",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-ocr/macos/operation.webm",
+   "sha256": "9e10c391317ecbebac19313ec25facb0a120df3fd928400e20a87e26c33e1be8",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-ocr/macos/run.log",
+  "sha256": "ed5d6a85f13c79d494ac37315f0d53c4dc87722bca74a2dc8e5127d5c119c1ab",
+  "bytes": 1397
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

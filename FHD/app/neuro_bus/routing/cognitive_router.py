@@ -24,7 +24,7 @@ from app.domain.neuro.cognition.plan_constraints import (
     select_processor_by_cost,
 )
 from app.domain.neuro.processors.coordinator import ProcessorType, RoutingDecision
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.neuro_bus.routing.policy_router import decide_processor_with_policy
 from app.neuro_bus.routing.routing_log import append_routing_decision
 from app.utils.operational_errors import RECOVERABLE_ERRORS

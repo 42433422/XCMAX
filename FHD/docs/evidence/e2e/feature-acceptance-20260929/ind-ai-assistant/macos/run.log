@@ -1,0 +1,6 @@
+2026-09-29T13:05:56+0800 [ind-ai-assistant] 开始验收 ind-ai-assistant 行业 AI 助手（占位）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:05:56+0800 [ind-ai-assistant] M1 failed :: 受阻：能力目录标注为「占位，尚未有已合入实现」；客户端 openapi 无对应行业 AI 助手接口，本机无可验证的 macOS 面
+2026-09-29T13:05:56+0800 [ind-ai-assistant] M2 failed :: 受阻：平台壳员工目录与能力清单中无该行业 AI 助手实现，无法在本机验证
+2026-09-29T13:05:56+0800 [ind-ai-assistant] M3 failed :: 受阻：功能未实现（占位），无法验证
+2026-09-29T13:05:57+0800 [ind-ai-assistant] screenshot result.png
+2026-09-29T13:05:58+0800 [ind-ai-assistant] video operation.webm bytes=95169

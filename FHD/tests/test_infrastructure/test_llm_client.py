@@ -1,11 +1,4 @@
-"""Branch-coverage tests for app.infrastructure.llm.client.
-
-Covers: _env_mode, _initial_mode, _resolve_openai_timeout_seconds,
-_resolve_openai_max_retries, resolve_mode, set_mode, require_api_key,
-get_llm_client, dispose_llm_client, get_offline_status,
-get_openai_compatible_client, resolve_chat_model.
-Focus on env-var parsing, mode switching, and error branches.
-"""
+"""LLM client configuration, fallback, and request-scope regression tests."""
 
 from __future__ import annotations
 
@@ -16,43 +9,24 @@ import pytest
 
 from app.infrastructure.llm import client as llm_client
 
-# ---------------------------------------------------------------------------
-# _env_mode / _initial_mode
-# ---------------------------------------------------------------------------
-
 
 class TestEnvMode:
-    def test_offline_aliases(self, monkeypatch):
-        monkeypatch.setenv("FHD_LLM_MODE", "offline")
-        assert llm_client._env_mode() == "offline"
-
-    def test_local_alias(self, monkeypatch):
-        monkeypatch.setenv("FHD_LLM_MODE", "local")
-        assert llm_client._env_mode() == "offline"
-
-    def test_ollama_alias(self, monkeypatch):
-        monkeypatch.setenv("FHD_LLM_MODE", "ollama")
-        assert llm_client._env_mode() == "offline"
-
-    def test_online_aliases(self, monkeypatch):
-        monkeypatch.setenv("FHD_LLM_MODE", "online")
-        assert llm_client._env_mode() == "online"
-
-    def test_cloud_alias(self, monkeypatch):
-        monkeypatch.setenv("FHD_LLM_MODE", "cloud")
-        assert llm_client._env_mode() == "online"
-
-    def test_api_alias(self, monkeypatch):
-        monkeypatch.setenv("FHD_LLM_MODE", "api")
-        assert llm_client._env_mode() == "online"
-
-    def test_unknown_returns_none(self, monkeypatch):
-        monkeypatch.setenv("FHD_LLM_MODE", "unknown")
-        assert llm_client._env_mode() is None
-
-    def test_empty_returns_none(self, monkeypatch):
-        monkeypatch.setenv("FHD_LLM_MODE", "")
-        assert llm_client._env_mode() is None
+    @pytest.mark.parametrize(
+        ("mode", "expected"),
+        [
+            ("offline", "offline"),
+            ("local", "offline"),
+            ("ollama", "offline"),
+            ("online", "online"),
+            ("cloud", "online"),
+            ("api", "online"),
+            ("unknown", None),
+            ("", None),
+        ],
+    )
+    def test_aliases(self, monkeypatch, mode, expected):
+        monkeypatch.setenv("FHD_LLM_MODE", mode)
+        assert llm_client._env_mode() == expected
 
     def test_llm_mode_env_var(self, monkeypatch):
         monkeypatch.delenv("FHD_LLM_MODE", raising=False)
@@ -85,71 +59,34 @@ class TestInitialMode:
         assert llm_client._initial_mode() == "online"
 
 
-# ---------------------------------------------------------------------------
-# _resolve_openai_timeout_seconds
-# ---------------------------------------------------------------------------
-
-
-class TestResolveTimeout:
-    def test_default(self, monkeypatch):
-        monkeypatch.delenv("XCAGI_OPENAI_TIMEOUT_SEC", raising=False)
-        assert llm_client._resolve_openai_timeout_seconds() == 45.0
-
-    def test_custom_value(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_TIMEOUT_SEC", "120")
-        assert llm_client._resolve_openai_timeout_seconds() == 120.0
-
-    def test_invalid_value_returns_default(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_TIMEOUT_SEC", "not-a-number")
-        assert llm_client._resolve_openai_timeout_seconds() == 45.0
-
-    def test_below_minimum_clamped(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_TIMEOUT_SEC", "1")
-        assert llm_client._resolve_openai_timeout_seconds() == 5.0
-
-    def test_above_maximum_clamped(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_TIMEOUT_SEC", "500")
-        assert llm_client._resolve_openai_timeout_seconds() == 300.0
-
-    def test_empty_string_returns_default(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_TIMEOUT_SEC", "")
-        assert llm_client._resolve_openai_timeout_seconds() == 45.0
-
-
-# ---------------------------------------------------------------------------
-# _resolve_openai_max_retries
-# ---------------------------------------------------------------------------
-
-
-class TestResolveMaxRetries:
-    def test_default(self, monkeypatch):
-        monkeypatch.delenv("XCAGI_OPENAI_MAX_RETRIES", raising=False)
-        assert llm_client._resolve_openai_max_retries() == 0
-
-    def test_custom_value(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_MAX_RETRIES", "3")
-        assert llm_client._resolve_openai_max_retries() == 3
-
-    def test_invalid_value_returns_default(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_MAX_RETRIES", "not-a-number")
-        assert llm_client._resolve_openai_max_retries() == 0
-
-    def test_below_minimum_clamped(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_MAX_RETRIES", "-1")
-        assert llm_client._resolve_openai_max_retries() == 0
-
-    def test_above_maximum_clamped(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_MAX_RETRIES", "10")
-        assert llm_client._resolve_openai_max_retries() == 5
-
-    def test_empty_string_returns_default(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OPENAI_MAX_RETRIES", "")
-        assert llm_client._resolve_openai_max_retries() == 0
-
-
-# ---------------------------------------------------------------------------
-# set_mode / resolve_mode
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("env", "resolve", "value", "expected"),
+    [
+        ("XCAGI_OPENAI_TIMEOUT_SEC", llm_client._resolve_openai_timeout_seconds, None, 45.0),
+        ("XCAGI_OPENAI_TIMEOUT_SEC", llm_client._resolve_openai_timeout_seconds, "120", 120.0),
+        (
+            "XCAGI_OPENAI_TIMEOUT_SEC",
+            llm_client._resolve_openai_timeout_seconds,
+            "not-a-number",
+            45.0,
+        ),
+        ("XCAGI_OPENAI_TIMEOUT_SEC", llm_client._resolve_openai_timeout_seconds, "1", 5.0),
+        ("XCAGI_OPENAI_TIMEOUT_SEC", llm_client._resolve_openai_timeout_seconds, "500", 300.0),
+        ("XCAGI_OPENAI_TIMEOUT_SEC", llm_client._resolve_openai_timeout_seconds, "", 45.0),
+        ("XCAGI_OPENAI_MAX_RETRIES", llm_client._resolve_openai_max_retries, None, 0),
+        ("XCAGI_OPENAI_MAX_RETRIES", llm_client._resolve_openai_max_retries, "3", 3),
+        ("XCAGI_OPENAI_MAX_RETRIES", llm_client._resolve_openai_max_retries, "not-a-number", 0),
+        ("XCAGI_OPENAI_MAX_RETRIES", llm_client._resolve_openai_max_retries, "-1", 0),
+        ("XCAGI_OPENAI_MAX_RETRIES", llm_client._resolve_openai_max_retries, "10", 5),
+        ("XCAGI_OPENAI_MAX_RETRIES", llm_client._resolve_openai_max_retries, "", 0),
+    ],
+)
+def test_timeout_and_retry_bounds(monkeypatch, env, resolve, value, expected):
+    if value is None:
+        monkeypatch.delenv(env, raising=False)
+    else:
+        monkeypatch.setenv(env, value)
+    assert resolve() == expected
 
 
 class TestSetResolveMode:
@@ -192,11 +129,6 @@ class TestSetResolveMode:
         assert llm_client._openai_client is None
 
 
-# ---------------------------------------------------------------------------
-# require_api_key
-# ---------------------------------------------------------------------------
-
-
 class TestRequireApiKey:
     def test_offline_mode_skips_check(self):
         llm_client.set_mode("offline")
@@ -219,11 +151,6 @@ class TestRequireApiKey:
         ):
             with pytest.raises(RuntimeError, match="未配置"):
                 llm_client.require_api_key()
-
-
-# ---------------------------------------------------------------------------
-# get_llm_client
-# ---------------------------------------------------------------------------
 
 
 class TestGetLlmClient:
@@ -279,11 +206,6 @@ class TestGetLlmClient:
                 llm_client.get_llm_client()
 
 
-# ---------------------------------------------------------------------------
-# dispose_llm_client
-# ---------------------------------------------------------------------------
-
-
 class TestDisposeLlmClient:
     def test_dispose_clears_client(self):
         llm_client._openai_client = MagicMock()
@@ -294,11 +216,6 @@ class TestDisposeLlmClient:
         llm_client._openai_client = None
         llm_client.dispose_llm_client()
         assert llm_client._openai_client is None
-
-
-# ---------------------------------------------------------------------------
-# get_offline_status
-# ---------------------------------------------------------------------------
 
 
 class TestGetOfflineStatus:
@@ -389,11 +306,6 @@ class TestGetOfflineStatus:
         assert status["ollama_host"] == "http://127.0.0.1:11434"
 
 
-# ---------------------------------------------------------------------------
-# get_openai_compatible_client
-# ---------------------------------------------------------------------------
-
-
 class TestGetOpenaiCompatibleClient:
     def test_offline_raises(self):
         llm_client.set_mode("offline")
@@ -416,11 +328,6 @@ class TestGetOpenaiCompatibleClient:
         llm_client.dispose_llm_client()
 
 
-# ---------------------------------------------------------------------------
-# resolve_chat_model
-# ---------------------------------------------------------------------------
-
-
 class TestResolveChatModel:
     def test_delegates_to_credentials(self):
         with patch(
@@ -430,11 +337,6 @@ class TestResolveChatModel:
             result = llm_client.resolve_chat_model()
         assert result == "gpt-4"
         mock_fn.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Cleanup fixture
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)

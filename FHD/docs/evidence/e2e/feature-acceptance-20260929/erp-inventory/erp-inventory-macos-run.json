@@ -1,0 +1,74 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "erp-inventory",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "库存接口读写通过，库存管理页可见；验收账号当前无库存明细，页面显示空表。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/inventory",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/inventory（写操作自动附带 CSRF）：库存台账",
+      "expected": "库存台账：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 17ms；库存行 0",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/inventory/combined-alert",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/inventory/combined-alert（写操作自动附带 CSRF）：库存预警",
+      "expected": "库存预警：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 17ms；total_alerts=0",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "GET /api/inventory/transactions",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/inventory/transactions（写操作自动附带 CSRF）：库存流水",
+      "expected": "库存流水：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 16ms；流水 0",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "input": "界面路由 /mod/xcagi-erp-domain-bridge/inventory",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/inventory，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod/xcagi-erp-domain-bridge/inventory，页面可见 库存，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/inventory；命中文本 ['库存']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 库存管理 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 库存管理 | 导出 Excel入库出库 |  | 按当前筛选导出全部库存明细，单次最多 50,000 条。 |  | 全部仓库 | MAC验收09",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "erp-inventory",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-inventory/macos/result.png",
+      "sha256": "46ddb3febf0afb1d19227455e5b08f4c0896155463e18a67e8fc5fa71680cc52",
+      "visual_review": "accepted",
+      "visible_result": "「库存管理」页：仓库筛选「全部仓库」、库存明细表（暂无库存数据）、库存预警表（暂无预警信息），入库/出库按钮。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-inventory",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-inventory/macos/operation.webm",
+      "sha256": "c9b909adb3dedd8426ad180cfb56b1c0dd002ebd1a62de3ec0acebab8c90d71a",
+      "visual_review": "accepted",
+      "visible_result": "录屏为库存管理页，各帧一致。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-inventory/macos/run.log",
+    "sha256": "2c9e6f67eb297dff4615a46fd3cb954777db585762d1c404ca3fa1198134d345",
+    "bytes": 1231
+  }
+}

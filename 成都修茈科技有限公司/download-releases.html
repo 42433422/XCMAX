@@ -4,8 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>更新日志 | XCAGI 产品下载</title>
-    <meta name="description" content="查看 XCAGI 稳定版更新日志、发布日期、公开平台与重要版本变化。" />
+    <meta name="description" content="查看 XCAGI 版本演进记录、历史发布状态与当前各平台制品校验结果。" />
     <link rel="canonical" href="https://xiu-ci.com/download/releases" />
+    <link rel="icon" href="/assets/xiu-ci-logo.png" type="image/png" />
     <style>
       :root {
         color-scheme: light;
@@ -115,12 +116,6 @@
       .header-nav .is-current {
         color: var(--blue);
         background: var(--blue-soft);
-      }
-      .header-nav .market-link {
-        margin-left: 5px;
-        border: 1px solid var(--line-dark);
-        color: var(--ink);
-        background: #fff;
       }
 
       .release-hero {
@@ -304,7 +299,7 @@
         font-weight: 650;
       }
       .summary-changes li::before {
-        content: '\2713';
+        content: '·';
         display: grid;
         place-items: center;
         width: 18px;
@@ -417,22 +412,6 @@
         color: #6f7a88;
         font-size: 11px;
         line-height: 1.65;
-      }
-      .phase-arrow {
-        position: absolute;
-        top: 77px;
-        right: -12px;
-        z-index: 2;
-        display: grid;
-        place-items: center;
-        width: 23px;
-        height: 23px;
-        border: 1px solid #d8e2ed;
-        border-radius: 50%;
-        color: var(--blue);
-        background: #fff;
-        font-size: 11px;
-        box-shadow: 0 6px 18px rgba(26, 72, 124, 0.1);
       }
       .release-layout {
         position: relative;
@@ -849,9 +828,6 @@
         .evolution-phase:nth-child(-n + 2) {
           border-bottom: 1px solid #dfe7f0;
         }
-        .phase-arrow {
-          display: none;
-        }
         .release-layout {
           padding: 32px 24px 42px;
         }
@@ -907,8 +883,7 @@
           padding: 7px 8px;
           font-size: 11px;
         }
-        .header-nav .nav-home,
-        .header-nav .nav-kellai {
+        .header-nav .nav-home {
           display: none;
         }
         .hero-grid {
@@ -1029,22 +1004,27 @@
         }
       }
     </style>
+      <meta property="og:site_name" content="XCAGI" />
+    <meta property="og:title" content="XCAGI 产品更新日志" />
+    <meta property="og:description" content="查看 XCAGI 官方版本更新说明与平台状态。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://xiu-ci.com/download/releases" />
+    <meta property="og:image" content="https://xiu-ci.com/assets/brand-logo.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <header class="site-header">
       <div class="container header-inner">
         <a class="brand" href="/download" aria-label="产品下载首页">
           <img src="/assets/xiu-ci-logo.png?v=20260610d" alt="修茈科技 Logo" />
-          <span class="brand-copy"><strong>产品下载</strong><span>Xiuci Downloads</span></span>
+          <span class="brand-copy"><strong>XCAGI</strong><span>产品更新日志</span></span>
         </a>
         <nav class="header-nav" aria-label="下载页导航">
           <a class="nav-home" href="/index.html">官网</a>
-          <a href="/download#xcagi">XCAGI</a>
-          <a href="/download/breakpoints">断点清单</a>
-          <a href="/download/goals">工作目标</a>
+          <a href="/download#xcagi">产品介绍</a>
+          <a href="/download#platforms">平台与下载</a>
           <a class="is-current" href="/download/releases" aria-current="page">更新日志</a>
-          <a class="nav-kellai" href="/download#kellai">客来来</a>
-          <a class="market-link" href="/market/">AI 市场</a>
+          <a href="/contact.html">安装支持</a>
         </nav>
       </div>
     </header>
@@ -1055,30 +1035,27 @@
           <div>
             <p class="eyebrow">Release notes</p>
             <h1>XCAGI 更新日志</h1>
-            <p class="hero-lead">六个月，从 Excel 打印工具成长为企业级 AI 员工平台。这里不只列版本号，更讲清每次升级带来了什么能力。</p>
+            <p class="hero-lead">从 Excel 打印工具到企业级 AI 员工平台：历史演进与当前可下载制品分开展示，不以版本条目数冒充正式发布次数。</p>
             <div class="hero-actions">
               <a href="/download#xcagi">下载当前版本</a>
               <a href="/download">返回下载首页</a>
             </div>
-            <div class="hero-proof" aria-label="版本演进概览">
-              <div><strong>12</strong><span>关键版本</span></div>
-              <div><strong>4</strong><span>能力阶段</span></div>
-              <div><strong>3 端</strong><span>稳定交付</span></div>
+            <div class="hero-proof" aria-label="版本演进概览" aria-live="polite">
+              <div><strong id="history-count">—</strong><span>去重演进记录</span></div>
+              <div><strong id="milestone-count">—</strong><span>历史里程碑</span></div>
+              <div><strong id="phase-count">—</strong><span>能力阶段（展示分组）</span></div>
             </div>
           </div>
-          <aside class="version-summary" aria-label="当前交付版本">
-            <span class="summary-label">Current delivery release</span>
-            <p class="summary-version" id="summary-version">v1.0.0.1</p>
-            <div class="summary-status" id="summary-status">Windows 临时交付可下载</div>
+          <aside class="version-summary" aria-label="当前下载指针">
+            <span class="summary-label">Current download pointer</span>
+            <!-- 当前版本不写死在页面里：唯一来源是发布清单 /download-release.json（见页面脚本） -->
+            <p class="summary-version" id="summary-version">—</p>
+            <div class="summary-status" id="summary-status" role="status">版本信息加载中</div>
             <div class="summary-meta">
-              <span>发布日期<b id="summary-date">2026-09-01</b></span>
-              <span>发布渠道<b id="summary-channel">Enterprise interim</b></span>
+              <span>历史记录日期<b id="summary-date">—</b></span>
+              <span>发布渠道<b id="summary-channel">—</b></span>
             </div>
-            <ul class="summary-changes" aria-label="当前版本重点">
-              <li>客户交付中心显示已安装版本与平台</li>
-              <li>Windows 1.0.0.1 临时包公开下载与 SHA-256</li>
-              <li>稳定签名门禁保持关闭，未混入自动更新</li>
-            </ul>
+            <ul class="summary-changes" id="summary-changes" aria-label="当前版本重点"></ul>
           </aside>
         </div>
       </section>
@@ -1088,35 +1065,11 @@
           <div class="evolution-intro">
             <div class="evolution-intro__copy">
               <p class="section-kicker">Product evolution</p>
-              <h2>四次能力跃迁，看懂 XCAGI 如何走到今天</h2>
+              <h2>能力演进，看懂 XCAGI 如何走到今天</h2>
             </div>
             <p>版本不是孤立功能的累加，而是一条从效率工具、AI 平台、生态交付到企业稳定性的连续产品路线。</p>
           </div>
-          <div class="evolution-strip" aria-label="产品演进四阶段">
-            <article class="evolution-phase">
-              <span class="phase-range">v1 – v3</span>
-              <h3>效率工具智能化</h3>
-              <p>从 Excel 解析与标签打印，走向 AI 对话、OCR 与任务 Agent。</p>
-              <span class="phase-arrow" aria-hidden="true">→</span>
-            </article>
-            <article class="evolution-phase">
-              <span class="phase-range">v4 – v5</span>
-              <h3>AI 员工平台化</h3>
-              <p>多模态、角色化 AI 员工与 Neuro-DDD 架构成为主线。</p>
-              <span class="phase-arrow" aria-hidden="true">→</span>
-            </article>
-            <article class="evolution-phase">
-              <span class="phase-range">v6 – v8</span>
-              <h3>生态与多端交付</h3>
-              <p>Mod 商业生态、桌面与 Web 双端、行业化工作台逐步成型。</p>
-              <span class="phase-arrow" aria-hidden="true">→</span>
-            </article>
-            <article class="evolution-phase">
-              <span class="phase-range">v9 – 稳定版</span>
-              <h3>企业级稳定发布</h3>
-              <p>工程硬门禁、单轨生产线与三端稳定交付完成收敛。</p>
-            </article>
-          </div>
+          <div class="evolution-strip" id="evolution-phases" aria-label="产品能力阶段" aria-live="polite"></div>
 
           <div class="release-layout">
             <aside class="release-aside">
@@ -1124,51 +1077,24 @@
                 <p class="section-kicker">All releases</p>
                 <h2 id="history-title">逐版看变化 · 沿时间轨展开</h2>
                 <p>
-                  按版本演进从新到旧排列。当前 Windows 交付候选版提供带风险说明的临时下载；v1–v10 为历史产品里程碑，不代表仍提供旧安装包。
+                  按 SSOT 中的版本演进顺序展示；历史里程碑、候选记录和历史发布均不保证当前仍有可下载安装包。
                 </p>
               </div>
               <div class="release-aside__actions">
                 <div class="release-legend" aria-label="版本阶段颜色图例">
-                  <span><i style="--legend-color: var(--green)"></i>当前交付版本</span>
+                  <span><i style="--legend-color: var(--green)"></i>当前指针版本</span>
                   <span><i style="--legend-color: var(--amber)"></i>工程硬化与收敛</span>
                   <span><i style="--legend-color: var(--cyan)"></i>生态与多端交付</span>
                   <span><i style="--legend-color: var(--violet)"></i>AI 平台化</span>
                   <span><i style="--legend-color: var(--blue)"></i>智能工具起点</span>
                 </div>
-                <a href="/download-release.json">查看发布清单 →</a>
+                <a href="/data/release-history.json">查看版本历史 →</a>
               </div>
             </aside>
             <div>
-              <div class="release-list" id="release-list" aria-live="polite" aria-label="XCAGI 版本时间线">
-                <article class="release-entry">
-                  <div class="release-entry__head">
-                    <div>
-                      <div class="release-version-line">
-                        <h3>v1.0.0.1</h3>
-                        <span class="release-channel">平台分阶段发布</span>
-                      </div>
-                      <p class="release-title">太阳鸟行业考勤归并与企业交付可见</p>
-                    </div>
-                    <time class="release-date" datetime="2026-09-02">2026-09-02</time>
-                  </div>
-                  <ul class="release-notes">
-                    <li>太阳鸟归入饰品包装行业，旧的单独考勤入口归并为行业通用考勤；既有登录会话升级后自动补齐能力。</li>
-                    <li>客户交付中心展示最近一次成功安装回执中的产品版本与平台，缺失版本时明确显示未上报。</li>
-                    <li>首次登录和 OTA 安装成功后上报版本、构建 SHA 与平台，失败升级不覆盖已安装版本。</li>
-                    <li>
-                      Windows 64 位企业临时交付包尚未完成 Authenticode 签名，仅供管理员核对来源与 SHA-256 后安装，不进入稳定自动更新。
-                    </li>
-                    <li>
-                      macOS 1.0.0.1 通过签名、公证和稳定更新源校验；发布流程同时更新下载中心、更新日志并校验构建 SHA、大小和 SHA-256。
-                    </li>
-                  </ul>
-                  <div class="release-platforms" aria-label="公开平台">
-                    <span>Windows 64 位临时交付</span><span>macOS Apple Silicon 1.0.0.1 稳定版</span
-                    ><span>Android 1.0.0.0 稳定版</span>
-                  </div>
-                </article>
-              </div>
-              <p class="release-source-note">历史演进来自 XCAGI 版本演进轨与更新日志；当前下载状态、文件大小和校验值以制品发布清单为准。</p>
+              <!-- 版本时间线由历史投影 /data/release-history.json 的 release_history 渲染（见页面脚本） -->
+              <div class="release-list" id="release-list" aria-live="polite" aria-label="XCAGI 版本时间线"></div>
+              <p class="release-source-note">历史演进来自 <a href="/data/release-history.json">发布目录历史投影</a>（FHD/config/download_release.json）；当前下载状态、文件大小和校验值独立核对在线指针与制品清单。</p>
             </div>
           </div>
         </div>
@@ -1179,373 +1105,104 @@
       <div class="container footer-inner">
         <span>© 2026 成都修茈科技有限公司 · XCAGI 更新日志</span>
         <nav class="footer-links" aria-label="页脚导航">
-          <a href="/download">产品下载</a><a href="/download/breakpoints">断点清单</a><a href="/download/goals">工作目标</a
-          ><a href="/market/">AI 市场</a><a href="/contact.html">联系支持</a>
+          <a href="/download">产品下载</a><a href="/contact.html">安装支持</a>
         </nav>
       </div>
     </footer>
 
+    <script src="/release-data.js"></script>
     <script>
       ;(function () {
         'use strict'
 
-        var fallbackHistory = [
-          {
-            version: '1.0.0.1',
-            date: '2026-09-02',
-            title: '太阳鸟行业考勤归并与企业交付可见',
-            channel: '平台分阶段发布',
-            notes: [
-              '太阳鸟账号按饰品包装行业归类，原有单独考勤入口归并到行业通用考勤；既有登录会话在升级后自动补齐行业能力。',
-              '客户交付中心新增客户设备当前安装版本与平台展示；历史回执未携带版本时明确显示未上报，不再把未知值当作有效版本。',
-              '安装与首次登录成功后上报版本、构建 SHA 和平台；展示只采用最近一次成功安装回执，失败升级不会覆盖客户已安装版本。',
-              'macOS Apple Silicon 1.0.0.1 通过 Developer ID 签名、公证与稳定更新源校验后发布；Android 继续使用已验收的 1.0.0.0。',
-              'Windows 64 位企业临时交付包已构建并公开 SHA-256，但尚未完成 Authenticode 代码签名；仅供管理员确认来源后安装，不进入稳定自动更新通道。',
-              '桌面发布流程会原子更新安装包、下载中心与更新日志，并核验版本、构建 SHA、文件大小和 SHA-256；正式 Windows 稳定版继续执行代码签名硬门禁。',
-            ],
-            platforms: ['Windows 64 位临时交付', 'macOS Apple Silicon 1.0.0.1 稳定版', 'Android 1.0.0.0 稳定版'],
-          },
-          {
-            version: '1.0.0.0',
-            date: '2026-07-13',
-            title: '企业版稳定发布基线',
-            channel: '稳定版',
-            notes: [
-              '在历史 v1–v10 产品演进之后重新建立稳定发布基线；对外产品版本统一为 1.0.0.0。',
-              '企业版进入公开稳定渠道，个人版冻结；统一 AI 员工工作台、智能对话与行业 Mod 装载入口。',
-              'Windows、macOS Apple Silicon 与 Android 企业版安装包均公开文件大小及 SHA-256 校验信息。',
-              '桌面端接入 stable 自动更新通道，产品四段版本与 Electron/Apple 三段工具链版本分开管理。',
-            ],
-            platforms: ['Windows 64 位', 'macOS Apple Silicon', 'Android'],
-          },
-          {
-            version: '10.0.0',
-            date: '2026-06-03',
-            title: '单轨收敛与六线打通',
-            channel: '历史里程碑',
-            notes: [
-              '移除双事件入口，统一为单轨事件总线与 ProductionLineOrchestrator。',
-              '运营、伙伴、网站、Mod、软件与归档六线贯通，伙伴生态 B1–B5 正式落编。',
-              'CI 覆盖率门禁提升，历史 shim 与重复入口继续清零。',
-            ],
-          },
-          {
-            version: '9.0.x',
-            date: '2026-05-29',
-            title: '认证、异步、锁与 CI 全面硬化',
-            channel: '历史里程碑',
-            notes: [
-              'FastAPI Depends 统一登录、权限与角色认证路径。',
-              '补齐 sync/async 双路径装饰器与 Redis token + Lua 分布式锁。',
-              'Bandit、Safety、Flake8、mypy、OpenAPI 一致性与全量 pytest 进入硬门禁。',
-            ],
-          },
-          {
-            version: '8.0.0',
-            date: '2026-05-21',
-            title: '跨行业 UI 与行业预设',
-            channel: '历史版本',
-            notes: [
-              '引入通用、涂料、考勤、批发等行业预设。',
-              'Mod 源码库支持行业选择与 manifest.industry。',
-              '菜单、欢迎语、快捷按钮及模板随行业切换。',
-            ],
-          },
-          {
-            version: '7.0.0',
-            date: '2026-04-29',
-            title: '桌面版与 Web 并行交付',
-            channel: '历史里程碑',
-            notes: [
-              'Electron 桌面壳支持 Windows 与 macOS，本地 FastAPI 子进程承载核心能力。',
-              'Web 版继续并行交付，同一业务代码覆盖桌面与浏览器。',
-              '接入 electron-updater 与 Mod OTA 灰度更新路径。',
-            ],
-          },
-          {
-            version: '6.0.0',
-            date: '2026-04-28',
-            title: '商业模式与 Mod 生态成型',
-            channel: '历史版本',
-            notes: [
-              '形成订阅、交易与服务三层商业模型。',
-              'ModStore、沙箱执行、创作者上架与分成流程成型。',
-              '会员体系与企业能力交付边界进入产品主线。',
-            ],
-          },
-          {
-            version: '5.0.0',
-            date: '2026-04-20',
-            title: 'Neuro-DDD 与审批流',
-            channel: '历史里程碑',
-            notes: [
-              '建立 Entry、Route、Application、Domain、Infrastructure 分层。',
-              '引入 NeuroBus、性能监控与多级审批流。',
-              '微信小程序与企业业务流程开始共用平台能力。',
-            ],
-          },
-          {
-            version: '4.0.0',
-            date: '2026-04-05',
-            title: 'AI 员工体系与多模态交互',
-            channel: '历史里程碑',
-            notes: [
-              '产品从被动工具升级为角色化 AI 员工平台。',
-              '图像、语音、文本三态融合，员工路由按意图分发任务。',
-              '神经域事件协作成为业务自动化基础。',
-            ],
-          },
-          {
-            version: '3.0.0',
-            date: '2026-03-15',
-            title: '混合意图引擎与任务 Agent',
-            channel: '历史版本',
-            notes: [
-              '混合意图识别整合 BERT、规则与大模型能力。',
-              '加入 TTS 语音合成与异步任务 Agent 编排。',
-              '数据库迁移和队列机制支撑长任务执行。',
-            ],
-          },
-          {
-            version: '2.0.0',
-            date: '2026-02-20',
-            title: 'Vue 3、AI 对话与 OCR',
-            channel: '历史版本',
-            notes: [
-              '使用 Vue 3 与 Vite 重构前端并建立 Web 工作台。',
-              '接入 AI 对话、OCR 双通道识别与标签打印引擎。',
-              'FastAPI REST 接口开始拆分桌面单体逻辑。',
-            ],
-          },
-          {
-            version: '1.0.0',
-            date: '2026-01-15',
-            title: 'Excel 解析与标签打印起点',
-            channel: '历史版本',
-            notes: [
-              '建立 Excel 单据解析、标签模板和出货单生成能力。',
-              '以单一桌面应用承载最早期业务流程。',
-              '形成后续 AI、Web 与自动化演进的产品基础。',
-            ],
-          },
-        ]
-
-        var presentationByVersion = {
-          '1.0.0.1': {
-            era: 'stable',
-            shift: '安装完成 → 客户版本可见且可持续追踪',
-            tags: ['交付可见', '回执 SSOT', '发布闭环'],
-          },
-          '1.0.0.0': {
-            era: 'stable',
-            shift: '研发版本线 → 企业稳定发布线',
-            tags: ['三端交付', '稳定更新', '版本治理'],
-          },
-          '10.0.0': {
-            era: 'hardening',
-            shift: '多入口协作 → 单轨生产线',
-            tags: ['事件总线', '六线贯通', 'CI 门禁'],
-          },
-          '9.0.x': {
-            era: 'hardening',
-            shift: '功能验证 → 企业级工程硬门禁',
-            tags: ['统一认证', '异步能力', '安全门禁'],
-          },
-          '8.0.0': {
-            era: 'ecosystem',
-            shift: '通用界面 → 行业化工作台',
-            tags: ['行业预设', 'Mod 清单', '动态界面'],
-          },
-          '7.0.0': {
-            era: 'ecosystem',
-            shift: 'Web 单端 → 桌面与 Web 并行交付',
-            tags: ['Electron', '本地服务', 'OTA 更新'],
-          },
-          '6.0.0': {
-            era: 'ecosystem',
-            shift: '产品能力 → 可交易的 Mod 商业生态',
-            tags: ['ModStore', '订阅体系', '创作者分成'],
-          },
-          '5.0.0': {
-            era: 'platform',
-            shift: '业务功能堆叠 → 分层架构与流程治理',
-            tags: ['Neuro-DDD', '审批流', '性能监控'],
-          },
-          '4.0.0': {
-            era: 'platform',
-            shift: '被动业务工具 → 角色化 AI 员工平台',
-            tags: ['AI 员工', '多模态', '事件协作'],
-          },
-          '3.0.0': {
-            era: 'foundation',
-            shift: '单步识别 → 意图理解与任务编排',
-            tags: ['意图引擎', 'TTS', '任务 Agent'],
-          },
-          '2.0.0': {
-            era: 'foundation',
-            shift: '桌面单体 → Web 工作台与 AI 能力',
-            tags: ['Vue 3', 'OCR', 'FastAPI'],
-          },
-          '1.0.0': {
-            era: 'foundation',
-            shift: '人工制单 → Excel 自动解析与标签打印',
-            tags: ['Excel 解析', '标签模板', '桌面应用'],
-          },
-        }
-
+        var releases = window.XCReleaseData
+        if (!releases) return
         var listEl = document.getElementById('release-list')
-        var summaryVersionEl = document.getElementById('summary-version')
-        var summaryDateEl = document.getElementById('summary-date')
-        var summaryStatusEl = document.getElementById('summary-status')
-        var summaryChannelEl = document.getElementById('summary-channel')
-
-        function compareVersions(left, right) {
-          var a = String(left || '')
-            .split('.')
-            .map(Number)
-          var b = String(right || '')
-            .split('.')
-            .map(Number)
-          for (var i = 0; i < Math.max(a.length, b.length); i += 1) {
-            var difference = (a[i] || 0) - (b[i] || 0)
-            if (difference !== 0) return difference
-          }
-          return 0
+        var text = function (id, value) { document.getElementById(id).textContent = value }
+        var fetchJson = releases.fetchJson
+        function node(tag, className, value, children) {
+          var el = Object.assign(document.createElement(tag), { className: className || '', textContent: value || '' })
+          ;(children || []).forEach(function (child) { el.appendChild(child) })
+          return el
         }
-
-        function fetchJson(url) {
-          return fetch(url, { cache: 'no-store' })
-            .then(function (response) {
-              var type = response.headers.get('content-type') || ''
-              return response.ok && type.includes('json') ? response.json() : null
-            })
-            .catch(function () {
-              return null
-            })
+        function platformLabel(value) {
+          value = String(value)
+          return value.startsWith('Android') ? 'Android ' + ((value.match(/\d+(?:\.\d+){2,3}/) || [''])[0]) + ' 实验版·非签约级' : value
         }
-
-        function render(history, interimActive) {
-          if (!Array.isArray(history) || !history.length) history = fallbackHistory
-          listEl.innerHTML = ''
-          history.forEach(function (release, releaseIndex) {
-            var releaseVersion = String(release.version || '')
-            var presentation = presentationByVersion[releaseVersion] || {
-              era: 'foundation',
-              shift: '持续演进中的产品能力升级',
-              tags: [],
-            }
-            var releaseChannel = String(release.channel || '稳定版')
-            var entry = document.createElement('article')
-            entry.className = 'release-entry'
-            entry.setAttribute('data-era', presentation.era)
-            if (releaseIndex === 0) entry.className += ' is-current'
-            if (releaseChannel.indexOf('里程碑') !== -1) entry.className += ' is-milestone'
-            var head = document.createElement('div')
-            head.className = 'release-entry__head'
-            var identity = document.createElement('div')
-            var versionLine = document.createElement('div')
-            versionLine.className = 'release-version-line'
-            var version = document.createElement('h3')
-            version.textContent = 'v' + releaseVersion
-            var channel = document.createElement('span')
-            channel.className = 'release-channel'
-            channel.textContent = releaseChannel
-            versionLine.appendChild(version)
-            versionLine.appendChild(channel)
-            var title = document.createElement('p')
-            title.className = 'release-title'
-            title.textContent = String(release.title || '版本更新')
-            identity.appendChild(versionLine)
-            identity.appendChild(title)
-            if (Array.isArray(presentation.tags) && presentation.tags.length) {
-              var tags = document.createElement('div')
-              tags.className = 'release-tags'
-              presentation.tags.forEach(function (tagText) {
-                var tag = document.createElement('span')
-                tag.textContent = tagText
-                tags.appendChild(tag)
-              })
-              identity.appendChild(tags)
-            }
-            var date = document.createElement('time')
-            date.className = 'release-date'
-            date.dateTime = String(release.date || '')
-            date.textContent = String(release.date || '')
-            head.appendChild(identity)
-            head.appendChild(date)
-            var shift = document.createElement('div')
-            shift.className = 'release-shift'
-            var shiftLabel = document.createElement('span')
-            shiftLabel.textContent = '能力跃迁'
-            var shiftText = document.createElement('strong')
-            shiftText.textContent = presentation.shift
-            shift.appendChild(shiftLabel)
-            shift.appendChild(shiftText)
-            var notesLabel = document.createElement('p')
-            notesLabel.className = 'release-notes-label'
-            notesLabel.textContent = '主要变化'
-            var notes = document.createElement('ul')
-            notes.className = 'release-notes'
-            ;(Array.isArray(release.notes) ? release.notes : []).forEach(function (note, noteIndex) {
-              var item = document.createElement('li')
-              var index = document.createElement('span')
-              index.className = 'note-index'
-              index.textContent = String(noteIndex + 1).padStart(2, '0')
-              var noteText = document.createElement('span')
-              noteText.textContent = String(note)
-              item.appendChild(index)
-              item.appendChild(noteText)
-              notes.appendChild(item)
-            })
-            entry.appendChild(head)
-            entry.appendChild(shift)
-            entry.appendChild(notesLabel)
-            entry.appendChild(notes)
+        function historicalStatus(release) {
+          if (release.kind === 'milestone') return '历史里程碑（非制品发布证明）'
+          return ({ candidate: '候选（未晋升）', accepted: '历史已验收（未确认发布）',
+            published: '历史已发布（不代表当前可下载）', withdrawn: '已撤回' })[release.publication_state] || '历史记录（发布状态待对账）'
+        }
+        function render(history, pointer, current, presentation) {
+          var historyKnown = Array.isArray(history)
+          history = history || []
+          text('history-count', historyKnown ? String(history.length) : '—')
+          text('milestone-count', historyKnown ? String(history.filter(function (row) { return row.kind === 'milestone' }).length) : '—')
+          var phases = Array.isArray(presentation.phases) ? presentation.phases : []
+          text('phase-count', phases.length ? String(phases.length) : '—')
+          document.getElementById('evolution-phases').replaceChildren(...phases.map(function (phase) {
+            return node('article', 'evolution-phase', '', [node('span', 'phase-range', phase.range), node('h3', '', phase.title), node('p', '', phase.description)])
+          }))
+          listEl.replaceChildren(...history.map(function (release) {
+            var annotation = (presentation.presentationByVersion || {})[release.version] || {}
+            var versionLine = node('div', 'release-version-line', '', [node('h3', '', 'v' + release.version), node('span', 'release-channel', historicalStatus(release))])
+            var identity = node('div', '', '', [versionLine, node('p', 'release-title', release.title || '版本演进记录')])
+            if (release.channel) identity.appendChild(node('p', 'release-title', '历史记录渠道：' + release.channel))
+            if (Array.isArray(annotation.tags)) identity.appendChild(node('div', 'release-tags', '', annotation.tags.map(function (tag) { return node('span', '', tag) })))
+            var date = node('time', 'release-date', release.date || '日期未知')
+            date.dateTime = release.date || ''
+            var entry = node('article', 'release-entry' + (release.version === current.version ? ' is-current' : '') +
+              (release.kind === 'milestone' ? ' is-milestone' : ''), '', [node('div', 'release-entry__head', '', [identity, date])])
+            entry.setAttribute('data-era', annotation.era || 'foundation')
+            if (annotation.shift) entry.appendChild(node('div', 'release-shift', '', [node('span', '', '能力跃迁'), node('strong', '', annotation.shift)]))
+            entry.appendChild(node('p', 'release-notes-label', '历史变化记录（非实时下载状态）'))
+            entry.appendChild(node('ul', 'release-notes', '', (Array.isArray(release.notes) ? release.notes : []).map(function (note, index) {
+              return node('li', '', '', [node('span', 'note-index', String(index + 1).padStart(2, '0')), node('span', '', String(note))])
+            })))
             if (Array.isArray(release.platforms) && release.platforms.length) {
-              var platforms = document.createElement('div')
-              platforms.className = 'release-platforms'
-              platforms.setAttribute('aria-label', '公开平台')
-              release.platforms.forEach(function (platform) {
-                var tag = document.createElement('span')
-                tag.textContent = String(platform)
-                platforms.appendChild(tag)
-              })
+              var platforms = node('div', 'release-platforms', '', release.platforms.map(function (platform) { return node('span', '', platformLabel(platform)) }))
+              platforms.setAttribute('aria-label', '历史记录平台（非当前下载状态）')
               entry.appendChild(platforms)
-            } else {
-              entry.className += ' release-entry--no-platforms'
-            }
-            listEl.appendChild(entry)
-          })
-          summaryVersionEl.textContent = 'v' + String(history[0].version || '')
-          summaryDateEl.textContent = String(history[0].date || '')
-          summaryStatusEl.textContent = interimActive ? 'Windows 临时交付可下载' : '稳定版可下载'
-          summaryChannelEl.textContent = interimActive ? 'Enterprise interim' : 'Enterprise'
+            } else entry.className += ' release-entry--no-platforms'
+            return entry
+          }))
+          if (!historyKnown) listEl.replaceChildren(node('p', 'release-source-note', '版本时间线暂不可用：未能读取发布目录历史投影。'))
+          var selected = history.find(function (release) { return release.version === current.version })
+          text('summary-version', current.version ? 'v' + current.version : '—')
+          text('summary-date', selected && selected.date || '—')
+          var platforms = [['Windows x64', 'win'], ['macOS Apple Silicon', 'mac', 'arm64'], ['macOS Intel', 'mac', 'x64'], ['Android', 'android']]
+          var statuses = platforms.map(function (platform) { return { name: platform[0], result: current.platform(platform[1], platform[2]) } })
+          var available = statuses.filter(function (row) { return row.result.artifact })
+          text('summary-status', available.length ? '清单已校验 ' + available.length + ' 个下载入口' : !current.version ? '版本信息暂不可用' : '当前制品未开放或身份待核验')
+          text('summary-channel', '按平台与制品分别核验')
+          document.getElementById('summary-changes').replaceChildren(...statuses.map(function (row) {
+            return node('li', '', row.name + (row.result.version ? ' v' + row.result.version : '') + '：' + row.result.status + (row.result.artifact ? ' · ' + row.result.channel : '') + (row.result.temporary && row.result.temporary.release && row.result.temporary.release.test_only ? ' · 已知问题与范围：' + row.result.temporary.release.notes.join('；') : ''))
+          }))
         }
-
-        render(fallbackHistory, true)
-        Promise.all([fetchJson('/download-release.json'), fetchJson('/download-windows-hotfix.json')]).then(function (results) {
-          var stable = results[0]
-          var hotfix = results[1]
-          var hasStableHistory = stable && Array.isArray(stable.release_history)
-          var history = hasStableHistory ? stable.release_history.slice() : fallbackHistory.slice()
-          var interimActive =
-            hotfix &&
-            hotfix.schema === 'xcagi.windows_interim_release/v1' &&
-            hotfix.download_allowed === true &&
-            hotfix.signature_status === 'unsigned' &&
-            hotfix.release &&
-            (!hasStableHistory || compareVersions(hotfix.version, history[0].version) >= 0)
-          if (interimActive) {
-            if (compareVersions(hotfix.version, history[0].version) > 0) history.unshift(hotfix.release)
-          }
-          render(history, Boolean(interimActive))
-        })
+        function unavailable() {
+          ;['summary-version', 'summary-date', 'summary-channel', 'history-count', 'milestone-count', 'phase-count'].forEach(function (id) { text(id, '—') })
+          text('summary-status', '版本信息暂不可用')
+          document.getElementById('summary-changes').replaceChildren()
+          document.getElementById('evolution-phases').replaceChildren()
+          listEl.replaceChildren(node('p', 'release-source-note', '版本时间线暂不可用：未能读取发布清单；请稍后重试或通过上方链接查看清单。'))
+        }
+        unavailable()
+        Promise.all([fetchJson('/download-release.json'), fetchJson('/download-windows-hotfix.json'), fetchJson('/data/release-presentation.json'), fetchJson('/data/release-history.json')]).then(function (results) {
+          var pointer = results[0]
+          var projection = results[3]
+          var history = projection && projection.schema === 'xcagi.release_history.public/v1' && Array.isArray(projection.release_history) ? releases.history(projection.release_history) : null
+          var url = releases.manifestUrl(pointer)
+          return (url ? fetchJson(url) : Promise.resolve(null)).then(function (manifest) {
+            render(history, pointer, releases.view(pointer, manifest, results[1]), results[2] || {})
+          })
+        }).catch(unavailable)
       })()
     </script>
 
     <div id="xc-corp-butler-root"></div>
-    <link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260725a" data-xc-corp-butler-css="1" />
-    <script type="module" src="/corp-butler/corp-butler.js?v=20260725a" data-xc-corp-butler-js="1"></script>
+    <link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20261103a" data-xc-corp-butler-css="1" />
+    <script type="module" src="/corp-butler/corp-butler.js?v=20261103a" data-xc-corp-butler-js="1"></script>
     <script src="/main.js?v=20260723h"></script>
   </body>
 </html>

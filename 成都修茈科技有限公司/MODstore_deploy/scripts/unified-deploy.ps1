@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   - FullSync   调用 sync-modstore-to-server.ps1：将本机 MODstore_deploy（含未提交修改）打成 tar → scp → 远端解压 → pip / npm build / mvn → systemctl 重启 modstore + modstore-payment，并做健康检查。
-  - RemoteGit  调用 remote-sre.ps1 -Action deploy：远端 git fetch/reset、备份、docker compose --profile app、冒烟（见 docs/runbooks/remote-server-operations.md）。
+  - RemoteGit  旧 Docker 路径：远端 git fetch/reset、备份、docker compose。当前生产发布见 scripts/xcmax-immutable-release.sh；旧指引见根目录 ARCHIVE_POINTER.md。
   - 其余动作   直接透传 remote-sre.ps1（preflight / smoke / backup / rollback 等）。
 
   可在 MODstore_deploy 根目录放置 deploy-target.local.ps1（已 gitignore）预置 $env:DEPLOY_SSH、DEPLOY_REMOTE_REPO 等，与本仓库 remote-sre.ps1 行为一致。
@@ -130,7 +130,7 @@ function Show-UnifiedDeployHelp {
     '  DEPLOY_GIT_BRANCH       default main'
     '  MODSTORE_ROLLBACK_REF   required for Rollback mode'
     ''
-    'Manual: docs/runbooks/remote-server-operations.md'
+    'Current production deploy: scripts/xcmax-immutable-release.sh; legacy: ../../ARCHIVE_POINTER.md'
   )
   Write-Host ($lines -join [Environment]::NewLine)
 }

@@ -14,9 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from modstore_server.autonomy_decision_audit import (
-    record_posthoc_anomaly_evidence,
-)
+from modstore_server.autonomy_decision_audit import record_posthoc_anomaly_evidence
 from modstore_server.autonomy_posthoc_contracts import (
     default_para_task_fetcher,
     load_self_maintenance_records,

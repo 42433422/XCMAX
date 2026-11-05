@@ -1,0 +1,8 @@
+[13:55:44] feature=ai-csv platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-csv
+[13:55:56] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:55:57] case C1: passed - CSV 生成员真实写出文件
+[13:55:57] case C2: passed - CSV 全量读取员真实读回
+[13:55:57] case C3: passed - CSV 员工真实注册可查
+[13:55:57] case C4: passed - 缺输入文件时如实 fail-closed（负例/边界）
+[13:55:58] video: ai-csv-web-20260929-135544.webm (1036723 bytes)
+[13:55:58] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-csv/log/ai-csv-web-20260929-135544.log

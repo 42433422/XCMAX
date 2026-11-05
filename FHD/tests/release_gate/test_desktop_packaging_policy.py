@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import json
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,25 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def _desktop_runtime_source(*names: str) -> str:
     return "\n".join((REPO_ROOT / "desktop" / name).read_text(encoding="utf-8") for name in names)
+
+
+def test_weekly_backup_keeps_cadence_after_missed_sunday() -> None:
+    scripts = REPO_ROOT / "scripts" / "backup"
+    install = (scripts / "Install-BackupTask.ps1").read_text(encoding="utf-8")
+    backup = (scripts / "XcagiBackup.ps1").read_text(encoding="utf-8")
+    installer = (REPO_ROOT / "desktop" / "build" / "installer.nsh").read_text(encoding="utf-8")
+    custom_install = installer.split("!macro customInstall", 1)[1].split("!macroend", 1)[0]
+    assert "$task.Settings.StartWhenAvailable = $true" in install
+    assert 'if ($Cadence -eq "Weekly") { "$baseArgs -Weekly" }' in install
+    assert "$action.Arguments" in install
+    assert "XcagiDailyBackup" in install and "XcagiWeeklyBackup" in install
+    assert "$trigger.DaysOfWeek = 1" in install
+    assert '-DataDir "$APPDATA\\XCAGI"' in custom_install
+    assert "Installation continues." in custom_install
+    assert "Abort" not in custom_install
+    assert "backup scheduled task registration failed" not in installer
+    assert "[switch]$Weekly" in backup and "($Weekly -or (Get-Date).DayOfWeek" in backup
+    assert 'Write-Log "ERROR: failed to create weekly copy: $_"\n      throw' in backup
 
 
 def test_desktop_enterprise_installer_builds_full_frontend() -> None:
@@ -29,17 +50,15 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     assert "personal   = 'minimal'" in ps_sync
     assert "enterprise = 'full'" in ps_sync
 
-    for script in (sh_windows, sh_thin):
+    assert "build-installer.ps1" in sh_windows and "-ProductSku" in sh_windows
+    for script in (sh_thin,):
         assert (
             "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
         assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in script
-        # 桌面包不得构建 admin-console
         assert "admin-console && npm run build" not in script
         assert "(cd admin-console && npm run build)" not in script
 
-    # build-backend.sh 自 4c724dae8 起把前端构建委托给 build-frontend.sh（SSOT 单点构建），
-    # enterprise=full 的构建由 build-frontend.sh 保证，这里校验委托关系与 admin-console 禁令。
     sh_frontend = (scripts / "build-frontend.sh").read_text(encoding="utf-8")
     assert "build-frontend.sh" in sh_backend
     assert (
@@ -88,13 +107,11 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert "return 17500" in desktop_runtime
     assert "process.platform === 'darwin' ? 17500 : 5000" not in desktop_runtime
     assert '"return 17500"' in ps_installer
-    assert '"return 17500"' in sh_installer
+    assert "build-installer.ps1" in sh_installer
     assert '"backendHealthMs"' in ps_installer
-    assert '"backendHealthMs"' in sh_installer
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in smoke
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in acceptance
     assert "isDesktopShell" in router
-    # 网页 admin → /admin；桌面壳 admin → 拒入（管理端仅网页 SSOT）
     assert "resolveAdminConsoleHomeUrl()" in router
     assert "profile.isAdminAccount" in router
     assert "DESKTOP_ADMIN_FORBIDDEN_MESSAGE" in router
@@ -107,6 +124,8 @@ def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> No
         encoding="utf-8"
     )
     build = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(encoding="utf-8")
+    assert "SkipUiInstaller" not in build
+    assert "XcagiInstaller.csproj" in build
     signer = (REPO_ROOT / "desktop" / "build" / "windows-sign.cjs").read_text(encoding="utf-8")
     post_gate = (REPO_ROOT / "scripts" / "package" / "pre-release-security.ps1").read_text(
         encoding="utf-8"
@@ -192,10 +211,10 @@ def test_windows_release_scripts_are_parsed_on_a_real_windows_ci_runner() -> Non
         "\n  # SSOT drift gate", 1
     )[0]
     assert "runs-on: windows-latest" in job
-    assert "build-installer.ps1" in job
-    assert "pre-release-security.ps1" in job
-    assert "verify-windows-signature.ps1" in job
-    assert "verify-windows-installed-runtime.ps1" in job
+    # 全量解析 scripts/package/*.ps1 + 空清单 fail-closed；acceptance-windows.ps1 曾整体语法错误却长期绿，故显式守卫。
+    assert "Get-ChildItem -LiteralPath 'scripts/package' -Filter '*.ps1' -File" in job
+    assert "$paths.Count -eq 0" in job
+    assert (REPO_ROOT / "scripts" / "package" / "acceptance-windows.ps1").is_file()
     assert "[scriptblock]::Create" in job
     assert "node --check desktop/build/windows-sign.cjs" in job
     assert "SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b" in job
@@ -234,10 +253,28 @@ def test_desktop_update_rollback_is_fail_closed_and_windows_full_app() -> None:
     assert "mode: 'windows-full'" in rollback
     assert "launchWindowsFullRollback" in rollback
     assert "windows-app-current" in rollback
-    assert "Move-Item -LiteralPath $stagingDir -Destination $installDir" in windows
+    assert "[IO.Directory]::Move($stagingDir, $installDir)" in windows
     assert "Copy-Item -LiteralPath $databaseBackupPath" in windows
     assert "state.buildSha.slice(0, 12)" in install_update
     assert "migration backup failed; refusing to continue" in entrypoint
+
+
+def test_windows_builders_pass_four_part_product_version_metadata() -> None:
+    """XCAGI.exe 属性须为四段产品版本（验收协议 §身份核对），由 electron-builder
+    buildVersion→FileVersion、extraMetadata.shortVersionWindows→ProductVersion 透传。"""
+    scripts = REPO_ROOT / "scripts" / "package"
+    ps_installer = (scripts / "build-installer.ps1").read_text(encoding="utf-8")
+
+    assert '"--config.buildVersion=$Version"' in ps_installer
+    assert '"--config.extraMetadata.shortVersionWindows=$Version"' in ps_installer
+    for sh_name in ("build-windows-electron-only.sh",):
+        sh_installer = (scripts / sh_name).read_text(encoding="utf-8")
+        assert '"--config.buildVersion=${VERSION}"' in sh_installer
+        assert '"--config.extraMetadata.shortVersionWindows=${VERSION}"' in sh_installer
+
+    acceptance = (scripts / "acceptance-windows.ps1").read_text(encoding="utf-8")
+    assert "6.exe版本" in acceptance
+    assert "Record '6.exe版本' 'FAIL'" in acceptance
 
 
 def test_desktop_package_includes_chat_voice_runtime() -> None:
@@ -280,6 +317,9 @@ def test_desktop_package_includes_commercial_safe_office_employee_runtimes() -> 
     workflow = (REPO_ROOT / ".github" / "workflows" / "release-desktop.yml").read_text(
         encoding="utf-8"
     )
+    workflow += (REPO_ROOT / "scripts/package/verify-macos-release-dmg.sh").read_text(
+        encoding="utf-8"
+    )
     employee_root = REPO_ROOT / "mods" / "_employees"
     employee_runtime = "\n".join(
         path.read_text(encoding="utf-8")
@@ -287,11 +327,45 @@ def test_desktop_package_includes_commercial_safe_office_employee_runtimes() -> 
         for path in (employee_root / employee_name / "backend").rglob("*.py")
     )
 
-    assert '"pypdf>=6.15,<7"' in pyproject
+    assert '"pypdf>=6.20.1,<7"' in pyproject
     assert '"reportlab>=5,<6"' in pyproject
     assert "PyMuPDF" not in pyproject
     assert "collect_submodules(module)" in spec
-    assert 'for module in ["docx", "openpyxl", "pptx", "xlsxwriter", "pypdf", "reportlab"]' in spec
+    required = {"docx", "openpyxl", "xlrd", "pptx", "xlsxwriter", "pypdf", "reportlab"}
+    collected = set()
+    for loop in ast.walk(ast.parse(spec)):
+        if not (
+            isinstance(loop, ast.For)
+            and isinstance(loop.target, ast.Name)
+            and isinstance(loop.iter, (ast.List, ast.Tuple, ast.Set))
+        ):
+            continue
+        for call in ast.walk(loop):
+            if not (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "hiddenimports"
+                and call.func.attr == "extend"
+                and len(call.args) == 1
+            ):
+                continue
+            collector = call.args[0]
+            if (
+                isinstance(collector, ast.Call)
+                and isinstance(collector.func, ast.Name)
+                and collector.func.id == "collect_submodules"
+                and len(collector.args) == 1
+                and isinstance(collector.args[0], ast.Name)
+                and collector.args[0].id == loop.target.id
+            ):
+                collected.update(
+                    item.value
+                    for item in loop.iter.elts
+                    if isinstance(item, ast.Constant) and isinstance(item.value, str)
+                )
+    assert required <= collected, f"Missing collected office runtimes: {required - collected}"
+    assert '"xlrd>=2.0.1"' in pyproject
     assert '"app.application.office_plaintext_generate"' in spec
     assert '"python-docx>=1.1.0"' in pyproject
     assert "openpyxl==3.1.5" in pyproject
@@ -331,16 +405,68 @@ def test_desktop_package_preserves_vendored_langgraph_provenance() -> None:
         assert f'"{module_name}"' in spec
 
 
+def test_windows_package_probes_real_elt_runtime_without_development_dependencies() -> None:
+    spec = (REPO_ROOT / "scripts/package/xcagi_backend.spec").read_text(encoding="utf-8")
+    assert 'collect_submodules("defusedxml", on_error="raise")' in spec
+    assert 'importlib.util.find_spec("defusedxml") is None' in spec
+    entrypoint = ast.parse((REPO_ROOT / "XCAGI/run_fastapi.py").read_text(encoding="utf-8"))
+    critical_probe = next(
+        node
+        for node in entrypoint.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_verify_frozen_critical_runtime"
+    )
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_verify_frozen_elt_runtime"
+        for node in ast.walk(critical_probe)
+    )
+    for filename in ("build-backend.ps1", "verify-windows-installed-runtime.ps1"):
+        script = (REPO_ROOT / "scripts/package" / filename).read_text(encoding="utf-8-sig")
+        assert "Start-Process -FilePath $backendExe" in script
+        assert "--verify-frozen-critical-runtime" in script
+        assert "-WorkingDirectory $probeDir -PassThru" in script
+        assert "$probe.WaitForExit(300000)" in script
+        assert "Stop-Process -Id $probe.Id -Force" in script
+        assert "$probe.WaitForExit(5000)" in script
+        assert "$probe.ExitCode -ne 0" in script
+    build = (REPO_ROOT / "scripts/package/build-backend.ps1").read_text(encoding="utf-8-sig")
+    assert 'pip install -c deploy/requirements-server-api.lock.txt -e ".[server-api]"' in build
+    assert build.index("PyInstaller --noconfirm") < build.index(
+        "Start-Process -FilePath $backendExe"
+    )
+    for phase in (
+        "frontend started",
+        "runtime dependency installation started",
+        "runtime dependency installation completed",
+        "PyInstaller started",
+        "PyInstaller completed",
+        "frozen runtime probe started",
+        "frozen runtime probe completed",
+    ):
+        assert phase in build
+    first_python = build.index("& python scripts/dev/mods_ssot.py check")
+    assert build.index("$env:PYTHONUTF8 = '1'") < first_python
+    assert build.index("$env:PYTHONIOENCODING = 'utf-8'") < first_python
+    cleanup = build.split("} finally {", 1)[1]
+    assert "data\\logs\\backend-bootstrap.log" in cleanup
+    assert cleanup.index("Get-Content -LiteralPath $probeLog") < cleanup.index(
+        "Remove-Item -LiteralPath $probeDir"
+    )
+
+
 def test_desktop_package_includes_and_probes_dynamic_xcmax_sync_appliers() -> None:
     spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
     entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
 
     for module_name in (
-        "app.services.xcmax_sync_basic_appliers",
-        "app.services.xcmax_sync_extended_appliers",
+        "app.domain.shared_services.xcmax_sync_basic_appliers",
+        "app.domain.shared_services.xcmax_sync_extended_appliers",
     ):
         assert f'"{module_name}"' in spec
-    assert "from app.services.xcmax_sync_service import _ENTITY_APPLIERS" in entrypoint
+    assert (
+        "from app.domain.shared_services.xcmax_sync_service import _ENTITY_APPLIERS" in entrypoint
+    )
     assert '"account_entitlements"' in entrypoint
     assert "missing_sync_appliers" in entrypoint
 
@@ -348,7 +474,7 @@ def test_desktop_package_includes_and_probes_dynamic_xcmax_sync_appliers() -> No
 def test_frozen_excel_temp_files_use_writable_app_data() -> None:
     modules = [
         REPO_ROOT / "app" / "application" / "excel_template_http_app_service.py",
-        REPO_ROOT / "app" / "fastapi_routes" / "excel_extract.py",
+        REPO_ROOT / "app" / "fastapi_routes" / "domains" / "excel" / "excel_extract.py",
     ]
 
     for path in modules:
@@ -385,7 +511,7 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     )
     notarize = (REPO_ROOT / "desktop" / "build" / "notarize.cjs").read_text(encoding="utf-8")
 
-    assert "xattr -cr desktop/node_modules/electron/dist" in installer
+    assert all(s in installer for s in ("electron/install.js", "xattr -cr"))
     assert '"--config.electronDist=node_modules/electron/dist"' in installer
     assert '"--config.directories.output=${package_stage}"' in installer
     assert 'for staged_file in "${package_stage}"/*' in installer
@@ -402,10 +528,9 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "scripts/package/create-mac-dmg.sh" in installer
     assert "hdiutil create" in dmg_builder
     assert "notarytool submit" in dmg_builder
-    assert "stapler staple" in dmg_builder
-    assert "Apply signing normalization to both the local dotenv path" in installer
+    assert "scripts/package/staple-macos-dmg.py" in dmg_builder
     assert installer.index('if [ -f "${MAC_SIGNING_ENV}" ]') < installer.index(
-        'if [ -n "${CSC_LINK:-}" ]'
+        'if [ -n "${CSC_KEYCHAIN:-}" ]'
     )
     assert "unset CSC_LINK" in installer
     assert "SKIP_DESKTOP_BUILD=1 but desktop/dist/main.js is missing" in installer
@@ -422,6 +547,12 @@ def test_desktop_staging_bundles_visible_office_employee_executors() -> None:
         assert "office_pack_catalog.json" in stage_script
         assert "_employees" in stage_script
         assert "Missing required Office employee pack" in stage_script
+        assert "bundled_employees" in stage_script
+    for manifest in (REPO_ROOT / "mods").glob("*/manifest.json"):
+        declared = json.loads(manifest.read_text(encoding="utf-8")).get("bundled_employees", [])
+        assert all((REPO_ROOT / "mods" / "_employees" / e).is_dir() for e in declared), manifest
+    cs = json.loads((REPO_ROOT / "mods/xcagi-customer-service-bridge/manifest.json").read_text())
+    assert cs["bundled_employees"] == ["user-customer-service-officer"]
 
 
 def test_frozen_backend_dispatches_multiprocessing_workers_before_cli() -> None:

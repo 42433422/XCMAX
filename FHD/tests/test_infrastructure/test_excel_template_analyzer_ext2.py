@@ -583,7 +583,6 @@ class TestExcelAnalyzerSkill:
 
     def test_execute_without_output_json(self, tmp_path):
         excel_path = tmp_path / "test.xlsx"
-        excel_path.write_bytes(b"fake")
 
         skill = ExcelAnalyzerSkill()
         with patch(
@@ -592,11 +591,10 @@ class TestExcelAnalyzerSkill:
         ) as mock_analyze:
             result = skill.execute(str(excel_path))
             assert result["success"] is True
-            mock_analyze.assert_called_once_with(str(excel_path), None)
+            mock_analyze.assert_called_once_with(str(excel_path), None, verbose=True)
 
     def test_execute_with_output_json(self, tmp_path):
         excel_path = tmp_path / "test.xlsx"
-        excel_path.write_bytes(b"fake")
         output_path = tmp_path / "out.json"
 
         skill = ExcelAnalyzerSkill()
@@ -610,7 +608,6 @@ class TestExcelAnalyzerSkill:
 
     def test_execute_with_sheet_name(self, tmp_path):
         excel_path = tmp_path / "test.xlsx"
-        excel_path.write_bytes(b"fake")
 
         skill = ExcelAnalyzerSkill()
         with patch(
@@ -619,7 +616,7 @@ class TestExcelAnalyzerSkill:
         ) as mock_analyze:
             result = skill.execute(str(excel_path), sheet_name="Sheet2")
             assert result["success"] is True
-            mock_analyze.assert_called_once_with(str(excel_path), "Sheet2")
+            mock_analyze.assert_called_once_with(str(excel_path), "Sheet2", verbose=True)
 
     def test_get_skill_info(self):
         skill = ExcelAnalyzerSkill()

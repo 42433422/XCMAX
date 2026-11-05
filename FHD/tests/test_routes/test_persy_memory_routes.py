@@ -2,16 +2,23 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application import dataset_rag_app_service as dataset_rag_module
 from app.application.dataset_rag_app_service import (
     DatasetAccessContext,
     DatasetRagApplicationService,
 )
 from app.application.persy_memory_app_service import PersyMemoryApplicationService
+from app.domain.shared_services.user_memory_service import UserMemoryService, UserMemoryStore
 from app.fastapi_routes.knowledge_v1 import router as knowledge_router
-from app.services.user_memory_service import UserMemoryService, UserMemoryStore
+
+
+@pytest.fixture(autouse=True)
+def _explicit_gateway_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XCAGI_TRUST_DATASET_ACCESS_HEADERS", "1")
 
 
 def _headers(*, actor: str = "7", tenant: str = "2", write: bool = True) -> dict[str, str]:
@@ -62,11 +69,12 @@ def test_persy_memory_routes_cover_review_query_graph_and_delete(tmp_path) -> No
     )
 
     with (
-        patch("app.fastapi_routes.knowledge_v1._persy_memory_service", return_value=memories),
         patch(
-            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-            return_value=datasets,
+            "app.fastapi_routes.knowledge_v1._persy_memory_service",
+            return_value=memories,
         ),
+        patch.dict("os.environ", {"DATASET_RAG_STORE_PATH": str(tmp_path / "datasets.json")}),
+        patch.object(dataset_rag_module, "_dataset_rag_app_service", None),
     ):
         pending = client.get(
             "/api/knowledge/v1/datasets/persy-knowledge/memories?status=pending",

@@ -44,7 +44,7 @@ from app.application.workflow.planner import (
     _execute_template_extract_tool,
     execute_tool,
 )
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1919,7 +1919,9 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.return_value = {"keyword": "ABC"}
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch(
+                "app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent
+            ):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -1960,7 +1962,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
             with patch(
-                "app.services.task_agent.TaskAgent",
+                "app.domain.shared_services.task_agent.TaskAgent",
                 side_effect=ImportError("no module"),
             ):
                 with patch(
@@ -2003,7 +2005,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
             with patch(
-                "app.services.task_agent.TaskAgent",
+                "app.domain.shared_services.task_agent.TaskAgent",
                 side_effect=RuntimeError("init fail"),
             ):
                 with patch(
@@ -2045,7 +2047,9 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         mock_task_agent = MagicMock()
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch(
+                "app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent
+            ):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2085,7 +2089,9 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         mock_task_agent = MagicMock()
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch(
+                "app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent
+            ):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2297,7 +2303,9 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.side_effect = ImportError("no module")
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch(
+                "app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent
+            ):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2338,7 +2346,9 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.side_effect = RuntimeError("fail")
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch(
+                "app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent
+            ):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2379,7 +2389,9 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.return_value = "not a dict"
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch(
+                "app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent
+            ):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2445,13 +2457,13 @@ class TestPlanWithReactMultiagentProbeOutputs:
             ],
         }
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, invalid_final]):
-            with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+            with patch("app.application.workflow.planner.request_planner_completion") as completion:
                 resp = MagicMock()
                 resp.status_code = 200
                 resp.json.return_value = {
                     "choices": [{"message": {"content": json.dumps(repaired_payload)}}]
                 }
-                mock_client.return_value.post.return_value = resp
+                completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool",
                     return_value={"success": True, "data": []},
@@ -2502,13 +2514,13 @@ class TestPlanWithReactMultiagentProbeOutputs:
             ],
         }
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, invalid_final]):
-            with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+            with patch("app.application.workflow.planner.request_planner_completion") as completion:
                 resp = MagicMock()
                 resp.status_code = 200
                 resp.json.return_value = {
                     "choices": [{"message": {"content": json.dumps(bad_repaired_payload)}}]
                 }
-                mock_client.return_value.post.return_value = resp
+                completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool",
                     return_value={"success": True, "data": []},
@@ -2576,11 +2588,11 @@ class TestCriticRepairWithLLMAdditional:
                 },
             },
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2599,11 +2611,11 @@ class TestCriticRepairWithLLMAdditional:
         reg = {
             "tool": {"description": "d", "actions": None},
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2625,11 +2637,11 @@ class TestCriticRepairWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2654,11 +2666,11 @@ class TestCriticRepairWithLLMAdditional:
                 }
             ],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2682,11 +2694,11 @@ class TestCriticRepairWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2708,11 +2720,11 @@ class TestCriticRepairWithLLMAdditional:
             "todo_steps": [],
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2734,11 +2746,11 @@ class TestCriticRepairWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2762,11 +2774,11 @@ class TestCriticRepairWithLLMAdditional:
             "nodes": [],
         }
         content = f"```\n{json.dumps(payload)}\n```"
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": content}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2783,11 +2795,11 @@ class TestCriticRepairWithLLMAdditional:
         """空 choices 列表返回 None。"""
         planner = _make_planner_with_fence()
         invalid_plan = PlanGraph(plan_id="pid", intent="i", nodes=[])
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": []}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._critic_repair_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2827,10 +2839,10 @@ class TestPlanWithLLMAdditional:
     def test_http_error_returns_none(self) -> None:
         """HTTP 错误时返回 None。"""
         planner = _make_planner()
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 500
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2852,11 +2864,11 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2878,11 +2890,11 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2909,11 +2921,11 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2933,11 +2945,11 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2956,11 +2968,11 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -2980,11 +2992,11 @@ class TestPlanWithLLMAdditional:
             "risk_level": "low",
             "nodes": [],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -3015,11 +3027,11 @@ class TestPlanWithLLMAdditional:
                 }
             ],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -3064,11 +3076,11 @@ class TestPlanWithLLMAdditional:
                 },
             ],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -3100,11 +3112,11 @@ class TestPlanWithLLMAdditional:
                 },
             ],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -3136,11 +3148,11 @@ class TestPlanWithLLMAdditional:
                 },
             ],
         }
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -3161,11 +3173,11 @@ class TestPlanWithLLMAdditional:
             "nodes": [],
         }
         # 传入非 dict context（如 None），isinstance 检查跳过提取
-        with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
+        with patch("app.application.workflow.planner.request_planner_completion") as completion:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-            mock_client.return_value.post.return_value = resp
+            completion.side_effect = lambda **_: resp.json() if resp.status_code < 400 else None
             result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
@@ -3263,17 +3275,18 @@ class TestFallbackPlanAdditional:
         assert not any(n.tool_id == "customers" for n in result.nodes)
 
     def test_default_fallback_to_customers_when_no_products(self) -> None:
-        """无 products 工具时回退查询客户。"""
+        """命中 customers 意图时按 tool_key 路由到 customers.query。"""
         planner = _make_planner()
         reg = {"customers": _sample_registry()["customers"]}
-        result = planner._fallback_plan("pid", "随便看看", reg)
+        result = planner._fallback_plan("pid", "客户列表", reg)
         assert any(n.tool_id == "customers" for n in result.nodes)
 
     def test_default_fallback_empty_registry(self) -> None:
-        """空注册表时返回空节点图。"""
+        """空注册表且意图未命中时返回 clarify 节点。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "随便看看", {})
-        assert len(result.nodes) == 0
+        assert len(result.nodes) == 1
+        assert result.nodes[0].tool_id == "clarify"
         assert result.risk_level == "low"
 
     def test_employee_keyword_english(self) -> None:
@@ -3519,7 +3532,7 @@ class TestPlanIntegrationAdditional:
             ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
-                        "app.services.user_memory_service.get_user_memory_service",
+                        "app.domain.shared_services.user_memory_service.get_user_memory_service",
                         return_value=mock_memory,
                     ):
                         result = planner.plan(
@@ -3552,7 +3565,7 @@ class TestPlanIntegrationAdditional:
             ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
-                        "app.services.user_memory_service.get_user_memory_service",
+                        "app.domain.shared_services.user_memory_service.get_user_memory_service",
                         return_value=mock_memory,
                     ):
                         result = planner.plan(

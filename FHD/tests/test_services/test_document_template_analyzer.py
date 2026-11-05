@@ -12,7 +12,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from app.services.document_templates.analyzer import (
+from app.domain.shared_services.document_templates.analyzer import (
     _cleanup_progress_tracking,
     _collect_docx_part_text,
     _extract_word_placeholder_fields,
@@ -265,8 +265,6 @@ class TestExtractWordPlaceholderFields:
 
 
 class TestAnalyzeTemplateWithUpload:
-    """测试模板分析主入口。"""
-
     def test_no_file_returns_400(self):
         result = analyze_template_with_upload(None, "test")
         assert result.status_code == 400
@@ -274,57 +272,58 @@ class TestAnalyzeTemplateWithUpload:
         assert data["success"] is False
 
     def test_empty_filename_returns_400(self):
-        mock_file = MagicMock()
-        mock_file.filename = ""
+        mock_file = MagicMock(filename="")
         result = analyze_template_with_upload(mock_file, "test")
         assert result.status_code == 400
 
     def test_unsupported_file_type_returns_400(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.pdf"
-        mock_file.save = MagicMock()
+        mock_file = MagicMock(filename="test.pdf")
         result = analyze_template_with_upload(mock_file, "test")
         assert result.status_code == 400
 
-    def test_excel_file_routes_to_excel_analyzer(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.xlsx"
-        mock_file.save = MagicMock()
+    def test_excel_file_routes_to_excel_analyzer(self, tmp_path, monkeypatch):
+        bundle = tmp_path / "readonly-bundle"
+        bundle.write_text("cannot create directories inside this file")
+        monkeypatch.setattr(
+            "app.domain.shared_services.document_templates.analyzer.__file__",
+            str(bundle / "services" / "document_templates" / "analyzer.py"),
+        )
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "user-data"))
+        mock_file = MagicMock(filename="test.xlsx")
 
         with patch(
-            "app.services.document_templates.analyzer._analyze_excel_template"
+            "app.domain.shared_services.document_templates.analyzer._analyze_excel_template"
         ) as mock_analyze:
             mock_analyze.return_value = _j({"success": True, "template_type": "excel"})
             result = analyze_template_with_upload(mock_file, "test")
+            assert result.status_code == 200
+            assert mock_file.save.call_args.args[0].startswith(
+                str(tmp_path / "user-data" / "uploads" / "templates")
+            )
             mock_analyze.assert_called_once()
 
     def test_docx_file_routes_to_word_analyzer(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.docx"
-        mock_file.save = MagicMock()
+        mock_file = MagicMock(filename="test.docx")
 
         with patch(
-            "app.services.document_templates.analyzer._analyze_word_template"
+            "app.domain.shared_services.document_templates.analyzer._analyze_word_template"
         ) as mock_analyze:
             mock_analyze.return_value = _j({"success": True, "template_type": "word"})
             result = analyze_template_with_upload(mock_file, "test")
             mock_analyze.assert_called_once()
 
     def test_image_file_routes_to_label_analyzer(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.png"
-        mock_file.save = MagicMock()
+        mock_file = MagicMock(filename="test.png")
 
         with patch(
-            "app.services.document_templates.analyzer._analyze_label_template"
+            "app.domain.shared_services.document_templates.analyzer._analyze_label_template"
         ) as mock_analyze:
             mock_analyze.return_value = _j({"success": True, "template_type": "label"})
             result = analyze_template_with_upload(mock_file, "test")
             mock_analyze.assert_called_once()
 
     def test_recoverable_error_returns_500(self, tmp_path):
-        mock_file = MagicMock()
-        mock_file.filename = "test.xlsx"
+        mock_file = MagicMock(filename="test.xlsx")
         mock_file.save = MagicMock(side_effect=OSError("disk error"))
 
         result = analyze_template_with_upload(mock_file, "test")
@@ -351,7 +350,7 @@ class TestAnalyzeWordTemplate:
     def test_no_placeholders_returns_400(self, tmp_path):
         docx_path = self._create_docx("Just plain text", tmp_path)
 
-        from app.services.document_templates.analyzer import _analyze_word_template
+        from app.domain.shared_services.document_templates.analyzer import _analyze_word_template
 
         result = _analyze_word_template(docx_path, "test", "plain.docx", "task-1")
         assert result.status_code == 400
@@ -361,10 +360,10 @@ class TestAnalyzeWordTemplate:
     def test_with_placeholders_returns_success(self, tmp_path):
         docx_path = self._create_docx("Dear {{name}}, price is ${{amount}}", tmp_path)
 
-        from app.services.document_templates.analyzer import _analyze_word_template
+        from app.domain.shared_services.document_templates.analyzer import _analyze_word_template
 
         with patch(
-            "app.services.document_templates.analyzer._validate_required_terms",
+            "app.domain.shared_services.document_templates.analyzer._validate_required_terms",
             return_value=(True, []),
         ):
             result = _analyze_word_template(docx_path, "test", "template.docx", "task-2")
@@ -377,7 +376,7 @@ class TestAnalyzeWordTemplate:
     def test_missing_required_terms_returns_400(self, tmp_path):
         docx_path = self._create_docx("{{name}}", tmp_path)
 
-        from app.services.document_templates.analyzer import _analyze_word_template
+        from app.domain.shared_services.document_templates.analyzer import _analyze_word_template
 
         with patch(
             "app.application.office_template_analyze_handlers._validate_required_terms",
@@ -393,10 +392,10 @@ class TestAnalyzeWordTemplate:
     def test_template_name_fallback_to_filename(self, tmp_path):
         docx_path = self._create_docx("{{name}}", tmp_path)
 
-        from app.services.document_templates.analyzer import _analyze_word_template
+        from app.domain.shared_services.document_templates.analyzer import _analyze_word_template
 
         with patch(
-            "app.services.document_templates.analyzer._validate_required_terms",
+            "app.domain.shared_services.document_templates.analyzer._validate_required_terms",
             return_value=(True, []),
         ):
             result = _analyze_word_template(docx_path, "", "my_template.docx", "task-4")
@@ -410,7 +409,7 @@ class TestAnalyzeExcelTemplate:
     """测试 Excel 模板分析。"""
 
     def test_excel_analysis_failure_returns_500(self, tmp_path):
-        from app.services.document_templates.analyzer import _analyze_excel_template
+        from app.domain.shared_services.document_templates.analyzer import _analyze_excel_template
 
         mock_skill_instance = MagicMock()
         mock_skill_instance.execute.return_value = {"success": False, "error": "parse error"}
@@ -431,7 +430,7 @@ class TestAnalyzeExcelTemplate:
         assert result.status_code == 500
 
     def test_excel_analysis_success(self, tmp_path):
-        from app.services.document_templates.analyzer import _analyze_excel_template
+        from app.domain.shared_services.document_templates.analyzer import _analyze_excel_template
 
         mock_skill_instance = MagicMock()
         mock_skill_instance.execute.return_value = {
@@ -452,7 +451,7 @@ class TestAnalyzeExcelTemplate:
             },
         ):
             with patch(
-                "app.services.document_templates.analyzer._extract_structured_excel_preview",
+                "app.domain.shared_services.document_templates.analyzer._extract_structured_excel_preview",
                 return_value={
                     "fields": [{"label": "产品名称", "value": "", "type": "dynamic"}],
                     "sample_rows": [],
@@ -460,11 +459,11 @@ class TestAnalyzeExcelTemplate:
                 },
             ):
                 with patch(
-                    "app.services.document_templates.analyzer._extract_excel_grid_preview",
+                    "app.domain.shared_services.document_templates.analyzer._extract_excel_grid_preview",
                     return_value={},
                 ):
                     with patch(
-                        "app.services.document_templates.analyzer._validate_required_terms",
+                        "app.domain.shared_services.document_templates.analyzer._validate_required_terms",
                         return_value=(True, []),
                     ):
                         result = _analyze_excel_template(
@@ -480,7 +479,7 @@ class TestAnalyzeLabelTemplate:
     """测试标签模板分析。"""
 
     def test_label_analysis_failure_returns_500(self, tmp_path):
-        from app.services.document_templates.analyzer import _analyze_label_template
+        from app.domain.shared_services.document_templates.analyzer import _analyze_label_template
 
         mock_skill_instance = MagicMock()
         mock_skill_instance.execute.return_value = {"success": False, "error": "OCR failed"}
@@ -502,7 +501,7 @@ class TestAnalyzeLabelTemplate:
         assert result.status_code == 500
 
     def test_label_analysis_success_with_fields(self, tmp_path):
-        from app.services.document_templates.analyzer import _analyze_label_template
+        from app.domain.shared_services.document_templates.analyzer import _analyze_label_template
 
         mock_skill_instance = MagicMock()
         mock_skill_instance.execute.return_value = {
@@ -543,7 +542,7 @@ class TestAnalyzeLabelTemplate:
         assert len(data["fields"]) >= 1
 
     def test_label_analysis_no_ocr_fields_uses_defaults(self, tmp_path):
-        from app.services.document_templates.analyzer import _analyze_label_template
+        from app.domain.shared_services.document_templates.analyzer import _analyze_label_template
 
         mock_skill_instance = MagicMock()
         mock_skill_instance.execute.return_value = {

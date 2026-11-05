@@ -1,0 +1,8 @@
+[15:16:48] feature=erp-shipment platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-shipment
+[15:17:01] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:17:02] case SH1: passed - 真实发布发货单创建事件
+[15:17:03] case SH2: passed - 出货记录与单位真实读回
+[15:17:03] case SH3: passed - 出货管理员工状态真实读取
+[15:17:04] case SH4: passed - 缺 unit_name 422 · 旧接口 403（负例）
+[15:17:04] video: erp-shipment-web-20260929-151648.webm (1184955 bytes)
+[15:17:04] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-shipment/log/erp-shipment-web-20260929-151648.log

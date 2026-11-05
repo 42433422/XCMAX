@@ -1,0 +1,191 @@
+{
+  "run": "36755955078-1",
+  "started_at": "2026-09-30T18:09:03.438Z",
+  "marker": "WIN-GUI-36755955078-1",
+  "names": {
+    "customer": "WIN-GUI-36755955078-1-客户",
+    "product": "WIN-GUI-36755955078-1-产品",
+    "supplier": "WIN-GUI-36755955078-1-供应商",
+    "ai": "WIN-GUI-36755955078-1-AI客户"
+  },
+  "cases": [
+    {
+      "id": "normal_login",
+      "started_at": "2026-09-30T18:09:03.508Z",
+      "input": {
+        "customer": "WIN-GUI-36755955078-1-客户",
+        "product": "WIN-GUI-36755955078-1-产品",
+        "supplier": "WIN-GUI-36755955078-1-供应商",
+        "ai": "WIN-GUI-36755955078-1-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23"
+      },
+      "finished_at": "2026-09-30T18:09:22.809Z"
+    },
+    {
+      "id": "tenant_identity",
+      "started_at": "2026-09-30T18:09:22.809Z",
+      "input": {
+        "customer": "WIN-GUI-36755955078-1-客户",
+        "product": "WIN-GUI-36755955078-1-产品",
+        "supplier": "WIN-GUI-36755955078-1-供应商",
+        "ai": "WIN-GUI-36755955078-1-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "status": 200,
+        "account_kind": "enterprise",
+        "tenant_id": 1,
+        "account_sha256": "9060eb04a9d3a08126c59a5ce771291cf94bea2c064ff163331d4d5034771e23"
+      },
+      "finished_at": "2026-09-30T18:09:23.029Z"
+    },
+    {
+      "id": "customer",
+      "started_at": "2026-09-30T18:09:23.029Z",
+      "input": {
+        "customer": "WIN-GUI-36755955078-1-客户",
+        "product": "WIN-GUI-36755955078-1-产品",
+        "supplier": "WIN-GUI-36755955078-1-供应商",
+        "ai": "WIN-GUI-36755955078-1-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "customer_name": "WIN-GUI-36755955078-1-客户",
+          "contact_person": "验收员",
+          "contact_phone": "13800000001",
+          "contact_address": "WIN-GUI-36755955078-1隔离验收地址",
+          "created_at": "2026-09-30T18:09:26",
+          "updated_at": "2026-09-30T18:09:26"
+        }
+      },
+      "finished_at": "2026-09-30T18:09:28.138Z"
+    },
+    {
+      "id": "product",
+      "started_at": "2026-09-30T18:09:28.138Z",
+      "input": {
+        "customer": "WIN-GUI-36755955078-1-客户",
+        "product": "WIN-GUI-36755955078-1-产品",
+        "supplier": "WIN-GUI-36755955078-1-供应商",
+        "ai": "WIN-GUI-36755955078-1-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1
+        }
+      },
+      "finished_at": "2026-09-30T18:09:35.180Z"
+    },
+    {
+      "id": "purchase",
+      "started_at": "2026-09-30T18:09:35.180Z",
+      "input": {
+        "customer": "WIN-GUI-36755955078-1-客户",
+        "product": "WIN-GUI-36755955078-1-产品",
+        "supplier": "WIN-GUI-36755955078-1-供应商",
+        "ai": "WIN-GUI-36755955078-1-AI客户"
+      },
+      "status": "passed",
+      "actual": {
+        "endpoint": "/api/purchase/orders",
+        "status": 200,
+        "id": 1,
+        "fields": {
+          "id": 1,
+          "order_no": "PO20260930180937",
+          "supplier_id": 1,
+          "warehouse_id": null,
+          "order_date": "2026-09-30",
+          "delivery_date": null,
+          "total_amount": 125,
+          "paid_amount": 0,
+          "status": "draft",
+          "approver": null,
+          "approve_date": null,
+          "remark": "WIN-GUI-36755955078-1",
+          "created_at": "2026-09-30 18:09:37.869268",
+          "updated_at": "2026-09-30 18:09:37.869268",
+          "tenant_id": 1
+        }
+      },
+      "finished_at": "2026-09-30T18:09:39.681Z"
+    },
+    {
+      "id": "purchase_inbound",
+      "started_at": "2026-09-30T18:09:39.681Z",
+      "input": {
+        "customer": "WIN-GUI-36755955078-1-客户",
+        "product": "WIN-GUI-36755955078-1-产品",
+        "supplier": "WIN-GUI-36755955078-1-供应商",
+        "ai": "WIN-GUI-36755955078-1-AI客户"
+      },
+      "status": "failed",
+      "error": "page.waitForResponse: Timeout 30000ms exceeded while waiting for event \"response\"\n    at save (D:\\a\\XCMAX\\XCMAX\\FHD\\scripts\\dev\\record_enterprise_desktop_init.mjs:67:24)\n    at D:\\a\\XCMAX\\XCMAX\\FHD\\scripts\\dev\\record_enterprise_desktop_init.mjs:162:25\n    at async step (D:\\a\\XCMAX\\XCMAX\\FHD\\scripts\\dev\\record_enterprise_desktop_init.mjs:24:21)\n    at async main (D:\\a\\XCMAX\\XCMAX\\FHD\\scripts\\dev\\record_enterprise_desktop_init.mjs:151:3)\n    at async file:///D:/a/XCMAX/XCMAX/FHD/scripts/dev/record_enterprise_desktop_init.mjs:224:7",
+      "finished_at": "2026-09-30T18:10:10.673Z"
+    }
+  ],
+  "observations": [
+    {
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/customers",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T18:09:26.919Z"
+    },
+    {
+      "endpoint": "/api/mod/xcagi-erp-domain-bridge/products/add",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T18:09:32.958Z"
+    },
+    {
+      "endpoint": "/api/purchase/suppliers",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T18:09:36.881Z"
+    },
+    {
+      "endpoint": "/api/purchase/orders",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T18:09:38.022Z"
+    },
+    {
+      "endpoint": "/api/purchase/orders/1/approve",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T18:09:39.293Z"
+    },
+    {
+      "endpoint": "/api/inventory/warehouses",
+      "method": "POST",
+      "status": 200,
+      "observed_at": "2026-09-30T18:09:40.473Z"
+    }
+  ],
+  "result": "failed",
+  "failure": "page.waitForResponse: Timeout 30000ms exceeded while waiting for event \"response\"",
+  "finished_at": "2026-09-30T18:10:10.673Z",
+  "unfinished": [
+    "purchase_inbound",
+    "sales_order",
+    "shipping_delivery_export",
+    "ui_readback",
+    "ai_business"
+  ],
+  "full_customer_acceptance": "not_verified"
+}

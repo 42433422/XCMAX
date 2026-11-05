@@ -1,0 +1,11 @@
+{
+  "at": "2026-09-12T17:49:01.324Z",
+  "source": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml",
+  "installedApp": "/Applications/XCAGI.app",
+  "keySource": "app.asar/dist/desktop-config.js",
+  "publicKeySha256": "942bd7d5458158ff502b6bf4484332af1fa22680aabecf137e5c68458f8df71e",
+  "signatureValid": true,
+  "productVersion": "1.0.0.1",
+  "buildSha": "99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+  "otaCompleted": false
+}

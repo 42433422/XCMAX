@@ -1,0 +1,18 @@
+{
+  "recorded_at": "2026-10-01T11:01:31.8394178+00:00",
+  "release_sha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+  "installer_sha256": "f7c5eb4a006267634e758b1abe0af20b6a6cb6643cd8964a4f6f928f340b7733",
+  "installer_size": 250135221,
+  "installer_path": "C:\\xcagi-delivery-closeout\\candidate-91c73f2c-36850651269\\XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+  "build_run": 36850651269,
+  "build_info": {
+    "version": "1.0.0.5",
+    "gitSha": "91c73f2c576799f42c6d8600871d4bd497f9669a",
+    "releaseId": "xcagi-1.0.0.5-91c73f2c576799f42c6d8600871d4bd497f9669a",
+    "schema_version": 1
+  },
+  "signature_status": "NotSigned",
+  "stable_ota": false,
+  "customer_acceptance": "not_verified",
+  "mods_version": "1.0.0.4"
+}

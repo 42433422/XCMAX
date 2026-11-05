@@ -2,14 +2,17 @@ param(
   [Parameter(Mandatory = $true)]
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku,
-  [string]$UnpackedInternalDir = ''
+  [string]$UnpackedInternalDir = '',
+  [string]$Version = ''
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 
 if (-not $UnpackedInternalDir) {
-  $ver = '1.0.0.0'
+  $ver = $Version
   if ($env:XCAGI_VERIFY_VERSION) { $ver = $env:XCAGI_VERIFY_VERSION }
   $UnpackedInternalDir = Join-Path $Root "release\xcagi-v$ver\$ProductSku\win-unpacked\resources\backend\_internal"
 }

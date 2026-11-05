@@ -69,6 +69,23 @@ describe('workspacePrefsApi', () => {
     expect(localStorage.getItem('xcagi_product_flow_completed')).toBe('1')
   })
 
+  it('hydrateWorkspacePrefsFromServer completes when prefs data is empty and owner_id is null', async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, owner_id: null, data: {} }),
+    } as Response)
+    await expect(hydrateWorkspacePrefsFromServer()).resolves.toEqual({})
+  })
+
+  it('does not write prefs when the owning scope changed before response', async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, owner_id: 'u1', data: { product_flow_completed: true } }),
+    } as Response)
+    await hydrateWorkspacePrefsFromServer('tenant:10', () => false)
+    expect(localStorage.getItem('xcagi_product_flow_completed:tenant:10')).toBeNull()
+  })
+
   it('hydrateWorkspacePrefsFromServer returns null on failure', async () => {
     vi.mocked(apiFetch).mockRejectedValue(new Error('offline'))
     await expect(hydrateWorkspacePrefsFromServer()).resolves.toBeNull()

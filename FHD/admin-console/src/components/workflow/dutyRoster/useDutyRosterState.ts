@@ -15,6 +15,8 @@ import type { EmployeeCapabilityView } from '@host/domain/butlerEmployeeProfile'
 import type { ClientWorkshop } from '@host/domain/clientWorkshops'
 import { providerRowHasUsableKey } from '@host/domain/llm/providerCredential'
 import type { LlmProviderStatus } from '@host/domain/llm/types'
+import type { DutyRosterLoopStatus } from '@host/composables/useDutyRosterLoopStatus'
+import { ALL_PLANNED_YUANGON_PKG_IDS } from '@host/domain/yuangonDutyRoster'
 import { parseViewModeFromQuery, isDutyGraphMember, ALL_AREAS, AREA_COLORS, isVirtualEmployee } from './dutyRosterConstants'
 
 export function useDutyRosterState(route: RouteLocationNormalizedLoaded) {
@@ -36,6 +38,8 @@ function empAreaColor(id: string): string {
 function isDeployedDutyRosterRow(e: EmpRow): boolean {
   return (
     !isVirtualEmployee(e.id)
+    && rosterHealth.value?.localKnown === true && rosterHealth.value.catalogKnown
+    && rosterHealth.value.plannedCount === ALL_PLANNED_YUANGON_PKG_IDS.size
     && e.source === 'catalog'
     && !missingLocalPackIds.value.has(e.id)
   )
@@ -90,6 +94,7 @@ function capabilityLabel(id: string): string {
 const employees  = ref<EmpRow[]>([])
 /** 编制内但未安装到本机 mods/_employees 的 pkg_id（与 missing_employees/catalog 缺岗区分） */
 const missingLocalPackIds = ref<Set<string>>(new Set())
+const rosterHealth = ref<DutyRosterLoopStatus | null>(null)
 const healthMap  = ref<Record<string, HealthSt>>({})
 const depsMap    = ref<Record<string, string[]>>({})
 const loading    = ref(false)
@@ -201,6 +206,7 @@ const onDutyEmployees = computed<EmpRow[]>(() =>
   return {
     employees,
     missingLocalPackIds,
+    rosterHealth,
     healthMap,
     depsMap,
     loading,

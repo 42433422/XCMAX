@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 from contextlib import closing
@@ -66,6 +67,25 @@ def initialize_roster_once(employees: list[dict]) -> bool:
         staging.unlink(missing_ok=True)
 
 
+def ordered_employee_rows(conn, owner: str):
+    """Stable owner-local IDs; unranked new employees append in creation order."""
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE name='attendance_employee_order'"
+    ).fetchone()
+    query = (
+        "SELECT e.* FROM attendance_employees e LEFT JOIN attendance_employee_order o "
+        "ON o.employee_id=e.id AND o.owner_user_id=e.owner_user_id "
+        "WHERE e.owner_user_id=? ORDER BY o.rank IS NULL, o.rank, e.id"
+        if exists
+        else "SELECT * FROM attendance_employees WHERE owner_user_id=? ORDER BY id"
+    )
+    return conn.execute(query, (owner,)).fetchall()
+
+
+def order_revision(rows) -> str:
+    return hashlib.sha256(",".join(str(row["id"]) for row in rows).encode()).hexdigest()
+
+
 def attendance_roster_state(request=None) -> tuple[bool, list[tuple[str, str, str]]]:
     """Use the current main roster with explicit ownership, then an isolated private seed."""
     if request is not None:
@@ -80,12 +100,11 @@ def attendance_roster_state(request=None) -> tuple[bool, list[tuple[str, str, st
                     row[1] for row in conn.execute("PRAGMA table_info(attendance_employees)")
                 }
                 if {"id", "employee_name", "department", "position", "owner_user_id"} <= columns:
-                    rows = conn.execute(
-                        "SELECT department, position, employee_name FROM attendance_employees "
-                        "WHERE owner_user_id = ? AND TRIM(employee_name) <> '' ORDER BY id",
-                        (username,),
-                    ).fetchall()
-                    return True, _unique_roster(rows)
+                    conn.row_factory = sqlite3.Row
+                    rows = ordered_employee_rows(conn, username)
+                    return True, _roster(
+                        (r["department"], r["position"], r["employee_name"]) for r in rows
+                    )
     path = attendance_database_path()
     if not path.is_file():
         return False, []
@@ -97,19 +116,16 @@ def attendance_roster_state(request=None) -> tuple[bool, list[tuple[str, str, st
             "SELECT department, position, employee_name FROM attendance_employees "
             "WHERE TRIM(employee_name) <> '' ORDER BY id"
         ).fetchall()
-    return True, _unique_roster(rows)
+    return True, _roster(rows)
 
 
 def read_attendance_roster(request=None) -> list[tuple[str, str, str]]:
     return attendance_roster_state(request)[1]
 
 
-def _unique_roster(rows) -> list[tuple[str, str, str]]:
-    seen: set[str] = set()
-    result: list[tuple[str, str, str]] = []
-    for department, position, name in rows:
-        name = str(name or "").strip()
-        if name and name not in seen:
-            seen.add(name)
-            result.append((str(department or ""), str(position or ""), name))
-    return result
+def _roster(rows) -> list[tuple[str, str, str]]:
+    return [
+        (str(dept or ""), str(position or ""), str(name).strip())
+        for dept, position, name in rows
+        if str(name or "").strip()
+    ]

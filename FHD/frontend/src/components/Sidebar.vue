@@ -76,12 +76,16 @@
           <button
             type="button"
             class="runtime-health-button"
-            :title="runtimeHealth.detail"
-            :aria-label="`${runtimeHealth.text}，打开系统设置`"
+            :title="`${runtimeHealth.detail}；${runtimeHealthCheck.title}`"
+            :aria-label="`${runtimeHealth.text}，${runtimeHealthCheck.text}，打开系统设置`"
             @click="selectView(settingsMenuItem.key)"
           >
             <span class="status-dot" :class="runtimeHealth.tone" aria-hidden="true"></span>
-            <span role="status">{{ runtimeHealth.text }}</span>
+            <span class="runtime-health-labels">
+              <span role="status">{{ runtimeHealth.text }}</span>
+              <time v-if="runtimeHealthCheck.iso" :datetime="runtimeHealthCheck.iso">{{ runtimeHealthCheck.text }}</time>
+              <span v-else class="runtime-health-unchecked">{{ runtimeHealthCheck.text }}</span>
+            </span>
           </button>
           <DesktopAppUpdatePrompt />
           <span
@@ -124,6 +128,7 @@
  * Facade：侧边栏装配入口（实现拆分至 sidebar/ 子模块与 Sidebar.css，行为与拆分前一致）。
  */
 import { TransitionGroup, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
 import { useSidebarLayoutStore } from '@/stores/sidebarLayout'
 import { useModsStore } from '@/stores/mods'
@@ -138,6 +143,7 @@ import { useSidebarAppVersion } from './sidebar/useSidebarAppVersion'
 import { useSidebarAdminDeployStatus } from './sidebar/useSidebarAdminDeployStatus'
 import { useSidebarEntitlementSync } from './sidebar/useSidebarEntitlementSync'
 import { useSidebarMenuReorder } from './sidebar/useSidebarMenuReorder'
+import { prefetchShellRouteChunks } from '@/utils/shellRoutePrefetch'
 
 const { imUnreadTotal } = useImUnreadBadge()
 
@@ -149,6 +155,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['change-view'])
+const router = useRouter()
 
 const industryStore = useIndustryStore()
 const sidebarLayoutStore = useSidebarLayoutStore()
@@ -173,7 +180,7 @@ const {
   syncAdminDeployStatusPolling,
 } = useSidebarAdminDeployStatus()
 
-const { sidebarAppVersionText, sidebarAppVersionTitle, runtimeHealth, startHealthPolling, stopHealthPolling } = useSidebarAppVersion({
+const { sidebarAppVersionText, sidebarAppVersionTitle, runtimeHealth, runtimeHealthCheck, startHealthPolling, stopHealthPolling } = useSidebarAppVersion({
   shouldShowAdminDeployStatus,
 })
 
@@ -293,6 +300,7 @@ function onMenuItemKeydown(event, key) {
 }
 
 onMounted(async () => {
+  prefetchShellRouteChunks(router)
   startHealthPolling()
   window.addEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
   sidebarLayoutStore.initialize(sidebarLayoutSeedKeys())

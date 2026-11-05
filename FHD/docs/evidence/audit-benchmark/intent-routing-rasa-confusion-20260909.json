@@ -1,0 +1,12 @@
+{
+ "chitchat->chitchat": 3,
+ "erp_reversal->erp_reversal": 4,
+ "erp_reversal->stock_outbound": 1,
+ "order_create->order_create": 4,
+ "order_create->out_of_scope": 1,
+ "out_of_scope->out_of_scope": 3,
+ "payment_receive->payment_receive": 5,
+ "refund->refund": 5,
+ "stock_outbound->stock_outbound": 5,
+ "system_config->system_config": 5
+}

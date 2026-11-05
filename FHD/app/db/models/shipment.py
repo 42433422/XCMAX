@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from sqlalchemy import DateTime, Float, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 if TYPE_CHECKING:

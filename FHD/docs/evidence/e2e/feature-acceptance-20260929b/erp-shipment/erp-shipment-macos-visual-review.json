@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-shipment",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "7d269780e242caa7bf5033a58fc73e4a22f069f01d399eb87d58a39f1f37f7ef",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。failed。出货记录管理。未选择购买单位，表内暂无数据。 未通过明细：M2 failed：HTTP 200 154ms；{\"success\": true, \"data\": [], \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\"}；M3 failed：未在 /mod/xcagi-erp-domain-bridge/shipment-records 页面看到「MAC验收0929出货客户」；上下文：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-shipment/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-shipment/macos/result.png"
+}

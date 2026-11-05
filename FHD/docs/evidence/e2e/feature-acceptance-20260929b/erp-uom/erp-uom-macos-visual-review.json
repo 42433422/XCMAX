@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-uom",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "a26a9b7b7686badaeadef2f96da011d2ff6dcfa3be099b8b99ed62d2f8f53fc4",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-uom/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-uom/macos/result.png"
+}

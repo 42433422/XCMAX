@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.services import unified_intent_recognizer as uir_mod
-from app.domain.services.unified_intent_recognizer import UnifiedIntentRecognizer
+from app.domain.conversation import unified_intent_recognizer as uir_mod
+from app.domain.conversation.unified_intent_recognizer import UnifiedIntentRecognizer
 
 
 @pytest.fixture()

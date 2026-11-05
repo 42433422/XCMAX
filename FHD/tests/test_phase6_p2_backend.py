@@ -1,18 +1,5 @@
 # mypy: disable-error-code="arg-type, attr-defined, method-assign"
-"""COVERAGE_RAMP Phase 6 round 2: approval_gated_engine + ai_intent routes.
-
-Targets:
-- ``app.application.workflow.approval_gated_engine`` (~33.1% line coverage)
-- ``app.fastapi_routes.ai_intent`` (~27.1% line coverage)
-
-Strategy:
-- ApprovalGatedEngine: 用 MagicMock 替换 WorkflowEngine / ApprovalService,
-  构造真实 PlanGraph + HybridRiskGate,覆盖 auto / interactive / reject 三种策略
-  以及 ``to_dict`` / ``build_gated_evidence`` / ``_summarize_output`` 各分支。
-- ai_intent: 用 TestClient + FastAPI 子应用挂载 router,mock 掉
-  ``unified_chat_single_payload`` / ``recognize_intents`` / ``BertIntentClassifier``
-  等外部依赖,覆盖 400/404/500/200 各路径。
-"""
+"""Approval gate strategies and AI intent route regression coverage."""
 
 from __future__ import annotations
 
@@ -31,7 +18,7 @@ from app.application.workflow.approval_gated_engine import (
 )
 from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.risk_gate import RiskDecision
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,
@@ -197,68 +184,32 @@ def test_gated_plan_decision_to_dict_empty_node_decisions() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_evaluate_plan_auto_strategy_all_approved() -> None:
-    engine = _make_engine()
-    plan = _make_plan()
-    decision = engine.evaluate_plan(
-        plan, runtime_context={}, strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_AUTO
-    )
-
-    # write_op 是 high risk → requires_approval=True, auto → approved=True
+@pytest.mark.parametrize(
+    ("strategy", "approved", "rejected", "reason"),
+    [
+        ("auto", True, None, "auto-approved"),
+        ("reject", None, True, "auto-rejected"),
+        ("interactive", None, None, "pending human approval"),
+    ],
+)
+def test_evaluate_plan_strategies(
+    strategy: str, approved: bool | None, rejected: bool | None, reason: str
+) -> None:
+    decision = _make_engine().evaluate_plan(_make_plan(), runtime_context={}, strategy=strategy)
     nd_write = next(nd for nd in decision.node_decisions if nd.node_id == "write_op")
     assert nd_write.requires_approval is True
-    assert nd_write.approved is True
-    assert nd_write.rejected is None
-    assert nd_write.reason == "auto-approved"
+    assert nd_write.approved is approved
+    assert nd_write.rejected is rejected
+    assert nd_write.reason == reason
     assert nd_write.approval_request_id != ""
-
     nd_read = next(nd for nd in decision.node_decisions if nd.node_id == "read_only")
     assert nd_read.requires_approval is False
     assert nd_read.approved is True
     assert nd_read.reason == "low-risk auto-approved"
-
-    assert decision.all_approved is True
-    assert decision.any_rejected is False
-    assert decision.pending_approval is False
+    assert decision.all_approved is (approved is True)
+    assert decision.any_rejected is (rejected is True)
+    assert decision.pending_approval is (approved is None and rejected is None)
     assert len(decision.approval_request_ids) == 1
-
-
-def test_evaluate_plan_reject_strategy_marks_rejected() -> None:
-    engine = _make_engine()
-    plan = _make_plan()
-    decision = engine.evaluate_plan(
-        plan, runtime_context={}, strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_REJECT
-    )
-
-    nd_write = next(nd for nd in decision.node_decisions if nd.node_id == "write_op")
-    assert nd_write.requires_approval is True
-    assert nd_write.rejected is True
-    assert nd_write.approved is None
-    assert nd_write.reason == "auto-rejected"
-
-    assert decision.any_rejected is True
-    assert decision.all_approved is False
-    assert decision.pending_approval is False
-
-
-def test_evaluate_plan_interactive_strategy_pending() -> None:
-    engine = _make_engine()
-    plan = _make_plan()
-    decision = engine.evaluate_plan(
-        plan,
-        runtime_context={},
-        strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_INTERACTIVE,
-    )
-
-    nd_write = next(nd for nd in decision.node_decisions if nd.node_id == "write_op")
-    assert nd_write.requires_approval is True
-    assert nd_write.approved is None
-    assert nd_write.rejected is None
-    assert nd_write.reason == "pending human approval"
-
-    assert decision.pending_approval is True
-    assert decision.all_approved is False
-    assert decision.any_rejected is False
 
 
 def test_evaluate_plan_low_risk_only_no_approval_needed() -> None:
@@ -698,7 +649,7 @@ def test_chat_unified_missing_message_returns_400(ai_intent_client: TestClient) 
 
 
 def test_chat_unified_success(ai_intent_client: TestClient) -> None:
-    with patch("app.application.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
+    with patch("app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
         mock_payload.return_value = {
             "success": True,
             "message": "处理完成",
@@ -720,7 +671,7 @@ def test_chat_unified_alias_attaches_agent_run(ai_intent_client: TestClient) -> 
     from app.application.agent_orchestrator import get_agent_run_repository
 
     get_agent_run_repository().clear()
-    with patch("app.application.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
+    with patch("app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
         mock_payload.return_value = {
             "success": True,
             "message": "处理完成",
@@ -747,7 +698,7 @@ def test_chat_unified_alias_attaches_agent_run(ai_intent_client: TestClient) -> 
 def test_chat_unified_propagates_explicit_http_status(
     ai_intent_client: TestClient,
 ) -> None:
-    with patch("app.application.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
+    with patch("app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload") as mock_payload:
         mock_payload.return_value = {
             "success": False,
             "message": "AI 服务错误",
@@ -767,7 +718,9 @@ def test_chat_unified_propagates_explicit_http_status(
 
 
 def test_chat_unified_batch_empty_returns_400(ai_intent_client: TestClient) -> None:
-    with patch("app.application.ai_chat_helpers.normalize_batch_messages_payload", return_value=[]):
+    with patch(
+        "app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload", return_value=[]
+    ):
         r = ai_intent_client.post("/api/ai/chat-unified/batch", json={"messages": []})
     assert r.status_code == 400
     assert r.json()["success"] is False
@@ -775,7 +728,7 @@ def test_chat_unified_batch_empty_returns_400(ai_intent_client: TestClient) -> N
 
 def test_chat_unified_batch_too_many_returns_400(ai_intent_client: TestClient) -> None:
     with patch(
-        "app.application.ai_chat_helpers.normalize_batch_messages_payload",
+        "app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload",
         return_value=[f"m{i}" for i in range(25)],
     ):
         r = ai_intent_client.post("/api/ai/chat-unified/batch", json={"messages": ["x"] * 25})
@@ -786,11 +739,11 @@ def test_chat_unified_batch_too_many_returns_400(ai_intent_client: TestClient) -
 def test_chat_unified_batch_success(ai_intent_client: TestClient) -> None:
     with (
         patch(
-            "app.application.ai_chat_helpers.normalize_batch_messages_payload",
+            "app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload",
             return_value=["a", "b"],
         ),
         patch(
-            "app.application.ai_chat_helpers.unified_chat_single_payload",
+            "app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload",
             side_effect=lambda msg, *a, **kw: {
                 "success": True,
                 "data": {"text": f"reply-{msg}"},
@@ -811,11 +764,11 @@ def test_chat_unified_batch_with_error_status_preserved(
     """批量中某条返回 _http_status>=400 → 应保留在结果中,且整体 success=False。"""
     with (
         patch(
-            "app.application.ai_chat_helpers.normalize_batch_messages_payload",
+            "app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload",
             return_value=["ok", "bad"],
         ),
         patch(
-            "app.application.ai_chat_helpers.unified_chat_single_payload",
+            "app.domain.app_pure.ai_chat_helpers.unified_chat_single_payload",
             side_effect=[
                 {"success": True, "data": {"text": "ok"}},
                 {"success": False, "message": "err", "_http_status": 500},
@@ -850,7 +803,7 @@ def test_intent_test_success(ai_intent_client: TestClient) -> None:
 
     repo = InMemoryAgentRunRepository()
     with (
-        patch("app.application.ai_chat_helpers.recognize_intents") as mock_rec,
+        patch("app.domain.app_pure.ai_chat_helpers.recognize_intents") as mock_rec,
         patch(
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
@@ -881,7 +834,7 @@ def test_intent_test_recognizer_raises_returns_500(
     ai_intent_client: TestClient,
 ) -> None:
     with patch(
-        "app.application.ai_chat_helpers.recognize_intents",
+        "app.domain.app_pure.ai_chat_helpers.recognize_intents",
         side_effect=ValueError("意图识别错误"),
     ):
         r = ai_intent_client.post("/api/ai/intent/test", json={"message": "测试"})

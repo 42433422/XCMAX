@@ -1,0 +1,56 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "G6",
+  "platform": "macos",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "login_binding": {
+    "endpoint": "GET /api/auth/me",
+    "status": true,
+    "username": "SUNBIRD",
+    "account_kind": null,
+    "permission_count": 15,
+    "note": "会话在 1.0.0.4→1.0.0.5 OTA 与应用重启后仍有效（cookie 复用成功）"
+  },
+  "mod_loading": {
+    "endpoint": "GET /api/mods/loading-status",
+    "mods_root": "/Users/a4243342/Library/Application Support/XCAGI/mods",
+    "discovered": 15,
+    "installed": 15,
+    "mods_loaded": 15,
+    "load_mismatch": false,
+    "load_errors": [],
+    "mods_disabled": false,
+    "installed_mod_ids": [
+      "xcagi-erp-domain-bridge",
+      "xcagi-planner-bridge",
+      "xcagi-office-employee-pack-bridge",
+      "xcagi-planner-excel-tools",
+      "xcagi-lan-license-bridge",
+      "xcagi-neuro-bus-bridge",
+      "xcagi-core-workflow-employees",
+      "accessories-packaging-industry",
+      "xcagi-customer-service-bridge",
+      "xcagi-model-payment-bridge",
+      "wechat-contacts-ai-employee",
+      "xcagi-approval-bridge",
+      "attendance-industry",
+      "lan-gate-ai-employee",
+      "xcagi-workflow-visualization-bridge"
+    ]
+  },
+  "entitlement": {
+    "filter_active": true,
+    "basis": "resolve_product_sku()==enterprise → enterprise_mod_filter_active()，/api/mods/ 经 visible_mod_rows 过滤",
+    "visible_mods": 62,
+    "registered_mod_routes": 13,
+    "mod_store_catalog": {
+      "installed": 0,
+      "available": 26
+    },
+    "model_payment_entitlements": "GET /api/model-payment/entitlements → 200（模型计费权益，本 SKU 为空列表，非 Mod 权益）"
+  },
+  "verdict": "PASS"
+}

@@ -16,8 +16,7 @@ const ignores = {
     '**/test-results/**',
     '**/.venv/**',
     '**/__pycache__/**',
-    '**/*.min.js',
-    '**/*.min.css',
+    '**/*.min.{js,css}',
     'public/**',
     // 客来来是内置的 React/Tauri/Electron 独立工作区，由其自身工具链校验。
     'src/domain/客来来/**',

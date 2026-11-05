@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from modstore_server.platform_model_transport import llm_http_response, redact_key
+
 
 def _facade() -> Any:
     from modstore_server import llm_chat_proxy
@@ -29,16 +31,19 @@ async def image_openai_compatible(
         "size": size,
         "n": max(1, min(int(n or 1), 4)),
     }
-    async with _facade().httpx.AsyncClient(
-        timeout=_facade()._LLM_TIMEOUT, limits=_facade()._LLM_LIMITS
-    ) as client:
-        r = await client.post(
-            url, headers=_facade()._openai_request_headers(provider, api_key), json=body
-        )
-        text = r.text
-    if r.status_code >= 400:
-        return {"ok": False, "status": r.status_code, "error": text[:2000]}
-    data = r.json()
+    async with llm_http_response(
+        url,
+        api_key,
+        _facade()._openai_request_headers(provider, api_key),
+        body,
+        timeout=_facade()._LLM_TIMEOUT,
+        limits=_facade()._LLM_LIMITS,
+    ) as r:
+        data = redact_key(r.json(), api_key) if r.status_code < 300 else None
+    if r.status_code >= 300:
+        return {"ok": False, "status": r.status_code, "error": "模型供应商请求失败"}
+    if not isinstance(data, dict):
+        return {"ok": False, "error": "模型供应商未返回有效的媒体响应"}
     images: List[str] = []
     for item in data.get("data") or []:
         if not isinstance(item, dict):
@@ -70,7 +75,7 @@ async def image_dispatch(
             "ok": False,
             "error": f"provider {provider} does not expose OpenAI-compatible images API",
         }
-    b = _facade()._normalize_openai_base(provider, base_url)
+    b = _facade()._normalize_openai_base(provider, base_url, api_key)
     return await _facade().image_openai_compatible(
         b, api_key, model or "gpt-image-1", prompt, provider=provider, size=size, n=n
     )
@@ -127,16 +132,19 @@ async def video_openai_compatible(
     else:
         url = f"{base_url.rstrip('/')}/videos"
         body = {"model": model, "prompt": prompt, "size": size, "seconds": safe_seconds}
-    async with _facade().httpx.AsyncClient(
-        timeout=_facade()._LLM_TIMEOUT, limits=_facade()._LLM_LIMITS
-    ) as client:
-        r = await client.post(
-            url, headers=_facade()._openai_request_headers(provider, api_key), json=body
-        )
-        text = r.text
-    if r.status_code >= 400:
-        return {"ok": False, "status": r.status_code, "error": text[:2000]}
-    data = r.json()
+    async with llm_http_response(
+        url,
+        api_key,
+        _facade()._openai_request_headers(provider, api_key),
+        body,
+        timeout=_facade()._LLM_TIMEOUT,
+        limits=_facade()._LLM_LIMITS,
+    ) as r:
+        data = redact_key(r.json(), api_key) if r.status_code < 300 else None
+    if r.status_code >= 300:
+        return {"ok": False, "status": r.status_code, "error": "模型供应商请求失败"}
+    if not isinstance(data, dict):
+        return {"ok": False, "error": "模型供应商未返回有效的媒体响应"}
     job_id = data.get("id") or data.get("job_id") or data.get("task_id") or ""
     status = data.get("status") or data.get("state") or "pending"
     preview_url = _facade()._first_video_url(data)
@@ -166,7 +174,7 @@ async def video_dispatch(
         }
     if not model:
         return {"ok": False, "error": "video model is required"}
-    b = _facade()._normalize_openai_base(provider, base_url)
+    b = _facade()._normalize_openai_base(provider, base_url, api_key)
     return await _facade().video_openai_compatible(
         b, api_key, model, prompt, provider=provider, size=size, seconds=seconds
     )

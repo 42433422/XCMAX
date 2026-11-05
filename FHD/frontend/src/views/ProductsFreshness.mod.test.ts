@@ -1,31 +1,30 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { computed, defineComponent, h, ref } from 'vue'
-import { useEtlFolderBatch } from '@/composables/useEtlFolderBatch'
+import { computed, defineComponent } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ModProductsView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/ProductsView.vue'
 import HostProductsView from './ProductsView.vue'
-import { createEtlCenterState } from './etlCenter/etlCenterState'
-import { createEtlCenterRuns } from './etlCenter/useEtlCenterRuns'
+import { createEltCenterState } from './eltCenter/eltCenterState'
+import { createEltCenterRuns } from './eltCenter/useEltCenterRuns'
 import { useProductsStore } from '@/stores/products'
 import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
-import type { EtlRun } from '@/api/etl'
+import type { EltRun, EltRunRow } from '@/api/elt'
 
-const api = vi.hoisted(() => ({ getProducts: vi.fn(), getCustomers: vi.fn(), updateProduct: vi.fn(), execute: vi.fn(), upload: vi.fn(), preview: vi.fn(), run: vi.fn(), runs: vi.fn(), rollback: vi.fn() }))
+const api = vi.hoisted(() => ({ getProducts: vi.fn(), getCustomers: vi.fn(), updateProduct: vi.fn(), execute: vi.fn(), run: vi.fn(), runs: vi.fn(), rollback: vi.fn(), rows: vi.fn() }))
 vi.mock('@/api/products', () => ({ default: api }))
-vi.mock('@/api/etl', () => ({ etlApi: api }))
+vi.mock('@/api/elt', () => ({ eltApi: api }))
 vi.mock('@/api/customers', () => ({ default: api }))
 vi.mock('@/api/templatePreview', () => ({ default: { listTemplates: vi.fn().mockResolvedValue({ success: true, templates: [] }) } }))
 vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn() }))
 vi.mock('@/composables/useCoreNavLabel', () => ({ useCoreNavLabel: () => '产品' }))
 let price = 99
-let run: EtlRun
+let run: EltRun
 let wrapper: VueWrapper | undefined
 const Table = defineComponent({ props: ['data'], template: '<div><div v-for="row in data" :key="row.id" class="product-row"><span class="product-price">{{ row.price }}</span><slot name="actions" :row="row" /></div></div>' })
 const Shell = defineComponent({ template: '<RouterView v-slot="{ Component }"><KeepAlive><component :is="Component" /></KeepAlive></RouterView>' })
-function fixture(status = 'preview_ready'): EtlRun {
-  return { id: 'run-price-update', upload_id: 'upload-1', file_name: 'prices.xlsx', file_sha256: 'abc', target_type: 'products', status,
+function fixture(status = 'preview_ready'): EltRun {
+  return { id: 'run-price-update', upload_id: 'upload-1', file_name: 'prices.xlsx', file_sha256: 'abc', target_type: 'products', status, preview_revision: 'a'.repeat(64),
     stage: status, progress: 100, total_rows: 1, processed_rows: 1, summary: { new: 0, update: 1, skip: 0, error: 0, executed: status === 'preview_ready' ? 0 : 1 },
     details: {}, source_features: {}, draft: {}, receipt: {}, reversible: true }
 }
@@ -37,8 +36,9 @@ async function setup(view = ModProductsView) {
   await router.push('/products'); await router.isReady()
   wrapper = mount(Shell, { global: { plugins: [pinia, router], stubs: { DataTable: Table, ConfirmDialog: true } } })
   await flushPromises()
-  const state = createEtlCenterState(); state.currentRun.value = run
-  const etl = createEtlCenterRuns({ state, router, route: { query: {} }, canExecute: computed(() => true), canRollback: computed(() => true), shipmentTemplateCandidates: computed(() => []), bulkNewRows: computed(() => []) })
+  const state = createEltCenterState(); state.currentRun.value = run
+  const etl = createEltCenterRuns({ state, router, route: { query: {} }, canExecute: computed(() => true), canRollback: computed(() => true), shipmentTemplateCandidates: computed(() => []), bulkNewRows: computed(() => []) })
+  await etl.loadRows()
   return { router, etl, state, store: useProductsStore() }
 }
 const rowPrice = () => wrapper!.get('.product-price').text()
@@ -47,6 +47,12 @@ beforeEach(() => {
   vi.clearAllMocks(); updateProductReadAccountScope({ tenantId: 1, marketUserId: 11 }); price = 99; run = fixture()
   api.getCustomers.mockResolvedValue({ success: true, data: [{ unit_name: '客户甲' }] })
   api.getProducts.mockImplementation(async () => ({ success: true, data: [{ id: 1, name: 'PM90', model_number: 'PM90-001', specification: '人工规格', price }], total: 1 }))
+  api.rows.mockResolvedValue({ page: 1, page_size: 50, total: 1, preview_revision: run.preview_revision, items: [{
+    id: 1, source_sheet: 'Sheet1', source_row: 2, source: { 产品名称: 'PM90', 单价: 109 },
+    normalized: { product_name: 'PM90', price: 109 }, provenance: {}, validation_issues: [], llm_suggestion: {},
+    suggested_action: 'update', final_action: 'update', action_overridden: false, match_ref: 'product:1',
+    before: { price: 99 }, after: { price: 109 },
+  } satisfies EltRunRow] })
   api.run.mockImplementation(async () => run); api.runs.mockImplementation(async () => [run])
   api.execute.mockImplementation(async () => { price = 109; run = fixture('completed'); return run })
   api.rollback.mockImplementation(async () => { price = 99; run = { ...run, rollback_status: 'completed', receipt: { rollback: { status: 'completed', rows: 1 } } }; return run })
@@ -55,6 +61,18 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.restoreAllMocks(); vi.useRealTimers() })
 
 describe('kept-alive product freshness', () => {
+  it('does not execute or refresh products when an empty preview page has not been reviewed', async () => {
+    api.rows.mockResolvedValue({ page: 1, page_size: 50, items: [], total: 1, preview_revision: run.preview_revision })
+    const { etl, state } = await setup()
+    const reads = api.getProducts.mock.calls.length
+    await etl.executeCurrentRun(); await flushPromises()
+    expect(state.reviewedPreviewRevision.value).toBeNull()
+    expect(api.execute).not.toHaveBeenCalled()
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(api.getProducts).toHaveBeenCalledTimes(reads)
+    expect(rowPrice()).toBe('99')
+  })
+
   it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s shows 99 → import 109 → rollback 99 without a document reload', async (_label, view) => {
     const { router, etl } = await setup(view)
     expect(rowPrice()).toBe('99')
@@ -83,39 +101,11 @@ describe('kept-alive product freshness', () => {
     expect(rowPrice()).toBe('109')
   })
 
-  it('folder polling updates a product page that stays visible, without relying on activation', async () => {
-    const { router, etl, state } = await setup()
-    let batch!: ReturnType<typeof useEtlFolderBatch>
-    const BatchHarness = defineComponent({ setup() {
-      batch = useEtlFolderBatch({ capabilities: state.capabilities, targetType: state.targetType,
-        templateId: ref(''), compatibilityPresetId: ref(''), targetConfigId: ref(''), runs: state.runs,
-        currentRun: state.currentRun, activeTab: state.activeTab, busy: state.busy, pageError: state.pageError,
-        router, autoWriteEnabled: ref(true), markAutoWrite: etl.markAutoWrite, tryAutoWrite: etl.tryAutoWrite,
-        syncDraft: etl.syncDraft, schedulePoll: etl.schedulePoll, loadRows: etl.loadRows })
-      return () => h('div')
-    } })
-    const harness = mount(BatchHarness, { global: { stubs: { DataTable: Table, ConfirmDialog: true } } })
-    const replace = vi.spyOn(router, 'replace').mockResolvedValue(undefined)
-    try {
-      api.upload.mockResolvedValue({ upload_id: 'batch-upload' })
-      api.preview.mockImplementation(async () => ({ ...fixture(), status: 'executing' }))
-      batch.onFileChange({ target: { files: [new File(['a'], 'first.xlsx'), new File(['b'], 'second.xlsx')] } } as unknown as Event)
-      vi.useFakeTimers()
-      await batch.startPreview()
-      expect(rowPrice()).toBe('99')
-      price = 109; run = fixture('completed')
-      await vi.advanceTimersByTimeAsync(1500)
-      await flushPromises()
-      expect(rowPrice()).toBe('109')
-      expect(router.currentRoute.value.path).toBe('/products')
-    } finally { harness.unmount(); replace.mockRestore(); vi.useRealTimers() }
-  })
 
-  it('auto-write refreshes a visible product list through the same notification path', async () => {
-    const { etl, state } = await setup()
-    state.autoWriteEnabled.value = true
-    etl.markAutoWrite(run.id)
-    await etl.tryAutoWrite(run); await flushPromises()
+
+  it('a confirmed write refreshes a visible product list through the same notification path', async () => {
+    const { etl } = await setup()
+    await etl.executeCurrentRun(); await flushPromises()
     expect(rowPrice()).toBe('109'); expect(api.execute).toHaveBeenCalledTimes(1)
   })
 
@@ -140,8 +130,8 @@ describe('kept-alive product freshness', () => {
     expect(rowPrice()).toBe('109')
   })
 
-  it('refresh failure keeps the known price visible but blocks editing until a successful retry', async () => {
-    const { store } = await setup()
+  it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s refresh failure keeps the known price visible but blocks editing until a successful retry', async (_label, view) => {
+    const { store } = await setup(view)
     api.getProducts.mockRejectedValueOnce(new Error('无法读取'))
     store.invalidateProducts(); await flushPromises()
     expect(rowPrice()).toBe('99'); expect(wrapper!.get('[role="status"]').text()).toContain('产品读取失败')
@@ -152,8 +142,8 @@ describe('kept-alive product freshness', () => {
     expect(rowPrice()).toBe('109'); expect(editButton().attributes('disabled')).toBeUndefined()
   })
 
-  it('account switching clears an open edit form and prevents old rows remaining on a kept-alive page', async () => {
-    const { store } = await setup()
+  it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s account switching clears an open edit form and prevents old rows remaining on a kept-alive page', async (_label, view) => {
+    const { store } = await setup(view)
     await editButton().trigger('click'); expect(wrapper!.find('.modal').exists()).toBe(true)
     price = 88
     updateProductReadAccountScope({ tenantId: 2, marketUserId: 22 })
@@ -162,8 +152,8 @@ describe('kept-alive product freshness', () => {
     expect(wrapper!.find('.modal').exists()).toBe(false); expect(rowPrice()).toBe('88')
   })
 
-  it('returning to a retained page retires its old edit form before reading the latest price', async () => {
-    const { router } = await setup()
+  it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s returning to a retained page retires its old edit form before reading the latest price', async (_label, view) => {
+    const { router } = await setup(view)
     await editButton().trigger('click')
     await router.push('/business-docking'); await flushPromises()
     price = 109
@@ -171,8 +161,8 @@ describe('kept-alive product freshness', () => {
     expect(wrapper!.find('.modal').exists()).toBe(false); expect(rowPrice()).toBe('109')
   })
 
-  it('external data invalidation closes an old-price edit form instead of silently making it writable after refresh', async () => {
-    const { store } = await setup()
+  it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s external data invalidation closes an old-price edit form instead of silently making it writable after refresh', async (_label, view) => {
+    const { store } = await setup(view)
     await editButton().trigger('click'); expect(wrapper!.find('.modal').exists()).toBe(true)
     price = 109; store.invalidateProducts(); await flushPromises()
     expect(wrapper!.find('.modal').exists()).toBe(false)

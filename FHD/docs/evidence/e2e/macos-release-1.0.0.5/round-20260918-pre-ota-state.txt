@@ -1,0 +1,6 @@
+zsh:27: command not found: app_pid=641
+installed_build_info={"schema_version":1,"gitSha":"280225ac77ce0b5f66470d2d7a11ad2844cdad67","version":"1.0.0.4","releaseId":"xcagi-1.0.0.4-280225ac77ce0b5f66470d2d7a11ad2844cdad67","builtAt":"2026-09-14T14:48:06.725Z"}
+app_owner=drwxr-xr-x@ 3 a4243342  staff  96  9月 14 14:48 /Applications/XCAGI.app
+shipit_state={"launchAfterInstallation":false,"updateBundleURL":"file:\/\/\/Users\/a4243342\/Library\/Caches\/com.xcagi.desktop.enterprise.ShipIt\/update.9MWdVhS\/XCAGI.app\/","useUpdateBundleName":true,"bundleIdentifier":"com.xcagi.desktop.enterprise","targetBundleURL":"file:\/\/\/Applications\/XCAGI.app\/"}
+privileged_helper=none
+app_pid=641

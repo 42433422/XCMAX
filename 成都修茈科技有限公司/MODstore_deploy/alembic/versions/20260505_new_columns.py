@@ -20,7 +20,8 @@ depends_on = None
 def _col_exists(bind, table: str, column: str) -> bool:
     result = bind.execute(
         sa.text(
-            "SELECT 1 FROM information_schema.columns " "WHERE table_name = :t AND column_name = :c"
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = :t AND column_name = :c"
         ),
         {"t": table, "c": column},
     ).first()
@@ -125,6 +126,12 @@ def downgrade() -> None:
         op.execute(sa.text(f"ALTER TABLE user_plans DROP COLUMN IF EXISTS {col}"))
 
     for col in ("embedding_provider", "embedding_source"):
-        op.execute(sa.text(f"ALTER TABLE knowledge_collections DROP COLUMN IF EXISTS {col}"))
+        op.execute(
+            sa.text(f"ALTER TABLE knowledge_collections DROP COLUMN IF EXISTS {col}")
+        )
 
-    op.execute(sa.text("ALTER TABLE account_experience_ledger DROP COLUMN IF EXISTS description"))
+    op.execute(
+        sa.text(
+            "ALTER TABLE account_experience_ledger DROP COLUMN IF EXISTS description"
+        )
+    )

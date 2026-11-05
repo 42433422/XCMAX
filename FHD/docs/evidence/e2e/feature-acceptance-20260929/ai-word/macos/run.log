@@ -1,0 +1,7 @@
+2026-09-29T07:23:20+0800 [ai-word] 开始验收 ai-word Word 生成与解析；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:23:20+0800 [ai-word] M1 passed :: HTTP 200 26ms；ok=True；{"output_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-word-1790637800/outputs/generated_document.docx", "template_path": "", "paragraph_count": 3, "table_count": 0, "output_sche
+2026-09-29T07:23:20+0800 [ai-word] M2 passed :: HTTP 200 31ms；ok=True；{"output_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-word-1790637800/outputs/word-read.json", "text_output_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/tem
+2026-09-29T07:23:20+0800 [ai-word] M3 passed :: HTTP 200 11ms；{"success": true, "data": {"files": [{"path": "temp_excel/mac0929-ai-word-1790637800/outputs/word-read.json", "kind": "json", "json": {"metadata": {"source": "generated_document.docx", "format": "docx
+2026-09-29T07:23:24+0800 [ai-word] M4 passed :: 导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管理 | 系统设
+2026-09-29T07:23:25+0800 [ai-word] screenshot result.png
+2026-09-29T07:23:31+0800 [ai-word] video operation.webm bytes=317938

@@ -53,15 +53,7 @@ def _employees_root() -> Path:
 
 
 def _employee_roots() -> list[Path]:
-    """Return writable employee packs first, then read-only bundled packs.
-
-    Packaged desktop builds intentionally keep the marketplace install root in
-    ``userData/mods`` while shipping a small, SKU-approved employee subset in
-    ``_MEIPASS/mods/_employees``.  The writable root must win when a user has
-    installed an override, but a missing user copy must not hide the bundled
-    employee from the runtime.
-    """
-
+    """Prefer installed overrides; retain the read-only bundled fallback."""
     roots = [_employees_root()]
     try:
         from app.mod_sdk.edition_policy import bundled_mods_dir
@@ -88,10 +80,27 @@ def candidate_pack_ids(pack_id: str) -> list[str]:
 
 
 def resolve_pack_dir(pack_id: str) -> Path | None:
-    for root in _employee_roots():
+    roots = _employee_roots()
+    for root in roots:
         for cid in candidate_pack_ids(pack_id):
             pdir = root / cid
             if (pdir / "manifest.json").is_file():
+                receipt = pdir / ".xcagi-install-receipt.json"
+                if root == roots[0] and not receipt.exists() and not receipt.is_symlink():
+                    from app.infrastructure.mods.package import compute_directory_hash
+
+                    for bundled_root in roots[1:]:
+                        bundled = bundled_root / cid
+                        try:
+                            if (
+                                verify_direct_python_pack_trust(bundled)[0]
+                                and (bundled / "manifest.json").is_file()
+                                and compute_directory_hash(str(pdir))
+                                == compute_directory_hash(str(bundled))
+                            ):
+                                return bundled
+                        except OSError:
+                            logger.debug("compare seeded employee copy failed", exc_info=True)
                 return pdir
     return None
 

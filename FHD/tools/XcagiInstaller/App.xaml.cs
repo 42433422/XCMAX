@@ -8,7 +8,14 @@ public partial class App : System.Windows.Application
 {
     protected override async void OnStartup(StartupEventArgs e)
     {
-        var options = SilentInstallOptions.Parse(e.Args);
+        SilentInstallOptions options;
+        try { options = SilentInstallOptions.Parse(e.Args); }
+        catch (NotSupportedException ex)
+        {
+            NsisSilentInstaller.Trace(ex.Message);
+            ShutdownOnUiThread(1);
+            return;
+        }
         if (!options.Enabled)
         {
             base.OnStartup(e);
@@ -16,35 +23,30 @@ public partial class App : System.Windows.Application
         }
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        InstallResult result = default;
         try
         {
-            WriteSilentLog("silent install start");
+            NsisSilentInstaller.Trace("silent install start");
             var setupExe = await PayloadLocator.ResolveSetupExeAsync(
                 cancellationToken: CancellationToken.None).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(setupExe))
                 throw new InvalidOperationException("Unable to resolve embedded setup payload.");
-            WriteSilentLog($"payload={setupExe};{DescribeFile(setupExe)}");
+            NsisSilentInstaller.Trace($"payload={setupExe};{DescribeFile(setupExe)}");
+            NsisSilentInstaller.ValidateRegisteredInstallDirectory(options.InstallDirectory ?? NsisSilentInstaller.DefaultInstallDirectory());
 
-            var result = await NsisSilentInstaller.RunAsync(
+            result = await NsisSilentInstaller.RunAsync(
                 setupExe,
                 options.InstallDirectory ?? NsisSilentInstaller.DefaultInstallDirectory(),
-                cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                cancellationToken: CancellationToken.None, userDataDirectory: NsisSilentInstaller.UserDataDirectory(), updaterHandoff: e.Args.Contains("--updated")).ConfigureAwait(false);
             if (!result.Success)
                 throw new InvalidOperationException(result.Error ?? "Silent install failed.");
-            WriteSilentLog($"installed={result.InstallDir};app={result.AppExePath}");
-
-            if (options.DeploySunbirdSeed && SunbirdSeedExtractor.HasEmbeddedSeed())
-            {
-                await SunbirdSeedExtractor.DeployToUserDataAsync(
-                    cancellationToken: CancellationToken.None).ConfigureAwait(false);
-                WriteSilentLog("sunbird seed deployed");
-            }
+            NsisSilentInstaller.Trace($"installed={result.InstallDir};app={result.AppExePath}");
 
             ShutdownOnUiThread(0);
         }
         catch (Exception ex)
         {
-            WriteSilentLog("failed: " + ex);
+            NsisSilentInstaller.Trace("failed: " + (result.Success ? await result.RecoverPostInstallFailureAsync(ex.Message) : ex.ToString()));
             ShutdownOnUiThread(1);
         }
     }
@@ -58,19 +60,6 @@ public partial class App : System.Windows.Application
         }
 
         Dispatcher.Invoke(() => Shutdown(exitCode));
-    }
-
-    private static void WriteSilentLog(string message)
-    {
-        try
-        {
-            var path = Path.Combine(Path.GetTempPath(), "xcagi-installer-silent.log");
-            File.AppendAllText(path, $"[{DateTimeOffset.UtcNow:O}] {message}{Environment.NewLine}");
-        }
-        catch
-        {
-            // Silent install logging must never hide the real install result.
-        }
     }
 
     private static string DescribeFile(string path)
@@ -90,20 +79,19 @@ public partial class App : System.Windows.Application
 
     private sealed record SilentInstallOptions(
         bool Enabled,
-        string? InstallDirectory,
-        bool DeploySunbirdSeed)
+        string? InstallDirectory)
     {
         public static SilentInstallOptions Parse(string[] args)
         {
             var enabled = false;
             string? installDirectory = null;
-            var deploySunbirdSeed = false;
 
             for (var i = 0; i < args.Length; i += 1)
             {
                 var arg = args[i];
                 if (arg.Equals("--silent", StringComparison.OrdinalIgnoreCase) ||
-                    arg.Equals("/silent", StringComparison.OrdinalIgnoreCase))
+                    arg.Equals("/silent", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/S", StringComparison.OrdinalIgnoreCase))
                 {
                     enabled = true;
                     continue;
@@ -112,8 +100,7 @@ public partial class App : System.Windows.Application
                 if (arg.Equals("--sunbird-seed", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/sunbird-seed", StringComparison.OrdinalIgnoreCase))
                 {
-                    deploySunbirdSeed = true;
-                    continue;
+                    throw new NotSupportedException("The retired --sunbird-seed option is not supported.");
                 }
 
                 if (arg.Equals("--install-dir", StringComparison.OrdinalIgnoreCase) ||
@@ -134,10 +121,10 @@ public partial class App : System.Windows.Application
                 }
 
                 if (arg.StartsWith("/D=", StringComparison.OrdinalIgnoreCase))
-                    installDirectory = arg["/D=".Length..];
+                    installDirectory = string.Join(" ", args[i..])["/D=".Length..];
             }
 
-            return new SilentInstallOptions(enabled, installDirectory, deploySunbirdSeed);
+            return new SilentInstallOptions(enabled, installDirectory);
         }
     }
 }

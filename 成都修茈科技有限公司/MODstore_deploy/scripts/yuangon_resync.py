@@ -34,7 +34,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 YUANGON_DIR = REPO_ROOT / "yuangon"
 PROCESS_LOG_DIR = REPO_ROOT / "MODstore_deploy" / "var" / "yuangon_resync"
 MODSTORE_ROOT = REPO_ROOT / "MODstore_deploy"
-EVENT_OUTBOX = REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "event_outbox.jsonl"
+EVENT_OUTBOX = (
+    REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "event_outbox.jsonl"
+)
 
 
 def _git_diff_paths(base_ref: str) -> list[str]:
@@ -49,7 +51,9 @@ def _git_diff_paths(base_ref: str) -> list[str]:
         out = subprocess.check_output(
             ["git", "-C", str(REPO_ROOT), "diff", "--name-only", "HEAD~1"], text=True
         )
-    return [line.strip().replace("\\", "/") for line in out.splitlines() if line.strip()]
+    return [
+        line.strip().replace("\\", "/") for line in out.splitlines() if line.strip()
+    ]
 
 
 def _changed_pkg_ids(paths: list[str]) -> list[str]:
@@ -82,14 +86,18 @@ def _emit_event_fallback_jsonl(
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def _emit_event(name: str, payload: dict, producer: str = "push-update-context-officer") -> None:
+def _emit_event(
+    name: str, payload: dict, producer: str = "push-update-context-officer"
+) -> None:
     try:
         modstore_path = str(MODSTORE_ROOT)
         if modstore_path not in sys.path:
             sys.path.insert(0, modstore_path)
         from modstore_server.incident_bus import publish
 
-        ok = publish(name, payload if isinstance(payload, dict) else {}, source=producer)
+        ok = publish(
+            name, payload if isinstance(payload, dict) else {}, source=producer
+        )
         if ok:
             return
     except RECOVERABLE_ERRORS:
@@ -98,10 +106,14 @@ def _emit_event(name: str, payload: dict, producer: str = "push-update-context-o
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else "")
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0] if __doc__ else ""
+    )
     g = parser.add_mutually_exclusive_group(required=True)
     g.add_argument("--check", action="store_true", help="Validate only (no write).")
-    g.add_argument("--apply", action="store_true", help="Actually onboard + emit event.")
+    g.add_argument(
+        "--apply", action="store_true", help="Actually onboard + emit event."
+    )
     parser.add_argument(
         "--base-ref",
         default=os.environ.get("YUANGON_RESYNC_BASE_REF", "origin/main"),
@@ -120,7 +132,10 @@ def main() -> int:
         try:
             paths = _git_diff_paths(args.base_ref)
         except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
-            print(f"[WARN] git diff failed: {exc}; falling back to all employees", file=sys.stderr)
+            print(
+                f"[WARN] git diff failed: {exc}; falling back to all employees",
+                file=sys.stderr,
+            )
             paths = []
         ids = _changed_pkg_ids(paths)
 
@@ -153,12 +168,17 @@ def main() -> int:
         rc2 = subprocess.call(
             [
                 sys.executable,
-                str(REPO_ROOT / "MODstore_deploy" / "scripts" / "build_routing_table.py"),
+                str(
+                    REPO_ROOT / "MODstore_deploy" / "scripts" / "build_routing_table.py"
+                ),
             ],
             cwd=str(cwd),
         )
         if rc2 != 0:
-            print("[WARN] routing table rebuild failed; please rerun manually", file=sys.stderr)
+            print(
+                "[WARN] routing table rebuild failed; please rerun manually",
+                file=sys.stderr,
+            )
         _emit_event(
             "ops.yuangon.resync.done",
             {
@@ -168,9 +188,15 @@ def main() -> int:
             },
         )
         PROCESS_LOG_DIR.mkdir(parents=True, exist_ok=True)
-        log_path = PROCESS_LOG_DIR / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}.json"
+        log_path = (
+            PROCESS_LOG_DIR / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}.json"
+        )
         log_path.write_text(
-            json.dumps({"pkg_ids": ids, "rc": rc, "rc_routing": rc2}, ensure_ascii=False, indent=2),
+            json.dumps(
+                {"pkg_ids": ids, "rc": rc, "rc_routing": rc2},
+                ensure_ascii=False,
+                indent=2,
+            ),
             encoding="utf-8",
         )
         print(f"[OK] resync done; log -> {log_path.relative_to(REPO_ROOT)}")

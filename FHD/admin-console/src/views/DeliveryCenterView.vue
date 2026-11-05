@@ -1,9 +1,8 @@
 <template>
   <div class="delivery-center page-content" id="view-delivery-center">
-    <MacControlPanel />
     <header class="delivery-hero">
       <div>
-        <p class="delivery-eyebrow">CUSTOMER DELIVERY CONTROL</p>
+        <p class="delivery-eyebrow">客户交付总控</p>
         <h2>客户交付中心</h2>
         <p>所有企业用户统一进入交付台账；内部本 Mac 永不计入客户交付；购买权益、定制路径、安装与首次登录证据分别如实展示。</p>
       </div>
@@ -13,15 +12,18 @@
       </button>
     </header>
 
-    <section class="delivery-stats" aria-label="交付统计">
+    <section id="delivery-overview" class="delivery-stats" aria-label="交付统计">
       <article v-for="item in summaryCards" :key="item.key" :class="`is-${item.key}`">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
         <small>{{ item.hint }}</small>
       </article>
     </section>
+    <nav class="delivery-jumps" aria-label="交付中心快速导航"><a href="#delivery-overview">交付概览</a><a href="#delivery-enterprise-roster">企业客户</a>
+      <a href="#delivery-standard-roster">购买交付</a><a href="#delivery-trial-roster">体验交付</a><a href="#delivery-custom-orders">定制工单</a></nav>
+    <MacControlPanel />
 
-    <EnterpriseCustomerRoster
+    <EnterpriseCustomerRoster id="delivery-enterprise-roster"
       v-if="!errorMessage && (!loading || enterpriseUsers.length)"
       :users="enterpriseUsers"
       :tickets="tickets"
@@ -30,7 +32,7 @@
       @open-custom="focusCustomDeliveries"
     />
 
-    <EnterpriseDeliveryRoster
+    <EnterpriseDeliveryRoster id="delivery-standard-roster"
       v-if="!errorMessage && (!loading || standardDeliveries.length)"
       :deliveries="standardDeliveries"
       :tickets="tickets"
@@ -38,7 +40,7 @@
       @open-custom="focusCustomDeliveries"
     />
 
-    <EnterpriseDeliveryRoster
+    <EnterpriseDeliveryRoster id="delivery-trial-roster"
       v-if="!errorMessage && (!loading || trialDeliveries.length)"
       variant="trial"
       :deliveries="trialDeliveries"
@@ -105,13 +107,15 @@
           </div>
         </header>
 
+        <p class="delivery-next-step"><strong :title="stageOf(ticket)">当前：{{ stageLabel(stageOf(ticket)) }}</strong><span>下一步：{{ nextStepLabel(stageOf(ticket)) }}</span></p>
         <ol class="delivery-timeline" aria-label="交付阶段">
           <li
-            v-for="step in timelineStepsFor(ticket)"
+            v-for="(step, index) in timelineStepsFor(ticket)"
             :key="step.key"
             :class="timelineClass(ticket, step.key)"
+            :aria-current="timelineClass(ticket, step.key).active || timelineClass(ticket, step.key).failed ? 'step' : undefined"
           >
-            <span><i :class="`fa ${step.icon}`" aria-hidden="true"></i></span>
+            <span>{{ index + 1 }}</span>
             <div><strong>{{ step.label }}</strong><small>{{ step.hint }}</small></div>
           </li>
         </ol>
@@ -140,7 +144,7 @@
             <div v-if="latestRun(ticket)" class="delivery-run">
               <div><span>最近生产</span><strong>第 {{ latestRun(ticket)?.attempt || runCount(ticket) }} 轮</strong></div>
               <div><span>运行状态</span><strong>{{ runStatusLabel(latestRun(ticket)?.status) }}</strong></div>
-              <div><span>执行步骤</span><strong>{{ latestRun(ticket)?.steps?.length || 0 }} 项</strong></div>
+              <div><span>本次执行步骤</span><strong>{{ latestRun(ticket)?.steps?.length || 0 }} 项</strong></div>
               <p v-if="latestRun(ticket)?.error" class="delivery-run__error">
                 {{ latestRun(ticket)?.error }}
               </p>
@@ -177,6 +181,9 @@
             <span>内部确认不会冒充客户验收；不把“已生成”冒充“已安装”。</span>
           </div>
           <div v-if="stageOf(ticket) !== 'delivered'" class="delivery-actions__controls">
+            <label v-if="ticket.custom_delivery?.kind === 'module' && ticket.custom_delivery.suggested_id === 'sunbird-attendance-custom'">
+              <input v-model="mainRework[ticket.id]" type="checkbox" />使用主线私有模块源码（保留原客户归属与权益）
+            </label>
             <input
               v-model.trim="reworkNotes[ticket.id]"
               type="text"
@@ -230,6 +237,7 @@ import {
   addonTimelineSteps,
   initialTimelineSteps,
   kindLabel,
+  nextStepLabel,
   stageLabel,
   stageOf,
   stageOptions,
@@ -249,6 +257,7 @@ const loading = ref(false)
 const errorMessage = ref('')
 const busyTicketId = ref<number | null>(null)
 const reworkNotes = reactive<Record<number, string>>({})
+const mainRework = reactive<Record<number, boolean>>({})
 
 const filteredTickets = computed(() => {
   const needle = query.value.toLowerCase()
@@ -369,7 +378,7 @@ function timelineStepsFor(ticket: CustomDeliveryTicket) {
 function stageRank(ticket: CustomDeliveryTicket, stage: string): number {
   const normalized = stage === 'rework' ? 'production' : stage
   const index = timelineStepsFor(ticket).findIndex((step) => step.key === normalized)
-  return index < 0 ? 0 : index
+  return index
 }
 
 function updateDeliveryTicket(updated: CustomDeliveryTicket) {
@@ -469,7 +478,8 @@ async function requestRework(ticket: CustomDeliveryTicket) {
   if (!confirmed) return
   busyTicketId.value = ticket.id
   try {
-    await xcmaxAdminApi.decideCustomDelivery(ticket.id, 'rework', note)
+    if (mainRework[ticket.id]) await xcmaxAdminApi.decideCustomDelivery(ticket.id, 'rework', note, 'versioned_main')
+    else await xcmaxAdminApi.decideCustomDelivery(ticket.id, 'rework', note)
     reworkNotes[ticket.id] = ''
     await loadAll()
   } catch (error) {

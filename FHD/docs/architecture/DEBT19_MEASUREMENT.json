@@ -1,0 +1,49 @@
+{
+  "2_ports": 11,
+  "3_layers": [
+    "domain",
+    "infrastructure"
+  ],
+  "10_legacy": 47,
+  "11": {
+    "types.py": 1,
+    "base.py": 1,
+    "routes.py": 0,
+    "paths.py": 12,
+    "convert.py": 14
+  },
+  "12_merged_top": [
+    [
+      90.5,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py"
+    ],
+    [
+      89.4,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py"
+    ],
+    [
+      84.5,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_merged.py"
+    ],
+    [
+      84.4,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py"
+    ],
+    [
+      73.5,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit_merged.py"
+    ]
+  ],
+  "13_gt100kb": [],
+  "14_fastapi_routes_py": 301,
+  "15_pregel_kb": 0.4,
+  "20_package_json": 10,
+  "1_app_domain": {
+    "app_files": 592,
+    "domain_files": 346,
+    "ratio": 1.711,
+    "app_py": 592,
+    "domain_py": 346,
+    "ratio_py": 1.711
+  }
+}

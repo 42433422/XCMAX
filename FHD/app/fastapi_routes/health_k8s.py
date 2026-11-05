@@ -33,10 +33,12 @@ def _check_database() -> dict[str, Any]:
 
 
 def _check_redis() -> dict[str, Any]:
+    redis_url = os.environ.get("REDIS_URL") or os.environ.get("CACHE_REDIS_URL")
+    if not redis_url:
+        return {"status": "disabled", "detail": "Redis 未配置（桌面单机使用进程内缓存）"}
     try:
         import redis
 
-        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
         client = redis.from_url(redis_url)
         client.ping()
         return {"status": "healthy", "latency_ms": 0}
@@ -53,7 +55,7 @@ def _check_ai_service() -> dict[str, Any]:
     """
 
     try:
-        from app.domain.services.unified_intent_recognizer import (
+        from app.domain.conversation.unified_intent_recognizer import (
             get_unified_intent_recognizer,
         )
 
@@ -258,7 +260,7 @@ def capabilities_diagnostics():
     # intent_engines 单独取一份快照，便于前端渲染"哪些引擎已落地"。
     intent_engines: dict[str, Any] = {}
     try:
-        from app.domain.services.unified_intent_recognizer import (
+        from app.domain.conversation.unified_intent_recognizer import (
             get_unified_intent_recognizer,
         )
 

@@ -11,7 +11,7 @@ _write_lock = threading.Lock()
 @contextmanager
 def sqlite_write_guard():
     """串行化桌面环境下的批量写（Excel 导入等）。"""
-    from app.desktop_runtime.paths import is_desktop_mode
+    from app.desktop_runtime.desktop_runtime_paths import is_desktop_mode
 
     if not is_desktop_mode():
         yield

@@ -1,0 +1,18 @@
+[09:48:29] feature=dt-mac-control platform=macos base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control
+[09:48:41] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[09:48:41] case D1: passed - 经代理读取真实市场 mac-control 机队
+[09:48:43] market login status=200
+[09:48:43] market create task status=202
+[09:48:46] case D2: passed - 市场侧真实下达任务后，经代理在任务列表读回
+[09:48:48] market login status=200
+[09:48:48] market create task status=202
+[09:48:48] case D3: passed - 经代理读取任务详情且内容与本轮下达一致
+[09:48:50] market login status=200
+[09:48:50] market create task status=202
+[09:48:51] proxy cancel status=200
+[09:48:52] case D4: passed - 经代理取消任务并读回状态变化
+[09:48:52] case D5: passed - 经代理读取真实事实数据
+[09:48:53] mac-control negatives: missing=404 cancel_missing=404 unauth={'fleet': 401, 'tasks': 401, 'facts': 401}
+[09:48:54] case D6: passed - 不存在任务与未认证会话均被拒（负例）
+[09:48:54] video: dt-mac-control-macos-20260929-094829.webm (2089035 bytes)
+[09:48:54] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-mac-control/log/dt-mac-control-macos-20260929-094829.log

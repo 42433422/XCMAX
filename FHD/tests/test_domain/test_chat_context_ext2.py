@@ -1,4 +1,4 @@
-"""Tests for app.domain.services.conversation.context.chat_context — ext2.
+"""Tests for app.domain.conversation.services.context.chat_context — ext2.
 
 Covers ``ChatTurn`` (fingerprint + semantic fingerprint), ``ChatContext``
 (add_turn / get_recent_turns / get_recent_intents / clear_history /
@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.domain.services.conversation.context.chat_context import (
+from app.domain.conversation.services.context.chat_context import (
     ChatContext,
     ChatContextContainer,
     ChatTurn,

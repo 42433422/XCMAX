@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "mods-bridge",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "80f9588589ac2fbb18bf4a617ef84773e44891832cbb0df471eb9a986a45a86e",
+  "visible_content": "ERP 领域桥、审批桥、客服桥 status 均 success，能力库页可见。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-bridge/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-bridge/macos/result.png"
+}

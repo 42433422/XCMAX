@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-device-bind",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "ebff0cdaeb9c2bbefc0089489d358ed419107fa49336718fff907f3521dc535c",
+  "visible_content": "阻塞：需移动端真机同网段扫码，且云端设备码服务 503「云端设备码暂不可用」，桌面端无法生成可扫码设备码；配对状态恒 paired=false。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-device-bind/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-device-bind/macos/result.png"
+}

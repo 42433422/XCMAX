@@ -1,0 +1,24 @@
+{
+  "note": "官网「产品下载」页在本次验收时刻的快照记录。为避免把官网 HTML 原样入库（会触发 html-innerhtml-assignment 安全规则），此处只保留可核验的指纹与从该快照直接读出的事实，不再提交原始 HTML。",
+  "snapshot": {
+    "title": "产品下载 | XCAGI 与客来来",
+    "content_type": "text/html",
+    "bytes": 39696,
+    "sha256": "cd46b7b4bfc451643ff5b6e3052ecdef8d5a96545199cfaf4d0384070b24fcfa"
+  },
+  "facts_read_from_snapshot": {
+    "reads_release_pointer": true,
+    "release_pointer_path": "download-release.json",
+    "hardcoded_default_version_present": false,
+    "download_entries": [
+      "XCAGI-Enterprise-*mac*.dmg",
+      "XCAGI-Enterprise-Setup-*.exe",
+      "XCAGI-Enterprise-Android-*.apk"
+    ]
+  },
+  "cross_check": {
+    "mac_artifact_download_http": 200,
+    "mac_artifact_sha256": "414d9f226fac826302a02657ff9ef97fccbc141f005bb13bf6db8735bbe18783",
+    "source": "official-release-metadata/manifest.json 与 download-release.json"
+  }
+}

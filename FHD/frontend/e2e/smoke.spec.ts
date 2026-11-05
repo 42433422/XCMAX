@@ -1,8 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { installE2eShellMocks, isFullStack, loginBrowserSession } from './helpers'
 
-const DB_READ_TOKEN = '61408693'
-
 test.describe('XCAGI 前端冒烟 @5001', () => {
   test.beforeEach(async ({ page }) => {
     if (!isFullStack()) {
@@ -21,7 +19,7 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page.locator('#app')).toBeVisible()
 
-    // 与 App.vue STARTUP_FAILSAFE_MS 对齐：最坏约 12s 也应 is-ready
+    // Readiness is earned by required resources; timeouts retain an actionable error.
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 20_000 })
     await expect(page.locator('.sidebar')).toBeVisible()
     await expect(page.locator('.sidebar .menu-item').first()).toBeVisible()
@@ -30,7 +28,7 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
     if (!apiProbe || !apiProbe.ok()) {
       test.info().annotations.push({
         type: 'notice',
-        description: '经 Vite 代理的 /api/health 未成功：多为 5000 后端未启动或仍初始化。页面应仍能出壳，但聊天等功能会失效。',
+        description: '经 Vite 代理的 /api/health 未成功：多为 5000 后端未启动或仍初始化。本用例使用合成就绪资源，真实后端状态不能由 mock 页面证明。',
       })
     }
 
@@ -69,17 +67,14 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
     await expect(page.locator('#xcagi-assistant-float-panel')).toHaveCount(0)
   })
 
-  test('并发 API 不被单点阻塞（products/list + system/industries）', async ({ request }) => {
+  test('并发 API 不被单点阻塞（已授权 ETL + 行业目录）', async ({ page }) => {
     test.skip(!isFullStack(), 'requires E2E_FULL_STACK=1')
     const jobs: Promise<any>[] = []
     for (let i = 0; i < 10; i += 1) {
       jobs.push(
-        request.get('/api/products/list?page=1&per_page=1', {
-          timeout: 20_000,
-          headers: { 'X-FHD-Db-Read-Token': DB_READ_TOKEN },
-        }),
+        page.request.get('/api/elt/capabilities', { timeout: 20_000 }),
       )
-      jobs.push(request.get('/api/system/industries', { timeout: 20_000 }))
+      jobs.push(page.request.get('/api/system/industries', { timeout: 20_000 }))
     }
     const responses = await Promise.all(jobs)
     const bad: string[] = []
@@ -89,5 +84,13 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
       }
     }
     expect(bad, `all concurrent API calls should be 200, got ${bad.join(',')}`).toEqual([])
+    const etl = await responses[0].json()
+    expect(etl).toMatchObject({ success: true, data: { enabled: true } })
+    expect(etl.data.targets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'customers' }),
+      expect.objectContaining({ type: 'products' }),
+    ]))
+    const legacyProduct = await page.request.get('/api/products/list?page=1&per_page=1')
+    expect(legacyProduct.status(), await legacyProduct.text()).toBe(403)
   })
 })

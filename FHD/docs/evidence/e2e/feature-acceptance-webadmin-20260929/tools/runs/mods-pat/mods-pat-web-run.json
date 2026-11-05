@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "mods-pat",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-064549",
+  "generated_at": "2026-09-29 06:46:30",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端完成：管理员登录 → 系统设置页真实渲染 → 管理会话 JWT/会话有效性校验 → /api/mod/{mod_id} 命名空间按接入上下文路由 → 未绑定修茈账号的市场管理接口被拒（401）→ 无 CSRF 凭证的写操作被拒（403）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 34400,
+        "processed": 34361,
+        "errors": 0,
+        "dropped": 39,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 3,
+            "max_cache_size": 1000,
+            "hits": 8,
+            "misses": 3,
+            "hit_rate": 0.7272727272727273,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "error.occurred",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "evolution.search"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/mods-pat/mods-pat-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "mods-pat",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-pat/shot/00-login-form.png",
+      "sha256": "41d72598a586a1157bef356f14558b42b7490076f3e359b9ec8d3b1b69d9585c",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点蓝色「登 录」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-pat",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-pat/shot/A1-settings.png",
+      "sha256": "6b3b8c819a118019cdc783836976572a988d8c55978b1c85f39992307ac9e5f0",
+      "visual_review": "accepted",
+      "visible_result": "「系统设置」页真实渲染：个人主页 管理员 / admin / admin@local，模型服务卡片。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-pat",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-pat/shot/A2-server-functions.png",
+      "sha256": "c0d568c29f64a66fa161d3055a28315366487884287f40c61065a2e814de4247",
+      "visual_review": "accepted",
+      "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块（xcmax-admin、ai-ecosystem、model-payment 等）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-pat",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-pat/shot/A3-overview.png",
+      "sha256": "cbc70dd41823d650562a3ceceec62204a00acbe756e92e6d94e219047e29d72d",
+      "visual_review": "accepted",
+      "visible_result": "「服务器后台总览」页真实渲染：本地节点 127.0.0.1:42423、远程服务器「离线」、模块注册表 0 个模块。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-pat",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-pat/shot/A4-tools.png",
+      "sha256": "ba75e17451a2b32449b17166df4fa0ff318ac575ef8f03fb66d54c36254f39ff",
+      "visual_review": "accepted",
+      "visible_result": "「运维工具」页真实渲染：工具表区域显示「加载中…」，本轮尚未刷新出工具列表。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "mods-pat",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-pat/video/mods-pat-web-20260929-064549.webm",
+      "sha256": "8df7160813abf5d1f2b7fbed2428d59e44437c9805686c7d60edcaabf7469e89",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，40.76s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 系统设置 → 服务器功能模块 → 总览 → 运维工具，并 fetch 复核 session/validate、/api/mod/{mod_id} 命名空间、市场管理 401 与无 CSRF 写操作 403。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "A1",
+      "title": "管理会话 JWT/会话有效性校验",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器打开 /admin/settings，随后 fetch GET /api/auth/session/validate。",
+      "expected": "HTTP 200、valid=true，account_kind=admin 且用户名为 admin。",
+      "observed": "{\"status\": 200, \"valid\": true, \"account_kind\": \"admin\", \"username\": \"admin\", \"tier\": \"admin\", \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能\"}",
+      "result": "passed"
+    },
+    {
+      "id": "A2",
+      "title": "/api/mod/{mod_id} 命名空间按接入上下文路由",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器打开 /admin/server-functions，随后 fetch GET /api/mod/xcagi-planner-bridge/tools/registry。",
+      "expected": "HTTP 200、success=true，返回 tool_count>0（mod 命名空间被按 mod_id 解析）。",
+      "observed": "{\"status\": 200, \"tool_count\": 93, \"sample\": [\"excel_analysis\", \"excel_schema_understand\", \"excel_join_compare\", \"excel_chart_recommend\"], \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能\"}",
+      "result": "passed"
+    },
+    {
+      "id": "A3",
+      "title": "未绑定修茈账号的市场管理接口被拒绝（负例）",
+      "input": "已建立的管理员会话，但未绑定修茈市场账号。",
+      "actions": "浏览器打开管理端总览页，随后 fetch GET /api/xcmax/admin/market/assignable-mods。",
+      "expected": "HTTP 401，提示尚未绑定修茈服务器账号。",
+      "observed": "{\"status\": 401, \"message\": \"尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization\", \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能\"}",
+      "result": "passed"
+    },
+    {
+      "id": "A4",
+      "title": "无 CSRF 凭证的写操作被拒绝（负例）",
+      "input": "已建立的管理员会话，写请求不带 X-CSRF-Token 头。",
+      "actions": "浏览器打开 /admin/tools，随后 POST /api/mod-store/update（不带 CSRF 头）。",
+      "expected": "HTTP 403，message 提示 CSRF token missing。",
+      "observed": "{\"status\": 403, \"message\": \"CSRF token missing\", \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能\"}",
+      "result": "passed"
+    }
+  ]
+}

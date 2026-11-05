@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "dt-desktop-workflow",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+  "visible_content": "阻塞：能力目录标注为「占位」；/api/desktop/automation/workflow/run 返回「desktop automation backend not installed in this build」。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-desktop-workflow/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-desktop-workflow/macos/result.png"
+}

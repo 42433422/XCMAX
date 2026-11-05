@@ -41,3 +41,12 @@ def test_blank_username_or_industry_noop():
 def test_missing_user_noop():
     db = _run("ghost", "涂料", user=None)
     db.commit.assert_not_called()
+
+
+def test_registration_database_failure_is_logged(caplog):
+    from app.application.account_registration import apply_account_profile_on_register
+
+    with patch("app.db.session.get_db", side_effect=RuntimeError("db down")) as database:
+        assert apply_account_profile_on_register("fixture-user") is None
+    database.assert_called_once_with()
+    assert "apply_account_profile_on_register failed for fixture-user" in caplog.text

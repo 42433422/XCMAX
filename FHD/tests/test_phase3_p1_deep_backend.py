@@ -5,6 +5,8 @@ service_bridge + excel_extract routes, compat_db writes."""
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -97,6 +99,25 @@ def excel_client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.fixture
+def configured_excel_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Configure the same narrow workspace root that production validates."""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    managed_temp = tmp_path / "temp_excel"
+    managed_temp.mkdir()
+    from app.fastapi_routes import excel_extract
+
+    monkeypatch.setattr(excel_extract, "TEMP_EXCEL_DIR", str(managed_temp))
+    real_named_temporary_file = tempfile.NamedTemporaryFile
+
+    def named_file_in_workspace(*args, **kwargs):
+        kwargs.setdefault("dir", tmp_path)
+        return real_named_temporary_file(*args, **kwargs)
+
+    monkeypatch.setattr(tempfile, "NamedTemporaryFile", named_file_in_workspace)
+    return tmp_path
+
+
 def _mock_db_ctx(query_result=None, count_result=0):
     db = MagicMock()
     q = MagicMock()
@@ -131,7 +152,7 @@ def _bypass_native_planner_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda _n: False,
     )
     monkeypatch.setattr(
-        "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+        "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
         lambda *a, **k: None,
     )
 
@@ -526,9 +547,14 @@ def test_service_bridge_receive_request(mock_get_db: MagicMock, bridge_client: T
 
 
 def test_service_bridge_ping_main(bridge_client: TestClient) -> None:
-    with patch("app.fastapi_routes.service_bridge._get_config_value", return_value=""):
+    with (
+        patch("app.fastapi_routes.service_bridge._get_config_value", return_value=""),
+        patch("app.fastapi_routes.service_bridge.httpx.AsyncClient") as remote,
+    ):
         r = bridge_client.get("/api/service-bridge/ping-main")
-    assert r.status_code in (200, 502, 503)
+    assert r.status_code == 200
+    assert r.json() == {"success": True, "connected": True, "main_server": "(本机直写)"}
+    remote.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -541,7 +567,9 @@ def test_excel_extract_missing_file_path(excel_client: TestClient) -> None:
     assert r.status_code == 400
 
 
-def test_excel_extract_from_path(tmp_path, excel_client: TestClient) -> None:
+def test_excel_extract_from_path(
+    tmp_path, excel_client: TestClient, configured_excel_workspace: Path
+) -> None:
     p = _write_xlsx(tmp_path / "e.xlsx", [["产品", "单价"], ["漆", 99]])
     r = excel_client.post(
         "/api/excel/data/extract",
@@ -562,21 +590,22 @@ def test_excel_generate_missing_data(excel_client: TestClient) -> None:
     assert r.status_code == 400
 
 
-def test_excel_generate_and_download(excel_client: TestClient, tmp_path) -> None:
-    with patch("app.fastapi_routes.excel_extract.TEMP_EXCEL_DIR", str(tmp_path)):
-        rows = [{"产品": "漆", "单价": 88}]
-        r = excel_client.post(
-            "/api/excel/data/generate",
-            json={"data": rows, "filename": "out.xlsx"},
-        )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
-        r2 = excel_client.post(
-            "/api/excel/data/generate/download",
-            json={"data": rows, "filename": "out.xlsx"},
-        )
-        assert r2.status_code == 200
-        assert "spreadsheetml" in r2.headers.get("content-type", "")
+def test_excel_generate_and_download(
+    excel_client: TestClient, configured_excel_workspace: Path
+) -> None:
+    rows = [{"产品": "漆", "单价": 88}]
+    r = excel_client.post(
+        "/api/excel/data/generate",
+        json={"data": rows, "filename": "out.xlsx"},
+    )
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    r2 = excel_client.post(
+        "/api/excel/data/generate/download",
+        json={"data": rows, "filename": "out.xlsx"},
+    )
+    assert r2.status_code == 200
+    assert "spreadsheetml" in r2.headers.get("content-type", "")
 
 
 def test_excel_extract_upload_invalid_ext(excel_client: TestClient) -> None:
@@ -587,22 +616,21 @@ def test_excel_extract_upload_invalid_ext(excel_client: TestClient) -> None:
     assert r.status_code == 400
 
 
-def test_excel_extract_upload_ok(excel_client: TestClient, tmp_path) -> None:
-    buf = BytesIO()
-    _write_xlsx(Path(buf.name) if False else tmp_path / "up.xlsx", [["a"], [1]])
-    p = tmp_path / "up.xlsx"
-    with patch("app.fastapi_routes.excel_extract.TEMP_EXCEL_DIR", str(tmp_path)):
-        with open(p, "rb") as f:
-            r = excel_client.post(
-                "/api/excel/data/extract/upload",
-                files={
-                    "excel_file": (
-                        "up.xlsx",
-                        f.read(),
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                },
-            )
+def test_excel_extract_upload_ok(
+    excel_client: TestClient, tmp_path, configured_excel_workspace: Path
+) -> None:
+    p = _write_xlsx(tmp_path / "up.xlsx", [["a"], [1]])
+    with open(p, "rb") as f:
+        r = excel_client.post(
+            "/api/excel/data/extract/upload",
+            files={
+                "excel_file": (
+                    "up.xlsx",
+                    f.read(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
     assert r.status_code == 200
     assert r.json()["success"] is True
 

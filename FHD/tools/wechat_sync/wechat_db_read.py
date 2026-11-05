@@ -11,9 +11,9 @@ FHD/mutants/resources/wechat_cv/wechat_db_read.py 为沙箱原始版本（CV 脚
 本模块不负责从内存提取 key，仅从 wechat_db_key.json 读取 key_hex 后解密。配置示例：
   wechat_sync/wechat_db_key.json  {"key_hex": "64位十六进制密钥", "wechat_data_dir": "C:\\xwechat_files"}
 """
+import json
 import os
 import sqlite3
-import json
 
 _here = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_KEY_CONFIG = os.path.join(_here, "wechat_db_key.json")

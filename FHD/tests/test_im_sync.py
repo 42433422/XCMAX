@@ -16,7 +16,7 @@ from app.application.im_app_service import (
 )
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
-from app.services.xcmax_sync_service import (
+from app.domain.shared_services.xcmax_sync_service import (
     _apply_im_message,
     _apply_im_read_state,
     apply_inbox,

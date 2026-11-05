@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-ppt",
+ "name": "PPT 生成与解析",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/mod/ppt-generate-employee/employees/ppt-generate-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790713310\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSE",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/ppt-generate-employee/employees/ppt-generate-employee/run（写操作自动附带 CSRF）：PPT 生成员工：由文本生成 .pptx",
+   "expected": "ok=true 且产出 .pptx 文件",
+   "observed": "HTTP 200 270ms；ok=True；{\"output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790713310/outputs/output.pptx\", \"slide_count\": 1, \"title\": \"MAC验收0929 汇报\", \"output_schema\": [\"title\", \"slides\", \"slide",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/mod/ppt-full-read-employee/employees/ppt-full-read-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790713310\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSE",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/ppt-full-read-employee/employees/ppt-full-read-employee/run（写操作自动附带 CSRF）：PPT 读取员工：解析刚生成的 .pptx",
+   "expected": "ok=true 且写出解析结果 JSON",
+   "observed": "HTTP 200 141ms；ok=True；{\"output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790713310/outputs/ppt-read.json\", \"meta_output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "POST /api/platform-shell/workspace-read-files 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790713310\", \"file_paths\": [\"/Users/Shared/XCAGI-FULLCLO",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/platform-shell/workspace-read-files（写操作自动附带 CSRF）：读回 PPT 解析结果（界面同一读取接口）",
+   "expected": "解析结果含原文「太阳鸟」「包装盒」",
+   "observed": "HTTP 200 18ms；{\"success\": true, \"data\": {\"files\": [{\"path\": \"temp_excel/mac0929-ai-ppt-1790713310/outputs/ppt-read.json\", \"kind\": \"json\", \"json\": {\"title\": \"MAC验收0929 汇报\", \"slide_count\": 1, \"outline\": [{\"level\": 1,",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /mod/xcagi-office-employee-pack-bridge/other-tools",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-office-employee-pack-bridge/other-tools，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-office-employee-pack-bridge/other-tools，页面可见 员工，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-office-employee-pack-bridge/other-tools；命中文本 ['员工']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 员工工作流 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 员工工作流管理 | 流程与员工 |  | 在此查看与管理副窗中的固定六类与当前 manifest 已声明的扩展工作流员工；开关样式与",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-ppt",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/macos/result.png",
+   "sha256": "cea16e58c42e360f5db63652c5fbc7b5972a3b35651812cc15de56f3a042f62e",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-ppt",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/macos/operation.webm",
+   "sha256": "de8bef6f2671a7f55b36aba96a0bb46c11af05175260bff46a600d5152420e56",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/macos/run.log",
+  "sha256": "8f173333d993abaa7dbee11eb7e6446670e0298e7dc1cfb6978dda53e5f1f94f",
+  "bytes": 1879
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

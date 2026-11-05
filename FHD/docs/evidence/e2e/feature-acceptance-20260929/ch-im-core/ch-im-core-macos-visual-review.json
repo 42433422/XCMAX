@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ch-im-core",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "c16257b2ea88f69be7f7ffe37672d047034e302432aac598bf4a72e0394b2ff1",
+  "visible_content": "联系人读回企业专属客服；同会话发送站内消息并读回，界面点开会话看到新消息。消息时间按 UTC 显示为本地时间（差 8 小时）——已修复待新构建验收。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-core/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-core/macos/result.png"
+}

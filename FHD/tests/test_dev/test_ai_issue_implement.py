@@ -490,7 +490,78 @@ class TestEstimateFiles:
     def test_explicit_paths_counted(self) -> None:
         body = "改 app/foo.py 和 tests/test_foo.py"
         n = _ai_impl._estimate_files("title", body)
-        assert n >= 2  # 两个明确路径
+        assert n == 2  # 明确的测试文件不再重复计数
+
+    @pytest.mark.parametrize(
+        "prefix",
+        [
+            "",
+            "./",
+            "FHD/",
+            "./FHD/",
+            "/github/workspace/FHD/",
+            "/home/runner/work/XCMAX/XCMAX/FHD/",
+            "/__w/XCMAX/XCMAX/FHD/",
+            "D:/a/XCMAX/XCMAX/FHD/",
+        ],
+    )
+    def test_source_path_aliases_count_once(self, prefix: str) -> None:
+        path = f"{prefix}app/services/foo.py"
+        body = "\n".join(
+            ["app/services/foo.py", path, path.replace("/", "\\"), path.replace("/", "//")]
+        )
+        assert _ai_impl._estimate_files("title", body) == 1
+
+    @pytest.mark.parametrize(
+        "artifact",
+        [
+            "test_reports/result.json",
+            "shard-summary.json",
+            "shard-evidence/worker.json",
+            "coverage/report.json",
+            "htmlcov/coverage.js",
+            "/opt/python/site-packages/pkg/foo.py",
+            "frontend/node_modules/pkg/index.js",
+            "app/__pycache__/cached.py",
+            ".pytest_cache/results.json",
+            "logs/run.jsonl",
+        ],
+    )
+    def test_artifacts_are_not_source_changes(self, artifact: str) -> None:
+        assert _ai_impl._estimate_files("title", f"app/foo.py app/bar.py {artifact}") == 2
+
+    def test_artifact_heavy_failure_stays_within_limit(self) -> None:
+        body = """Fix FHD/scripts/dev/nightly.py and FHD/tests/test_dev/test_nightly.py.
+```text
+File /home/runner/work/XCMAX/XCMAX/FHD/scripts/dev/nightly.py:42
+FAILED tests/test_dev/test_nightly.py::test_summary
+test_reports/nightly.json test_reports/failures.json test_reports/gate.json
+shard-summary.json shard-evidence/worker-1.json shard-evidence/worker-2.json
+coverage/summary.json htmlcov/assets/index.js logs/receipts.jsonl
+/opt/python/site-packages/pytest/runner.py frontend/node_modules/pkg/index.js
+```
+"""
+        assert _ai_impl._estimate_files("修复夜间测试", body) == 2
+
+    def test_six_real_files_including_config_and_docs_exceed_limit(self) -> None:
+        body = """```text
+app/foo.py app/bar.py tests/test_foo.py
+config/settings.json docs/coverage.md pyproject.toml
+```"""
+        assert _ai_impl._estimate_files("title", body) == 6
+
+    @pytest.mark.parametrize(
+        "test_path",
+        [
+            "test_foo.py",
+            "src/foo_test.py",
+            "src/foo.test.ts",
+            "src/foo.spec.js",
+            "src/__tests__/foo.ts",
+        ],
+    )
+    def test_explicit_test_does_not_add_keyword_allowance(self, test_path: str) -> None:
+        assert _ai_impl._estimate_files("补测试", f"app/foo.py {test_path}") == 2
 
     def test_add_new_keyword_adds_two(self) -> None:
         body = "新增一个工具模块"

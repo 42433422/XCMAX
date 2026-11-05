@@ -10,6 +10,8 @@ export type DutyRosterLoopStatus = {
   plannedCount: number
   catalogRegisteredCount: number
   localInstalledCount: number
+  catalogKnown: boolean
+  localKnown: boolean
   missingCatalogIds: string[]
   missingLocalIds: string[]
   extraIds: string[]
@@ -28,12 +30,15 @@ function objectValue(raw: unknown): Record<string, unknown> {
 
 function stringArray(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
-  return raw.map((x) => String(x ?? '').trim()).filter(Boolean)
+  return [...new Set(raw.map((x) => String(x ?? '').trim()).filter(Boolean))]
+}
+function inventoryKnown(raw: unknown): boolean {
+  return Array.isArray(raw) && raw.every(id => typeof id === 'string' && !!id.trim())
 }
 
 function numberValue(raw: unknown, fallback: number): number {
-  const n = Number(raw)
-  return Number.isFinite(n) ? n : fallback
+  const n = raw === null || raw === '' || typeof raw === 'boolean' ? NaN : Number(raw)
+  return Number.isInteger(n) && n >= 0 ? n : fallback
 }
 
 function boolOrNull(raw: unknown): boolean | null {
@@ -47,25 +52,30 @@ export function normalizeDutyRosterLoopStatus(payload: HealthPayload | null | un
   const scheduler = objectValue(health.employee_scheduler ?? health.scheduler)
   const plannedFallback = ALL_PLANNED_YUANGON_PKG_IDS.size
   const missingCatalogIds = stringArray(staffing.missing_employees)
-  const missingLocalIds = stringArray(staffing.missing_local_employee_packs)
+  const hasLocalInventory = inventoryKnown(health.planned_employee_ids) && inventoryKnown(health.local_employee_pack_ids)
+  const installed = new Set(stringArray(health.local_employee_pack_ids))
+  const localMissing = hasLocalInventory ? stringArray(health.planned_employee_ids).filter(id => !installed.has(id)) : staffing.missing_local_employee_packs ?? health.missing_local_employee_packs
+  const missingLocalIds = stringArray(localMissing)
+  const catalogKnown = inventoryKnown(staffing.missing_employees)
+  const localKnown = inventoryKnown(localMissing)
   const extraIds = stringArray(staffing.extra_employees ?? health.extra_local_employee_pack_ids)
   const missingCatalogCount = missingCatalogIds.length
   const missingLocalCount = missingLocalIds.length
   const plannedCount = numberValue(staffing.planned_count ?? health.planned_count, plannedFallback)
   const catalogRegisteredCount = numberValue(
     staffing.registered_count ?? health.registered_count,
-    Math.max(0, plannedCount - missingCatalogCount),
+    catalogKnown ? Math.max(0, plannedCount - missingCatalogCount) : 0,
   )
   const localInstalledCount = numberValue(
     health.planned_local_installed_count ?? staffing.local_installed_count,
-    Math.max(0, plannedCount - missingLocalCount),
+    localKnown ? Math.max(0, plannedCount - missingLocalCount) : 0,
   )
   const schedulerJobs = Array.isArray(health.employee_cron_jobs)
     ? health.employee_cron_jobs
     : Array.isArray(scheduler.jobs)
       ? scheduler.jobs
       : []
-  const ok = health.ok === true || health.success === true || health.healthy === true
+  const ok = typeof health.ok === 'boolean' ? health.ok : typeof health.healthy === 'boolean' ? health.healthy : health.success === true
   const source = String(health.source || '').trim() || 'unknown'
   const message = typeof staffing.error === 'string' ? staffing.error : typeof health.message === 'string' ? health.message : ''
 
@@ -75,6 +85,8 @@ export function normalizeDutyRosterLoopStatus(payload: HealthPayload | null | un
     plannedCount,
     catalogRegisteredCount,
     localInstalledCount,
+    catalogKnown,
+    localKnown,
     missingCatalogIds,
     missingLocalIds,
     extraIds,
@@ -95,6 +107,8 @@ function emptyStatus(): DutyRosterLoopStatus {
     plannedCount: ALL_PLANNED_YUANGON_PKG_IDS.size,
     catalogRegisteredCount: 0,
     localInstalledCount: 0,
+    catalogKnown: false,
+    localKnown: false,
     missingCatalogIds: [],
     missingLocalIds: [],
     extraIds: [],
@@ -116,23 +130,26 @@ export function useDutyRosterLoopStatus(options: { autoRefreshMs?: number } = {}
 
   const ready = computed(
     () =>
-      status.value.ok && status.value.plannedCount > 0 && status.value.missingCatalogCount === 0 && status.value.missingLocalCount === 0,
+      status.value.ok && status.value.catalogKnown && status.value.localKnown && status.value.plannedCount > 0
+      && status.value.missingCatalogCount === 0 && status.value.missingLocalCount === 0
+      && status.value.catalogRegisteredCount >= status.value.plannedCount && status.value.localInstalledCount >= status.value.plannedCount,
   )
 
   const healthLabel = computed(() => {
     if (loading.value && !status.value.checkedAt) return '读取中'
     if (error.value) return '接口异常'
-    if (!status.value.ok) return '异常'
-    if (ready.value) return '编制已对齐'
     if (status.value.missingLocalCount > 0) return '本机缺包'
     if (status.value.missingCatalogCount > 0) return 'Catalog 缺岗'
+    if (!status.value.catalogKnown || !status.value.localKnown) return '待核实'
+    if (!status.value.ok) return '异常'
+    if (ready.value) return '编制包已对齐'
     return '待校验'
   })
 
   const detailLine = computed(() => {
     if (error.value) return error.value
     if (status.value.message) return status.value.message
-    return `编制 ${status.value.plannedCount} 岗，本机员工包 ${status.value.localInstalledCount}/${status.value.plannedCount}，Catalog ${status.value.catalogRegisteredCount}/${status.value.plannedCount}`
+    return `编制 ${status.value.plannedCount} 岗，本机员工包 ${status.value.localKnown ? `${status.value.localInstalledCount}/${status.value.plannedCount}` : '待核实'}，Catalog ${status.value.catalogKnown ? `${status.value.catalogRegisteredCount}/${status.value.plannedCount}` : '待核实'}`
   })
 
   async function refresh() {
@@ -143,7 +160,7 @@ export function useDutyRosterLoopStatus(options: { autoRefreshMs?: number } = {}
       status.value = normalizeDutyRosterLoopStatus(payload)
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : String(e)
-      status.value = { ...status.value, ok: false, checkedAt: Date.now(), message: error.value }
+      status.value = { ...emptyStatus(), source: 'unavailable', checkedAt: Date.now(), message: error.value }
     } finally {
       loading.value = false
     }

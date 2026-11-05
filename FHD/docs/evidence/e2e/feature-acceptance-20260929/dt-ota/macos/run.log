@@ -1,0 +1,5 @@
+2026-09-29T06:54:43+0800 [dt-ota] 开始验收 dt-ota 自动更新（OTA）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:54:50+0800 [dt-ota] M1 passed :: HTTP 200 6698ms；{"updates_available": [], "count": 0, "complete": true, "source_errors": {}}
+2026-09-29T06:54:53+0800 [dt-ota] M2 passed :: 导航后路径 /settings；命中文本 ['更新']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名
+2026-09-29T06:54:54+0800 [dt-ota] screenshot result.png
+2026-09-29T06:55:00+0800 [dt-ota] video operation.webm bytes=473144

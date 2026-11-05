@@ -1,0 +1,67 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M04.source-identity",
+ "platform": "macos",
+ "round": "M04-M16-2026-10-12",
+ "product_version": "1.0.0.5",
+ "candidate_release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "origin_main_tip_at_check": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "origin_main_tip_matches_workorder": true,
+ "merged_fixes_verified": [
+  {
+   "pr": 2295,
+   "sha": "0bcbe65d11",
+   "title": "fix(delivery): 收口取号、原任务确认与原工单结果证据",
+   "ancestor_of_release_sha": true,
+   "covers": "单据编号取号收敛 / 原任务确认"
+  },
+  {
+   "pr": 2298,
+   "sha": "a31ffcb79d",
+   "title": "fix(mac): execute one approved restore and persist workflow cancellation",
+   "ancestor_of_release_sha": true,
+   "covers": "恢复只执行一次 + 取消持久化"
+  },
+  {
+   "pr": 2299,
+   "sha": "37abefb71a",
+   "title": "fix: Mac 流式确认不预建业务任务并约束恢复请求",
+   "ancestor_of_release_sha": true,
+   "covers": "流式确认 / 恢复请求约束"
+  },
+  {
+   "pr": 2301,
+   "sha": "67df3ebe22",
+   "title": "fix: close maintenance controls, Mod faults and work-order decision replay",
+   "ancestor_of_release_sha": true,
+   "covers": "维护控件 / Mod 故障 / 工单决策重放"
+  },
+  {
+   "pr": 2303,
+   "sha": "d488804b63",
+   "title": "fix: preserve restore audit identity and pending chat controls",
+   "ancestor_of_release_sha": true,
+   "covers": "恢复审计身份保留 + 待确认对话控件"
+  },
+  {
+   "pr": 2308,
+   "sha": "e3ac9f1049",
+   "title": "fix: absorb aiohttp client failures in recoverable error family",
+   "ancestor_of_release_sha": true,
+   "covers": "运行期错误家族容错"
+  }
+ ],
+ "forbidden_old_packages_not_reused": [
+  {
+   "sha": "67df3ebe220c98d440a45c4a220d7e0fd7a47bc8",
+   "note": "#2301 merge 旧失败包，仅作为源码修复证据，不作为交付包"
+  },
+  {
+   "sha": "12aa243c",
+   "note": "更早失败包，本轮未引用"
+  }
+ ],
+ "round_evidence_dir": "FHD/docs/evidence/e2e/macos-release-1.0.0.5-e3ac9f1049",
+ "captured_at_utc": "2026-10-12T09:47:02Z",
+ "verdict": "PASS"
+}

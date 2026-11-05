@@ -6,8 +6,8 @@ import operator
 from collections.abc import Hashable
 from typing import TYPE_CHECKING, Annotated, Any, TypedDict, cast
 
-from app.application.workflow.ports.checkpoint import CheckpointStore
-from app.application.workflow.types import (
+from app.application.workflow.ports import CheckpointStore
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     StateField,

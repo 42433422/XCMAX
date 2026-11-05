@@ -56,7 +56,12 @@ def _write_state(ok: bool) -> Path:
                 "ok": ok,
                 "skipped": False,
                 "probes": [
-                    {"name": "health", "url": "drill", "status": 200 if ok else 503, "ok": ok}
+                    {
+                        "name": "health",
+                        "url": "drill",
+                        "status": 200 if ok else 503,
+                        "ok": ok,
+                    }
                 ],
                 "ran_at": datetime.now(UTC).isoformat(),
                 "drill": True,
@@ -71,7 +76,10 @@ def _write_state(ok: bool) -> Path:
 def main() -> int:
     _set_drill_env()
     from modstore_server.ops_staged_auto_approve import should_auto_approve_staged
-    from modstore_server.post_deploy_smoke import _state_file_path, slo_halt_blocks_auto_merge
+    from modstore_server.post_deploy_smoke import (
+        _state_file_path,
+        slo_halt_blocks_auto_merge,
+    )
 
     state_path = _state_file_path()
     backup = state_path.read_text(encoding="utf-8") if state_path.is_file() else None
@@ -81,8 +89,12 @@ def main() -> int:
         _force_live_smoke_fail()
         _write_state(ok=False)
         if not slo_halt_blocks_auto_merge():
-            failures.append("状态文件失败但 slo_halt_blocks_auto_merge() 未阻断次日 auto-merge")
-        if should_auto_approve_staged(files_changed_count=1, diff_summary="app/foo.py | 1 +"):
+            failures.append(
+                "状态文件失败但 slo_halt_blocks_auto_merge() 未阻断次日 auto-merge"
+            )
+        if should_auto_approve_staged(
+            files_changed_count=1, diff_summary="app/foo.py | 1 +"
+        ):
             failures.append("实时 smoke 失败但 should_auto_approve_staged() 仍放量")
         print("[drill] 失败相位 → 安全网阻断:", not failures)
 
@@ -90,9 +102,15 @@ def main() -> int:
         _disable_live_smoke()
         _write_state(ok=True)
         if slo_halt_blocks_auto_merge():
-            failures.append("状态文件健康但 slo_halt_blocks_auto_merge() 仍阻断（误阻断）")
-        if not should_auto_approve_staged(files_changed_count=1, diff_summary="app/foo.py | 1 +"):
-            failures.append("smoke 恢复健康但 should_auto_approve_staged() 仍拒绝（误阻断）")
+            failures.append(
+                "状态文件健康但 slo_halt_blocks_auto_merge() 仍阻断（误阻断）"
+            )
+        if not should_auto_approve_staged(
+            files_changed_count=1, diff_summary="app/foo.py | 1 +"
+        ):
+            failures.append(
+                "smoke 恢复健康但 should_auto_approve_staged() 仍拒绝（误阻断）"
+            )
         print("[drill] 健康相位 → 放量恢复:", not failures)
     finally:
         if backup is not None:
@@ -107,7 +125,9 @@ def main() -> int:
         print("[结论] 安全网未生效 → 禁止开 MODSTORE_OPS_STAGED_AUTO_APPROVE")
         return 1
     print("[PASS] SLO halt 安全网生效：smoke 失败自动阻断放量，健康后恢复。")
-    print("[提醒] 真实回滚演练计时见 docs/runbooks/ROLLBACK.md（目标 15 分钟内原子切换）。")
+    print(
+        "[提醒] 真实回滚演练计时见 docs/runbooks/ROLLBACK.md（目标 15 分钟内原子切换）。"
+    )
     return 0
 
 

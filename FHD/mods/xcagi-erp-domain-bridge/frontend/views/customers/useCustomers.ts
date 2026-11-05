@@ -1,12 +1,13 @@
-import { ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, onActivated, watch } from 'vue'
 import customersApi from '@/api/customers'
 import ordersApi from '@/api/orders'
 import templatePreviewApi from '@/api/templatePreview'
 import { appAlert } from '@/utils/appDialog'
+import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema'
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel'
 import type { CustomerCreateDTO, CustomerUpdateDTO } from '@/types/customer'
+import type { ApiResponse } from '@/types/api'
 
-// 客户行数据（字段以 DataTable 列、合并逻辑与编辑弹窗实际访问项为准）
 interface CustomerRow {
   id?: number | string
   customer_name?: string
@@ -14,7 +15,6 @@ interface CustomerRow {
   name?: string
   contact_person?: string
   contact_phone?: string
-  address?: string
   contact_address?: string
 }
 
@@ -25,29 +25,17 @@ interface CustomerAddForm {
   address: string
 }
 
-interface CustomerEditForm {
+interface CustomerEditForm extends CustomerAddForm {
   id?: number | string | null
-  customer_name: string
-  contact_person: string
-  contact_phone: string
-  address: string
 }
 
-interface CustomersListResponse {
-  success: boolean
-  message?: string
-  total?: number
+interface CustomersListResponse extends ApiResponse<CustomerRow[]> {
   customers?: CustomerRow[]
-  data?: CustomerRow[]
 }
 
 // 购买单位下拉项：接口可能返回字符串或对象（多字段名兼容）
-interface UnitOptionObject {
-  id?: number | string
-  name?: string
+interface UnitOptionObject extends CustomerRow {
   symbol?: string
-  unit_name?: string
-  customer_name?: string
   unitName?: string
 }
 
@@ -60,7 +48,6 @@ interface UnitsPayload {
   units?: unknown[]
 }
 
-// 客户导出模板（templatePreviewApi.listTemplates 响应）
 interface ExportTemplateItem {
   id: number | string
   name: string
@@ -75,10 +62,10 @@ interface ExportTemplatesResponse {
   templates?: ExportTemplateItem[]
 }
 
-// 拆分自 CustomersView.vue script（原第 200–508 行）；逻辑逐字迁移，行为不变。
-// DataTable / ConfirmDialog 组件仍在入口 SFC 中导入。
 export function useCustomers() {
   const pageNavTitle = useCoreNavLabel('customers');
+  const schema = useIndustryFieldSchema('customers');
+  const entityName = computed(() => schema.entity.value || '客户');
   const productsNavLabel = useCoreNavLabel('products');
   const shipmentNavLabel = useCoreNavLabel('shipment-records');
 
@@ -109,12 +96,12 @@ export function useCustomers() {
     address: ''
   });
 
-  const columns = [
-    { key: 'customer_name', label: '客户名称' },
+  const columns = computed(() => [
+    { key: 'customer_name', label: `${entityName.value}名称` },
     { key: 'contact_person', label: '联系人' },
     { key: 'contact_phone', label: '电话' },
-    { key: 'address', label: '地址' }
-  ];
+    { key: 'contact_address', label: '地址' }
+  ]);
 
   function normalizeUnitsPayload(data: UnitsPayload) {
     const list = data?.data || data?.units || [];
@@ -178,8 +165,8 @@ export function useCustomers() {
         ...(pu ? { purchase_unit: pu } : {})
       });
       if (data.success) {
-        const incoming = data.customers || data.data || [];
-        const total = Number(data.total ?? incoming.length ?? 0);
+        const incoming = data.data ?? data.customers ?? [];
+        const total = Number(data.total ?? incoming.length);
         totalCustomers.value = Number.isFinite(total) ? total : incoming.length;
 
         if (reset) {
@@ -241,7 +228,7 @@ export function useCustomers() {
       customer_name: customer.customer_name || customer.unit_name || customer.name || '',
       contact_person: customer.contact_person || '',
       contact_phone: customer.contact_phone || '',
-      address: customer.address || customer.contact_address || ''
+      address: customer.contact_address || ''
     };
     showEditModal.value = true;
   };
@@ -261,7 +248,7 @@ export function useCustomers() {
 
   const saveAdd = async () => {
     if (!addForm.value.customer_name?.trim()) {
-      await appAlert('客户名称不能为空');
+      await appAlert(`${entityName.value}名称不能为空`);
       return;
     }
     try {
@@ -271,7 +258,7 @@ export function useCustomers() {
         contact_phone: addForm.value.contact_phone,
         contact_address: addForm.value.address,
       } as unknown as CustomerCreateDTO);
-      await appAlert('客户创建成功');
+      await appAlert(`${entityName.value}创建成功`);
       closeAddModal();
       await loadCustomers({ reset: true });
     } catch (e) {
@@ -282,7 +269,7 @@ export function useCustomers() {
   const saveEdit = async () => {
     if (!editForm.value.id) return;
     if (!editForm.value.customer_name?.trim()) {
-      await appAlert('客户名称不能为空');
+      await appAlert(`${entityName.value}名称不能为空`);
       return;
     }
     try {
@@ -371,14 +358,16 @@ export function useCustomers() {
     loadCustomers({ reset: true });
   });
 
-  onMounted(() => {
+  const refreshCustomersView = () => {
     loadPurchaseUnitOptions();
     loadCustomers({ reset: true });
     loadTemplateOptions();
-  });
+  };
+  onMounted(refreshCustomersView);
+  onActivated(refreshCustomersView);
 
   return {
-    pageNavTitle,
+    pageNavTitle, entityName,
     productsNavLabel,
     shipmentNavLabel,
     customers,

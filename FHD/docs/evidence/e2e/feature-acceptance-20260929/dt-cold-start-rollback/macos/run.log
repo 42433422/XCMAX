@@ -1,0 +1,5 @@
+2026-09-29T06:55:07+0800 [dt-cold-start-rollback] 开始验收 dt-cold-start-rollback 冷启动与回滚；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:55:08+0800 [dt-cold-start-rollback] M1 passed :: HTTP 200 13ms；readyForUi=True degraded=False
+2026-09-29T06:55:11+0800 [dt-cold-start-rollback] M2 passed :: 导航后路径 /；命中文本 ['智能对话']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 1 次任务 · 预计节约人工费用 ¥4 |  | 你好，我是饰品包装助手。 - 查产品与
+2026-09-29T06:55:12+0800 [dt-cold-start-rollback] screenshot result.png
+2026-09-29T06:55:16+0800 [dt-cold-start-rollback] video operation.webm bytes=172396

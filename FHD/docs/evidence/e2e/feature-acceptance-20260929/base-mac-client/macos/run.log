@@ -1,0 +1,6 @@
+2026-09-29T06:38:54+0800 [base-mac-client] 开始验收 base-mac-client macOS 桌面客户端；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:38:54+0800 [base-mac-client] M1 passed :: HTTP 200 12ms；desktopMode=True readyForUi=True storage=local_sqlite
+2026-09-29T06:38:54+0800 [base-mac-client] M2 passed :: HTTP 200 14ms；version=1.0.0.5 git_sha=37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e release=xcagi-1.0.0.5-37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e
+2026-09-29T06:38:58+0800 [base-mac-client] M3 passed :: 导航后路径 /desktop-runtime；命中文本 ['桌面']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 桌面运行时 | SUNBIRD | 副窗 | ◈ | 工作区 | 桌面运行时 |  | 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 |  | 刷新状态检查桌面更新 | 运行状态 | 桌面模式
+2026-09-29T06:38:59+0800 [base-mac-client] screenshot result.png
+2026-09-29T06:39:01+0800 [base-mac-client] video operation.webm bytes=274375

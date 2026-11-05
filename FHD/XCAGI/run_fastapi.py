@@ -1,20 +1,12 @@
 #!/usr/bin/env python3
-"""FastAPI + Uvicorn 启动入口
-
-由 ``start-lan.ps1``、``python run.py`` 或桌面壳 ``xcagi-backend`` 调用。
-环境变量（由启动脚本或 .env 注入）：
-
-- FASTAPI_HOST / XCAGI_API_HOST — 监听地址，默认 127.0.0.1
-- FASTAPI_PORT / XCAGI_API_PORT — 监听端口，默认 5000（**XCAGI_API_PORT 优先**，供 systemd/fhd-full.env 覆盖 .env 内 FASTAPI_PORT）
-- XCAGI_UVICORN_RELOAD — 是否启用热重载，默认 1（桌面/打包强制 0）
-"""
+"""FastAPI/Uvicorn entry; packaged desktop uses the host/port supplied by Electron."""
 
 from __future__ import annotations
 
 import argparse
 import os
-import socket
 import sys
+import time
 from pathlib import Path
 
 BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
@@ -22,51 +14,19 @@ RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     OSError,
     ValueError,
     TypeError,
-    KeyError,
     AttributeError,
     RuntimeError,
     ImportError,
     LookupError,
-    ConnectionError,
-    TimeoutError,
     ArithmeticError,
-    UnicodeError,
 )
 
 _XCAGI_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _XCAGI_DIR.parent
 
-# 自动寻找端口的范围（macOS AirPlay 常占用 5000）
-_PORT_PROBE_RANGE = range(5000, 5021)
-
-
-def _is_port_free(host: str, port: int) -> bool:
-    """检测 host:port 是否可绑定（未被占用）。"""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind((host, port))
-        return True
-    except OSError:
-        return False
-
-
-def _find_free_port(host: str, preferred: int) -> int:
-    """从 preferred 开始在 _PORT_PROBE_RANGE 内找可用端口；都占用则返回 preferred。"""
-    candidates = [preferred] + [p for p in _PORT_PROBE_RANGE if p != preferred]
-    for p in candidates:
-        if _is_port_free(host, p):
-            return p
-    return preferred
-
 
 def _runtime_port_file() -> Path:
-    """运行时端口文件。
-
-    打包桌面版的程序目录属于已签名、可能只读的应用资源，绝不能在其中创建
-    ``.runtime``。Electron 通过 ``--data-dir`` 设置的用户数据目录是唯一可写
-    位置；源码开发态未配置数据目录时仍保持原有仓库路径。
-    """
+    """Write runtime ports to desktop userData, never signed application resources."""
     data_root = (
         os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
     ).strip()
@@ -132,11 +92,7 @@ def _env_truthy(name: str) -> bool:
 
 
 def _apply_desktop_local_market_env() -> None:
-    """桌面模式默认连接生产认证服务器；本地 MODstore 仅当显式 XCAGI_USE_LOCAL_MARKET=1。
-
-    ``XCAGI_USE_REMOTE_MARKET=1`` 优先于本地市场，避免 shell 同时 export 两者时
-    ``.env.local-market`` 把 ``XCAGI_MARKET_BASE_URL`` 覆盖回 ``:8788``。
-    """
+    """Production by default; explicit remote preference overrides explicit local market."""
     os.environ.setdefault("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
     if _env_truthy("XCAGI_USE_REMOTE_MARKET"):
         _load_dotenv_override(
@@ -162,10 +118,107 @@ def _is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False)) or hasattr(sys, "_MEIPASS")
 
 
+def _force_stdio_utf8(data_dir: str | None = None) -> None:
+    """Keep Windows pipes UTF-8; windowed Python needs streams before Uvicorn logging."""
+    if sys.platform != "win32":
+        return
+    fallback = None
+    for name, descriptor in (("stdout", 1), ("stderr", 2)):
+        if getattr(sys, name) is not None:
+            continue
+        try:
+            stream = os.fdopen(os.dup(descriptor), "w", encoding="utf-8", buffering=1)
+        except OSError:
+            if fallback is None:
+                root = Path(
+                    data_dir
+                    or os.environ.get("XCAGI_DATA_DIR")
+                    or os.environ.get("XCAGI_DESKTOP_DATA_DIR")
+                    or (Path(os.environ.get("APPDATA") or Path.home()) / "XCAGI")
+                )
+                logs = root.expanduser().resolve() / "logs"
+                logs.mkdir(parents=True, exist_ok=True)
+                fallback = (logs / "backend-bootstrap.log").open("a", encoding="utf-8", buffering=1)
+            stream = fallback
+        setattr(sys, name, stream)
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except (ValueError, OSError):
+            pass
+
+
+def _bootstrap_stage(stage: str) -> None:
+    if sys.platform == "win32" and _is_frozen():
+        print(f"[bootstrap] {time.time():.3f} {stage}", file=sys.stderr, flush=True)
+
+
+def _verify_frozen_elt_runtime() -> None:
+    """Exercise safe XML parsing and the real XLSX slice path without user data or AI."""
+    from hashlib import sha256
+    from io import BytesIO
+
+    from defusedxml import ElementTree as safe_xml
+    from defusedxml.common import DTDForbidden
+    from openpyxl import Workbook, load_workbook
+    from openpyxl.worksheet.print_settings import PrintArea
+
+    from app.application.reviewed_excel_template import (
+        derive_document_workbook,
+        inspect_workbook,
+    )
+
+    # Importing alone does not prove the bundled parser or derivation path works.
+    try:
+        safe_xml.fromstring(b"<!DOCTYPE probe><probe/>", forbid_dtd=True)
+    except DTDForbidden:
+        pass
+    else:
+        raise RuntimeError("frozen ELT runtime probe did not reject a DTD")
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Synthetic"
+    sheet.append(["Item", "Quantity"])
+    sheet.append(["Sample", 2])
+    sheet.append(["Total", "=SUM(B2:B2)"])
+    sheet.auto_filter.ref = "A1:B3"
+    sheet.print_area = "A1:B3"
+    stream = BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    source = stream.getvalue()
+    source_sha = sha256(source).digest()
+    if inspect_workbook(source)["sheets"] != ["Synthetic"]:
+        raise RuntimeError("frozen ELT runtime probe could not inspect its workbook")
+    derived = derive_document_workbook(
+        source, [{"sheet": "Synthetic", "range": "A1:B3"}], print_area_mode="selected"
+    )
+    checked = load_workbook(BytesIO(derived), data_only=False, keep_links=True, rich_text=True)
+    try:
+        result = checked["Synthetic"]
+        if (
+            checked.sheetnames != ["Synthetic"]
+            or list(result.values)
+            != [("Item", "Quantity"), ("Sample", 2), ("Total", "=SUM(B2:B2)")]
+            or result.auto_filter.ref != "A1:B3"
+            or {str(area) for area in PrintArea.from_string(result.print_area).ranges} != {"A1:B3"}
+            or sha256(source).digest() != source_sha
+        ):
+            raise RuntimeError("frozen ELT runtime probe did not preserve its workbook")
+    finally:
+        checked.close()
+    print("[run_fastapi] frozen ELT runtime probe OK: defusedxml + XLSX inspect/derive/readback")
+
+
 def _verify_frozen_critical_runtime() -> None:
     """Exercise critical office and voice dependencies in the frozen executable."""
     import tempfile
 
+    print("[frozen-runtime-probe] voice and PDF imports begin", file=sys.stderr, flush=True)
     import av
     import faster_whisper
     from pypdf import PdfReader
@@ -174,12 +227,15 @@ def _verify_frozen_critical_runtime() -> None:
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont  # type: ignore[import-untyped]
     from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 
-    # xcmax_sync_service loads its applier modules through importlib strings,
-    # which PyInstaller cannot infer. Import the real service and validate the
-    # registry here so release CI fails before publishing a desktop package
-    # whose entitlement-sync endpoint would return 500 at runtime.
-    from app.services.xcmax_sync_service import _ENTITY_APPLIERS
+    print("[frozen-runtime-probe] ELT derivation begin", file=sys.stderr, flush=True)
+    _verify_frozen_elt_runtime()
+    print("[frozen-runtime-probe] ELT derivation complete", file=sys.stderr, flush=True)
 
+    # Validate string-loaded sync appliers that static PyInstaller analysis cannot discover.
+    print("[frozen-runtime-probe] sync applier import begin", file=sys.stderr, flush=True)
+    from app.domain.shared_services.xcmax_sync_service import _ENTITY_APPLIERS
+
+    print("[frozen-runtime-probe] sync applier import complete", file=sys.stderr, flush=True)
     required_sync_appliers = {
         "personnel",
         "department",
@@ -218,10 +274,13 @@ def _verify_frozen_critical_runtime() -> None:
             raise RuntimeError("frozen PDF runtime probe produced an invalid document")
 
         if _is_frozen():
-            from app.desktop_runtime.paths import configure_desktop_environment
+            print("[frozen-runtime-probe] desktop seed import begin", file=sys.stderr, flush=True)
+            from app.desktop_runtime.desktop_runtime_paths import configure_desktop_environment
 
-            data_root = Path(tmp) / "desktop-data"
+            print("[frozen-runtime-probe] desktop seed setup begin", file=sys.stderr, flush=True)
+            data_root = Path(os.environ["XCAGI_DATA_DIR"])
             configure_desktop_environment(data_root)
+            print("[frozen-runtime-probe] desktop seed setup complete", file=sys.stderr, flush=True)
             bundled_root = Path(sys._MEIPASS) / "mods" / "_employees"  # type: ignore[attr-defined]
             installed_root = data_root / "mods" / "_employees"
             bundled = {
@@ -247,6 +306,108 @@ def _verify_frozen_critical_runtime() -> None:
     )
 
 
+def _run_frozen_critical_probe(data_dir: str | None) -> None:
+    """Isolate diagnostics before importing application bootstrap packages."""
+    import faulthandler
+    import tempfile
+    import traceback
+
+    with tempfile.TemporaryDirectory(prefix="xcagi-critical-probe-") as temporary:
+        root = Path(data_dir or temporary).resolve()
+        for name in ("data", "logs", "mods"):
+            (root / name).mkdir(parents=True, exist_ok=True)
+        database_url = "sqlite:///" + (root / "data" / "probe.db").as_posix()
+        isolated_env = {
+            "PYTHON_DOTENV_DISABLED": "1",
+            "XCAGI_DESKTOP_MODE": "1",
+            "XCAGI_DATA_DIR": str(root),
+            "XCAGI_DESKTOP_DATA_DIR": str(root),
+            "XCAGI_MODS_ROOT": str(root / "mods"),
+            "XCAGI_LOG_DIR": str(root / "logs"),
+            "DATABASE_URL": database_url,
+            "VECTOR_DB_URL": database_url,
+            "XCAGI_DESKTOP_DATABASE_URL": database_url,
+            "XCAGI_DESKTOP_VECTOR_DB_URL": database_url,
+            "DATABASE_PATH": str(root / "data"),
+            "WORKSPACE_ROOT": str(root),
+            "XCAGI_WORKSPACE_ROOT": str(root),
+            "XCAGI_FORCE_SYNC_TASKS": "1",
+            "XCAGI_DISABLE_REDIS": "1",
+            "CACHE_REDIS_URL": "",
+            "CELERY_BROKER_URL": "memory://",
+            "CELERY_RESULT_BACKEND": "cache+memory://",
+        }
+        previous_env = {name: os.environ.get(name) for name in isolated_env}
+        os.environ.update(isolated_env)
+        try:
+            _force_stdio_utf8(str(root))
+            print("[frozen-runtime-probe] isolated entry", file=sys.stderr, flush=True)
+            _ensure_sys_path()
+            print("[frozen-runtime-probe] source path ready", file=sys.stderr, flush=True)
+            with (root / "logs" / "frozen-runtime-probe.log").open(
+                "w", encoding="utf-8", buffering=1
+            ) as diagnostics:
+                # Dump Python stacks if an import stalls; the caller also bounds
+                # this one process. No locals, arguments or environment are logged.
+                faulthandler.dump_traceback_later(60, repeat=True, file=diagnostics)
+                try:
+                    _verify_frozen_critical_runtime()
+                except BOUNDARY_ERRORS as exc:  # isolated command records failure and exits nonzero
+                    traceback.print_exc(file=diagnostics)
+                    diagnostics.flush()
+                    traceback.print_exc(file=sys.stderr)
+                    # A windowed PyInstaller executable displays unhandled errors
+                    # in a blocking dialog. An explicit failed exit keeps CI usable.
+                    raise SystemExit(1) from exc
+                finally:
+                    faulthandler.cancel_dump_traceback_later()
+        finally:
+            for name, value in previous_env.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+
+
+def _run_notice_publication_probe(expected_sha256: str, data_dir: str | None) -> None:
+    """Read the installed bundle through the real loader without normal app startup."""
+    import hashlib
+    import re
+
+    try:
+        _force_stdio_utf8(data_dir)
+        if not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha256):
+            raise ValueError("invalid expected publication digest")
+        _ensure_sys_path()
+        from app.application import elt_login_authorization as authorization
+
+        if authorization.NOTICE_PUBLICATION_ENV in os.environ:
+            raise RuntimeError("environment override prevents bundled publication verification")
+        path = authorization._NOTICE_PUBLICATION_FILE
+        if path.is_symlink() or path.parent.is_symlink():
+            raise RuntimeError("bundled publication must not be a symlink")
+        body = path.read_bytes()
+        if hashlib.sha256(body).hexdigest() != expected_sha256.lower():
+            raise RuntimeError("bundled publication digest mismatch")
+        publication = authorization.notice_publication()
+        if publication is None:
+            raise RuntimeError("bundled publication record is invalid")
+        if path.read_bytes() != body:
+            raise RuntimeError("bundled publication changed during verification")
+        print(
+            f"[notice-publication-probe] OK sha256={expected_sha256.lower()} "
+            f"runtime_record_sha256={publication['record_sha256']}",
+            flush=True,
+        )
+    except BOUNDARY_ERRORS as exc:
+        # Explicit failed exit avoids the windowed PyInstaller unhandled-error dialog.
+        try:
+            print(f"[notice-publication-probe] failed: {type(exc).__name__}", file=sys.stderr)
+        except (OSError, ValueError):
+            pass
+        raise SystemExit(1) from None
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="XCAGI FastAPI server")
     parser.add_argument(
@@ -256,6 +417,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--host", default=None, help="监听地址")
     parser.add_argument("--port", type=int, default=None, help="监听端口")
     parser.add_argument("--data-dir", default=None, help="桌面数据目录")
+    parser.add_argument("--verify-backup", default="", help="只读校验 SQLite 备份后退出")
+    parser.add_argument(
+        "--export-model-usage-ledger",
+        default="",
+        help="后端停写后将计量账本交接给旧版；成功后退出，不启动服务器",
+    )
     parser.add_argument("--migrate-only", action="store_true", help="仅执行数据库迁移后退出")
     parser.add_argument(
         "--backup", action="store_true", help="迁移前备份（与 --migrate-only 合用）"
@@ -264,6 +431,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--verify-frozen-critical-runtime",
         action="store_true",
         help="验证冻结包内办公与语音关键依赖后退出",
+    )
+    parser.add_argument(
+        "--verify-notice-publication-sha256",
+        default=None,
+        help="只读校验冻结包内条款发布记录与预期 SHA256 后退出",
     )
     return parser.parse_args(argv)
 
@@ -283,29 +455,61 @@ def _apply_desktop_bootstrap(args: argparse.Namespace) -> None:
         print(f"[run_fastapi] desktop bootstrap warning: {exc}", file=sys.stderr)
 
 
+def _apply_no_console_child_defaults() -> None:
+    """打包桌面后端自身无控制台：默认让子进程不开新控制台窗口（避免点功能闪黑窗）。"""
+    try:
+        from app.desktop_runtime.no_console_children import (
+            install_no_console_child_defaults,
+        )
+
+        install_no_console_child_defaults()
+    except BOUNDARY_ERRORS:
+        pass
+
+
 def _resolve_reload(desktop: bool) -> bool:
     if _is_frozen() or desktop:
         return False
-    return os.environ.get("XCAGI_UVICORN_RELOAD", "1").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    return _env_truthy("XCAGI_UVICORN_RELOAD") if "XCAGI_UVICORN_RELOAD" in os.environ else True
 
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
-
+    if args.verify_notice_publication_sha256 is not None:
+        _run_notice_publication_probe(args.verify_notice_publication_sha256, args.data_dir)
+        return
     if args.verify_frozen_critical_runtime:
-        _verify_frozen_critical_runtime()
+        _run_frozen_critical_probe(args.data_dir)
+        return
+    _force_stdio_utf8(args.data_dir)
+    _bootstrap_stage("entry")
+    _ensure_sys_path()
+    _apply_no_console_child_defaults()
+    _bootstrap_stage("child-defaults-ready")
+
+    if args.export_model_usage_ledger:
+        from app.infrastructure.billing.model_usage_export import main as export_ledger
+
+        ledger = str(Path(args.export_model_usage_ledger).expanduser().resolve())
+        result = export_ledger(["--ledger", ledger, "--output", ledger, "--handoff"])
+        if result:
+            raise SystemExit(result)
+        print(f"XCAGI_MODEL_USAGE_HANDOFF={ledger}", flush=True)
+        return
+
+    if args.verify_backup:
+        from app.desktop_runtime.db import integrity_check_ok
+
+        backup = Path(args.verify_backup)
+        if not backup.is_file() or not backup.stat().st_size or not integrity_check_ok(backup):
+            raise SystemExit(1)
+        print(f"XCAGI_BACKUP_VALID={backup}")
         return
 
     _load_dotenv_if_present(_XCAGI_DIR / ".env")
     _load_dotenv_if_present(_REPO_ROOT / ".env")
 
     # Clash 常注入 ALL_PROXY=socks5://…；无 socksio 时 httpx 会直接失败。
-    _ensure_sys_path()
     try:
         from app.utils.security.proxy_env import sanitize_socks_all_proxy
 
@@ -314,36 +518,46 @@ def main(argv: list[str] | None = None) -> None:
         pass
 
     if args.desktop or args.data_dir or args.migrate_only:
+        _bootstrap_stage("desktop-environment-begin")
         _apply_desktop_bootstrap(args)
+        _bootstrap_stage("desktop-environment-ready")
 
-    if args.desktop or os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
+    desktop = args.desktop or _env_truthy("XCAGI_DESKTOP_MODE")
+    if desktop:
         _apply_desktop_local_market_env()
 
     if args.migrate_only:
-        _ensure_sys_path()
-        from app.desktop_runtime.migrate import backup_database, run_alembic_upgrade
-        from app.desktop_runtime.paths import (
+        from app.desktop_runtime.desktop_runtime_paths import (
             configure_desktop_environment,
             ensure_desktop_dirs,
+        )
+        from app.desktop_runtime.migrate import (
+            backup_database,
+            migration_lock,
+            run_alembic_upgrade,
         )
 
         configure_desktop_environment(args.data_dir)
         version = os.environ.get("XCAGI_VERSION", "unknown")
-        if args.backup:
-            dirs = ensure_desktop_dirs(args.data_dir)
-            database_exists = (dirs["data"] / "xcagi.db").exists()
-            backup_path = backup_database(args.data_dir, version)
-            if database_exists and backup_path is None:
-                raise RuntimeError("migration backup failed; refusing to continue")
-            if backup_path is not None:
-                print(f"XCAGI_MIGRATION_BACKUP={backup_path}", flush=True)
-        run_alembic_upgrade(args.data_dir)
+        # Backup and migration share the lock with concurrent normal startup.
+        with migration_lock(args.data_dir):
+            if args.backup:
+                dirs = ensure_desktop_dirs(args.data_dir)
+                database_exists = (dirs["data"] / "xcagi.db").exists()
+                backup_path = backup_database(args.data_dir, version)
+                if database_exists and backup_path is None:
+                    raise RuntimeError("migration backup failed; refusing to continue")
+                if backup_path is not None:
+                    print(f"XCAGI_MIGRATION_BACKUP={backup_path}", flush=True)
+            run_alembic_upgrade(args.data_dir)
         return
+
+    if desktop:
+        from app.desktop_runtime.migrate import ensure_startup_migration
+
+        _bootstrap_stage("startup-migration-begin")
+        ensure_startup_migration(args.data_dir)
+        _bootstrap_stage("startup-migration-ready")
 
     if args.host:
         os.environ["FASTAPI_HOST"] = args.host
@@ -352,62 +566,56 @@ def main(argv: list[str] | None = None) -> None:
         os.environ["FASTAPI_PORT"] = str(args.port)
         os.environ["XCAGI_API_PORT"] = str(args.port)
 
-    _ensure_sys_path()
+    from app.utils.device_system.listen_port import (
+        DESKTOP_API_PORT,
+        find_available_port,
+        publish_listen_address,
+        resolve_listen_host,
+        resolve_listen_port,
+    )
 
-    host = os.environ.get("FASTAPI_HOST") or os.environ.get("XCAGI_API_HOST") or "127.0.0.1"
-    port = int(os.environ.get("XCAGI_API_PORT") or os.environ.get("FASTAPI_PORT") or "5000")
-    # 桌面模式：端口由 Electron 主进程指定，不做避让——避让会导致 Electron 健康检查
-    # 轮询原端口而后端实际监听其他端口，引发白屏超时。端口被占时直接报错退出，
-    # 由 Electron 捕获退出码并引导用户。
-    if not args.desktop:
-        # 自动寻找可用端口：macOS AirPlay 等常占用 5000，被占用时在 5000-5020 内自动避让
-        probe_host = "127.0.0.1" if host in ("0.0.0.0", "") else host
-        free_port = _find_free_port(probe_host, port)
+    host = resolve_listen_host()
+    port = resolve_listen_port()
+    if args.port is not None and not 1 <= args.port <= 65535:
+        raise ValueError("HTTP port must be between 1 and 65535")
+    if not desktop:
+        free_port = find_available_port(host, port, range(DESKTOP_API_PORT, DESKTOP_API_PORT + 21))
         if free_port != port:
             print(
                 f"[run_fastapi] 端口 {port} 被占用，自动切换到 {free_port}",
                 file=sys.stderr,
             )
             port = free_port
-    # 持久化实际端口，供前端 Vite 读取联动
+    publish_listen_address(host, port)
     _persist_runtime_port(port)
-    reload = _resolve_reload(
-        args.desktop
-        or os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
-    )
+    reload = _resolve_reload(desktop)
 
+    _bootstrap_stage("server-import-begin")
     import uvicorn
 
     # 打包后避免 ``"module:attr"`` 字符串导入（PyInstaller 常无法解析，导致桌面端启动失败/假死）
     if _is_frozen():
         from app.fastapi_app import create_fastapi_app
 
-        uvicorn.run(
-            create_fastapi_app,
-            factory=True,
-            host=host,
-            port=port,
-            reload=False,
-            log_level="info",
-        )
-        return
+        _bootstrap_stage("server-import-ready")
+        target = create_fastapi_app
+    else:
+        target = "app.fastapi_app:create_fastapi_app"
 
     uvicorn.run(
-        "app.fastapi_app:create_fastapi_app",
+        target,
         factory=True,
         host=host,
         port=port,
         reload=reload,
         reload_dirs=[str(_REPO_ROOT)] if reload else None,
         log_level="info",
+        timeout_graceful_shutdown=30,
     )
 
 
 if __name__ == "__main__":
-    # PyInstaller replaces freeze_support() so frozen worker/resource-tracker
-    # invocations are dispatched before our argparse sees their private flags.
-    # Without this, faster-whisper can still return text while leaking a dead
-    # multiprocessing resource tracker after every cold model load.
+    # Dispatch frozen multiprocessing workers before parsing application arguments.
     import multiprocessing
 
     multiprocessing.freeze_support()

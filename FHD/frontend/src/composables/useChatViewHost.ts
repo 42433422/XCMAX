@@ -1,7 +1,8 @@
-import { onMounted, onBeforeUnmount, type Ref } from 'vue'
+import { onMounted, onBeforeUnmount, onActivated, onDeactivated, type Ref } from 'vue'
 import type { useModsStore } from '@/stores/mods'
 import { asRecord } from '@/utils/typeGuards'
 import { consumeFirstAiTaskPrompt } from '@/constants/productFlow'
+import { useStartupPageReady } from '@/composables/useStartupSplash'
 
 const CHAT_RIGHT_PANE_MQ = '(max-width: 1023px)'
 const AUTO_REFRESH_STARRED_WECHAT_KEY = 'xcagi_auto_refresh_starred_wechat'
@@ -13,7 +14,8 @@ export interface UseChatViewHostDeps {
   isTaskPaneResizable: Ref<boolean>
   messageInput: Ref<string>
   latestAssistantPush: Ref<{ title: string; description: string } | null>
-  syncSessionMessages: () => Promise<void>
+  syncSessionMessages: (options?: { required?: boolean; isCurrent?: () => boolean }) => Promise<void>
+  pageScopeKey?: () => unknown
   chatHandleAutoAction: (action: Record<string, unknown>, userMessage?: string) => void
   sendMessage: () => Promise<void>
   batchCalculateHeights: () => void
@@ -42,14 +44,53 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
   let legacyAutoActionHandler: ((action: unknown, userMessage?: string) => void) | null = null
   let onAssistantPush: ((evt: Event) => void) | null = null
   let taskPaneViewportMedia: MediaQueryList | null = null
+  let returningToChat = false
+  let chatViewActive = true
+  const preparePage = useStartupPageReady(async current => {
+    await syncSessionMessages({ required: true, isCurrent: current })
+    if (!current()) return
+    const firstTaskPrompt = consumeFirstAiTaskPrompt()
+    if (firstTaskPrompt) {
+      messageInput.value = firstTaskPrompt
+      void sendMessage()
+    }
+  }, deps.pageScopeKey)
+  const emitChatViewActive = (active: boolean) => {
+    chatViewActive = active
+    try {
+      window.dispatchEvent(new CustomEvent('xcagi:chat-view-active', { detail: { active } }))
+    } catch {
+      /* ignore */
+    }
+  }
+  onDeactivated(() => {
+    returningToChat = true
+    // Pause non-critical ChatView work while keep-alive caches this instance (nav jank 2B).
+    cleanupVoiceInput()
+    stopMessageTts()
+    stopTaskPaneResize()
+    emitChatViewActive(false)
+  })
+  onActivated(() => {
+    emitChatViewActive(true)
+    if (returningToChat) void syncSessionMessages().catch(() => {})
+    returningToChat = false
+  })
 
+  /**
+   * Legacy WeChat star-refresh persist — retained for workflow settings callers only.
+   * Chat toolbar「主动意识」must NOT call this (isolates xcagi_auto_refresh_starred_wechat).
+   */
   const persistAutoRefreshWechatSetting = () => {
     const enabled = !!autoRefreshStarredWechat.value
     localStorage.setItem(AUTO_REFRESH_STARRED_WECHAT_KEY, enabled ? '1' : '0')
     window.dispatchEvent(new CustomEvent('xcagi:auto-refresh-wechat-changed', { detail: { enabled } }))
   }
 
+  /** @deprecated Chat toolbar no longer toggles WeChat polling. Prefer workflow settings. */
   const onAutoRefreshToolbarChange = (enabled: boolean) => {
+    // Intentionally do not write STAR_REFRESH from the chat proactive checkbox path.
+    // Keep function for unit tests / old callers that still import the name.
     autoRefreshStarredWechat.value = enabled
     persistAutoRefreshWechatSetting()
   }
@@ -66,8 +107,11 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
         await modsStore.initialize()
       }
     })()
-    void syncSessionMessages().catch(() => {})
-    setTimeout(() => batchCalculateHeights(), 100)
+    const initialPage = preparePage()
+    void initialPage.catch(() => {})
+    setTimeout(() => {
+      if (chatViewActive) batchCalculateHeights()
+    }, 100)
 
     legacyAutoActionHandler =
       typeof (window as unknown as { handleAutoAction?: unknown }).handleAutoAction === 'function'
@@ -87,11 +131,6 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
       const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null
       if (domInput) domInput.value = text
       return true
-    }
-    const firstTaskPrompt = consumeFirstAiTaskPrompt()
-    if (firstTaskPrompt) {
-      messageInput.value = firstTaskPrompt
-      void sendMessage()
     }
     ;(window as unknown as { __VUE_HANDLE_AUTO_ACTION__?: boolean }).__VUE_HANDLE_AUTO_ACTION__ = true
     ;(window as Window & { handleAutoAction: (a: unknown, m?: string) => void }).handleAutoAction = (

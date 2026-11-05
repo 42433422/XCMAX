@@ -8,8 +8,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_auth_permission_resolver_exists():
-    path = ROOT / "app/application/auth_permission_resolver.py"
-    text = path.read_text(encoding="utf-8")
+    # Compat shim may live at application/; canonical implementation at domain/app_pure/.
+    shim = ROOT / "app/application/auth_permission_resolver.py"
+    canonical = ROOT / "app/domain/app_pure/auth_permission_resolver.py"
+    assert shim.is_file()
+    text = (
+        canonical.read_text(encoding="utf-8")
+        if canonical.is_file()
+        else shim.read_text(encoding="utf-8")
+    )
     assert "def resolve_permissions" in text
     assert "enterprise_viewer" in text
 

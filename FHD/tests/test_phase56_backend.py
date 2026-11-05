@@ -18,7 +18,7 @@ from app.application.ai_chat_app_service import (
     _skip_pro_excel_deterministic_import,
 )
 from app.application.workflow.planner import get_tool_registry
-from app.application.workflow.types import PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBody,
     _extract_excel_paths_from_message,
@@ -33,7 +33,7 @@ from app.fastapi_routes.domains.misc.helpers import (
     _message_to_dict,
     _session_to_dict,
 )
-from app.infrastructure.persistence.compat_db.base import (
+from app.infrastructure.persistence.compat_db.compat_db_base import (
     _customer_body_name_contact,
     _exc_chain_has_undefined_table,
     _product_parse_id,
@@ -218,7 +218,8 @@ def test_ai_chat_is_pro_source_and_merge_context() -> None:
         "查产品",
         {"ui_surface": "chat", "excel_analysis": {"sheet": "S1"}},
     )
-    assert ctx["user_id"] == "u1"
+    assert ctx["conversation_id"] == "u1"
+    assert "user_id" not in ctx  # A conversation label is not an authenticated actor.
     assert ctx["excel_analysis"]["sheet"] == "S1"
 
 

@@ -21,14 +21,14 @@ def client() -> TestClient:
 
 
 def _install_lost_parse_price():
-    """Temporarily install _parse_price on app.application.excel_imports.
+    """Temporarily install _parse_price on app.domain.app_pure.excel_imports.
 
     The module uses __getattr__ to raise ImportError for _LOST_LEGACY_SYMBOLS,
     which prevents ``patch(..., create=True)`` from working.  We inject a stub
     directly into the module dict so that the lazy ``from … import _parse_price``
     inside route handlers succeeds.
     """
-    import app.application.excel_imports as _ei
+    import app.domain.app_pure.excel_imports as _ei
 
     _ei._parse_price = MagicMock(return_value=0.0)
     return _ei
@@ -278,7 +278,7 @@ class TestProductsResolveNameHints:
 
 
 class TestProductsUpdate:
-    def test_erp_service(self, client: TestClient):
+    def test_erp_service(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -311,7 +311,7 @@ class TestProductsUpdate:
         finally:
             _remove_lost_parse_price(_ei)
 
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         _ei = _install_lost_parse_price()
         try:
             with (
@@ -357,7 +357,7 @@ class TestProductsUpdate:
 
 
 class TestProductsAdd:
-    def test_erp_service(self, client: TestClient):
+    def test_erp_service(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -371,7 +371,7 @@ class TestProductsAdd:
             r = client.post("/products/add", json={"product_name": "new"})
             assert r.json()["success"] is True
 
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         _ei = _install_lost_parse_price()
         try:
             with (
@@ -402,7 +402,7 @@ class TestProductsAdd:
 
 
 class TestProductsDelete:
-    def test_erp_service(self, client: TestClient):
+    def test_erp_service(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -431,7 +431,7 @@ class TestProductsDelete:
             r = client.post("/products/delete", json={"id": "bad"})
             assert r.status_code == 400
 
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -458,7 +458,7 @@ class TestProductsDelete:
 
 
 class TestProductsBatchDelete:
-    def test_erp_service(self, client: TestClient):
+    def test_erp_service(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -502,7 +502,7 @@ class TestProductsBatchDelete:
             r = client.post("/products/batch-delete", json={"ids": "bad"})
             assert r.status_code == 400
 
-    def test_success(self, client: TestClient):
+    def test_success(self, client: TestClient, local_tools):
         with (
             patch(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
@@ -556,7 +556,7 @@ class TestProductsPriceListExport:
                 return_value=(Path("/nonexistent/template.docx"), "template.docx"),
             ),
         ):
-            r = client.get("/products/price-list-export")
+            r = client.get("/products/price-list-export?template_id=customer-missing")
             assert r.status_code == 404
 
     def test_export_docx_alias(self, client: TestClient):

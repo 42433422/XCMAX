@@ -1,4 +1,4 @@
-"""Tests for app.domain.services.conversation.context.intent_context — ext2.
+"""Tests for app.domain.conversation.services.context.intent_context — ext2.
 
 Covers ``PendingIntent`` (is_expired / merge_slots / to_dict),
 ``IntentContext`` (set/get/clear/has pending, merge_slots,
@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.domain.services.conversation.context.intent_context import (
+from app.domain.conversation.services.context.intent_context import (
     HIGH_PRIORITY_INTENTS,
     LOW_PRIORITY_INTENTS,
     SPECIAL_INTENTS,

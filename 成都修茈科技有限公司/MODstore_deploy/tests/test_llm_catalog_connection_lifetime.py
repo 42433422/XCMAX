@@ -24,7 +24,7 @@ def small_pool(tmp_path, monkeypatch):
     UserLlmCredential.__table__.create(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(models, "get_session_factory", lambda: factory)
-    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _provider: None)
+    monkeypatch.setattr(llm_key_resolver, "platform_credentials", lambda _provider: (None, None))
     monkeypatch.setattr(llm_catalog, "_cache", {})
     monkeypatch.setattr(llm_api, "_CATALOG_PROVIDER_TIMEOUT_SEC", 3)
     yield engine
@@ -51,7 +51,9 @@ async def test_unconfigured_catalog_fanout_releases_each_real_connection(small_p
 
 @pytest.mark.asyncio
 async def test_remote_catalog_waits_leave_pool_available_for_wallet(small_pool, monkeypatch):
-    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _provider: "local-test-key")
+    monkeypatch.setattr(
+        llm_key_resolver, "platform_credentials", lambda _provider: ("local-test-key", None)
+    )
     started, release = asyncio.Event(), asyncio.Event()
     arrivals = []
 
@@ -83,7 +85,9 @@ async def test_remote_catalog_waits_leave_pool_available_for_wallet(small_pool, 
 
 @pytest.mark.asyncio
 async def test_cancelled_catalog_does_not_retain_credential_connection(small_pool, monkeypatch):
-    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _provider: "local-test-key")
+    monkeypatch.setattr(
+        llm_key_resolver, "platform_credentials", lambda _provider: ("local-test-key", None)
+    )
     started = asyncio.Event()
 
     async def remote(_base, _key, **_kwargs):

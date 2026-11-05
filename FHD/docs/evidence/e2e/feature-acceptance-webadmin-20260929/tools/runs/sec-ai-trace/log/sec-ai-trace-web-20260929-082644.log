@@ -1,0 +1,7 @@
+[08:26:44] feature=sec-ai-trace base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-ai-trace
+[08:26:55] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:26:55] case AI1: passed - GenAI 追溯接口真实应答
+[08:26:55] case AI2: passed - 真实 agent 运行记录可追溯
+[08:26:55] case AI3: passed - 未登录会话访问追溯接口被拒
+[08:26:56] video: sec-ai-trace-web-20260929-082644.webm (645600 bytes)
+[08:26:56] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-ai-trace/log/sec-ai-trace-web-20260929-082644.log

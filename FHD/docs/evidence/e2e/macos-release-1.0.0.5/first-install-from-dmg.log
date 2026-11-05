@@ -1,0 +1,36 @@
+[2026-09-18 19:26:05] === first-install-from-dmg start ===
+downloaded_dmg sha256=6d127de45f58d86ebfb015b4216be8064bf70321e112bde6da35a2cf92ea0464 size=298366428
+--- codesign ---
+--validated:/Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5/mnt/XCAGI.app/Contents/Frameworks/XCAGI Helper (GPU).app
+--prepared:/Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5/mnt/XCAGI.app/Contents/Frameworks/XCAGI Helper (Plugin).app
+--validated:/Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5/mnt/XCAGI.app/Contents/Frameworks/XCAGI Helper (Plugin).app
+/Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5/mnt/XCAGI.app: valid on disk
+/Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5/mnt/XCAGI.app: satisfies its Designated Requirement
+--- spctl ---
+/Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5/mnt/XCAGI.app: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+--- stapler ---
+Processing: /Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5/mnt/XCAGI.app
+The validate action worked!
+--- dmg-app build-info ---
+{"schema_version":1,"gitSha":"54325894cc6e3fc2becfcbc98697a099310d9420","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420","builtAt":"2026-09-18T07:39:47.185Z"}
+
+OTA 安装件已备份到 /Users/Shared/xcagi-t6-tools/macos-release-1.0.0.5/XCAGI.app.ota-installed-10005
+已从 DMG 安装到 /Applications/XCAGI.app
+--- installed build-info ---
+{"schema_version":1,"gitSha":"54325894cc6e3fc2becfcbc98697a099310d9420","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420","builtAt":"2026-09-18T07:39:47.185Z"}
+
+--- installed codesign ---
+--validated:/Applications/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/.
+/Applications/XCAGI.app: valid on disk
+/Applications/XCAGI.app: satisfies its Designated Requirement
+Identifier=com.xcagi.desktop.enterprise
+Authority=Developer ID Application: jialong Li (G26WSH472M)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+TeamIdentifier=G26WSH472M
+--- first launch (open) ---
+backend_up=1 after first launch
+{"verdict": "PASS", "sha_matches": true, "backend_up": true, "health": "healthy", "version": "1.0.0.5"}
+[2026-09-18 19:27:07] === first-install-from-dmg end ===

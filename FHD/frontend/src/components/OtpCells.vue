@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -18,7 +18,6 @@ const emit = defineEmits<{
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
-const focusedIndex = ref(0)
 
 const digits = computed(() => props.modelValue.replace(/\D/g, '').slice(0, props.length).split(''))
 
@@ -27,21 +26,18 @@ watch(
   (value) => {
     const clean = value.replace(/\D/g, '').slice(0, props.length)
     if (clean !== value) emit('update:modelValue', clean)
-    focusedIndex.value = Math.min(clean.length, props.length - 1)
   },
 )
 
 function onInput(event: Event) {
   const raw = (event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, props.length)
   emit('update:modelValue', raw)
-  focusedIndex.value = Math.min(raw.length, props.length - 1)
 }
 
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Backspace' && props.modelValue.length > 0) {
     const next = props.modelValue.slice(0, -1)
     emit('update:modelValue', next)
-    focusedIndex.value = Math.max(0, next.length)
     event.preventDefault()
   }
 }
@@ -52,13 +48,8 @@ function onPaste(event: ClipboardEvent) {
   if (!clean) return
   event.preventDefault()
   emit('update:modelValue', clean)
-  focusedIndex.value = Math.min(clean.length, props.length - 1)
   void nextTick(() => inputRef.value?.blur())
 }
-
-onMounted(() => {
-  focusedIndex.value = Math.min(props.modelValue.length, props.length - 1)
-})
 </script>
 
 <template>
@@ -80,7 +71,6 @@ onMounted(() => {
         @input="onInput"
         @keydown="onKeydown"
         @paste="onPaste"
-        @focus="focusedIndex = Math.min(digits.length, length - 1)"
       />
     </div>
   </div>

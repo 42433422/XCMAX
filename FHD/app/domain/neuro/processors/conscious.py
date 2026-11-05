@@ -19,7 +19,7 @@ from typing import Any
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.circuit_breaker import NeuroCircuitBreakerManager
 from app.neuro_bus.deduplicator import NeuroBusDeduplicator
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.neuro_bus.retry_handler import NeuroRetryHandler
 from app.neuro_bus.sandbox import NeuroSandbox
 from app.neuro_bus.sla_controller import SLAController

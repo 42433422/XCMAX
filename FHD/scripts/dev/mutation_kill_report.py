@@ -12,8 +12,8 @@
   - mutmut 3.x progress：``🎉 67 🫥 0  ⏰ 0  🤔 0  🙁 23``
   - mutmut 3.x ``results``：``    key: survived``（默认跳过 killed，需 ``--all``）
 * 仅用标准库。
-* 加权杀死率 = ``killed / (killed + survived + timeout)``；
-  ``no_tests`` / ``skipped`` 不计入分母。
+* 加权杀死率 = ``killed / (killed + survived + timeout + no_tests)``；
+  ``no_tests`` / ``skipped`` 作为未检测变异计入分母。
 
 退出码
 ------
@@ -56,7 +56,9 @@ _PROGRESS_RE = re.compile(
     r"🫥\s*(?P<no_tests>\d+).*?"
     r"⏰\s*(?P<timeout>\d+).*?"
     r"🤔\s*(?P<suspicious>\d+).*?"
-    r"🙁\s*(?P<survived>\d+)",
+    r"🙁\s*(?P<survived>\d+)"
+    r"(?:[^\r\n\S]*🔇\s*(?P<skipped>\d+))?"
+    r"(?:[^\r\n\S]*🧙\s*(?P<type_checked>\d+))?",
     re.DOTALL,
 )
 
@@ -108,6 +110,8 @@ def parse_results(output: str) -> dict:
         counts["survived"] = int(m.group("survived"))
         counts["timeout"] = int(m.group("timeout"))
         counts["no_tests"] = int(m.group("no_tests"))
+        counts["no_tests"] += int(m.group("skipped") or 0)
+        counts["timeout"] += int(m.group("type_checked") or 0)
         # suspicious 保守并入 survived
         counts["survived"] += int(m.group("suspicious"))
         return counts
@@ -163,8 +167,8 @@ def parse_results(output: str) -> dict:
 
 
 def compute_kill_rate(counts: dict) -> float:
-    """计算加权杀死率：``killed / (killed + survived + timeout)``。"""
-    denom = counts["killed"] + counts["survived"] + counts["timeout"]
+    """计算加权杀死率：``killed / (killed + survived + timeout + no_tests)``。"""
+    denom = counts["killed"] + counts["survived"] + counts["timeout"] + counts.get("no_tests", 0)
     if denom == 0:
         return 0.0
     return counts["killed"] / denom
@@ -211,6 +215,22 @@ def main() -> int:
         print(f"[ERROR] cannot read --from-file: {exc}", file=sys.stderr)
         return 2
 
+    # A mutmut worker can crash while the parent still counts it as killed.
+    # Such logs cannot certify mutation quality, regardless of the final score.
+    if any(
+        marker in output
+        for marker in (
+            "Traceback (most recent call last):",
+            "PytestUnraisableExceptionWarning:",
+            "ResourceWarning:",
+        )
+    ):
+        print(
+            "[ERROR] mutation runner diagnostics invalidate this result; inspect raw log",
+            file=sys.stderr,
+        )
+        return 2
+
     counts = parse_results(output)
     kill_rate = compute_kill_rate(counts)
     kill_rate_pct = kill_rate * 100
@@ -220,6 +240,7 @@ def main() -> int:
         **counts,
         "kill_rate": round(kill_rate, 4),
         "threshold": args.threshold,
+        "score_policy": "all_reported_mutants_v2",
     }
 
     print(

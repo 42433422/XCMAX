@@ -1,0 +1,6 @@
+2026-09-29T20:25:06+0800 [erp-sales-order] 开始验收 erp-sales-order 销售订单管理；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
+2026-09-29T20:25:06+0800 [erp-sales-order] M1 passed :: HTTP 200 209ms；{"success": true, "data": {"order_number": "26-09-00001A", "sequence": 1, "year_month": "26-09"}}
+2026-09-29T20:25:06+0800 [erp-sales-order] M2 passed :: HTTP 200 126ms；订单 0 条
+2026-09-29T20:25:10+0800 [erp-sales-order] M3 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/orders/create；命中文本 ['单']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 新建业务单据 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 新建发货单 | 返回列表 | 选择发货单模板 | 发货单模板 | -- 请选择模板 -- | 暂无可用发货单模板：请点下方「模板编辑」上传贵司出货单
+2026-09-29T20:25:11+0800 [erp-sales-order] screenshot result.png
+2026-09-29T20:25:14+0800 [erp-sales-order] video operation.webm bytes=333553

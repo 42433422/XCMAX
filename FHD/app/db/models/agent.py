@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.db_base import Base
 
 
 class AgentRunRecord(Base):

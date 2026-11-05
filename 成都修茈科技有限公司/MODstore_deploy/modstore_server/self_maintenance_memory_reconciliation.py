@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import modstore_server.maintenance_loop.memory as _maintenance_memory
+import modstore_server.maintenance_loop.store as _maintenance_store
+
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
@@ -40,10 +43,8 @@ def reconcile_completed_loop_memory_from_ledger() -> dict[str, Any]:
     ``merge_completed`` ledger receipt into memory closure.
     """
 
-    from modstore_server import self_maintenance_loop_runner as runner
-
-    rows = runner._read_ledger(limit=5000)
-    memory = runner._load_loop_memory()
+    rows = _maintenance_store._read_ledger(limit=5000)
+    memory = _maintenance_store._load_loop_memory()
     recent_runs = memory.get("recent_runs")
     if not isinstance(recent_runs, list):
         recent_runs = []
@@ -79,7 +80,7 @@ def reconcile_completed_loop_memory_from_ledger() -> dict[str, Any]:
             _text(completed.get("para_task_id")),
             _text(resume.get("para_task_id")),
         ]
-        resolution = runner._close_open_items_in_memory(
+        resolution = _maintenance_memory._close_open_items_in_memory(
             memory,
             actor="deployment_receipt_reconciler",
             branches=branches,
@@ -109,7 +110,7 @@ def reconcile_completed_loop_memory_from_ledger() -> dict[str, Any]:
     memory["completed_merge_reconciliations"] = (reconciliation_history + sorted(newly_reconciled))[
         -200:
     ]
-    runner._write_loop_memory(memory)
+    _maintenance_store._write_loop_memory(memory)
     return {
         "closed_count": closed_count,
         "reconciled_run_ids": sorted(newly_reconciled),

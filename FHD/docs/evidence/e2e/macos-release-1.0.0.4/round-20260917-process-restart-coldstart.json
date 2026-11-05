@@ -1,0 +1,151 @@
+{
+  "round": "2026-09-17",
+  "check": "PROCESS-LEVEL COLD START (独立检查，明确不等价于 G12，不计入 MAC FULL CHAIN PASS)",
+  "why_not_g12": "G12 判据要求「重启 Mac 后」复验：需覆盖 OS 级冷启动路径、非正常关机下 SQLite 落盘完整性、以及不可伪造的重启锚点。进程重启不覆盖这些，故不得替代 G12。",
+  "started_at": "2026-09-17T01:21:51+08:00",
+  "steps": {
+    "graceful_stop": {
+      "pid": 3027,
+      "method": "SIGTERM",
+      "exited_after_s": "4",
+      "backend_reachable": "HTTP 000 (connection refused)"
+    },
+    "relaunch": {
+      "cmd": "open -a /Applications/XCAGI.app",
+      "new_pid": 80518,
+      "new_backend_pid": 80547,
+      "healthy_after_s": 5
+    },
+    "reboot_anchor": {
+      "kern_boottime": "Mon Sep 14 13:57:35 2026",
+      "unchanged": true,
+      "meaning": "锚点未变 → 本轮确为进程重启，非整机重启"
+    },
+    "health": {
+      "http": 200,
+      "version": "1.0.0.4",
+      "git_sha": "280225ac77ce",
+      "status": "healthy",
+      "degradedReasons": []
+    },
+    "db_quick_check": {
+      "result": "ok",
+      "engine": "sqlite3 PRAGMA quick_check (read-only)"
+    },
+    "data_retention": {
+      "pre": {
+        "xcagi.db.bytes": 987168768,
+        "xcagi.db.wal.bytes": 3160072,
+        "excel_vectors.db.bytes": -1,
+        "mod_dbs.files": 0,
+        "uploads.files": 167,
+        "uploads.templates.files": 21,
+        "routing_policies.files": 1,
+        "mods.files": 1257,
+        "models.files": 1,
+        "backups.files": 5,
+        "backups.latest": "xcagi-unknown-20260916171916.db",
+        "rows.templates": 22,
+        "rows.sales_orders": 0,
+        "rows.manufacturing_orders": 0,
+        "rows.customers": 0,
+        "rows.users": 6
+      },
+      "post": {
+        "xcagi.db.bytes": 987168768,
+        "xcagi.db.wal.bytes": 3160072,
+        "excel_vectors.db.bytes": -1,
+        "mod_dbs.files": 0,
+        "uploads.files": 167,
+        "uploads.templates.files": 21,
+        "routing_policies.files": 1,
+        "mods.files": 1257,
+        "models.files": 1,
+        "backups.files": 6,
+        "backups.latest": "xcagi-unknown-20260916172206.db",
+        "rows.templates": 22,
+        "rows.sales_orders": 0,
+        "rows.manufacturing_orders": 0,
+        "rows.customers": 0,
+        "rows.users": 6
+      },
+      "deltas": {
+        "xcagi.db.bytes": 0,
+        "uploads.files": 0,
+        "uploads.templates.files": 0,
+        "mods.files": 0,
+        "models.files": 0,
+        "rows.templates": 0,
+        "rows.users": 0
+      },
+      "verdict": "OK (no loss)"
+    },
+    "g7_business_chain": {
+      "health": {
+        "status": 200,
+        "version": "1.0.0.4",
+        "git_sha": "280225ac77ce"
+      },
+      "login": {
+        "status": 200,
+        "success": true
+      },
+      "auth_me": {
+        "status": 200,
+        "user": null
+      },
+      "templates_upload": {
+        "status": 200,
+        "template_id": "db:23",
+        "file_sha256": "be5e1ca38be53b2c7232f399829a1f21bcc80138aa50a94d553df94081f668e6"
+      },
+      "templates_list": {
+        "status": 200,
+        "probe_present": false
+      },
+      "customer_ensure": {
+        "status": 400,
+        "customer_id": null
+      },
+      "shipment_generate": {
+        "status": 200,
+        "success": true,
+        "message": "发货单生成成功",
+        "doc_name": "发货单_26-0900001A_20260917_012225.xlsx",
+        "agent_status": "completed",
+        "run_id": "run_4db28a984c6f4eedb7d14c69b1e02e33"
+      },
+      "file_download": {
+        "status": 200,
+        "bytes": 5194,
+        "xlsx_magic": true,
+        "sha256": "3b19554d3a23f26fbd12bab57391ac1b98ddc0def4b7d2d7076ea0a3188bb5b0",
+        "filename": "发货单_26-0900001A_20260917_012225.xlsx"
+      }
+    },
+    "mods": {
+      "http": 200,
+      "count": 62,
+      "shape": "{success, data:[...]}"
+    },
+    "employees": {
+      "http": 200
+    },
+    "startup_log_scan": {
+      "pattern": "quick_check|corrupt|recover|integrity",
+      "matches": 0,
+      "note": "应用日志中未出现恢复/损坏痕迹；DB 完整性以本轮 sqlite3 quick_check=ok 为准"
+    }
+  },
+  "verdict": {
+    "process_cold_start": "PASS",
+    "counts_as_G12": "NO",
+    "counts_as_FULL_CHAIN_PASS": "NO"
+  },
+  "evidence_dir_tool": "/Users/Shared/xcagi-t6-tools/process-restart-20260917/",
+  "known_non_defects": [
+    "templates_list.probe_present=false（脚本截断 400 字符所致）",
+    "customer_ensure 400（客户名已存在，幂等）",
+    "auth_me.user=null（仅字段名不匹配，HTTP 200）"
+  ]
+}

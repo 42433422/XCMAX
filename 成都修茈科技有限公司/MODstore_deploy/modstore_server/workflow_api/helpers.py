@@ -8,15 +8,8 @@ from typing import Any, Dict
 
 from sqlalchemy.orm import Session
 
-from modstore_server.models import (
-    Workflow,
-    WorkflowEdge,
-    WorkflowNode,
-    WorkflowTrigger,
-)
-from modstore_server.workflow_sandbox_state import (
-    sandbox_status_for_workflow,
-)
+from modstore_server.models import Workflow, WorkflowEdge, WorkflowNode, WorkflowTrigger
+from modstore_server.workflow_sandbox_state import sandbox_status_for_workflow
 
 
 def _guess_employee_id_from_empty_workflow(workflow: Workflow) -> str:

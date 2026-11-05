@@ -1,0 +1,42 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "install.first-launch",
+  "platform": "macos",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "stranger_download": {
+    "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "downloaded_sha256": "6d127de45f58d86ebfb015b4216be8064bf70321e112bde6da35a2cf92ea0464",
+    "downloaded_size": 298366428,
+    "expected_sha256": "6d127de45f58d86ebfb015b4216be8064bf70321e112bde6da35a2cf92ea0464",
+    "sha256_matches": true
+  },
+  "install": {
+    "method": "hdiutil attach -> ditto XCAGI.app /Applications -> xattr -dr com.apple.quarantine",
+    "installed_build_info": {
+      "schema_version": 1,
+      "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+      "builtAt": "2026-09-18T07:39:47.185Z"
+    },
+    "ota_installed_bundle_backed_up": true
+  },
+  "first_launch": {
+    "backend_up": true,
+    "health_status": 200,
+    "health_state": "healthy",
+    "health_version": "1.0.0.5",
+    "health_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "runtime": "healthy"
+  },
+  "data_dir_untouched": {
+    "xcagi.db.bytes": 987504640,
+    "uploads.files": 173,
+    "mods.files": 875
+  },
+  "captured_at_utc": "2026-09-18T11:27:07Z",
+  "verdict": "PASS"
+}

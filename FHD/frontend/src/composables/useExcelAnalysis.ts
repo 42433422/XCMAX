@@ -55,6 +55,7 @@ interface UseChatMessagesReturn {
 }
 
 interface UseExcelAnalysisOptions {
+  captureIsCurrent?: () => () => boolean
   onAnalyzed?: (payload: { fileName: string; summary: string; result: ExcelAnalysisResult }) => void
   onAnalyzeStart?: (payload: { fileName: string }) => void
   onAnalyzeProgress?: (payload: { fileName: string; step: string; progress?: number }) => void
@@ -238,6 +239,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
     if (!file) return
 
     if (/\.(xlsx|xlsm)$/i.test(file.name)) {
+      const isCurrent = options.captureIsCurrent?.() || (() => true)
       // Excel is copied into FormData synchronously below, so the picker can be
       // reset now and selecting the same workbook again will still emit change.
       input.value = ''
@@ -253,6 +255,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
 
         try {
           await ensureCsrfReady()
+          if (!isCurrent()) return
           const formData = new FormData()
           formData.append('file', file)
           formData.append('analyze_all_sheets', 'true')
@@ -273,6 +276,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
               signal: controller.signal,
             })
             const data: ExcelExtractGridResponse = await readResponseJsonWithTimeout(response, 120_000)
+            if (!isCurrent()) return
 
             if (!response.ok || !data?.success) {
               throw new Error(asString(data?.message) || `HTTP ${response.status}`)
@@ -299,6 +303,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
                   progress: Math.floor(((i + 1) / sheetNames.length) * 100),
                 })
                 const detail = await extractSingleSheetDetail(file, name)
+                if (!isCurrent()) return
                 if (detail) {
                   detailedSheets.push({
                     sheet_index: i + 1,
@@ -330,6 +335,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
             window.clearTimeout(timeoutId)
           }
         } catch (err: unknown) {
+          if (!isCurrent()) return
           const errObj = err as { name?: string; message?: string }
           const isAbort = errObj?.name === 'AbortError'
           const raw = String(errObj?.message || err || '')

@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-
-// 隔离重依赖：window-manager 顶层 import 了 backend-process / desktop-config /
-// rollback / updater / desktop-navigation，测试只关注 showMainWindow 与 toggleMainWindow 语义。
+import { app, BrowserWindow } from 'electron'
+import fs from 'node:fs'
+import { waitForBackendPing, waitForBackendApplicationReady, waitForBackendStatus } from './backend-process'
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
-  app: { getPath: vi.fn(() => '/tmp/xcagi-test'), isQuitting: false },
-  dialog: {},
-  screen: {},
+  app: { getPath: vi.fn(() => '/tmp/xcagi-test'), isQuitting: false, focus: vi.fn() },
+  dialog: { showErrorBox: vi.fn() },
+  screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })), getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })) },
   shell: {},
 }))
 vi.mock('./backend-process', () => ({
@@ -40,9 +40,9 @@ vi.mock('./desktop-navigation', () => ({
   isTrustedDesktopOrigin: vi.fn(),
 }))
 
-import { showMainWindow, toggleMainWindow } from './window-manager'
+import { clampWindowBounds } from './window-state'
+import { createWindow, showMainWindow, toggleMainWindow } from './window-manager'
 import { desktopRuntime } from './runtime-state'
-
 function makeWindow(overrides: Partial<{
   isVisible: boolean
   isMinimized: boolean
@@ -55,32 +55,35 @@ function makeWindow(overrides: Partial<{
     hide: vi.fn(),
     focus: vi.fn(),
     restore: vi.fn(),
+    setAlwaysOnTop: vi.fn(),
+    moveTop: vi.fn(),
+    getBounds: vi.fn(() => ({ x: 0, y: 0, width: 1280, height: 800 })),
+    setBounds: vi.fn(),
   }
   return win as unknown as NonNullable<typeof desktopRuntime.mainWindow>
 }
+beforeEach(() => {
+  desktopRuntime.splashUrl = ''
+  desktopRuntime.mainWindow = null
+  desktopRuntime.mainApplicationReady = null
+  vi.mocked(BrowserWindow).mockReset()
+})
 
 describe('showMainWindow（语音唤起专用：只显示聚焦，绝不隐藏）', () => {
-  beforeEach(() => {
-    desktopRuntime.mainWindow = null
-  })
-
   it('窗口可见时：仅 show + focus，不调用 hide（修复 toggle 语音唤起反向隐藏的 bug）', () => {
     const win = makeWindow({ isVisible: true, isMinimized: false })
     desktopRuntime.mainWindow = win
-
     showMainWindow()
-
     expect(win.show).toHaveBeenCalled()
     expect(win.focus).toHaveBeenCalled()
     expect(win.hide).not.toHaveBeenCalled()
+    expect(win.setBounds).not.toHaveBeenCalled()
   })
 
   it('窗口最小化时：restore + show + focus', () => {
     const win = makeWindow({ isVisible: true, isMinimized: true })
     desktopRuntime.mainWindow = win
-
     showMainWindow()
-
     expect(win.restore).toHaveBeenCalled()
     expect(win.show).toHaveBeenCalled()
     expect(win.focus).toHaveBeenCalled()
@@ -88,16 +91,10 @@ describe('showMainWindow（语音唤起专用：只显示聚焦，绝不隐藏�
 })
 
 describe('toggleMainWindow（托盘显隐切换语义保持不变）', () => {
-  beforeEach(() => {
-    desktopRuntime.mainWindow = null
-  })
-
   it('窗口可见时：隐藏（区别于 showMainWindow）', () => {
     const win = makeWindow({ isVisible: true })
     desktopRuntime.mainWindow = win
-
     toggleMainWindow()
-
     expect(win.hide).toHaveBeenCalled()
     expect(win.show).not.toHaveBeenCalled()
   })
@@ -105,11 +102,137 @@ describe('toggleMainWindow（托盘显隐切换语义保持不变）', () => {
   it('窗口不可见时：show + focus（复用 showMainWindow）', () => {
     const win = makeWindow({ isVisible: false, isMinimized: true })
     desktopRuntime.mainWindow = win
-
     toggleMainWindow()
-
     expect(win.show).toHaveBeenCalled()
     expect(win.focus).toHaveBeenCalled()
     expect(win.hide).not.toHaveBeenCalled()
   })
+
+  it('最小化但仍 isVisible 时：恢复而不是再隐藏', () => {
+    const win = makeWindow({ isVisible: true, isMinimized: true })
+    desktopRuntime.mainWindow = win
+    toggleMainWindow()
+    expect(win.hide).not.toHaveBeenCalled()
+    expect(win.restore).toHaveBeenCalled()
+    expect(win.show).toHaveBeenCalled()
+  })
+})
+
+it('拉回几乎不在工作区里的窗口，避免托盘单击后仍看不见', () => {
+  const win = makeWindow({ isVisible: false })
+  win.getBounds = vi.fn(() => ({ x: -4000, y: 80, width: 1280, height: 800 }))
+  desktopRuntime.mainWindow = win
+  vi.mocked(clampWindowBounds).mockClear()
+  showMainWindow()
+  expect(clampWindowBounds).toHaveBeenCalled()
+  expect(win.setBounds).toHaveBeenCalled()
+  expect(win.show).toHaveBeenCalled()
+  expect(win.focus).toHaveBeenCalled()
+})
+
+it('Windows 托盘唤起会把窗口临时置顶，否则 show 后仍留在别的窗口后面', () => {
+  const original = process.platform
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+  try {
+    const win = makeWindow({ isVisible: false })
+    desktopRuntime.mainWindow = win
+    showMainWindow()
+    expect(win.setAlwaysOnTop).toHaveBeenNthCalledWith(1, true)
+    expect(win.moveTop).toHaveBeenCalled()
+    expect(win.setAlwaysOnTop).toHaveBeenNthCalledWith(2, false)
+    expect(win.show).toHaveBeenCalled()
+  } finally {
+    Object.defineProperty(process, 'platform', { value: original, configurable: true })
+  }
+})
+
+it('macOS 托盘唤起会抢前台，隐藏窗口才能露出来', () => {
+  const original = process.platform
+  Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+  try {
+    const win = makeWindow({ isVisible: false })
+    desktopRuntime.mainWindow = win
+    showMainWindow()
+    expect(app.focus).toHaveBeenCalledWith({ steal: true })
+    expect(win.show).toHaveBeenCalled()
+    expect(win.focus).toHaveBeenCalled()
+  } finally {
+    Object.defineProperty(process, 'platform', { value: original, configurable: true })
+  }
+})
+
+it('keeps the activated startup window and its in-flight readiness task', async () => {
+  const win = makeWindow()
+  const ready = new Promise<void>(() => {})
+  desktopRuntime.mainWindow = win
+  desktopRuntime.mainApplicationReady = ready
+  vi.mocked(BrowserWindow).mockImplementationOnce(() => { throw new Error('duplicate startup window') })
+  await expect(createWindow()).resolves.toBeUndefined()
+  expect(desktopRuntime.mainWindow).toBe(win)
+  expect(desktopRuntime.mainApplicationReady).toBe(ready)
+  expect(BrowserWindow).not.toHaveBeenCalled()
+})
+
+it.each([true, false])('records selected splash before loading (file exists: %s)', async (exists) => {
+  vi.spyOn(fs, 'existsSync').mockReturnValue(exists)
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  const loaded: Array<[string, string]> = []
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(),
+    once: vi.fn(),
+    setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
+    loadURL: vi.fn(async (url: string) => { loaded.push([url, desktopRuntime.splashUrl]) }),
+    webContents: {
+      on: vi.fn(), getURL: vi.fn(() => 'http://127.0.0.1:17500/'), setWindowOpenHandler: vi.fn(),
+      session: { on: vi.fn() },
+      executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+  await createWindow()
+  await desktopRuntime.mainApplicationReady
+  expect(loaded[0][0]).toBe(loaded[0][1])
+  expect(loaded[0][0].startsWith(exists ? 'file:' : 'data:')).toBe(true)
+})
+
+it.each(['paint', 'aborted', 'failed'])('keeps splash paint readiness across %s startup', async (outcome) => {
+  vi.spyOn(fs, 'existsSync').mockReturnValue(true)
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  let onReadyToShow: (() => void) | undefined
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(),
+    once: vi.fn((event: string, listener: () => void) => {
+      if (event === 'ready-to-show') onReadyToShow = listener
+    }),
+    setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
+    loadURL: vi.fn(async () => undefined),
+    webContents: {
+      on: vi.fn(), getURL: vi.fn(() => 'file:///trusted/splash.html'), setWindowOpenHandler: vi.fn(),
+      session: { on: vi.fn() },
+      executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  if (outcome !== 'paint') {
+    win.loadURL.mockRejectedValueOnce(new Error(outcome === 'aborted' ? 'ERR_ABORTED (-3)' : 'ERR_FAILED'))
+  }
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+
+  await createWindow()
+  await desktopRuntime.mainApplicationReady
+
+  expect(BrowserWindow).toHaveBeenCalledWith(expect.objectContaining({ show: false }))
+  expect(win.once).toHaveBeenCalledWith('ready-to-show', expect.any(Function))
+  expect(win.show).toHaveBeenCalledTimes(outcome === 'failed' ? 1 : 0)
+  const focusBeforePaint = vi.mocked(win.focus).mock.calls.length
+  if (outcome !== 'failed') expect(focusBeforePaint).toBe(0)
+  expect(onReadyToShow).toBeTypeOf('function')
+  onReadyToShow?.()
+  expect(win.show).toHaveBeenCalledTimes(1)
+  expect(win.focus).toHaveBeenCalledTimes(focusBeforePaint + (outcome === 'failed' ? 0 : 1))
+  onReadyToShow?.()
+  expect(win.show).toHaveBeenCalledTimes(1)
 })

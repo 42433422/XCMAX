@@ -1,0 +1,14 @@
+{
+  "users": {
+    "added_rows": 0,
+    "removed_rows": 0,
+    "changed_fields": {
+      "last_login": 1
+    }
+  },
+  "sessions": {
+    "added_rows": 4,
+    "removed_rows": 0,
+    "changed_fields": {}
+  }
+}

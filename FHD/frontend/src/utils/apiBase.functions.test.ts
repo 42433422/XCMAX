@@ -260,6 +260,14 @@ describe('apiFetch', () => {
     vi.restoreAllMocks()
   })
 
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('never replays a failed %s on the development fallback', async (method) => {
+    vi.stubEnv('DEV', true)
+    vi.stubEnv('VITE_API_BASE_URL', '')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('response lost'))
+    await expect(apiFetch('/api/im/enterprise-cs/messages', { method })).rejects.toThrow('response lost')
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('calls fetch with the resolved URL', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok'))
     await apiFetch('/api/test')

@@ -1,0 +1,32 @@
+{
+  "_comment": "Auto-generated snapshot of real Mac UI acceptance; DO NOT EDIT historical outcomes.",
+  "kind": "feature-acceptance",
+  "feature": "ai-knowledge",
+  "status": "failed",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 1,
+  "visible_content": "Mac 实机打开知识来源导入抽屉后，小C 悬浮入口覆盖提交区域；点击加入 Persy 打开了助理面板。导入与有效检索仍未通过实机验收。",
+  "media": [
+    {
+      "feature": "ai-knowledge",
+      "path": "FHD/docs/evidence/e2e/macos-acceptance-20260920/11-knowledge-import-assistant-overlap.png",
+      "sha256": "20c08148005439ec2c8c1cef7061b9eb5ed6cfc2dad78ed5383044de6f6f0148",
+      "visual_review": "accepted",
+      "visible_result": "添加知识来源抽屉仍打开；小C 助理浮层挡住表单，下方悬浮按钮与加入 Persy 按钮重叠。",
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "已安装 XCAGI 1.0.0.5，知识库为 0 内容、0 来源；打开文件导入但未选择文件。",
+      "actions": "点击导入知识，再点击加入 Persy；关闭被打开的助理后再次点击提交区域。",
+      "expected": "提交按钮可操作，未选择文件时显示请选择资料文件；不打开无关面板。",
+      "observed": "两次点击均打开小C 助理，导入抽屉仍打开且未显示文件校验；取消导入，未写入知识数据。",
+      "result": "failed"
+    }
+  ]
+}

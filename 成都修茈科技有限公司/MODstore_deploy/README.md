@@ -21,6 +21,43 @@ bash FHD/scripts/dev/run_modstore_daily_local.sh restart
 
 默认使用本目录（工作区 `成都修茈科技有限公司/MODstore_deploy`）；若目录缺失则回退 `~/XCMAX-archives/.../MODstore_deploy`。
 
+治理与员工包构建共用仓库包。在仓库根安装开发依赖：
+
+```bash
+python -m pip install -e packages/retort_engine -e packages/xcagi_common \
+  -e './成都修茈科技有限公司/MODstore_deploy[web,governance]'
+```
+
+员工目录内的 `build_xcemp.py` 与资产流水线共用 `xcagi_common.employee_pack`，
+保留原来的包内目录和各员工的文件包含规则。仓库内可直接运行入口；导出到仓库外的
+员工源码需要在构建环境安装 `xcagi-common`，生成的 `.xcemp` 无此构建依赖。
+
 ## 前端看板
 
 `XCAGI-Full-Pipeline.html` → `#s-gaps` / `#s-roadmap` 由 `docs/xcagi-dashboard/emp-wf-action-items.js` 拉取本栈 `:8788` API 动态渲染。
+# Company ticket read grants
+
+`GET /api/customer-service/tickets?offset=0&limit=50` and
+`GET /api/customer-service/tickets/{id}` accept an independent `cst_ro_` service
+credential with exactly `customer-tickets:read`. All other paths/methods are
+denied before dispatch; ordinary account ownership rules remain in place.
+The scope covers existing customer-service ticket intents, including delivery
+tickets stored in that table. It does not grant artifact downloads or access to
+Para development tasks. Deadlines are not recorded in this table, so overdue
+state is returned as unknown, never inferred from age.
+
+Set `MODSTORE_INSTANCE_ID` and `MODSTORE_TICKET_READ_GRANTS_FILE` on the server.
+The latter must be a regular owner-only file (0600), owned by root/service user:
+
+```json
+{"instance_id":"fixed-instance","company_id":"fixed-company","owner_user_ids":[1,2],"grants":[{"id":"dot-read","principal":"dot","scopes":["customer-tickets:read"],"token_sha256":"SHA256_OF_RANDOM_SERVICE_CREDENTIAL","expires_at":"2026-11-01T00:00:00Z","revoked":false}]}
+```
+
+An operator must populate `owner_user_ids` from the company's authoritative
+account membership, including its customer accounts; no wildcard is supported.
+New accounts require an explicit membership update. Create separate grants for
+`dot` and `grok-bot`. Only credential hashes belong on the server. Keep plaintext
+credentials in each executor's protected local file or credential manager, never
+in source, chat, tool arguments or Para tasks. Removing a grant or setting
+`revoked:true` takes effect on the next request. `ticket_read` logs record grant,
+route, allow/deny and response status; retain INFO logs in the server audit sink.

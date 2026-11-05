@@ -32,8 +32,7 @@ def _assert_customer_run(repo: InMemoryAgentRunRepository, run_id: str, action: 
 
 
 def test_customer_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     client = _client()

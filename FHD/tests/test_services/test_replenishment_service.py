@@ -22,11 +22,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.services.replenishment_service as replenishment_service
-from app.db.base import Base
+import app.domain.shared_services.replenishment_service as replenishment_service
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, Product, Warehouse
+from app.domain.shared_services.replenishment_service import suggest_replenishment
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.replenishment_service import suggest_replenishment
 
 
 @pytest.fixture(scope="function")

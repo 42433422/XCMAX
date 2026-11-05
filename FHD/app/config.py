@@ -35,6 +35,8 @@ class Config:
 
     # 安全密钥：优先使用环境变量，开发环境允许临时随机值。
     SECRET_KEY = os.environ.get("SECRET_KEY")
+    # Server-owned, opt-in admission of an already-enrolled isolated catalog.
+    OWNED_SOURCE_PROFILE = os.environ.get("XCAGI_OWNED_SOURCE_PROFILE", "")
 
     # 调试模式
     DEBUG = os.environ.get("XCAGI_DEBUG", "1") == "1"

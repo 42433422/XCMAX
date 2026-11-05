@@ -1196,40 +1196,16 @@ class TestDefaultRemoteState:
 
 
 class TestReadCrossTierAudit:
-    def test_tier_none_defaults_to_server(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        # point server path to a tmp file so we don't read real /opt
+    @pytest.mark.parametrize("tier", [None, "", "  SERVER  "])
+    def test_server_tier_normalization(self, monkeypatch, tmp_path, tier):
         audit_path = tmp_path / "audit.jsonl"
         audit_path.write_text(json.dumps({"tier": "server", "ts": "t1"}) + "\n", encoding="utf-8")
         monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(audit_path))
         monkeypatch.setenv("XCAGI_AUTONOMY_DATA_DIR", str(tmp_path / "nope"))
-        data = ao.read_cross_tier_audit(tier=None, limit=10)  # type: ignore[arg-type]
+        data = ao.read_cross_tier_audit(tier=tier, limit=10)
         assert data["tier"] == "server"
         assert data["count"] == 1
         assert data["exists"] is True
-
-    def test_tier_empty_defaults_to_server(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        audit_path = tmp_path / "audit.jsonl"
-        audit_path.write_text("", encoding="utf-8")
-        monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(audit_path))
-        monkeypatch.setenv("XCAGI_AUTONOMY_DATA_DIR", str(tmp_path / "nope"))
-        data = ao.read_cross_tier_audit(tier="", limit=10)
-        assert data["tier"] == "server"
-        assert data["count"] == 0
-
-    def test_tier_whitespace_and_case_normalized(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        audit_path = tmp_path / "audit.jsonl"
-        audit_path.write_text(json.dumps({"i": 1}) + "\n", encoding="utf-8")
-        monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(audit_path))
-        monkeypatch.setenv("XCAGI_AUTONOMY_DATA_DIR", str(tmp_path / "nope"))
-        data = ao.read_cross_tier_audit(tier="  SERVER  ", limit=10)
-        assert data["tier"] == "server"
-        assert data["count"] == 1
 
     def test_desktop_tier_uses_home_path(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -1282,35 +1258,13 @@ class TestReadCrossTierAudit:
         assert data["items"][0]["i"] == 99
         assert data["path"] == str(fallback_path)
 
-    def test_limit_clamped_to_one(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("limit, expected", [(-1, 1), (99999, 3), (None, 3)])
+    def test_audit_limit_bounds(self, monkeypatch, tmp_path, limit, expected):
         audit_path = tmp_path / "audit.jsonl"
-        rows = [json.dumps({"i": n}) for n in range(5)]
-        audit_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        audit_path.write_text("\n".join(json.dumps({"i": n}) for n in range(3)))
         monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(audit_path))
         monkeypatch.setenv("XCAGI_AUTONOMY_DATA_DIR", str(tmp_path / "nope"))
-        # limit=-1 (negative) clamps to 1; limit=0 is falsy → defaults to 50
-        data = ao.read_cross_tier_audit(tier="server", limit=-1)
-        assert data["count"] == 1
-
-    def test_limit_clamped_to_300(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        audit_path = tmp_path / "audit.jsonl"
-        rows = [json.dumps({"i": n}) for n in range(3)]
-        audit_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
-        monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(audit_path))
-        monkeypatch.setenv("XCAGI_AUTONOMY_DATA_DIR", str(tmp_path / "nope"))
-        data = ao.read_cross_tier_audit(tier="server", limit=99999)
-        assert data["count"] == 3
-
-    def test_limit_none_defaults_to_50(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        audit_path = tmp_path / "audit.jsonl"
-        rows = [json.dumps({"i": n}) for n in range(3)]
-        audit_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
-        monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(audit_path))
-        monkeypatch.setenv("XCAGI_AUTONOMY_DATA_DIR", str(tmp_path / "nope"))
-        data = ao.read_cross_tier_audit(tier="server", limit=None)  # type: ignore[arg-type]
-        assert data["count"] == 3
+        assert ao.read_cross_tier_audit(tier="server", limit=limit)["count"] == expected
 
     def test_missing_file_returns_empty(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

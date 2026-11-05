@@ -1,0 +1,48 @@
+{
+  "schema": "xcagi.download_manifest/v1",
+  "version": "1.0.0.5",
+  "release_ready": false,
+  "active_skus": [
+    "enterprise"
+  ],
+  "frozen_skus": [
+    "personal"
+  ],
+  "primary_sku": "enterprise",
+  "git_sha": "c8fb73c95235cb5a03733c85512303de3997894f",
+  "release_id": "xcagi-1.0.0.5-c8fb73c95235cb5a03733c85512303de3997894f",
+  "build_workflow_run_id": "",
+  "frontend_workflow_run_id": "",
+  "update_metadata_signatures": {
+    "mac": "ed25519:qChTcs4sPLvqLSdwiYdL6nPRSA0N1c/s1wa0kuUahLx689IjItjH/gUOrzkiZe88OYnHQTnuK7N6pOach5XCBA=="
+  },
+  "generated_at": "2026-09-20T19:12:31.922009+00:00",
+  "channels": {
+    "auto_update": {
+      "base_url": "https://xiu-ci.com/releases/stable",
+      "enterprise": {
+        "mac": [
+          {
+            "url": "https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+            "sha256": "414d9f226fac826302a02657ff9ef97fccbc141f005bb13bf6db8735bbe18783",
+            "size": 300180224,
+            "filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg"
+          }
+        ]
+      }
+    },
+    "official_download": {
+      "base_url": "https://xiu-ci.com/xcagi-v1.0.0.5",
+      "enterprise": {
+        "mac": [
+          {
+            "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+            "sha256": "414d9f226fac826302a02657ff9ef97fccbc141f005bb13bf6db8735bbe18783",
+            "size": 300180224,
+            "filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg"
+          }
+        ]
+      }
+    }
+  }
+}

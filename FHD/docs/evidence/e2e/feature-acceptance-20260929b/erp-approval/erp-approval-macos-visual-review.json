@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-approval",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "9378d0a973a9533190e9f34c82f9252495f5f044a6ea888f9c07ce32efe653ef",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。业务审批工作台。待审批 0，我发起的 4，已通过 4，已拒绝 0。列表含「MAC验收0929审批」2026/9/29 12:36 已通过，以及「MAC验收0929通知」。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-approval/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-approval/macos/result.png"
+}

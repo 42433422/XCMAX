@@ -1,0 +1,7 @@
+[08:27:09] feature=sec-slo base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-slo
+[08:27:21] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:27:23] case SL1: passed - 服务拓扑运行时清单真实读取
+[08:27:23] case SL2: passed - 编制收敛状态真实读取
+[08:27:24] case SL3: passed - 无会话访问运行时清单被拒（负例）
+[08:27:24] video: sec-slo-web-20260929-082709.webm (695250 bytes)
+[08:27:24] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-slo/log/sec-slo-web-20260929-082709.log

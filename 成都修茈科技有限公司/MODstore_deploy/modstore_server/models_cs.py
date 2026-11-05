@@ -12,9 +12,11 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
+    select,
 )
 
-from modstore_server.db.base import Base
+from modstore_server.db.db_base import Base
 
 
 class CustomerServiceSession(Base):
@@ -48,6 +50,8 @@ class CustomerServiceTicket(Base):
         Integer, ForeignKey("customer_service_sessions.id"), nullable=False, index=True
     )
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # 建单时固化身份，不能在管理统计时再按当前账号角色猜测。
+    submitter_type = Column(String(16), default="unknown", nullable=False, index=True)
     ticket_no = Column(String(64), unique=True, nullable=False, index=True)
     title = Column(String(256), default="")
     intent = Column(String(64), default="", index=True)
@@ -60,6 +64,7 @@ class CustomerServiceTicket(Base):
     decision_status = Column(String(24), default="pending", index=True)
     automation_level = Column(String(24), default="auto", index=True)
     assigned_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    expected_completion_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
@@ -67,6 +72,21 @@ class CustomerServiceTicket(Base):
         onupdate=lambda: datetime.now(UTC),
     )
     closed_at = Column(DateTime, nullable=True)
+
+
+@event.listens_for(CustomerServiceTicket, "before_insert")
+def _snapshot_ticket_submitter_type(_mapper, connection, target) -> None:
+    """在所有建单入口统一固化提交人身份。"""
+    if str(target.submitter_type or "").strip():
+        return
+    from modstore_server.db.identity import User
+
+    is_admin = connection.execute(
+        select(User.is_admin).where(User.id == target.user_id)
+    ).scalar_one_or_none()
+    target.submitter_type = (
+        "admin" if is_admin is True else "customer" if is_admin is False else "unknown"
+    )
 
 
 class CustomerServiceMessage(Base):

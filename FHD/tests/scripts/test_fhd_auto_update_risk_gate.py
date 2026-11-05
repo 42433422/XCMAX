@@ -1,6 +1,7 @@
 # mypy: disable-error-code="assignment"
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -72,6 +73,9 @@ def _manifest(*, approved: bool) -> dict:
         "git_sha": "abc123",
         "sha256": "0" * 64,
         "admin_console_sha256": "1" * 64,
+        "archive_verifier_sha256": hashlib.sha256(
+            (FHD_ROOT / "scripts/deploy/lib/verify_release_archive.py").read_bytes()
+        ).hexdigest(),
         "version": "test",
     }
     if approved:

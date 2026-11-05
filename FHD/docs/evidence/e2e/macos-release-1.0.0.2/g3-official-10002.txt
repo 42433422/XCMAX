@@ -1,0 +1,13 @@
+# G3 正式 1.0.0.2 官方包安全项复验（2026-09-13）
+
+来源：stable feed 下载产物（SHA256 f00801b0…2a28，= CVM 远端双目录核验值）。
+
+```
+codesign --verify --deep --strict XCAGI.app → exit=0
+spctl --assess --type execute XCAGI.app → exit=0（accepted，已公证）
+stapler validate XCAGI.app → "The validate action worked!"
+TeamIdentifier=G26WSH472M；Timestamp=Sep 13, 2026 10:16:01
+build-info.json: gitSha=6eda2203df27c53958b9d7af0e6db26d22b560c4, version=1.0.0.2, builtAt=2026-09-13T02:13:17Z
+```
+
+交付链：run 34732266439 构建+签名+公证成功；step14 CVM 直传 10KB/s 超时失败 → artifact 本机中转补齐 step14–16（双目录 5 文件 SHA256 核验 + manifest 生成 07:25:59Z + 公网 feed/DMG/ZIP/blockmap 全 200 + latest-mac.yml ed25519 公钥验签 VALID）。

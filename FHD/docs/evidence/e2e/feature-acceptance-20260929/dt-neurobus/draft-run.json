@@ -1,0 +1,69 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "dt-neurobus",
+ "name": "事件总线（NeuroBus）",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/neurobus/health",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/neurobus/health（写操作自动附带 CSRF）：事件总线健康",
+   "expected": "事件总线健康：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 22ms；published=115977 processed=115971 errors=0",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/neurobus/stats",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/neurobus/stats（写操作自动附带 CSRF）：总线统计",
+   "expected": "总线统计：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 22ms；{\"reflex\": 0, \"subconscious\": 0, \"conscious\": 0, \"total\": 0, \"fallbacks\": 0, \"errors\": 0, \"reflex_rate\": 0, \"fallback_rate\": 0}",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/mod/xcagi-neuro-bus-bridge/handlers/catalog",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-neuro-bus-bridge/handlers/catalog（写操作自动附带 CSRF）：桥接 Mod 处理器目录",
+   "expected": "桥接 Mod 处理器目录：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 12ms；{\"success\": true, \"data\": {\"catalog\": {\"schema_version\": 1, \"collection\": \"neuro_domain_handlers\", \"note\": \"处理器实现仍在宿主 app.neuro_bus.domains.*；Mod 负责启动时注册编排。\", \"",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /desktop-runtime",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /desktop-runtime，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /desktop-runtime，页面可见 ，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /desktop-runtime；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 桌面运行时 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 桌面运行时 |  | 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 |  | 刷新状态检查桌面更新 | 运行状态 | 桌面",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "dt-neurobus",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-neurobus/macos/result.png",
+   "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "dt-neurobus",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-neurobus/macos/operation.webm",
+   "sha256": "85f7ffc133cfbcc7dffc6ab1220a0a11dac447c1498c82689b8c10ea9242ac2d",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-neurobus/macos/run.log",
+  "sha256": "fb7e4fd60bcabb084f4ef5a13c80534ef89ecad80af49f97c7373b9d5f245e78",
+  "bytes": 1563
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

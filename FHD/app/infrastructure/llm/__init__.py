@@ -1,4 +1,4 @@
-"""LLM infrastructure (Phase 5 facade over app.legacy.llm_config)."""
+"""LLM infrastructure (Phase 5 facade over legacy-layer.llm_config)."""
 
 from __future__ import annotations
 

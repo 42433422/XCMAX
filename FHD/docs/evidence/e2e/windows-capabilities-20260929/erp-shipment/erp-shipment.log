@@ -1,0 +1,10 @@
+feature=erp-shipment
+at=2026-09-29T11:22:00.943Z
+route=/mod/xcagi-erp-domain-bridge/shipment-records
+landed=/mod/xcagi-erp-domain-bridge/shipment-records
+title=考勤记录 - XCAGI
+heading=考勤记录
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤记录 SUNBIRD 副窗 ◈ 工作区 出货记录管理 请选择购买单位 瓶 袋 全部状态 已打印 未打印 请选择出货记录模板 出货记录初始化表（出货记录） [未绑定文件] 查看记录 + 新建 导出 Excel 选择购买单位后点击「查看记录」加载数据 暂无数据 请先选择购买单位并加载 小C助理

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "mods-webhook",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "24f7bc9214e382611d7e300ed6b0ef37c766103db75e5542fe3fcc07b4d33e58",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。failed。AI 员工市场宿主基础能力共 0 件，与商店空态同一画面。 未通过明细：M1 failed：HTTP 403 49ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"该旧业务接口尚未提供安全的租户数据隔离\", \"path\": \"/api/orders/webhooks\"}",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/mods-webhook/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/mods-webhook/macos/result.png"
+}

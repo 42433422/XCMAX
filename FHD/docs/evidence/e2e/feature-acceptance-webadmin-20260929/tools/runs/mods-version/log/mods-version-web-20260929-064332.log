@@ -1,0 +1,8 @@
+[06:43:32] feature=mods-version base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-version
+[06:43:44] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:43:54] case V1: passed - 全量 Mod 版本清单真实读取
+[06:44:05] case V2: passed - 更新检查（版本对比源）真实读取
+[06:44:12] case V3: passed - 单 Mod 版本与依赖可安装性真实读取
+[06:44:18] case V4: passed - 查询不存在的 Mod 版本被真实拒绝（负例）
+[06:44:18] video: mods-version-web-20260929-064332.webm (3335935 bytes)
+[06:44:18] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-version/log/mods-version-web-20260929-064332.log

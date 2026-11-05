@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "mods-shell",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "34c32f1f091aab04cee3b0f53a557347dda40a96609e99b6c6546be3c06aaa82",
+  "visible_content": "解耦进度里程碑与宿主 profile 可读；能力库截图时刻目录未加载完成，显示空态。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-shell/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-shell/macos/result.png"
+}

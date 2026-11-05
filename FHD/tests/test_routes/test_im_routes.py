@@ -149,7 +149,7 @@ class TestNotifyOfflineImMembers:
 
         with (
             patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub,
-            patch("app.services.mobile_push.notify_user") as mock_notify,
+            patch("app.domain.shared_services.mobile_push.notify_user") as mock_notify,
         ):
             mock_hub.connected_user_ids.return_value = [1, 3]
             await _notify_offline_im_members([1, 2, 3], 1, "hello")
@@ -162,7 +162,10 @@ class TestNotifyOfflineImMembers:
 
         with (
             patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub,
-            patch("app.services.mobile_push.notify_user", side_effect=RuntimeError("push fail")),
+            patch(
+                "app.domain.shared_services.mobile_push.notify_user",
+                side_effect=RuntimeError("push fail"),
+            ),
         ):
             mock_hub.connected_user_ids.return_value = [1]
             # Should not raise
@@ -174,7 +177,7 @@ class TestNotifyOfflineImMembers:
 
         with (
             patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub,
-            patch("app.services.mobile_push.notify_user") as mock_notify,
+            patch("app.domain.shared_services.mobile_push.notify_user") as mock_notify,
         ):
             mock_hub.connected_user_ids.return_value = [1]
             await _notify_offline_im_members([1, 2], 1, "")

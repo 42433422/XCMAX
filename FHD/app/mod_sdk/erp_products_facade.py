@@ -36,7 +36,7 @@ def _service():
 
 
 def _map_create_body(body: dict[str, Any]) -> dict[str, Any]:
-    from app.application.excel_imports import _norm_model
+    from app.domain.app_pure.excel_imports import _norm_model
 
     name = str(body.get("name") or "").strip()
     spec = str(body.get("specification") or "").strip()
@@ -44,6 +44,7 @@ def _map_create_body(body: dict[str, Any]) -> dict[str, Any]:
     if not mn:
         mn = _norm_model("", name, spec)
     price = body.get("unit_price", body.get("price", 0))
+    price = 0 if price == "" else price
     return {
         "name": name,
         "specification": spec,
@@ -58,7 +59,7 @@ def _map_create_body(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _write_gate(request: Request | None) -> dict | None:
-    from app.infrastructure.persistence.compat_db.base import (
+    from app.infrastructure.persistence.compat_db.compat_db_base import (
         _business_mod_json_block,
         _products_write_raise,
     )
@@ -133,6 +134,8 @@ def products_add(request: Request | None, body: dict[str, Any]) -> dict[str, Any
         raise HTTPException(status_code=400, detail=result.get("message") or "添加失败")
     data = result.get("data") or {}
     pid = data.get("id") if isinstance(data, dict) else getattr(data, "id", None)
+    if pid is None:
+        pid = result.get("product_id")
     return {
         "success": True,
         "data": {"id": int(pid) if pid is not None else None},
@@ -142,7 +145,7 @@ def products_add(request: Request | None, body: dict[str, Any]) -> dict[str, Any
 
 
 def products_update(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    from app.infrastructure.persistence.compat_db.base import _product_parse_id
+    from app.infrastructure.persistence.compat_db.compat_db_base import _product_parse_id
 
     gate = _write_gate(request)
     if gate:
@@ -155,6 +158,8 @@ def products_update(request: Request | None, body: dict[str, Any]) -> dict[str, 
         raise HTTPException(status_code=400, detail="产品名称不能为空")
     payload = dict(body)
     payload.pop("id", None)
+    if payload.get("price") == "":
+        payload["price"] = 0
     result = _service().update_product(pid, payload)
     if not result.get("success"):
         raise HTTPException(status_code=404, detail=result.get("message") or "产品不存在")
@@ -167,7 +172,7 @@ def products_update(request: Request | None, body: dict[str, Any]) -> dict[str, 
 
 
 def products_delete(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    from app.infrastructure.persistence.compat_db.base import _product_parse_id
+    from app.infrastructure.persistence.compat_db.compat_db_base import _product_parse_id
 
     gate = _write_gate(request)
     if gate:
@@ -187,7 +192,7 @@ def products_delete(request: Request | None, body: dict[str, Any]) -> dict[str, 
 
 
 def products_batch_delete(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    from app.infrastructure.persistence.compat_db.base import _product_parse_id
+    from app.infrastructure.persistence.compat_db.compat_db_base import _product_parse_id
 
     gate = _write_gate(request)
     if gate:

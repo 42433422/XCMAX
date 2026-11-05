@@ -51,11 +51,22 @@ from app.application.workflow.approval_gated_engine import (
 )
 from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.risk_gate import RiskDecision
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,
     WorkflowRunResult,
+)
+from app.domain.shared_services.conversation.context import ConversationContext
+from app.domain.shared_services.conversation.handlers import HandlersMixin
+from app.domain.shared_services.distilled_intent_service import (
+    DEFAULT_INTENT_LABELS,
+    DistilledIntentRecognizer,
+)
+from app.domain.shared_services.modstore_library_sync import (
+    download_modstore_export_zip,
+    fetch_modstore_library_mod_ids,
+    sync_modstore_library_to_local,
 )
 from app.fastapi_routes import service_bridge as sb
 from app.fastapi_routes.service_bridge import (
@@ -67,17 +78,6 @@ from app.fastapi_routes.service_bridge import (
 from app.infrastructure.payment import order_store
 from app.infrastructure.skills.template_manager import template_manager as tm
 from app.services import distilled_intent_service as dis_svc
-from app.services.conversation.context import ConversationContext
-from app.services.conversation.handlers import HandlersMixin
-from app.services.distilled_intent_service import (
-    DEFAULT_INTENT_LABELS,
-    DistilledIntentRecognizer,
-)
-from app.services.modstore_library_sync import (
-    download_modstore_export_zip,
-    fetch_modstore_library_mod_ids,
-    sync_modstore_library_to_local,
-)
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -776,18 +776,16 @@ class TestBuildPendingCompleteResponseEdges:
 
 
 class TestOrderStorePaths:
-    def test_repo_root_returns_path_object(self) -> None:
-        result = order_store._repo_root()
-        assert isinstance(result, Path)
-        # Should be the FHD root (parents[3] from order_store.py location)
-        assert result.name == "FHD" or result.exists()
-
-    def test_order_store_path_default_when_env_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_order_store_path_default_when_env_unset(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.delenv("MODEL_PAYMENT_ORDER_STORE_PATH", raising=False)
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
         result = order_store.order_store_path()
         assert isinstance(result, Path)
         assert result.name == "model_payment_orders.json"
         assert "data" in result.parts
+        assert result == tmp_path / "data" / "model_payment_orders.json"
 
     def test_order_store_path_default_when_env_blank(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -1426,7 +1424,6 @@ class TestDistilledIntentRecognizerLoadDefaults:
             else:
                 sys.modules.pop("transformers", None)
 
-        # id2label should be DEFAULT_INTENT_LABELS
         assert r.id2label is not None
         assert r.id2label[0] == DEFAULT_INTENT_LABELS[0]
         assert r.label2id is not None
@@ -1440,14 +1437,10 @@ class TestDistilledIntentRecognizerLoadDefaults:
 
 class TestServiceBridgeGetInstanceIdWrite:
     def test_writes_new_id_when_no_cache(self, tmp_path: Path) -> None:
-        """When file doesn't exist, generates and writes a new instance_id."""
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
-        # Don't patch os.path.exists globally; let real fs check happen.
-        # The file doesn't exist yet, so the function will generate + write.
-        with patch.object(sb, "_INSTANCE_ID_FILE", str(instance_file)):
+        with patch.object(sb, "get_data_dir", return_value=str(instance_file.parent)):
             result = sb._get_or_create_instance_id()
         assert result.startswith("xcagi-host-")
-        # File should have been written
         assert instance_file.is_file()
         assert instance_file.read_text(encoding="utf-8") == result
 
@@ -1455,28 +1448,25 @@ class TestServiceBridgeGetInstanceIdWrite:
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
         instance_file.parent.mkdir(parents=True, exist_ok=True)
         instance_file.write_text("xcagi-host-cached123", encoding="utf-8")
-        with patch.object(sb, "_INSTANCE_ID_FILE", str(instance_file)):
+        with patch.object(sb, "get_data_dir", return_value=str(instance_file.parent)):
             result = sb._get_or_create_instance_id()
         assert result == "xcagi-host-cached123"
 
     def test_recoverable_error_falls_back_to_random_id(self, tmp_path: Path) -> None:
-        """When makedirs raises OSError → returns random id without writing."""
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
         with (
-            patch.object(sb, "_INSTANCE_ID_FILE", str(instance_file)),
+            patch.object(sb, "get_data_dir", return_value=str(instance_file.parent)),
             patch("os.path.exists", return_value=False),
             patch("os.makedirs", side_effect=OSError("no write")),
         ):
             result = sb._get_or_create_instance_id()
         assert result.startswith("xcagi-host-")
-        # File should NOT have been written because makedirs failed
         assert not instance_file.is_file()
 
 
 class TestServiceBridgeListRequestsSingleFilter:
     async def test_with_status_filter_only(self) -> None:
         mock_db = MagicMock()
-        # Single filter: query().filter().count() and ...order_by...all()
         single = mock_db.query.return_value.filter.return_value
         single.count.return_value = 5
         single.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
@@ -1582,7 +1572,7 @@ class TestModstoreLibrarySyncCleanup:
 
         with (
             patch(
-                "app.services.modstore_library_sync.download_modstore_export_zip",
+                "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
                 return_value=b"zip-bytes",
             ),
             patch(
@@ -1590,7 +1580,7 @@ class TestModstoreLibrarySyncCleanup:
                 return_value=mock_mm,
             ),
             patch(
-                "app.services.modstore_library_sync.normalize_package_zip_path",
+                "app.domain.shared_services.modstore_library_sync.normalize_package_zip_path",
                 side_effect=lambda p: p,
             ),
             patch("os.unlink", side_effect=OSError("permission denied")),
@@ -1607,7 +1597,7 @@ class TestModstoreLibrarySyncCleanup:
 
     async def test_sync_all_ok_with_empty_fetch_returns_noop(self) -> None:
         with patch(
-            "app.services.modstore_library_sync.fetch_modstore_library_mod_ids",
+            "app.domain.shared_services.modstore_library_sync.fetch_modstore_library_mod_ids",
             return_value=[],
         ) as mock_fetch:
             result = await sync_modstore_library_to_local(
@@ -1628,7 +1618,7 @@ class TestModstoreLibrarySyncCleanup:
 
         with (
             patch(
-                "app.services.modstore_library_sync.download_modstore_export_zip",
+                "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
                 return_value=b"zip-bytes",
             ),
             patch(
@@ -1636,7 +1626,7 @@ class TestModstoreLibrarySyncCleanup:
                 return_value=mock_mm,
             ),
             patch(
-                "app.services.modstore_library_sync.normalize_package_zip_path",
+                "app.domain.shared_services.modstore_library_sync.normalize_package_zip_path",
                 side_effect=lambda p: p,
             ),
         ):

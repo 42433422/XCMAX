@@ -1,7 +1,7 @@
 <template>
-  <ShipmentEtlDockingCenter />
+  <ShipmentEltDockingCenter />
 </template>
 
 <script setup>
-import ShipmentEtlDockingCenter from '@/components/etl/ShipmentEtlDockingCenter.vue'
+import ShipmentEltDockingCenter from '@/components/elt/ShipmentEltDockingCenter.vue'
 </script>

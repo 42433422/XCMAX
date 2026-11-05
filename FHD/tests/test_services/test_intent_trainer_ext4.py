@@ -1,4 +1,4 @@
-"""Tests for app.services.intent_trainer — extended coverage (ext4).
+"""Tests for app.domain.shared_services.intent_trainer — extended coverage (ext4).
 
 Focus: parse_nlu_yaml with various YAML structures, load_training_data with
 JSON list of dicts, IntentDataset.__getitem__ with valid label, train_intent_model
@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.intent_trainer import (
+from app.domain.shared_services.intent_trainer import (
     HAS_YAML,
     ID_TO_LABEL,
     INTENT_LABELS,
@@ -222,15 +222,17 @@ class TestIntentDatasetGetitemValid:
 class TestTrainIntentModelErrors:
     def test_empty_training_data_raises(self, tmp_path):
         """Empty training data should raise ValueError."""
-        with patch("app.services.intent_trainer.load_training_data", return_value=[]):
+        with patch("app.domain.shared_services.intent_trainer.load_training_data", return_value=[]):
             with pytest.raises(ValueError, match="训练数据为空"):
                 train_intent_model(data_path="fake.json", output_dir=str(tmp_path / "out"))
 
-    @patch("app.services.intent_trainer.Trainer")
-    @patch("app.services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
-    @patch("app.services.intent_trainer.AutoConfig.from_pretrained")
-    @patch("app.services.intent_trainer.AutoTokenizer.from_pretrained")
-    @patch("app.services.intent_trainer.load_training_data")
+    @patch("app.domain.shared_services.intent_trainer.Trainer")
+    @patch(
+        "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained"
+    )
+    @patch("app.domain.shared_services.intent_trainer.AutoConfig.from_pretrained")
+    @patch("app.domain.shared_services.intent_trainer.AutoTokenizer.from_pretrained")
+    @patch("app.domain.shared_services.intent_trainer.load_training_data")
     def test_train_with_early_stopping_disabled(
         self, mock_load, mock_tokenizer, mock_config, mock_model, mock_trainer, tmp_path
     ):
@@ -263,9 +265,11 @@ class TestTrainIntentModelErrors:
 
 
 class TestExportToOnnxWithRuntime:
-    @patch("app.services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
-    @patch("app.services.intent_trainer.AutoTokenizer.from_pretrained")
-    @patch("app.services.intent_trainer.torch.onnx.export")
+    @patch(
+        "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained"
+    )
+    @patch("app.domain.shared_services.intent_trainer.AutoTokenizer.from_pretrained")
+    @patch("app.domain.shared_services.intent_trainer.torch.onnx.export")
     def test_export_with_onnxruntime(self, mock_onnx_export, mock_tokenizer, mock_model, tmp_path):
         """When onnxruntime is importable, export proceeds."""
         # Make onnxruntime importable
@@ -327,8 +331,8 @@ class TestMainCLIWithOnnx:
             ],
         ):
             with (
-                patch("app.services.intent_trainer.train_intent_model") as mock_train,
-                patch("app.services.intent_trainer.export_to_onnx") as mock_export,
+                patch("app.domain.shared_services.intent_trainer.train_intent_model") as mock_train,
+                patch("app.domain.shared_services.intent_trainer.export_to_onnx") as mock_export,
             ):
                 mock_train.return_value = str(tmp_path / "final")
 
@@ -350,8 +354,8 @@ class TestMainCLIWithOnnx:
             ],
         ):
             with (
-                patch("app.services.intent_trainer.train_intent_model") as mock_train,
-                patch("app.services.intent_trainer.export_to_onnx") as mock_export,
+                patch("app.domain.shared_services.intent_trainer.train_intent_model") as mock_train,
+                patch("app.domain.shared_services.intent_trainer.export_to_onnx") as mock_export,
             ):
                 mock_train.return_value = str(tmp_path / "final")
 

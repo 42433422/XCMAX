@@ -1,9 +1,5 @@
-"""LLM 客户端 / 配置门面。
-
-OpenAI 兼容客户端与 online/offline（Ollama）模式切换。
-进程内全局状态,供 planner 与路由层共享。
-
-Phase 5B 从 ``app.legacy.llm_config`` 吸收。
+"""LLM mode configuration and clients: authenticated tool scope takes precedence
+over the process-wide client configured through provider credentials.
 """
 
 from __future__ import annotations
@@ -14,7 +10,13 @@ import os
 import threading
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Literal, cast
+
+from app.infrastructure.modstore_transport import safe_route_metadata
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,182 @@ _client_lock = threading.Lock()
 _mode: Literal["online", "offline"]
 _offline_model: str | None = None
 _openai_client: Any | None = None
+_scoped_client: ContextVar[tuple[Any, str | None] | None] = ContextVar(
+    "scoped_llm_client", default=None
+)
+
+
+@contextmanager
+def llm_client_scope(client: Any, model: str) -> Iterator[None]:
+    """Reuse the authenticated planner client for nested tools without persisting credentials."""
+    token = _scoped_client.set((client, model))
+    try:
+        yield
+    finally:
+        _scoped_client.reset(token)
+
+
+@contextmanager
+def llm_client_factory_scope(factory: Any) -> Iterator[None]:
+    """Defer client creation without making a model call at scope entry."""
+    token = _scoped_client.set((factory, None))
+    try:
+        yield
+    finally:
+        _scoped_client.reset(token)
+
+
+def _resolved_scoped_client() -> tuple[Any, str] | None:
+    scoped = _scoped_client.get()
+    if scoped is not None and scoped[1] is None:
+        client = scoped[0]()
+        if isinstance(client, tuple):
+            client, model = client
+            _scoped_client.set((client, model))
+            return client, model
+        from app.infrastructure.llm.providers.credentials import resolve_default_chat_model
+
+        model = resolve_default_chat_model()
+        if getattr(client, "is_modstore_openai_compatible", False):
+            provider = str(client.default_provider or "").strip()
+            model = f"{provider}/{client.default_model}" if provider else str(client.default_model)
+        scoped = (client, model)
+        _scoped_client.set(scoped)
+    return cast("tuple[Any, str] | None", scoped)
+
+
+def capture_worker_llm_scope(context: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """Copy minimal credentials into spawn arguments, never durable task context."""
+    scoped = _scoped_client.get()
+    if scoped is None:
+        owner = (context or {}).get("local_user_id") or (context or {}).get("actor_id")
+        if owner:
+            return (
+                {"kind": "account", "owner": int(owner)}
+                if str(owner).isdigit() and int(owner) > 0
+                else {"kind": "unavailable"}
+            )
+        return None
+    try:
+        scoped = _resolved_scoped_client()
+        if scoped is None:
+            return {"kind": "unavailable"}
+        client, model = scoped
+        if getattr(client, "is_modstore_openai_compatible", False) is True:
+            adapter = client.adapter
+            config = {
+                "kind": "modstore",
+                "platform_url": adapter.platform_url,
+                "auth_token": adapter.auth_token,
+                "user_id": adapter.user_id,
+                "default_provider": adapter.default_provider,
+                "default_model": adapter.default_model,
+                "timeout": adapter.timeout,
+                "route_snapshot": adapter._route_snapshots.get(
+                    (adapter._connection(), adapter.resolve_default_route())
+                ),
+            }
+        else:
+            if not isinstance(client.api_key, str) or not client.api_key:
+                raise ValueError("unsupported scoped client")
+            config = {"kind": "openai", "api_key": client.api_key, "base_url": str(client.base_url)}
+        config["model"] = model
+        json.dumps(config)
+        return config
+    except RECOVERABLE_ERRORS + (AttributeError, TypeError):
+        return {"kind": "unavailable"}
+
+
+def scoped_route_metadata(client: Any = None) -> dict[str, str | int]:
+    """Read only an already-used scoped client; never resolve a lazy factory."""
+    if client is None:
+        scoped = _scoped_client.get()
+        if scoped is None or scoped[1] is None:
+            return {}
+        client = scoped[0]
+    if getattr(client, "is_modstore_openai_compatible", False) is True:
+        return safe_route_metadata(client.adapter.last_route_metadata)
+    return {}
+
+
+def record_worker_route_metadata(metadata: Any, captured_scope: dict[str, Any] | None) -> None:
+    """Accept a worker receipt only for its original account and pinned snapshot."""
+    scoped = _scoped_client.get()
+    if scoped is None or scoped[1] is None or not captured_scope:
+        return
+    client = scoped[0]
+    if (
+        captured_scope.get("kind") != "modstore"
+        or getattr(client, "is_modstore_openai_compatible", False) is not True
+    ):
+        return
+    adapter = client.adapter
+    if any(
+        getattr(adapter, field) != captured_scope.get(field)
+        for field in ("platform_url", "auth_token", "user_id")
+    ):
+        return
+    snapshot = captured_scope.get("route_snapshot")
+    expected = safe_route_metadata(snapshot)
+    expected.pop("route_state", None)
+    route = safe_route_metadata(metadata)
+    if (
+        not expected
+        or not route
+        or any(route.get(field) != value for field, value in expected.items())
+    ):
+        return
+    current = adapter._route_snapshots.get(
+        (adapter._connection(), (expected.get("provider"), expected.get("model")))
+    )
+    current_identity = safe_route_metadata(current)
+    current_identity.pop("route_state", None)
+    if (
+        current_identity == expected
+        and isinstance(current, dict)
+        and isinstance(snapshot, dict)
+        and current.get("route_token") == snapshot.get("route_token")
+    ):
+        adapter.last_route_metadata = route
+
+
+def restore_worker_llm_client(config: dict[str, Any]) -> tuple[Any, str]:
+    client: Any
+    if config["kind"] in {"modstore", "account"}:
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            ModstoreOpenAICompatibleClient,
+            ModstorePlatformAdapter,
+        )
+
+        if config["kind"] == "account":
+            from app.fastapi_routes.market_account import latest_session_market_token
+
+            token = latest_session_market_token(user_id=config["owner"])
+            if not token:
+                raise RuntimeError("任务所属账号没有可用的模型登录凭据，请重新登录")
+            adapter = ModstorePlatformAdapter.from_session(auth_token=token)
+            adapter.user_id = None
+            client = ModstoreOpenAICompatibleClient(adapter)
+            return client, f"{client.default_provider}/{client.default_model}"
+        adapter = ModstorePlatformAdapter(
+            **{k: v for k, v in config.items() if k not in {"kind", "model", "route_snapshot"}}
+        )
+        for field in ("auth_token", "user_id", "default_provider", "default_model"):
+            setattr(adapter, field, config[field])
+        snapshot = config.get("route_snapshot")
+        if isinstance(snapshot, dict) and snapshot.get("provider") and snapshot.get("model"):
+            route = snapshot["provider"], snapshot["model"]
+            adapter.default_provider, adapter.default_model = route
+            adapter._route_snapshots[(adapter._connection(), route)] = dict(snapshot)
+            adapter._account_default = (adapter._connection(), route)
+        client = ModstoreOpenAICompatibleClient(adapter)
+    elif config["kind"] == "openai":
+        from openai import OpenAI
+
+        client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
+    else:
+        raise RuntimeError("当前请求的模型不可用，不能回退到其他账号")
+    return client, str(config["model"])
 
 
 def _env_mode() -> Literal["online", "offline"] | None:
@@ -98,7 +276,7 @@ def _first_api_key() -> tuple[str, str | None]:
 
 
 def require_api_key() -> None:
-    if resolve_mode() == "offline":
+    if _scoped_client.get() is not None or resolve_mode() == "offline":
         return
     key, _ = _first_api_key()
     if not key:
@@ -112,6 +290,8 @@ def get_llm_client() -> Any | None:
 
     offline：返回 ``None``（由本地 Ollama 等路径处理，不强制云端客户端）。
     """
+    if scoped := _resolved_scoped_client():
+        return scoped[0]
     if resolve_mode() == "offline":
         return None
     require_api_key()
@@ -182,6 +362,8 @@ def get_offline_status() -> dict[str, Any]:
 
 
 def get_openai_compatible_client() -> Any:
+    if scoped := _resolved_scoped_client():
+        return scoped[0]
     cli = get_llm_client()
     if cli is None:
         raise RuntimeError("offline mode has no OpenAI-compatible client")
@@ -189,6 +371,8 @@ def get_openai_compatible_client() -> Any:
 
 
 def resolve_chat_model() -> str:
+    if scoped := _resolved_scoped_client():
+        return scoped[1]
     from app.infrastructure.llm.providers.credentials import resolve_default_chat_model
 
     return resolve_default_chat_model()
@@ -196,6 +380,8 @@ def resolve_chat_model() -> str:
 
 __all__ = [
     "resolve_mode",
+    "llm_client_scope",
+    "llm_client_factory_scope",
     "set_mode",
     "require_api_key",
     "get_llm_client",

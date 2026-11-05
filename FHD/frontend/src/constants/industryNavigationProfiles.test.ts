@@ -60,9 +60,9 @@ describe('industry navigation profiles', () => {
     expect(attendance.businessMenuKeys).toContain('template-preview')
     expect(attendance.previewMenuKeys).toContain('template-preview')
 
-    for (const industryId of ['餐饮', '物流']) {
+    for (const industryId of ['餐饮', '物流', '饰品包装', '涂料', '考勤']) {
       const resolved = resolveIndustryNavigationProfile(industryId)
-      expect(resolved.businessMenuKeys).toContain('template-preview')
+      expect(resolved.businessMenuKeys).toEqual(expect.arrayContaining(['template-preview', 'approval-hub']))
       expect(resolved.previewMenuKeys).toContain('template-preview')
     }
 

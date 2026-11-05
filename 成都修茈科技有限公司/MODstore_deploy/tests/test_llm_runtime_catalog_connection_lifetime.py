@@ -25,7 +25,9 @@ def platform_small_pool(tmp_path, monkeypatch):
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(models, "get_session_factory", lambda: factory)
     monkeypatch.setattr(llm_key_resolver, "KNOWN_PROVIDERS", ("openai", "deepseek"))
-    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _provider: "platform-test-key")
+    monkeypatch.setattr(
+        llm_key_resolver, "platform_credentials", lambda _provider: ("platform-test-key", None)
+    )
     monkeypatch.setattr(llm_catalog, "_cache", {})
     yield engine
     assert engine.pool.checkedout() == 0
@@ -59,7 +61,10 @@ async def test_platform_catalog_parallel_providers_leave_wallet_connection_free(
     assert sorted(arrivals) == ["deepseek", "openai"]
     assert isinstance(results[0], dict)
     assert results[0]["configured_count"] == 2
-    assert [row["provider"] for row in results[0]["providers"]] == ["openai", "deepseek"]
+    assert [row["provider"] for row in results[0]["providers"]] == [
+        "openai",
+        "deepseek",
+    ]
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,10 @@
+T5 rollback drill (G13 path B: downgrade install) - download evidence
+time: 2026-09-14 (Asia/Shanghai)
+source: https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe  (HTTP :443, 200)
+expected (from official manifest https://xiu-ci.com/xcagi-v1.0.0.0/manifest.json, release_ready=true):
+  size   = 213833311 B
+  sha256 = a40250c2128c77ec3060e5718e1c577d44480d37d1d0e51306903d25bbb12547
+actual:
+  size   = 213833311 B
+  sha256 = a40250c2128c77ec3060e5718e1c577d44480d37d1d0e51306903d25bbb12547
+RESULT: PASS (size + sha256 identical to official manifest)

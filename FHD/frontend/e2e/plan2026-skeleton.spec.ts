@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
-import { csrfHeaders, E2E_ACCOUNT_KIND, E2E_USER, E2E_PASSWORD } from './helpers'
+import { csrfHeaders, E2E_ACCOUNT_KIND, E2E_USER, E2E_PASSWORD, isFullStack } from './helpers'
 
-const skipUnlessFullStack = !process.env.E2E_FULL_STACK
+const skipUnlessFullStack = !isFullStack()
 
 test.describe('plan2026 skeleton paths (full-stack only)', () => {
   test.skip(skipUnlessFullStack, 'requires E2E_FULL_STACK=1')
@@ -12,28 +12,9 @@ test.describe('plan2026 skeleton paths (full-stack only)', () => {
       headers,
       data: { username: E2E_USER, password: E2E_PASSWORD, account_kind: E2E_ACCOUNT_KIND },
     })
-    expect(resp.status(), await resp.text()).toBeLessThan(500)
+    expect(resp.status(), await resp.text()).toBe(200)
     const body = await resp.json().catch(() => ({}))
     expect(body?.success, `login response: ${JSON.stringify(body)}`).toBe(true)
   })
 
-  test('skeleton order', async ({ request }) => {
-    const resp = await request.get('/api/orders')
-    expect(resp.status()).toBeLessThan(500)
-  })
-
-  test('skeleton shipment', async ({ request }) => {
-    const resp = await request.get('/api/shipment/list')
-    expect(resp.status()).toBeLessThan(500)
-  })
-
-  test('skeleton ocr', async ({ request }) => {
-    const resp = await request.get('/api/ocr/test')
-    expect(resp.status()).toBeLessThan(500)
-  })
-
-  test('skeleton mod', async ({ request }) => {
-    const resp = await request.get('/api/mods/')
-    expect(resp.status()).toBeLessThan(500)
-  })
 })

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-30 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-shipment",
+  "platform": "macos",
+  "reviewed_at": "2026-09-30",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+  "screenshot_sha256": "62ebf97c1aeae40b1e6dd6b5085a3ab89f683c9f684d277038c60cee26cd8aa5",
+  "visible_content": "出货记录页提示先选择购买单位，当前列表暂无数据。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-shipment/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-shipment/macos/result.png"
+}

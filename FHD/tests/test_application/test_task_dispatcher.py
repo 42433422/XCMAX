@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
@@ -154,6 +156,41 @@ def test_expired_idempotent_step_recovers_but_non_idempotent_step_fails_closed()
     assert len(executor.contexts) == calls_before
 
 
+@pytest.mark.parametrize("legacy_claim", [False, True])
+def test_quote_recovery_uses_real_registry_and_does_not_replay_unknown_write(legacy_claim):
+    from app.application.workflow.workflow_types import WorkflowNode
+
+    repository = InMemoryAgentRunRepository()
+    executor = _ConcurrentExecutor()
+    executor.release.set()
+    orchestrator = _orchestrator_factory(repository, executor)
+    run = _queued_run("unknown-quote")
+    run.steps = [
+        orchestrator._step_from_node(
+            WorkflowNode(
+                node_id="quote",
+                tool_id="sales",
+                action="quote",
+                idempotent=True,
+                params={
+                    "customer_id": 1,
+                    "items": [{"product_id": 2, "quantity": 1, "unit_price": 50}],
+                },
+            )
+        )
+    ]
+    assert run.steps[0].idempotent is False  # Registry overrides planner optimism.
+    if legacy_claim:
+        run.steps[0].idempotent = True  # Simulate an already persisted pre-fix plan.
+    run.status = "running"
+    run.steps[0].status = "running"
+    repository.save(run)
+    recovered = orchestrator.execute_dispatched_run(run.run_id, recovered=True)
+    assert recovered.status == "blocked"
+    assert recovered.error == "non_idempotent_recovery_blocked"
+    assert executor.contexts == []
+
+
 def test_dispatcher_restart_claims_expired_lease_and_completes_idempotent_task() -> None:
     repository = InMemoryAgentRunRepository()
     queue = InMemoryTaskExecutionRepository()
@@ -198,3 +235,44 @@ def test_dispatcher_restart_claims_expired_lease_and_completes_idempotent_task()
     assert execution.state == "completed"
     assert recovered is not None and len(recovered.tool_calls) == 2
     assert recovered.tool_calls[0].error == "worker_lease_expired"
+
+
+def test_timeout_unknown_releases_worker_slot_and_prevents_repair_replay(monkeypatch):
+    monkeypatch.setenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", "true")
+    repository = InMemoryAgentRunRepository()
+    queue = InMemoryTaskExecutionRepository()
+    calls = []
+
+    class DeadlineExecutor:
+        def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
+            assert deadline_monotonic == runtime_context["deadline_monotonic"]
+            calls.append(runtime_context["idempotency_key"])
+            raise TimeoutError
+
+    runs = [_queued_run("timeout-one"), _queued_run("timeout-two")]
+    for run in runs:
+        run.metadata["repair_overrides"] = {"query": {"retry": True, "max_attempts": 3}}
+        repository.save(run)
+        queue.enqueue(run)
+    dispatcher = AgentTaskDispatcher(
+        execution_repository=queue,
+        run_repository=repository,
+        max_workers=1,
+        poll_seconds=0.02,
+        orchestrator_factory=lambda repo: _orchestrator_factory(repo, DeadlineExecutor()),
+    )
+    dispatcher.start()
+    try:
+        assert _wait_until(lambda: all(queue.get(run.run_id).state == "blocked" for run in runs))
+        assert _wait_until(lambda: dispatcher.snapshot()["active_count"] == 0)
+        assert len(calls) == 2 and len(set(calls)) == 2
+        for run in runs:
+            stored = repository.get(run.run_id)
+            assert stored.status == "blocked"
+            assert stored.metadata["non_retryable"] is True
+            assert stored.metadata["recovery"]["state"] == "manual_reconciliation_required"
+            assert stored.steps[0].attempt_count == 1
+            with pytest.raises(ValueError):
+                _orchestrator_factory(repository, DeadlineExecutor()).retry_run(run.run_id)
+    finally:
+        dispatcher.stop()

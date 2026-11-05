@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted } from 'vue';
-import { fetchSessionMarketHandoff } from '@/api/marketAccount';
+import { fetchSessionMarketHandoff, persistMarketTokensFromHandoff } from '@/api/marketAccount';
+import { captureAuthSession } from '@/utils/authSessionCache';
 import { useMpOffline } from './useMpOffline'
 import { useMpMarketData } from './useMpMarketData'
 import { useMpCatalog } from './useMpCatalog'
@@ -15,6 +16,7 @@ import {
  * 逻辑自 ModelPaymentView.vue 逐字迁移，行为不变。
  */
 export function assembleMpModelPayment() {
+  const handoffController = new AbortController()
   const offline = useMpOffline({
     refreshOverview: () => marketData.refreshMarketOverview(),
     refreshCatalog: () => marketData.refreshLlmCatalog(),
@@ -30,6 +32,8 @@ export function assembleMpModelPayment() {
   })
 
   onMounted(async () => {
+    const sessionCurrent = captureAuthSession()
+    const current = () => sessionCurrent() && !handoffController.signal.aborted
     // 0. 初始化离线状态监听
     offline.setupOnlineListeners();
     offline.updateOnlineStatus();
@@ -52,9 +56,10 @@ export function assembleMpModelPayment() {
     // 1b. 会话内有修茈 JWT 时优先覆盖本地旧 token，避免模型页读到另一个市场账号的缓存余额。
     if (!offline.isOffline.value) {
       try {
-        const handoffData = await fetchSessionMarketHandoff();
+        const handoffData = await fetchSessionMarketHandoff({ signal: handoffController.signal });
+        if (!current()) return;
         const mt = handoffData?.token?.trim();
-        if (mt) {
+        if (mt && persistMarketTokensFromHandoff(handoffData)) {
           marketData.hasSessionMarketToken.value = true;
           const changed = marketData.applyMarketToken(mt);
           if (changed) {
@@ -64,19 +69,21 @@ export function assembleMpModelPayment() {
           marketData.hasSessionMarketToken.value = false;
         }
       } catch {
+        if (!current()) return;
         marketData.hasSessionMarketToken.value = false;
         /* 静默：无会话映射或非登录态属正常 */
       }
     }
 
     // 2. 后台静默刷新（不阻塞UI）
-    if (!offline.isOffline.value) {
+    if (current() && !offline.isOffline.value) {
       marketData.refreshMarketOverview(undefined, true).catch(() => {});
       marketData.refreshLlmCatalog().catch(() => {});
     }
   });
 
   onUnmounted(() => {
+    handoffController.abort()
     offline.cleanupOnlineListeners();
   });
 

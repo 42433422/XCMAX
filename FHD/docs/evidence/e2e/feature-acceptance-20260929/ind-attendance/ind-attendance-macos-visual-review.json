@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-attendance",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "20a3fb76188c4d1823ee436a2ffad704db2b660ee734396b2428a7576fcee258",
+  "visible_content": "同会话新建部门与员工并在列表读回，考勤工作区人员管理页可见新员工。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-attendance/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-attendance/macos/result.png"
+}

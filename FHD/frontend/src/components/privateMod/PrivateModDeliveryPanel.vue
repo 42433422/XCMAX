@@ -1,7 +1,7 @@
 <template src="./PrivateModDeliveryPanel.template.html"></template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { apiFetch } from '@/utils/apiBase'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 
@@ -11,6 +11,10 @@ let accountGeneration = 0
 let deliveryAbort = null
 
 const projects = ref([])
+const versionedMain = ref(false)
+const versionedMainAvailable = computed(() =>
+  projects.value.some((row) => row?.runtime_mod_id === 'sunbird-attendance-custom'),
+)
 const requests = ref([])
 const happyPath = ref(['production', 'testing', 'acceptance', 'delivered'])
 const stageFlow = ref({})
@@ -55,6 +59,7 @@ const submittingRequest = ref(false)
 const requestBusy = ref('')
 const reworkRequestId = ref(0)
 const requestReworkNotes = ref({})
+const requestMainSource = ref({})
 const requestKinds = [
   { id: 'module', label: '业务模块', summary: '生成可安装的私有 Mod 模块' },
   { id: 'employee', label: 'AI 员工', summary: '生成员工包、Skill 组和运行校验' },
@@ -128,11 +133,12 @@ async function submitCustomRequest() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        kind: form.kind,
+        kind: versionedMain.value ? 'module' : form.kind,
+        source_mode: versionedMain.value ? 'versioned_main' : 'generated',
         title,
         requirements,
         acceptance_criteria: acceptanceCriteria,
-        suggested_id: String(form.suggestedId || '').trim() || undefined,
+        suggested_id: versionedMain.value ? 'sunbird-attendance-custom' : String(form.suggestedId || '').trim() || undefined,
       }),
       timeoutMs: 60_000,
     })
@@ -149,6 +155,7 @@ async function submitCustomRequest() {
       requirements: '',
       acceptanceCriteria: '',
     }
+    versionedMain.value = false
     await loadDelivery()
   } catch (cause) {
     if (generation === accountGeneration) error.value = cause instanceof Error ? cause.message : '定制需求受理失败'
@@ -174,7 +181,7 @@ async function decideRequest(item, action) {
     const response = await apiFetch(`/api/mod-store/private-delivery/requests/${item.id}/decision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, note: note || undefined }),
+      body: JSON.stringify({ action, note: note || undefined, source_mode: action === 'rework' && requestMainSource.value[item.id] ? 'versioned_main' : undefined }),
       timeoutMs: 60_000,
     })
     const body = await response.json().catch(() => ({}))
@@ -184,6 +191,7 @@ async function decideRequest(item, action) {
     }
     reworkRequestId.value = 0
     delete requestReworkNotes.value[item.id]
+    delete requestMainSource.value[item.id]
     await loadDelivery()
   } catch (cause) {
     if (generation === accountGeneration) error.value = cause instanceof Error ? cause.message : '定制交付操作失败'
@@ -432,12 +440,14 @@ watch(() => [account.tenantId, account.marketUserId, account.localUserId, accoun
   accountGeneration++
   deliveryAbort?.abort()
   projects.value = []
+  versionedMain.value = false
   requests.value = []
   requestForm.value = { open: false, kind: 'bundle', title: '', suggestedId: '', requirements: '', acceptanceCriteria: '' }
   requestBusy.value = updating.value = savingStatus.value = ''
   submittingRequest.value = false
   loading.value = false
   requestReworkNotes.value = {}
+  requestMainSource.value = {}
   reworkRequestId.value = 0
   closeReworkDialog()
   error.value = remoteError.value = requestError.value = ''

@@ -34,7 +34,7 @@ from uuid import uuid4
 
 from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
-from ..security.paths import PathSafetyError, resolve_within_root
+from ..security.path_policy import PathSafetyError, resolve_within_root
 from .file_edit import FileEdit, ProjectPatch
 from .hunk import Hunk
 
@@ -453,7 +453,7 @@ class PatchApplier:
             raise PatchConflict(file=rel, reason=exc.reason) from exc
 
     def _reject_unsafe(self, rel: str) -> None:
-        """Centralised path-safety gate (delegates to :mod:`agent.security.paths`).
+        """Centralised path-safety gate (delegates to :mod:`agent.security.path_policy`).
 
         Catches: empty paths, ``..``, absolute paths, drive letters, NUL bytes,
         symlink escape (resolved path lands outside root). Raises a

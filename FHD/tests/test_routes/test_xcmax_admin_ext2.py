@@ -128,11 +128,17 @@ class TestMarketAdminProxyAdditional:
             patch(
                 "app.fastapi_routes.market_account._proxy_json",
                 new=AsyncMock(return_value={"success": True, "data": {"id": 1}}),
-            ),
+            ) as proxy,
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
-        assert isinstance(result, dict)
-        assert result["success"] is True
+        assert result == {"success": True, "data": {"id": 1}}
+        proxy.assert_awaited_once_with(
+            "GET",
+            "/api/test",
+            json_body=None,
+            authorization="Bearer tok",
+            return_error_payload=True,
+        )
 
     @pytest.mark.asyncio
     async def test_require_admin_session_true_gate(self):
@@ -179,7 +185,7 @@ class TestMarketAdminProxyAdditional:
 
 class TestDigestLocalOrProxyLocalPaths:
     @pytest.mark.asyncio
-    async def test_local_daily_digests_list(self):
+    async def test_local_daily_digests_list(self, digest_admin_branch):
         req = MagicMock(spec=Request)
         with (
             patch(
@@ -199,7 +205,7 @@ class TestDigestLocalOrProxyLocalPaths:
         assert result["data"][0]["id"] == 1
 
     @pytest.mark.asyncio
-    async def test_empty_local_falls_back_to_remote_xcmax(self):
+    async def test_empty_local_falls_back_to_remote_xcmax(self, digest_admin_branch):
         req = MagicMock(spec=Request)
         remote = {"success": True, "data": [{"id": 24}], "total": 24}
         with (
@@ -223,7 +229,7 @@ class TestDigestLocalOrProxyLocalPaths:
         mock_remote.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_local_daily_digests_single(self):
+    async def test_local_daily_digests_single(self, digest_admin_branch):
         req = MagicMock(spec=Request)
         with (
             patch(
@@ -241,7 +247,7 @@ class TestDigestLocalOrProxyLocalPaths:
         assert isinstance(result, dict)
 
     @pytest.mark.asyncio
-    async def test_local_daily_digests_artifacts(self):
+    async def test_local_daily_digests_artifacts(self, digest_admin_branch):
         req = MagicMock(spec=Request)
         with (
             patch(
@@ -259,7 +265,7 @@ class TestDigestLocalOrProxyLocalPaths:
         assert isinstance(result, dict)
 
     @pytest.mark.asyncio
-    async def test_local_action_items_stats(self):
+    async def test_local_action_items_stats(self, digest_admin_branch):
         req = MagicMock(spec=Request)
         with (
             patch(
@@ -277,7 +283,7 @@ class TestDigestLocalOrProxyLocalPaths:
         assert isinstance(result, dict)
 
     @pytest.mark.asyncio
-    async def test_local_action_items_list(self):
+    async def test_local_action_items_list(self, digest_admin_branch):
         req = MagicMock(spec=Request)
         with (
             patch(
@@ -295,7 +301,7 @@ class TestDigestLocalOrProxyLocalPaths:
         assert isinstance(result, dict)
 
     @pytest.mark.asyncio
-    async def test_local_read_failure(self):
+    async def test_local_read_failure(self, digest_admin_branch):
         req = MagicMock(spec=Request)
         with (
             patch(
@@ -322,7 +328,7 @@ class TestDigestLocalOrProxyLocalPaths:
         assert result.status_code == 502
 
     @pytest.mark.asyncio
-    async def test_non_get_method_skips_local(self):
+    async def test_non_get_method_skips_local(self, digest_admin_branch):
         """Non-GET methods should skip local path and go to proxy."""
         req = MagicMock(spec=Request)
         with (
@@ -342,7 +348,7 @@ class TestDigestLocalOrProxyLocalPaths:
         assert result.get("proxied") is True
 
     @pytest.mark.asyncio
-    async def test_unknown_path_falls_through_to_proxy(self):
+    async def test_unknown_path_falls_through_to_proxy(self, digest_admin_branch):
         """Unknown path in local mode falls through to proxy."""
         req = MagicMock(spec=Request)
         with (
@@ -1457,7 +1463,7 @@ class TestResolveConflictAdditional:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.fetch_inbox_row",
+                "app.domain.shared_services.admin_sync_service.fetch_inbox_row",
                 return_value={"entity_type": "product", "payload": "{}"},
             ),
             patch(
@@ -1478,7 +1484,7 @@ class TestResolveConflictAdditional:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.fetch_inbox_row",
+                "app.domain.shared_services.admin_sync_service.fetch_inbox_row",
                 return_value=None,
             ),
             patch(
@@ -1498,7 +1504,7 @@ class TestResolveConflictAdditional:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.fetch_inbox_row",
+                "app.domain.shared_services.admin_sync_service.fetch_inbox_row",
                 return_value={"entity_type": "unknown", "payload": "{}"},
             ),
             patch(
@@ -1537,7 +1543,7 @@ class TestResolveConflictAdditional:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.mark_inbox_skipped",
+                "app.domain.shared_services.admin_sync_service.mark_inbox_skipped",
             ) as mock_skip,
         ):
             response = client.post(

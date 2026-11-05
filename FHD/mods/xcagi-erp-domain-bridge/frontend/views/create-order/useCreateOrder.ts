@@ -1,8 +1,14 @@
-import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api/index'
+import { templatePreviewApi } from '@/api/templatePreview'
+import { getTemplateScopeKey, isExportTemplate, type TplRecord } from '../template-preview/tpTemplateMeta'
+import { productsApi } from '@/api/products'
+import type { Product } from '@/types/product'
+import { downloadBlob } from '@/utils'
 import { appAlert } from '@/utils/appDialog'
 import { pushErpPage } from '@/utils/erpPagePaths'
+import { resolveErpApiPath } from '@/utils/erpDomainPaths'
 
 // AI 填单事件（xcagi:ai-fill-order / window.__VUE_FILL_ORDER__）载荷
 interface AIProductPayload {
@@ -24,28 +30,11 @@ interface AIFillOrderPayload {
   products?: AIProductPayload[]
 }
 
-// 模板下拉项（/templates?action=api，模板仅访问 name）
-interface TemplateOption {
-  name: string
-}
-
-// 购买单位（/api/purchase_units）
 interface PurchaseUnit {
   unit_name: string
   contact_person?: string
 }
 
-// 产品名称库（/api/product_names）
-interface ProductName {
-  id: number
-  name: string
-  model_number?: string
-  specification?: number
-  price?: number
-  purchase_unit_name?: string
-}
-
-// 订单产品编辑行（本地状态）
 interface OrderProductRow {
   id: number
   nameId: string | number
@@ -58,27 +47,10 @@ interface OrderProductRow {
   amount: number
 }
 
-// /documents 生成结果（模板访问 output_filename）
 interface ShipmentResult {
   success: boolean
-  output_filename?: string
+  doc_name?: string
   message?: string
-}
-
-// 发货单可编辑数据结构（提交给 /documents 的 editable_data）
-interface ShipmentHeaderCell {
-  purchase_unit: string
-  contact_person: string
-  purchase_date: string
-  order_number: string
-}
-
-type ShipmentRowCells = Record<number, string | number>
-
-interface ShipmentEditableData {
-  header_row: Record<number, ShipmentHeaderCell>
-  product_rows: ShipmentRowCells[]
-  price_row: Record<number, string | number>
 }
 
 declare global {
@@ -87,7 +59,6 @@ declare global {
   }
 }
 
-// 拆分自 CreateOrderView.vue script（原第 179–563 行）；逻辑逐字迁移，行为不变。
 export function useCreateOrder() {
   const router = useRouter()
 
@@ -157,32 +128,33 @@ export function useCreateOrder() {
     showStatus('AI 数据已自动填充', 'success')
   }
 
-  function setupAIEventListener() {
-    window.addEventListener('xcagi:ai-fill-order', (event: Event) => {
-      handleAIFillOrder((event as CustomEvent).detail)
-    })
-
-    window.__VUE_FILL_ORDER__ = handleAIFillOrder
+  function onAIFillOrder(event: Event) {
+    handleAIFillOrder((event as CustomEvent<AIFillOrderPayload>).detail)
   }
 
-  onMounted(() => {
+  function refreshOptions() {
     loadTemplates()
     loadPurchaseUnits()
     loadAllProducts()
+  }
+  onActivated(refreshOptions)
+  onMounted(() => {
+    refreshOptions()
     generateOrderNumber()
-    setupAIEventListener()
+    window.addEventListener('xcagi:ai-fill-order', onAIFillOrder)
+    window.__VUE_FILL_ORDER__ = handleAIFillOrder
   })
 
   onUnmounted(() => {
-    window.removeEventListener('xcagi:ai-fill-order', handleAIFillOrder as EventListener)
+    window.removeEventListener('xcagi:ai-fill-order', onAIFillOrder)
     if (window.__VUE_FILL_ORDER__ === handleAIFillOrder) {
       delete window.__VUE_FILL_ORDER__
     }
   })
 
-  const templates = ref<TemplateOption[]>([])
+  const templates = ref<TplRecord[]>([])
   const purchaseUnits = ref<PurchaseUnit[]>([])
-  const allProducts = ref<ProductName[]>([])
+  const allProducts = ref<Product[]>([])
   const products = ref<OrderProductRow[]>([])
   let productIdCounter = 0
 
@@ -201,6 +173,7 @@ export function useCreateOrder() {
   })
 
   const result = ref<ShipmentResult | null>(null)
+  const generatingShipment = ref(false)
   const showProductSelector = ref(false)
   const productSearchQuery = ref('')
   const searchingProducts = ref(false)
@@ -225,17 +198,11 @@ export function useCreateOrder() {
 
   async function loadTemplates() {
     try {
-      const response = await fetch('/templates?action=api', {
-        headers: {
-          'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
-        }
-      })
-      const data: { success: boolean; templates: TemplateOption[] } = await response.json()
+      const data = await templatePreviewApi.listTemplates() as { success: boolean; templates: TplRecord[] }
       if (data.success) {
-        templates.value = data.templates
-        if (data.templates.length > 0 && !form.templateName) {
-          form.templateName = data.templates[0].name
+        templates.value = data.templates.filter(t => isExportTemplate(t) && t.category === 'excel' && getTemplateScopeKey(t) === 'orders')
+        if (!templates.value.some(t => t.id === form.templateName)) {
+          form.templateName = templates.value[0]?.id || ''
         }
       }
     } catch (error) {
@@ -243,14 +210,9 @@ export function useCreateOrder() {
     }
   }
 
-  function onTemplateChange() {
-    console.log('已选择模板:', form.templateName)
-  }
-
   async function loadPurchaseUnits() {
     try {
-      const response = await fetch('/api/purchase_units')
-      const data: { success: boolean; data: PurchaseUnit[] } = await response.json()
+      const data = await api.get<{ success: boolean; data: PurchaseUnit[] }>(resolveErpApiPath('/api/purchase_units'))
       if (data.success) {
         purchaseUnits.value = data.data
       }
@@ -259,27 +221,20 @@ export function useCreateOrder() {
     }
   }
 
-  async function onPurchaseUnitChange() {
-    if (form.purchaseUnit) {
-      try {
-        const response = await fetch(`/api/purchase_units/by_name/${encodeURIComponent(form.purchaseUnit)}`)
-        const data: { success: boolean; data: PurchaseUnit } = await response.json()
-        if (data.success) {
-          form.contactPerson = data.data.contact_person || ''
-        }
-      } catch (error) {
-        console.error('获取购买单位信息失败:', error)
-      }
-    }
+  function onPurchaseUnitChange() {
+    form.contactPerson = purchaseUnits.value.find(unit => unit.unit_name === form.purchaseUnit)?.contact_person || ''
   }
 
   async function loadAllProducts() {
     try {
-      const response = await fetch('/api/product_names')
-      const data: { success: boolean; data: ProductName[] } = await response.json()
-      if (data.success) {
-        allProducts.value = data.data
+      const rows: Product[] = []
+      for (let page = 1; ; page++) {
+        const data = await productsApi.getProducts({ page, per_page: 1000 })
+        if (!data.success) throw new Error(data.message || '产品列表不可用')
+        rows.push(...(data.data || []))
+        if (!data.data?.length || rows.length >= (data.total ?? rows.length)) break
       }
+      allProducts.value = rows
     } catch (error) {
       console.error('加载产品名称列表失败:', error)
     }
@@ -287,8 +242,7 @@ export function useCreateOrder() {
 
   async function generateOrderNumber() {
     try {
-      const response = await fetch('/orders/next_number?suffix=A')
-      const data: { success: boolean; data: { order_number: string } } = await response.json()
+      const data = await api.get<{ success: boolean; data: { order_number: string } }>(resolveErpApiPath('/api/orders/next_number'), { suffix: 'A' })
       if (data.success) {
         form.orderNumber = data.data.order_number
       }
@@ -332,24 +286,11 @@ export function useCreateOrder() {
 
   function onProductNameSelect(product: OrderProductRow, index: number) {
     const selected = allProducts.value.find(p => p.id == product.nameId)
-    if (selected) {
-      product.name = selected.name || ''
-      if (selected.model_number) {
-        product.model = selected.model_number
-      }
-      if (selected.specification) {
-        product.specification = selected.specification
-        calculateKg(index)
-      }
-      if (selected.price) {
-        product.unitPrice = selected.price
-        calculateAmount(index)
-      }
-    }
-  }
-
-  function onProductModelChange(_product: OrderProductRow, _index: number) {
-    // Auto-fill name when model changes
+    product.name = selected?.name ?? ''
+    product.model = selected?.model_number ?? ''
+    product.specification = Number.parseFloat(String(selected?.specification ?? 0)) || 0
+    product.unitPrice = selected?.price ?? 0
+    calculateKg(index)
   }
 
   function searchProductsForSelection() {
@@ -359,24 +300,20 @@ export function useCreateOrder() {
     }, 300)
   }
 
-  function selectProductForAdd(product: ProductName) {
+  function selectProductForAdd(product: Product) {
     addProductRow()
     const newProduct = products.value[products.value.length - 1]
     newProduct.nameId = product.id
-    newProduct.name = product.name || ''
-    newProduct.model = product.model_number || ''
-    if (product.specification) {
-      newProduct.specification = product.specification
-      calculateKg(products.value.length - 1)
-    }
-    if (product.price) {
-      newProduct.unitPrice = product.price
-      calculateAmount(products.value.length - 1)
-    }
+    onProductNameSelect(newProduct, products.value.length - 1)
     showProductSelector.value = false
   }
 
   async function generateShipment() {
+    if (generatingShipment.value) return
+    if (!templates.value.length) {
+      await appAlert('暂无可用发货单模板：请先点「模板编辑」上传或创建贵司出货单模板，保存后回到本页点「刷新模板列表」再生成。')
+      return
+    }
     if (!form.templateName) {
       await appAlert('请选择发货单模板')
       return
@@ -394,49 +331,25 @@ export function useCreateOrder() {
       return
     }
 
-    showStatus('正在生成发货单...', 'processing')
-
-    const editableData: ShipmentEditableData = {
-      header_row: {},
-      product_rows: [],
-      price_row: {}
-    }
-
-    const dateStr = form.purchaseDate.replace(/(\d{4})-(\d{2})-(\d{2})/, '$1年$2月$3日')
-    editableData.header_row[1] = {
-      purchase_unit: form.purchaseUnit,
-      contact_person: form.contactPerson,
-      purchase_date: dateStr,
-      order_number: form.orderNumber
-    }
-
-    products.value.forEach((product, index) => {
-      const rowNum = index + 4
-      const productData: ShipmentRowCells = {}
-      productData[1] = product.model || ''
-      productData[4] = product.name || ''
-      productData[5] = product.quantityBox || ''
-      productData[6] = product.specification || ''
-      productData[7] = product.quantityKg || ''
-      productData[8] = product.unitPrice || ''
-      productData[9] = product.amount || ''
-      editableData.product_rows.push(productData)
-    })
-
+    generatingShipment.value = true
+    result.value = null
     try {
-      const response = await fetch('/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          template_name: form.templateName,
-          editable_data: editableData,
-          // 统一策略：仅使用编号模式，禁用其他模式分支
-          number_mode: true,
-          custom_mode: false
-        })
+      showStatus('正在生成发货单...', 'processing')
+      const data = await api.post<ShipmentResult>(resolveErpApiPath('/api/shipment/generate'), {
+        unit_name: form.purchaseUnit,
+        date: form.purchaseDate,
+        order_number: form.orderNumber,
+        template_id: form.templateName,
+        products: products.value.map(product => ({
+          name: product.name,
+          model_number: product.model,
+          quantity_tins: product.quantityBox,
+          tin_spec: product.specification,
+          quantity_kg: product.quantityKg,
+          unit_price: product.unitPrice,
+          amount: product.amount
+        }))
       })
-
-      const data: ShipmentResult = await response.json()
       if (data.success) {
         showStatus('发货单生成成功！', 'success')
         result.value = data
@@ -445,10 +358,24 @@ export function useCreateOrder() {
       }
     } catch (error) {
       showStatus('生成失败: ' + (error as Error).message, 'error')
+    } finally {
+      generatingShipment.value = false
+    }
+  }
+
+  async function downloadShipment() {
+    const filename = result.value?.doc_name
+    if (!filename) return
+    try {
+      const response = await api.download(resolveErpApiPath(`/api/shipment/download/${encodeURIComponent(filename)}`))
+      downloadBlob(await response.blob(), filename)
+    } catch (error) {
+      showStatus('下载失败: ' + (error as Error).message, 'error')
     }
   }
 
   function resetForm() {
+    if (generatingShipment.value) return
     form.templateName = ''
     form.purchaseUnit = ''
     form.contactPerson = ''
@@ -460,13 +387,6 @@ export function useCreateOrder() {
     generateOrderNumber()
   }
 
-  onMounted(() => {
-    loadTemplates()
-    loadPurchaseUnits()
-    loadAllProducts()
-    generateOrderNumber()
-  })
-
   return {
     goOrdersList,
     goTemplatePreview,
@@ -477,11 +397,11 @@ export function useCreateOrder() {
     status,
     form,
     result,
+    generatingShipment,
     showProductSelector,
     productSearchQuery,
     searchingProducts,
     filteredProductsForSelection,
-    onTemplateChange,
     onPurchaseUnitChange,
     onDateChange,
     loadTemplates,
@@ -490,10 +410,9 @@ export function useCreateOrder() {
     calculateKg,
     calculateAmount,
     onProductNameSelect,
-    onProductModelChange,
     searchProductsForSelection,
     selectProductForAdd,
-    generateShipment,
+    generateShipment, downloadShipment,
     resetForm,
   }
 }

@@ -33,8 +33,7 @@ def _assert_finance_run(repo: InMemoryAgentRunRepository, run_id: str, action: s
 
 
 def test_finance_transaction_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path,
-    monkeypatch,
+    tmp_path, monkeypatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()

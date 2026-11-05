@@ -1,0 +1,78 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ch-im-cs",
+ "name": "AI 客服与话术协同",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 5,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/mod/xcagi-customer-service-bridge/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-customer-service-bridge/status（写操作自动附带 CSRF）：客服桥加载状态",
+   "expected": "客服桥加载状态：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 3886ms；{\"ok\": true, \"mod_id\": \"xcagi-customer-service-bridge\", \"registry\": {\"success\": true, \"mod_id\": \"xcagi-customer-service-bridge\", \"mod_page_prefix\": \"/mod/xcagi-",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/mod/xcagi-customer-service-bridge/user-cs/pipeline/funnel",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-customer-service-bridge/user-cs/pipeline/funnel（写操作自动附带 CSRF）：客服漏斗（真实客户阶段）",
+   "expected": "客服漏斗（真实客户阶段）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 47ms；阶段 11，活跃阶段 [('未接触', 1)]",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "POST /api/im/enterprise-cs/messages 请求体 {\"body\": \"MAC验收0929 客服路由\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/im/enterprise-cs/messages（写操作自动附带 CSRF）：企业专属客服会话路由（消息进入人工客服队列）",
+   "expected": "企业专属客服会话路由（消息进入人工客服队列）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 2581ms；conversation=58 cs_mode=human status=human_pending",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "GET /api/mod/xcagi-customer-service-bridge/user-cs/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-customer-service-bridge/user-cs/status（写操作自动附带 CSRF）：随包客服员工状态",
+   "expected": "安装包内用户客服员工已就绪",
+   "observed": "HTTP 200 25ms；{\"success\": true, \"data\": {\"ok\": true, \"status\": \"ready\", \"summary\": \"用户客服员工已就绪：可生成需求采集话术、表单链接草稿，并保留只读资料核对能力。\", \"issues\": [], \"ready_for_response_draft\": true, ",
+   "result": "passed"
+  },
+  {
+   "id": "M5",
+   "input": "界面路由 /im",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /im，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /im，页面可见 信息，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /im；命中文本 ['信息']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 信息 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 信息 | 实时已连接 | 客 | 客户消息 · 客来来在 XCMAX 内只读查看客户会话 | 💬 | 用户客服员工 | O-A 获客部 · 未安装 | 🧭 | 需求接入",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ch-im-cs",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ch-im-cs/macos/result.png",
+   "sha256": "89ab327cbba1cf7cb687c81d1ec45d7415ce55744420f8aff6ff8dd3a04831f7",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ch-im-cs",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ch-im-cs/macos/operation.webm",
+   "sha256": "faa573a5b698acd1534538ca5d6a8eece28c8b3c8ac872c3f73ea18859aaf3c5",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ch-im-cs/macos/run.log",
+  "sha256": "2a3fb80665307bea90f3392cffb2125780ea8b17d8b11bc0b43be92b86f170cb",
+  "bytes": 1726
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

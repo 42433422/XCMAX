@@ -1,0 +1,74 @@
+# ai-ppt PPT 生成与解析
+# verified_at=2026-09-20T09:20:44.166Z
+# app=1.0.0.5@9d6134d5cc37372d9e14bad83ca1fcf2ea060f56
+url=http://127.0.0.1:17500/tools
+title=工具 - XCAGI
+--- body text (head) ---
+饰品包装助手
+SUNBIRD
+智能对话
+考勤工作区
+信息
+智能生态
+知识库
+员工工作台
+数据对接中心
+饰品包装品管理
+原材料仓库
+库存管理
+客户管理
+订单管理
+出货记录
+数据来源
+包装标签打印
+标签模板库
+系统设置
+系统正常
+通用考勤模块
+v1.0.0.5
+SUNBIRD
+工具表
+SUNBIRD
+副窗
+◈
+工作区
+工具表
+全部分类
+AI Planner
+产品管理
+客户管理
+出货单
+Excel处理
+图片OCR
+原材料仓库
+标签打印
+数据库管理
+系统设置
+AI Planner 可调用的工具
+
+以下为对话里 Planner 实际注册并可能调用的后端工具（function calling），与下方「业务工作台入口」不同。
+
+AI Planner
+Planner
+excel_analysis
+分析 Excel 文件内容，支持读取、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。
+查看
+AI Planner
+Planner
+excel_schema_understand
+理解 Excel 文件的数据结构和 schema，返回列名、数据类型、样本数据等元信息。适合在分析前先了解文件结构。
+查看
+AI Planner
+Planner
+excel_join_compare
+合并或对比两个 Excel 文件的数据。支持 join（合并）和 diff（差异对比）两种操作。
+查看
+AI Planner
+Planner
+excel_chart_recommend
+根据 Excel 数据内容推荐合适的图表类型。
+查看
+AI Planner
+Planner
+import_excel_to_database
+将 Excel 数据导入到数据库。系统会分析 Excel 内容并自动匹配字段进行导入。报价单等

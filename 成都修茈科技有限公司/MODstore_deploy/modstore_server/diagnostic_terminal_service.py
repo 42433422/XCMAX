@@ -36,7 +36,11 @@ from modstore_server.entitlement_fast_lane import (
     account_fast_lane_status,
     resolve_account,
 )
-from modstore_server.models import IncidentEvent, OutboxDeadLetter, UpdateInstallationReceipt
+from modstore_server.models import (
+    IncidentEvent,
+    OutboxDeadLetter,
+    UpdateInstallationReceipt,
+)
 
 
 def _doctor(

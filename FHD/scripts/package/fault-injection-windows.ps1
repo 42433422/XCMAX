@@ -1,0 +1,536 @@
+﻿<#
+XCAGI 桌面端 Windows 故障注入验收（目标项 7 数据与并发安全 / 项 8 故障恢复与回退）
+协议：docs/e2e/desktop-real-machine-acceptance-protocol.md
+
+用途：对**验收隔离环境**注入运行时故障，取证端到端恢复行为。补齐
+tests/test_desktop_db_resilience.py（函数级单测）之上的进程级/实机级证据。
+
+场景：
+  1. kill-all          运行中强杀全部进程（等价「强杀/断电对进程的影响」）→ 重启 → health + 数据无损。
+  2. kill-orphan       模拟「孤儿后端」：主进程死了但 xcagi-backend.exe 仍占 17500 → 再启动 → 观察端口占用处理。
+  3. corrupt-backup    损坏最新备份（不碰主库）→ 启动 → 坏备份不误伤正常启动。
+  4. corrupt-main      损坏主库 → 启动 → 自动改名留证 + 从最近有效备份恢复 → health + 数据可访问。
+                        ⚠ 仅允许在 C:\XCAGI-acceptance 隔离安装上执行，检测到其他安装根一律拒绝。
+  5. dual-process      运行中二次启动 XCAGI.exe → 单实例锁应令第二实例自行退出，主实例 health 无损。
+  6. migration-mutex   冷启动竞态：两个 XCAGI.exe 近似同时拉起 → 仅一个后端完成迁移/监听 17500，无损坏证据。
+  人工场景（脚本给指引，不自动执行）：
+  7. disk-full         磁盘写满（需卷配额/小 VHD，物理环境执行）。
+  8. power-cut         异常断电（拔电/断 PDU，物理环境执行）。
+
+行为依据：
+  - recover_if_corrupt（app/desktop_runtime/migrate.py）：损坏库改名 .corrupt-{timestamp} 留证；
+    按 backups/ 时间倒序找第一个通过 integrity_check 的备份恢复。
+  - WAL + synchronous=FULL + wal_autocheckpoint=1000（app/db/__init__.py）：
+    强杀/断电后已提交事务不丢，主库不应损坏。
+  - 单实例锁 + 17500 端口（desktop/main.ts、backend-process.ts）。
+
+用法示例：
+  # 全部可自动化场景（默认对 C:\XCAGI-acceptance 隔离安装）
+  .\scripts\package\fault-injection-windows.ps1
+  # 只跑强杀与坏备份
+  .\scripts\package\fault-injection-windows.ps1 -Scenario kill-all,corrupt-backup
+  # 指定安装根与数据根（覆盖升级验收后的环境可直接复用）
+  .\scripts\package\fault-injection-windows.ps1 -Scenario all -InstallRoot "C:\XCAGI-acceptance" -DataRoot "$env:APPDATA\XCAGI"
+#>
+param(
+  [ValidateSet('all', 'kill-all', 'kill-orphan', 'corrupt-backup', 'corrupt-main', 'dual-process', 'migration-mutex')]
+  [string[]]$Scenario = @('all'),
+  # 安装根；默认按 C:\XCAGI-acceptance → %LOCALAPPDATA%\Programs\XCAGI → %ProgramFiles%\XCAGI 探测。
+  [string]$InstallRoot = "",
+  # 业务数据根目录；默认 %APPDATA%\XCAGI（与 desktop/main.ts userData 一致）。
+  [string]$DataRoot = "",
+  # 证据目录；默认 .\fault-injection-evidence-<时间戳>。
+  [string]$EvidenceDir = "",
+  # 健康检查地址（与验收脚本一致）。
+  [string]$HealthUrl = 'http://127.0.0.1:17500/api/health',
+  # CI/非交互模式：跳过人工场景 Read-Host 录入（disk-full/power-cut 记 SKIP），供 runner 执行。
+  [switch]$CiMode
+)
+
+$ErrorActionPreference = 'Stop'
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+$AcceptRoot = 'C:\XCAGI-acceptance'
+$script:Results = New-Object System.Collections.Generic.List[object]
+$script:Timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+
+function Write-Step([string]$Name) {
+  Write-Host ""
+  Write-Host ("=" * 72) -ForegroundColor DarkCyan
+  Write-Host ("FAULT {0}" -f $Name) -ForegroundColor Cyan
+  Write-Host ("=" * 72) -ForegroundColor DarkCyan
+}
+function Write-Ok([string]$Msg)   { Write-Host ("  [OK]   " + $Msg) -ForegroundColor Green }
+function Write-Warn2([string]$Msg){ Write-Host ("  [WARN] " + $Msg) -ForegroundColor Yellow }
+function Write-Fail([string]$Msg) { Write-Host ("  [FAIL] " + $Msg) -ForegroundColor Red }
+function Write-Info([string]$Msg) { Write-Host ("  [INFO] " + $Msg) -ForegroundColor Gray }
+
+function Record([string]$Step, [string]$Result, [string]$Detail) {
+  $script:Results.Add([PSCustomObject]@{ 场景 = $Step; 结果 = $Result; 说明 = $Detail })
+  if ($Result -eq 'FAIL') { Write-Fail ("场景 [{0}] 记录为 FAIL：{1}" -f $Step, $Detail) }
+}
+
+# 等待 17500 端口释放（强杀后 sidecar/主进程退出需要时间）。
+function Wait-PortFree([int]$Seconds = 30) {
+  for ($i = 0; $i -lt $Seconds; $i++) {
+    $conn = Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction SilentlyContinue
+    if (-not $conn) { return $true }
+    Start-Sleep -Seconds 1
+  }
+  return $false
+}
+
+# N05（2026-09-12）：健康判定口径修正——原实现死磕 status=healthy，但 /api/health 在
+# 无 LLM 凭据环境（runner/客户机）会返回 degraded（app/fastapi_routes/mounts/health.py
+# 的 neuro 降级链路），导致 run 34642734307 四场景全误判 FAIL（后端实际已在 17500 监听）。
+# 现与 acceptance-windows.ps1 口径一致：200 响应即算启动成功；degraded 状态与原因记入证据。
+function Get-Health {
+  try {
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+      # -NoProxy：本机代理可能拦截 127.0.0.1 造成假阴性（此前 macOS 实证）。
+      return Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 3 -NoProxy
+    }
+    return Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 3 -UseBasicParsing
+  } catch { return $null }
+}
+
+# 启动应用并等待 health；返回 @{ Up=bool; Status=string; Detail=string }。
+function Start-App([string]$Exe) {
+  $proc = Start-Process -FilePath $Exe -PassThru
+  $lastErr = 'no response'
+  for ($i = 0; $i -lt 90; $i++) {
+    Start-Sleep -Seconds 1
+    if ($proc.HasExited) {
+      return @{ Up = $false; Status = 'exited'; Detail = ("XCAGI.exe 第 {0} 秒提前退出 ExitCode={1}" -f $i, $proc.ExitCode) }
+    }
+    $h = Get-Health
+    if ($null -ne $h) {
+      $reasons = if ($h.degradedReasons) { @($h.degradedReasons) -join ';' } else { '-' }
+      return @{ Up = $true; Status = [string]$h.status; Detail = ("status={0}; degradedReasons={1}" -f $h.status, $reasons) }
+    }
+    $lastErr = 'health 未就绪'
+  }
+  return @{ Up = $false; Status = 'no-health'; Detail = ("90s 无 health 响应（最后状态：{0}）" -f $lastErr) }
+}
+
+# 强杀全部 XCAGI 相关进程（Electron 主进程 + sidecar 后端）。
+# N05：taskkill /T 树杀 + 按端口归属兜底清场——原 Stop-Process 不杀子进程树，
+# 场景间残留孤儿监听导致后续场景前置检查级联失败（run 34642734307 实证）。
+function Stop-AppAll {
+  foreach ($name in @('XCAGI', 'xcagi-backend')) {
+    Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
+      taskkill /PID $_.Id /T /F 2>$null | Out-Null
+    }
+  }
+  Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object {
+      taskkill /PID $_ /T /F 2>$null | Out-Null
+    }
+  Start-Sleep -Seconds 2
+  $freed = Wait-PortFree 30
+  if (-not $freed) { Write-Warn2 "强杀后 17500 端口 30 秒内未释放（可能有残留进程）" }
+  return $freed
+}
+
+# 业务数据快照（与 acceptance-windows.ps1 Get-BusinessDataDigest 同口径的关键字段）。
+function Get-Digest([string]$Root) {
+  $d = [ordered]@{}
+  $mainDb = Join-Path $Root 'data\xcagi.db'
+  $d['xcagi.db.bytes'] = if (Test-Path $mainDb) { (Get-Item $mainDb).Length } else { -1 }
+  $vecDb = Join-Path $Root 'data\excel_vectors.db'
+  $d['excel_vectors.db.bytes'] = if (Test-Path $vecDb) { (Get-Item $vecDb).Length } else { -1 }
+  foreach ($sub in @('uploads', 'mods')) {
+    $p = Join-Path $Root $sub
+    $d["$sub.files"] = if (Test-Path $p) { @(Get-ChildItem $p -File -Recurse -ErrorAction SilentlyContinue).Count } else { 0 }
+  }
+  $bks = @(Get-ChildItem (Join-Path $Root 'backups') -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^xcagi-.+?(-\w+)?-\d{14}\.db$' })
+  $d['backups.files'] = $bks.Count
+  $d['backups.latest'] = if ($bks.Count) { ($bks | Sort-Object LastWriteTime -Descending | Select-Object -First 1).Name } else { '' }
+  $corrupt = @(Get-ChildItem (Join-Path $Root 'data') -Filter 'xcagi.db.corrupt-*' -File -ErrorAction SilentlyContinue)
+  $d['corrupt.evidence'] = $corrupt.Count
+  return $d
+}
+
+function Format-Digest([object]$Digest) {
+  return (($Digest.Keys | ForEach-Object { "{0}={1}" -f $_, $Digest[$_] }) -join ' ')
+}
+
+function New-Evidence([string]$Name, [string]$Text) {
+  $path = Join-Path $script:EvidenceDir ("{0}-{1}.txt" -f $Name, $script:Timestamp)
+  Set-Content -Path $path -Value $Text -Encoding UTF8
+  Write-Info ("证据已保存：{0}" -f $path)
+  return $path
+}
+
+# N05：失败取证——端口/进程状态 + 后端日志尾部 + 数据根清单。
+# 本轮 run 34642734307 全场景 FAIL 但无任何应用日志可查，根因无法定位，此函数堵住该缺口。
+function Collect-Diagnostics([string]$Tag) {
+  $sb = New-Object System.Text.StringBuilder
+  [void]$sb.AppendLine(("=== 诊断 {0} @ {1} ===" -f $Tag, (Get-Date -Format o)))
+  $conn = @(Get-NetTCPConnection -LocalPort 17500 -ErrorAction SilentlyContinue | Select-Object -First 3)
+  $portLine = if ($conn) { ($conn | ForEach-Object { "State={0} PID={1}" -f $_.State, $_.OwningProcess }) -join ' | ' } else { '无监听' }
+  [void]$sb.AppendLine(("端口17500: {0}" -f $portLine))
+  $procs = @(Get-Process -Name @('XCAGI', 'xcagi-backend') -ErrorAction SilentlyContinue)
+  $procLine = if ($procs) { ($procs | ForEach-Object { "{0}#{1}" -f $_.Name, $_.Id }) -join ' | ' } else { '无' }
+  [void]$sb.AppendLine(("进程: {0}" -f $procLine))
+  $logPath = Join-Path $DataRoot 'logs\electron-backend.log'
+  if (Test-Path $logPath) {
+    [void]$sb.AppendLine("--- electron-backend.log 尾部 80 行 ---")
+    Get-Content $logPath -Tail 80 -ErrorAction SilentlyContinue | ForEach-Object { [void]$sb.AppendLine($_) }
+  } else {
+    [void]$sb.AppendLine(("未找到后端日志: {0}" -f $logPath))
+  }
+  [void]$sb.AppendLine("--- 数据根清单（前 40 项）---")
+  Get-ChildItem $DataRoot -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+    Select-Object -First 40 | ForEach-Object { [void]$sb.AppendLine($_.FullName) }
+  return New-Evidence ("diag-" + $Tag) $sb.ToString()
+}
+
+# ---------------------------------------------------------------- 前置检查
+Write-Host ""
+Write-Host "XCAGI 桌面端 Windows 故障注入验收（协议：docs/e2e/desktop-real-machine-acceptance-protocol.md）" -ForegroundColor White
+if (-not $DataRoot) { $DataRoot = Join-Path $env:APPDATA 'XCAGI' }
+if (-not $EvidenceDir) { $EvidenceDir = Join-Path (Get-Location) ("fault-injection-evidence-" + $script:Timestamp) }
+New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
+Write-Host ("证据目录：{0}" -f $EvidenceDir)
+Write-Host ("数据根：{0}" -f $DataRoot)
+
+if (-not $InstallRoot) {
+  foreach ($c in @($AcceptRoot, (Join-Path $env:LOCALAPPDATA 'Programs\XCAGI'), (Join-Path ${env:ProgramFiles} 'XCAGI'))) {
+    if (Test-Path (Join-Path $c 'resources\build-info.json')) { $InstallRoot = $c; break }
+  }
+}
+if (-not ($InstallRoot -and (Test-Path (Join-Path $InstallRoot 'XCAGI.exe')))) {
+  Write-Fail ("未找到可用的 XCAGI.exe（InstallRoot={0}）。请先完成 acceptance-windows.ps1 安装验收。" -f $InstallRoot)
+  exit 1
+}
+Write-Ok ("安装根：{0}" -f $InstallRoot)
+$AppExe = Join-Path $InstallRoot 'XCAGI.exe'
+$BackendExe = Join-Path $InstallRoot 'resources\backend\xcagi-backend.exe'
+
+# N06：后端桌面环境（与 desktop/backend-env.ts desktopBackendEnv 同源）。
+# 孤儿后端场景与备份种子都直接拉起 xcagi-backend.exe，缺 XCAGI_DATA_DIR /
+# XCAGI_DESKTOP_RESOURCES 时后端无法定位数据目录与资源（首轮 34646944874
+# 孤儿未监听、34642734307 备份缺失均源于此）。DATABASE_URL 绝不继承。
+Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+$env:XCAGI_DESKTOP_MODE = '1'
+$env:XCAGI_DATA_DIR = $DataRoot
+$env:XCAGI_UVICORN_RELOAD = '0'
+$env:XCAGI_GLOBAL_RATE_LIMIT = '0'
+$env:XCAGI_EMPLOYEE_SCHEDULER = '0'
+$env:PYTHONUTF8 = '1'
+$env:XCAGI_DESKTOP_RESOURCES = (Join-Path $InstallRoot 'resources')
+
+# N06：用应用自带「--migrate-only --backup」产出**真实备份**——走
+# backup_database() 的 sqlite3.backup() 热备份 + integrity_check 校验，
+# 与更新安装备份同源。全新安装只有迁移才产生备份（ensure_startup_migration
+# 对已是 head 的库直接跳过），corrupt-backup / corrupt-main 两场景因此需要
+# 显式种子，否则只能 SKIP（首轮实证）。
+function New-AppBackup {
+  if (-not (Test-Path $BackendExe)) { Write-Warn2 ("sidecar 不存在，无法创建备份：{0}" -f $BackendExe); return $false }
+  Write-Info ("创建备份：xcagi-backend --migrate-only --backup（XCAGI_DATA_DIR={0}）" -f $DataRoot)
+  $out = Join-Path $script:EvidenceDir 'seed-backup-stdout.txt'
+  $err = Join-Path $script:EvidenceDir 'seed-backup-stderr.txt'
+  $p = Start-Process -FilePath $BackendExe -ArgumentList @('--migrate-only', '--backup') -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+  if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch { }; Write-Warn2 "备份进程 180s 超时已终止" }
+  elseif ($p.ExitCode -ne 0) { Write-Warn2 ("备份进程退出码 {0}（详见 seed-backup-stderr.txt）" -f $p.ExitCode) }
+  $bks = @(Get-ChildItem (Join-Path $DataRoot 'backups') -Filter 'xcagi-*.db' -File -ErrorAction SilentlyContinue)
+  if ($bks.Count -eq 0) { Write-Warn2 "备份目录仍为空"; return $false }
+  Write-Ok ("备份已创建：{0}" -f ($bks | Sort-Object LastWriteTime -Descending | Select-Object -First 1).Name)
+  return $true
+}
+
+$running = Get-Process -Name 'XCAGI' -ErrorAction SilentlyContinue
+if ($running) {
+  Write-Info "检测到运行中的 XCAGI 实例，故障注入需要先退出（强杀会污染前置状态）。"
+  Stop-AppAll | Out-Null
+}
+
+if ($Scenario -contains 'all') { $Scenario = @('kill-all', 'kill-orphan', 'corrupt-backup', 'corrupt-main', 'dual-process', 'migration-mutex') }
+
+# ---------------------------------------------------------------- 场景 1 kill-all
+if ($Scenario -contains 'kill-all') {
+  Write-Step "1/6 kill-all 强杀全部进程 → 重启恢复"
+  $pre = Start-App $AppExe
+  if (-not $pre.Up) {
+    Collect-Diagnostics 'kill-all-前置启动' | Out-Null
+    Record 'kill-all' 'FAIL' ("前置启动失败，无法执行强杀场景：{0}" -f $pre.Detail)
+  } else {
+    Write-Info ("前置启动：{0}" -f $pre.Detail)
+    $before = Get-Digest $DataRoot
+    Write-Info ("强杀前快照：{0}" -f (Format-Digest $before))
+    New-Evidence 'kill-all-before' ("{0}; {1}" -f $pre.Detail, (Format-Digest $before)) | Out-Null
+    Write-Info "注入：taskkill /T /F（XCAGI + xcagi-backend，等价强杀/断电对进程的影响）"
+    Stop-AppAll | Out-Null
+    Write-Info "重启并等待 health ..."
+    $re = Start-App $AppExe
+    $after = Get-Digest $DataRoot
+    New-Evidence 'kill-all-after' ("restart_up={0}; {1}; {2}" -f $re.Up, $re.Detail, (Format-Digest $after)) | Out-Null
+    if (-not $re.Up) {
+      Collect-Diagnostics 'kill-all-重启' | Out-Null
+      Record 'kill-all' 'FAIL' ("强杀后重启未恢复：{0}" -f $re.Detail)
+    } elseif ([int64]$after['xcagi.db.bytes'] -lt [int64]$before['xcagi.db.bytes']) {
+      Record 'kill-all' 'FAIL' ("强杀后主库变小（{0} → {1}），疑似数据丢失" -f $before['xcagi.db.bytes'], $after['xcagi.db.bytes'])
+    } elseif ([int64]$after['corrupt.evidence'] -gt 0) {
+      Record 'kill-all' 'FAIL' '强杀后重启出现损坏库留证（WAL+synchronous=FULL 下不应发生）'
+    } else {
+      Write-Ok ("强杀后重启：health 可达（{0}），主库无损坏证据，数据未减少" -f $re.Status)
+      Record 'kill-all' 'PASS' ("{0}；主库 {1} → {2} 字节；corrupt 证据=0" -f $re.Detail, $before['xcagi.db.bytes'], $after['xcagi.db.bytes'])
+    }
+    Stop-AppAll | Out-Null
+  }
+}
+
+# ---------------------------------------------------------------- 场景 2 kill-orphan
+if ($Scenario -contains 'kill-orphan') {
+  Write-Step "2/6 kill-orphan 孤儿后端占端口 → 再启动"
+  if (-not (Test-Path $BackendExe)) {
+    Record 'kill-orphan' 'SKIP' ("未找到 sidecar：{0}" -f $BackendExe)
+  } elseif (-not (Wait-PortFree 5)) {
+    Record 'kill-orphan' 'FAIL' '17500 已被占用，前置不满足（先清场）'
+  } else {
+    Write-Info "注入：手动拉起 xcagi-backend.exe（模拟主进程死亡后遗留的孤儿后端），随后启动 XCAGI.exe"
+    # 归档上次运行可能遗留的回滚证据，避免误判为本次触发。
+    $rollback = Join-Path $DataRoot 'rollback-applied.json'
+    if (Test-Path $rollback) { Move-Item $rollback ($rollback + '.prev') -Force }
+    Start-Process -FilePath $BackendExe | Out-Null
+    Start-Sleep -Seconds 6
+    $orphanConn = Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction SilentlyContinue
+    if (-not $orphanConn) { Write-Warn2 "孤儿后端未在 17500 监听（可能启动失败），场景按实际情况记录" }
+    Start-Process -FilePath $AppExe | Out-Null
+    Start-Sleep -Seconds 12
+    $h = Get-Health
+    $rollbackNote = if (Test-Path $rollback) { (Get-Content $rollback -Raw -Encoding UTF8) } else { '' }
+    $healthNote = if ($null -ne $h) { ("up status={0}" -f $h.status) } else { 'no-health' }
+    New-Evidence 'kill-orphan' ("{0}; rollback_applied={1}" -f $healthNote, $rollbackNote) | Out-Null
+    if ($null -ne $h) {
+      Write-Ok "孤儿后端场景：应用最终 health 可达（端口占用被妥善处理）"
+      Record 'kill-orphan' 'PASS' ("孤儿 sidecar 占端口后重启，最终 {0}" -f $healthNote)
+    } elseif ($rollbackNote) {
+      Write-Warn2 "触发回滚保护（rollback-applied.json 已落盘），应用进入受控恢复路径"
+      Collect-Diagnostics 'kill-orphan-回滚' | Out-Null
+      Record 'kill-orphan' 'PARTIAL' 'health 未恢复但回滚保护触发（受控行为，需人工复核原因）'
+    } else {
+      Collect-Diagnostics 'kill-orphan-失败' | Out-Null
+      Record 'kill-orphan' 'FAIL' '孤儿后端占端口后应用既未恢复健康也无回滚证据'
+    }
+    Stop-AppAll | Out-Null
+  }
+}
+
+# ---------------------------------------------------------------- 场景 3 corrupt-backup
+if ($Scenario -contains 'corrupt-backup') {
+  Write-Step "3/6 corrupt-backup 损坏最新备份 → 启动不受影响"
+  $backupsDir = Join-Path $DataRoot 'backups'
+  $bks = @(Get-ChildItem $backupsDir -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^xcagi-.+?(-\w+)?-\d{14}\.db$' } | Sort-Object LastWriteTime -Descending)
+  if (-not ($bks.Count -gt 0)) {
+    Write-Info "无可用备份：用应用自带 migrate-only --backup 创建。"
+    if (New-AppBackup) {
+      $bks = @(Get-ChildItem $backupsDir -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^xcagi-.+?(-\w+)?-\d{14}\.db$' } | Sort-Object LastWriteTime -Descending)
+    }
+  }
+  if (-not ($bks.Count -gt 0)) {
+    Record 'corrupt-backup' 'SKIP' '数据根无备份文件，场景无法执行'
+  } else {
+    $victim = $bks[0]
+    $victimPath = $victim.FullName
+    Copy-Item $victimPath ($victimPath + '.pre-inject') -Force
+    Write-Info ("注入：向最新备份写入垃圾字节（不碰主库）：{0}" -f $victim.Name)
+    [IO.File]::WriteAllBytes($victimPath, ([byte[]](0x58, 0x43, 0x41, 0x47, 0x49, 0x2D, 0x43, 0x4F, 0x52, 0x52, 0x55, 0x50, 0x54)))
+    $beforeMain = (Get-Item (Join-Path $DataRoot 'data\xcagi.db')).Length
+    $re = Start-App $AppExe
+    $after = Get-Digest $DataRoot
+    New-Evidence 'corrupt-backup' ("up={0}; {1}; victim={2}; main={3}→{4}" -f $re.Up, $re.Detail, $victim.Name, $beforeMain, $after['xcagi.db.bytes']) | Out-Null
+    if ($re.Up) {
+      Write-Ok "坏备份未误伤正常启动（recover_if_corrupt 只在主库损坏时启用）"
+      Record 'corrupt-backup' 'PASS' ("坏备份 {0} 存在时启动正常（{1}），主库未动" -f $victim.Name, $re.Detail)
+    } else {
+      Collect-Diagnostics 'corrupt-backup-失败' | Out-Null
+      Record 'corrupt-backup' 'FAIL' ("损坏备份后启动失败（坏备份不应影响健康主库的启动）：{0}" -f $re.Detail)
+    }
+    Stop-AppAll | Out-Null
+    Remove-Item ($victimPath + '.pre-inject') -ErrorAction SilentlyContinue
+  }
+}
+
+# ---------------------------------------------------------------- 场景 4 corrupt-main
+if ($Scenario -contains 'corrupt-main') {
+  Write-Step "4/6 corrupt-main 损坏主库 → 自动恢复"
+  # 安全闸：仅允许隔离验收目录，防止误伤客户真实安装。
+  $isolated = ($InstallRoot -eq $AcceptRoot) -or ($InstallRoot.StartsWith($AcceptRoot + '\'))
+  if (-not $isolated) {
+    Write-Fail ("安全闸：InstallRoot={0} 不是隔离验收目录（{1}）。损坏主库只允许在隔离环境执行。" -f $InstallRoot, $AcceptRoot)
+    Record 'corrupt-main' 'SKIP' ("安全闸拒绝：非隔离安装根 {0}" -f $InstallRoot)
+  } else {
+    $mainDb = Join-Path $DataRoot 'data\xcagi.db'
+    if (-not (Test-Path $mainDb)) { Record 'corrupt-main' 'FAIL' ("主库不存在：{0}" -f $mainDb) }
+    else {
+      $before = Get-Digest $DataRoot
+      if ([int64]$before['backups.files'] -le 0) {
+        Write-Info "无备份可恢复：先尝试用应用自带 migrate-only --backup 创建。"
+        if (New-AppBackup) { $before = Get-Digest $DataRoot }
+      }
+      if ([int64]$before['backups.files'] -le 0) {
+        Record 'corrupt-main' 'SKIP' '无备份可恢复（corrupt_no_backup 路径属于阻塞启动的预期行为，请人工核对启动日志后重跑）'
+      } else {
+        Copy-Item $mainDb ($mainDb + '.pre-inject') -Force
+        Write-Info ("注入：向主库写入垃圾字节（备份 {0} 份可用，最新 {1}）" -f $before['backups.files'], $before['backups.latest'])
+        [IO.File]::WriteAllBytes($mainDb, ([byte[]](0x53, 0x51, 0x4C, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6F, 0x72, 0x6D, 0x61, 0x74, 0x20, 0x43, 0x4F, 0x52, 0x52, 0x55, 0x50, 0x54)))
+        Write-Info "启动应用，预期：坏库改名 .corrupt-{timestamp} 留证 → 从最近有效备份恢复 → health 可达"
+        $re = Start-App $AppExe
+        $after = Get-Digest $DataRoot
+        New-Evidence 'corrupt-main' ("up={0}; {1}; corrupt_evidence={2}; main={3}→{4}" -f $re.Up, $re.Detail, $after['corrupt.evidence'], $before['xcagi.db.bytes'], $after['xcagi.db.bytes']) | Out-Null
+        if ($re.Up -and ([int64]$after['corrupt.evidence'] -gt 0)) {
+          Write-Ok "主库损坏后自动恢复：坏库留证 + 备份还原 + health 可达"
+          Record 'corrupt-main' 'PASS' ("{0}；.corrupt 留证 {1} 份；主库由备份恢复（{2} 字节）" -f $re.Detail, $after['corrupt.evidence'], $after['xcagi.db.bytes'])
+        } elseif ($re.Up) {
+          Write-Warn2 "启动可达但未见 .corrupt 留证：可能恢复逻辑未触发（请核对启动日志与 data 目录）"
+          Record 'corrupt-main' 'PARTIAL' "health 可达但缺少 .corrupt 留证，恢复路径未确认"
+        } else {
+          Collect-Diagnostics 'corrupt-main-失败' | Out-Null
+          Record 'corrupt-main' 'FAIL' ("主库损坏后启动失败且未自动恢复：{0}" -f $re.Detail)
+        }
+        Stop-AppAll | Out-Null
+        Remove-Item ($mainDb + '.pre-inject') -ErrorAction SilentlyContinue
+      }
+    }
+  }
+}
+
+# ---------------------------------------------------------------- 场景 5 dual-process
+if ($Scenario -contains 'dual-process') {
+  Write-Step "5/6 dual-process 运行中二次启动 → 单实例锁拒绝第二实例"
+  $pre = Start-App $AppExe
+  if (-not $pre.Up) {
+    Collect-Diagnostics 'dual-process-前置启动' | Out-Null
+    Record 'dual-process' 'FAIL' ("前置启动失败：{0}" -f $pre.Detail)
+  } else {
+    $before = Get-Digest $DataRoot
+    Write-Info "注入：主实例健康时再次 Start-Process XCAGI.exe（预期 requestSingleInstanceLock 拒绝并退出）"
+    $second = Start-Process -FilePath $AppExe -PassThru
+    $exitedAt = -1
+    for ($i = 1; $i -le 20; $i++) {
+      Start-Sleep -Seconds 1
+      if ($second.HasExited) { $exitedAt = $i; break }
+    }
+    $h = Get-Health
+    $backendCount = @(Get-Process -Name 'xcagi-backend' -ErrorAction SilentlyContinue).Count
+    $after = Get-Digest $DataRoot
+    New-Evidence 'dual-process' ("second_exited_at={0}s exitcode={1}; health={2}; backend_count={3}; main={4}→{5}" -f `
+      $(if ($exitedAt -gt 0) { $exitedAt } else { 'NOT-EXITED(20s)' }), $(if ($second.HasExited) { $second.ExitCode } else { '-' }), `
+      $(if ($null -ne $h) { $h.status } else { 'no-health' }), $backendCount, $before['xcagi.db.bytes'], $after['xcagi.db.bytes']) | Out-Null
+    if (-not $second.HasExited) {
+      Collect-Diagnostics 'dual-process-未退出' | Out-Null
+      Stop-AppAll | Out-Null
+      Record 'dual-process' 'FAIL' '第二实例 20s 未退出：单实例锁未生效（存在双主进程/双后端风险）'
+    } elseif ($null -eq $h) {
+      Collect-Diagnostics 'dual-process-失联' | Out-Null
+      Record 'dual-process' 'FAIL' "第二实例已退出（${exitedAt}s）但主实例 health 失联，二次启动干扰了主实例"
+    } elseif ([int]$backendCount -gt 1) {
+      Collect-Diagnostics 'dual-process-双后端' | Out-Null
+      Record 'dual-process' 'FAIL' ("第二实例退出后仍有 {0} 个 xcagi-backend 残留（应恰为 1）" -f $backendCount)
+    } elseif (([int64]$after['corrupt.evidence'] - [int64]$before['corrupt.evidence']) -gt 0) {
+      Record 'dual-process' 'FAIL' '二次启动后新增损坏库留证（场景前已有留证不重复计，见 corrupt-main 设计留证）'
+    } else {
+      Write-Ok ("第二实例 {0}s 自行退出，主实例 health={1}，单后端，数据无损" -f $exitedAt, $h.status)
+      Record 'dual-process' 'PASS' ("单实例锁生效：第二实例 {0}s 退出（ExitCode={1}），主实例 {2}" -f $exitedAt, $second.ExitCode, $h.status)
+    }
+    Stop-AppAll | Out-Null
+  }
+}
+
+# ---------------------------------------------------------------- 场景 6 migration-mutex
+if ($Scenario -contains 'migration-mutex') {
+  Write-Step "6/6 migration-mutex 冷启动竞态 → 仅一个迁移方/后端"
+  if (-not (Wait-PortFree 5)) {
+    Record 'migration-mutex' 'FAIL' '17500 未释放，前置不满足（先清场）'
+  } else {
+    Write-Info "注入：0.3s 间隔连续拉起两个 XCAGI.exe（迁移/端口竞态），随后等待 health"
+    $before = Get-Digest $DataRoot   # 场景前基线：corrupt-main 设计留证不计入本场景新增
+    Start-Process -FilePath $AppExe | Out-Null
+    Start-Sleep -Milliseconds 300
+    Start-Process -FilePath $AppExe | Out-Null
+    $h = $null
+    for ($i = 0; $i -lt 120; $i++) {
+      Start-Sleep -Seconds 1
+      $h = Get-Health
+      if ($null -ne $h) { break }
+    }
+    Start-Sleep -Seconds 5   # 让竞态败者的退出流程走完
+    $xProcs = @(Get-Process -Name 'XCAGI' -ErrorAction SilentlyContinue)
+    $backendCount = @(Get-Process -Name 'xcagi-backend' -ErrorAction SilentlyContinue).Count
+    $conn = @(Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction SilentlyContinue |
+      Select-Object -ExpandProperty OwningProcess -Unique)
+    $after = Get-Digest $DataRoot
+    New-Evidence 'migration-mutex' ("health={0}; xcagi_procs={1}; backend_count={2}; listeners={3}; corrupt_evidence={4}→{5}; main={6}" -f `
+      $(if ($null -ne $h) { $h.status } else { 'no-health' }), $xProcs.Count, $backendCount, ($conn -join '/'), `
+      $before['corrupt.evidence'], $after['corrupt.evidence'], $after['xcagi.db.bytes']) | Out-Null
+    if ($null -eq $h) {
+      Collect-Diagnostics 'migration-mutex-无健康' | Out-Null
+      Record 'migration-mutex' 'FAIL' '竞态启动 120s 内 health 不可达'
+    } elseif ([int]$conn.Count -gt 1) {
+      Collect-Diagnostics 'migration-mutex-多监听' | Out-Null
+      Record 'migration-mutex' 'FAIL' ("17500 有 {0} 个监听进程：迁移互斥失效" -f $conn.Count)
+    } elseif (([int64]$after['corrupt.evidence'] - [int64]$before['corrupt.evidence']) -gt 0) {
+      Collect-Diagnostics 'migration-mutex-损坏' | Out-Null
+      Record 'migration-mutex' 'FAIL' '竞态启动新增损坏库留证（迁移并发保护缺失）'
+    } else {
+      Write-Ok ("竞态启动收敛：health={0}，监听 PID 唯一，无损坏证据（主库 {1} 字节）" -f $h.status, $after['xcagi.db.bytes'])
+      Record 'migration-mutex' 'PASS' ("竞态双启动收敛：{0}；XCAGI 进程 {1} 个、后端 {2} 个、监听 {3}" -f `
+        $h.status, $xProcs.Count, $backendCount, ($conn -join '/'))
+    }
+    Stop-AppAll | Out-Null
+  }
+}
+
+# ---------------------------------------------------------------- 人工场景指引
+Write-Step "人工场景（脚本不自动执行）"
+if ($CiMode) {
+  Write-Info "CI 模式：disk-full / power-cut 为实体机人工场景，此处记 SKIP。"
+  Record 'disk-full(人工)' 'SKIP' 'CI 环境：实体机场景待人工执行'
+  Record 'power-cut(人工)' 'SKIP' 'CI 环境：实体机场景待人工执行'
+} else {
+Write-Host "▶ disk-full（磁盘写满）：" -ForegroundColor Cyan
+Write-Host "  1) 用卷配额或小型 VHD 把数据根所在卷写到剩余 <100MB；"
+Write-Host "  2) 正常使用中触发写入失败 → 观察应用报错是否友好、无静默数据损坏；"
+Write-Host "  3) 释放空间后重启 → health healthy + 数据完好。"
+Write-Host "▶ power-cut（异常断电）：" -ForegroundColor Cyan
+Write-Host "  1) 业务写入过程中直接断电（PDU/拔电）；"
+Write-Host "  2) 上电后启动 → health healthy + 最后一次已提交操作仍在（WAL+FULL 保证）；"
+Write-Host "  3) 若主库损坏 → 应自动走 .corrupt 留证 + 备份恢复（同场景 4）。"
+Write-Host "  ※ 两项请在实体测试机执行，并把观察结果补录进验收协议证据。"
+$diskFull = Read-Host "  disk-full 执行结果 [PASS/FAIL/SKIP]"
+$powerCut = Read-Host "  power-cut 执行结果 [PASS/FAIL/SKIP]"
+Record 'disk-full(人工)' $(if ($diskFull) { $diskFull.ToUpper() } else { 'SKIP' }) '实体机场景'
+Record 'power-cut(人工)' $(if ($powerCut) { $powerCut.ToUpper() } else { 'SKIP' }) '实体机场景'
+}
+
+# ---------------------------------------------------------------- 汇总
+Write-Host ""
+Write-Host ("=" * 72) -ForegroundColor DarkCyan
+Write-Host (" 故障注入验收汇总（{0} · Windows x64）" -f $InstallRoot) -ForegroundColor White
+Write-Host ("=" * 72) -ForegroundColor DarkCyan
+$script:Results | Format-Table -AutoSize | Out-Host
+# N05：直接按结果分类计数并显式转 [int]——原实现用总减法在 pwsh 下触发
+# 「Argument types do not match」（run 34642734307 line 334 实证）。
+$failCount    = [int](@($script:Results | Where-Object { $_.结果 -eq 'FAIL' }).Count)
+$partialCount = [int](@($script:Results | Where-Object { $_.结果 -eq 'PARTIAL' }).Count)
+$skipCount    = [int](@($script:Results | Where-Object { $_.结果 -eq 'SKIP' }).Count)
+$passCount    = [int](@($script:Results | Where-Object { $_.结果 -eq 'PASS' }).Count)
+Write-Host ("统计：PASS={0} FAIL={1} PARTIAL={2} SKIP={3}" -f $passCount, $failCount, $partialCount, $skipCount) -ForegroundColor Gray
+
+$receipt = [ordered]@{
+  generated_at = (Get-Date).ToString('o')
+  install_root = $InstallRoot
+  data_root    = $DataRoot
+  scenarios    = $script:Results
+  summary      = @{ pass = $passCount; fail = $failCount; partial = $partialCount; skip = $skipCount }
+}
+$receiptPath = Join-Path $EvidenceDir 'fault-injection-receipt.json'
+$receipt | ConvertTo-Json -Depth 4 | Set-Content -Path $receiptPath -Encoding UTF8
+Write-Ok ("收据已写入：{0}" -f $receiptPath)
+
+if ($failCount -gt 0) { exit 1 }
+exit 0

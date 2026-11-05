@@ -29,7 +29,7 @@ from app.neuro_bus.domains.ocr_domain_handlers import (
     handle_ocr_completed,
     register_ocr_domain_handlers,
 )
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 
 @pytest.fixture(autouse=True)

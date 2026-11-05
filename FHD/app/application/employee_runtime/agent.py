@@ -1,14 +1,4 @@
-"""EmployeeAgent：真正员工运行时编排对象。
-
-把此前散落在 ``executor.execute_employee_task_local`` 的流程收敛为一个对象，并补齐：
-- 记忆召回（短期会话 + 长期向量）→ 注入 system_prompt
-- 行动后记忆回写
-- 为 agent handler 注入「作用域工具 + gate」钩子（P1 填充 tool_scope / workspace_guard）
-- 感知层钩子（P2 填充 PerceptionPipeline）
-
-执行链：风险门 → 感知 → 记忆召回 → 认知（单轮补全）→ 行动（agent 走多轮工具循环）→ 记忆回写。
-返回结构与历史 ``execute_employee_task_local`` 完全一致，保证所有调用方兼容。
-"""
+"""员工运行时：风险、感知、记忆、认知与行动；agent 工具和授权解析失败时拒绝执行。"""
 
 from __future__ import annotations
 
@@ -33,7 +23,9 @@ from app.application.employee_runtime.loader import (
     resolve_pack_dir,
 )
 from app.application.employee_runtime.memory import EmployeeMemoryManager, MemoryContext
-from app.application.employee_runtime.office_workers import is_deterministic_office_worker
+from app.application.employee_runtime.office_workers import (
+    is_deterministic_office_worker,
+)
 from app.application.employee_runtime.result_builders import (
     build_blocked_result,
     build_cognition_failed_result,
@@ -54,17 +46,17 @@ class EmployeeAgent:
     # ---- 钩子：子阶段在后续 Phase 增强（P1 tool_scope/guard、P2 perception） ----
     def _build_agent_tools(
         self, manifest: dict[str, Any], config: dict[str, Any]
-    ) -> list[dict[str, Any]] | None:
-        """返回 agent handler 可用的工具子集；None 表示用 agent_loop 默认工具。"""
+    ) -> list[dict[str, Any]]:
+        """工具解析失败时拒绝全部工具。"""
         try:
-            from app.application.employee_runtime.tool_scope import resolve_employee_tools
+            from app.application.employee_runtime.tool_scope import (
+                resolve_employee_tools,
+            )
 
             return resolve_employee_tools(self.employee_id, manifest, config)
-        except ImportError:
-            return None
         except RECOVERABLE_ERRORS:
-            logger.debug("build agent tools fallback", exc_info=True)
-            return None
+            logger.debug("build agent tools denied", exc_info=True)
+            return []
 
     def _build_agent_gate(
         self,
@@ -73,31 +65,26 @@ class EmployeeAgent:
         workspace_root: str | None,
         input_data: dict[str, Any] | None = None,
     ) -> Any:
-        """返回 (tool_name, args) -> {ok, reason} 的 gate；None 表示无额外门控。"""
-        ws_gate = None
-        write_gate = None
+        """任一必需授权门初始化失败时拒绝执行。"""
         try:
-            from app.application.employee_runtime.workspace_guard import build_employee_gate
+            from app.application.employee_runtime.workspace_guard import (
+                build_employee_gate,
+            )
+            from app.application.employee_runtime.write_approval import (
+                build_write_approval_gate,
+                compose_gates,
+            )
 
-            ws_gate = build_employee_gate(self.employee_id, manifest, config, workspace_root)
-        except ImportError:
-            pass
+            return compose_gates(
+                build_employee_gate(self.employee_id, manifest, config, workspace_root),
+                build_write_approval_gate(self.employee_id, input_data),
+            )
         except RECOVERABLE_ERRORS:
-            logger.debug("build workspace gate fallback", exc_info=True)
-        try:
-            from app.application.employee_runtime.write_approval import build_write_approval_gate
-
-            write_gate = build_write_approval_gate(self.employee_id, input_data)
-        except ImportError:
-            pass
-        except RECOVERABLE_ERRORS:
-            logger.debug("build write gate fallback", exc_info=True)
-        try:
-            from app.application.employee_runtime.write_approval import compose_gates
-
-            return compose_gates(ws_gate, write_gate)
-        except ImportError:
-            return ws_gate or write_gate
+            logger.exception("employee authorization initialization failed closed")
+            return lambda name, args: {
+                "ok": False,
+                "reason": "工具授权初始化失败，未执行",
+            }
 
     def _run_upstream_collaboration(
         self,
@@ -110,7 +97,9 @@ class EmployeeAgent:
             return None
         try:
             from app.application.employee_runtime.metrics import record_orchestration
-            from app.application.employee_runtime.orchestrator import EmployeeOrchestrator
+            from app.application.employee_runtime.orchestrator import (
+                EmployeeOrchestrator,
+            )
 
             orch = EmployeeOrchestrator()
             deps = orch.depends_on(self.employee_id, manifest, config)
@@ -302,7 +291,9 @@ class EmployeeAgent:
                 memory = _ex._memory_light({"employee_id": employee_id})
                 reasoning = _ex._cognition_fhd(config, perceived, memory, task)
                 if reasoning.get("error") and is_collaboration_context_payload(payload):
-                    from app.application.employee_runtime.metrics import record_employee_run
+                    from app.application.employee_runtime.metrics import (
+                        record_employee_run,
+                    )
 
                     result = build_collaboration_context_result(
                         self.employee_id,
@@ -324,7 +315,9 @@ class EmployeeAgent:
                     return result
                 if reasoning.get("error") and handler_list != ["direct_python"]:
                     if is_interactive_chat_payload(payload):
-                        from app.application.employee_runtime.metrics import record_employee_run
+                        from app.application.employee_runtime.metrics import (
+                            record_employee_run,
+                        )
 
                         record_employee_run(employee_id, success=True, task=task)
                         return build_interactive_chat_fallback_result(
@@ -444,9 +437,9 @@ class EmployeeAgent:
                 "executed_at": datetime.now(UTC).isoformat(),
                 "source": "employee_runtime.local",
                 "memory_used": mem_ctx.has_content,
-                "collaboration_upstream": upstream
-                if upstream and not upstream.get("skipped")
-                else None,
+                "collaboration_upstream": (
+                    upstream if upstream and not upstream.get("skipped") else None
+                ),
             }
         except RECOVERABLE_ERRORS:
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)

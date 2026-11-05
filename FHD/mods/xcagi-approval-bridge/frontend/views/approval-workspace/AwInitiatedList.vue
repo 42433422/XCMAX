@@ -5,7 +5,7 @@ import type { ApprovalWorkspaceCtx } from './assemble'
 const props = defineProps<{ tm: ApprovalWorkspaceCtx }>()
 
 const {
-  initiatedRequests, viewDetails, deleteSingle, viewAll,
+  visibleInitiatedRequests: initiatedRequests, fullListType, viewDetails, deleteSingle, viewAll,
   cleanupLoading, completedInitiatedCount, cleanupCompleted,
   isFinalStatus, getBusinessIcon, getStatusLabel, formatTime,
 } = props.tm
@@ -27,7 +27,7 @@ const {
             清理
             <span v-if="completedInitiatedCount > 0" class="count-badge">{{ completedInitiatedCount }}</span>
           </button>
-          <button class="btn-link" @click="viewAll('initiated')">查看全部</button>
+          <button v-if="!fullListType" class="btn-link" @click="viewAll('initiated')">查看全部</button>
         </div>
       </div>
       <div class="request-list" data-tutorial-id="approval-initiated-list">

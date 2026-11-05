@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ind-attendance",
+ "name": "考勤行业包",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/mods/attendance-industry/departments 请求体 {\"department\": \"MAC验收0929部门3851\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mods/attendance-industry/departments（写操作自动附带 CSRF）：新建部门",
+   "expected": "新建部门：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 22ms；{\"success\": true, \"data\": {\"id\": 3, \"department\": \"MAC验收0929部门3851\", \"main_department\": \"MAC验收0929部门3851\", \"attendance_group\": \"\", \"employee_count\": 0}}",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/mods/attendance-industry/employees 请求体 {\"employee_name\": \"MAC验收0929员工\", \"name\": \"MAC验收0929员工\", \"department\": \"MAC验收0929部门3851\", \"employee_no\": \"M13851\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mods/attendance-industry/employees（写操作自动附带 CSRF）：新建员工",
+   "expected": "新建员工：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 18ms；{\"success\": true, \"data\": {\"id\": 4, \"employee_name\": \"MAC验收0929员工\", \"department\": \"MAC验收0929部门3851\", \"main_department\": \"\", \"attendance_group\": \"\", \"employee_no",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/mods/attendance-industry/employees",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mods/attendance-industry/employees（写操作自动附带 CSRF）：读回员工",
+   "expected": "读回员工：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 16ms；员工 4",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面读回：考勤人员管理页出现新员工",
+   "actions": "导航到 /attendance-industry/personnel 并在页面文本中查找「MAC验收0929员工」",
+   "expected": "界面列表/详情中出现「MAC验收0929员工」",
+   "observed": "已在 /attendance-industry/personnel 页面看到「MAC验收0929员工」；上下文：、所属部门与考勤组。 |  | 新增人员 | 刷新 | ⌕ | 查询 | 共 4 条 | 姓名\t工号\t部门\t上级部门\t考勤组\t岗位 / 性质\t操作 | MAC验收0929员工\tM35907\tMAC验收0929部门5907\t—\t未设置\t—\t | 编辑 | 删除 |  | MAC验收0929员工\tM36954\tMAC验收0929部门6953\t—\t未设置\t—\t | 编辑 | 删除 |  | MAC验收0929员工\tM85613",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ind-attendance",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ind-attendance/macos/result.png",
+   "sha256": "d7f8ae4cc8627e0e90bd2ed974ce3440e70844438a0a83f189ca170e320688d6",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ind-attendance",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ind-attendance/macos/operation.webm",
+   "sha256": "4af1f7a92bb2fb04764c0e1970edf4371b819c24deb7c6319c3131c8be77cc9a",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ind-attendance/macos/run.log",
+  "sha256": "c2299f3082651cc836c09c139ec0c42640112b1fca398f2acb4ac1b834c232f1",
+  "bytes": 1465
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

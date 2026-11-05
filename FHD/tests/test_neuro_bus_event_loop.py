@@ -4,7 +4,7 @@ import time
 import pytest
 
 from app.neuro_bus.bus import NeuroBus
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 
 @pytest.mark.asyncio

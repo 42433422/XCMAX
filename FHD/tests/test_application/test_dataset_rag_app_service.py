@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -18,6 +19,11 @@ from app.infrastructure.rag.dataset_vector_index import (
     DatasetVectorSQLiteIndex,
 )
 from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
+
+
+@pytest.fixture(autouse=True)
+def _explicit_gateway_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XCAGI_TRUST_DATASET_ACCESS_HEADERS", "1")
 
 
 def _minimal_pdf_bytes() -> bytes:
@@ -809,6 +815,13 @@ def test_knowledge_v1_dataset_routes_use_dataset_service(tmp_path: Path) -> None
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
+    client.headers.update(
+        {
+            "X-Dataset-Actor-ID": "route-test",
+            "X-Dataset-Tenant-ID": "tenant-route",
+            "X-Dataset-Permissions": "dataset.read,dataset.write",
+        }
+    )
     svc = DatasetRagApplicationService(
         embedder=None,
         allowed_roots=[tmp_path],
@@ -854,11 +867,6 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
-    svc = DatasetRagApplicationService(
-        embedder=None,
-        allowed_roots=[tmp_path],
-        storage_path=tmp_path / "dataset_store.json",
-    )
     admin_headers = {"X-Dataset-Admin": "true"}
     tenant_a_read_headers = {
         "X-Dataset-Tenant-ID": "tenant-a",
@@ -869,9 +877,10 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
         "X-Dataset-Permissions": "dataset.read,dataset.write",
     }
 
-    with patch(
-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-        return_value=svc,
+    # Spawned tools and direct status routes must use the same real persisted store.
+    with (
+        patch.dict("os.environ", DATASET_RAG_STORE_PATH=str(tmp_path / "dataset_store.json")),
+        patch.object(dataset_rag_module, "_dataset_rag_app_service", None),
     ):
         tenant_a = client.post(
             "/api/knowledge/v1/datasets/secure-route/documents",
@@ -933,15 +942,17 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
     assert own_query.json()["success"] is True
     assert "XCauto" in own_query.json()["answer"]
     assert "DeepSeek" not in own_query.json()["answer"]
-    assert cross_query.status_code == 200
+    assert cross_query.status_code == 403
     assert cross_query.json()["success"] is False
     assert cross_query.json()["error_code"] == "dataset_permission_denied"
     assert read_only_ingest.json()["success"] is False
+    assert read_only_ingest.status_code == 403
     assert read_only_ingest.json()["required_permission"] == "dataset.write"
     assert own_ingest.json()["document"]["tenant_id"] == "tenant-a"
     assert status.json()["document_count"] == 2
     assert status.json()["tenant_ids"] == ["tenant-a"]
     assert delete_cross.json()["success"] is False
+    assert delete_cross.status_code == 403
     assert delete_cross.json()["error_code"] == "dataset_permission_denied"
 
 
@@ -949,15 +960,18 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
-    svc = DatasetRagApplicationService(
-        embedder=None,
-        allowed_roots=[tmp_path],
-        storage_path=tmp_path / "dataset_store.json",
+    client.headers.update(
+        {
+            "X-Dataset-Actor-ID": "route-test",
+            "X-Dataset-Tenant-ID": "tenant-route",
+            "X-Dataset-Permissions": "dataset.read,dataset.write",
+        }
     )
 
-    with patch(
-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-        return_value=svc,
+    # Spawned tools and direct status routes must use the same real persisted store.
+    with (
+        patch.dict("os.environ", DATASET_RAG_STORE_PATH=str(tmp_path / "dataset_store.json")),
+        patch.object(dataset_rag_module, "_dataset_rag_app_service", None),
     ):
         first = client.post(
             "/api/knowledge/v1/datasets/route-versioned/documents",
@@ -1026,7 +1040,9 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
     assert job_status.json()["job"]["job_id"] == job_id
 
 
-def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
+def test_knowledge_v1_dataset_rebuild_cancel_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
@@ -1036,14 +1052,26 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
         storage_path=tmp_path / "dataset_store.json",
         rebuild_workers_enabled=False,
     )
+    # Earlier HTTP tests may have initialized a service backed by another store.
+    # Both the real write getter and the read-only status path must use this test's service.
+    previous = DatasetRagApplicationService(
+        embedder=None, storage_path=tmp_path / "previous-store.json", rebuild_workers_enabled=False
+    )
+    assert previous.ingest_document(dataset_id="previous", text="Earlier dataset")["success"]
+    monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", previous)
     headers = {
         "X-Dataset-Tenant-ID": "tenant-route",
         "X-Dataset-Permissions": "dataset.read,dataset.write",
     }
 
-    with patch(
-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-        return_value=svc,
+    with (
+        patch.dict("os.environ", DATASET_RAG_STORE_PATH=str(tmp_path / "dataset_store.json")),
+        patch.object(dataset_rag_module, "_dataset_rag_app_service", svc),
+        # Keep the queue paused while exercising its HTTP admission/cancellation
+        # contract. Host ownership and wake-up use real workers in the separate
+        # HTTP/Agent lifecycle tests below; unrelated process startup must not
+        # exhaust a fake embedding operation's bounded wait here.
+        patch("app.domain.app_pure.dataset_rag_queue.ensure_host_worker") as wake_host,
     ):
         client.post(
             "/api/knowledge/v1/datasets/route-queue/documents",
@@ -1069,9 +1097,470 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
             headers=headers,
         )
 
+    wake_host.assert_called_once_with()
     assert rebuild.status_code == 200
     assert rebuild.json()["job"]["status"] == "queued"
     assert cancelled.status_code == 200
     assert cancelled.json()["success"] is True
     assert cancelled.json()["job"]["status"] == "cancelled"
-    assert job_status.json()["job"]["status"] == "cancelled"
+    status = job_status.json()
+    assert job_status.status_code == 200, status
+    assert status["success"] is True, status
+    assert status["job"]["job_id"] == job_id
+    assert status["job"]["status"] == "cancelled"
+    assert dataset_rag_module._dataset_rag_app_service is previous
+
+
+@pytest.mark.parametrize("entry", ["http", "agent"])
+def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, entry) -> None:
+    import multiprocessing
+    import threading
+    import time
+
+    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "host-datasets.json"))
+    monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", None)
+    app = FastAPI()
+    app.include_router(knowledge_router)
+    client = TestClient(app)
+    headers = {
+        "X-Dataset-Tenant-ID": "host-tenant",
+        "X-Dataset-Permissions": "dataset.read,dataset.write",
+    }
+    original_children = {p.pid for p in multiprocessing.active_children()}
+    assert client.post(
+        "/api/knowledge/v1/datasets/host-queue/documents",
+        headers=headers,
+        json={
+            "text": "Host owns durable rebuild work.",
+            "source": "host.md",
+            "chunk_strategy": "fixed",
+        },
+    ).json()["success"]
+    service = _host_service()
+    started, release = threading.Event(), threading.Event()
+
+    def embed(text):
+        started.set()
+        # This fixture spans two subsequent isolated tool calls, each with its
+        # own deadline. Bound the whole scenario; finally always releases it.
+        assert release.wait(60), "host rebuild did not receive release"
+        return [float(len(text)), 1.0]
+
+    service._embedder = embed
+    try:
+        if entry == "http":
+            reply = client.post(
+                "/api/knowledge/v1/datasets/host-queue/index/rebuild",
+                headers=headers,
+                json={"background": True},
+            ).json()
+        else:
+            from app.application.agent_orchestrator.run_models import AgentStep
+            from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+            reply = AgentToolExecutor().execute_with_deadline(
+                AgentStep(
+                    node_id="direct-rebuild",
+                    tool_id="dataset_rag",
+                    action="rebuild_index",
+                    params={
+                        "dataset_id": "host-queue",
+                        "background": True,
+                        "access_context": {
+                            "tenant_id": "host-tenant",
+                            "permissions": ["dataset.read", "dataset.write"],
+                        },
+                    },
+                ),
+                runtime_context={},
+                deadline_monotonic=time.monotonic() + 10,
+            )
+        assert reply["job"]["status"] == "queued"
+        assert started.wait(5)
+        assert {p.pid for p in multiprocessing.active_children()} == original_children
+        job_url = f"/api/knowledge/v1/datasets/host-queue/index/rebuild/{reply['job']['job_id']}"
+        assert client.get(job_url, headers=headers).json()["job"]["status"] == "running"
+        queued = client.post(
+            "/api/knowledge/v1/datasets/host-queue/index/rebuild",
+            headers=headers,
+            json={"background": True},
+        ).json()["job"]
+        assert queued["status"] == "queued"
+        cancel_url = f"/api/knowledge/v1/datasets/host-queue/index/rebuild/{queued['job_id']}"
+        assert (
+            client.post(cancel_url + "/cancel", headers=headers).json()["job"]["status"]
+            == "cancelled"
+        )
+        assert client.get(cancel_url, headers=headers).json()["job"]["status"] == "cancelled"
+        release.set()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            job = client.get(
+                f"/api/knowledge/v1/datasets/host-queue/index/rebuild/{reply['job']['job_id']}",
+                headers=headers,
+            ).json()["job"]
+            if job["status"] == "completed":
+                break
+            time.sleep(0.02)
+        assert job["status"] == "completed"
+        assert job["worker_id"].split(":")[0] == str(__import__("os").getpid())
+        reloaded = DatasetRagApplicationService(
+            storage_path=tmp_path / "host-datasets.json", rebuild_workers_enabled=False
+        )
+        persisted = reloaded.get_rebuild_job("host-queue", job["job_id"])["job"]
+        assert persisted["status"] == "completed"
+        assert persisted["attempt_count"] == 1
+    finally:
+        release.set()
+        from app.domain.app_pure.dataset_rag_queue import stop_host_workers
+
+        assert stop_host_workers()
+
+
+def _abandoned_rebuild_host(storage, ready):
+    import threading
+
+    service = DatasetRagApplicationService(storage_path=storage)
+    service.ingest_document(
+        dataset_id="recover-host",
+        source="restart.md",
+        text="Recover only dead owners.",
+        chunk_strategy="fixed",
+    )
+
+    def blocked_embed(text):
+        ready.set()
+        threading.Event().wait(60)
+        return [1.0]
+
+    service._embedder = blocked_embed
+    service.start_rebuild_index(dataset_id="recover-host", background=True)
+    threading.Event().wait(60)
+
+
+def test_rebuild_recovers_only_after_real_host_process_dies(tmp_path, monkeypatch):
+    import multiprocessing
+    import time
+
+    storage = tmp_path / "recover.json"
+    ctx = multiprocessing.get_context("spawn")
+    ready = ctx.Event()
+    host = ctx.Process(target=_abandoned_rebuild_host, args=(storage, ready))
+    host.start()
+    try:
+        assert ready.wait(10)
+        reader = DatasetRagApplicationService(storage_path=storage, rebuild_workers_enabled=False)
+        job_id = next(iter(reader._datasets["recover-host"].rebuild_jobs))
+        assert reader.get_rebuild_job("recover-host", job_id)["job"]["status"] == "running"
+        host.terminate()
+        host.join(5)
+        assert not host.is_alive()
+        monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(storage))
+        monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", None)
+        replacement = _host_service()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            job = replacement.get_rebuild_job("recover-host", job_id)["job"]
+            if job["status"] == "completed":
+                break
+            time.sleep(0.02)
+        assert job["status"] == "completed"
+        assert job["attempt_count"] == 2
+        assert replacement.status("recover-host")["document_count"] == 1
+    finally:
+        if host.is_alive():
+            host.terminate()
+        host.join(5)
+        from app.domain.app_pure.dataset_rag_queue import stop_host_workers
+
+        assert stop_host_workers()
+
+
+def _host_service():
+    import os
+    import time
+
+    from app.domain.app_pure.dataset_rag_queue import _hosts, ensure_host_worker
+
+    ensure_host_worker()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        holder = _hosts[os.environ.get("DATASET_RAG_STORE_PATH")][2]
+        if holder:
+            return holder[0]
+        time.sleep(0.01)
+    raise AssertionError("host consumer did not initialize")
+
+
+def test_direct_agent_rebuild_wakes_host_without_waiting_for_cold_storage(tmp_path, monkeypatch):
+    import threading
+    import time
+
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.domain.app_pure.dataset_rag_queue import stop_host_workers
+
+    storage = tmp_path / "cold-host.json"
+    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(storage))
+    seed = DatasetRagApplicationService(storage_path=storage, rebuild_workers_enabled=False)
+    seed.ingest_document(
+        dataset_id="cold-host",
+        source="cold.md",
+        text="Durable direct Agent job.",
+        chunk_strategy="fixed",
+    )
+    entered, release = threading.Event(), threading.Event()
+
+    def cold_storage(*args, **kwargs):
+        entered.set()
+        assert release.wait(10)
+        return DatasetRagApplicationService(*args, **kwargs)
+
+    monkeypatch.setattr(dataset_rag_module, "DatasetRagApplicationService", cold_storage)
+    try:
+        reply = AgentToolExecutor().execute_with_deadline(
+            AgentStep(
+                node_id="cold",
+                tool_id="dataset_rag",
+                action="rebuild_index",
+                params={"dataset_id": "cold-host", "background": True},
+            ),
+            runtime_context={},
+            deadline_monotonic=time.monotonic() + 10,
+        )
+        assert entered.is_set()
+        assert not release.is_set()
+        assert reply["job"]["status"] == "queued"
+        release.set()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            reader = DatasetRagApplicationService(
+                storage_path=storage, rebuild_workers_enabled=False
+            )
+            job = reader.get_rebuild_job("cold-host", reply["job"]["job_id"])["job"]
+            if job["status"] == "completed":
+                break
+            time.sleep(0.02)
+        assert job["status"] == "completed"
+        assert job["attempt_count"] == 1
+    finally:
+        release.set()
+        assert stop_host_workers()
+
+
+@pytest.mark.parametrize("damage", [None, "missing", "json", "identity"])
+def test_rebuild_status_reads_atomic_snapshot_without_writer_lock_or_repair(
+    tmp_path, monkeypatch, damage
+):
+    import json
+    import sqlite3
+
+    path = tmp_path / "status.json"
+    service = DatasetRagApplicationService(storage_path=path, rebuild_workers_enabled=False)
+    access = DatasetAccessContext(
+        tenant_id="reader", permissions=frozenset({"dataset.read", "dataset.write"})
+    )
+    service.ingest_document(dataset_id="status", text="synthetic status", access_context=access)
+    reply = service.start_rebuild_index(dataset_id="status", background=True, access_context=access)
+    job_id = reply["job"]["job_id"]
+    before = path.read_bytes()
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("status reads must not load, repair, persist, schedule or embed")
+
+    for target, name in [
+        (service._repository, "_load_persisted_state"),
+        (service._repository, "_persist_locked"),
+        (service._vector, "_sync_vector_index_locked"),
+        (service._rebuild, "_schedule_rebuild_jobs"),
+    ]:
+        monkeypatch.setattr(target, name, forbidden)
+    if damage == "missing":
+        path.unlink()
+    elif damage == "json":
+        path.write_text("{")
+    elif damage == "identity":
+        raw = json.loads(before)
+        raw["datasets"]["status"]["rebuild_jobs"][job_id]["dataset_id"] = "other"
+        path.write_text(json.dumps(raw))
+    observed = path.read_bytes() if path.exists() else None
+    with sqlite3.connect(str(path) + ".lock.sqlite3") as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        result = service.get_rebuild_job("status", job_id, access_context=access)
+        if damage:
+            assert result["success"] is False
+            assert result["error_code"] == "dataset_rebuild_readback_unavailable"
+            assert "job" not in result
+        else:
+            assert result["success"] is True
+            assert result["job"] == reply["job"]
+            other = DatasetAccessContext(tenant_id="other", permissions=frozenset({"dataset.read"}))
+            assert (
+                service.get_rebuild_job("status", job_id, access_context=other)["success"] is False
+            )
+            denied = DatasetAccessContext(tenant_id="reader", permissions=frozenset())
+            assert (
+                service.get_rebuild_job("status", job_id, access_context=denied)["success"] is False
+            )
+            assert (
+                service.get_rebuild_job("status", "missing", access_context=access)["success"]
+                is False
+            )
+    assert (path.read_bytes() if path.exists() else None) == observed
+
+
+def _rebuild_status_snapshot(path):
+    import json
+
+    job = dataset_rag_module.DatasetRebuildJob(
+        job_id="job",
+        dataset_id="status",
+        tenant_id="reader",
+        status="running",
+        worker_id="0:0:dead",
+        attempt_count=1,
+    ).to_dict()
+    snapshot = {
+        "version": 1,
+        "datasets": {"status": {"dataset_id": "status", "rebuild_jobs": {"job": job}}},
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(snapshot), encoding="utf-8")
+    return snapshot
+
+
+@pytest.mark.parametrize("present", [False, True])
+@pytest.mark.parametrize("default_path", [False, True])
+def test_first_rebuild_status_http_get_never_initializes_or_repairs_storage(
+    tmp_path, monkeypatch, present, default_path
+):
+    import sqlite3
+    from contextlib import ExitStack
+
+    from app.application.dataset_rag.repository import DatasetRepository
+    from app.domain.app_pure.dataset_rag_queue import DatasetStateLock
+
+    data = tmp_path / "new-data"
+    path = data / "dataset_rag" / "datasets.json"
+    if present:
+        _rebuild_status_snapshot(path)
+    monkeypatch.delenv("XCAGI_DATASET_RAG_STORE_PATH", raising=False)
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(data))
+    if default_path:
+        monkeypatch.delenv("DATASET_RAG_STORE_PATH", raising=False)
+    else:
+        monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(path))
+    monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", None)
+    app = FastAPI()
+    app.include_router(knowledge_router)
+    client = TestClient(app)
+    url = "/api/knowledge/v1/datasets/status/index/rebuild/job"
+    headers = {"X-Dataset-Tenant-ID": "reader", "X-Dataset-Permissions": "dataset.read"}
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("a status GET must not initialize, lock, recover, schedule or embed")
+
+    with ExitStack() as stack:
+        if present:
+            writer = stack.enter_context(sqlite3.connect(str(path) + ".lock.sqlite3"))
+            writer.execute("BEGIN IMMEDIATE")
+        before = {
+            p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
+        }
+        for target, name in [
+            (dataset_rag_module, "DatasetRagApplicationService"),
+            (dataset_rag_module, "get_dataset_rag_app_service"),
+            (dataset_rag_module, "get_default_embedder"),
+            (dataset_rag_module, "_build_dataset_vector_index_backend"),
+            (DatasetVectorSQLiteIndex, "__init__"),
+            (DatasetVectorPgIndex, "__init__"),
+            (DatasetStateLock, "__enter__"),
+            (DatasetRepository, "_load_persisted_state"),
+            (DatasetRepository, "_persist_locked"),
+            (sqlite3, "connect"),
+        ]:
+            monkeypatch.setattr(target, name, forbidden)
+        result = client.get(url, headers=headers)
+        assert result.status_code == 200
+        body = result.json()
+        assert body["success"] is present
+        if present:
+            assert body["job"]["status"] == "running"  # Readback never recovers a dead owner.
+            assert body["job"]["attempt_count"] == 1
+            cross = client.get(url, headers={**headers, "X-Dataset-Tenant-ID": "other"}).json()
+            assert cross["error_code"] == "dataset_permission_denied" and "job" not in cross
+        else:
+            assert body["error_code"] == "dataset_rebuild_readback_unavailable"
+            assert not data.exists()
+        monkeypatch.setattr(DatasetRepository, "read_rebuild_state", forbidden)
+        denied = client.get(url, headers={**headers, "X-Dataset-Permissions": ""}).json()
+        assert denied["error_code"] == "dataset_permission_denied" and "job" not in denied
+        assert dataset_rag_module._dataset_rag_app_service is None
+        after = {
+            p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
+        }
+        assert after == before
+
+
+@pytest.mark.parametrize(
+    "keys, value",
+    [
+        (("version",), 2),
+        (("version",), True),
+        (("datasets", "status", "dataset_id"), "other"),
+        (("datasets", "status", "rebuild_jobs"), []),
+        (("job_id",), "other"),
+        (("dataset_id",), "other"),
+        (("tenant_id",), 1),
+        (("status",), []),
+        (("status",), "unknown"),
+        (("attempt_count",), float("inf")),
+        (("attempt_count",), True),
+        (("document_count",), -1),
+        (("chunk_count",), 0.5),
+        (("max_attempts",), 0),
+        (("metadata_filter",), []),
+        (("created_at",), None),
+        (("updated_at",), ""),
+    ],
+)
+def test_rebuild_status_rejects_corrupt_snapshot_without_fabricated_values(
+    tmp_path, monkeypatch, keys, value
+):
+    import json
+
+    path = tmp_path / "status.json"
+    raw = _rebuild_status_snapshot(path)
+    row = (
+        raw
+        if keys[0] in {"version", "datasets"}
+        else raw["datasets"]["status"]["rebuild_jobs"]["job"]
+    )
+    for key in keys[:-1]:
+        row = row[key]
+    row[keys[-1]] = value
+    path.write_text(json.dumps(raw).replace("Infinity", "1e999"), encoding="utf-8")
+    before = path.read_bytes()
+    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(path))
+    monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", None)
+    access = DatasetAccessContext(tenant_id="reader", permissions=frozenset({"dataset.read"}))
+    result = dataset_rag_module.read_dataset_rebuild_job("status", "job", access_context=access)
+    assert result["error_code"] == "dataset_rebuild_readback_unavailable" and "job" not in result
+    assert path.read_bytes() == before
+
+
+def test_rebuild_status_reads_latest_atomic_generation_without_refreshing_service(tmp_path):
+    import json
+
+    path = tmp_path / "status.json"
+    service = DatasetRagApplicationService(
+        storage_path=path, rebuild_workers_enabled=False, vector_index_backend_name="none"
+    )
+    raw = _rebuild_status_snapshot(path)
+    assert service.get_rebuild_job("status", "job")["job"]["status"] == "running"
+    raw["datasets"]["status"]["rebuild_jobs"]["job"]["status"] = "completed"
+    temporary = path.with_suffix(".next")
+    temporary.write_text(json.dumps(raw), encoding="utf-8")
+    temporary.replace(path)
+    assert service.get_rebuild_job("status", "job")["job"]["status"] == "completed"
+    assert not service._datasets

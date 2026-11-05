@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-ocr",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "75b83d1d2846e94e2c158fef7b07150bbba29860fcfaf9e0fbb9f08014c4fc60",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话页，助手说明已保存的能力范围。右栏 19 条消息。底栏按住说话。画面不是回滚日志。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-ocr/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-ocr/macos/result.png"
+}

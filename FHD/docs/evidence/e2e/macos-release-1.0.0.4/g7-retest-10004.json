@@ -1,0 +1,59 @@
+{
+ "phase": "G7-retest-10004",
+ "steps": {
+  "health": {
+   "status": 200,
+   "version": "1.0.0.4",
+   "git_sha": "280225ac77ce"
+  },
+  "login": {
+   "status": 200,
+   "success": true
+  },
+  "auth_me": {
+   "status": 200,
+   "user": null
+  },
+  "templates_upload": {
+   "status": 200,
+   "template_id": "db:20",
+   "file_sha256": "866087f47ff2f13890293a382dd83427e11e56d69e2a1cc5cd886a2a4e7e9448"
+  },
+  "templates_list": {
+   "status": 200,
+   "probe_present": false
+  },
+  "customer_ensure": {
+   "status": 400,
+   "customer_id": null
+  },
+  "shipment_generate": {
+   "status": 200,
+   "success": true,
+   "message": "发货单生成成功",
+   "doc_name": "发货单_26-0900001A_20260915_152144.xlsx",
+   "agent_status": "completed",
+   "run_id": "run_42aea02d17bf4b8e8407dd5443086b93"
+  },
+  "file_download": {
+   "status": 200,
+   "bytes": 5194,
+   "xlsx_magic": true,
+   "sha256": "11fcfddcece484d0a06c7f885ecac67fd8b4477ed54717d3672f4c668d62f063",
+   "filename": "发货单_26-0900001A_20260915_152144.xlsx"
+  }
+ },
+ "anomaly_resolution": {
+  "templates_list.probe_present=false": {
+   "root_cause": "探针脚本 bug：响应为 dict（{success,templates:[...]}）非 list，走 [:400] 截断分支只搜前 400 字节 → 误报未找到",
+   "db_proof": "xcagi.db templates 表 row id=20：template_name=G7重测探针、is_active=1、tenant_id=2、created 2026-09-15 07:21:44Z（与测试时刻一致）；且 shipment/generate 用其成功出单",
+   "fix": "脚本改为全文搜索 + 记录 total_listed（本文件同目录 g7_business_retest.py 已修）",
+   "conclusion": "非产品缺陷，模板上传+入库+列表链路正常"
+  },
+  "customer_ensure.status=400": {
+   "root_cause": "客户已存在：后端日志 electron-backend.log 'HTTP Exception 400: 客户名称已存在 - Path: /api/customers'（幂等创建语义，purchase_units 表查重命中）",
+   "db_proof": "xcagi.db purchase_units row id=26：unit_name=G7重测客户(勿删)、tenant_id=2 —— 该客户为 1.0.0.3 轮创建，跨 OTA 版本存活",
+   "conclusion": "非缺陷；400=已存在恰为数据跨版本保留的旁证，与 1.0.0.3 轮口径一致"
+  }
+ }
+}

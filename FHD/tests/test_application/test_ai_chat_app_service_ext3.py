@@ -16,18 +16,9 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-
-
-def _make_service():
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
-
+from tests.test_application.ai_chat_test_helpers import (
+    _make_svc as _make_service,
+)
 
 # ========================= _skip_pro_excel_deterministic_import - extended =
 
@@ -85,46 +76,17 @@ class TestSkipProExcelDeterministicImportExtended:
                 assert _skip_pro_excel_deterministic_import({}) is False
 
 
-# ========================= _is_pro_source - extended ======================
-
-
-class TestIsProSourceExtended:
-    def test_pro_mode(self):
-        assert AIChatApplicationService._is_pro_source("pro_mode") is True
-
-    def test_promode(self):
-        assert AIChatApplicationService._is_pro_source("promode") is True
-
-    def test_professional(self):
-        assert AIChatApplicationService._is_pro_source("professional") is True
-
-    def test_xcagi_pro(self):
-        assert AIChatApplicationService._is_pro_source("xcagi_pro") is True
-
-    def test_pro_with_dash(self):
-        assert AIChatApplicationService._is_pro_source("pro-mode") is True
-
-    def test_none(self):
-        assert AIChatApplicationService._is_pro_source(None) is False
-
-    def test_empty(self):
-        assert AIChatApplicationService._is_pro_source("") is False
-
-    def test_normal(self):
-        assert AIChatApplicationService._is_pro_source("normal") is False
-
-
 # ========================= _merge_tool_runtime_context - extended ==========
 
 
 class TestMergeToolRuntimeContextExtended:
     def test_none_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_non_dict_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not a dict")
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_context_with_ui_surface(self):
         result = AIChatApplicationService._merge_tool_runtime_context(
@@ -546,21 +508,25 @@ class TestResolveSheetNameForReimportExtended:
 
 
 class TestResolveExcelPathForImportExtended:
-    def test_from_excel_analysis(self):
+    def test_out_of_root_blocked(self):
+        # CodeQL #3730 加固契约：出根路径（应用数据/临时目录之外）一律返回空
         result = AIChatApplicationService._resolve_excel_path_for_import(
             {"file_path": "/path/to/file.xlsx"}, {}
         )
-        assert result == "/path/to/file.xlsx"
+        assert result == ""
 
     def test_from_preview_data_fallback(self):
+        # 出根路径同样拦截，即便来自 preview_data 回退
         result = AIChatApplicationService._resolve_excel_path_for_import(
             {"file_path": ""}, {"file_path": "/fallback/path.xlsx"}
         )
-        assert result == "/fallback/path.xlsx"
-
-    def test_empty_both(self):
-        result = AIChatApplicationService._resolve_excel_path_for_import({}, {})
         assert result == ""
+
+    def test_within_temp_root_passthrough(self, tmp_path):
+        # 根内路径放行
+        fp = str(tmp_path / "in.xlsx")
+        result = AIChatApplicationService._resolve_excel_path_for_import({"file_path": fp}, {})
+        assert result == fp
 
     def test_non_dict_preview_data(self):
         result = AIChatApplicationService._resolve_excel_path_for_import(
@@ -1189,21 +1155,11 @@ class TestExtractExcelImportRecordsDeep:
 
 
 class TestProcessChatDeepErrors:
-    def _make_service_with_mock(self):
-        with (
-            patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-            patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-            patch("app.application.ai_chat_app_service.HybridRiskGate"),
-            patch("app.application.ai_chat_app_service.WorkflowEngine"),
-            patch("app.application.ai_chat_app_service.get_approval_service"),
-        ):
-            return AIChatApplicationService()
-
     def test_connection_error(self):
         async def raise_conn(*a, **kw):
             raise ConnectionError("refused")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_conn
         service.ai_service = mock_ai
@@ -1220,7 +1176,7 @@ class TestProcessChatDeepErrors:
         async def raise_timeout(*a, **kw):
             raise TimeoutError("timed out")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_timeout
         service.ai_service = mock_ai
@@ -1237,7 +1193,7 @@ class TestProcessChatDeepErrors:
         async def raise_api_key(*a, **kw):
             raise RuntimeError("api_key is invalid")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_api_key
         service.ai_service = mock_ai
@@ -1254,7 +1210,7 @@ class TestProcessChatDeepErrors:
         async def raise_conn_str(*a, **kw):
             raise RuntimeError("connection refused by remote")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_conn_str
         service.ai_service = mock_ai
@@ -1271,7 +1227,7 @@ class TestProcessChatDeepErrors:
         async def raise_generic(*a, **kw):
             raise RuntimeError("unknown internal error")
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = raise_generic
         service.ai_service = mock_ai
@@ -1296,7 +1252,7 @@ class TestProcessChatDeepErrors:
         async def mock_chat(*a, **kw):
             return {"success": True, "text": "结果", "action": "followup", "data": {}}
 
-        service = self._make_service_with_mock()
+        service = _make_service()
         mock_ai = Mock()
         mock_ai.chat = mock_chat
         service.ai_service = mock_ai
@@ -1330,7 +1286,7 @@ class TestPersistChatTurnDeep:
             service._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "sess1"},
+                {"session_id": "sess1", "local_user_id": 17, "actor_id": 17},
                 {
                     "success": True,
                     "response": "world",
@@ -1338,6 +1294,7 @@ class TestPersistChatTurnDeep:
                 },
             )
         assert mock_conv.save_message.call_count == 2
+        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_message.call_args_list)
 
     def test_with_conversation_id_persists(self):
         service = _make_service()
@@ -1346,10 +1303,11 @@ class TestPersistChatTurnDeep:
             service._persist_chat_turn(
                 "u1",
                 "hello",
-                {"conversation_id": "conv1"},
+                {"conversation_id": "conv1", "local_user_id": 17, "actor_id": 17},
                 {"success": True, "response": "world", "data": {}},
             )
         assert mock_conv.save_message.call_count == 2
+        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_message.call_args_list)
 
     def test_with_tool_call_data(self):
         service = _make_service()
@@ -1358,7 +1316,7 @@ class TestPersistChatTurnDeep:
             service._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "sess1"},
+                {"session_id": "sess1", "local_user_id": 17, "actor_id": 17},
                 {
                     "success": True,
                     "response": "done",
@@ -1371,6 +1329,7 @@ class TestPersistChatTurnDeep:
                 },
             )
         assert mock_conv.save_message.call_count == 2
+        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_message.call_args_list)
 
 
 # ========================= _inject_excel_vector_context - deep ============

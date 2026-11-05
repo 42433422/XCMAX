@@ -5,7 +5,7 @@ import type { ApprovalWorkspaceCtx } from './assemble'
 const props = defineProps<{ tm: ApprovalWorkspaceCtx }>()
 
 const {
-  pendingRequests, viewDetails, approve, reject, viewAll,
+  visiblePendingRequests: pendingRequests, fullListType, viewDetails, approve, reject, viewAll,
   getBusinessIcon, formatTime,
 } = props.tm
 </script>
@@ -15,7 +15,7 @@ const {
     <div class="section">
       <div class="section-header">
         <h3>待我审批</h3>
-        <button class="btn-link" @click="viewAll('pending')">查看全部</button>
+        <button v-if="!fullListType" class="btn-link" @click="viewAll('pending')">查看全部</button>
       </div>
       <div class="request-list" data-tutorial-id="approval-pending-list">
         <div
@@ -55,7 +55,7 @@ const {
         </div>
         <div v-if="pendingRequests.length === 0" class="empty-state">
           <i class="fa fa-check-circle-o"></i>
-          <p>暂无待审批事项</p>
+          <p>{{ fullListType ? '本页没有待您审批的事项，可继续翻页查看。' : '暂无待审批事项' }}</p>
         </div>
       </div>
     </div>

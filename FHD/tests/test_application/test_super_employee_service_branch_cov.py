@@ -32,7 +32,6 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from app.application.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant, ExecutionScope
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -51,6 +50,7 @@ from app.application.super_employee_service import (
     _trae_cli_command,
     _utc_now,
 )
+from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant, ExecutionScope
 
 # ─────────────────────────── helpers ────────────────────────────
 
@@ -156,8 +156,10 @@ class _FakeStream:
             return self._lines.pop(0)
         return b""
 
-    async def read(self):
-        return self._read_data
+    async def read(self, size=-1):
+        data = self._read_data if size < 0 else self._read_data[:size]
+        self._read_data = self._read_data[len(data) :]
+        return data
 
 
 def _fake_proc(stdout_lines, returncode=0):

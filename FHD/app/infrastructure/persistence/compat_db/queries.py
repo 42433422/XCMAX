@@ -12,7 +12,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
 from app.infrastructure.db.sync_engine import get_sync_engine
-from app.infrastructure.persistence.compat_db.base import (
+from app.infrastructure.persistence.compat_db.compat_db_base import (
     TRIVIAL_MEASURE_UNITS,
     _exc_chain_has_undefined_table,
     _insp_table_exists,
@@ -443,3 +443,24 @@ def _products_units_for_select() -> dict:
     if distinct:
         return {"success": True, "data": distinct}
     return {"success": True, "data": []}
+
+
+def _shipment_units_for_select() -> dict:
+    from app.db.models import ShipmentRecord
+    from app.db.session import get_db
+    from app.infrastructure.tenant_scope import apply_tenant_filter
+
+    data = _products_units_for_select()["data"]
+    seen = {str(row["name"]).lower() for row in data}
+    with get_db() as db:
+        rows = (
+            apply_tenant_filter(db.query(ShipmentRecord.purchase_unit), ShipmentRecord)
+            .distinct()
+            .all()
+        )
+    for (unit,) in rows:
+        name = str(unit or "").strip()
+        if name and name.lower() not in seen:
+            data.append({"id": None, "name": name, "symbol": name})
+            seen.add(name.lower())
+    return {"success": True, "data": data}

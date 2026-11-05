@@ -1,0 +1,78 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-ocr-doc",
+ "name": "单据图像识别解析",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 5,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/ocr/test",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/ocr/test（写操作自动附带 CSRF）：OCR 后端（macOS Vision）",
+   "expected": "OCR 后端（macOS Vision）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 19ms；active_backend=macos_vision",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/ocr/recognize 表单文件 ['image']",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize（写操作自动附带 CSRF）：识别单据图片（含单号）",
+   "expected": "识别结果包含图片中的单号 20260929",
+   "observed": "HTTP 200 403ms；{\"success\": true, \"message\": \"识别成功\", \"text\": \"发货单 NO.20260929\\n客户：太阳鸟\\n产品：包装盒 数量：24\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png\", \"artifacts\": [{\"artifact_type\": \"ocr_text\", \"name\": \"o",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "POST /api/ocr/recognize 表单文件 ['image']",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize（写操作自动附带 CSRF）：识别第二张图片（不同单号）",
+   "expected": "识别结果包含第二张图片中的单号 8888",
+   "observed": "HTTP 200 356ms；{\"success\": true, \"message\": \"识别成功\", \"text\": \"INVOICE NO.8888\\nTOTAL 777\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-8888.png\", \"artifacts\": [{\"artifact_type\": \"ocr_text\", \"name\": \"ocr_result\",",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "POST /api/ocr/recognize 表单文件 ['note']",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize（写操作自动附带 CSRF）：边界：未提供图像文件时被拒",
+   "expected": "缺少 image 返回 400 并提示提供图像文件",
+   "observed": "HTTP 400 91ms；{\"success\": false, \"message\": \"请提供图像文件或文件路径\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M5",
+   "input": "界面路由 /",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /，页面可见 上传附件，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /；命中文本 ['上传附件']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 12 次任务 · 预计节约人工费用 ¥49 |  | 你好，我是饰品包装助手。",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-ocr-doc",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/macos/result.png",
+   "sha256": "3f4282e2629b6e49a924818d332e68750fc1cb6d9fe57be0e3aa6d1d009ac185",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-ocr-doc",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/macos/operation.webm",
+   "sha256": "bd6e6b91675393cd6e153447a85aef59c96418cc202a87093cfa0475e49eca87",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/macos/run.log",
+  "sha256": "51e2be7e910e35f25d7125443706a727853447dcc1e1489a9927701530f3fd1b",
+  "bytes": 1893
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

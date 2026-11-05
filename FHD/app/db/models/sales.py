@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 # 销售订单正交维度状态（Odoo 派生，替代单一线性状态机）

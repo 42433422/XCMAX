@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from functools import lru_cache
 from typing import Any
 
@@ -11,6 +12,17 @@ from app.mod_sdk.erp_domain_compat import ERP_DOMAIN_BRIDGE_MOD_ID, is_erp_domai
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+# Schema 类 DB 错误必须原样上抛：在 dispatch 层吞掉会把它伪装成
+# "erp domain handler missing"，掩盖真实根因（2026-09-10 实测：存量库缺
+# products.base_uom_id 时，产品页 500 的真实错误被本层掩盖，排障困难）。
+_PROPAGATE_ERRORS: tuple[type[Exception], ...] = (sqlite3.DatabaseError,)
+try:
+    from sqlalchemy.exc import OperationalError as _SQLAlchemyOperationalError
+
+    _PROPAGATE_ERRORS = (sqlite3.DatabaseError, _SQLAlchemyOperationalError)
+except ImportError:  # pragma: no cover - sqlalchemy 为运行时强依赖
+    pass
 
 
 def _truthy_env(name: str) -> bool:
@@ -102,7 +114,9 @@ def try_invoke_erp_domain_handler(
         if out is None:
             return None
         return out
-    except RECOVERABLE_ERRORS:
+    except RECOVERABLE_ERRORS as exc:
+        if isinstance(exc, _PROPAGATE_ERRORS):
+            raise
         logger.exception("erp domain handler failed domain=%s action=%s", dom, act)
         return None
 

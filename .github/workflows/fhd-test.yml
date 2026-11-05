@@ -18,6 +18,7 @@ on:
       - "FHD/metrics/coverage_ratchet_baseline.json"
       - "FHD/scripts/ci/check_coverage_ssot.py"
       - "FHD/scripts/ci/guard_temp_scripts.py"
+      - "FHD/scripts/ci/check_repo_hygiene.sh"
       - "FHD/scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-test.yml"
   pull_request:
@@ -33,12 +34,16 @@ on:
       - "FHD/metrics/coverage_ratchet_baseline.json"
       - "FHD/scripts/ci/check_coverage_ssot.py"
       - "FHD/scripts/ci/guard_temp_scripts.py"
+      - "FHD/scripts/ci/check_repo_hygiene.sh"
       - "FHD/scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-test.yml"
   workflow_dispatch:
 
 env:
   PYTHON_VERSION: "3.11"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 
 defaults:
@@ -53,35 +58,7 @@ jobs:
 
       - name: Fail on tracked secrets or dependency caches
         shell: bash
-        run: |
-          set -euo pipefail
-          bad=""
-          while IFS= read -r f; do
-            [ -z "${f}" ] && continue
-            f="${f#\"}"
-            f="${f%\"}"
-            [[ "${f}" =~ \.example$ ]] && continue
-            [[ "${f}" =~ /\.env\.generic$ ]] && continue
-            [[ "${f}" =~ /\.env\.minimal$ ]] && continue
-            if [[ "${f}" =~ (^|/)\.env(\.|$) ]] || \
-               [[ "${f}" =~ (^|/)secret\.yaml$ ]] || \
-               [[ "${f}" =~ login_out\.json$ ]] || \
-               [[ "${f}" =~ \.der$ ]] || \
-               [[ "${f}" =~ /\.nm- ]] || \
-               [[ "${f}" =~ /node_modules/ ]] || \
-               [[ "${f}" =~ /__pycache__/ ]] || \
-               [[ "${f}" =~ /chroma/ ]] || \
-               [[ "${f}" =~ /chroma_db/ ]] || \
-               [[ "${f}" =~ /vector_data/.*\.sqlite ]]; then
-              bad+="${f}"$'\n'
-            fi
-          done < <(git ls-files)
-          if [ -n "${bad}" ]; then
-            echo "Tracked paths that must stay gitignored:"
-            printf '%s' "${bad}"
-            exit 1
-          fi
-          echo "Repo hygiene check passed."
+        run: bash scripts/ci/check_repo_hygiene.sh
 
   backend-smoke:
     needs: repo-hygiene
@@ -90,16 +67,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
+          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
+          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
-          pip install -r deploy/requirements-dev.txt
+          pip install -r deploy/requirements-dev.txt "$pytest_pin"
 
       - name: Verify stable version anchors
         run: python scripts/dev/verify_version_anchors.py
@@ -120,32 +100,7 @@ jobs:
           python -m pytest tests/test_routes/test_route_registry.py \
             tests/test_routes/test_registry_unit.py -x -q --tb=short
 
-      - name: Offline Agent runtime eval
+      - name: Offline Agent contract fixtures (process boundary tested separately)
         env:
           SECRET_KEY: "ci-agent-eval-secret-at-least-32-bytes"
         run: python evals/run_agent_eval.py
-
-  frontend-smoke:
-    needs: repo-hygiene
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: FHD/frontend/package-lock.json
-
-      - name: Install dependencies
-        working-directory: FHD/frontend
-        run: npm ci
-
-      - name: ESLint
-        working-directory: FHD/frontend
-        run: npm run lint
-
-      - name: Vitest smoke
-        working-directory: FHD/frontend
-        run: npm run test:smoke

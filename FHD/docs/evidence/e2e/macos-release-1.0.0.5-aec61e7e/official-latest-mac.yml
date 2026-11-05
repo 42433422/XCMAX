@@ -1,0 +1,25 @@
+version: 1.0.0
+productVersion: 1.0.0.5
+buildSha: aec61e7e7224fe83c98b3a26522ee3f09f9e728d
+releaseId: xcagi-1.0.0.5-aec61e7e7224fe83c98b3a26522ee3f09f9e728d
+releaseNotes: |
+  版本 1.0.0.5
+  构建 aec61e7e7224
+  
+  • 更新桌面壳与本地后端运行时
+  • 保留本机业务数据与已安装 Mod
+  • 安装完成后重新加载进入新版本
+files:
+  - url: XCAGI-Enterprise-1.0.0.5-mac-arm64.zip
+    sha512: x8Azk3T+xt0NnWUEnZrQPfu5SBy8o3cTd869MXNygY50VeVfjWeeorpTq5NHhkCfEEZ5X3LfKZpQljLbWH6zYA==
+    size: 264818498
+  - url: XCAGI-Enterprise-1.0.0.5-mac-arm64.zip.blockmap
+    sha512: q6WBrZ/GtS2cKidUnkH6FfkmeLFrckLnHIJBF3PP6XcAnl8qi0cCb7Seim6JLLx5LqDOPT9cQmxCXC6bAvcj7g==
+    size: 273120
+path: XCAGI-Enterprise-1.0.0.5-mac-arm64.zip
+sha512: x8Azk3T+xt0NnWUEnZrQPfu5SBy8o3cTd869MXNygY50VeVfjWeeorpTq5NHhkCfEEZ5X3LfKZpQljLbWH6zYA==
+releaseDate: '2026-09-21T01:45:13.853Z'
+stagingPercentage: 100
+forceUpgrade: false
+minVersion: 1.0.0
+signature: ed25519:QjIGlRD5lhMxFTXtYl2ByZCQGql8PdvpKHy2UUEZXT5su8t7EQVOes7tHl9sbVWI2aEooZOjMkzoN9mMi/USCw==

@@ -1,0 +1,8 @@
+[16:02:18] feature=pay-alipay platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-alipay
+[16:02:30] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[16:02:32] case P1: passed - 支付宝通道配置侦察真实读取
+[16:02:32] case P2: passed - 套餐目录真实读取
+[16:02:32] case P3: passed - 无签名的支付宝异步回调被拒（负例）
+[16:02:33] case P4: passed - 不存在订单的只读查询被如实拒绝（负例）
+[16:02:33] video: pay-alipay-web-20260929-160218.webm (1276743 bytes)
+[16:02:33] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-alipay/log/pay-alipay-web-20260929-160218.log

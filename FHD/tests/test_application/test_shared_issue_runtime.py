@@ -86,3 +86,43 @@ async def test_confirmation_response_loss_replays_saved_payload_after_ticket_lea
     assert result == {"replayed": True}
     assert remote.await_count == 3  # retry POST does not require a still-pending ticket
     assert remote.await_args.kwargs["payload"] == original
+
+
+@pytest.mark.asyncio
+async def test_list_flags_only_fixes_running_here_and_decision_forwards_owner_note(host):
+    request, remote, _, target = host
+    mine = {"items": [{"id": 7, "state": "awaiting_customer_verification"}, {"id": 8}]}
+    remote.side_effect = [mine, {"items": [{"id": 7, "ready": True, "target": target}]}]
+    listed = await bridge.list_issues(request)
+    assert [(row["id"], row["ready"]) for row in listed["items"]] == [(7, True), (8, False)]
+    assert remote.await_args_list[0].args[1] == "/api/customer-service/issues/mine"
+    with pytest.raises(HTTPException) as caught:
+        await bridge.decide_issue(
+            request, 8, decision="reopen", note="不行", idempotency_key="k" * 8
+        )
+    assert caught.value.status_code == 400
+    remote.side_effect, remote.return_value = None, {"success": True}
+    await bridge.decide_issue(
+        request, 8, decision="reopen", note=" 导出还是报错 ", idempotency_key="k" * 8
+    )
+    assert remote.await_args.args[1] == "/api/customer-service/issues/8/decision"
+    assert remote.await_args.kwargs["payload"] == {
+        "decision": "reopen",
+        "note": "导出还是报错",
+        "idempotency_key": "k" * 8,
+    }
+
+
+@pytest.mark.asyncio
+async def test_route_surfaces_market_refusal_instead_of_internal_error(host):
+    from app.fastapi_routes import issue_runtime_routes as routes
+
+    request, remote, _, _ = host
+    remote.side_effect = RuntimeError("工单仍在处理中，请等处理结果出来后再决定")
+    body = routes.IssueDecision(decision="reopen", note="导出还是报错", idempotency_key="k" * 8)
+    with pytest.raises(HTTPException) as caught:
+        await routes.submit_issue_decision(8, body, request)
+    assert (caught.value.status_code, caught.value.detail) == (
+        502,
+        "工单仍在处理中，请等处理结果出来后再决定",
+    )

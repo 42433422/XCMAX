@@ -4,7 +4,7 @@
   "upstream_pkg": "langgraph-checkpoint-sqlite",
   "license": "MIT",
   "license_file": "LICENSE",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "upstream_tag": null,
   "upstream_commit_sha": "b2926a0ff9589c28c7e01fe7cdbb337b86d5a4b4",
   "source_path": "libs/checkpoint-sqlite",
@@ -13,7 +13,9 @@
   "verify_script": "verify_vendor.py",
   "fetch_time_utc": "2026-08-17T13:00:00Z",
   "verification": {
-    "method": "本地吸收副本与上游锁定 release commit 字节级比对 + MANIFEST.sha256 完整性 + LICENSE 校验",
-    "note": "吸收源取自 langgraph 仓库锁定 commit b2926a0ff9589c28c7e01fe7cdbb337b86d5a4b4 的 libs/checkpoint-sqlite/langgraph + LICENSE，字节级一致。version 3.1.1 与 pyproject 一致。"
-  }
+    "method": "锁定上游基线 + 官方 GHSA-6hmw-9432-67qq 补丁逐行核对 + 当前 MANIFEST.sha256 与 LICENSE 校验",
+    "note": "保留原 upstream_commit_sha 所示吸收基线及本仓安全/兼容改动；回补官方 namespace 校验修复，版本与 pyproject 同步，不声称整包等同上游 release。"
+  },
+  "security_patch_commit": "bfcfea554ed5c7f7be562cebf8825e911b493ab1",
+  "security_release_tag": "checkpointsqlite==3.1.2"
 }

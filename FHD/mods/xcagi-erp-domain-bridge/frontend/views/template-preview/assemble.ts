@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTpTemplateList } from './useTpTemplateList'
 import { useTpCreateFlow } from './useTpCreateFlow'
@@ -47,10 +47,25 @@ export function assembleTemplatePreview() {
   )
 
   onMounted(() => {
+    active = true
+    window.addEventListener('xcagi:templates-updated', templatesUpdated)
     void list.refreshTemplates()
   })
 
+  let active = false
+  let dirty = false
+  function templatesUpdated() {
+    if (active) void list.refreshTemplates()
+    else dirty = true
+  }
+  onActivated(() => {
+    active = true
+    if (dirty) { dirty = false; void list.refreshTemplates() }
+  })
+  onDeactivated(() => { active = false })
+
   onBeforeUnmount(() => {
+    window.removeEventListener('xcagi:templates-updated', templatesUpdated)
     create.stopProgressTimer()
   })
 

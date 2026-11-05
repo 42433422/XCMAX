@@ -1,0 +1,8 @@
+[06:45:49] feature=mods-pat base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-pat
+[06:46:00] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:46:06] case A1: passed - 管理会话 JWT/会话有效性校验
+[06:46:12] case A2: passed - /api/mod/{mod_id} 命名空间按接入上下文路由
+[06:46:22] case A3: passed - 未绑定修茈账号的市场管理接口被拒绝（负例）
+[06:46:30] case A4: passed - 无 CSRF 凭证的写操作被拒绝（负例）
+[06:46:30] video: mods-pat-web-20260929-064549.webm (3485203 bytes)
+[06:46:30] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-pat/log/mods-pat-web-20260929-064549.log

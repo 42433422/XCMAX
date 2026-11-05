@@ -1,0 +1,6 @@
+2026-09-29T13:06:13+0800 [dt-desktop-workflow] 开始验收 dt-desktop-workflow 桌面工作流（占位）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:06:13+0800 [dt-desktop-workflow] M1 failed :: 受阻：能力目录标注为「占位」；POST /api/desktop/automation/workflow/run 返回「desktop automation backend not installed in this build」
+2026-09-29T13:06:13+0800 [dt-desktop-workflow] M2 failed :: 受阻：本机未安装桌面自动化后端，profile 落盘返回 backend not installed
+2026-09-29T13:06:13+0800 [dt-desktop-workflow] M3 failed :: 受阻：功能未实现（占位），无法验证
+2026-09-29T13:06:15+0800 [dt-desktop-workflow] screenshot result.png
+2026-09-29T13:06:15+0800 [dt-desktop-workflow] video operation.webm bytes=96919

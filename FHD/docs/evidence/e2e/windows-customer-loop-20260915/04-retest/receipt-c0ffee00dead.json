@@ -1,0 +1,25 @@
+{
+  "dedup_key": "c0ffee00deadbeef12345678abcdef99",
+  "wo_id": "WO-c0ffee00dead",
+  "checked_at": "2026-09-15T11:37:23.148191+00:00",
+  "base_url": "http://127.0.0.1:17500",
+  "app_version": "1.0.0.4",
+  "checks": [
+    {
+      "name": "app_health",
+      "url": "http://127.0.0.1:17500/api/health?lite=1",
+      "ok": true,
+      "status": 200,
+      "error": "",
+      "body_snippet": "{\"status\":\"healthy\",\"version\":\"1.0.0.4\",\"service\":\"xcagi-fastapi\",\"runtime\":{\"status\":\"healthy\",\"components\":{\"desktop_runtime_routes\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"desktop_automation_routes\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"gdpr_routes\":{\"ok\":true,\"required\":false,\"detail\":\"\"},\"platform_shell_routes\":{\"ok\":true,\"required\":true,\"detail\":\"\"},\"business_route:xcmax_admin\":{\"ok\":tr",
+      "app_version": "1.0.0.4"
+    },
+    {
+      "name": "app_version_expectation",
+      "ok": true,
+      "expected": "1.0.0.4",
+      "actual": "1.0.0.4"
+    }
+  ],
+  "verdict": "pass"
+}

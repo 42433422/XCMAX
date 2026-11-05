@@ -1,0 +1,47 @@
+{
+  "phase": "G11-business-10005",
+  "session_tag": "G11重测提交 e3d910a1",
+  "steps": {
+    "health": {
+      "status": 200,
+      "version": "1.0.0.4",
+      "git_sha": "280225ac77ce",
+      "runtime": "healthy"
+    },
+    "session_reuse": {
+      "status": 200,
+      "success": true,
+      "username": "SUNBIRD",
+      "user_id": 5,
+      "permission_count": 15,
+      "has_shipment_edit": true
+    },
+    "templates_upload": {
+      "status": 200,
+      "template_id": "db:28",
+      "file_sha256": "3e910f7cfc2ce9b0b50d50226cfaaa0a066a44757e394dbeb930657723bae7ac"
+    },
+    "templates_list_probe_present": {
+      "status": 200,
+      "probe_present": true
+    },
+    "customer_retained": {
+      "status": 200,
+      "already_exists": false
+    },
+    "shipment_generate": {
+      "status": 200,
+      "success": true,
+      "message": "发货单生成成功",
+      "doc_name": "发货单_26-0900001A_20260918_190420.xlsx"
+    },
+    "file_download": {
+      "status": 200,
+      "bytes": 5191,
+      "xlsx_magic": true,
+      "sha256": "5b2d0f2333799e7618ab610665f115aa54ae67f4f3d93c4445679e3c6457b38c",
+      "filename": "发货单_26-0900001A_20260918_190420.xlsx"
+    }
+  },
+  "verdict": "PASS"
+}

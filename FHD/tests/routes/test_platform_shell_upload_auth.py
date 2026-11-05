@@ -57,6 +57,16 @@ class TestPlatformShellUploadAuth:
                 files={"file": ("chat.xlsx", BytesIO(b"x"), "application/octet-stream")},
             )
         assert resp.status_code == 401
+        assert "请先登录" in resp.text
+
+    def test_route_messages_are_readable_text(self):
+        from pathlib import Path
+
+        import app.fastapi_routes.platform_shell_routes as routes
+        import app.mod_sdk.deliverable_status as status
+
+        for module in (routes, status):
+            assert "????" not in Path(module.__file__).read_text(encoding="utf-8")
 
     def test_office_sample_upload_ok_with_session(self):
         from app.fastapi_routes.platform_shell_routes import router

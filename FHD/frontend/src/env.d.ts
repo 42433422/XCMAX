@@ -22,6 +22,7 @@ interface Window {
         reason?: string
       }
     }>
+    clipboardWriteText?: (text: string) => Promise<{ ok: boolean }>
     getDataDir: () => Promise<string>
     /** One-shot, local-only renderer entry hint from Electron's persisted cookie store. */
     consumeBootstrapSessionHint?: () => Promise<boolean>
@@ -30,7 +31,7 @@ interface Window {
     downloadUpdate: () => Promise<unknown>
     installUpdate: () => Promise<void>
     onUpdateEvent: (callback: (event: unknown) => void) => () => void
-    getPairingQrPayload?: () => Promise<string>
+    getPairingQrPayload?: () => Promise<string | null>
     showNotification: (title: string, body: string) => Promise<void>
     setBadge: (count: number) => Promise<void>
     getAutoLaunch?: () => Promise<boolean>

@@ -1,0 +1,5 @@
+2026-09-29T20:34:35+0800 [ch-im-ws] 开始验收 ch-im-ws 实时通道（WebSocket）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
+2026-09-29T20:34:37+0800 [ch-im-ws] M1 passed :: WebSocket /ws/im 握手结果 {'ok': True}
+2026-09-29T20:34:37+0800 [ch-im-ws] M2 passed :: HTTP 200 19ms；{"success": true, "unread_total": 0}
+2026-09-29T20:34:38+0800 [ch-im-ws] screenshot result.png
+2026-09-29T20:34:40+0800 [ch-im-ws] video operation.webm bytes=307748

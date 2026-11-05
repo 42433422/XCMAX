@@ -18,12 +18,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from modstore_server import rag_service, vector_engine
 from modstore_server.api.deps import _get_current_user
-from modstore_server.embedding_service import (
-    embedding_config_snapshot,
-)
-from modstore_server.knowledge_ingest import (
-    SUPPORTED_EXTENSIONS,
-)
+from modstore_server.embedding_service import embedding_config_snapshot
+from modstore_server.knowledge_ingest import SUPPORTED_EXTENSIONS
 from modstore_server.knowledge_v2_documents import upload_document
 from modstore_server.knowledge_v2_models import (
     CollectionCreateBody,

@@ -1,0 +1,6 @@
+2026-09-29T20:43:08+0800 [mods-store] 开始验收 mods-store Mod 市场与一键装包；被测 {'app_version': '1.0.0.5', 'app_git_sha': '027c8ec59443f1be9d7934e77282348e7483f883', 'built_at': '2026-09-29T11:16:03.975Z', 'account': 'SUNBIRD'}
+2026-09-29T20:43:12+0800 [mods-store] M1 passed :: HTTP 200 3552ms；可装 26，已索引 26
+2026-09-29T20:43:15+0800 [mods-store] M2 passed :: HTTP 200 3092ms；市场条目 25
+2026-09-29T20:43:18+0800 [mods-store] M3 passed :: 导航后路径 /mod-store；命中文本 ['能力']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后
+2026-09-29T20:43:20+0800 [mods-store] screenshot result.png
+2026-09-29T20:43:25+0800 [mods-store] video operation.webm bytes=393446

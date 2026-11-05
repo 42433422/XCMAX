@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ch-wechat-ingest",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "f262f5fac6307654ab6d6ae25effdcfba023ca19cb5d37c7be65f6c7fc2520a7",
+  "visible_content": "数据来源页显示员工“不可用”、多项来源“规划中”，没有微信接入或 OCR/Excel 导入结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ch-wechat-ingest.png"
+}

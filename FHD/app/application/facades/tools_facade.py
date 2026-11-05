@@ -1,4 +1,4 @@
-from app.services.tools_execution_service import (
+from app.domain.shared_services.tools_execution_service import (
     _parse_order_text,
     execute_registered_workflow_tool,
     execute_tool_from_payload,
@@ -17,12 +17,7 @@ __all__ = [
 
 
 def run_archive_tools_execute(body: dict | None) -> tuple[dict, int]:
-    """
-    Execute a workflow-tool payload and unpack the legacy JSON response shape.
-
-    The public HTTP route still has to preserve the old response contract, but
-    callers should import this facade instead of the removed historical route shim.
-    """
+    """Execute a workflow tool and unpack its legacy JSON response."""
     raw = execute_tool_from_payload(body or {})
 
     if isinstance(raw, tuple):

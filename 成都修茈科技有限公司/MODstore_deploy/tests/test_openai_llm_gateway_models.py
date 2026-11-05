@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+
+def test_public_developer_page_links_to_existing_portal_and_describes_current_auth():
+    root = Path(__file__).resolve().parents[1]
+    page = (root.parent / "developer.html").read_text(encoding="utf-8")
+    routes = (root / "market/src/router/index.ts").read_text(encoding="utf-8")
+    assert page.count('href="/market/dev"') >= 2
+    assert "path: '/dev'" in routes
+    assert "/market/developer/docs" not in page
+    assert "模型调用须启用专用计费服务" in page
+    assert "OPENAI_API_KEY=pat_" not in page
 
 
 @pytest.mark.asyncio

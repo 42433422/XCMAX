@@ -21,6 +21,7 @@ def create_employee_run_log(
     session_id: str | None = None,
     user_id: int | None = None,
 ) -> int:
+    tenant_id = _require_tenant(tenant_id)
     with get_db() as db:
         row = EmployeeRunLog(
             employee_id=str(employee_id or "").strip(),
@@ -41,32 +42,41 @@ def finish_employee_run_log(
     run_id: int,
     *,
     status: str,
+    tenant_id: int | None = None,
     output: dict[str, Any] | None = None,
     error: str = "",
     attempts: int = 1,
     verified: bool = False,
 ) -> None:
+    tenant_id = _require_tenant(tenant_id)
     with get_db() as db:
         row = db.get(EmployeeRunLog, int(run_id))
-        if row is None:
+        if row is None or row.tenant_id != tenant_id:
             return
         row.status = str(status or "failed")[:32]
         row.output_json = json.dumps(output or {}, ensure_ascii=False)
         row.error_text = str(error or "")[:4000]
         row.attempts = max(1, int(attempts))
         row.verified = 1 if verified else 0
-        row.finished_at = datetime.now(UTC).replace(tzinfo=None)
+        row.finished_at = (
+            None
+            if row.status in {"unknown", "pending", "accepted", "running", "awaiting_approval"}
+            else datetime.now(UTC).replace(tzinfo=None)
+        )
         db.commit()
 
 
-def list_employee_run_logs(employee_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+def list_employee_run_logs(
+    employee_id: str, *, tenant_id: int | None = None, limit: int = 50
+) -> list[dict[str, Any]]:
+    tenant_id = _require_tenant(tenant_id)
     eid = str(employee_id or "").strip()
     if not eid:
         return []
     with get_db() as db:
         rows = (
             db.query(EmployeeRunLog)
-            .filter(EmployeeRunLog.employee_id == eid)
+            .filter(EmployeeRunLog.employee_id == eid, EmployeeRunLog.tenant_id == tenant_id)
             .order_by(EmployeeRunLog.id.desc())
             .limit(max(1, min(limit, 200)))
             .all()
@@ -84,3 +94,9 @@ def list_employee_run_logs(employee_id: str, *, limit: int = 50) -> list[dict[st
             }
             for row in rows
         ]
+
+
+def _require_tenant(tenant_id: int | None) -> int:
+    if isinstance(tenant_id, bool) or not isinstance(tenant_id, int) or tenant_id <= 0:
+        raise ValueError("employee run requires a trusted tenant")
+    return tenant_id

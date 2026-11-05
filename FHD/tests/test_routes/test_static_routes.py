@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes.domains.static.routes import router
+from app.fastapi_routes.domains.static.static_routes import router
 
 
 def _create_app() -> FastAPI:
@@ -27,7 +27,7 @@ class TestIndexRoute:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            "app.fastapi_routes.domains.static.static_routes.get_base_dir",
             return_value="/nonexistent",
         ):
             resp = client.get("/")
@@ -42,7 +42,7 @@ class TestIndexRoute:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/")
@@ -58,7 +58,7 @@ class TestIndexRoute:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/")
@@ -79,7 +79,7 @@ class TestStaticServe:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/static/app.js")
@@ -92,7 +92,7 @@ class TestStaticServe:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/static/missing.js")
@@ -105,7 +105,7 @@ class TestStaticServe:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/static/subdir")
@@ -130,7 +130,7 @@ class TestAssetRoutes:
         app, client, tmpdir = self._make_app_with_file("vite.svg", b"<svg></svg>")
         try:
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/vite.svg")
@@ -147,7 +147,7 @@ class TestAssetRoutes:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/vite.svg")
@@ -157,7 +157,7 @@ class TestAssetRoutes:
         app, client, tmpdir = self._make_app_with_file("brand-xc-logo.jpg")
         try:
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/brand-xc-logo.jpg")
@@ -171,7 +171,7 @@ class TestAssetRoutes:
         app, client, tmpdir = self._make_app_with_file("brand-xc-logo.png")
         try:
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/brand-xc-logo.png")
@@ -191,7 +191,7 @@ class TestAssetRoutes:
             fh.write(b"\xff\xd8\xff")
         try:
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 female = client.get("/ai-butler-female-avatar-v1.png")
@@ -211,7 +211,7 @@ class TestAssetRoutes:
         )
         try:
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/workflow-employee-docs.json")
@@ -225,7 +225,7 @@ class TestAssetRoutes:
         app, client, tmpdir = self._make_app_with_file("sw.js", b"self.addEventListener();")
         try:
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/sw.js")
@@ -255,7 +255,7 @@ class TestWorkflowEmployeesJson:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/workflow-employees.json")
@@ -270,7 +270,7 @@ class TestWorkflowEmployeesJson:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/workflow-employees.json")
@@ -282,7 +282,7 @@ class TestWorkflowEmployeesJson:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/workflow-employees.json")
@@ -305,7 +305,7 @@ class TestOutputsRoute:
                 return_value="/nonexistent2",
             ):
                 with patch(
-                    "app.fastapi_routes.domains.static.routes.get_base_dir",
+                    "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                     return_value="/nonexistent3",
                 ):
                     resp = client.get("/outputs/test.pdf")
@@ -348,7 +348,7 @@ class TestPageRoutes:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            "app.fastapi_routes.domains.static.static_routes.get_base_dir",
             return_value="/nonexistent",
         ):
             resp = client.get("/test-buttons")
@@ -358,7 +358,7 @@ class TestPageRoutes:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            "app.fastapi_routes.domains.static.static_routes.get_base_dir",
             return_value="/nonexistent",
         ):
             resp = client.get("/products-test")
@@ -373,7 +373,7 @@ class TestPageRoutes:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/console")
@@ -388,7 +388,7 @@ class TestPageRoutes:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                "app.fastapi_routes.domains.static.static_routes.get_base_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/console")
@@ -404,7 +404,7 @@ class TestTraditionalModeList:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.list_files_response",
+            "app.fastapi_routes.domains.static.static_routes.list_files_response",
             return_value=({"files": []}, 200),
         ):
             resp = client.get("/api/traditional-mode/list")
@@ -416,7 +416,7 @@ class TestTraditionalModeRoot:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.root_info_response",
+            "app.fastapi_routes.domains.static.static_routes.root_info_response",
             return_value={"root": "/tmp"},
         ):
             resp = client.get("/api/traditional-mode/root")
@@ -428,7 +428,7 @@ class TestTraditionalModeRead:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.read_file_response",
+            "app.fastapi_routes.domains.static.static_routes.read_file_response",
             return_value=({"content": "hello"}, 200),
         ):
             resp = client.get("/api/traditional-mode/read?file=test.txt")
@@ -444,7 +444,7 @@ class TestTraditionalModeWatch:
             yield 'data: {"event":"change"}\n\n'
 
         with patch(
-            "app.fastapi_routes.domains.static.routes.sse_watch_events",
+            "app.fastapi_routes.domains.static.static_routes.sse_watch_events",
             side_effect=fake_sse,
         ):
             resp = client.get("/api/traditional-mode/watch")
@@ -456,7 +456,7 @@ class TestTraditionalModeStat:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.stat_response",
+            "app.fastapi_routes.domains.static.static_routes.stat_response",
             return_value=({"exists": True}, 200),
         ):
             resp = client.get("/api/traditional-mode/agent/stat?path=test.txt")
@@ -468,7 +468,7 @@ class TestTraditionalModeWriteText:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.write_text_response",
+            "app.fastapi_routes.domains.static.static_routes.write_text_response",
             return_value=({"success": True}, 200),
         ):
             resp = client.post(
@@ -483,7 +483,7 @@ class TestTraditionalModeWriteBase64:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.write_base64_response",
+            "app.fastapi_routes.domains.static.static_routes.write_base64_response",
             return_value=({"success": True}, 200),
         ):
             resp = client.post(
@@ -498,7 +498,7 @@ class TestTraditionalModeMove:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.move_response",
+            "app.fastapi_routes.domains.static.static_routes.move_response",
             return_value=({"success": True}, 200),
         ):
             resp = client.post(
@@ -513,7 +513,7 @@ class TestTraditionalModeCopy:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.copy_response",
+            "app.fastapi_routes.domains.static.static_routes.copy_response",
             return_value=({"success": True}, 200),
         ):
             resp = client.post(
@@ -537,7 +537,7 @@ class TestTraditionalModeWrite:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+            "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
             return_value=None,
         ):
             resp = client.post(
@@ -550,7 +550,7 @@ class TestTraditionalModeWrite:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+            "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
             return_value="/tmp/test.xlsx",
         ):
             resp = client.post(
@@ -563,7 +563,7 @@ class TestTraditionalModeWrite:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+            "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
             return_value="/tmp/test.xlsx",
         ):
             with patch.dict("sys.modules", {"openpyxl": None}):
@@ -580,7 +580,7 @@ class TestTraditionalModeWrite:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=filepath,
             ):
                 resp = client.post(
@@ -635,7 +635,7 @@ class TestTraditionalModeMkdir:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+            "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
             return_value=None,
         ):
             resp = client.post(
@@ -651,11 +651,11 @@ class TestTraditionalModeMkdir:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 with patch(
-                    "app.fastapi_routes.domains.static.routes.ROOT_DIR",
+                    "app.fastapi_routes.domains.static.static_routes.ROOT_DIR",
                     tmpdir,
                 ):
                     resp = client.post(
@@ -669,11 +669,11 @@ class TestTraditionalModeMkdir:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 with patch(
-                    "app.fastapi_routes.domains.static.routes.ROOT_DIR",
+                    "app.fastapi_routes.domains.static.static_routes.ROOT_DIR",
                     tmpdir,
                 ):
                     resp = client.post(
@@ -716,7 +716,7 @@ class TestTraditionalModeRename:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+            "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
             return_value=None,
         ):
             resp = client.post(
@@ -730,11 +730,11 @@ class TestTraditionalModeRename:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 with patch(
-                    "app.fastapi_routes.domains.static.routes.ROOT_DIR",
+                    "app.fastapi_routes.domains.static.static_routes.ROOT_DIR",
                     tmpdir,
                 ):
                     resp = client.post(
@@ -752,11 +752,11 @@ class TestTraditionalModeRename:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 with patch(
-                    "app.fastapi_routes.domains.static.routes.ROOT_DIR",
+                    "app.fastapi_routes.domains.static.static_routes.ROOT_DIR",
                     tmpdir,
                 ):
                     resp = client.post(
@@ -772,11 +772,11 @@ class TestTraditionalModeRename:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 with patch(
-                    "app.fastapi_routes.domains.static.routes.ROOT_DIR",
+                    "app.fastapi_routes.domains.static.static_routes.ROOT_DIR",
                     tmpdir,
                 ):
                     resp = client.post(
@@ -811,7 +811,7 @@ class TestTraditionalModeDelete:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+            "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
             return_value=None,
         ):
             resp = client.post(
@@ -825,11 +825,11 @@ class TestTraditionalModeDelete:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 with patch(
-                    "app.fastapi_routes.domains.static.routes.ROOT_DIR",
+                    "app.fastapi_routes.domains.static.static_routes.ROOT_DIR",
                     tmpdir,
                 ):
                     resp = client.post(
@@ -846,11 +846,11 @@ class TestTraditionalModeDelete:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 with patch(
-                    "app.fastapi_routes.domains.static.routes.ROOT_DIR",
+                    "app.fastapi_routes.domains.static.static_routes.ROOT_DIR",
                     tmpdir,
                 ):
                     resp = client.post(
@@ -869,11 +869,11 @@ class TestTraditionalModeDelete:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 with patch(
-                    "app.fastapi_routes.domains.static.routes.ROOT_DIR",
+                    "app.fastapi_routes.domains.static.static_routes.ROOT_DIR",
                     tmpdir,
                 ):
                     resp = client.post(
@@ -893,7 +893,7 @@ class TestTraditionalModeUpload:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 resp = client.post(
@@ -909,7 +909,7 @@ class TestTraditionalModeUpload:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+            "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
             return_value="/tmp",
         ):
             # Upload with empty filename - FastAPI may still set filename
@@ -928,7 +928,7 @@ class TestTraditionalModeUpload:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+            "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
             return_value=None,
         ):
             resp = client.post(
@@ -946,7 +946,7 @@ class TestTraditionalModeUpload:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+                "app.fastapi_routes.domains.static.static_routes.resolve_safe_path",
                 return_value=tmpdir,
             ):
                 resp = client.post(

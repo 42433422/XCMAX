@@ -1,12 +1,12 @@
 # MODstore 开发者文档
 
-把 MODstore 的 AI 员工与工作流当成可调用的"业务 API"，接入到任何外部系统。
+机器接入仅使用明确声明 scope 的接口；登录接口与机器凭证不互相替代。PAT 边界以已登记的账号体系 SSOT 为准。
 
 ## 入门
 
 | 文档                                                      | 适合谁                                                              |
 | --------------------------------------------------------- | ------------------------------------------------------------------- |
-| [01 Quickstart](./01-quickstart.md)                       | 5 分钟跑通：拿到 Token → 触发员工 → 收到 webhook                    |
+| [01 Quickstart](./01-quickstart.md)                       | 创建 mod:sync Token → 读取已授权 Mod                    |
 | [02 Authentication](./02-authentication.md)               | 理解 PAT 与 JWT 双认证、scope、过期策略                             |
 | [03 REST API](./03-rest-api.md)                           | 全量接口索引（指向 OpenAPI 静态快照与 Swagger UI）                  |
 | [04 Webhooks](./04-webhooks.md)                           | 出站订阅、HMAC 签名、入站工作流触发器                               |

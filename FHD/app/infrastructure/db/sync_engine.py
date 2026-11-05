@@ -1,7 +1,7 @@
 """Sync engine / database mode / mod-aware URL resolution.
 
-Phase 5B 从 ``app.legacy.database`` + ``app.legacy.mod_database_url`` 吸收。
-对外接口与 legacy 完全一致,曾经 ``from app.legacy.database import ...``
+Phase 5B 从 ``legacy-layer.database`` + ``legacy-layer.mod_database_url`` 吸收。
+对外接口与 legacy 完全一致,曾经 ``from legacy-layer.database import ...``
 的调用方改为 ``from app.infrastructure.db.sync_engine import ...``。
 """
 

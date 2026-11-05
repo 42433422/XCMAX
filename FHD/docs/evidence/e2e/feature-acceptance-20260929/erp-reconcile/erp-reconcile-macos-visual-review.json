@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-reconcile",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "8a97f22b97a14e43ab6773e9db80e962175dc79b2bca1ab9eba4e942c783dc89",
+  "visible_content": "经营对账 run 成功、对账状态结构可读、运营线 O1–O9 健康；边界：内部支付对账接口无密钥返回 403/503。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-reconcile/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-reconcile/macos/result.png"
+}

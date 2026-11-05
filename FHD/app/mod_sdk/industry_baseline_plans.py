@@ -63,6 +63,64 @@ def ensure_industries_selectable(catalog: dict[str, Any], industry_ids: set[str]
     return result
 
 
+def delivery_statuses_for_session(session_id: str) -> dict[str, str]:
+    """Read only this session's entitled, identity-matched private delivery stages."""
+    from app.application.private_mod_delivery_progress import overall_status
+    from app.application.private_mod_delivery_state import STAGES, account_projects
+    from app.enterprise.private_delivery_binding import load_session_private_delivery_binding
+    from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    try:
+        binding = load_session_private_delivery_binding(session_id)
+        uid = binding.get("market_user_id")
+        if not isinstance(uid, int) or isinstance(uid, bool) or uid <= 0:
+            return {}
+        username = str(binding.get("username") or "").strip().casefold()
+        targets: set[str] = set()
+        for mod_id in binding.get("mod_ids") or []:
+            row = delivery_for_account_custom_mod(mod_id)
+            if not row or row.get("delivery_mode") != "private_mod":
+                continue
+            owner = str(row.get("customer_account") or "").strip().casefold()
+            if owner and owner != username:
+                continue
+            if row.get("market_user_id") is not None and row["market_user_id"] != uid:
+                continue
+            targets.add(mod_id)
+        if not targets:
+            return {}
+        result: dict[str, str] = {}
+        for project in account_projects(f"market:{uid}", targets, strict=True):
+            mod_id = project.get("mod_id")
+            tracks = project.get("tracks")
+            if not isinstance(mod_id, str) or mod_id not in targets or not isinstance(tracks, dict):
+                continue
+            required = [tracks.get("modules", tracks.get("business")), tracks.get("employees")]
+            if any(
+                not isinstance(track, dict) or track.get("status") not in (*STAGES, "partial")
+                for track in required
+            ):
+                continue
+            selected = [
+                tracks[key] for key in ("modules", "business", "employees") if key in tracks
+            ]
+            if any(
+                not isinstance(track, dict) or not isinstance(track.get("nodes", {}), dict)
+                for track in selected
+            ):
+                continue
+            nodes = [node for track in selected for node in track.get("nodes", {}).values()]
+            if any(
+                not isinstance(node, dict) or node.get("status") not in STAGES for node in nodes
+            ):
+                continue
+            result[mod_id] = overall_status(project)
+        return result
+    except RECOVERABLE_ERRORS:
+        return {}
+
+
 def build_industry_baseline_plan(
     industry_id: str,
     installed_mod_ids: list[str] | None = None,
@@ -70,6 +128,7 @@ def build_industry_baseline_plan(
     entitled_mod_ids: set[str] | None = None,
     skip_account_custom_gate: bool = False,
     account_username: str = "",
+    delivery_statuses: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Assemble installation readiness for one industry and account."""
     from app.mod_sdk import industry_baseline as facade
@@ -154,6 +213,17 @@ def build_industry_baseline_plan(
         }
         if private_runtime is not None:
             entry["runtime_mod_id"] = private_runtime
+            status = (delivery_statuses or {}).get(mod_id, "unknown")
+            deferred = not entry["installed"] and status in {
+                "production",
+                "testing",
+                "acceptance",
+                "rework",
+                "partial",
+            }
+            entry.update(delivery_status=status, delivery_deferred=deferred)
+            if deferred:
+                entry["required"] = False
         return entry
 
     custom_hint, _ = facade._custom_line_spec(
@@ -235,7 +305,9 @@ def build_industry_baseline_plan(
         entry["mod_id"] for entry in flat_items if entry["required"] and not entry["installed"]
     ]
     missing_optional = [
-        entry["mod_id"] for entry in flat_items if not entry["required"] and not entry["installed"]
+        entry["mod_id"]
+        for entry in flat_items
+        if not entry["required"] and not entry["installed"] and not entry.get("delivery_deferred")
     ]
     missing_industry = [
         entry["mod_id"]
@@ -246,12 +318,15 @@ def build_industry_baseline_plan(
     missing_account_custom = [
         entry["mod_id"]
         for entry in flat_items
-        if entry["tier"] == "account_custom" and entry["required"] and not entry["installed"]
+        if entry["tier"] == "account_custom" and not entry["installed"]
     ]
+    deferred_ids = {entry["mod_id"] for entry in flat_items if entry.get("delivery_deferred")}
     seed_packages: list[dict[str, Any]] = []
     from app.mod_sdk.customer_delivery import delivery_seed_package_for_mod
 
     for mod_id in facade._dedupe(industry_mod_ids + account_custom_ids):
+        if mod_id in deferred_ids:
+            continue
         package = delivery_seed_package_for_mod(
             mod_id,
             industry_key,
@@ -300,6 +375,7 @@ def build_industry_baseline_plan(
         "account_custom_mod_ids": account_custom_ids,
         "missing_account_custom_mod_ids": missing_account_custom,
         "account_delivery_seed_packages": seed_packages,
+        "deferred_account_custom_mod_ids": sorted(deferred_ids),
         "host_baseline_ready": host_ready,
         "account_custom_ready": account_ready,
         "custom_employee_extension_mod_ids": employee_extension_ids,

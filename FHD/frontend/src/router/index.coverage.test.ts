@@ -20,6 +20,7 @@
  * 4. afterEach document title
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 
 // ── 使用 vi.hoisted 提升在 mock 工厂中引用的 mock 函数 ────
 const {
@@ -72,10 +73,14 @@ const {
   },
   mockAccountProfileStore: {
     loaded: true,
+    sessionCheckUnavailable: false,
     isAdminAccount: false,
     accountKind: 'personal' as string,
     marketIsAdmin: false,
     marketIsEnterprise: false,
+    tenantId: null as number | null,
+    userRole: '',
+    permissions: [] as string[],
     refreshFromServer: vi.fn().mockResolvedValue(undefined),
   },
   mockIsProtectedClientModId: vi.fn(() => false),
@@ -160,11 +165,14 @@ vi.mock('@/utils/desktopShell', () => ({
 
 vi.mock('@/api/auth', () => ({
   authApi: {
+    validateSession: vi.fn().mockResolvedValue({ success: true, valid: true }),
     logout: vi.fn().mockResolvedValue({ success: true }),
   },
 }))
 
 vi.mock('@/constants/platformShellMode', () => ({
+  isEnterpriseProductSkuBuild: () => false,
+  INDUSTRY_DELIVERY_ERP_MENU_KEYS: [],
   isPlatformShellModeEnabled: mockIsPlatformShellModeEnabled,
   isShellEditionBuild: () => false,
   isIndustryDeliveryRouteName: mockIsIndustryDeliveryRouteName,
@@ -201,6 +209,8 @@ vi.mock('@/constants/genericModPack', () => ({
 vi.mock('@/utils/roleMenuProfile', () => ({
   buildRoleMenuProfile: mockBuildRoleMenuProfile,
   canShowCoreMenuKey: mockCanShowCoreMenuKey,
+  UNSCOPED_HOST_BUSINESS_KEYS: new Set(['products', 'customers', 'orders', 'orders-create', 'shipment-records', 'materials', 'inventory', 'print', 'printer-list', 'template-preview', 'traditional-mode', 'approval-hub', 'tools']),
+  tenantScopedBusinessPath: () => null,
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({
@@ -288,10 +298,14 @@ function resetMockDefaults() {
   mockModsStore.mods = []
   mockModsStore.activeModId = ''
   mockAccountProfileStore.loaded = true
+  mockAccountProfileStore.sessionCheckUnavailable = false
   mockAccountProfileStore.isAdminAccount = false
   mockAccountProfileStore.accountKind = 'personal'
   mockAccountProfileStore.marketIsAdmin = false
   mockAccountProfileStore.marketIsEnterprise = false
+  mockAccountProfileStore.tenantId = null
+  mockAccountProfileStore.userRole = ''
+  mockAccountProfileStore.permissions = []
   mockAccountProfileStore.refreshFromServer.mockResolvedValue(undefined)
   mockResolvePlannerChatHomePath.mockReturnValue('/')
   mockResolvePlannerPagePath.mockImplementation((p: string) => p)
@@ -336,6 +350,54 @@ describe('router/index 覆盖率补齐', () => {
     it('/business-docking 进入 ETL 数据对接中心', async () => {
       await router.push('/business-docking')
       expect(router.currentRoute.value.name).toBe('business-docking')
+    })
+
+    it('租户成员不能直达未授权 ETL，创始人不能直达未隔离宿主产品页', async () => {
+      mockAccountProfileStore.tenantId = 7
+      mockAccountProfileStore.userRole = 'tenant:7:member'
+      await router.push('/')
+      expect(router.currentRoute.value.name).toBe('settings')
+      await router.push('/business-docking')
+      expect(router.currentRoute.value.name).toBe('settings')
+      await router.push('/products')
+      expect(router.currentRoute.value.name).toBe('settings')
+      mockAccountProfileStore.userRole = 'user'
+      await router.push('/products')
+      expect(router.currentRoute.value.name).toBe('settings')
+    })
+
+    it('冷启动直达受限页面前加载企业权限，失败时闭锁登录', async () => {
+      mockFetchProductSku.mockResolvedValue('enterprise')
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockAccountProfileStore.loaded = false
+      mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => {
+        mockAccountProfileStore.loaded = true
+        mockAccountProfileStore.tenantId = 7
+        mockAccountProfileStore.userRole = 'tenant:7:member'
+      })
+      await router.push('/orders')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('settings')
+
+      await router.push('/login')
+      mockAccountProfileStore.loaded = false
+      mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => {})
+      await router.push('/materials')
+      expect(router.currentRoute.value.name).toBe('login')
+      expect(router.currentRoute.value.query.redirect).toBe('/materials')
+    })
+
+    it('冷启动租户成员不能直达未授权核心页面', async () => {
+      mockFetchProductSku.mockResolvedValue('enterprise')
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockAccountProfileStore.loaded = false
+      mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => {
+        mockAccountProfileStore.loaded = true
+        mockAccountProfileStore.tenantId = 7
+        mockAccountProfileStore.userRole = 'tenant:7:member'
+      })
+      await router.push('/')
+      expect(router.currentRoute.value.name).toBe('settings')
     })
 
     it('/model-payment 重定向到 settings 带 section query', async () => {
@@ -482,7 +544,7 @@ describe('router/index 覆盖率补齐', () => {
       expect(freshRouter.currentRoute.value.query.redirect).toBe('/xcmax-admin')
     })
 
-    it('admin console 冷启动 profile refresh 异常时闭锁到登录页', async () => {
+    it('admin console 冷启动瞬态异常取消导航，不误称账号失效', async () => {
       mockIsAdminConsoleSpa.mockReturnValue(true)
       mockAccountProfileStore.loaded = false
       mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('network'))
@@ -490,8 +552,8 @@ describe('router/index 覆盖率补齐', () => {
       vi.resetModules()
       const { default: freshRouter } = await import('./index')
       await freshRouter.push('/')
-      expect(freshRouter.currentRoute.value.name).toBe('login')
-      expect(freshRouter.currentRoute.value.query.error).toBe('管理员会话校验失败，请重新登录')
+      expect(freshRouter.currentRoute.value.name).toBeUndefined()
+      expect(freshRouter.currentRoute.value.query.error).toBeUndefined()
     })
   })
 
@@ -769,6 +831,15 @@ describe('router/index 覆盖率补齐', () => {
       expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
     })
 
+    it('refreshes a loaded admin route in the background when the session check timed out', async () => {
+      mockAccountProfileStore.loaded = true
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      mockAccountProfileStore.isAdminAccount = true
+      await router.push('/admin/entitlements')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('admin-entitlements')
+    })
+
     it('profile refresh 异常时重定向到 chat', async () => {
       mockAccountProfileStore.loaded = false
       mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('network'))
@@ -781,6 +852,45 @@ describe('router/index 覆盖率补齐', () => {
   // 12. beforeEach 守卫 - enterprise session
   // ═══════════════════════════════════════════════════════════
   describe('beforeEach 守卫 - enterprise session', () => {
+    it.each([
+      { dwell: 1_000, latency: 80, result: 'valid', background: false, target: 'settings' },
+      { dwell: 300_001, latency: 80, result: 'valid', background: true, target: 'settings' },
+      { dwell: 300_001, latency: 450, result: 'valid', background: true, target: 'settings' },
+      { dwell: 300_001, latency: 8_000, result: 'timeout', background: true, target: 'settings' },
+      { dwell: 300_001, latency: 80, result: 'invalid', background: true, target: 'login' },
+    ])('reuses a recent enterprise session without blocking navigation: %j', async ({ dwell, latency, result, background, target }) => {
+      const cache = await vi.importActual<typeof import('@/utils/authSessionCache')>('@/utils/authSessionCache')
+      const { authApi } = await import('@/api/auth')
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+      vi.setSystemTime(new Date('2026-10-30T00:00:00Z'))
+      const probe = vi.spyOn(authApi, 'validateSession').mockImplementation(() => new Promise((resolve, reject) => {
+        setTimeout(() => result === 'timeout'
+          ? reject(Object.assign(new Error('controlled timeout'), { name: 'AbortError' }))
+          : resolve({ success: true, valid: result === 'valid' }), latency)
+      }))
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockImplementation(cache.validateEnterpriseSessionCached)
+      cache.markEnterpriseSessionValid()
+      try {
+        await router.push('/')
+        vi.setSystemTime(Date.now() + dwell)
+        const started = Date.now()
+        await router.push('/settings')
+        expect(Date.now() - started).toBe(0)
+        expect(router.currentRoute.value.name).toBe('settings')
+        expect(probe).toHaveBeenCalledTimes(background ? 1 : 0)
+        if (background) {
+          await vi.advanceTimersByTimeAsync(latency)
+          await flushPromises()
+        }
+        expect(router.currentRoute.value.name).toBe(target)
+      } finally {
+        cache.invalidateEnterpriseSessionCache()
+        probe.mockRestore()
+        vi.useRealTimers()
+      }
+    })
+
     it('enterprise + 无效 session 时重定向到 login', async () => {
       mockIsEnterpriseEdition.mockReturnValue(true)
       mockValidateEnterpriseSession.mockResolvedValue(false)
@@ -828,30 +938,125 @@ describe('router/index 覆盖率补齐', () => {
       expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
     })
 
-    it('enterprise + 有效 session + profile refresh 异常时忽略', async () => {
+    it('enterprise + 有效 session + profile refresh 异常时闭锁登录', async () => {
       mockIsEnterpriseEdition.mockReturnValue(true)
       mockValidateEnterpriseSession.mockResolvedValue(true)
       mockAccountProfileStore.loaded = false
       mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('network'))
       mockAccountProfileStore.isAdminAccount = false
       await router.push('/settings')
-      // 内部 catch 忽略异常，继续允许导航
-      expect(router.currentRoute.value.name).toBe('settings')
-    })
-
-    it('fetchProductSku 异常 + 非 enterprise 时允许导航', async () => {
-      mockFetchProductSku.mockRejectedValueOnce(new Error('network'))
-      mockFetchProductSku.mockResolvedValueOnce('generic')
-      mockIsEnterpriseEdition.mockReturnValue(false)
-      await router.push('/settings')
-      expect(router.currentRoute.value.name).toBe('settings')
-    })
-
-    it('fetchProductSku 异常 + enterprise 时重定向到 login', async () => {
-      mockFetchProductSku.mockRejectedValue(new Error('network'))
-      mockIsEnterpriseEdition.mockReturnValue(true)
-      await router.push('/settings')
       expect(router.currentRoute.value.name).toBe('login')
+    })
+
+    it.each([false, true])('SKU unavailability cancels protected navigation without changing authentication: %s', async enterprise => {
+      await router.push('/login')
+      mockFetchProductSku.mockRejectedValue(new Error('network'))
+      mockIsEnterpriseEdition.mockReturnValue(enterprise)
+      await router.push('/settings')
+      expect(router.currentRoute.value.fullPath).toBe('/login')
+      expect(router.currentRoute.value.query.error).toBeUndefined()
+    })
+
+    it.each([new Error('network'), Object.assign(new Error('timeout'), { name: 'AbortError' }), Object.assign(new Error('unavailable'), { status: 503 })])('retains the current page on transient session validation errors', async error => {
+      await router.push('/')
+      const before = router.currentRoute.value.fullPath
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockRejectedValueOnce(error)
+      await router.push('/settings')
+      expect(router.currentRoute.value.fullPath).toBe(before)
+      mockValidateEnterpriseSession.mockResolvedValue(true)
+      await router.push('/settings')
+      expect(router.currentRoute.value.name).toBe('settings')
+    })
+
+    it.each(['admin', 'enterprise', 'desktop', 'generic'])('keeps a loaded unavailable %s profile on the page and refreshes behind it', async shell => {
+      mockIsAdminConsoleSpa.mockReturnValue(shell === 'admin')
+      mockIsDesktopShell.mockReturnValue(shell === 'desktop')
+      mockIsEnterpriseEdition.mockReturnValue(shell !== 'generic')
+      mockAccountProfileStore.isAdminAccount = shell === 'admin'
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      await router.push('/settings')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('settings')
+      const calls = mockAccountProfileStore.refreshFromServer.mock.calls.length
+      mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => { mockAccountProfileStore.sessionCheckUnavailable = false })
+      await router.push('/')
+      await router.push('/settings')
+      expect(mockAccountProfileStore.refreshFromServer.mock.calls.length).toBeGreaterThan(calls)
+      expect(router.currentRoute.value.name).toBe('settings')
+    })
+
+    it.each(['admin', 'enterprise', 'desktop', 'generic'])('keeps a recovered but rejected %s profile out of protected routes', async shell => {
+      mockIsAdminConsoleSpa.mockReturnValue(shell === 'admin')
+      mockIsDesktopShell.mockReturnValue(shell === 'desktop')
+      mockIsEnterpriseEdition.mockReturnValue(shell !== 'generic')
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      mockAccountProfileStore.refreshFromServer.mockImplementation(async () => {
+        mockAccountProfileStore.sessionCheckUnavailable = false
+        mockAccountProfileStore.loaded = false
+        mockAccountProfileStore.isAdminAccount = false
+      })
+      mockValidateEnterpriseSession.mockResolvedValue(false)
+      await router.push('/settings')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('login')
+    })
+
+    it('keeps a valid session when a background refresh has not republished the profile', async () => {
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockResolvedValue(true)
+      mockAccountProfileStore.loaded = true
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      let finish!: () => void
+      mockAccountProfileStore.refreshFromServer.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve }))
+      await router.push('/settings')
+      expect(router.currentRoute.value.name).toBe('settings')
+      mockAccountProfileStore.loaded = false
+      finish()
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('settings')
+    })
+
+    it('keeps the page when the background profile refresh fails', async () => {
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockResolvedValue(true)
+      mockAccountProfileStore.loaded = true
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('timeout'))
+      await router.push('/settings')
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('settings')
+    })
+
+    it.each(['admin', 'desktop', 'enterprise', 'admin-route'] as const)('cancels navigation when an unavailable profile stays unloaded: %s', async (shell) => {
+      mockIsAdminConsoleSpa.mockReturnValue(shell === 'admin')
+      mockIsDesktopShell.mockReturnValue(shell === 'desktop')
+      mockIsEnterpriseEdition.mockReturnValue(shell === 'enterprise' || shell === 'desktop')
+      mockAccountProfileStore.loaded = false
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      mockAccountProfileStore.isAdminAccount = shell === 'admin' || shell === 'admin-route'
+      mockAccountProfileStore.refreshFromServer.mockImplementation(async () => {
+        mockAccountProfileStore.loaded = false
+        mockAccountProfileStore.sessionCheckUnavailable = true
+      })
+      await router.push(shell === 'admin-route' ? '/admin/entitlements' : '/settings')
+      expect(router.currentRoute.value.name).toBe('login')
+    })
+
+    it('supersedes a pending sidebar guard without applying its late redirect', async () => {
+      const { navigateFromSidebarKey, resetSidebarNavigationForTests } = await import('@/utils/sidebarNavigation')
+      resetSidebarNavigationForTests()
+      await router.push('/login')
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      let finish!: (valid: boolean) => void
+      mockValidateEnterpriseSession.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      const old = navigateFromSidebarKey(router, 'settings')
+      await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+      const latest = navigateFromSidebarKey(router, 'chat')
+      finish(false)
+      await Promise.all([old, latest])
+      expect(router.currentRoute.value.name).toBe('chat')
+      resetSidebarNavigationForTests()
     })
 
     it('publicAccess 路由跳过 enterprise session 检查', async () => {

@@ -1,0 +1,6 @@
+2026-09-29T13:06:01+0800 [ind-szqsm] 开始验收 ind-szqsm 奇士美专属 Mod；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:06:01+0800 [ind-szqsm] M1 failed :: 受阻：页面（/sz-qsm-pro）自述为「仓库脚手架」，完整批次处理、智能推荐等能力由客户 .xcmod 交付，本机未安装；无对应后端接口（/api/mod/sz-qsm-pro 不存在）
+2026-09-29T13:06:01+0800 [ind-szqsm] M2 failed :: 受阻：需奇士美企业账号授权（sz-qsm-pro 属 protected_client_mod_ids），SUNBIRD 账号无该权益
+2026-09-29T13:06:01+0800 [ind-szqsm] M3 failed :: 受阻：该 Mod 为受保护定制脚手架，本机无真实业务实现可验证
+2026-09-29T13:06:02+0800 [ind-szqsm] screenshot result.png
+2026-09-29T13:06:03+0800 [ind-szqsm] video operation.webm bytes=96919

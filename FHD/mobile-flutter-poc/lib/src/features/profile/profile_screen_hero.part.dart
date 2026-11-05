@@ -11,6 +11,7 @@ class _ProfileHeroCard extends StatelessWidget {
     required this.syncing,
     required this.onEdit,
     required this.onSync,
+    this.syncStatusText = '',
   });
 
   final String displayName;
@@ -21,6 +22,9 @@ class _ProfileHeroCard extends StatelessWidget {
   final bool syncing;
   final VoidCallback onEdit;
   final VoidCallback onSync;
+
+  /// 最近一次手动同步的结果；为空时显示配置的就绪文案。
+  final String syncStatusText;
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +174,10 @@ class _ProfileHeroCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      syncing ? syncingStatus : readyStatus,
+                      syncing
+                          ? syncingStatus
+                          : syncStatusText.trim().ifEmpty(readyStatus),
+                      key: const ValueKey('profile_sync_status_text'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

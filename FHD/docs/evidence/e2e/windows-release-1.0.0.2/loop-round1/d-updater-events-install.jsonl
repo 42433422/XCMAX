@@ -1,0 +1,6 @@
+{"ts":"2026-09-13T15:46:12.626Z","type":"update_available","data":{"version":"1.0.0"}}
+{"ts":"2026-09-13T15:46:19.028Z","type":"update_available","data":{"version":"1.0.0"}}
+{"ts":"2026-09-13T15:46:21.503Z","type":"download_start","data":{}}
+{"ts":"2026-09-13T15:46:22.496Z","type":"update_downloaded","data":{"version":"1.0.0"}}
+{"ts":"2026-09-13T15:47:04.322Z","type":"update_available","data":{"version":"1.0.0"}}
+{"ts":"2026-09-13T15:47:08.273Z","type":"install_start","data":{}}

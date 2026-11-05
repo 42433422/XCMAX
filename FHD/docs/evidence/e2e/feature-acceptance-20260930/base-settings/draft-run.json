@@ -1,0 +1,78 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "base-settings",
+ "name": "系统设置与偏好",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 5,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/workspace/prefs",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/workspace/prefs（写操作自动附带 CSRF）：读取工作区偏好（租户级）",
+   "expected": "读取工作区偏好（租户级）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 23ms；owner_id=tenant:1 keys=['host_pack_acknowledged', 'workflow_ai_employees']",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/preferences 请求体 {\"key\": \"acc_settings_probe\", \"value\": \"MAC验收0929-13435\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/preferences（写操作自动附带 CSRF）：写入用户偏好（接口回显写入值）",
+   "expected": "写入用户偏好（接口回显写入值）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 25ms；{\"key\": \"acc_settings_probe\", \"value\": \"MAC验收0929-13435\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/system/industry",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/system/industry（写操作自动附带 CSRF）：系统设置：当前行业配置可读",
+   "expected": "系统设置：当前行业配置可读：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 26ms；行业 饰品包装行业 config keys ['units', 'quantity_fields', 'product_fields', 'order_types', 'print_config', 'subsystems']",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "POST /api/workspace/prefs 请求体 {\"key\": \"x\", \"value\": \"y\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/workspace/prefs（写操作自动附带 CSRF）：边界：工作区偏好为只读，写入被拒",
+   "expected": "工作区级偏好只读，写入返回 405",
+   "observed": "HTTP 405 14ms；{\"success\": false, \"error_code\": \"http_405\", \"message\": \"Method Not Allowed\", \"path\": \"/api/workspace/prefs\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M5",
+   "input": "界面路由 /settings",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /settings，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /settings，页面可见 系统设置，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /settings；命中文本 ['系统设置']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 |  | SUNBIRD |  | 登录后同步修茈市场 |  | 登录 | 系统设置 | 角色与权限 | 管理本企业的角色、权限和用户分配 | 模型服务 | 钱包 · 套餐 | 模",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "base-settings",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-settings/macos/result.png",
+   "sha256": "e1d9ab5db392ec892e8634bae0c337e0cb0d6acf79ab43f7e7e8e7641c91b48d",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "base-settings",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-settings/macos/operation.webm",
+   "sha256": "74939666a661924cc5fd1f16063fea45ef1d50ade2c06fce37d1cce13cf55ea8",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/base-settings/macos/run.log",
+  "sha256": "6d68d6b89a7b64dd3e6971890e5f48edc7f81068cc5adbf99309e4c6aeea895d",
+  "bytes": 1669
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

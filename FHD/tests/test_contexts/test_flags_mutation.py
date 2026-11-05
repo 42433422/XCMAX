@@ -163,3 +163,35 @@ def test_per_context_empty_context_id():
     # 空字符串 strip().upper() 后仍是空
     assert flags.is_event_primary_enabled("") is True
     assert flags.is_event_primary_enabled("  ") is True
+
+
+@pytest.mark.parametrize("mode", ["legacy", "shadow", "canary", "primary"])
+def test_runtime_mode_normalizes_supported_modes(monkeypatch, mode):
+    monkeypatch.setenv("XCAGI_LG_RUNTIME", f"  {mode.upper()}  ")
+    assert flags.lg_runtime_mode() == mode
+
+
+def test_runtime_mode_defaults_and_rejects_unknown(monkeypatch):
+    monkeypatch.delenv("XCAGI_LG_RUNTIME", raising=False)
+    assert flags.lg_runtime_mode() == "legacy"
+    monkeypatch.setenv("XCAGI_LG_RUNTIME", "production-typo")
+    with pytest.raises(ValueError, match="XCAGI_LG_RUNTIME"):
+        flags.lg_runtime_mode()
+
+
+@pytest.mark.parametrize("ratio", ["0", "1", "0.25", " 0.75 "])
+def test_canary_ratio_includes_endpoints(monkeypatch, ratio):
+    monkeypatch.setenv("XCAGI_LG_CANARY_RATIO", ratio)
+    assert flags.lg_runtime_canary_ratio() == float(ratio)
+
+
+@pytest.mark.parametrize("ratio", ["-0.01", "1.01", "nan", "inf", "-inf", "invalid", " "])
+def test_canary_ratio_rejects_unsafe_configuration(monkeypatch, ratio):
+    monkeypatch.setenv("XCAGI_LG_CANARY_RATIO", ratio)
+    with pytest.raises(ValueError, match="XCAGI_LG_CANARY_RATIO"):
+        flags.lg_runtime_canary_ratio()
+
+
+def test_canary_ratio_default(monkeypatch):
+    monkeypatch.delenv("XCAGI_LG_CANARY_RATIO", raising=False)
+    assert flags.lg_runtime_canary_ratio() == 0.1

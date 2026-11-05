@@ -1,0 +1,28 @@
+{
+  "total": 100,
+  "collected": 100,
+  "by_status": {
+    "partial": 97,
+    "planned": 3
+  },
+  "by_method": {
+    "api": 7,
+    "ui": 88,
+    "app": 2,
+    "planned": 3
+  },
+  "by_domain": {
+    "base": 11,
+    "ai": 13,
+    "erp": 22,
+    "channel": 12,
+    "mods": 7,
+    "industry": 13,
+    "pay": 5,
+    "desktop": 12,
+    "sec": 5
+  },
+  "with_screenshot": 97,
+  "with_video": 97,
+  "with_log": 100
+}

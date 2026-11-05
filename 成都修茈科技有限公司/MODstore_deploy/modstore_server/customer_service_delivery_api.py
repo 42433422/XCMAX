@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import uuid
 from datetime import UTC, datetime
 from io import BytesIO
@@ -15,20 +14,16 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
-from modstore_server.customer_service_api import (
-    _visible_ticket_or_404,
+from modstore_server.customer_delivery_workbench_start import (
+    _start_custom_delivery_run as _start_custom_delivery_run,
 )
+from modstore_server.customer_service_api import _visible_ticket_or_404
 from modstore_server.customer_service_delivery_completion import (
     complete_delivery_if_ready,
 )
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryDecisionBody,
     CustomDeliveryInstallReceiptBody,
-)
-from modstore_server.customer_service_delivery_models import (
-    custom_delivery_brief as _custom_delivery_brief,
-)
-from modstore_server.customer_service_delivery_models import (
     custom_delivery_commerce_blockers,
     custom_delivery_crm,
 )
@@ -39,24 +34,13 @@ from modstore_server.customer_service_delivery_models import (
     custom_delivery_pricing_mode,
 )
 from modstore_server.customer_service_delivery_quality import custom_delivery_gate
-from modstore_server.customer_service_orchestrator import (
-    audit,
-    ticket_payload,
-)
+from modstore_server.customer_service_orchestrator import audit, ticket_payload
 from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import User
-from modstore_server.models_cs import (
-    CustomerServiceTicket,
-)
+from modstore_server.models_cs import CustomerServiceTicket
 
-logger = logging.getLogger(__name__)
-router = APIRouter()
+router: APIRouter = APIRouter()
 _get_current_user = get_current_user
-
-
-from modstore_server.customer_delivery_workbench_start import (
-    _start_custom_delivery_run as _start_custom_delivery_run,
-)
 
 
 async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, Any]:
@@ -66,11 +50,14 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     run_rows = [r for r in evidence.get("runs", []) if isinstance(r, dict)]
     runs: list[dict[str, Any]] = []
     latest_snapshot: dict[str, Any] = {}
+    latest_generation = ""
     for row in run_rows:
         sid = str(row.get("session_id") or "")
+        latest_generation = sid
         snapshot = (
             await get_workbench_session_snapshot(sid, int(ticket.user_id or 0)) if sid else None
         )
+        latest_snapshot = snapshot or {}
         item = dict(row)
         if snapshot:
             item["status"] = str(snapshot.get("status") or item.get("status") or "")
@@ -79,24 +66,43 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
             item["error"] = snapshot.get("error")
             item["quality_report"] = snapshot.get("quality_report")
             item["sandbox_report"] = snapshot.get("sandbox_report")
+            persisted_artifacts = snapshot.get("verified_artifacts")
             item["verified_artifacts"] = (
-                snapshot.get("verified_artifacts") or item.get("verified_artifacts") or []
+                persisted_artifacts or []
+                if evidence.get("source_mode") == "versioned_main"
+                else persisted_artifacts or item.get("verified_artifacts") or []
             )
             snapshot["verified_artifacts"] = item["verified_artifacts"]
-            latest_snapshot = snapshot
         runs.append(item)
 
     acceptance_status = str(evidence.get("acceptance_status") or "")
     accepted = acceptance_status == "accepted"
     pricing_mode = custom_delivery_pricing_mode(evidence)
     commerce_blockers = custom_delivery_commerce_blockers(evidence)
+    artifact = (
+        latest_snapshot.get("artifact") if isinstance(latest_snapshot.get("artifact"), dict) else {}
+    )
+    raw_validation = artifact.get("validation_summary")
+    validation = raw_validation if isinstance(raw_validation, dict) else {}
+
+    def quality_gate(snapshot: dict[str, Any]) -> tuple[bool, str]:
+        return custom_delivery_gate(
+            snapshot,
+            owner_id=int(ticket.user_id or 0),
+            ticket_id=int(ticket.id),
+            generation=latest_generation,
+        )
+
     if str(ticket.status or "") in {"resolved", "closed", "done"}:
         stage, label = "delivered", "已交付并上岗"
     elif (evidence.get("resolution") or {}).get("runtime_failure") and (
         evidence.get("resolution") or {}
     ).get("state") in {"queued_rework", "repair_failed"}:
-        stage, label = "rework", str(
-            (evidence.get("resolution") or {}).get("last_error") or "业务验证未通过，原单返工中"
+        stage, label = (
+            "rework",
+            str(
+                (evidence.get("resolution") or {}).get("last_error") or "业务验证未通过，原单返工中"
+            ),
         )
     elif (evidence.get("resolution") or {}).get("state") == "awaiting_runtime":
         stage, label = "delivering", "业务验证失败，等待宿主发行身份核验"
@@ -118,11 +124,18 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     elif acceptance_status == "internal_approved" and latest_snapshot:
         stage, label = "acceptance", "内部确认完成，待客户本人验收"
     elif not latest_snapshot:
-        stage, label = "queued", "已受理"
+        stage, label = (
+            ("rework", "生产会话已不可读取，请在原单返工") if run_rows else ("queued", "已受理")
+        )
     elif str(latest_snapshot.get("status") or "") == "error":
         stage, label = "rework", "生产失败，待返工"
+    elif (
+        latest_snapshot.get("delivery_source_mode") == "versioned_main"
+        and validation.get("probe_pending") is True
+    ):
+        stage, label = "production", "正式签包及业务验证中"
     elif str(latest_snapshot.get("status") or "") == "done":
-        gate_ok, _ = custom_delivery_gate(latest_snapshot)
+        gate_ok, _ = quality_gate(latest_snapshot)
         stage, label = (
             ("acceptance", "质量门通过，待您验收") if gate_ok else ("rework", "质量门未通过")
         )
@@ -130,14 +143,11 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         stage, label = "production", "生产员工制作中"
 
     gate_ok, gate_message = (
-        custom_delivery_gate(latest_snapshot)
+        quality_gate(latest_snapshot)
         if latest_snapshot
         else (False, str(evidence.get("start_error") or ""))
     )
     artifacts: list[dict[str, str]] = []
-    artifact = (
-        latest_snapshot.get("artifact") if isinstance(latest_snapshot.get("artifact"), dict) else {}
-    )
     if artifact.get("mod_id"):
         artifacts.append({"kind": "module", "id": str(artifact["mod_id"])})
     if artifact.get("pack_id"):
@@ -148,6 +158,18 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
             {
                 "kind": row["kind"],
                 "id": row["id"],
+                **{
+                    key: row[key]
+                    for key in (
+                        "version",
+                        "package_sha256",
+                        "source_mode",
+                        "source_git_sha",
+                        "source_git_tree",
+                        "source_sha256",
+                    )
+                    if row.get(key)
+                },
                 **(
                     {"source_artifact_kind": "employee"}
                     if row.get("source_employee_pack_id")
@@ -160,6 +182,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         **ticket_payload(ticket),
         "custom_delivery": {
             "kind": str(evidence.get("kind") or ""),
+            "suggested_id": str(evidence.get("suggested_id") or ""),
             "requirements": str(evidence.get("requirements") or ""),
             "acceptance_criteria": str(evidence.get("acceptance_criteria") or ""),
             "stage": stage,
@@ -234,6 +257,17 @@ async def decide_custom_delivery(
     if ticket.intent != "custom_delivery":
         raise HTTPException(404, "定制交付工单不存在")
     evidence = _custom_delivery_evidence(ticket)
+    if body.source_mode:
+        from modstore_server.customer_delivery_versioned import (
+            select_main_rework_source,
+        )
+
+        try:
+            select_main_rework_source(evidence, int(ticket.user_id), body.action)
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
     payload = await _custom_delivery_payload(ticket)
     custom = payload.get("custom_delivery") or {}
     if body.action == "accept":
@@ -416,7 +450,9 @@ async def download_custom_delivery_artifact(
         }
     )
     evidence["download_grants"] = grants[-20:]
-    from modstore_server.customer_delivery_entitlements import grant_verified_delivery_access
+    from modstore_server.customer_delivery_entitlements import (
+        grant_verified_delivery_access,
+    )
 
     grant_verified_delivery_access(db, ticket, evidence, manifest, owner_id=int(user.id))
     ticket.evidence_json = json_dumps(evidence)

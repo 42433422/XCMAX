@@ -1,0 +1,10 @@
+[06:26:51] feature=ai-chat-debug base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-chat-debug
+[06:27:03] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:27:03] case C1: passed - 对话工具目录与分类真实读取
+[06:27:03] case C2: passed - AI Planner 函数调用注册表
+[06:27:03] case C3: passed - 工具调用路由真实执行
+[06:27:03] case C4: passed - 空请求被拒（负例/边界）
+[06:27:03] case C5: passed - 未知工具被拒（负例）
+[06:27:06] case C6: passed - 对话调试工作台真实渲染
+[06:27:06] video: ai-chat-debug-web-20260929-062651.webm (944119 bytes)
+[06:27:06] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-chat-debug/log/ai-chat-debug-web-20260929-062651.log

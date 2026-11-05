@@ -8,10 +8,10 @@ import json
 import logging
 import os
 import threading
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
 
+from modstore_server.customer_issue_intake import _persist_incident
 from modstore_server.employee_executor import execute_employee_task as execute_employee_task
 from modstore_server.incident_dispatch import _dispatch_incident_body as _dispatch_incident_body
 from modstore_server.incident_dispatch import (
@@ -21,6 +21,7 @@ from modstore_server.integrations.ops_action_handlers import EVENT_TYPES
 from modstore_server.models import (
     CatalogItem,
     EmployeeTriggerBinding,
+    IncidentClaim,
     IncidentEvent,
     User,
     get_session_factory,
@@ -74,6 +75,14 @@ def _parse_binding_event_key(stored: str) -> tuple[str, str]:
     return s, ""
 
 
+def _incident_payload(row: IncidentEvent) -> Dict[str, Any]:
+    """Reject damaged event data before routing or replacing durable evidence."""
+    data = json.loads(str(row.payload_json or "{}"))
+    if not isinstance(data, dict):
+        raise ValueError(f"incident {row.id}: payload must be a JSON object")
+    return data
+
+
 def _fingerprint(payload: Dict[str, Any], source: str) -> str:
     raw = json.dumps({"s": source, "p": payload}, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:64]
@@ -122,6 +131,7 @@ def publish(
     source: str,
     fingerprint: str | None = None,
     dedupe_minutes: int = 10,
+    inbox_key: str = "",
 ) -> bool:
     """发布事件；在指定分钟窗口内按 fingerprint 去重。返回是否新写入并派发。
 
@@ -138,30 +148,11 @@ def publish(
         payload = {**(payload or {}), "_unregistered_event_type": raw_event_type}
         event_type = "incident.unknown"
     fp = fingerprint or _fingerprint(payload, source)
-    sf = get_session_factory()
-    with sf() as session:
-        cutoff = datetime.now(UTC) - timedelta(minutes=max(0, int(dedupe_minutes)))
-        old = (
-            session.query(IncidentEvent)
-            .filter(
-                IncidentEvent.event_type == event_type,
-                IncidentEvent.fingerprint == fp,
-                IncidentEvent.created_at >= cutoff,
-            )
-            .first()
-        )
-        if old:
-            return False
-        ev = IncidentEvent(
-            event_type=event_type,
-            source=source,
-            payload_json=json.dumps(payload, ensure_ascii=False)[:8000],
-            fingerprint=fp,
-            dispatched_count=0,
-        )
-        session.add(ev)
-        session.commit()
-        eid = int(ev.id)
+    eid, created = _persist_incident(event_type, payload, source, fp, dedupe_minutes, inbox_key)
+    if not created:
+        if inbox_key:
+            _schedule_incident(eid)  # Recover a crash between SQL commit and initial scheduling.
+        return False
     _publish_stream_shadow(
         event_type,
         payload if isinstance(payload, dict) else {},
@@ -199,30 +190,26 @@ def publish(
                 )
         except RECOVERABLE_ERRORS:
             logger.exception("consistency_check.completed autofix trigger failed")
-    # 默认异步派发：同步跑员工编排/LLM 会拖死 HTTP（如 AI 客服 /chat → 处理中卡住）。
-    # 测试或显式需要可设 MODSTORE_INCIDENT_SYNC_DISPATCH=1。
-    sync_dispatch = (os.environ.get("MODSTORE_INCIDENT_SYNC_DISPATCH") or "").strip().lower() in {
+    _schedule_incident(eid)
+    return True
+
+
+def _schedule_incident(event_id: int) -> None:
+    def run():
+        try:
+            _dispatch_incident(event_id)
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.exception("dispatch incident id=%s failed", event_id)
+
+    if (os.environ.get("MODSTORE_INCIDENT_SYNC_DISPATCH") or "").strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
-    }
-
-    def _run_dispatch() -> None:
-        try:
-            _dispatch_incident(eid)
-        except BOUNDARY_ERRORS:  # noqa: BLE001
-            logger.exception("dispatch incident id=%s failed", eid)
-
-    if sync_dispatch:
-        _run_dispatch()
+    }:
+        run()
     else:
-        threading.Thread(
-            target=_run_dispatch,
-            daemon=True,
-            name=f"incident-dispatch-{eid}",
-        ).start()
-    return True
+        threading.Thread(target=run, daemon=True, name=f"incident-dispatch-{event_id}").start()
 
 
 def publish_unified_incident(
@@ -280,14 +267,11 @@ def _catalog_employee_ids(session) -> set[str]:
 
 
 def _incident_event_type(event_id: int) -> str:
-    sf = get_session_factory()
-    with sf() as session:
-        ev = (
-            session.query(IncidentEvent.event_type)
-            .filter(IncidentEvent.id == int(event_id))
-            .first()
-        )
-        return str(ev[0] or "") if ev else ""
+    with get_session_factory()() as session:
+        ev = session.get(IncidentEvent, int(event_id))
+        if ev:
+            _incident_payload(ev)
+        return str(ev.event_type or "") if ev else ""
 
 
 def _incident_employee_input(
@@ -316,36 +300,62 @@ def _incident_employee_input(
 
 @platform_llm_scoped
 def _dispatch_incident(event_id: int) -> None:
-    claimed_here = False
-    try:
-        from modstore_server.node_coordinator import claim_incident_for_node
-
-        claim = claim_incident_for_node(event_id)
-        if not claim.get("claimed"):
-            logger.info(
-                "incident_bus: event_id=%s already claimed by node=%s",
-                event_id,
-                claim.get("owner"),
-            )
-            return
-        claimed_here = True
-    except RECOVERABLE_ERRORS:
-        logger.debug("incident cluster claim skipped event_id=%s", event_id, exc_info=True)
+    from modstore_server.node_coordinator import (
+        IncidentClaimLost,
+        assert_incident_claim,
+        incident_claim_scope,
+    )
 
     try:
-        _dispatch_incident_body(event_id)
-    finally:
-        if claimed_here:
-            try:
-                from modstore_server.node_coordinator import release_incident_claim
-
-                release_incident_claim(event_id)
-            except RECOVERABLE_ERRORS:
-                logger.debug(
-                    "incident cluster claim release failed event_id=%s",
-                    event_id,
-                    exc_info=True,
+        with incident_claim_scope(event_id):
+            with get_session_factory()() as session:
+                assert_incident_claim(event_id, session=session)
+                row = session.get(IncidentClaim, int(event_id), populate_existing=True)
+                if row is None:
+                    raise IncidentClaimLost("claim row unavailable")
+                reconcile = str(row.dispatch_state) in {
+                    "dispatching",
+                    "unknown",
+                    "completed",
+                }
+                if str(row.dispatch_state) in {"dispatching", "unknown"}:
+                    row.dispatch_state = "unknown"
+                    row.last_error = (
+                        "interrupted dispatch; reconcile original execution before any replay"
+                    )
+                elif not reconcile:
+                    row.dispatch_state = "dispatching"
+                session.commit()
+            if reconcile:
+                from modstore_server.incident_team_completion import (
+                    reconcile_pending_teams,
                 )
+
+                reconcile_pending_teams(event_id=int(event_id))
+                return
+            try:
+                _dispatch_incident_body(event_id)
+            except BOUNDARY_ERRORS:  # noqa: BLE001
+                with get_session_factory()() as session:
+                    assert_incident_claim(event_id, session=session)
+                    row = session.get(IncidentClaim, int(event_id), populate_existing=True)
+                    if row is None:
+                        raise IncidentClaimLost("claim row unavailable")
+                    row.dispatch_state, row.last_error = (
+                        "unknown",
+                        "dispatch raised; original attempt requires reconciliation",
+                    )
+                    session.commit()
+                raise
+            with get_session_factory()() as session:
+                assert_incident_claim(event_id, session=session)
+                row = session.get(IncidentClaim, int(event_id), populate_existing=True)
+                if row is None:
+                    raise IncidentClaimLost("claim row unavailable")
+                row.dispatch_state, row.last_error = "completed", ""
+                session.commit()
+    except IncidentClaimLost:
+        logger.info("incident_bus: no live claim event_id=%s; dispatch stopped", event_id)
 
 
 def _extract_routing_plan(exec_result: Any) -> List[Dict[str, Any]]:

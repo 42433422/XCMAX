@@ -34,6 +34,9 @@
   flex-wrap: wrap;
 }
 
+.grid-tool-file-input { display: none; }
+.grid-tool-file-name { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+
 .template-preview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

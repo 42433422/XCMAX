@@ -272,7 +272,7 @@ describe('marketAccount – fetchSessionMarketHandoff', () => {
     expect(result?.market_base_url).toBe('http://m')
   })
 
-  it('persists refresh token to localStorage', async () => {
+  it('only persists refresh token when the handoff is committed', async () => {
     localStorage.clear()
     mockApiFetch.mockResolvedValueOnce({
       ok: true,
@@ -285,7 +285,9 @@ describe('marketAccount – fetchSessionMarketHandoff', () => {
         },
       }),
     } as Response)
-    await fetchSessionMarketHandoff()
+    const handoff = await fetchSessionMarketHandoff()
+    expect(localStorage.getItem(LS_MARKET_REFRESH_TOKEN)).toBeNull()
+    persistMarketTokensFromHandoff(handoff)
     expect(localStorage.getItem(LS_MARKET_REFRESH_TOKEN)).toBe('refresh_tok')
   })
 })

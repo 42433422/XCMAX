@@ -1,0 +1,39 @@
+{
+  "_comment": "此文件为 Web 端（修茈市场）真机验收的站点身份/版本/SHA 侦察快照，由 accept-base-login-web.mjs 自动生成，请勿手改（DO NOT EDIT）。",
+  "kind": "web-identity",
+  "feature": "base-login",
+  "platform": "web",
+  "captured_at": "2026-09-24 01:54:10",
+  "entry_url": "https://xiu-ci.com/market/login",
+  "page_title": "XC AGI 市场",
+  "site_health": {
+    "ok": true,
+    "deploy_tier": "production",
+    "git_sha": "201d1f691855465f76dd53adc74c1d53ff4d9af4",
+    "release_id": "xcagi-1.0.0.1-201d1f691855465f76dd53adc74c1d53ff4d9af4",
+    "artifact_sha256": "6c11d71cb153adc10444fec73668b0eb52d08f15f0465e0c691ab22b05de3591",
+    "hostname": "VM-0-7-tencentos",
+    "tavily_configured": false,
+    "scheduler_running": false
+  },
+  "site_git_sha": "201d1f691855465f76dd53adc74c1d53ff4d9af4",
+  "site_release_id": "xcagi-1.0.0.1-201d1f691855465f76dd53adc74c1d53ff4d9af4",
+  "site_version": "1.0.0.1",
+  "market_bundle_assets": [
+    "/market/assets/index-FALH-3aL.js",
+    "/market/assets/client-BxtVyCi4.js",
+    "/market/assets/vue-flow-BzhO9OoF.js",
+    "/market/assets/vue-vendor-Cui18K2f.js",
+    "/market/assets/preload-helper-CTAeRWoV.js",
+    "/market/assets/api-CfUuGeLY.js",
+    "/market/assets/vue-flow-_6XKS09t.css",
+    "/market/assets/index-DDLG-XyS.css"
+  ],
+  "desktop_side_build_info": {
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-84a4b75445cd529a96529c938f8e88b288ab6228",
+    "gitSha": "84a4b75445cd529a96529c938f8e88b288ab6228",
+    "schema_version": 1
+  },
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0"
+}

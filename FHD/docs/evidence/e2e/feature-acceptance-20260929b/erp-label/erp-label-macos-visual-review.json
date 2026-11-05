@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-label",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "a6e8354a59f48e509c600b8ce3393a142c26ad903e9e13d393d3ff3caefc5e79",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。failed。标签输出与打印。红字「该旧业务接口尚未提供安全的租户数据隔离」，暂无已保存的标签模板，产品 0/0。生成标签 PDF 按钮在。 未通过明细：M1 failed：HTTP 403 22ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"该旧业务接口尚未提供安全的租户数据隔离\", \"path\": \"/api/print/label-jobs/products\"}；M3 failed：导航后路径 /mod/xcagi-erp-domain-bridge/print；命中文本 ['标签']；缺失 []；界面请求失败 [(403, '/api/print/label-jobs/products?keyword=&page=1&per_page=50')]；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | ；M4 failed：受阻：需要连接并选择实体标签打印机（本机未连接打印机）",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-label/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/erp-label/macos/result.png"
+}

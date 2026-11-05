@@ -49,7 +49,7 @@ def test_conscious_processor_path_used_when_handler_registered():
 
 
 def test_conscious_processor_fallback_to_unified():
-    from app.services.unified_intent_recognizer import RecognizerResult
+    from app.domain.shared_services.unified_intent_recognizer import RecognizerResult
 
     base = MagicMock()
     base.recognize.return_value = RecognizerResult(

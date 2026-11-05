@@ -1,5 +1,5 @@
 # mypy: disable-error-code="arg-type, var-annotated"
-"""Deep tests for ``app.services.unified_intent_recognizer`` covering remaining uncovered branches."""
+"""Deep tests for ``app.domain.shared_services.unified_intent_recognizer`` covering remaining uncovered branches."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.unified_intent_recognizer import (
+from app.domain.shared_services.unified_intent_recognizer import (
     RecognizerResult,
     RecognizerType,
     UnifiedIntentRecognizer,
@@ -20,7 +20,7 @@ from app.services.unified_intent_recognizer import (
 @pytest.fixture()
 def fresh_recognizer(monkeypatch: pytest.MonkeyPatch) -> UnifiedIntentRecognizer:
     """Build a recognizer with all sub-engines mocked (no real model loading)."""
-    import app.services.unified_intent_recognizer as mod
+    import app.domain.shared_services.unified_intent_recognizer as mod
 
     monkeypatch.setattr(mod, "_unified_recognizer", None)
     monkeypatch.setattr(UnifiedIntentRecognizer, "_init_recognizers", lambda self: None)
@@ -63,7 +63,7 @@ class TestRecognizeMainDeep:
             "context_inherited": False,
         }
         with patch(
-            "app.services.intent_service.quick_recognize",
+            "app.domain.shared_services.intent_service.quick_recognize",
             return_value=quick_result,
         ):
             result = fresh_recognizer.recognize("msg", context_data={"k": "v"})
@@ -78,7 +78,7 @@ class TestRecognizeMainDeep:
             "source": "quick_command",
         }
         with patch(
-            "app.services.intent_service.quick_recognize",
+            "app.domain.shared_services.intent_service.quick_recognize",
             return_value=quick_result,
         ):
             result = fresh_recognizer.recognize("msg", context_data={"k": "v"})
@@ -97,7 +97,7 @@ class TestRecognizeMainDeep:
         }
         with (
             patch(
-                "app.services.intent_service.quick_recognize",
+                "app.domain.shared_services.intent_service.quick_recognize",
                 return_value=quick_result,
             ),
             patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
@@ -241,7 +241,7 @@ class TestRecognizeMainDeep:
         fresh_recognizer._deepseek_recognizer = MagicMock()
         with (
             patch(
-                "app.services.intent_service.quick_recognize",
+                "app.domain.shared_services.intent_service.quick_recognize",
                 side_effect=RuntimeError("simulated infra failure"),
             ),
             patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
@@ -470,7 +470,7 @@ class TestSingletonAccessorsDeep:
     def test_get_unified_intent_recognizer_creates_once(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import app.services.unified_intent_recognizer as mod
+        import app.domain.shared_services.unified_intent_recognizer as mod
 
         monkeypatch.setattr(mod, "_unified_recognizer", None)
         monkeypatch.setattr(UnifiedIntentRecognizer, "_init_recognizers", lambda self: None)
@@ -479,7 +479,7 @@ class TestSingletonAccessorsDeep:
         assert r1 is r2
 
     def test_reload_unified_recognizer_no_existing(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import app.services.unified_intent_recognizer as mod
+        import app.domain.shared_services.unified_intent_recognizer as mod
 
         monkeypatch.setattr(mod, "_unified_recognizer", None)
         monkeypatch.setattr(UnifiedIntentRecognizer, "_init_recognizers", lambda self: None)
@@ -488,7 +488,7 @@ class TestSingletonAccessorsDeep:
         assert r is not None
 
     def test_reload_unified_recognizer_with_existing(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import app.services.unified_intent_recognizer as mod
+        import app.domain.shared_services.unified_intent_recognizer as mod
 
         existing = MagicMock()
         monkeypatch.setattr(mod, "_unified_recognizer", existing)

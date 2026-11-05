@@ -12,7 +12,7 @@ import pytest
 @pytest.fixture
 def db_ready():
     import modstore_server.models  # noqa: F401  (registers JobRun on Base.metadata)
-    from modstore_server.db.base import init_db
+    from modstore_server.db.db_base import init_db
 
     init_db()
     yield
@@ -45,6 +45,93 @@ def test_record_and_read_roundtrip(db_ready):
     assert entry["last_status"] == "success"
     assert entry["last_success_at"] is not None
     assert entry["runs_counted"] == 1
+
+
+@pytest.mark.parametrize("scan_limit, noisy_runs", [(2, 3), (5000, 5001)])
+def test_runtime_window_keeps_low_frequency_jobs(db_ready, scan_limit, noisy_runs):
+    from modstore_server.db.scheduler_ops import JobRun
+    from modstore_server.models import get_session_factory
+    from modstore_server.scheduler_runtime import get_runtime_status
+
+    daily, stale, noisy = (_job(name) for name in ("daily", "stale", "noisy"))
+    now = datetime.now(timezone.utc)
+    with get_session_factory()() as session:
+        session.add_all(
+            [
+                JobRun(job_id=daily, status="success", started_at=now - timedelta(minutes=30)),
+                JobRun(job_id=stale, status="success", started_at=now - timedelta(days=2)),
+            ]
+            + [JobRun(job_id=noisy, status="success", started_at=now) for _ in range(noisy_runs)]
+        )
+        session.commit()
+
+    status = get_runtime_status(scan_limit=scan_limit)
+    assert _find(status, daily)["state"] == "healthy"
+    assert _find(status, stale)["state"] == "stale"
+    assert _find(status, noisy)["runs_counted"] == scan_limit
+
+
+@pytest.mark.parametrize("latest_status, state", [("skipped", "healthy"), ("failed", "failing")])
+def test_runtime_window_keeps_last_success(db_ready, latest_status, state):
+    from modstore_server.scheduler_runtime import get_runtime_status, record_job_run
+
+    job_id = _job("last_success")
+    now = datetime.now(timezone.utc)
+    record_job_run(job_id=job_id, status="success", started_at=now)
+    for _ in range(3):
+        record_job_run(job_id=job_id, status=latest_status, started_at=now)
+
+    entry = _find(get_runtime_status(scan_limit=2), job_id)
+    assert entry["state"] == state
+    assert entry["last_success_at"] is not None
+    assert entry["runs_counted"] == 3  # bounded history plus the older successful run
+
+
+def test_runtime_read_does_not_window_rank_the_ledger(db_ready):
+    from sqlalchemy import event
+
+    from modstore_server.db.scheduler_ops import JobRun
+    from modstore_server.models import get_session_factory
+    from modstore_server.scheduler_runtime import get_runtime_status
+
+    daily = _job("daily")
+    now = datetime.now(timezone.utc)
+    with get_session_factory()() as session:
+        session.add(JobRun(job_id=daily, status="success", started_at=now - timedelta(minutes=5)))
+        session.add_all(
+            JobRun(
+                job_id=_job("noisy"), status="failed", started_at=now, error="api_key=must-not-leak"
+            )
+            for _ in range(12)
+        )
+        for _ in range(240):
+            session.add(JobRun(job_id=_job("bulk"), status="success", started_at=now))
+        session.commit()
+        engine = session.get_bind()
+
+    statements: list[str] = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        status = get_runtime_status(scan_limit=5000)
+        cold = "\n".join(statements).lower()
+        statements.clear()
+        again = get_runtime_status(scan_limit=5000)
+        warm = "\n".join(statements).lower()
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    for blob in (cold, warm):
+        assert "row_number" not in blob
+        assert " over " not in blob and " over(" not in blob
+        assert "partition by" not in blob
+    assert "scheduler_job_runs.error" not in warm
+    assert _find(status, daily)["state"] == "healthy"
+    assert _find(again, daily)["state"] == "healthy"
+    assert "must-not-leak" not in json.dumps(status)
 
 
 def test_track_job_run_failure_reraises_and_records(db_ready):
@@ -100,6 +187,111 @@ def test_employee_cron_failure_code_is_safe_for_public_runtime(db_ready):
     assert entry is not None
     assert entry["last_error_code"] == "employee_cron_unsuccessful:handler_failed:quota"
     assert "must-not-leak" not in json.dumps(entry, ensure_ascii=False)
+
+
+@pytest.mark.parametrize(
+    "error, code",
+    [
+        ("RuntimeError('api_key=must-not-leak')", "scheduler_exception:RuntimeError"),
+        ("FileNotFoundError('/private/must-not-leak')", "scheduler_exception:FileNotFoundError"),
+        (
+            "TimeoutExpired(['git', 'token=must-not-leak'], 20)",
+            "scheduler_exception:TimeoutExpired",
+        ),
+        ("HTTPError('https://user:must-not-leak@host')", "scheduler_exception:HTTPError"),
+        ("HTTPStatusError('must-not-leak')", "scheduler_exception:HTTPStatusError"),
+        ("ConnectError('must-not-leak')", "scheduler_exception:ConnectError"),
+        ("SSHException('key=must-not-leak')", "scheduler_exception:SSHException"),
+        ("JSONDecodeError('must-not-leak', 'doc', 0)", "scheduler_exception:JSONDecodeError"),
+        ("ValidationError('must-not-leak')", "scheduler_exception:ValidationError"),
+        ("must-not-leak('secret')", None),
+        ("message RuntimeError('must-not-leak')", None),
+        ("execution_timeout", "execution_timeout"),
+        ("CustomError('safe_code')", None),
+    ],
+)
+def test_non_employee_failure_exposes_only_reviewed_exception_type(db_ready, error, code):
+    from modstore_server.scheduler_runtime import get_runtime_status, record_job_run
+
+    job_id = _job("maintenance_failure")
+    record_job_run(
+        job_id=job_id, status="failed", started_at=datetime.now(timezone.utc), error=error
+    )
+    entry = _find(get_runtime_status(), job_id)
+    assert entry["state"] == "failing"
+    assert entry["last_error_code"] == code
+    assert "must-not-leak" not in json.dumps(entry)
+
+
+def test_public_exception_type_keeps_recoverable_subclass_names():
+    import subprocess
+
+    from modstore_server.scheduler_runtime import public_exception_type
+
+    assert public_exception_type(subprocess.TimeoutExpired(["git"], 1)) == "TimeoutExpired"
+    assert public_exception_type(json.JSONDecodeError("m", "d", 0)) == "JSONDecodeError"
+    assert public_exception_type(subprocess.CalledProcessError(1, ["git"])) == "CalledProcessError"
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "skipped_active_lease",
+        "skipped_cooldown",
+        "completed",
+        "completed_merged",
+        "completed_held_for_remediation",
+        "success",
+    ],
+)
+def test_daily_self_maintenance_keeps_skip_and_completed_as_success(status):
+    from modstore_server.maintenance_loop.schedule import (
+        raise_if_self_maintenance_scheduler_failed,
+    )
+
+    result = {"status": status, "error": "api_key=must-not-leak"}
+    assert raise_if_self_maintenance_scheduler_failed(result) is result
+
+
+@pytest.mark.parametrize("status", ["failed", "blocked", "kb_schema_failed", ""])
+def test_daily_self_maintenance_soft_failure_raises_without_raw_error(status):
+    from modstore_server.maintenance_loop.schedule import (
+        raise_if_self_maintenance_scheduler_failed,
+    )
+
+    with pytest.raises(RuntimeError, match=r"^self_maintenance_loop_daily_failed:") as caught:
+        raise_if_self_maintenance_scheduler_failed(
+            {"status": status, "error": "TimeoutExpired(['token=must-not-leak'], 5)"}
+        )
+    message = str(caught.value)
+    assert "must-not-leak" not in message
+    if status in {"failed", "blocked", "kb_schema_failed"}:
+        assert message.startswith(f"self_maintenance_loop_daily_failed:{status}:")
+        assert "scheduler_exception:TimeoutExpired" in message
+    else:
+        assert message.startswith("self_maintenance_loop_daily_failed:invalid_status:")
+
+
+def test_daily_self_maintenance_soft_failure_is_a_runtime_failure(db_ready):
+    from modstore_server.maintenance_loop.schedule import (
+        raise_if_self_maintenance_scheduler_failed,
+    )
+    from modstore_server.scheduler_runtime import get_runtime_status, track_job_run
+
+    job_id = _job("self_maintenance_loop_daily")
+    with pytest.raises(RuntimeError):
+        with track_job_run(job_id):
+            raise_if_self_maintenance_scheduler_failed(
+                {"status": "failed", "error": "ConnectError('api_key=must-not-leak')"}
+            )
+
+    entry = _find(get_runtime_status(), job_id)
+    assert entry is not None
+    assert entry["state"] == "failing"
+    assert entry["last_status"] == "failed"
+    assert entry["consecutive_failures"] == 1
+    assert entry["last_error_code"] == "scheduler_exception:RuntimeError"
+    assert "must-not-leak" not in json.dumps(entry)
 
 
 def test_deferred_employee_cron_is_not_reported_as_failure(db_ready):
@@ -466,7 +658,13 @@ def test_runtime_status_policy_holds_do_not_degrade_health(monkeypatch):
                     "state": "failing",
                 },
             ],
-            "summary": {"total": 2, "healthy": 0, "failing": 1, "stale": 0, "deferred": 1},
+            "summary": {
+                "total": 2,
+                "healthy": 0,
+                "failing": 1,
+                "stale": 0,
+                "deferred": 1,
+            },
         },
     )
 

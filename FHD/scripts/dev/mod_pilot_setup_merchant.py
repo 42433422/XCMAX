@@ -19,9 +19,9 @@ MODSTORE_DEPLOY = Path(
     )
 )
 MERCHANT_USER = os.environ.get("MOD_PILOT_MERCHANT_USER", "modpilot")
-MERCHANT_PASS = os.environ.get("MOD_PILOT_MERCHANT_PASSWORD", "ModPilot2026!")
+MERCHANT_PASS = os.environ.get("MOD_PILOT_MERCHANT_PASSWORD", "")
 ADMIN_USER = os.environ.get("MOD_PILOT_ADMIN_USER", "testuser")
-ADMIN_PASS = os.environ.get("MOD_PILOT_ADMIN_PASSWORD", "ModPilot2026!")
+ADMIN_PASS = os.environ.get("MOD_PILOT_ADMIN_PASSWORD", "")
 MODSTORE_PORT = os.environ.get("MODSTORE_PORT", "8788")
 FHD_API = os.environ.get("MOD_PILOT_FHD_API", "http://127.0.0.1:5000")
 BASE = f"http://127.0.0.1:{MODSTORE_PORT}"
@@ -131,6 +131,8 @@ def sync_fhd_local_user() -> None:
 def main() -> int:
     if not MODSTORE_DEPLOY.is_dir():
         raise SystemExit(f"MODstore_deploy 不存在: {MODSTORE_DEPLOY}")
+    if not MERCHANT_PASS or not ADMIN_PASS:
+        raise SystemExit("请从密钥库注入 MOD_PILOT_MERCHANT_PASSWORD / MOD_PILOT_ADMIN_PASSWORD")
     grant_admin()
     grant_merchant()
     sync_fhd_local_user()

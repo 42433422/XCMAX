@@ -1,4 +1,10 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+import pytest
+
+from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def test_workflow_registry_exposes_employee_and_business_db_tools():
@@ -51,7 +57,14 @@ def test_fallback_planner_can_route_to_named_employee_without_llm():
     assert plan.nodes[0].params["employee_id"] == "quality-validator"
 
 
-def test_fallback_planner_routes_customer_db_write_without_llm():
+@pytest.mark.parametrize(
+    "message",
+    [
+        "请把客户 星光贸易 写入数据库",
+        "新增一个客户，单位名称为 星光贸易，不填写电话和地址。只操作这条测试记录，不操作其他记录。",
+    ],
+)
+def test_fallback_planner_routes_customer_db_write_without_llm(message):
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
@@ -67,7 +80,7 @@ def test_fallback_planner_routes_customer_db_write_without_llm():
         planner = LLMWorkflowPlanner()
         plan = planner.plan(
             "u1",
-            "请把客户 星光贸易 写入数据库",
+            message,
             get_workflow_tool_registry(),
         )
 
@@ -78,6 +91,9 @@ def test_fallback_planner_routes_customer_db_write_without_llm():
     assert node.params["entity"] == "customers"
     assert node.params["operation"] == "upsert"
     assert node.params["payload"]["unit_name"] == "星光贸易"
+    if "不填写" in message:
+        assert "contact_phone" not in node.params["payload"]
+        assert "contact_address" not in node.params["payload"]
 
 
 def test_fallback_planner_routes_product_db_write_without_llm():
@@ -162,7 +178,9 @@ def test_fallback_planner_ignores_recoverable_memory_rag_error():
 
 
 def test_employee_tool_dispatch_calls_local_employee_runtime():
-    from app.services.tools_workflow_registered import execute_registered_workflow_tool
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
 
     with (
         patch(
@@ -218,7 +236,9 @@ def test_business_db_read_routes_to_business_service_router():
 
 
 def test_business_db_rejects_raw_sql():
-    from app.services.tools_workflow_registered import execute_registered_workflow_tool
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
 
     result = execute_registered_workflow_tool(
         "business_db",
@@ -236,11 +256,13 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
 
     import app.db as db_mod
     from app.application.business_db_write_verification import verify_business_db_write
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.product import Product, UomCategory, UomUnit
     from app.db.models.purchase_unit import PurchaseUnit
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
     from app.infrastructure.tenant_scope import tenant_scope
-    from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
     db_mod.dispose_and_recreate_engine()
     tables = [
@@ -371,14 +393,16 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
 
     import app.db as db_mod
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.material import Material
     from app.db.models.product import Product, UomCategory, UomUnit
     from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.shipment import ShipmentRecord
     from app.db.session import get_db
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
     from app.infrastructure.tenant_scope import tenant_scope
-    from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
     tables = [
         PurchaseUnit.__table__,
@@ -480,6 +504,15 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
                 material.tenant_id,
                 shipment.tenant_id,
             } == {1}
+
+        for entity, record_id in zip(
+            ("customers", "products", "materials", "shipment_records"), ids.values(), strict=True
+        ):
+            params = {"entity": entity, "id": record_id}
+            readback = execute_registered_workflow_tool("business_db", "read", params)
+            assert [row["id"] for row in readback["data"]] == [record_id]
+            with tenant_scope(2):
+                assert execute_registered_workflow_tool("business_db", "read", params)["data"] == []
 
         assert write(
             "customers",
@@ -609,10 +642,8 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
 
 
 def test_chat_formats_employee_and_business_db_outputs():
-    from unittest.mock import Mock
 
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)
     plan = PlanGraph(
@@ -676,13 +707,11 @@ def test_chat_formats_employee_and_business_db_outputs():
     assert "output_preview" in node_results[0]
 
 
-def test_ai_chat_dynamic_workflow_executes_employee_tool():
-    from unittest.mock import Mock
+def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_actor):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
+    actor = trusted_actor(role="admin")
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
         plan_id="p-employee",
@@ -732,7 +761,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool():
             user_id="u1",
             message="call quality-validator",
             source="pro",
-            context={},
+            context={**actor.context, "conversation_id": "u1"},
             file_context={},
         )
 
@@ -751,7 +780,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool():
             user_id="u1",
             message="确认",
             source="pro",
-            context={},
+            context={**actor.context, "conversation_id": "u1"},
             file_context={},
         )
 
@@ -768,12 +797,9 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool():
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator():
-    from unittest.mock import Mock
+def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator(local_tools):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -841,12 +867,11 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator():
     assert action == "read"
 
 
-def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator():
-    from unittest.mock import Mock
+def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator(
+    local_tools,
+):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -930,7 +955,6 @@ def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator():
 
 def test_workflow_engine_does_not_retry_non_idempotent_write():
     from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     calls = {"count": 0}
 
@@ -973,7 +997,7 @@ def test_workflow_engine_does_not_retry_non_idempotent_write():
 
 def test_workflow_engine_retries_idempotent_write_once_then_succeeds():
     from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.types import WorkflowNode
+    from app.application.workflow.workflow_types import WorkflowNode
 
     calls = {"count": 0}
 
@@ -1008,7 +1032,7 @@ def test_workflow_engine_retries_idempotent_write_once_then_succeeds():
 
 def test_agentic_loop_uses_action_name_and_disables_write_retry():
     from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.types import PlanGraph
+    from app.application.workflow.workflow_types import PlanGraph
 
     calls = []
 
@@ -1048,11 +1072,13 @@ def test_agentic_loop_uses_action_name_and_disables_write_retry():
 
 
 def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
-    from unittest.mock import Mock
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import NodeExecutionResult, PlanGraph, WorkflowRunResult
+    from app.application.workflow.workflow_types import (
+        NodeExecutionResult,
+        PlanGraph,
+        WorkflowRunResult,
+    )
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
@@ -1149,7 +1175,7 @@ def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
 
 def test_chat_formats_recovery_hint_for_non_retryable_failure():
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import NodeExecutionResult, PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import NodeExecutionResult, PlanGraph, WorkflowNode
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)
     plan = PlanGraph(
@@ -1203,13 +1229,11 @@ def test_chat_formats_recovery_hint_for_non_retryable_failure():
     assert result["data"]["data"]["workflow_status"] == {}
 
 
-def test_ai_chat_explicit_employee_intent_runs_without_pro_source():
-    from unittest.mock import Mock
+def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools, trusted_actor):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
+    actor = trusted_actor(role="admin")
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
         plan_id="p-employee-normal",
@@ -1259,7 +1283,7 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source():
             user_id="u1",
             message="调用员工 quality-validator 检查这个包",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1278,7 +1302,7 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source():
             user_id="u1",
             message="确认",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1293,13 +1317,14 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source():
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_source():
-    from unittest.mock import Mock
+def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_source(
+    local_tools,
+    trusted_actor,
+):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
+    actor = trusted_actor(role="admin")
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
         plan_id="p-db-normal",
@@ -1353,7 +1378,7 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
             user_id="u1",
             message="请把客户 星光贸易 写入数据库",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1372,7 +1397,7 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
             user_id="u1",
             message="确认",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1388,13 +1413,11 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_medium_risk_confirmation_continues_same_agent_run():
-    from unittest.mock import Mock
+def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools, trusted_actor):
 
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph, WorkflowNode
 
+    actor = trusted_actor(role="admin")
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
         plan_id="p-db-confirm-agent",
@@ -1448,7 +1471,7 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run():
             user_id="u1",
             message="请把客户 星光贸易 写入数据库",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1463,7 +1486,7 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run():
             user_id="u1",
             message="确认",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1476,3 +1499,40 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run():
     assert run.status == "completed"
     assert "step.approved" in [event.event_type for event in run.events]
     mock_dispatch.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("message", "labels", "expected"),
+    [
+        ("不填写电话和地址", ("联系电话", "电话"), ""),
+        ("不要 提供 电话 13800000000", ("电话",), ""),
+        ("地址不用填写", ("地址",), ""),
+        ("地址「上海」", ("地址",), "上海"),
+        ("联系人 张三，不填写电话和地址", ("联系人",), "张三"),
+        ("电话 13800000000", ("电话",), "13800000000"),
+        ("联系人不二", ("联系人",), "不二"),
+    ],
+)
+def test_business_fields_only_use_explicit_non_negated_assignments(message, labels, expected):
+    from app.application.workflow.planner import _extract_marked_value
+
+    assert _extract_marked_value(message, labels) == expected
+
+
+@pytest.mark.parametrize("customer_id", [10, 0, -1, "10.5", "unknown"])
+def test_customer_workflow_read_never_expands_explicit_id(monkeypatch, customer_id):
+    from unittest.mock import MagicMock
+
+    from app.application.workflow.planner import _execute_customers_tool
+
+    service = MagicMock()
+    service.get_by_id.return_value = {"success": True, "data": {"id": 10}}
+    monkeypatch.setattr("app.bootstrap.get_customer_app_service", lambda: service)
+    result = _execute_customers_tool({"id": customer_id})
+    service.get_all.assert_not_called()
+    if customer_id == 10:
+        assert result["success"] is True
+        service.get_by_id.assert_called_once_with(10)
+    else:
+        assert result["success"] is False
+        service.get_by_id.assert_not_called()

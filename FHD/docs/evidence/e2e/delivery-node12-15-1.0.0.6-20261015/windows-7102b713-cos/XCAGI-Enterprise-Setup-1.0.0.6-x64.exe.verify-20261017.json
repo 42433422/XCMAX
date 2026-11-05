@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-10-17T12:26:16+08:00",
+  "status": "SERVER_VERIFIED_PUBLIC_DOWNLOAD_VERIFIED",
+  "package": {
+    "name": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+    "version": "1.0.0.6",
+    "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+    "bytes": 331819335,
+    "sha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+    "buildRun": "local-windows-longpath-20261015-114026",
+    "authenticode": "NotSigned"
+  },
+  "serverVerification": {
+    "status": "PASS",
+    "result": "ALREADY_PRESENT_AND_IDENTICAL",
+    "verifiedAt": "2026-10-17T12:26:16+08:00",
+    "server": "119.27.178.147",
+    "path": "/var/www/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+    "bytes": 331819335,
+    "sha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+    "originalUploadedAt": "2026-10-15T22:00:01+08:00",
+    "reuploaded": false,
+    "note": "Same-name formal file already existed with identical size and sha256 (checked 12:13 and again after the 12:15 host reboot); not overwritten."
+  },
+  "publicDownloadVerification": {
+    "status": "PASS",
+    "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+    "head": "HTTP/2 200; content-length: 331819335; last-modified: Thu, 15 Oct 2026 14:00:01 GMT; etag: \"6ad0dc61-13c72947\"",
+    "contentLength": 331819335,
+    "downloadedBytes": 331819335,
+    "fullDownloadedSha256": "9D7025E9367BB934868ADB79BE7A99BBB8DAE728727AA7ACE00C492C45F40100",
+    "completedAt": "2026-10-17T12:24:02+08:00",
+    "method": "curl over HTTPS with certificate verification; transfer resumed with byte ranges (-C -) after TLS errors caused by the 12:15 host reboot; whole assembled byte stream hashed",
+    "client": "Grok Bot box (outside the server)"
+  },
+  "previousReceipt": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe.receipt.json (2026-10-15, sha256 4B9D91353EEBE14F3AB0A97D9B382856D15C43FCCE1F9E16E9D94142DFDC7C5C, unchanged)",
+  "scope": {
+    "originalPackageBytesUnchanged": true,
+    "rebuilt": false,
+    "acceptanceRerun": false,
+    "stableOtaChanged": false,
+    "publicVersionPointerChanged": false,
+    "productionApplicationChanged": false,
+    "nginxConfigurationChanged": false
+  }
+}

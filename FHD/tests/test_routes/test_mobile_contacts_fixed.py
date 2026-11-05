@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
 import json
-import sys
 from unittest.mock import MagicMock
 
 import pytest
 
 
 def _ext():
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        from app.fastapi_routes import mobile_api  # noqa: F401  触发子路由加载
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 def _user():

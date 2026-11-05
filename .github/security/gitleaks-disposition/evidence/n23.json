@@ -1,0 +1,20 @@
+{
+  "schema": "gitleaks-disposition-evidence/v1",
+  "n": 23,
+  "disposition": "false-positive",
+  "bucket": "transformers_pack",
+  "rule": "generic-api-key",
+  "path": "FHD/templates/sunbird-vue-dist/assets/js/transformers.web-Dito4dTh.js",
+  "line": 2893,
+  "commit_sha": "9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152",
+  "note": "FP proof: vendored transformers.web pack / xenova; see fp-proofs/",
+  "linked_evidence_refs": [
+    "gitleaks23/fp-proofs/transformers_n23.json",
+    "gitleaks23/fp-proofs/transformers_COMPARE.json",
+    "gitleaks23/fp-proofs/INDEX.json"
+  ],
+  "author": "codex-security-remediation",
+  "reviewer": "42433422",
+  "reviewed_at": "2026-11-01T02:00:00Z",
+  "review_due": "2027-01-30T00:00:00Z"
+}

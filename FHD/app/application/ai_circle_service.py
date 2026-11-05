@@ -10,7 +10,7 @@ from typing import Any, cast
 
 from sqlalchemy import Table, func
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS

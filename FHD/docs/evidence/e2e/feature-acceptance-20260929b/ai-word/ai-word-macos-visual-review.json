@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-word",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "4a72e5982f259f61beb32eeed3ba8c8619aae521ba32b33aeb4f97eb22bbb720",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-word/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-word/macos/result.png"
+}

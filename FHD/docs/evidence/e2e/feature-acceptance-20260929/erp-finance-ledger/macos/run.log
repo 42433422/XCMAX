@@ -1,0 +1,7 @@
+2026-09-29T07:07:59+0800 [erp-finance-ledger] 开始验收 erp-finance-ledger 财务账本与发票；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:07:59+0800 [erp-finance-ledger] M1 passed :: HTTP 200 105ms；{"id": 1, "transaction_type": "revenue", "amount": 128.5, "currency": "CNY", "reference_type": null, "reference_id": null, "journal_entry_id": null, "descriptio
+2026-09-29T07:07:59+0800 [erp-finance-ledger] M2 passed :: HTTP 200 16ms；流水 1 条
+2026-09-29T07:07:59+0800 [erp-finance-ledger] M3 passed :: HTTP 200 15ms；count=1
+2026-09-29T07:08:03+0800 [erp-finance-ledger] M4 passed :: 导航后路径 /kitten-finance；命中文本 ['财务']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告 |  | 立即开
+2026-09-29T07:08:04+0800 [erp-finance-ledger] screenshot result.png
+2026-09-29T07:08:07+0800 [erp-finance-ledger] video operation.webm bytes=238722

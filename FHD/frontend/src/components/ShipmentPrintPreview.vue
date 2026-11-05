@@ -177,6 +177,7 @@ export default {
           this.localData = {
             ...this.localData,
             ...newData,
+            products: (newData.products || this.localData.products).map((product) => ({ ...product })),
             signatures: {
               ...this.localData.signatures,
               ...(newData.signatures || {}),

@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ops-work-order",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-074224",
+  "generated_at": "2026-09-29 07:42:56",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取共享工单列表（/api/ops/autonomy/work-orders）→ 非法 limit 参数被参数校验拒绝（422）→ 非 Owner 提交 owner-decision 被越权拒绝（403）→ 无会话访问工单列表被拒（401）；并在自治审批中心页真实渲染工单审批面。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 3676,
+        "processed": 3676,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.search",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "error.occurred",
+                "evolution.index"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/ops-work-order/ops-work-order-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ops-work-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-work-order/shot/00-login-form.png",
+      "sha256": "5d5d0fa0ef69a2f5cb2e19bd14173f052035e99fe591b44f5a9a4eeaa5cde614",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-work-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-work-order/shot/W1-work-orders.png",
+      "sha256": "96e62deeaf231a6947a284d2ecf8259420b4df09393eb5f614916b4d0460ce74",
+      "visual_review": "accepted",
+      "visible_result": "「自治审批中心」页真实渲染：标题「产品问题工单审批」，副标题「共享 Work Order 与完整闸门时间线；每 30 秒刷新」，含刷新工单按钮，显示「当前没有共享工单」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-work-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-work-order/shot/W2-invalid-limit.png",
+      "sha256": "1d9ae324d45a7ebc8a8b9c0e778597abe40dabaeb682cdae3093313a499a479b",
+      "visual_review": "accepted",
+      "visible_result": "「客户交付中心」页真实渲染：Mac 主控·四设备协同，企业用户/永久购买账户/体验账户/永久待安装/定制交付工单等计数卡片（均为 0）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-work-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-work-order/shot/W3-non-owner.png",
+      "sha256": "97ac2677544c5ef19df39dfc738be4c6adcb574e1948c6bf390c9073c4f101c5",
+      "visual_review": "accepted",
+      "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块列表。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-work-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-work-order/shot/W4-unauth-denied.png",
+      "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+      "visual_review": "accepted",
+      "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何工单数据。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-work-order",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-work-order/video/ops-work-order-web-20260929-074224.webm",
+      "sha256": "469690cbb991c62c82fb993ece21fcbec0513f749868732da793790a75bb7e4a",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，30.16s，1600x1000 25fps，ffmpeg 实测）：管理员登录 → 自治审批中心 → 客户交付中心 → 服务器功能模块 → 无会话被拒，并 fetch/POST 复核工单列表与 422/403/401。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "W1",
+      "title": "共享工单列表真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器打开 /admin/autonomy-approval-hub，随后 fetch GET /api/ops/autonomy/work-orders。",
+      "expected": "HTTP 200、ok=true，返回 items 列表与整数 count。",
+      "observed": "{\"status\": 200, \"ok\": true, \"count\": 0, \"items_sample\": [], \"ui_has_approval_hub\": true, \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能力未就绪 版本检测中 平台运维 · 系统管理 自治审批中心 副窗 ◈ 工作区 3\"}",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "title": "非法 limit 参数被参数校验拒绝（负例）",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器打开 /admin/delivery-center，随后 fetch GET /api/ops/autonomy/work-orders?limit=abc。",
+      "expected": "HTTP 422、error_code=validation_error，指明 query.limit 解析失败。",
+      "observed": "{\"status\": 422, \"error_code\": \"validation_error\", \"message\": \"请求参数验证失败\", \"errors\": [{\"field\": \"query.limit\", \"message\": \"Input should be a valid integer, unable to parse string as an integer\", \"type\": \"int_parsing\"}], \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能\"}",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "title": "非 Owner 提交工单决策被越权拒绝（负例）",
+      "input": "已建立的管理员会话（当前管理员非 Owner 本人）。",
+      "actions": "浏览器打开 /admin/server-functions，随后 POST /api/ops/autonomy/work-orders/{wo_id}/owner-decision。",
+      "expected": "HTTP 403，提示仅 Owner 本人可执行工单决策。",
+      "observed": "{\"status\": 403, \"message\": \"仅 Owner 本人可执行工单决策\", \"body\": {\"success\": false, \"error_code\": \"http_403\", \"message\": \"仅 Owner 本人可执行工单决策\", \"path\": \"/api/ops/autonomy/work-orders/wo-acceptance-probe/owner-decision\"}, \"ui_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能\"}",
+      "result": "passed"
+    },
+    {
+      "id": "W4",
+      "title": "无会话访问工单列表被拒（负例）",
+      "input": "全新的无会话浏览器上下文。",
+      "actions": "在无 cookie 的上下文中 fetch GET /api/ops/autonomy/work-orders。",
+      "expected": "被拒绝（401/403），success=false，不返回工单数据。",
+      "observed": "{\"status\": 401, \"body\": {\"success\": false, \"message\": \"请先登录\"}}",
+      "result": "passed"
+    }
+  ]
+}

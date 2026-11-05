@@ -1,0 +1,109 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "gui-customer-chain",
+  "platform": "macos",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "release_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+  "session_tag": "CLEAN-GUI-20260921",
+  "artifact_under_test": {
+    "app_path": "/Applications/XCAGI.app",
+    "build_info": {
+      "gitSha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-eb07dfcf372532292dc87c187b67c0ee620640b2"
+    },
+    "installed_from": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "note": "本机 Gatekeeper 已放行过一次，故本轮复启未再弹确认框；应用被 macOS 重定位到 /private/var/folders/.../AppTranslocation/<UUID>/d/XCAGI.app，属正常行为。"
+  },
+  "steps": {
+    "G1_first_launch_login_window": {
+      "action": "open -a /Applications/XCAGI.app",
+      "observed_window_title": "XCAGI 企业版 · V1 · 登录",
+      "observed_form": "企业账号登录（账号密码 / 手机验证码 / 扫码登录）",
+      "backend_health": {
+        "status": "healthy",
+        "runtime_status": "healthy",
+        "degradedReasons": []
+      },
+      "screenshot": "gui-01-first-launch-login-window.png",
+      "verdict": "PASS"
+    },
+    "G2_gui_login_real_credentials": {
+      "method": "GUI 真实键入 + 点击登录（非 API 代打）",
+      "account": "SUNBIRD",
+      "result": "登录成功，页面离开登录态并跳转 /onboarding?step=host-pack",
+      "observed_text": [
+        "XCAGI · 创建您的数字公司",
+        "SUNBIRD的配置方案",
+        "饰品包装 · 按账号授权准备行业功能。确认后进入系统，业务资料由您决定何时导入。"
+      ],
+      "error_prompt": null,
+      "verdict": "PASS"
+    },
+    "G3_entitlement_visible_in_onboarding": {
+      "observed_available_capabilities": [
+        "考勤工作区",
+        "饰品包装品管理",
+        "客户管理",
+        "订单管理",
+        "包装标签打印",
+        "标签模板库"
+      ],
+      "screenshot": "gui-02-login-success-onboarding.png",
+      "verdict": "PASS"
+    },
+    "G4_strict_workspace_gate": {
+      "action": "点击「进入SUNBIRD工作空间」",
+      "result": "FAIL（未进入工作区，弹出「提示」对话框）",
+      "dialog_text_verbatim": "仍缺必需项：taiyangniao-pro、wechat-contacts-ai-employee\ntaiyangniao-pro：当前账号没有该客户 Mod 的私有版本；\nwechat-contacts-ai-employee：缺少 version；\nsunbird-attendance-custom 交付数据：远端 Mod 包下载失败 404: {\"detail\":\"交付种子文件缺失\"}",
+      "root_cause": {
+        "classification": "MARKET_SIDE_PROVISIONING_GAP",
+        "not_a_client_defect": true,
+        "evidence": [
+          "客户端逻辑正确：app/application/private_mod_delivery_artifacts.py:275 在市场 /v1/mod-sync/mods 私有 Mod 库中查不到 taiyangniao-pro 时抛 LookupError('当前账号没有该客户 Mod 的私有版本')。",
+          "客户端逻辑正确：同文件 277-278 行，市场返回的私有 Mod 记录缺少 version 时抛 ValueError('私有 Mod 版本信息缺失')，前端渲染为「缺少 version」。",
+          "市场端 404 由 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_part04.py:209 抛出：包记录存在、账号授权校验（403 分支）已通过，但市场 files_dir() 中缺少该种子文件。"
+        ],
+        "affected_scope": "仅 SUNBIRD 账号 + 「饰品包装」行业；该组合下账号定制 Mod 集为 [taiyangniao-pro, xcagi-core-workflow-employees, xcagi-office-employee-pack-bridge, wechat-contacts-ai-employee]，其中前两者已装、后两者需由市场私有投递。",
+        "baseline_probe": {
+          "endpoint": "GET /api/platform-shell/industry-baseline?industry_id=<行业>",
+          "通用": {"missing_required": [], "missing_account_custom": [], "full_stack_ready": true},
+          "饰品包装": {"missing_required": ["taiyangniao-pro", "wechat-contacts-ai-employee"], "missing_account_custom": ["taiyangniao-pro", "wechat-contacts-ai-employee"], "full_stack_ready": false},
+          "考勤": {"missing_required": [], "full_stack_ready": true},
+          "涂料": {"missing_required": [], "full_stack_ready": false, "industry_mod_ready": false},
+          "批发": {"missing_required": [], "full_stack_ready": true},
+          "电商": {"missing_required": [], "full_stack_ready": true},
+          "餐饮": {"missing_required": [], "full_stack_ready": true},
+          "物流": {"missing_required": [], "full_stack_ready": true}
+        }
+      },
+      "verdict": "FAIL",
+      "marked_green": false
+    },
+    "G5_workspace_entry_via_documented_bypass": {
+      "action": "点击页面自带的「先进入，稍后再设置」",
+      "result": "成功进入主工作区",
+      "observed_window_title": "智能对话 - XCAGI",
+      "observed_url": "http://127.0.0.1:17500/",
+      "observed_nav_modules": [
+        "智能对话", "考勤工作区", "信息", "智能生态", "知识库", "数据对接中心",
+        "员工工作台", "饰品包装品管理", "原材料仓库", "库存管理", "客户管理",
+        "订单管理", "出货记录", "数据来源", "包装标签打印", "标签模板库", "系统设置"
+      ],
+      "observed_brand": "饰品包装助手 / SUNBIRD",
+      "observed_status_bar": "系统正常 · 通用考勤模块 · v1.0.0.5",
+      "error_prompt": null,
+      "screenshot": "gui-03-workspace-entered.png",
+      "verdict": "PASS"
+    }
+  },
+  "not_covered": {
+    "os_level_new_user_account": "NOT_COVERED",
+    "os_level_note": "本机无 sudo 密码且无虚拟化工具（tart/utmctl/prlctl/vmrun/qemu/limactl 均缺失），无法新建 macOS 用户或 VM，因此 Secure Token / TCC 首次授权 / 钥匙串 / 登录项等 OS 级全新用户路径未覆盖。应用层全新环境（全新安装目录 + 全新数据根 + 模拟浏览器下载 quarantine）已在 round-20260921-clean-env-customer-chain-runtime.json 中覆盖。",
+    "market_private_mod_delivery": "BLOCKED（见 G4，市场侧资产缺失，非客户端缺陷）"
+  },
+  "verdict": "PASS_WITH_DOCUMENTED_GAP",
+  "verdict_note": "GUI 客户链（首启 → 登录 → 权益展示 → 进入主工作区）在真实键鼠操作下跑通；唯一未绿项为 G4 严格装包门，根因为市场侧缺失 SUNBIRD 账号的私有 Mod / 交付种子资产，客户端行为正确并给出精确错误文案，且官方旁路「先进入，稍后再设置」可正常进入工作区。",
+  "finished_at_utc": "2026-09-21T00:36:00+00:00"
+}

@@ -1,7 +1,7 @@
 # isort: skip_file
 # ruff: noqa: E402, F401
-from __future__ import annotations
 
+from __future__ import annotations
 import io
 import json
 import logging
@@ -12,7 +12,6 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
 import httpx
 from fastapi import (
     APIRouter,
@@ -26,7 +25,6 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-
 from modman.blueprint_scan import scan_fastapi_router_routes
 from modman.fhd_shell_export import write_fhd_shell_mods_json
 from modman.industry_presets import apply_industry_to_mod_dir
@@ -112,6 +110,45 @@ from modstore_server.workflow_employee_scaffold import (
     scaffold_auto_merge_default,
 )
 
+api_router = APIRouter()
+
+from modstore_server.routes_registry_merged import (
+    _read_mod_json_file as _read_mod_json_file,
+    _mod_shell_ui_row as _mod_shell_ui_row,
+    _frontend_spec_for_existing_mod as _frontend_spec_for_existing_mod,
+    health as health,
+    api_list_mods as api_list_mods,
+    api_mods_shell_ui as api_mods_shell_ui,
+    api_get_mod as api_get_mod,
+    api_authoring_extension_surface as api_authoring_extension_surface,
+    api_mod_blueprint_routes as api_mod_blueprint_routes,
+    api_mod_authoring_summary as api_mod_authoring_summary,
+    api_mod_workflow_employee_scaffold as api_mod_workflow_employee_scaffold,
+    api_export_workflow_employee_pack as api_export_workflow_employee_pack,
+    api_register_workflow_employee_catalog as api_register_workflow_employee_catalog,
+    api_patch_workflow_employee_nodes as api_patch_workflow_employee_nodes,
+    api_put_manifest as api_put_manifest,
+    api_get_mod_file as api_get_mod_file,
+    api_put_mod_file as api_put_mod_file,
+    api_create_mod as api_create_mod,
+    api_mod_ai_scaffold as api_mod_ai_scaffold,
+    api_mod_frontend_regenerate as api_mod_frontend_regenerate,
+    api_delete_mod as api_delete_mod,
+    api_import_mod as api_import_mod,
+    api_export_mod as api_export_mod,
+    api_sync_push as api_sync_push,
+    api_sync_pull as api_sync_pull,
+    api_debug_sandbox as api_debug_sandbox,
+    api_debug_focus_primary as api_debug_focus_primary,
+    api_fhd_db_tokens_status as api_fhd_db_tokens_status,
+    api_xcagi_loading_status as api_xcagi_loading_status,
+    api_xcagi_installed_mods as api_xcagi_installed_mods,
+    _include_optional as _include_optional,
+    _maybe_mount_dev_docs as _maybe_mount_dev_docs,
+    _maybe_mount_ui as _maybe_mount_ui,
+    register_all_routes as register_all_routes,
+)
+
 _TAGS = [
     {"name": "health", "description": "服务探活"},
     {
@@ -135,51 +172,6 @@ _TAGS = [
         "description": "公网机器令牌：库与 XCAGI/mods 推送/拉回（/v1/mod-sync）",
     },
 ]
-
-api_router = APIRouter()
-
-
-from modstore_server.routes_registry_part01 import (
-    _read_mod_json_file as _read_mod_json_file,
-    _mod_shell_ui_row as _mod_shell_ui_row,
-    _frontend_spec_for_existing_mod as _frontend_spec_for_existing_mod,
-    health as health,
-    get_config as get_config,
-    api_export_fhd_shell_mods as api_export_fhd_shell_mods,
-    put_config as put_config,
-    api_list_mods as api_list_mods,
-    api_mods_shell_ui as api_mods_shell_ui,
-    api_get_mod as api_get_mod,
-    api_authoring_extension_surface as api_authoring_extension_surface,
-    api_mod_blueprint_routes as api_mod_blueprint_routes,
-    api_mod_authoring_summary as api_mod_authoring_summary,
-    api_mod_workflow_employee_scaffold as api_mod_workflow_employee_scaffold,
-    api_export_workflow_employee_pack as api_export_workflow_employee_pack,
-    api_register_workflow_employee_catalog as api_register_workflow_employee_catalog,
-    api_patch_workflow_employee_nodes as api_patch_workflow_employee_nodes,
-    api_put_manifest as api_put_manifest,
-    api_get_mod_file as api_get_mod_file,
-    api_put_mod_file as api_put_mod_file,
-    api_create_mod as api_create_mod,
-    api_mod_ai_scaffold as api_mod_ai_scaffold,
-)
-
-
-from modstore_server.routes_registry_part02 import (
-    api_mod_frontend_regenerate as api_mod_frontend_regenerate,
-    api_delete_mod as api_delete_mod,
-    api_import_mod as api_import_mod,
-    api_export_mod as api_export_mod,
-    api_sync_push as api_sync_push,
-    api_sync_pull as api_sync_pull,
-    api_debug_sandbox as api_debug_sandbox,
-    api_debug_focus_primary as api_debug_focus_primary,
-    api_fhd_db_tokens_status as api_fhd_db_tokens_status,
-    api_xcagi_loading_status as api_xcagi_loading_status,
-    api_xcagi_installed_mods as api_xcagi_installed_mods,
-    _include_optional as _include_optional,
-)
-
 _OPTIONAL_MODULES = (
     "modstore_server.llm_api",
     "modstore_server.openai_llm_gateway_api",
@@ -209,11 +201,4 @@ _OPTIONAL_MODULES = (
     "modstore_server.developer_key_export_api",
     "modstore_server.webhook_subscription_api",
     "modstore_server.templates_api",
-)
-
-
-from modstore_server.routes_registry_part03 import (
-    _maybe_mount_dev_docs as _maybe_mount_dev_docs,
-    _maybe_mount_ui as _maybe_mount_ui,
-    register_all_routes as register_all_routes,
 )

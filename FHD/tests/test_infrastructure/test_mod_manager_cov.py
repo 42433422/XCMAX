@@ -1,8 +1,4 @@
-"""Branch-coverage tests for app.infrastructure.mods.mod_manager.
-
-Targets the 60 missing branches in the 84.8%-covered file.
-We never hit real filesystems for mod loading — every FS dependency is mocked.
-"""
+"""Mod manager branch regressions."""
 
 from __future__ import annotations
 
@@ -43,48 +39,30 @@ def _get_manager():
 
 
 class TestImportModBackendPy:
-    def test_returns_cached_module(self, tmp_path):
-        """If module is already in sys.modules, return it immediately."""
-        mod_path = str(tmp_path / "mymod")
-        os.makedirs(os.path.join(mod_path, "backend"), exist_ok=True)
-        py = os.path.join(mod_path, "backend", "entry.py")
-        open(py, "w").close()
+    def test_returns_cached_module(self, tmp_path, monkeypatch):
         import hashlib
 
         from app.infrastructure.mods.mod_manager import import_mod_backend_py
 
-        digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[
-            :16
-        ]
-        safe = "mymod"
-        spec_name = f"_xcagi_mod_{safe}_{digest}_entry"
+        backend = tmp_path / "backend"
+        backend.mkdir()
+        (backend / "entry.py").touch()
+        digest = hashlib.sha256(str(tmp_path).encode()).hexdigest()[:16]
         sentinel = MagicMock()
-        sys.modules[spec_name] = sentinel
-        try:
-            result = import_mod_backend_py(mod_path, "mymod", "entry")
-            assert result is sentinel
-        finally:
-            sys.modules.pop(spec_name, None)
+        monkeypatch.setitem(sys.modules, f"_xcagi_mod_mymod_{digest}_entry", sentinel)
+        assert import_mod_backend_py(str(tmp_path), "mymod", "entry") is sentinel
 
-    def test_raises_file_not_found_for_missing_stem(self, tmp_path):
+    @pytest.mark.parametrize("missing", [True, False], ids=["missing-stem", "invalid-spec"])
+    def test_invalid_import(self, tmp_path, missing):
         from app.infrastructure.mods.mod_manager import import_mod_backend_py
 
-        mod_path = str(tmp_path / "mymod")
-        os.makedirs(os.path.join(mod_path, "backend"), exist_ok=True)
-        with pytest.raises(FileNotFoundError):
-            import_mod_backend_py(mod_path, "mymod", "nonexistent")
-
-    def test_raises_import_error_when_spec_none(self, tmp_path):
-        mod_path = str(tmp_path / "mymod")
-        backend = os.path.join(mod_path, "backend")
-        os.makedirs(backend, exist_ok=True)
-        py = os.path.join(backend, "entry.py")
-        open(py, "w").close()
-        from app.infrastructure.mods.mod_manager import import_mod_backend_py
-
+        backend = tmp_path / "backend"
+        backend.mkdir()
+        if not missing:
+            (backend / "entry.py").touch()
         with patch("importlib.util.spec_from_file_location", return_value=None):
-            with pytest.raises(ImportError):
-                import_mod_backend_py(mod_path, "mymod", "entry")
+            with pytest.raises(FileNotFoundError if missing else ImportError):
+                import_mod_backend_py(str(tmp_path), "mymod", "entry")
 
 
 # ---------------------------------------------------------------------------

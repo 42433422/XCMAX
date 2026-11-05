@@ -1,0 +1,10 @@
+{
+  "source": "customer_one_sentence",
+  "wo_id": "WO-c0ffee00dead",
+  "utterance": "备份恢复失败，客户说备份文件损坏打不开了",
+  "channel": "signal_gate",
+  "captured_at": "2026-09-15T11:35:44.2810520Z",
+  "platform": "windows",
+  "product_version": "1.0.0.4",
+  "dedup_key": "c0ffee00deadbeef12345678abcdef99"
+}

@@ -1,11 +1,27 @@
 import { authApi } from '@/api/auth'
+import { ref } from 'vue'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 let cachedValid: boolean | null = null
 let cachedAt = 0
-let cacheEpoch = 0
+const cacheEpoch = ref(0)
+let validationInFlight: Promise<boolean> | null = null
 let desktopBootstrapSessionHint: boolean | null = null
+
+/** Retire work across logout/relogin as well as A -> B -> A workspace changes. */
+export function captureAuthSession(): () => boolean {
+  const session = cacheEpoch.value
+  const account = productReadAccountEpoch.value
+  return () => session === cacheEpoch.value && account === productReadAccountEpoch.value
+}
+
+export function getAuthSessionEpoch(): number {
+  return cacheEpoch.value
+}
 /** 企业版会话校验缓存：减少侧栏频繁切换时重复打 /api/auth/session/validate */
 const SESSION_TTL_MS = 5 * 60_000
+/** 空闲超过短 TTL 后，导航仍沿用最近一次成功结果，并在后台复核。 */
+const SESSION_NAV_STALE_MS = 30 * 60_000
 /**
  * This marker contains no credential and never authorizes an API request.  It
  * only lets the Electron shell render the already-known workspace while the
@@ -86,34 +102,57 @@ function resetDesktopSessionBootstrapHint(): void {
   desktopBootstrapSessionHint = null
 }
 
-function readValid(res: unknown): boolean {
+export function readValid(res: unknown): boolean {
   const r = res as { success?: boolean; valid?: boolean; data?: { valid?: boolean } }
-  return r?.success === true || r?.valid === true || r?.data?.valid === true
+  if (typeof r?.valid === 'boolean') return r.valid
+  if (typeof r?.data?.valid === 'boolean') return r.data.valid
+  if (r?.success === true) return true
+  throw new Error('会话校验暂不可用，请稍后重试')
 }
 
 export async function validateEnterpriseSessionCached(force = false): Promise<boolean> {
   const now = Date.now()
-  if (!force && cachedValid !== null && now - cachedAt < SESSION_TTL_MS) {
-    return cachedValid
+  if (!force && cachedValid === true && now - cachedAt < SESSION_TTL_MS) return true
+  if (!force && cachedValid !== null && cachedValid !== true && now - cachedAt < SESSION_TTL_MS) return cachedValid
+  if (!force && cachedValid === true && now - cachedAt < SESSION_NAV_STALE_MS) {
+    if (!validationInFlight) {
+      void validateEnterpriseSessionCached(true).then((valid) => {
+        if (valid || typeof window === 'undefined') return
+        window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
+      }).catch(() => undefined)
+    }
+    return true
   }
-  const requestEpoch = cacheEpoch
-  const res = await authApi.validateSession()
-  const valid = readValid(res)
-  if (requestEpoch !== cacheEpoch) {
-    return cachedValid === true
-  }
-  cachedValid = valid
-  cachedAt = Date.now()
-  if (valid) writeEnterpriseSessionHint(cachedAt)
-  else {
-    clearEnterpriseSessionHint()
-    clearDesktopSessionBootstrapHint()
-  }
-  return valid
+  if (validationInFlight) return validationInFlight
+  const requestEpoch = cacheEpoch.value
+  const pending = (async () => {
+    let valid: boolean
+    try { valid = readValid(await authApi.validateSession()) }
+    catch (error) {
+      const status = (error as { status?: number })?.status
+      if (status !== 401 && status !== 403) throw error
+      valid = false
+    }
+    if (requestEpoch !== cacheEpoch.value) {
+      return cachedValid === true
+    }
+    cachedValid = valid
+    cachedAt = Date.now()
+    if (valid) writeEnterpriseSessionHint(cachedAt)
+    else {
+      clearEnterpriseSessionHint()
+      clearDesktopSessionBootstrapHint()
+    }
+    return valid
+  })()
+  validationInFlight = pending
+  try { return await pending }
+  finally { if (validationInFlight === pending) validationInFlight = null }
 }
 
 export function invalidateEnterpriseSessionCache(): void {
-  cacheEpoch += 1
+  cacheEpoch.value += 1
+  validationInFlight = null
   cachedValid = null
   cachedAt = 0
   clearEnterpriseSessionHint()
@@ -122,7 +161,8 @@ export function invalidateEnterpriseSessionCache(): void {
 
 /** Login just established the cookie; avoid an immediate blocking validate round-trip. */
 export function markEnterpriseSessionValid(): void {
-  cacheEpoch += 1
+  cacheEpoch.value += 1
+  validationInFlight = null
   cachedValid = true
   cachedAt = Date.now()
   writeEnterpriseSessionHint(cachedAt)

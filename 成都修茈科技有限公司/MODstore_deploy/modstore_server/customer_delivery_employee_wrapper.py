@@ -110,7 +110,10 @@ def wrap_private_employee(source: Path, destination: Path) -> Path:
                 "source": "frontend/src/delivery-employee.js",
                 "entry": "frontend/runtime/delivery-employee.js",
                 "routes": [
-                    {"path": f"/mod/{mid}/employee", "title": original.get("name", employee_id)}
+                    {
+                        "path": f"/mod/{mid}/employee",
+                        "title": original.get("name", employee_id),
+                    }
                 ],
             }
         },

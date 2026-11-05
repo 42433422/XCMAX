@@ -7,7 +7,7 @@ export async function mount(root, sdk) {
   const title = node('h1', '太阳鸟考勤转换')
   const status = node('p', '正在读取当前账号配置…'); status.setAttribute('role', 'status')
   const output = node('div')
-  page.append(title, node('p', '使用当前账号的人员名单、模板与班制规则生成考勤表。'), status)
+  page.append(title, node('p', '在人员管理中修改导出序号并保存，转换使用当前账号的顺序、模板与班制规则。'), status)
   root.append(page)
   let policy = {}
   const controls = []
@@ -52,7 +52,9 @@ export async function mount(root, sdk) {
     const path = result.download_path
     if (typeof path !== 'string' || !path.startsWith(`/api/mod/${sdk.modId}/attendance/download?file=output-`)) throw new Error('转换结果缺少有效下载地址')
     const link = node('a', '下载转换后的考勤表'); link.href = path; link.download = ''
-    output.append(link)
+    const preview = node('ol')
+    for (const person of result.personnel_order || []) preview.append(node('li', `${person.name} · ${person.department}`))
+    output.append(link, node('h2', '导出人员顺序'), preview)
     status.textContent = `转换完成：${result.employees_matched} 人，${result.rows_used_for_template} 条考勤记录。`
   }), output)
   page.append(node('h2', '转换规则'))

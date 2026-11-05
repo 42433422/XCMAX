@@ -25,6 +25,28 @@ from modstore_server.employee_ai_scaffold import (
     _strip_json_fence,
 )
 from modstore_server.script_agent.llm_client import LlmClient
+from modstore_server.employee_ai_pipeline_merged import (
+    Intent as Intent,
+    WorkflowChoice as WorkflowChoice,
+    EmployeeConfigV2 as EmployeeConfigV2,
+    SuggestedSkill as SuggestedSkill,
+    _is_project_analysis_intent as _is_project_analysis_intent,
+    PricingHint as PricingHint,
+    _parse_json as _parse_json,
+    stage_parse_intent as stage_parse_intent,
+    stage_resolve_workflow as stage_resolve_workflow,
+    stage_design_v2 as stage_design_v2,
+    _build_employee_runtime_prompt as _build_employee_runtime_prompt,
+    _quality_gate_system_prompt as _quality_gate_system_prompt,
+    stage_suggest_skills as stage_suggest_skills,
+    stage_suggest_pricing as stage_suggest_pricing,
+    stage_assemble as stage_assemble,
+    _build_vibe_coding_prompt as _build_vibe_coding_prompt,
+    GeneratedCode as GeneratedCode,
+    stage_generate_code as stage_generate_code,
+    refine_system_prompt as refine_system_prompt,
+    run_pipeline as run_pipeline,
+)
 
 # ── system prompts ────────────────────────────────────────────────────────────
 
@@ -150,31 +172,3 @@ _SYS_REFINE_PROMPT = """你是专业 system prompt 优化助手。用户提供�
 
 
 # ── dataclasses ───────────────────────────────────────────────────────────────
-
-
-from modstore_server.employee_ai_pipeline_part01 import (
-    Intent as Intent,
-    WorkflowChoice as WorkflowChoice,
-    EmployeeConfigV2 as EmployeeConfigV2,
-    SuggestedSkill as SuggestedSkill,
-    _is_project_analysis_intent as _is_project_analysis_intent,
-    PricingHint as PricingHint,
-    _parse_json as _parse_json,
-    stage_parse_intent as stage_parse_intent,
-    stage_resolve_workflow as stage_resolve_workflow,
-    stage_design_v2 as stage_design_v2,
-    _build_employee_runtime_prompt as _build_employee_runtime_prompt,
-    _quality_gate_system_prompt as _quality_gate_system_prompt,
-    stage_suggest_skills as stage_suggest_skills,
-    stage_suggest_pricing as stage_suggest_pricing,
-    stage_assemble as stage_assemble,
-    _build_vibe_coding_prompt as _build_vibe_coding_prompt,
-    GeneratedCode as GeneratedCode,
-)
-
-
-from modstore_server.employee_ai_pipeline_part02 import (
-    stage_generate_code as stage_generate_code,
-    refine_system_prompt as refine_system_prompt,
-    run_pipeline as run_pipeline,
-)

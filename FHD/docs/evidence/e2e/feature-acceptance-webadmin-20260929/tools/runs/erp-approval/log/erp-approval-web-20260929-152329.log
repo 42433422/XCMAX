@@ -1,0 +1,9 @@
+[15:23:29] feature=erp-approval platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval
+[15:23:42] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:23:44] case AP1: passed - 审批流程真实写-读回
+[15:23:45] case AP2: passed - 审批请求真实发起与读回
+[15:23:45] case AP3: passed - 审批通过并读回 approved
+[15:23:45] case AP4: passed - 缺 flow_name/flow_key 与缺 title 被拒（负例）
+[15:23:46] case AP5: passed - 审批人与工具规则读取
+[15:23:46] video: erp-approval-web-20260929-152329.webm (1248052 bytes)
+[15:23:46] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-approval/log/erp-approval-web-20260929-152329.log

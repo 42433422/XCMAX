@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-employees-workflow",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "screenshot_sha256": "c337dfafd9f37b136b874098040f925716d936a2e72a15fd0a8d33fc227b0fe5",
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。员工空间。企业工位 1，饰品包装行业包定制。已托管副窗一键托管开。工作中最近活跃视觉全忙。待命已托管但暂无忙态。工位「考勤 AI 助手」副窗未启用，开关已关。 各步结果均为通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-employees-workflow/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-employees-workflow/macos/result.png"
+}

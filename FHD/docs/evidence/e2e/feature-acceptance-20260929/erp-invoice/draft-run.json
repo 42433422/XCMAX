@@ -1,0 +1,61 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-invoice",
+ "name": "发票与税务",
+ "platform": "macos",
+ "status": "blocked",
+ "verdict": "BLOCKED",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 0,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "访问 CRM 发票接口",
+   "actions": "尝试执行：访问 CRM 发票接口",
+   "expected": "访问 CRM 发票接口 成功",
+   "observed": "受阻：GET /api/finance/invoices/crm 返回 403「需要管理员账号登录后访问」；SUNBIRD 为普通企业账号，发票接口仅管理员可用",
+   "result": "blocked"
+  },
+  {
+   "id": "M2",
+   "input": "读取税务开票通道状态",
+   "actions": "尝试执行：读取税务开票通道状态",
+   "expected": "读取税务开票通道状态 成功",
+   "observed": "受阻：GET /api/finance/invoices/tax-channel 同样 403；本机未配置企业税号与开票证书",
+   "result": "blocked"
+  },
+  {
+   "id": "M3",
+   "input": "开具真实税务发票",
+   "actions": "尝试执行：开具真实税务发票",
+   "expected": "开具真实税务发票 成功",
+   "observed": "受阻：需企业在百望/航信等开票通道开通并配置税号与证书，本机未配置，无法真实开票",
+   "result": "blocked"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-invoice",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-invoice/macos/result.png",
+   "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-invoice",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-invoice/macos/operation.webm",
+   "sha256": "206acaa0520f84f0097ff6db2c0f41681df5fb8d1b4ce6aced0d11a2382ba91f",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-invoice/macos/run.log",
+  "sha256": "b6f7d163a4ba034edde127ad2c0c42948993da82eb1dc0a0d3357b65ef4b37d2",
+  "bytes": 883
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

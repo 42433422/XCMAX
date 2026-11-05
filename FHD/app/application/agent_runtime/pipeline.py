@@ -66,7 +66,7 @@ def recall_knowledge_context(
         base["status"] = "skipped"
         return base
     try:
-        from app.application.dataset_rag_app_service_part05 import (
+        from app.application.dataset_rag_app_service import (
             get_dataset_rag_app_service,
         )
 
@@ -213,7 +213,7 @@ def _remember_short_term(
     *, session_id: str, user_id: str, task: str, summary: str, metadata_json: str
 ) -> bool:
     try:
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         if task:

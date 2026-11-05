@@ -9,7 +9,7 @@ from app.application.tools.workflow import execute_workflow_tool, get_workflow_t
 from app.domain.context.session_context import (
     merge_system_prompt,
 )
-from app.services.tools_workflow_registered import (
+from app.domain.shared_services.tools_workflow_registered import (
     _REGISTERED_WORKFLOW_ROUTERS,
     execute_registered_workflow_tool,
 )

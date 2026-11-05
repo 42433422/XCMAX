@@ -1,0 +1,208 @@
+{
+  "step": "template_create_via_ui",
+  "actions": [
+    {
+      "at": "/orders/create",
+      "empty_state": {
+        "text": "选择发货单模板发货单模板-- 请选择模板 -- 暂无可用发货单模板：请点下方「模板编辑」上传贵司出货单 Excel（表头需含必备词条），保存后回到本页刷新模板列表。 刷新模板列表",
+        "option_count": 1,
+        "has_hint": true
+      },
+      "state": {
+        "url": "http://127.0.0.1:17500/orders/create",
+        "title": "新建业务单据 - XCAGI",
+        "h1": "新建发货单",
+        "dialogs": []
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-01-create-order-entry.png",
+      "bytes": 353057
+    },
+    {
+      "click": "模板编辑",
+      "label": "模板编辑",
+      "rect": {
+        "x": 1000.5,
+        "y": 781.328125,
+        "w": 178,
+        "h": 51.59375,
+        "text": "模板编辑"
+      }
+    },
+    {
+      "after": {
+        "url": "http://127.0.0.1:17500/template-preview?scope=orders",
+        "title": "模板预览 - XCAGI",
+        "h1": "模板预览",
+        "dialogs": []
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-02-template-page.png",
+      "bytes": 416796
+    },
+    {
+      "click": "创建模板",
+      "label": "创建模板",
+      "rect": {
+        "x": 1158.5,
+        "y": 148.1875,
+        "w": 99,
+        "h": 34,
+        "text": "创建模板"
+      }
+    },
+    {
+      "create_modal_open": true,
+      "state": {
+        "url": "http://127.0.0.1:17500/template-preview?scope=orders",
+        "title": "模板预览 - XCAGI",
+        "h1": "模板预览",
+        "dialogs": []
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-03-create-modal.png",
+      "bytes": 292226
+    },
+    {
+      "type_name": "客户送货单模板-UI"
+    },
+    {
+      "set_file": true,
+      "file": "客户送货单模板-标准.xlsx"
+    },
+    {
+      "selected_file_visible": true
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-04-file-chosen.png",
+      "bytes": 292247
+    },
+    {
+      "click": "下一步",
+      "label": "下一步",
+      "rect": {
+        "x": 881.0546875,
+        "y": 758.296875,
+        "w": 95.890625,
+        "h": 34,
+        "text": "下一步"
+      }
+    },
+    {
+      "step2_reached": true
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-05-step2-fields.png",
+      "bytes": 271737
+    },
+    {
+      "click": "保存模板",
+      "label": "保存模板",
+      "rect": {
+        "x": 872,
+        "y": 757.296875,
+        "w": 114,
+        "h": 34,
+        "text": "保存模板"
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-06-saved.png",
+      "bytes": 222016
+    }
+  ],
+  "verdict": "PASS",
+  "empty_state": {
+    "text": "选择发货单模板发货单模板-- 请选择模板 -- 暂无可用发货单模板：请点下方「模板编辑」上传贵司出货单 Excel（表头需含必备词条），保存后回到本页刷新模板列表。 刷新模板列表",
+    "option_count": 1,
+    "has_hint": true
+  },
+  "dialog_after_save": {
+    "title": "提示",
+    "message": "模板保存成功！",
+    "buttons": [
+      "确定"
+    ]
+  },
+  "templates_after": [
+    {
+      "id": "db:1",
+      "name": "客户送货单模板-UI",
+      "category": "excel",
+      "scope": "orders",
+      "source": "db"
+    },
+    {
+      "id": "seed:customer-ledger",
+      "name": "客户资料初始化表",
+      "category": "excel",
+      "source": "builtin_seed"
+    },
+    {
+      "id": "seed:product-ledger",
+      "name": "产品资料初始化表",
+      "category": "excel",
+      "source": "builtin_seed"
+    },
+    {
+      "id": "seed:sales-order",
+      "name": "销售订单标准表",
+      "category": "excel",
+      "source": "builtin_seed"
+    },
+    {
+      "id": "seed:shipment",
+      "name": "出货记录初始化表",
+      "category": "excel",
+      "source": "builtin_seed"
+    },
+    {
+      "id": "seed:inventory",
+      "name": "库存盘点表",
+      "category": "excel",
+      "source": "builtin_seed"
+    },
+    {
+      "id": "seed:purchase-request",
+      "name": "采购申请表",
+      "category": "excel",
+      "source": "builtin_seed"
+    },
+    {
+      "id": "seed:quotation",
+      "name": "客户报价单",
+      "category": "excel",
+      "source": "builtin_seed"
+    },
+    {
+      "id": "seed:reconciliation",
+      "name": "客户对账单",
+      "category": "excel",
+      "source": "builtin_seed"
+    },
+    {
+      "id": "seed:sales-contract",
+      "name": "销售合同（通用）",
+      "category": "word",
+      "source": "builtin_seed"
+    },
+    {
+      "id": "seed:work-report",
+      "name": "工作报告（通用）",
+      "category": "word",
+      "source": "builtin_seed"
+    }
+  ],
+  "created": [
+    {
+      "id": "db:1",
+      "name": "客户送货单模板-UI",
+      "category": "excel",
+      "scope": "orders",
+      "source": "db"
+    }
+  ]
+}

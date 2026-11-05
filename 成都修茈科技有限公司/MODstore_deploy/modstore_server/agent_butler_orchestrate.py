@@ -38,9 +38,7 @@ async def _run_butler_orchestrate_pipeline(
 ) -> None:
     """异步管线主体，由 butler_orchestrate 路由用 asyncio.create_task 启动。"""
     from modstore_server.models import User, get_session_factory
-    from modstore_server.workbench_api import (
-        _fail_session,
-    )
+    from modstore_server.workbench_api import _fail_session
 
     target_type = str(payload.get("target_type") or "mod").strip()
     target_id = str(payload.get("target_id") or "").strip()

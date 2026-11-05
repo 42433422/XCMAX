@@ -225,11 +225,16 @@ def _register_scheduler_phase_02():
         try:
 
             def _run() -> None:
-                from modstore_server.self_maintenance_loop_runner import (
+                from modstore_server.maintenance_loop.coordinator import (
                     run_self_maintenance_loop,
                 )
+                from modstore_server.maintenance_loop.schedule import (
+                    raise_if_self_maintenance_scheduler_failed,
+                )
 
-                result = run_self_maintenance_loop(triggered_by="scheduler")
+                result = raise_if_self_maintenance_scheduler_failed(
+                    run_self_maintenance_loop(triggered_by="scheduler")
+                )
                 _facade().logger.info("self-maintenance loop finished: %s", result)
 
             _facade()._run_tracked_scheduler_job("self_maintenance_loop_daily", _run)
@@ -237,7 +242,7 @@ def _register_scheduler_phase_02():
             _facade().logger.exception("self-maintenance loop job failed")
 
     try:
-        from modstore_server.self_maintenance_loop_runner import (
+        from modstore_server.maintenance_loop.schedule import (
             cron_trigger_for_self_maintenance,
         )
 
@@ -258,7 +263,7 @@ def _register_scheduler_phase_02():
         try:
 
             def _run() -> None:
-                from modstore_server.self_maintenance_loop_runner import (
+                from modstore_server.maintenance_loop.schedule import (
                     record_self_maintenance_heartbeat,
                 )
 

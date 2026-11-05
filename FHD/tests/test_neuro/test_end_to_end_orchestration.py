@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 
 # ---------------------------------------------------------------------------
@@ -458,7 +458,7 @@ class TestPurchaseServicePublishesInboundCreated:
         # tests/test_services/test_purchase_service.py 单独 collect 也会失败），
         # 在不能完成包级导入的环境下跳过本用例，不影响其它链路覆盖。
         try:
-            from app.services.purchase_service import PurchaseService
+            from app.domain.shared_services.purchase_service import PurchaseService
         except ImportError:  # pragma: no cover - 环境受限
             pytest.skip("app.services 包级循环导入不可用，跳过 PurchaseService 集成用例")
 
@@ -489,8 +489,8 @@ class TestPurchaseServicePublishesInboundCreated:
         # 让 _update_order_received_quantity 跳过
         mock_session.execute = MagicMock()
 
-        with patch("app.services.purchase_service.get_db", return_value=mock_session):
-            with patch("app.services.purchase_service.InventoryService") as MockInv:
+        with patch("app.domain.shared_services.purchase_service.get_db", return_value=mock_session):
+            with patch("app.domain.shared_services.purchase_service.InventoryService") as MockInv:
                 MockInv.return_value.inventory_in = MagicMock(
                     return_value={"success": True, "message": "ok"}
                 )

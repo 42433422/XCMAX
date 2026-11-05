@@ -120,98 +120,89 @@ def record_tool_usage(
 def refund_tool_usage(
     *, usage_key: str = "", usage_id: str = "", refund_key: str = "", reason: str = ""
 ) -> dict[str, Any]:
-    """Mark a tool usage entry as refunded/compensated and restore local wallet units."""
-    wanted_key = str(usage_key or "").strip()
-    wanted_id = str(usage_id or "").strip()
-    key = str(refund_key or wanted_key or wanted_id or f"refund_{uuid.uuid4().hex}").strip()
-    now = _facade()._utc_iso()
-    with _facade()._ledger_lock:
-        state = _facade()._load_usage_state()
-        entries: list[dict[str, Any]] = state.setdefault("entries", [])
-        target: dict[str, Any] | None = None
-        for entry in entries:
-            if wanted_key and str(entry.get("usage_key") or "") == wanted_key:
-                target = entry
-                break
-            if wanted_id and str(entry.get("usage_id") or "") == wanted_id:
-                target = entry
-                break
-        if target is None:
-            return {
-                "success": False,
-                "refund_status": "usage_not_found",
-                "usage_key": wanted_key,
-                "usage_id": wanted_id,
-            }
-        existing_refund = target.get("refund") if isinstance(target.get("refund"), dict) else {}
-        if existing_refund:
-            return dict(target)
-        cost_units = _facade()._coerce_int(target.get("cost_units"))
-        wallet_debit = (
-            target.get("wallet_debit") if isinstance(target.get("wallet_debit"), dict) else {}
-        )
-        billing_source = str(target.get("billing_source") or "")
-        uid = _facade()._wallet_user_id(str(target.get("user_id") or ""))
-        refund = {
-            "refund_key": key,
-            "reason": str(reason or ""),
-            "cost_units": max(cost_units, 0),
-            "created_at": now,
+    """Refund once, atomically with a local wallet or via stable market keys."""
+    mu = _facade()
+    wanted_key, wanted_id = str(usage_key or "").strip(), str(usage_id or "").strip()
+    with mu._usage_db() as db:
+        row = db.execute(
+            "SELECT usage_key FROM entries WHERE usage_key = ? OR usage_id = ? LIMIT 1",
+            (wanted_key, wanted_id or None),
+        ).fetchone()
+    if row is None:
+        return {
+            "success": False,
+            "refund_status": "usage_not_found",
+            "usage_key": wanted_key,
+            "usage_id": wanted_id,
         }
-        not_charged = cost_units <= 0 or str(target.get("billing_status") or "") in {
-            "insufficient_balance",
-            "market_debit_failed",
-        }
-        if not_charged:
-            refund.update({"status": "not_charged", "user_id": uid})
-        if not isinstance(wallet_debit, dict):
-            wallet_debit = {}
-        if not_charged:
-            pass
-        elif (
-            str(wallet_debit.get("status") or "") == "debited"
-            and billing_source == "local_model_wallet"
-        ):
-            wallets: dict[str, Any] = state.setdefault("wallets", {})
-            wallet = _facade()._wallet_snapshot(wallets, uid) or {
+    key = row[0]
+    with mu._usage_key_lock(key):
+        with mu._usage_db(write=True) as db:
+            target, state = mu._read_entry(db, key)
+            if state != "complete":
+                return {**target, "refund_status": "debit_pending"}
+            existing = target.get("refund") or {}
+            if existing and existing.get("status") != "refund_pending":
+                return dict(target)
+            previous = dict(target)
+            uid = mu._wallet_user_id(target.get("user_id") or "")
+            cost = mu._coerce_int(target.get("cost_units"))
+            debit = target.get("wallet_debit") or {}
+            refund = dict(existing) or {
+                "refund_key": str(
+                    refund_key or wanted_key or wanted_id or f"refund_{uuid.uuid4().hex}"
+                ),
+                "reason": str(reason or ""),
+                "cost_units": max(cost, 0),
+                "created_at": mu._utc_iso(),
                 "user_id": uid,
-                "balance_units": 0,
             }
-            balance_before = _facade()._coerce_int(wallet.get("balance_units"))
-            balance_after = balance_before + cost_units
-            wallet_row = dict(wallet)
-            wallet_row["user_id"] = uid
-            wallet_row["balance_units"] = balance_after
-            wallet_row["updated_at"] = now
-            wallets[uid] = wallet_row
-            refund.update(
-                {
-                    "status": "refunded",
-                    "user_id": uid,
-                    "balance_before_units": balance_before,
-                    "balance_after_units": balance_after,
-                }
+            market = False
+            if cost <= 0 or target.get("billing_status") in {
+                "insufficient_balance",
+                "market_debit_failed",
+            }:
+                refund["status"] = "not_charged"
+            elif (
+                debit.get("status") == "debited"
+                and target.get("billing_source") == "local_model_wallet"
+            ):
+                wallet = mu._read_wallet(db, uid) or {"user_id": uid, "balance_units": 0}
+                before = mu._coerce_int(wallet.get("balance_units"))
+                wallet.update(balance_units=before + cost, updated_at=mu._utc_iso())
+                mu._save_wallet(db, uid, wallet)
+                refund.update(
+                    status="refunded",
+                    balance_before_units=before,
+                    balance_after_units=before + cost,
+                )
+            elif debit.get("status") == "audit_only":
+                refund["status"] = "audit_only"
+            elif target.get("billing_source") == "market_wallet":
+                market = True
+                refund["status"] = "refund_pending"
+            else:
+                refund["status"] = "not_required"
+            target.update(
+                refund=refund, refund_status=refund["status"], refunded_at=refund["created_at"]
             )
-        elif str(wallet_debit.get("status") or "") == "audit_only":
-            refund.update({"status": "audit_only", "user_id": uid})
-        elif billing_source == "market_wallet":
-            amount_yuan = wallet_debit.get(
-                "amount_yuan"
-            ) or _facade()._market_amount_for_cost_units(cost_units)
-            (refund_status, market_refund) = _facade()._apply_market_wallet_refund(
+            mu._save_entry(db, target, previous=previous, storage_key=key)
+        if market:
+            status, result = mu._apply_market_wallet_refund(
                 user_id=uid,
-                hold_no=str(wallet_debit.get("hold_no") or ""),
-                amount_yuan=amount_yuan,
-                refund_key=key,
-                reason=reason,
+                hold_no=str(debit.get("hold_no") or ""),
+                amount_yuan=debit.get("amount_yuan") or mu._market_amount_for_cost_units(cost),
+                refund_key=refund["refund_key"],
+                reason=refund["reason"],
+                request=target.get("market_request")
+                or {"market_base_url": debit.get("market_base_url") or mu._market_base_url()},
             )
-            refund.update(market_refund)
-            refund["status"] = refund_status
-        else:
-            refund.update({"status": "not_required", "user_id": uid})
-        target["refund"] = refund
-        target["refund_status"] = refund.get("status")
-        target["refunded_at"] = now
-        state["summary"] = _facade()._usage_summary(entries)
-        _facade()._atomic_write(_facade().model_usage_ledger_path(), state)
+            with mu._usage_db(write=True) as db:
+                target, _ = mu._read_entry(db, key)
+                if target["refund"]["status"] != "refund_pending":
+                    return dict(target)
+                previous = dict(target)
+                refund = {**target["refund"], **result, "status": status}
+                target.update(refund=refund, refund_status=status)
+                mu._save_entry(db, target, previous=previous, storage_key=key)
         return dict(target)

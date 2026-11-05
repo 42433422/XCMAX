@@ -11,6 +11,11 @@ from fastapi.testclient import TestClient
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
 
+@pytest.fixture(autouse=True)
+def _explicit_gateway_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XCAGI_TRUST_DATASET_ACCESS_HEADERS", "1")
+
+
 def _client() -> TestClient:
     from app.fastapi_routes.knowledge_v1 import router
 
@@ -41,8 +46,7 @@ def _dataset_headers() -> dict[str, str]:
 
 
 def test_dataset_query_route_executes_dataset_rag_tool_through_agent(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)
@@ -236,6 +240,7 @@ def test_dataset_mutation_routes_execute_dataset_rag_tools_through_agent(
     cost_units: int,
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
+    local_tools,
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)

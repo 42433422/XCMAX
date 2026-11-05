@@ -365,7 +365,9 @@ def _parse_datetime(value: Any) -> datetime:
 
 
 def _entity_node_id(entity_type: str, name: str) -> str:
-    digest = hashlib.sha1(f"{entity_type}:{name.casefold()}".encode()).hexdigest()[:14]
+    digest = hashlib.sha1(
+        f"{entity_type}:{name.casefold()}".encode(), usedforsecurity=False
+    ).hexdigest()[:14]
     return f"entity:{digest}"
 
 

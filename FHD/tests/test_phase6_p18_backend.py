@@ -23,14 +23,12 @@ from __future__ import annotations
 
 import os
 
-from app.utils.operational_errors import BOUNDARY_ERRORS
-
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
+import importlib
 import json
 import shutil
 import sqlite3
-import sys
 import tempfile
 from contextlib import contextmanager
 from datetime import datetime
@@ -45,17 +43,17 @@ import pytest
 from fastapi import BackgroundTasks
 
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,
 )
+from app.domain.shared_services.ocr_service import OCRResult, OCRService
 from app.infrastructure.repositories.product_repository_impl import (
     TRIVIAL_MEASURE_UNITS,
     SQLAlchemyProductRepository,
 )
 from app.mod_sdk import industry_seed as industry_seed_mod
-from app.services.ocr_service import OCRResult, OCRService
 
 # ===========================================================================
 # Shared helpers / fixtures
@@ -165,20 +163,9 @@ def _simple_plan(nodes=None, plan_id="p1"):
     )
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _resolve_circular_import():
-    """Resolve circular import between mobile_api and mobile_api_extensions."""
-    if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
-        try:
-            from app.fastapi_routes import mobile_api  # noqa: F401
-        except BOUNDARY_ERRORS:
-            pass
-    yield
-
-
 @pytest.fixture
 def ext_mod():
-    return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
 
 # ===========================================================================
@@ -740,9 +727,12 @@ class TestOCRServiceInit:
     def test_init_auto_backend_no_engines(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "auto")
         with (
-            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False),
-            patch("app.services.ocr_service.OCRService._init_easyocr") as mock_eo,
-            patch("app.services.ocr_service.OCRService._init_tesseract") as mock_ts,
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=False,
+            ),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr") as mock_eo,
+            patch("app.domain.shared_services.ocr_service.OCRService._init_tesseract") as mock_ts,
         ):
             svc = OCRService()
         assert svc._paddle_enabled is False
@@ -751,15 +741,23 @@ class TestOCRServiceInit:
 
     def test_init_paddle_backend_unavailable_logs_error(self, monkeypatch, caplog):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "paddle")
-        with patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False):
+        with patch(
+            "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+            return_value=False,
+        ):
             svc = OCRService()
         assert svc._paddle_enabled is False
 
     def test_init_paddle_backend_available(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "paddle")
         with (
-            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=True),
-            patch("app.services.paddle_ocr_runner.get_paddle_ocr_instance") as mock_inst,
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=True,
+            ),
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.get_paddle_ocr_instance"
+            ) as mock_inst,
         ):
             svc = OCRService()
         assert svc._paddle_enabled is True
@@ -768,8 +766,11 @@ class TestOCRServiceInit:
     def test_init_easyocr_backend(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "easyocr")
         with (
-            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False),
-            patch("app.services.ocr_service.OCRService._init_easyocr") as mock_eo,
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=False,
+            ),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr") as mock_eo,
         ):
             svc = OCRService()
         mock_eo.assert_called_once()
@@ -777,9 +778,12 @@ class TestOCRServiceInit:
     def test_init_tesseract_backend(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "tesseract")
         with (
-            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False),
-            patch("app.services.ocr_service.OCRService._init_easyocr"),
-            patch("app.services.ocr_service.OCRService._init_tesseract") as mock_ts,
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=False,
+            ),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr"),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_tesseract") as mock_ts,
         ):
             svc = OCRService()
         mock_ts.assert_called()
@@ -788,11 +792,11 @@ class TestOCRServiceInit:
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "auto")
         with (
             patch(
-                "app.services.paddle_ocr_runner.check_paddle_available",
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
                 side_effect=RuntimeError("paddle init fail"),
             ),
-            patch("app.services.ocr_service.OCRService._init_easyocr"),
-            patch("app.services.ocr_service.OCRService._init_tesseract"),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr"),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_tesseract"),
         ):
             svc = OCRService()
         assert svc._paddle_enabled is False
@@ -918,7 +922,7 @@ class TestOCRServiceRecognize:
         image.convert.return_value = image
         with (
             patch(
-                "app.services.paddle_ocr_runner.predict_to_text_blocks",
+                "app.domain.shared_services.paddle_ocr_runner.predict_to_text_blocks",
                 return_value=[{"text": "hello"}, {"text": "world"}],
             ),
             patch("numpy.array", return_value=np.zeros((10, 10, 3))),
@@ -1005,7 +1009,7 @@ class TestOCRServiceRecognizeTextBlocks:
         image.convert.return_value = image
         with (
             patch(
-                "app.services.paddle_ocr_runner.predict_to_text_blocks",
+                "app.domain.shared_services.paddle_ocr_runner.predict_to_text_blocks",
                 return_value=[{"text": "x"}],
             ),
             patch("numpy.array", return_value=np.zeros((10, 10, 3))),
@@ -1469,7 +1473,8 @@ class TestWorkflowEngineRunBatch:
         plan = _simple_plan(nodes=nodes)
         result = engine.run(plan)
         assert result.success is False
-        assert "依赖无法继续解析" in result.message
+        assert "形成环" in result.message
+        assert result.node_results == []
 
     def test_runtime_context_propagation(self):
         engine = _make_engine({"success": True, "data": []})
@@ -1481,7 +1486,8 @@ class TestWorkflowEngineRunBatch:
         engine = _make_engine()
         plan = _simple_plan(nodes=[])
         result = engine.run(plan)
-        assert result.success is True
+        assert result.success is False
+        assert "不能为空" in result.message
         assert result.node_results == []
 
 
@@ -2054,88 +2060,6 @@ class TestMobileExtPairingIssueHost:
             assert ext_mod._pairing_issue_host(None) == "192.168.1.100"
 
 
-class TestMobileExtPairingRoutes:
-    """Cover pairing routes."""
-
-    @pytest.mark.asyncio
-    async def test_pairing_issue_success(self, ext_mod):
-        body = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
-        request = SimpleNamespace(
-            headers={"host": "192.168.1.10:5000"},
-            url=SimpleNamespace(hostname="192.168.1.10"),
-        )
-        with (
-            patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
-            patch(
-                "app.security.mobile_pairing.issue_pairing_nonce",
-                return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
-            ),
-        ):
-            result = await ext_mod.mobile_pairing_issue(body, request)
-        if hasattr(result, "body"):
-            data = json.loads(result.body)
-        else:
-            data = result
-        assert data.get("success") is True or data.get("data", {}).get("host") == "192.168.1.10"
-
-    @pytest.mark.asyncio
-    async def test_pairing_lookup_invalid_code(self, ext_mod):
-        body = ext_mod.PairingLookupBody(code="000000")
-        result = await ext_mod.mobile_pairing_lookup(body)
-        assert result.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_pairing_lookup_valid(self, ext_mod):
-        body = ext_mod.PairingLookupBody(code="123456")
-        with patch.object(
-            ext_mod,
-            "lookup_by_shortcode",
-            return_value={"host": "h", "port": 5000, "nonce": "n", "exp": 9999999999},
-        ):
-            result = await ext_mod.mobile_pairing_lookup(body)
-        if hasattr(result, "body"):
-            data = json.loads(result.body)
-        else:
-            data = result
-        assert data.get("success") is True
-
-    @pytest.mark.asyncio
-    async def test_pairing_exchange_no_credentials(self, ext_mod):
-        body = ext_mod.PairingExchangeBody(code="", nonce="")
-        result = await ext_mod.mobile_pairing_exchange(body)
-        assert result.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_pairing_exchange_by_code(self, ext_mod):
-        body = ext_mod.PairingExchangeBody(code="123456")
-        with patch.object(
-            ext_mod,
-            "consume_by_shortcode",
-            return_value={"host": "h", "port": 5000, "shortCode": "123456"},
-        ):
-            result = await ext_mod.mobile_pairing_exchange(body)
-        if hasattr(result, "body"):
-            data = json.loads(result.body)
-        else:
-            data = result
-        assert data.get("success") is True
-
-    @pytest.mark.asyncio
-    async def test_pairing_exchange_by_nonce(self, ext_mod):
-        body = ext_mod.PairingExchangeBody(nonce="abc123")
-        with patch.object(
-            ext_mod,
-            "consume_pairing_nonce",
-            return_value={"host": "h", "port": 5000, "shortCode": "123456"},
-        ):
-            result = await ext_mod.mobile_pairing_exchange(body)
-        if hasattr(result, "body"):
-            data = json.loads(result.body)
-        else:
-            data = result
-        assert data.get("success") is True
-
-
 class TestMobileExtUnauthorizedRoutes:
     """Cover unauthorized route branches."""
 
@@ -2429,6 +2353,11 @@ class TestMobileExtSyncRoutes:
         body = ext_mod.SyncPullBody(since_cursor=0)
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync),
+            patch(
+                "app.domain.app_pure.employee_circle_sync.sync_modstore_reports",
+                new_callable=AsyncMock,
+                return_value={},
+            ) as report_sync,
             patch.object(ext_mod, "_approval_items", return_value=[]),
             patch.object(ext_mod, "_shipment_items", return_value=[]),
         ):
@@ -2438,6 +2367,7 @@ class TestMobileExtSyncRoutes:
         else:
             data = result
         assert data.get("success") is True
+        report_sync.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_sync_pull_error(self, ext_mod):

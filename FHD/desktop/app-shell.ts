@@ -1,5 +1,6 @@
 import {
   BrowserWindow,
+  ClipboardItem,
   Menu,
   Tray,
   app,
@@ -16,7 +17,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { APP_NAME, DEFAULT_PORT, shellIconPath } from './desktop-config'
 import { desktopRuntime } from './runtime-state'
-import { broadcastToRenderer, toggleMainWindow } from './window-manager'
+import { broadcastToRenderer, showMainWindow, toggleMainWindow } from './window-manager'
 import { writeBackendLog } from './backend-process'
 import { readLocalProductVersion, runUpdateCheckWithDirectNet } from './updater'
 import { parseDesktopDeepLink } from './desktop-navigation'
@@ -64,6 +65,14 @@ export function setAutoLaunchEnabled(enabled: boolean): { ok: boolean; reason?: 
 
 // ---------- 首次引导 + 更新日志（What's New） ----------
 const RELEASE_NOTES: Record<string, string> = {
+  '1.0.0.3':
+    '· 修复：Mac 正式包模板上传写入受限路径，导入模板不再报错\n' +
+    '· 修复：新建发货单旧接口导致模板列表、生成与下载失效\n' +
+    '· 继续保持更新观察期自动回滚与稳定性保障',
+  '1.0.0.2':
+    '· 修复：发货单模板导入断链（模板上传/解析端点默认挂载，导入后可直接出单）\n' +
+    '· 修复：考勤工作区路由注册（企业版 Mod 加载更稳）\n' +
+    '· 继续保持更新观察期自动回滚与稳定性保障',
   '1.0.0.1':
     '· 桌面端新增：开机自启、xcagi:// 深链唤起、渲染错误遥测、全局截图与语音唤起快捷键\n' +
     '· 继续保持更新观察期自动回滚与稳定性保障',
@@ -121,9 +130,10 @@ export async function captureFullScreenScreenshot(): Promise<{
     const source = sources.find(s => s.display_id === String(primary.id)) || sources[0]
     if (!source || source.thumbnail.isEmpty()) return { ok: false, error: 'no screenshot source' }
     const image = source.thumbnail
-    clipboard.writeImage(image)
+    const png = image.toPNG()
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(png)], { type: 'image/png' }) })])
     const outPath = path.join(screenshotOutputDir(), `screenshot-${Date.now()}.png`)
-    fs.writeFileSync(outPath, image.toPNG())
+    fs.writeFileSync(outPath, png)
     return { ok: true, path: outPath }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -294,6 +304,14 @@ function menuBarTrayIcon(): Electron.NativeImage | null {
   return resized
 }
 
+function trayClickOpensMenu(event: Electron.KeyboardEvent | undefined): boolean {
+  if (!event) return false
+  // Linux 有时把右键并进 click，并用 button=2 区分；macOS Ctrl-单击等同右键。
+  const button = (event as Electron.KeyboardEvent & { button?: number }).button
+  if (button === 2) return true
+  return process.platform === 'darwin' && event.ctrlKey === true
+}
+
 export function createTray(): void {
   const image = menuBarTrayIcon()
   if (!image) {
@@ -302,14 +320,29 @@ export function createTray(): void {
   const tray = new Tray(image)
   desktopRuntime.tray = tray
   tray.setToolTip(APP_NAME)
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: '显示 / 隐藏 XCAGI', click: () => toggleMainWindow() },
-      { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
-      { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
-      { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
-      { type: 'separator' },
-      { label: '退出', click: () => app.quit() }
-    ])
-  )
+  // 单击要立刻弹出主窗口。setContextMenu 在 macOS 上会吞掉 click（菜单栏单击只出菜单），
+  // Windows 左键则没有任何 click 回调，所以菜单只挂在右键上。
+  if (process.platform === 'darwin' || process.platform === 'win32') {
+    tray.setIgnoreDoubleClickEvents(true)
+  }
+  const menu = Menu.buildFromTemplate([
+    { label: '显示 / 隐藏 XCAGI', click: () => toggleMainWindow() },
+    { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
+    { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
+    { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() }
+  ])
+  const reveal = () => showMainWindow()
+  tray.on('click', event => {
+    if (trayClickOpensMenu(event)) {
+      tray.popUpContextMenu(menu)
+      return
+    }
+    reveal()
+  })
+  tray.on('double-click', reveal)
+  tray.on('right-click', () => {
+    tray.popUpContextMenu(menu)
+  })
 }

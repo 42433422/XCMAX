@@ -16,6 +16,12 @@ async def _start_custom_delivery_run(
     rework_note: str = "",
     ticket_id: int = 0,
 ) -> dict[str, Any]:
+    if evidence.get("source_mode") == "versioned_main":
+        from modstore_server.customer_delivery_versioned import start_versioned_main_run
+
+        return await start_versioned_main_run(
+            user_id=user_id, ticket_id=ticket_id, evidence=evidence, attempt=attempt
+        )
     from modstore_server.workbench_api import start_workbench_session_for_user
 
     kind = str(evidence.get("kind") or "").strip()

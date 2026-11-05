@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.services.pricing_engine import (
+from app.domain.product.services.pricing_engine import (
     CustomerType,
     PriceBreakdown,
     PricingEngine,

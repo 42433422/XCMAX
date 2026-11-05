@@ -173,7 +173,11 @@ def render_human(result: dict[str, Any]) -> str:
                 lines.append(f"    {entry['detail']}")
             trail = " · ".join(
                 str(value)
-                for value in (entry.get("source"), entry.get("reference"), entry.get("timestamp"))
+                for value in (
+                    entry.get("source"),
+                    entry.get("reference"),
+                    entry.get("timestamp"),
+                )
                 if value
             )
             if trail:

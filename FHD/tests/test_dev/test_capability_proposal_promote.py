@@ -225,3 +225,53 @@ def test_unsafe_dispatch_ref_is_rejected(monkeypatch: pytest.MonkeyPatch, branch
         lambda *_args: pytest.fail("unsafe ref must be rejected before GitHub access"),
     )
     assert promote.run(_args(workflow_ref=branch)) == 1
+
+
+class TestCustomTrackGate:
+    """统一 Router 防污染：customer_custom 轨道无 custom-track-approved 标签拒绝派发。"""
+
+    def _patch_wo(self, monkeypatch: pytest.MonkeyPatch, view: dict[str, Any] | None) -> None:
+        from app.services import work_order_ssot as wo
+
+        monkeypatch.setattr(wo, "find_by_issue", lambda _n: view)
+
+    def test_custom_track_without_approval_label_blocked(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_wo(monkeypatch, {"wo_id": "WO-1", "track": "customer_custom"})
+        blocked, reason = promote._custom_track_blocked(_issue(), 42)
+        assert blocked is True
+        assert "custom-track-approved" in reason
+
+    def test_custom_track_with_approval_label_allowed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_wo(monkeypatch, {"wo_id": "WO-1", "track": "customer_custom"})
+        issue = _issue(
+            labels=[
+                *["capability-proposal", "auto-generated", "needs-human"],
+                "custom-track-approved",
+            ]
+        )
+        blocked, _ = promote._custom_track_blocked(issue, 42)
+        assert blocked is False
+
+    def test_product_line_track_allowed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._patch_wo(monkeypatch, {"wo_id": "WO-1", "track": "product_line"})
+        blocked, _ = promote._custom_track_blocked(_issue(), 42)
+        assert blocked is False
+
+    def test_unlinked_issue_allowed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._patch_wo(monkeypatch, None)
+        blocked, _ = promote._custom_track_blocked(_issue(), 42)
+        assert blocked is False
+
+    def test_lookup_failure_not_blocking(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.services import work_order_ssot as wo
+
+        def _boom(_n: int) -> None:
+            raise OSError("store unavailable")
+
+        monkeypatch.setattr(wo, "find_by_issue", _boom)
+        blocked, _ = promote._custom_track_blocked(_issue(), 42)
+        assert blocked is False

@@ -1,0 +1,244 @@
+name: FHD host maintenance preflight (read only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fhd-host-maintenance-preflight
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Collect fixed production metadata without maintenance actions
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.FHD_PUSH_HOST }}
+          username: root
+          key: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            set -eu
+            timeout --kill-after=5s 180s python3 - <<'PY'
+            import datetime
+            import json
+            import fcntl
+            import hashlib
+            import os
+            import shutil
+            import re
+            import stat
+            import subprocess
+            import selectors
+            import time
+            from pathlib import Path
+
+            errors = []
+            def emit(label, value):
+                print(json.dumps({"check": label, "value": value}, ensure_ascii=True), flush=True)
+
+            def command(label, args, accepted=(0,)):
+                try:
+                    result = subprocess.run(args, capture_output=True, text=True, timeout=15,
+                                            env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+                    if result.returncode not in accepted:
+                        raise ValueError("command_failed")
+                    emit(label, result.stdout.strip())
+                except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+                    errors.append(label)
+                    emit(label, {"error": type(exc).__name__})
+
+            def fixed_value(path, pattern):
+                try:
+                    if path.is_symlink() or not stat.S_ISREG(path.stat().st_mode) or path.stat().st_size > 16384:
+                        raise ValueError("unsafe_metadata")
+                    value = path.read_text()
+                    match = re.search(pattern, value, re.MULTILINE)
+                    emit(str(path), match.group(1) if match else "unknown_format")
+                except FileNotFoundError:
+                    emit(str(path), "missing")
+                except (OSError, UnicodeError, ValueError):
+                    errors.append(str(path))
+                    emit(str(path), "unreadable_or_invalid")
+
+            def validator_version(tool, search_path):
+                binary = shutil.which(tool, path=search_path)
+                result = {"path": binary, "version": "unknown"}
+                if binary:
+                    try:
+                        completed = subprocess.run([binary, "--version"], capture_output=True, text=True,
+                                                   timeout=15, env={"PATH": search_path, "LC_ALL": "C"})
+                        match = re.fullmatch(re.escape(tool) + r" \(PostgreSQL\) ([0-9]+(?:\.[0-9]+){0,2})(?: [^\r\n]*)?\s*", completed.stdout)
+                        if completed.returncode == 0 and match:
+                            result["version"] = match[1]
+                    except (OSError, UnicodeError, subprocess.TimeoutExpired):
+                        pass
+                emit(tool + "_host_candidate", result)
+                return binary
+
+            def run_validator(args):
+                detail = bytearray()
+                with subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                      env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}) as process:
+                    try:
+                        deadline = time.monotonic() + 15
+                        with selectors.DefaultSelector() as selector:
+                            selector.register(process.stderr, selectors.EVENT_READ)
+                            while True:
+                                if time.monotonic() >= deadline:
+                                    raise subprocess.TimeoutExpired(args, 15)
+                                if selector.select(timeout=0.1):
+                                    chunk = os.read(process.stderr.fileno(), 4096)
+                                    if not chunk:
+                                        break
+                                    detail.extend(chunk[:max(0, 4096 - len(detail))])
+                        return process.wait(timeout=max(0.01, deadline - time.monotonic())), bytes(detail)
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
+                            process.wait()
+
+            def validate_archive(binary, option, path):
+                result = {"file": path.name, "exitcode": None, "category": "missing_tool"}
+                if not binary:
+                    return result
+                try:
+                    exitcode, detail = run_validator([binary, option, str(path)])
+                    result["exitcode"] = exitcode
+                    result["category"] = "ok" if exitcode == 0 else "other"
+                    if exitcode:
+                        # Classify locally; never publish raw stderr, untrusted names or SQL.
+                        detail = detail.lower()
+                        for phrase, category in ((b"unsupported version", "unsupported_version"),
+                                                 (b"magic string", "bad_magic"),
+                                                 (b"permission denied", "permission")):
+                            if phrase in detail:
+                                result["category"] = category
+                                break
+                except subprocess.TimeoutExpired:
+                    result["category"] = "timeout"
+                except OSError:
+                    result["category"] = "execution_error"
+                return result
+
+            def verify_latest_backup():
+                names = ("fhd_pg.dump", "modstore_pg.dump", "payment_pg.dump",
+                         "modstore_sqlite.db.gz", "configs.tar.gz")
+                root = Path("/var/backups/xcmax/daily")
+                status = {"status": "unknown", "reason": "not_checked"}
+                try:
+                    # Share the writer's existing lock without creating or truncating it.
+                    with open(Path("/tmp/xcmax-backup.lock"), "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as lock:
+                        if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
+                            raise ValueError("unsafe_lock")
+                        fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                        if root.resolve() != root:
+                            raise ValueError("unsafe_backup_root")
+                        directories = sorted((p for p in root.iterdir() if re.fullmatch(r"\d{8}", p.name)
+                                              and not p.is_symlink() and p.is_dir()), reverse=True)
+                        completed = [p for p in directories if (p / "MANIFEST.txt").exists()]
+                        if not completed:
+                            raise ValueError("no_completed_snapshot")
+                        directory = completed[0]
+                        status["snapshot"] = directory.name
+                        paths = [directory / name for name in ("MANIFEST.txt",) + names]
+                        before = {}
+                        for path in paths:
+                            info = path.lstat()
+                            if not stat.S_ISREG(info.st_mode) or info.st_size == 0:
+                                raise ValueError("unsafe_or_empty_backup_file")
+                            before[path.name] = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+                        manifest = paths[0]
+                        age = datetime.datetime.now(datetime.timezone.utc).timestamp() - manifest.stat().st_mtime
+                        if not -300 <= age <= 26 * 3600 or manifest.stat().st_size > 16384:
+                            raise ValueError("stale_or_invalid_manifest")
+                        expected, seen = {}, set()
+                        summary = dict.fromkeys(("line_count", "format_valid_count", "allowlisted_count",
+                                                 "duplicate_count", "unknown_name_count", "invalid_format_count"), 0)
+                        for line in manifest.read_text().splitlines():
+                            summary["line_count"] += 1
+                            match = re.fullmatch(r"([0-9a-f]{64}) [ *](?:\./)?(.+)", line)
+                            if not match:
+                                summary["invalid_format_count"] += 1
+                                continue
+                            summary["format_valid_count"] += 1
+                            name = match[2]
+                            if name in seen:
+                                summary["duplicate_count"] += 1
+                            else:
+                                seen.add(name)
+                            if name not in names:
+                                summary["unknown_name_count"] += 1
+                                continue
+                            summary["allowlisted_count"] += 1
+                            expected.setdefault(name, match[1])
+                        summary["missing_expected_count"] = len(set(names) - set(expected))
+                        emit("manifest_summary", summary)
+                        if any(summary[key] for key in ("invalid_format_count", "duplicate_count", "unknown_name_count")):
+                            raise ValueError("invalid_manifest_entries")
+                        if set(expected) != set(names):
+                            raise ValueError("incomplete_manifest")
+                        for name in names:
+                            digest = hashlib.sha256()
+                            with open(directory / name, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as stream:
+                                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                                    digest.update(chunk)
+                            if digest.hexdigest() != expected[name]:
+                                raise ValueError("checksum_mismatch")
+                        restore = validator_version("pg_restore", "/usr/pgsql-16/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+                        emit("writer_version_limit", "Host candidates only; configured container writer and actual dump producer remain unverified.")
+                        for name in names[:3]:
+                            with open(directory / name, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as stream:
+                                header = stream.read(8)
+                            valid = len(header) == 8 and header[:5] == b"PGDMP"
+                            version = [header[5], header[6], 0 if header[5:7] == b"\x01\x00" else header[7]] if valid else None
+                            emit("archive_format", {"file": name, "magic": "PGDMP" if valid else "unknown", "version": version})
+                        commands = [("pg_restore", "--list", name) for name in names[:3]]
+                        commands += [("gzip", "-t", names[3]), ("tar", "-tzf", names[4])]
+                        results = []
+                        for tool, option, name in commands:
+                            binary = restore if tool == "pg_restore" else shutil.which(tool, path="/usr/sbin:/usr/bin:/sbin:/bin")
+                            result = validate_archive(binary, option, directory / name)
+                            result["tool"] = tool
+                            results.append(result)
+                            emit("archive_validator", result)
+                        for path in paths:
+                            info = path.lstat()
+                            after = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+                            if not stat.S_ISREG(info.st_mode) or after != before[path.name]:
+                                raise ValueError("snapshot_changed_during_check")
+                        failed = [r for r in results if r["category"] != "ok"]
+                        if failed:
+                            raise ValueError("archive_validator_failed_or_unknown")
+                        status.update(status="verified", reason="hashes_and_archive_readability_only")
+                except BlockingIOError:
+                    status["reason"] = "backup_writer_busy"
+                except FileNotFoundError:
+                    status["reason"] = "required_file_or_lock_missing"
+                except (OSError, UnicodeError, subprocess.TimeoutExpired):
+                    status["reason"] = "read_or_validation_error"
+                except ValueError as exc:
+                    status["reason"] = str(exc)
+                if status["status"] != "verified":
+                    errors.append("backup_integrity")
+                emit("backup_integrity", status)
+
+            emit("snapshot_started", datetime.datetime.now(datetime.timezone.utc).isoformat())
+            command("running_kernel", ["uname", "-r"])
+            command("installed_kernels", ["rpm", "-q", "kernel", "kernel-core", "--qf", "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n"])
+            command("default_kernel", ["grubby", "--default-kernel"])
+            command("disk_bytes", ["df", "-B1", "--output=target,size,used,avail,pcent", "/", "/boot"])
+            command("disk_inodes", ["df", "--output=target,itotal,iused,iavail,ipcent", "/", "/boot"])
+            verify_latest_backup()
+            for name in ("backup_last_success", "offsite_ssh_last_success"):
+                fixed_value(Path("/var/lib/xcmax-ops/state") / name, r"\A([0-9]{1,12})\s*\Z")
+            fixed_value(Path("/etc/xcmax-dr-runtime-role.env"),
+                        r"^XCMAX_DR_SAVED_RUNTIME_MODE=(standby|active-peer|primary)\s*$")
+            fixed_value(Path("/etc/xcmax-dr-auto-failover.env"), r"^OPS_DR_AUTO_FAILOVER_ENABLED=([01])\s*$")
+            for unit in ("fhd-full", "modstore", "postgresql", "nginx", "xcmax-dr-failover-guard.timer"):
+                command("unit_" + unit, ["systemctl", "show", unit, "--property=LoadState,ActiveState,SubState"])
+            emit("limits", "Host and backup metadata checked; archive readability is not a restore proof. Remote DR state, cloud snapshots and rescue console remain unverified. This is not maintenance clearance.")
+            emit("failed_checks", errors)
+            raise SystemExit(bool(errors))
+            PY

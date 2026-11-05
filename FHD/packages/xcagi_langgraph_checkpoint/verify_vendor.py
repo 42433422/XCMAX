@@ -9,7 +9,8 @@ SHA 与 PROVENANCE.json 锁定的 `41341457342327166d72fc11952ab28fb61ec0bf` 一
 职责:
   1. 校验本目录下所有 vendored 文件 (langgraph/ 包 + LICENSE) 的 SHA-256 与 MANIFEST.sha256 一致。
   2. 校验 LICENSE 为 MIT (含关键字检查)。
-  3. 在线校验: 拉取上游远端 tag，校验 commit SHA，比对 <source_path>/langgraph + LICENSE 字节级一致。
+    3. 在线校验: 拉取锁定上游 tag，校验 commit SHA，在其上应用有 SHA 锁定的
+       XCAGI backport patch，再与当前 vendored langgraph 字节级比对。
 
 用法:
   python verify_vendor.py            # 本地清单 + LICENSE + 在线上游 tag 比对
@@ -22,6 +23,7 @@ SHA 与 PROVENANCE.json 锁定的 `41341457342327166d72fc11952ab28fb61ec0bf` 一
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import io
 import json
@@ -199,8 +201,23 @@ def _fetch_tagged_source(prov: dict, base: Path) -> tuple[bool, str]:
 
 
 def verify_upstream(prov: dict) -> bool:
-    """校验 vendored 副本与上游远端 tag 锁定 commit 的 <src>/langgraph + LICENSE 字节级一致。"""
+    """重建锁定上游基线 + XCAGI patch，并与当前 vendored 源码比对。"""
     src = prov["source_path"]
+    patch_path = HERE / prov.get("patch_file", "")
+    patch_sha = prov.get("patch_sha256")
+    if not patch_path.is_file() or not patch_sha:
+        print("[FAIL] provenance 缺少可复现的 patch 文件或 SHA-256")
+        return False
+    if sha256_of(patch_path) != patch_sha:
+        print("[FAIL] vendor patch SHA-256 与 PROVENANCE.json 不符")
+        return False
+
+    try:
+        patch_bytes = base64.b64decode(patch_path.read_bytes())
+    except (ValueError, base64.binascii.Error) as exc:
+        print(f"[FAIL] vendor patch base64 格式错误: {exc}")
+        return False
+
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
         ok, err = _fetch_tagged_source(prov, base)
@@ -209,23 +226,51 @@ def verify_upstream(prov: dict) -> bool:
             return False
 
         upstream_base = base / src
+        decoded_patch = base / "xcagi-backport.patch"
+        decoded_patch.write_bytes(patch_bytes)
+        for mode in ("--check",):
+            check = subprocess.run(
+                ["git", "apply", mode, str(decoded_patch)],
+                cwd=upstream_base,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if check.returncode != 0:
+                print(f"[FAIL] vendor patch 无法应用到锁定基线: {check.stderr.strip()[:300]}")
+                return False
+        apply = subprocess.run(
+            ["git", "apply", str(decoded_patch)],
+            cwd=upstream_base,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if apply.returncode != 0:
+            print(f"[FAIL] 应用 vendor patch 失败: {apply.stderr.strip()[:300]}")
+            return False
+
         mismatches: list[str] = []
-        for rel, digest in collect_files().items():
-            if rel == "LICENSE":
-                upstream = upstream_base / "LICENSE"
-            else:
-                upstream = upstream_base / rel
-            if not upstream.is_file():
-                mismatches.append(f"{rel} (上游缺失)")
-                continue
-            if sha256_of(upstream) != digest:
-                mismatches.append(rel)
+        local = collect_files()
+        upstream_files = {
+            p.relative_to(upstream_base).as_posix(): sha256_of(p)
+            for p in _walk_files(upstream_base / "langgraph")
+        }
+        upstream_files["LICENSE"] = sha256_of(upstream_base / "LICENSE")
+        if local != upstream_files:
+            mismatches.extend(
+                sorted(
+                    rel
+                    for rel in set(local) | set(upstream_files)
+                    if local.get(rel) != upstream_files.get(rel)
+                )
+            )
 
     ok = not mismatches
     if ok:
         print(
-            f"[OK] 与远端 tag {prov['upstream_tag']} ({prov['upstream_commit_sha'][:12]}) 的 "
-            f"{src}/langgraph 字节级一致"
+            f"[OK] 锁定上游 tag {prov['upstream_tag']} ({prov['upstream_commit_sha'][:12]}) "
+            f"+ vendor patch ({patch_sha[:12]}) 可重建当前副本"
         )
     else:
         for m in mismatches:

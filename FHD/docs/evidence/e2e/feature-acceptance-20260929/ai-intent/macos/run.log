@@ -1,0 +1,7 @@
+2026-09-29T06:41:51+0800 [ai-intent] 开始验收 ai-intent 意图识别与工具路由；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:41:51+0800 [ai-intent] M1 passed :: HTTP 200 18ms；primary_intent=materials tool_key=materials sources=['rule_engine']
+2026-09-29T06:41:51+0800 [ai-intent] M2 passed :: HTTP 200 72ms；primary_intent=print_label tool_key=print_label
+2026-09-29T06:41:52+0800 [ai-intent] M3 passed :: HTTP 200 68ms；is_greeting=True
+2026-09-29T06:41:55+0800 [ai-intent] M4 passed :: 导航后路径 /chat-debug；命中文本 ['调试']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 对话调试 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 聊天调试工作台 |  | 测试普通版/专业版的意图和流程分支。此页只做本地模拟，不调用真实工具。 |  | 输入与模式 | 快速测试样例 | 产品查询 | 客户
+2026-09-29T06:41:56+0800 [ai-intent] screenshot result.png
+2026-09-29T06:41:58+0800 [ai-intent] video operation.webm bytes=293464

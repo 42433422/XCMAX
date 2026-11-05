@@ -1,0 +1,9 @@
+[07:01:39] feature=pay-entitlement base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement
+[07:01:51] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:01:58] case PE1: passed - 「用户管理 / 账号权益」页真实渲染
+[07:01:58] case PE2: passed - 已购权益清单接口真实读取
+[07:01:58] case PE3: passed - 企业端权益强推快照接口返回本账号身份
+[07:01:59] case PE4: passed - 权益快车道套餐未绑定市场账号被拒
+[07:01:59] case PE5: passed - 市场用户（授权对象）列表未绑定市场账号被拒
+[07:01:59] video: pay-entitlement-web-20260929-070139.webm (1349952 bytes)
+[07:01:59] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement/log/pay-entitlement-web-20260929-070139.log

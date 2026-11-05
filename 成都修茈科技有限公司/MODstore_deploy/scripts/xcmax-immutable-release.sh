@@ -9,6 +9,8 @@ RELEASES_DIR="${RELEASE_BASE%/}/releases"
 CURRENT_LINK="${XCMAX_CURRENT_LINK:-${RELEASE_BASE}/current}"
 CLI_LAUNCHER_PATH="${XCMAX_CLI_LAUNCHER_PATH:-/usr/local/bin/xcmax-terminal}"
 RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"
+LIBRARY_DIR="${MODMAN_LIBRARY:-${RUNTIME_DIR%/}/library}"
+CATALOG_DIR="${MODSTORE_CATALOG_DIR:-${RUNTIME_DIR%/}/catalog}"
 SITE_LINK="${XCMAX_SITE_LINK:-/root/成都修茈科技有限公司}"
 PUBLIC_SITE_STATE_DIR="${XCMAX_PUBLIC_SITE_STATE_DIR:-/var/lib/xcmax-public}"
 ENV_DIR="${MODSTORE_ENV_DIR:-/etc/xcmax}"
@@ -21,13 +23,62 @@ GITHUB_REPOSITORY_SLUG="${XCMAX_GITHUB_REPOSITORY:-}"
 SITE_SUBDIR="成都修茈科技有限公司"
 MODSTORE_SUBDIR="${SITE_SUBDIR}/MODstore_deploy"
 LOCK_FILE="${XCMAX_RELEASE_LOCK:-/run/lock/xcmax-immutable-release.lock}"
+PUBLICATION_LOCK="${XCMAX_PUBLICATION_LOCK:-/run/lock/xcmax-publication.lock}"
 HEALTH_URL="${MODSTORE_DEPLOY_HEALTH_URL:-http://127.0.0.1:9999/api/health}"
 SCHEDULER_HEALTH_URL="${MODSTORE_SCHEDULER_HEALTH_URL:-http://127.0.0.1:9990/api/health}"
 PUBLIC_HEALTH_URL="${MODSTORE_PUBLIC_HEALTH_URL:-https://xiu-ci.com/api/health}"
 RELEASES_TO_KEEP="${XCMAX_RELEASES_TO_KEEP:-4}"
 
+POINTER_SYNC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sync_site_download_release.py"
+
+verify_public_pointers() {
+  python3 "$POINTER_SYNC" --check --site-root "$1/$SITE_SUBDIR" \
+    --published-site-root "$SITE_LINK" \
+    --published-hotfix "/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"
+}
+
+acquire_publication_lock() {
+  mkdir -p "$(dirname "$PUBLICATION_LOCK")"
+  exec 8>"$PUBLICATION_LOCK"
+  flock -w 60 8 || fail "another public-site publication is active"
+}
+
 log() { printf '[xcmax-release] %s\n' "$*"; }
 fail() { log "ERROR: $*" >&2; exit 1; }
+
+persistent_path() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+from pathlib import Path
+
+path, releases = map(Path, sys.argv[1:])
+for member in reversed((path, *path.parents)):
+    if member.is_symlink():
+        raise SystemExit("persistent state cannot traverse symlinks")
+path = path.resolve()
+if path.is_relative_to(releases.resolve()):
+    raise SystemExit("persistent state must survive release pruning")
+print(path)
+PY
+}
+
+select_library_target() {
+  python3 - "$1" "$2" "$3" "$4" <<'PY'
+import sys
+from pathlib import Path
+
+wanted, active, previous, releases = map(Path, sys.argv[1:])
+for member in reversed((active, *active.parents)):
+    if member.is_symlink():
+        raise SystemExit("active library cannot traverse symlinks")
+active, previous, releases = active.resolve(), previous.resolve(), releases.resolve()
+if not active.is_relative_to(previous):
+    if active.is_relative_to(releases) or "releases" in active.parts:
+        raise SystemExit("active library points into another release")
+    wanted = active
+print(wanted)
+PY
+}
 
 resolve_java_home() {
   local candidate=""
@@ -99,6 +150,7 @@ JS
 }
 
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "XCMAX_TARGET_SHA must be a full 40-character commit SHA"
+case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1) ;; *) fail "XCMAX_PRESERVE_RELEASE_HISTORY must be 0 or 1" ;; esac
 [[ "$PRODUCT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] \
   || fail "XCMAX_PRODUCT_VERSION must be a numeric product version"
 [[ -d "$SOURCE_ROOT/.git" ]] || fail "source Git mirror not found: $SOURCE_ROOT"
@@ -107,8 +159,16 @@ JS
 [[ "$RELEASE_BASE" == /* ]] || fail "XCMAX_RELEASE_BASE must be an absolute path"
 [[ "$CLI_LAUNCHER_PATH" == /* ]] || fail "XCMAX_CLI_LAUNCHER_PATH must be an absolute path"
 [[ "$RUNTIME_DIR" == /* ]] || fail "MODSTORE_RUNTIME_DIR must be an absolute path"
+[[ "$LIBRARY_DIR" == /* ]] || fail "MODMAN_LIBRARY must be an absolute path"
+[[ "$RUNTIME_DIR" != "$RELEASES_DIR" && "$RUNTIME_DIR" != "$RELEASES_DIR/"* ]] \
+  || fail "MODSTORE_RUNTIME_DIR must survive release pruning"
+[[ "$LIBRARY_DIR" != "$RELEASES_DIR" && "$LIBRARY_DIR" != "$RELEASES_DIR/"* ]] \
+  || fail "MODMAN_LIBRARY must survive release pruning"
+[[ "$CATALOG_DIR" == /* ]] || fail "MODSTORE_CATALOG_DIR must be an absolute path"
 [[ "$RELEASES_TO_KEEP" =~ ^[0-9]+$ ]] && (( RELEASES_TO_KEEP >= 2 )) \
   || fail "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2"
+RUNTIME_DIR="$(persistent_path "$RUNTIME_DIR" "$RELEASES_DIR")" || fail "invalid persistent runtime directory"
+LIBRARY_DIR="$(persistent_path "$LIBRARY_DIR" "$RELEASES_DIR")" || fail "invalid persistent library directory"
 if [[ -n "$GITHUB_REPOSITORY_SLUG" ]] \
   && ! [[ "$GITHUB_REPOSITORY_SLUG" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
   fail "XCMAX_GITHUB_REPOSITORY must be an owner/repository slug when set"
@@ -148,6 +208,10 @@ PY
 }
 
 prune_releases() {
+  if [[ "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" == 1 ]]; then
+    log "preserving all release history for this invocation"
+    return 0
+  fi
   local releases_root=""
   local candidate=""
   local candidate_root=""
@@ -252,8 +316,38 @@ git -C "$SOURCE_ROOT" fetch --quiet origin main
 git -C "$SOURCE_ROOT" cat-file -e "${TARGET_SHA}^{commit}" \
   || fail "target commit is unavailable after fetch: $TARGET_SHA"
 REMOTE_MAIN_SHA="$(git -C "$SOURCE_ROOT" rev-parse origin/main)"
-if [[ "$TARGET_SHA" != "$REMOTE_MAIN_SHA" && "${XCMAX_ALLOW_NON_HEAD_SHA:-0}" != 1 ]]; then
-  fail "target SHA is not current origin/main (target=$TARGET_SHA origin_main=$REMOTE_MAIN_SHA)"
+verify_fixed_release_approval() {
+  [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA:-}" ]] || return 0
+  local controller="$XCMAX_RELEASE_CONTROLLER_SHA" approval
+  [[ "$controller" =~ ^[0-9a-f]{40}$ ]] || fail "invalid release controller SHA"
+  git -C "$SOURCE_ROOT" merge-base --is-ancestor "$controller" origin/main \
+    && git -C "$SOURCE_ROOT" merge-base --is-ancestor "$TARGET_SHA" "$controller" \
+    || fail "approved release/controller must already belong to main"
+  approval="$(git -C "$SOURCE_ROOT" show "$controller:ops/releases/$TARGET_SHA.json")" \
+    || fail "committed release approval missing"
+  local current health
+  health="$(curl --noproxy '*' -fsS --max-time 10 "$HEALTH_URL")" || fail "production health unavailable"
+  current="$(RELEASE_APPROVAL="$approval" HEALTH_PAYLOAD="$health" python3 - "$TARGET_SHA" "$PRODUCT_VERSION" "$CURRENT_LINK/.xcmax-release.json" <<'PY_APPROVAL'
+import json, os, re, sys
+approval = json.loads(os.environ["RELEASE_APPROVAL"])
+assert approval["git_sha"] == sys.argv[1] and approval["product_version"] == sys.argv[2]
+assert approval["approval_reference"] and approval["approval_scope"]
+assert re.fullmatch(r"[0-9a-f]{40}", approval["expected_production_sha"])
+with open(sys.argv[3]) as handle:
+    current = json.load(handle)["git_sha"]
+health = json.loads(os.environ["HEALTH_PAYLOAD"])
+assert health.get("ok") is True and health.get("git_sha") == current, "running production identity differs from current release"
+assert current in (approval["expected_production_sha"], approval["git_sha"]), "production advanced since approval; refuse overwrite"
+print(current)
+PY_APPROVAL
+)" || fail "production identity differs from approval"
+  git -C "$SOURCE_ROOT" merge-base --is-ancestor "$current" "$TARGET_SHA" \
+    || fail "approved target would roll production backward"
+}
+if [[ -n "${XCMAX_RELEASE_CONTROLLER_SHA:-}" ]]; then
+  verify_fixed_release_approval
+elif [[ "$TARGET_SHA" != "$REMOTE_MAIN_SHA" ]]; then
+  fail "non-HEAD release requires committed human approval and verified CI"
 fi
 
 migrate_env_file() {
@@ -350,7 +444,11 @@ else
   log "creating release-specific Python environment"
   python3 -m venv "$DEPLOY_DIR/.venv"
   "$DEPLOY_DIR/.venv/bin/python" -m pip install -q --upgrade pip
-  (cd "$DEPLOY_DIR" && .venv/bin/pip install -q -e '.[web,knowledge,evolution-metrics]')
+  (cd "$DEPLOY_DIR" && .venv/bin/pip install -q \
+    "$BUILD_ROOT/packages/retort_engine" "$BUILD_ROOT/packages/xcagi_common" \
+    -e '.[web,knowledge,evolution-metrics,governance]')
+  "$DEPLOY_DIR/.venv/bin/python" -c \
+    'from modstore_server.integrations.repository_packages import load_repository_module; load_repository_module("retort_engine.intent_alignment"); load_repository_module("retort_engine.clarification"); load_repository_module("xcagi_common.employee_pack")'
   mkdir -p "$BUILD_ROOT/.runtime-build"
   MODSTORE_ENV=production \
     MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET" \
@@ -386,6 +484,9 @@ else
     [[ -f "$DEPLOY_DIR/market/dist/index.html" ]] || fail "market build produced no index.html"
   fi
 
+  "$RUNTIME_NODE_BIN" "$BUILD_ROOT/scripts/dev/materialize_media_assets.mjs" marketing \
+    || fail "cannot reconstruct checksum-pinned public site media"
+
   if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
     command -v mvn >/dev/null 2>&1 || fail "mvn is required by the active payment service"
     log "packaging the CI-tested Java payment service"
@@ -394,13 +495,46 @@ else
       || fail "payment service jar missing after build"
   fi
 
-  TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}^{tree}")"
-  python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" "$PRODUCT_VERSION" "$RELEASE_ID" <<'PY'
-import datetime
-import json
-import sys
+  python3 "$POINTER_SYNC" --site-root "$(dirname "$DEPLOY_DIR")" \
+    --published-site-root "$SITE_LINK" \
+    --published-hotfix "/var/www/update/releases/stable/enterprise/download-windows-hotfix.json" \
+    || fail "cannot preserve existing public desktop pointers"
 
-path, git_sha, tree_sha, artifact_sha, product_version, release_id = sys.argv[1:]
+  TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}^{tree}")"
+  SUNBIRD_TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}:FHD/mods/sunbird-attendance-custom")"
+  python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" "$PRODUCT_VERSION" "$RELEASE_ID" "$SUNBIRD_TREE_SHA" "$SOURCE_ROOT" <<'PY'
+import datetime
+import hashlib
+import json
+import runpy
+import subprocess
+import sys
+from pathlib import Path
+
+path, git_sha, tree_sha, artifact_sha, product_version, release_id, sunbird_tree, source_root = sys.argv[1:]
+root = Path(path).parent
+source_path = "FHD/mods/sunbird-attendance-custom"
+source_files, source_hash = runpy.run_path(str(root / "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_delivery_versioned.py"))["source_fingerprints"](root / source_path)
+tree_rows = subprocess.run(
+    ["git", "-C", source_root, "ls-tree", "-r", "-z", git_sha, "--", source_path],
+    check=True, capture_output=True,
+).stdout
+git_files = {}
+for row in tree_rows.split(b"\0"):
+    if not row:
+        continue
+    metadata, path_bytes = row.split(b"\t", 1)
+    mode, kind, object_id = metadata.decode("ascii").split()
+    if mode not in {"100644", "100755"} or kind != "blob":
+        raise SystemExit("Sunbird main tree contains a non-file entry")
+    rel = path_bytes.decode("utf-8").removeprefix(source_path + "/")
+    blob = subprocess.run(
+        ["git", "-C", source_root, "cat-file", "blob", object_id],
+        check=True, capture_output=True,
+    ).stdout
+    git_files[rel] = hashlib.sha256(blob).hexdigest()
+if not git_files or git_files != source_files:
+    raise SystemExit("Sunbird release source differs from the pinned main Git tree")
 payload = {
     "artifact_sha256": artifact_sha,
     "built_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -408,6 +542,13 @@ payload = {
     "git_tree": tree_sha,
     "product_version": product_version,
     "release_id": release_id,
+    "private_mod_sources": {
+        "sunbird-attendance-custom": {
+            "git_tree": sunbird_tree,
+            "sha256": source_hash,
+            "files": source_files,
+        }
+    },
 }
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)
@@ -418,10 +559,8 @@ PY
   trap - EXIT
 fi
 unset BUILD_JWT_SECRET
+verify_public_pointers "$FINAL_ROOT" || fail "prepared release has stale desktop pointers; reconcile before migration"
 
-# mktemp creates the build root with mode 0700. The release stays immutable,
-# but the public-site symlink is served by an unprivileged nginx worker, so the
-# release root itself must remain traversable after both build and reuse paths.
 chmod 0555 "$FINAL_ROOT"
 
 DEPLOY_DIR="$FINAL_ROOT/$MODSTORE_SUBDIR"
@@ -430,10 +569,8 @@ verify_runtime_mod_compiler "$FINAL_ROOT" "$RUNTIME_NODE_BIN" \
 EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_sha256"])' "$FINAL_ROOT/.xcmax-release.json")"
 [[ "$EXPECTED_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || fail "release artifact SHA256 is invalid"
 
-# Apply the exact release's schema before switching the public/runtime symlinks.
-# The helper verifies and stamps the last known pre-Alembic production baseline
-# before applying newer revisions, then proves every declared head is recorded.
-# A migration failure therefore leaves the currently served release untouched.
+# Migrate schema before symlink switch; failure leaves currently served release untouched.
+verify_fixed_release_approval
 log "applying database migrations for $TARGET_SHA"
 (
   cd "$DEPLOY_DIR"
@@ -482,6 +619,10 @@ fi
 PREVIOUS_ROOT="$(readlink -f "$CURRENT_LINK")"
 [[ -d "$PREVIOUS_ROOT" ]] || fail "current release target is invalid: $PREVIOUS_ROOT"
 
+# Published package bytes and the catalog index must survive release pruning.
+case "$(canonical_path "$CATALOG_DIR")" in
+  "$(canonical_path "$RELEASES_DIR")"/*) fail "catalog directory cannot live inside immutable releases" ;;
+esac
 # Public runtime projections must survive immutable release promotion.  Seed
 # the persistent nginx root once from the previous release when available;
 # subsequent authenticated founder snapshots update this same external file.
@@ -512,11 +653,12 @@ write_service_units() {
   if [[ -f "$release_manifest" ]]; then
     release_artifact_sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("artifact_sha256", ""))' "$release_manifest")"
   fi
-  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nXCMAX_RELEASE_SHA=%s\nXCMAX_PRODUCT_VERSION=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
+  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_CATALOG_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nXCMAX_RELEASE_SHA=%s\nXCMAX_PRODUCT_VERSION=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
     "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" "$release_artifact_sha" \
-    "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" \
+    "$RUNTIME_DIR" "$CATALOG_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" \
     "$TARGET_SHA" "$PRODUCT_VERSION" > "${release_env}.tmp"
   printf 'MODSTORE_NODE_EXECUTABLE=%s\n' "$RUNTIME_NODE_BIN" >> "${release_env}.tmp"
+  printf 'MODMAN_LIBRARY=%s\n' "$LIBRARY_DIR" >> "${release_env}.tmp"
   chmod 644 "${release_env}.tmp"
   mv -f "${release_env}.tmp" "$release_env"
 
@@ -603,6 +745,19 @@ EnvironmentFile=-${ENV_FILE}
 EnvironmentFile=-${release_env}
 EOF
   fi
+}
+
+verify_catalog_runtime_dir() {
+  local pid=""
+  pid="$(systemctl show "$1" -p MainPID --value)"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  python3 - "/proc/$pid/environ" "$CATALOG_DIR" <<'PY'
+import sys
+
+with open(sys.argv[1], "rb") as handle:
+    entries = handle.read().split(b"\0")
+assert ("MODSTORE_CATALOG_DIR=" + sys.argv[2]).encode() in entries
+PY
 }
 
 install_cli_launcher() {
@@ -714,8 +869,37 @@ elif [[ -d "$PREVIOUS_ROOT/.git" ]]; then
   PREVIOUS_SHA="$(git -C "$PREVIOUS_ROOT" rev-parse HEAD 2>/dev/null || true)"
 fi
 [[ -z "$PREVIOUS_SHA" || "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "previous runtime Git SHA is invalid"
+PREVIOUS_LIBRARY_DIR="$(python3 - "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}" "$(systemctl show modstore.service -p MainPID --value)" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+deploy, pid = sys.argv[1:]
+value = ""
+if pid.isdigit() and int(pid) > 0:
+    try:
+        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+        value = next((e.partition(b"=")[2].decode() for e in entries if e.startswith(b"MODMAN_LIBRARY=")), "")
+    except OSError:
+        pass
+config = Path(deploy) / ".modstore-config.json"
+if config.is_symlink():
+    raise SystemExit("previous library configuration cannot be a symlink")
+if config.is_file():
+    value = json.loads(config.read_text()).get("library_root") or value
+print(Path(value or str(Path(deploy) / "library")).expanduser().absolute())
+PY
+)"
+LIBRARY_DIR="$(select_library_target "$LIBRARY_DIR" "$PREVIOUS_LIBRARY_DIR" "$PREVIOUS_ROOT" "$RELEASES_DIR")" \
+  || fail "active library directory requires explicit reconciliation"
+LIBRARY_DIR="$(persistent_path "$LIBRARY_DIR" "$RELEASES_DIR")" || fail "invalid persistent library directory"
 
 rollback() {
+  if ! verify_public_pointers "$PREVIOUS_ROOT"; then
+    log "ERROR: rollback blocked by changed public desktop pointers; operator reconciliation required"
+    return 1
+  fi
   log "promotion failed; rolling current back to $PREVIOUS_ROOT"
   ln -s "$PREVIOUS_ROOT" "${CURRENT_LINK}.rollback"
   mv -Tf "${CURRENT_LINK}.rollback" "$CURRENT_LINK"
@@ -724,7 +908,7 @@ rollback() {
     mv -Tf "${SITE_LINK}.rollback" "$SITE_LINK"
   fi
   if [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-    TARGET_SHA="$PREVIOUS_SHA" write_service_units
+    TARGET_SHA="$PREVIOUS_SHA" LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units
   fi
   systemctl daemon-reload
   systemctl restart modstore-payment.service 2>/dev/null || true
@@ -740,8 +924,132 @@ rollback() {
   systemctl is-active --quiet modstore.service modstore-scheduler.service
 }
 
+CATALOG_SOURCE="${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}/modstore_server/catalog_data"
+ACTIVE_CATALOG_DIR="$(python3 - "$(systemctl show modstore.service -p MainPID --value)" "$CATALOG_SOURCE" "${ENV_DIR}/modstore-release.env" "$PREVIOUS_SHA" <<'PY'
+import os
+import sys
+
+pid, fallback, release_env, previous_sha = sys.argv[1:]
+value = ""
+if pid.isdigit() and int(pid) > 0:
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as handle:
+            entries = handle.read().split(b"\0")
+        value = next((e.partition(b"=")[2].decode() for e in entries if e.startswith(b"MODSTORE_CATALOG_DIR=")), "")
+    except OSError:
+        pass
+if not value and previous_sha:
+    try:
+        with open(release_env, encoding="utf-8") as handle:
+            values = dict(line.rstrip("\n").split("=", 1) for line in handle if "=" in line)
+        if values.get("MODSTORE_GIT_SHA") == previous_sha:
+            value = values.get("MODSTORE_CATALOG_DIR", "")
+    except OSError:
+        pass
+print(os.path.realpath(value or fallback))
+PY
+)"
+[[ "$ACTIVE_CATALOG_DIR" == "$(canonical_path "$CATALOG_DIR")" || "$ACTIVE_CATALOG_DIR" == "$(canonical_path "$CATALOG_SOURCE")" ]] \
+  || fail "active catalog uses a different external directory: $ACTIVE_CATALOG_DIR"
+CATALOG_SERVICES_STOPPED=0
+RELEASE_SWITCHED=0
+CATALOG_STAGE=""
+recover_catalog_migration() {
+  local status=$?
+  if [[ -n "$CATALOG_STAGE" && -d "$CATALOG_STAGE" ]]; then
+    rm -rf -- "$CATALOG_STAGE" || log "could not remove incomplete catalog stage: $CATALOG_STAGE"
+    CATALOG_STAGE=""
+  fi
+  if [[ "$status" != 0 && "$CATALOG_SERVICES_STOPPED" == 1 ]]; then
+    if [[ "$RELEASE_SWITCHED" == 1 ]]; then rollback || true
+    else systemctl start modstore.service modstore-scheduler.service || true
+    fi
+  fi
+}
+trap recover_catalog_migration EXIT
+migrate_delivery_state() {
+  PYTHONPATH="$DEPLOY_DIR" "$DEPLOY_DIR/.venv/bin/python" - \
+    "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}" "$RUNTIME_DIR" "$LIBRARY_DIR" "$PREVIOUS_LIBRARY_DIR" "$1" "$ENV_FILE" "$DEPLOY_DIR" "$SOURCE_ROOT" "$RELEASES_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+from modstore_server.customer_delivery_sources import migrate_private_delivery_state
+
+previous, runtime, library, previous_library, mode, environment, candidate, source_root, releases = sys.argv[1:]
+load_dotenv(environment, override=False)
+config = Path(candidate) / ".modstore-config.json"
+if config.is_symlink():
+    raise SystemExit("candidate library configuration cannot be a symlink")
+if config.is_file():
+    configured = json.loads(config.read_text()).get("library_root")
+    if configured and Path(configured).expanduser().absolute() != Path(library):
+        raise SystemExit("candidate library_root conflicts with persistent MODMAN_LIBRARY")
+try:
+    result = migrate_private_delivery_state(
+        Path(previous), Path(runtime), library=Path(library),
+        legacy_library=Path(previous_library), dry_run=mode == "true",
+        bootstrap_source=Path(source_root), releases_root=Path(releases),
+    )
+except (OSError, ValueError) as error:
+    print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
+    raise SystemExit(1) from error
+print(json.dumps(result, ensure_ascii=False))
+PY
+}
+migrate_delivery_state true
+verify_fixed_release_approval  # live :9999 health; must precede stop
+CATALOG_SERVICES_STOPPED=1
+systemctl stop modstore.service modstore-scheduler.service
+if [[ "$ACTIVE_CATALOG_DIR" != "$(canonical_path "$CATALOG_DIR")" ]]; then
+  CATALOG_SERVICES_STOPPED=1
+  systemctl stop modstore.service modstore-scheduler.service
+  [[ -f "$CATALOG_SOURCE/packages.json" ]] || fail "active catalog index is missing"
+  install -d -m 700 "$(dirname "$CATALOG_DIR")"
+  CATALOG_STAGE="$(mktemp -d "$(dirname "$CATALOG_DIR")/.catalog.XXXXXX")"
+  cp -a "$CATALOG_SOURCE/." "$CATALOG_STAGE/"
+  install -d -m 700 "$CATALOG_STAGE/files"
+  python3 - "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}/modstore_server/market_files" "$CATALOG_STAGE/market_files" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+source, target = map(Path, sys.argv[1:])
+if source.is_dir():
+    target.mkdir(parents=True, exist_ok=True)
+    for item in source.iterdir():
+        if not item.is_file() or item.is_symlink():
+            continue
+        shutil.copy2(item, target / item.name)
+PY
+  chmod -R u+rwX "$CATALOG_STAGE"
+  if [[ -e "$CATALOG_DIR" ]]; then
+    diff -qr "$CATALOG_STAGE" "$CATALOG_DIR" >/dev/null \
+      || fail "inactive catalog differs from live snapshot; reconcile before promotion"
+    rm -rf -- "$CATALOG_STAGE"
+  else
+    mv "$CATALOG_STAGE" "$CATALOG_DIR"
+  fi
+  CATALOG_STAGE=""
+fi
+python3 - "$CATALOG_DIR/packages.json" <<'PY' || fail "persistent catalog index is invalid"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+assert isinstance(payload, dict) and isinstance(payload.get("packages"), list)
+PY
+migrate_delivery_state false
+
+# Acquire only after the build/migrations. Keep this lock through health checks
+# and rollback; those paths must not reacquire it through a child publisher.
+acquire_publication_lock
+verify_public_pointers "$FINAL_ROOT" || fail "public desktop pointers changed before activation"
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
+RELEASE_SWITCHED=1
 ln -s "${CURRENT_LINK}/${SITE_SUBDIR}" "${SITE_LINK}.next"
 mv -Tf "${SITE_LINK}.next" "$SITE_LINK"
 install_cli_launcher
@@ -779,7 +1087,9 @@ READY=0
 for _ in $(seq 1 60); do
   if systemctl is-active --quiet modstore.service modstore-scheduler.service \
       && verify_health_identity "$HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA" \
-      && verify_health_identity "$SCHEDULER_HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA"; then
+      && verify_health_identity "$SCHEDULER_HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA" \
+      && verify_catalog_runtime_dir modstore.service \
+      && verify_catalog_runtime_dir modstore-scheduler.service; then
     READY=1
     break
   fi
@@ -814,4 +1124,6 @@ if [[ -n "$PUBLIC_HEALTH_URL" ]] \
   fail "exact-SHA public health verification failed"
 fi
 log "release promoted and verified git_sha=$TARGET_SHA root=$FINAL_ROOT"
+CATALOG_SERVICES_STOPPED=0
+trap - EXIT
 prune_releases "$FINAL_ROOT" "$PREVIOUS_ROOT" "$(canonical_path "$CURRENT_LINK")"

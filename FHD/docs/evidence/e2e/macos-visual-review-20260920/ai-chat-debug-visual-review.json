@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ai-chat-debug",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "f8be5c03b84cf46ad9667e1dc965963c2c69d531caf08e34f57b959ec3d5e8fa",
+  "visible_content": "聊天调试工作台明确写明“仅做本地模拟，不调用真实工具”，且未输入或运行测试。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ai-chat-debug.png"
+}

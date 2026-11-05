@@ -1,0 +1,100 @@
+{
+  "schema": "xcagi.site_release_acceptance/v1",
+  "release_time": "2026-09-26T11:09:01Z",
+  "git_sha": "5d32f458ecfcb737e15ce69af4209ce782eec701",
+  "site_build_sha": "6c88d30c5fada80c1be3bf46c304019e651392692e70dd34e1e3d4d390f52d5b",
+  "version": "1.0.0.5",
+  "pricing_ssot_sha": "90f9bf6e9283121999805adbba4f23f6e307367c3cabfde15ea5447b06c86225",
+  "capability_ssot_sha": "3c9e28c8bcda2326ac80a82ba193d74bd7b1f27475527609ddfcfc0925a5c015",
+  "release_manifest_sha": "f6dc9598296582d160b6d4e9669c0572157d4d6d240e7cf3e0318a4c82b07fa7",
+  "cases_ssot_sha": "9afe21525fbc4fd79df757a369b08ecacbfcf8e87479d95e8b2af829ae2a3397",
+  "page_count": 27,
+  "broken_links": [],
+  "hardcoded_fact_violations": [],
+  "video_test": "pass",
+  "video_problems": [],
+  "upstream_evidence_drift": [
+    {
+      "feature": "base-login",
+      "file": "base-login-base-login-web-20260924-015410.mp4",
+      "issues": [
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-login",
+      "file": "base-login-base-login-20260924-173522.mp4",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-login",
+      "file": "base-login-install-first-launch-20260924-170259.mp4",
+      "issues": [
+        "时长超 60s 或不可解析(None)",
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-rbac",
+      "file": "base-rbac-base-rbac.png",
+      "kind": "sha-mismatch-not-published",
+      "recorded_sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
+      "actual_sha256": "9c62e8a431250b1720eeab6c03dd6a72fecab906b6d087cd510acc9dd645ec17",
+      "action": "not-published"
+    },
+    {
+      "feature": "base-rbac",
+      "file": "base-rbac-base-rbac.mp4",
+      "issues": [
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    },
+    {
+      "feature": "base-rbac",
+      "file": "base-rbac-base-rbac.png",
+      "kind": "sha-mismatch-not-published",
+      "recorded_sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
+      "actual_sha256": "9c62e8a431250b1720eeab6c03dd6a72fecab906b6d087cd510acc9dd645ec17",
+      "action": "not-published"
+    },
+    {
+      "feature": "base-rbac",
+      "file": "base-rbac-base-rbac.mp4",
+      "issues": [
+        "原始录像不可追溯"
+      ],
+      "action": "not-published"
+    }
+  ],
+  "video_inventory": [
+    {
+      "file": "base-login-03-login-operation-web.mp4",
+      "duration_seconds": 47.0,
+      "codec": "avc1",
+      "sha256": "27210eeb7c3fdc2a",
+      "poster": "/capabilities/assets/evidence/base-login-03-postlogin-screen.png"
+    },
+    {
+      "file": "base-login-05c-gui-logout-operation-web.mp4",
+      "duration_seconds": 21.1,
+      "codec": "avc1",
+      "sha256": "fcd8ede9041e3be4",
+      "poster": "/capabilities/assets/evidence/base-login-03-postlogin-screen.png"
+    }
+  ],
+  "ssot_drift_test": "pass",
+  "ssot_drift_detail": "",
+  "mobile_test": "pass",
+  "desktop_test": "pass",
+  "video_runtime_test": "pass",
+  "range_test": "pass",
+  "result": "PASS",
+  "_gate": "result=PASS 才允许发布；BLOCKED 必须修复；PENDING 需回填运行时结果。禁止改断言、改结果字段或删测试来过门禁。"
+}

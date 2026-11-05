@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>验证中心 · XCAGI 实机验证与完整技术证据 | 成都修茈科技有限公司</title>
+    <meta
+      name="description"
+      content="XCAGI 验证中心：平台实机验证状态、≤60 秒验收录像与完整技术证据（版本、Git SHA、SHA256、原始录像）。所有状态由仓库证据自动生成。"
+    />
+    <link rel="stylesheet" href="./styles.css?v=20260925a" />
+    <link rel="stylesheet" href="/assets/site-v2.css?v=20260926a" />
+    <style>
+      /* 验证中心专用布局 */
+      .xc-verify-hero {
+        padding: clamp(56px, 7vw, 96px) 0 clamp(32px, 4vw, 48px);
+      }
+      .xc-plat-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 32px;
+      }
+      .xc-plat-card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 22px 20px;
+      }
+      .xc-plat-card .os {
+        font-size: 15px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .xc-plat-card .lv {
+        font-size: 12px;
+        color: var(--ink-3);
+        margin: 6px 0 12px;
+      }
+      .xc-plat-card .nums {
+        display: flex;
+        gap: 14px;
+        font-size: 13px;
+        color: var(--ink-2);
+      }
+      .xc-plat-card .nums strong {
+        color: var(--ink);
+      }
+      .xc-cap-strip {
+        display: flex;
+        gap: 22px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+        padding: 18px 22px;
+        background: var(--bg-soft);
+        border-radius: var(--radius);
+        font-size: 14px;
+        color: var(--ink-2);
+      }
+      .xc-cap-strip strong {
+        color: var(--ink);
+        font-size: 20px;
+        font-weight: 700;
+        margin-right: 4px;
+      }
+      .xc-feat {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        margin-top: 18px;
+        overflow: hidden;
+      }
+      .xc-feat-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 18px 22px;
+      }
+      .xc-feat-head h3 {
+        font-size: 16.5px;
+        margin-right: auto;
+      }
+      .xc-feat-body {
+        padding: 0 22px 22px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+        gap: 22px;
+      }
+      .xc-feat-note {
+        margin: 0 0 14px;
+        font-size: 14.5px;
+        color: var(--ink-2);
+      }
+      .xc-feat-shots {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .xc-feat-shots img {
+        width: 168px;
+        border-radius: 9px;
+        border: 1px solid var(--line);
+      }
+      .xc-feat-tech {
+        grid-column: 1 / -1;
+      }
+      .xc-feat-tech summary {
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--brand);
+        padding: 10px 0 4px;
+        list-style: none;
+      }
+      .xc-feat-tech summary::before {
+        content: '▸ ';
+      }
+      .xc-feat-tech[open] summary::before {
+        content: '▾ ';
+      }
+      .xc-feat-tech .xc2-kv {
+        margin-top: 10px;
+      }
+      .xc-case-sec {
+        padding-top: 8px;
+      }
+      .xc-case-sec .xc2-lead {
+        margin-bottom: 6px;
+      }
+      @media (max-width: 960px) {
+        .xc-plat-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .xc-feat-body {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 560px) {
+        .xc-plat-grid {
+          grid-template-columns: 1fr;
+        }
+        .xc-feat-shots img {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body class="xc2" data-page="verify">
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand-mark" href="/index.html" aria-label="XCAGI 官网首页">
+          <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+          <span class="brand-name"><strong>XCAGI</strong><span>企业业务自动化平台</span></span>
+        </a>
+        <nav class="nav" id="main-nav" aria-label="站点导航">
+          <div class="nav-menu">
+            <a data-nav="product" href="/index.html#product">产品</a>
+            <a data-nav="solutions" href="/solutions.html">解决方案</a>
+            <a data-nav="cases" href="/cases.html">客户案例</a>
+            <a data-nav="pricing" href="/pricing.html">价格</a>
+            <a data-nav="download" href="/download">下载</a>
+            <a class="active" data-nav="verify" href="/verify.html">验证中心</a>
+            <a data-nav="contact" href="/contact.html">联系我们</a>
+            <details class="nav-secondary">
+              <summary>技术与透明度</summary>
+              <div class="nav-secondary-panel">
+                <a href="/developer.html">开发者中心</a><a href="/world-will">世界意志</a>
+                <a href="/capabilities/">能力全景</a>
+                <a href="/download/breakpoints">断点清单</a><a href="/download/goals">工作目标</a>
+              </div>
+            </details>
+          </div>
+        </nav>
+        <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
+      </div>
+    </header>
+    <div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
+    <nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+      <a href="/index.html#product" class="mobile-menu-link">产品</a>
+      <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
+      <a href="/cases.html" class="mobile-menu-link">客户案例</a>
+      <a href="/pricing.html" class="mobile-menu-link">价格</a>
+      <a href="/download" class="mobile-menu-link">下载</a>
+      <a href="/verify.html" class="mobile-menu-link active">验证中心</a>
+      <a href="/contact.html" class="mobile-menu-link">联系我们</a>
+      <details class="mobile-secondary"><summary>技术与透明度</summary>
+        <a href="/developer.html" class="mobile-menu-link">开发者中心</a><a href="/world-will" class="mobile-menu-link">世界意志</a>
+        <a href="/capabilities/" class="mobile-menu-link">能力全景</a>
+        <a href="/download/breakpoints" class="mobile-menu-link">断点清单</a><a href="/download/goals" class="mobile-menu-link">工作目标</a>
+      </details>
+    </nav>
+
+    <main>
+      <section class="xc-verify-hero">
+        <div class="xc2-container">
+          <p class="xc2-eyebrow">验证中心</p>
+          <h1 class="xc2-h1" style="font-size: clamp(32px, 4.4vw, 50px)">产品声称，要有实机证据</h1>
+          <p class="xc2-lead">
+            这里的验证状态、录像与技术指标全部由 XCAGI
+            正式仓库的验收证据自动生成，不是人工标注。客户看到什么，仓库里就是什么——包括未通过的部分。
+          </p>
+          <p class="xc2-updated" style="margin-top: 18px" data-ssot="updated-stamp"></p>
+        </div>
+      </section>
+
+      <!-- 第一层：客户验证视图 -->
+      <section class="xc2-section xc2-section--soft" style="padding-top: clamp(48px, 6vw, 72px)">
+        <div class="xc2-container">
+          <h2 class="xc2-h2" style="font-size: clamp(24px, 3vw, 32px)">平台状态</h2>
+          <div class="xc-plat-grid" id="plat-grid"></div>
+          <div class="xc-cap-strip" id="cap-strip"></div>
+        </div>
+      </section>
+
+      <section class="xc2-section xc2-section--border">
+        <div class="xc2-container">
+          <h2 class="xc2-h2" style="font-size: clamp(24px, 3vw, 32px)">实机验证记录</h2>
+          <p class="xc2-lead" style="font-size: 16px">
+            每条记录对应一次真机验收：录像 ≤60 秒、连续无剪辑；完整指标点击「查看完整技术证据」展开。
+          </p>
+          <div id="feat-list"></div>
+        </div>
+      </section>
+
+      <!-- 案例证据锚点（首页/案例页「查看完整证据」落点） -->
+      <section class="xc2-section xc2-section--soft">
+        <div class="xc2-container">
+          <h2 class="xc2-h2" style="font-size: clamp(24px, 3vw, 32px)">客户案例的公开验证范围</h2>
+          <div id="case-evidence"></div>
+        </div>
+      </section>
+
+      <section class="xc2-section xc-final">
+        <div class="xc2-container xc2-center">
+          <h2 class="xc2-h2" style="font-size: clamp(24px, 3vw, 32px)">想自己验证？</h2>
+          <p class="xc2-lead" style="margin-left: auto; margin-right: auto">
+            安装 XCAGI 后，同样的验收脚本可以在你自己的企业环境里重跑。
+          </p>
+          <div class="xc2-btn-row xc-final-cta">
+            <a class="xc2-btn xc2-btn--primary" href="/download">下载 XCAGI</a>
+            <a class="xc2-btn xc2-btn--ghost" href="/contact.html">联系我们</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <div class="footer-left">
+          <a class="brand-mark" href="/index.html"><span class="brand-name"><strong>XCAGI</strong><span>企业业务自动化平台</span></span></a>
+          <p class="footer-copy">© 成都修茈科技有限公司 · <span id="year"></span></p>
+          <p class="footer-meta footer-legal"><a href="https://beian.miit.gov.cn/" rel="noopener noreferrer" target="_blank">蜀ICP备2026014056号-3A</a></p>
+        </div>
+        <nav class="footer-links" aria-label="页脚导航">
+          <a href="/index.html#product">产品</a><a href="/solutions.html">解决方案</a><a href="/cases.html">客户案例</a>
+          <a href="/pricing.html">价格</a><a href="/download">下载</a><a href="/verify.html">验证中心</a><a href="/contact.html">联系我们</a>
+          <details class="footer-secondary"><summary>技术与透明度</summary><a href="/developer.html">开发者中心</a><a href="/world-will">世界意志</a><a href="/capabilities/">能力全景</a><a href="/download/breakpoints">断点清单</a><a href="/download/goals">工作目标</a></details>
+        </nav>
+      </div>
+    </footer>
+
+    <script src="./main.js?v=20260925a"></script>
+    <script>
+      ;(function () {
+        'use strict'
+        var OPT = '/assets/optimized/'
+        var FEATURE_LABELS = {
+          'base-login': '登录与会话保持',
+          'ai-chat-core': '智能对话核心',
+          'ai-intent': '意图理解与任务编排',
+          'ai-knowledge': '知识库',
+          'base-update-mgmt': '版本更新管理',
+          'erp-excel-io': 'Excel 导入导出',
+          'erp-templates': '单据模板',
+          'ind-custom-delivery': '行业定制交付',
+        }
+        var PLATFORM_LABELS = { macos: 'macOS', windows: 'Windows', web: 'Web', android: 'Android', ios: 'iOS' }
+
+        function el(tag, cls, text) {
+          var e = document.createElement(tag)
+          if (cls) e.className = cls
+          if (text != null) e.textContent = text
+          return e
+        }
+        function badge(status) {
+          var map = {
+            passed: ['xc2-badge xc2-badge--ok', '已通过'],
+            failed: ['xc2-badge xc2-badge--bad', '未通过'],
+            partial: ['xc2-badge xc2-badge--warn', '部分通过'],
+          }
+          var m = map[status] || ['xc2-badge xc2-badge--muted', '待验证']
+          return el('span', m[0], m[1])
+        }
+        function vurl(path, sha) {
+          return sha ? path + '?v=' + String(sha).slice(0, 12) : path
+        }
+        function webpName(p, sha) {
+          var u = OPT + p.split('/').pop().replace(/\.(png|jpg|jpeg)$/i, '.webp')
+          return vurl(u, sha)
+        }
+
+        function statusText(f) {
+          if (f.status === 'passed') return '验收通过'
+          if (f.status === 'failed') return '验收未通过（如实公开）'
+          return '尚未完成验收'
+        }
+
+        function renderPlatforms(data) {
+          var host = document.getElementById('plat-grid')
+          if (!host) return
+          ;(data.platforms || []).forEach(function (p) {
+            var card = el('div', 'xc-plat-card')
+            var os = el('div', 'os')
+            os.appendChild(el('span', null, PLATFORM_LABELS[p.key] || p.key))
+            os.appendChild(el('span', 'xc2-badge ' + (p.verified > 0 ? 'xc2-badge--ok' : 'xc2-badge--muted'), p.verified > 0 ? '已验证' : '待验证'))
+            card.appendChild(os)
+            card.appendChild(el('div', 'lv', p.level || ''))
+            var nums = el('div', 'nums')
+            function numStat(value, label) {
+              var s = el('span')
+              s.appendChild(el('strong', null, String(value)))
+              s.appendChild(document.createTextNode(' ' + label))
+              return s
+            }
+            nums.appendChild(numStat(p.applicable, '适用能力'))
+            nums.appendChild(numStat(p.verified, '已验证'))
+            nums.appendChild(numStat(p.pending || 0, '待验证'))
+            card.appendChild(nums)
+            if (p.last_verified_at) {
+              card.appendChild(el('div', 'lv', '最近实机验证：' + p.last_verified_at))
+            }
+            host.appendChild(card)
+          })
+          var caps = data.capabilities || {}
+          var strip = document.getElementById('cap-strip')
+          if (strip && caps.total != null) {
+            var bs = caps.by_status || {}
+            function capStat(value, label) {
+              var s = el('span')
+              s.appendChild(el('strong', null, String(value)))
+              s.appendChild(document.createTextNode(label))
+              return s
+            }
+            strip.appendChild(capStat(caps.total, '项能力'))
+            strip.appendChild(capStat(bs.verified || 0, '已验证'))
+            strip.appendChild(capStat(bs.partial || 0, '部分验证'))
+            strip.appendChild(capStat(bs.implemented || 0, '已实现待验证'))
+            strip.appendChild(capStat(bs.planned || 0, '规划中'))
+            var spacer = el('span')
+            spacer.style.flex = '1'
+            strip.appendChild(spacer)
+            var catalogLink = el('a', null, '完整能力目录 →')
+            catalogLink.href = '/capabilities/'
+            strip.appendChild(catalogLink)
+          }
+        }
+
+        function techBlock(f) {
+          var det = el('details', 'xc-feat-tech')
+          det.appendChild(el('summary', null, '查看完整技术证据'))
+          var kv = el('dl', 'xc2-kv')
+          function row(name, value) {
+            kv.appendChild(el('dt', null, name))
+            kv.appendChild(el('dd', null, value))
+          }
+          row('产品版本', 'v' + (f.app_version || '-'))
+          row('Git SHA', f.app_git_sha || '-')
+          row('验收状态', statusText(f))
+          row('通过 / 失败', (f.passed || 0) + ' / ' + (f.failed || 0))
+          row('验证时间', f.verified_at || '-')
+          ;(f.media || []).forEach(function (m, i) {
+            if (m.sha256) row('媒体 ' + (i + 1) + ' SHA256', m.sha256)
+          })
+          ;(f.media || []).forEach(function (m) {
+            if (m.kind === 'video' && m.original_recording) {
+              row('原始录像', m.original_recording.name + '（' + Math.round(m.original_recording.bytes / 1048576) + 'MB，SHA256 ' + m.original_recording.sha256.slice(0, 16) + '…，存档于工程证据库）')
+            }
+          })
+          if (f.source_run) {
+            var dd = el('dd')
+            var a = el('a', null, '验收记录 run.json')
+            a.href = f.source_run
+            a.target = '_blank'
+            a.rel = 'noopener'
+            kv.appendChild(el('dt', null, '验收记录'))
+            dd.appendChild(a)
+            if (f.run_log) {
+              dd.appendChild(el('span', null, ' · '))
+              var lg = el('a', null, '运行日志 run.log')
+              lg.href = f.run_log.public_path
+              lg.target = '_blank'
+              lg.rel = 'noopener'
+              dd.appendChild(lg)
+              dd.appendChild(el('span', null, '（SHA256 ' + f.run_log.sha256.slice(0, 16) + '…）'))
+            }
+            kv.appendChild(dd)
+          }
+          det.appendChild(kv)
+          var more = el('p', 'xc-feat-note')
+          more.appendChild(document.createTextNode('能力定义与完整验收历史见 '))
+          var catLink = el('a', null, '能力目录')
+          catLink.href = '/capabilities/catalog.html'
+          more.appendChild(catLink)
+          more.appendChild(document.createTextNode('。'))
+          det.appendChild(more)
+          return det
+        }
+
+        function renderFeatures(data) {
+          var host = document.getElementById('feat-list')
+          if (!host) return
+          var feats = (data.evidence && data.evidence.features) || []
+          feats
+            .slice()
+            .sort(function (a, b) {
+              var rank = { passed: 0, failed: 1 }
+              return (rank[a.status] ?? 2) - (rank[b.status] ?? 2)
+            })
+            .forEach(function (f) {
+              var card = el('article', 'xc-feat')
+              card.id = 'feat-' + f.feature
+              var head = el('div', 'xc-feat-head')
+              head.appendChild(el('h3', null, FEATURE_LABELS[f.feature] || f.feature))
+              head.appendChild(badge(f.status))
+              if (f.platform) {
+                head.appendChild(el('span', 'xc2-badge xc2-badge--info', PLATFORM_LABELS[f.platform] || f.platform))
+              }
+              head.appendChild(el('span', 'xc2-updated', f.verified_at ? '验证于 ' + f.verified_at : ''))
+              card.appendChild(head)
+
+              var body = el('div', 'xc-feat-body')
+              var left = el('div')
+              var firstText = null
+              ;(f.media || []).forEach(function (m) {
+                if (!firstText && (m.visible_result || m.visible_content)) firstText = m.visible_result || m.visible_content
+              })
+              left.appendChild(el('p', 'xc-feat-note', firstText || statusText(f)))
+              var shots = el('div', 'xc-feat-shots')
+              ;(f.media || [])
+                .filter(function (m) { return m.kind === 'screenshot' && m.public_path })
+                .slice(0, 2)
+                .forEach(function (m) {
+                  var pic = document.createElement('picture')
+                  var s = document.createElement('source')
+                  s.setAttribute('type', 'image/webp')
+                  s.setAttribute('srcset', webpName(m.public_path, m.sha256))
+                  var img = el('img')
+                  img.src = vurl(m.public_path, m.sha256)
+                  img.alt = m.visible_result || FEATURE_LABELS[f.feature] || f.feature
+                  img.loading = 'lazy'
+                  pic.appendChild(s)
+                  pic.appendChild(img)
+                  shots.appendChild(pic)
+                })
+              if (shots.children.length) left.appendChild(shots)
+              body.appendChild(left)
+
+              var right = el('div')
+              ;(f.media || [])
+                .filter(function (m) { return m.kind === 'video' && m.public_path && m.duration_ok })
+                .slice(0, 1)
+                .forEach(function (m) {
+                  var v = document.createElement('video')
+                  v.className = 'xc2-video'
+                  v.src = vurl(m.public_path, m.sha256)
+                  if (m.poster) v.poster = m.poster
+                  v.preload = 'metadata'
+                  v.controls = true
+                  v.playsInline = true
+                  v.setAttribute('playsinline', '')
+                  right.appendChild(v)
+                  right.appendChild(el('p', 'xc2-updated', '验收录像 · ' + m.duration_seconds + ' 秒 · 连续无剪辑 · 2× 速度'))
+                })
+              body.appendChild(right)
+
+              body.appendChild(techBlock(f))
+              card.appendChild(body)
+              host.appendChild(card)
+            })
+        }
+
+        function renderCaseEvidence(data) {
+          var host = document.getElementById('case-evidence')
+          if (!host) return
+          var feats = (data.evidence && data.evidence.features) || []
+          ;(data.cases || []).forEach(function (c) {
+            var sec = el('div', 'xc-case-sec')
+            sec.id = 'case-' + c.case_id
+            sec.style.marginTop = '34px'
+            var head = el('div', 'xc-feat-head')
+            head.appendChild(el('h3', null, c.customer_display_name))
+            head.appendChild(el('span', 'xc2-badge xc2-badge--warn', c.evidence_status))
+            sec.appendChild(head)
+            var body = el('div', 'xc-feat-body')
+            var left = el('div')
+            left.appendChild(el('p', 'xc-feat-note', c.limitations || ''))
+            var rel = el('div', 'xc-feat-shots')
+            ;(c.screenshots || []).forEach(function (s) {
+              var pic = document.createElement('picture')
+              var src = document.createElement('source')
+              src.setAttribute('type', 'image/webp')
+              src.setAttribute('srcset', webpName(s.public_path, s.sha256))
+              var img = el('img')
+              img.src = vurl(s.public_path, s.sha256)
+              img.alt = s.caption || ''
+              img.loading = 'lazy'
+              pic.appendChild(src)
+              pic.appendChild(img)
+              rel.appendChild(pic)
+            })
+            if (rel.children.length) left.appendChild(rel)
+            var kv = el('dl', 'xc2-kv')
+            ;(c.screenshots || []).forEach(function (s, i) {
+              kv.appendChild(el('dt', null, '截图 ' + (i + 1) + ' SHA256'))
+              kv.appendChild(el('dd', null, s.sha256 || '-'))
+            })
+            left.appendChild(kv)
+            body.appendChild(left)
+
+            var right = el('div')
+            ;(c.acceptance_ref || []).forEach(function (fid) {
+              var f = feats.filter(function (x) { return x.feature === fid })[0]
+              if (!f) return
+              var line = el('div', null, '')
+              line.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;'
+              line.appendChild(el('a', null, FEATURE_LABELS[fid] || fid)).href = '#feat-' + fid
+              line.appendChild(badge(f.status))
+              right.appendChild(line)
+            })
+            if (!right.children.length) right.appendChild(el('p', 'xc-feat-note', '关联验收记录待补。'))
+            body.appendChild(right)
+            sec.appendChild(body)
+            host.appendChild(sec)
+          })
+        }
+
+        fetch('/site/data/public-site.json', { credentials: 'same-origin' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('public-site.json ' + r.status)
+            return r.json()
+          })
+          .then(function (data) {
+            var stamp = document.querySelector('[data-ssot="updated-stamp"]')
+            if (stamp) {
+              stamp.textContent =
+                '数据更新：' + (data.data_updated_at || '-') + ' · 来源：XCAGI 发布 SSOT · 随正式仓库发布自动更新'
+            }
+            renderPlatforms(data)
+            renderFeatures(data)
+            renderCaseEvidence(data)
+          })
+          .catch(function (err) {
+            console.warn('[verify] SSOT 数据加载失败：', err)
+          })
+      })()
+    </script>
+  </body>
+</html>

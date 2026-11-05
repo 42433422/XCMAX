@@ -8,6 +8,8 @@ from urllib.parse import quote
 
 import httpx
 
+from modstore_server.cred_vault import get_credential
+
 
 class ParaUnavailable(RuntimeError):
     pass
@@ -15,7 +17,10 @@ class ParaUnavailable(RuntimeError):
 
 def stale_window() -> int:
     try:
-        return max(15, min(3600, int(os.environ.get("MODSTORE_MAC_CONTROL_STALE_SECONDS", "90"))))
+        return max(
+            15,
+            min(3600, int(os.environ.get("MODSTORE_MAC_CONTROL_STALE_SECONDS", "90"))),
+        )
     except ValueError:
         return 90
 
@@ -23,7 +28,11 @@ def stale_window() -> int:
 class ParaClient:
     def __init__(self):
         self.base = os.environ.get("MODSTORE_PARA_API_BASE", "").rstrip("/")
-        token = os.environ.get("MODSTORE_PARA_CONTROL_TOKEN", "")
+        token = get_credential(
+            "MODSTORE_PARA_CONTROL_TOKEN",
+            task_id="mac-control",
+            purpose="para_control_api",
+        )
         if not self.base or not token:
             raise ParaUnavailable("service_identity_not_configured")
         self.client = httpx.Client(

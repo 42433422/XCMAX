@@ -592,7 +592,7 @@ class TestProductsPgInsertRow:
             ):
                 with patch.dict(
                     "sys.modules",
-                    {"app.application.excel_imports": MagicMock(_norm_model=lambda *a: "M")},
+                    {"app.domain.app_pure.excel_imports": MagicMock(_norm_model=lambda *a: "M")},
                 ):
                     with pytest.raises(HTTPException) as exc_info:
                         products_pg_insert_row(
@@ -615,7 +615,7 @@ class TestProductsPgInsertRow:
             ):
                 with patch.dict(
                     "sys.modules",
-                    {"app.application.excel_imports": MagicMock(_norm_model=lambda *a: "M")},
+                    {"app.domain.app_pure.excel_imports": MagicMock(_norm_model=lambda *a: "M")},
                 ):
                     with pytest.raises(HTTPException) as exc_info:
                         products_pg_insert_row(

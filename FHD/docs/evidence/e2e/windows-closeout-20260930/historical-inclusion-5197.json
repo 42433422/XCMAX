@@ -1,0 +1,104 @@
+[
+  {
+    "pr": {
+      "headRefOid": "bed9869b8d139f56cf644808eb62d31fdbb5224b",
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 2096,
+      "state": "OPEN",
+      "url": "https://github.com/42433422/XCMAX/pull/2096"
+    },
+    "included_in_frozen_release": null
+  },
+  {
+    "pr": {
+      "headRefOid": "66950aec8c9f3d60ab9dfc5f67ffd0fa3f8992cd",
+      "mergeCommit": {
+        "oid": "37fbabedc281066196e3e1fd4a32cefacf41ed28"
+      },
+      "mergedAt": "2026-09-29T23:58:26Z",
+      "number": 2103,
+      "state": "MERGED",
+      "url": "https://github.com/42433422/XCMAX/pull/2103"
+    },
+    "included_in_frozen_release": true
+  },
+  {
+    "pr": {
+      "headRefOid": "235a1bb5fe28de1d3efa2a43a6ff2b15e2108e8c",
+      "mergeCommit": {
+        "oid": "83939363ca2ccf7776c97f5c7895e29c1e5bc453"
+      },
+      "mergedAt": "2026-09-30T02:47:12Z",
+      "number": 2104,
+      "state": "MERGED",
+      "url": "https://github.com/42433422/XCMAX/pull/2104"
+    },
+    "included_in_frozen_release": true
+  },
+  {
+    "pr": {
+      "headRefOid": "3b99b778a8e56a08a414fe7a3cc4eace96e9cd44",
+      "mergeCommit": {
+        "oid": "e5b2412ace0c7b202a6f60c41472b1deef83d8d8"
+      },
+      "mergedAt": "2026-09-30T11:36:45Z",
+      "number": 2107,
+      "state": "MERGED",
+      "url": "https://github.com/42433422/XCMAX/pull/2107"
+    },
+    "included_in_frozen_release": true
+  },
+  {
+    "pr": {
+      "headRefOid": "72205622a272609e4ba7eac743af7f4ffe4a2b95",
+      "mergeCommit": {
+        "oid": "f3421f709f585d829029c8da872d3b96708ac86f"
+      },
+      "mergedAt": "2026-10-01T06:03:58Z",
+      "number": 2109,
+      "state": "MERGED",
+      "url": "https://github.com/42433422/XCMAX/pull/2109"
+    },
+    "included_in_frozen_release": true
+  },
+  {
+    "pr": {
+      "headRefOid": "40a7c90455af7bb8a0d26c6d7d71ce709280b443",
+      "mergeCommit": {
+        "oid": "7ac780384f5a2343fdc44eac710dcc1825cf1645"
+      },
+      "mergedAt": "2026-10-01T03:14:40Z",
+      "number": 2113,
+      "state": "MERGED",
+      "url": "https://github.com/42433422/XCMAX/pull/2113"
+    },
+    "included_in_frozen_release": true
+  },
+  {
+    "pr": {
+      "headRefOid": "8b86ebc29ff1b0faa6029e01e90e97ebb2160d56",
+      "mergeCommit": {
+        "oid": "10b3418ff7ba3b905974c751a2e15bcef798b6b9"
+      },
+      "mergedAt": "2026-10-01T04:20:02Z",
+      "number": 2114,
+      "state": "MERGED",
+      "url": "https://github.com/42433422/XCMAX/pull/2114"
+    },
+    "included_in_frozen_release": true
+  },
+  {
+    "pr": {
+      "headRefOid": "d1fb39b45978d3fcb2a3c296825bcefdd942c645",
+      "mergeCommit": {
+        "oid": "5197dd66c3ce82c7e28f33a00ed0e11ef3cb5b30"
+      },
+      "mergedAt": "2026-10-01T08:59:28Z",
+      "number": 2116,
+      "state": "MERGED",
+      "url": "https://github.com/42433422/XCMAX/pull/2116"
+    },
+    "included_in_frozen_release": true
+  }
+]

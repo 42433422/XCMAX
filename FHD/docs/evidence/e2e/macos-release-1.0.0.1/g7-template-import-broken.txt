@@ -1,0 +1,31 @@
+# G7 RED 证据：1.0.0.1 发货单模板导入链路断裂（2026-09-12 真机复测）
+
+环境：macOS 验收实例 `~/Applications/acceptance/XCAGI.app`（1.0.0.1 / gitSha 99854233），后端 127.0.0.1:17500，登录前。
+
+## 复现步骤
+
+1. `GET /api/health`（预置 CSRF cookie）
+2. `GET /api/templates` → 模板库仅 10 个 builtin_seed（客户/产品/销售订单/出货记录/库存/采购/报价/对账单/2 个 Word），**无任何「发货单」类型版式模板**
+3. `POST /api/templates/upload`（multipart，尹玉华1.xlsx）→ **405 Method Not Allowed**（shipped 后端未注册 template_create 路由）
+4. `POST /api/templates/analyze`、`POST /api/templates/create` → 同样 405
+5. `POST /api/excel/template/save`（shipped 后端唯一已注册的模板写入端点）→ **404 源模板不存在: 尹玉华1.xlsx**（要求源文件已存在于 base_dir，而用户无 UI 途径放置）
+6. `GET /api/shipment/orders/next_number` → PASS：`26-09-00001A`（取号/CSRF 链路正常）
+7. `POST /api/shipment/generate`（unit_name+products）→ **500 TEMPLATE_NOT_FOUND**（`template_resolution.error_code=TEMPLATE_NOT_FOUND`，`agent_status=failed`）
+
+## 关键响应（原文见同目录日志）
+
+- `{"success":false,"error_code":"http_405","message":"Method Not Allowed","path":"/api/templates/upload"}`
+- `{"success":false,"message":"源模板不存在: 尹玉华1.xlsx"}`
+- `"template_resolution":{"error_code":"TEMPLATE_NOT_FOUND","ok":false},"agent_status":"failed"}`
+
+## 根因（静态定位）
+
+- shipped build（99854233，#1713）**不含** `app/fastapi_routes/template_create.py`（该文件由 main 上 b97073acc 引入，晚于构建提交），而打包前端 `vue-dist/assets/js/templatePreview-DX5BWt7p.js` 调用 `api/templates/upload|analyze|create` → UI 模板导入整链 405；
+- 应用不内置发货单版式模板：bundle 内无 `tools_legacy/AI助手/尹玉华1.xlsx`，legacy 兜底失效；
+- 结论：**1.0.0.1 用户无法通过任何 UI/API 途径导入发货单模板，无法完成发运单真实业务**。
+
+## 修复与重测
+
+- 修复已在 main：b97073acc（恢复 template_create 路由）。下个版本（T7）发版后重测：`POST /api/templates/upload` 应 2xx，且模板入库后 `POST /api/shipment/generate` 应成功出单。
+- 服务端日志旁证：`logs/electron-backend.log` `HTTP Exception 405: Method Not Allowed - Path: /api/templates/upload`。
+- 实例状态截图：`06-app-state-g7-red.png`。

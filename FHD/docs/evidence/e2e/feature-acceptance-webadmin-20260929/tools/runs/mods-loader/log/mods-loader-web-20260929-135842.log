@@ -1,0 +1,9 @@
+[13:58:42] feature=mods-loader platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-loader
+[13:58:55] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:58:57] case L1: passed - 已挂载的 Mod 路由清单真实读取
+[13:58:57] case L2: passed - 行业包 manifest 清单校验真实通过
+[13:58:58] case L3: passed - 模块激活态真实读取
+[13:59:00] case L4: passed - 未完成签名与安装验证的运行时加载被拒（负例/边界）
+[13:59:03] case L5: passed - 未找到 Mod 的清单校验被拒（负例/边界）
+[13:59:03] video: mods-loader-web-20260929-135842.webm (1327108 bytes)
+[13:59:03] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-loader/log/mods-loader-web-20260929-135842.log

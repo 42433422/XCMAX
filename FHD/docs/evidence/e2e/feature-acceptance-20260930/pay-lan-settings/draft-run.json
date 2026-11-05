@@ -1,0 +1,62 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "pay-lan-settings",
+ "name": "内网模式与授权设置",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/lan/admin/settings",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/lan/admin/settings（写操作自动附带 CSRF）：内网设置",
+   "expected": "内网设置：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 13ms；{\"enabled\": false, \"secret_ready\": false, \"secret_length\": 0, \"secret_preview\": \"\", \"bootstrap_set\": false, \"bootstrap_length\": 0, \"bootstrap_preview\": \"\", \"allowed_cidrs\": [\"127.0.0.1/32\", \"::1/128\",",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/lan/admin/allowlist",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/lan/admin/allowlist（写操作自动附带 CSRF）：白名单",
+   "expected": "白名单：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 14ms；{\"success\": true, \"data\": []}",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /lan-gate",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /lan-gate，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /lan-gate，页面可见 授权，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /lan-gate；命中文本 ['授权']；缺失 []；界面请求失败 []；页面摘录：FHD · 局域网授权 | 当前未启用局域网模式，无需授权。 | 进入系统 | 状态：未启用 | 本机 IP：127.0.0.1 | 主机管理员位",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "pay-lan-settings",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/pay-lan-settings/macos/result.png",
+   "sha256": "038db54377b5a14055c7f70774a30a8ac1cf790081bb4929ff9d62bd31e330a5",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "pay-lan-settings",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/pay-lan-settings/macos/operation.webm",
+   "sha256": "985f3cc72753ac8c4e2f0ee42db8ad197f23f32be5dc30de5da26c1fbd87563b",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/pay-lan-settings/macos/run.log",
+  "sha256": "72df9c03cff9749ab3694f5502ace31c2da4a9f3fb0dafc18c021c75da500d30",
+  "bytes": 1097
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

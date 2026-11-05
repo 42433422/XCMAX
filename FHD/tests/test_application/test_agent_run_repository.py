@@ -18,6 +18,73 @@ from app.application.agent_orchestrator import (
 )
 
 
+def test_sql_tenant_filter_precedes_limit_across_streaming_batches(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'tenant-list.db'}")
+    factory = sessionmaker(bind=engine)
+    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+    expected = []
+    try:
+        # Desired records are older than more than two streaming batches of
+        # another tenant's records belonging to the same user.
+        for index in range(2):
+            run = AgentRun(user_id="owner", message=f"target-{index}")
+            run.metadata["runtime_context"] = {"tenant_id": "target"}
+            repo.save(run)
+            expected.insert(0, run.run_id)
+        with factory.begin() as db:
+            for index in range(205):
+                run = AgentRun(user_id="owner", message=f"other-{index}")
+                run.metadata["runtime_context"] = {"tenant_id": "other"}
+                repo.save_in_session(db, run)
+        legacy = AgentRun(user_id="owner", message="no tenant")
+        repo.save(legacy)
+        outsider = AgentRun(user_id="different-user", message="same tenant other user")
+        outsider.metadata["runtime_context"] = {"tenant_id": "target"}
+        repo.save(outsider)
+        fresh = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
+        assert [
+            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id="target", limit=2)
+        ] == expected
+        assert [
+            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id="target", limit=1)
+        ] == expected[:1]
+        assert fresh.list_recent(user_id="owner", tenant_id="missing", limit=2) == []
+        assert fresh.list_recent(user_id="owner", tenant_id="target", limit=0) == []
+        assert [
+            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id="", limit=2)
+        ] == [legacy.run_id]
+    finally:
+        engine.dispose()
+
+
+def test_sql_mod_filter_precedes_limit_across_batches(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'mod-list.db'}")
+    factory = sessionmaker(bind=engine)
+    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+    try:
+        visible = AgentRun(user_id="owner", message="visible")
+        visible.metadata["runtime_context"] = {"_mod_authorization": {"mod_id": "a"}}
+        repo.save(visible)
+        with factory.begin() as db:
+            for index in range(105):
+                hidden = AgentRun(user_id="owner", message=f"hidden-{index}")
+                hidden.metadata["runtime_context"] = {"_mod_authorization": {"mod_id": "b"}}
+                repo.save_in_session(db, hidden)
+        host = AgentRun(user_id="owner", message="host")
+        repo.save(host)
+        fresh = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
+        assert [
+            run.run_id
+            for run in fresh.list_recent(user_id="owner", tenant_id="", mod_id="a", limit=1)
+        ] == [visible.run_id]
+        assert [run.run_id for run in fresh.list_recent(user_id="owner", mod_id="", limit=1)] == [
+            host.run_id
+        ]
+        assert fresh.list_recent(user_id="owner", mod_id="missing", limit=1) == []
+    finally:
+        engine.dispose()
+
+
 def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'agent-runs.db'}")
     session_factory = sessionmaker(bind=engine)
@@ -294,3 +361,46 @@ def test_desktop_repository_persists_four_tasks_concurrently(tmp_path, monkeypat
         }
     finally:
         engine.dispose()
+
+
+def test_sql_plain_save_locks_before_reading_concurrently_returned_evidence(tmp_path, monkeypatch):
+    from sqlalchemy import event
+
+    from app.application.agent_orchestrator import chat_trace
+
+    url = f"sqlite:///{tmp_path / 'save-receipt-race.sqlite'}"
+    engines = [create_engine(url) for _ in range(2)]
+    repo, writer = [
+        SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=e)) for e in engines
+    ]
+    original = repo.save(AgentRun(user_id="owner", message="write", status="running"))
+    writer._ensure_schema()
+    stale = repo.get(original.run_id)
+    monkeypatch.setattr(chat_trace, "get_agent_run_repository", lambda: writer)
+    injected = []
+
+    def returned_before_write(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("UPDATE agent_runs") and not injected:
+            injected.append(True)
+            chat_trace.mark_legacy_chat_stream_interrupted(
+                original, pending=True, reason="consumer_closed"
+            )
+            chat_trace.record_legacy_stream_tool_receipt(
+                original, sequence=1, record={"receipt": "committed-once"}
+            )
+
+    event.listen(engines[0], "before_cursor_execute", returned_before_write)
+    try:
+        repo.save(stale)
+        final = writer.get(original.run_id)
+        assert injected == [True]
+        assert final.metadata["non_retryable"] is True
+        assert final.metadata["recovery"]["state"] == "manual_reconciliation_required"
+        assert final.metadata["stream_tool_audit"][0]["record"]["receipt"] == "committed-once"
+        assert {item.event_type for item in final.events} >= {
+            "run.observation_interrupted",
+            "tool.receipt_observed",
+        }
+    finally:
+        for engine in engines:
+            engine.dispose()

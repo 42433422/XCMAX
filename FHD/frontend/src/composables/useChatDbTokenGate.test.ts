@@ -5,7 +5,8 @@ import { ref } from 'vue'
 const executeRemote = vi.fn()
 const readAiSessionIdFromStorageMock = vi.fn(() => 'stored-sid')
 
-vi.mock('@/utils/xcagiStorageKeys', () => ({
+vi.mock('@/utils/chatStorageKeys', async importOriginal => ({
+  ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
   readAiSessionIdFromStorage: () => readAiSessionIdFromStorageMock(),
 }))
 

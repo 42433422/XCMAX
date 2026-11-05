@@ -1,0 +1,360 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "pay-entitlement",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-070139",
+  "generated_at": "2026-09-29 07:01:59",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 5,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端完成：管理员登录 → 「用户管理 / 账号权益」页真实渲染（管理用户等级与行业、分配客户 Mod 权益）→ 已购权益清单接口真实读取（backend=json）→ 企业端权益强推快照接口返回本账号身份与 has_snapshot=false → 权益快车道套餐与用户列表接口在未绑定市场账号时被拒（401）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 48050,
+        "processed": 48011,
+        "errors": 0,
+        "dropped": 39,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 3,
+            "max_cache_size": 1000,
+            "hits": 8,
+            "misses": 3,
+            "hit_rate": 0.7272727272727273,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "error.occurred",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "evolution.search"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/pay-entitlement/pay-entitlement-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "pay-entitlement",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement/shot/00-login-form.png",
+      "sha256": "5d988796e21596de88825ee59080f917a50904f0f46ce6ffa708c67d36f489cd",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号 admin、密码为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement/shot/PE1-entitlements-ui.png",
+      "sha256": "6126024d4550578dee7cef6d49311501b61bda5463048c8ddbb6d4bd69e65579",
+      "visual_review": "accepted",
+      "visible_result": "「账号权益 / 用户管理」页真实渲染：顶栏面包屑「账号权益」，标题「用户管理」，说明「管理用户等级与行业，分配客户 Mod 权益，或进入代管模式代为配置。」，含「新建账号」按钮；红条「尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization」与「余额查询失败：…」；「本地宿主状态 7 个 Mod 已安装」；筛选 全部等级/全部行业、「共 0 / 0 人」，主体「没有匹配的用户」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement/shot/PE2-model-entitlements.png",
+      "sha256": "2ed799026c9772bde276ccc3a310a561dc9bdd6cd90728e0bcffa6cc67c1d032",
+      "visual_review": "accepted",
+      "visible_result": "本工具在真实浏览器中渲染的本轮响应：GET /api/model-payment/entitlements 返回 200，success=true，data.entitlements=[]，data.backend='json'。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement/shot/PE3-sync-current-entitlements.png",
+      "sha256": "daa6a9ae62ed53247d333f93b7fd8c39655c296d877dca70e084a472db7b6955",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/xcmax/sync/entitlements/current 返回 200，success=true，data.has_snapshot=false，data.account={username:'admin', account_kind:'admin', market_is_enterprise:true, market_is_admin:true}。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement/shot/PE4-fast-lane-plans-denied.png",
+      "sha256": "57be8d33dbba13c3889534738898cd88bc5bc91c76d27ff696919740201133ea",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/xcmax/admin/market/entitlement-fast-lane/plans 返回 401，success=false，message=尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement/shot/PE5-market-users-denied.png",
+      "sha256": "13998aee85bfc8413763a7cc6d500aad36d33833162655350db062925829668a",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/xcmax/admin/market/users 返回 401，success=false，同一未绑定市场账号消息。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "pay-entitlement",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-entitlement/video/pay-entitlement-web-20260929-070139.webm",
+      "sha256": "2f83dde3ea8d7f18f477bc72b8ac0b7ddafe854144835278d88cf18481d0ea2f",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，18.80s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 用户管理（账号权益）页渲染 → 权益清单/强推快照读取 → 快车道套餐与市场用户 401。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "PE1",
+      "title": "「用户管理 / 账号权益」页真实渲染",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器导航到 /admin/entitlements，等待 SPA 渲染后读取标题与正文。",
+      "expected": "渲染出「用户管理」并显示「管理用户等级与行业」说明与账号等级筛选。",
+      "observed": "{\"final_url\": \"http://127.0.0.1:42423/admin/entitlements\", \"title\": \"用户管理 - XCAGI\", \"has_users_view\": true, \"has_account_levels\": true, \"text_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能力未就绪 版本检测中 平台运维 · 系统管理 账号权益 副窗 ◈ 工作区 3 用户管理  管理用户等级与行业，分配客户 Mod 权益，或进入代管模式代为配置。  新建账号 尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization 余额查询失败：尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization 本地宿主状态7 个 Mod 已安装 刷新状态 全部\"}",
+      "result": "passed"
+    },
+    {
+      "id": "PE2",
+      "title": "已购权益清单接口真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/model-payment/entitlements。",
+      "expected": "200 且 success=true，entitlements 为数组，backend=json。",
+      "observed": "{\"status\": 200, \"backend\": \"json\", \"entitlement_count\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "PE3",
+      "title": "企业端权益强推快照接口返回本账号身份",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/xcmax/sync/entitlements/current。",
+      "expected": "200 且 success=true，account.username=admin 且为企业管理员身份，含 has_snapshot 字段。",
+      "observed": "{\"status\": 200, \"has_snapshot\": false, \"account\": {\"market_user_id\": null, \"username\": \"admin\", \"account_kind\": \"admin\", \"market_is_enterprise\": true, \"market_is_admin\": true}, \"updated_at_ms\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "PE4",
+      "title": "权益快车道套餐未绑定市场账号被拒",
+      "input": "已建立的管理员会话，但未绑定市场 Authorization。",
+      "actions": "页面上下文 fetch GET /api/xcmax/admin/market/entitlement-fast-lane/plans。",
+      "expected": "HTTP 401，success=false，不返回套餐数据。",
+      "observed": "{\"status\": 401, \"message\": \"尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization\"}",
+      "result": "passed"
+    },
+    {
+      "id": "PE5",
+      "title": "市场用户（授权对象）列表未绑定市场账号被拒",
+      "input": "已建立的管理员会话，但未绑定市场 Authorization。",
+      "actions": "页面上下文 fetch GET /api/xcmax/admin/market/users。",
+      "expected": "HTTP 401，success=false，不返回用户数据。",
+      "observed": "{\"status\": 401, \"message\": \"尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization\"}",
+      "result": "passed"
+    }
+  ]
+}

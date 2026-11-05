@@ -45,3 +45,32 @@ jobs:
           fi
           echo "Scanning commit range ${BASE}..${HEAD}"
           /tmp/gitleaks detect --source . --config .github/gitleaks-config.toml --log-opts "${BASE}..${HEAD}" --redact --no-banner --exit-code 1
+
+  # 凭据统一托管门禁：gitleaks 管高熵令牌形态；这里补短口令、默认值、命令行明文密码与 Markdown，
+  # 只看本次新增行、只输出 文件:行号:规则（不打印值）。另跑凭据层（Mac 执行端）单测。
+  credential-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block new plaintext credentials (PR range / push increment)
+        run: |
+          set -euo pipefail
+          if [ '${{ github.event_name }}' = 'pull_request' ]; then
+            BASE='${{ github.event.pull_request.base.sha }}'
+            HEAD='${{ github.event.pull_request.head.sha }}'
+          else
+            BASE='${{ github.event.before }}'
+            HEAD='${{ github.sha }}'
+            case "$BASE" in
+              ''|0000000000000000000000000000000000000000) BASE="${HEAD}~1" ;;
+            esac
+          fi
+          python3 FHD/scripts/security/check_plaintext_credentials.py --base "$BASE" --head "$HEAD"
+
+      - name: Credential vault unit tests (Mac executor)
+        run: node --test FHD/scripts/autonomy/runtime_tools/credential_vault.test.mjs

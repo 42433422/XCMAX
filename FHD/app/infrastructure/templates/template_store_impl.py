@@ -9,13 +9,15 @@ from typing import Any, cast
 
 from sqlalchemy import text
 
-from app.application.ports.template_store import TemplateStorePort
-from app.db.session import get_db
+from app.db import session as db_session
+from app.domain.template.ports import TemplateStorePort
 from app.infrastructure.templates.stored_metadata import read_stored_template_metadata
 from app.infrastructure.templates.template_discovery import (
     business_scope,
     discovery_directories,
     infer_template_type_from_filename,
+    template_path_key,
+    tenant_template_directories,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
@@ -109,7 +111,21 @@ class FileSystemTemplateStore(TemplateStorePort):
                             "file_path": file_path,
                             "template_type": template_type,
                             "category": self._map_category(template_type),
-                            "business_scope": self._business_scope(template_type),
+                            "business_scope": (
+                                "orders"
+                                if norm_path
+                                == os.path.normcase(
+                                    os.path.abspath(
+                                        os.path.join(
+                                            self._base_dir,
+                                            "resources",
+                                            "templates",
+                                            "标准发货单.xlsx",
+                                        )
+                                    )
+                                )
+                                else self._business_scope(template_type)
+                            ),
                             "preview_capable": True,
                             "is_active": 1,
                             "source": "fs_scan",
@@ -117,7 +133,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                     )
             except RECOVERABLE_ERRORS:
                 continue
-        return templates
+        return self._visible_scanned_templates(templates)
 
     def _discover_word_templates(self) -> list[dict]:
         """从与 Excel 相同的目录自动发现 Word 模板（.docx）。"""
@@ -161,7 +177,48 @@ class FileSystemTemplateStore(TemplateStorePort):
                     )
             except RECOVERABLE_ERRORS:
                 continue
-        return templates
+        return self._visible_scanned_templates(templates)
+
+    def _visible_scanned_templates(self, templates: list[dict]) -> list[dict]:
+        """Inactive owned assets must not reappear under an fs alias; keep bytes for references."""
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        runtime = get_app_data_dir()
+
+        def key(path: str) -> str:
+            return template_path_key(path, runtime_root=runtime)
+
+        private_dirs = {key(folder) for folder in tenant_template_directories(runtime_root=runtime)}
+        private_paths = {
+            key(t["path"]) for t in templates if key(os.path.dirname(t["path"])) in private_dirs
+        }
+        if not private_paths:
+            return templates
+        try:
+            with db_session.get_db() as db:
+                with db.execute(
+                    text(
+                        "SELECT original_file_path FROM templates "
+                        "WHERE tenant_id = :tenant_id AND is_active = 0 AND original_file_path IS NOT NULL"
+                    ),
+                    {"tenant_id": current_tenant_id()},
+                    execution_options={"stream_results": True},
+                ).yield_per(128) as inactive:
+                    hidden = {
+                        key(row[0]) for row in inactive if row[0] and key(row[0]) in private_paths
+                    }
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("Template removal state unavailable: %s", exc)
+            hidden = private_paths  # Fail closed rather than resurrecting removed private files.
+        hidden |= {
+            key(t["path"])
+            for t in templates
+            if key(t["path"]) in private_paths
+            and os.path.normcase(os.path.realpath(t["path"]))
+            != os.path.normcase(os.path.abspath(t["path"]))
+        }
+        hidden &= private_paths
+        return [t for t in templates if key(t["path"]) not in hidden]
 
     @staticmethod
     def _map_category(template_type: str | None) -> str:
@@ -180,7 +237,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         ensure_templates_tenant_column()
         tenant_sql, tenant_bind = templates_tenant_where_sql()
         try:
-            with get_db() as db:
+            with db_session.get_db() as db:
                 rows = db.execute(
                     text(
                         f"""
@@ -230,11 +287,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         return out
 
     def list_templates(self) -> list[dict]:
-        # DB 为主，自动发现文件模板为辅，再补 legacy（仅存在的文件）。
-        # 注意：历史上这里还会拼接 `_system_default_export_templates()` 产生的
-        # "导出默认模板" 占位条目，但它们带的都是假样例数据（M001/示例产品等），
-        # 在前端模板预览页看起来像占位；按产品要求已移除——无真实模板时由前端
-        # 的 "虚拟占位/快速创建" 流程兜底，而不再由后端塞入硬编码假数据。
+        # Real files only; bundled standard forms contain headers without customer data.
         templates = self._db_templates()
         templates.extend(self._discover_excel_templates())
         templates.extend(self._discover_word_templates())
@@ -289,13 +342,16 @@ class FileSystemTemplateStore(TemplateStorePort):
                 db_id = None
             if db_id is not None:
                 try:
-                    with get_db() as db:
+                    from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
+
+                    tenant_sql, tenant_bind = templates_tenant_where_sql()
+                    with db_session.get_db() as db:
                         row = db.execute(
                             text(
                                 "SELECT original_file_path FROM templates "
-                                "WHERE id = :id AND (is_active IS NULL OR is_active = 1)"
+                                f"WHERE id = :id AND ({tenant_sql}) AND (is_active IS NULL OR is_active = 1)"
                             ),
-                            {"id": db_id},
+                            {"id": db_id, **tenant_bind},
                         ).fetchone()
                     if row and row.original_file_path and os.path.exists(row.original_file_path):
                         return cast("str | None", row.original_file_path)
@@ -304,11 +360,12 @@ class FileSystemTemplateStore(TemplateStorePort):
 
         # 1.5) 支持 "fs:<filename>" 形式（文件扫描来源）
         if template_id.startswith("fs:"):
-            filename = os.path.basename(template_id.split(":", 1)[1])
-            for folder in self._discovery_directories():
-                path = os.path.join(folder, filename)
-                if os.path.exists(path):
-                    return path
+            # Resolve only IDs advertised by the server's visible catalog.
+            # Request strings never become filesystem path components.
+            for row in self._discover_excel_templates() + self._discover_word_templates():
+                if row["id"] == template_id:
+                    return cast("str | None", row.get("path"))
+            return None
 
         # 2) 模板文件路由目前仍使用 "shipment"/"fallback" 这种字符串 ID，继续走 legacy 逻辑
         templates = self._legacy_templates()
@@ -356,7 +413,7 @@ class FileSystemTemplateStore(TemplateStorePort):
 
             tenant_id = templates_tenant_id_for_insert()
             tenant_sql, tenant_bind = templates_tenant_where_sql()
-            with get_db() as db:
+            with db_session.get_db() as db:
                 # 这里不强制唯一约束，只是简单插入一条记录，并将同类型旧记录标记为非激活
                 db.execute(
                     sql_text(
@@ -438,7 +495,7 @@ class FileSystemTemplateStore(TemplateStorePort):
             from app.infrastructure.tenant_scope import TenantScopeError
 
             tenant_id = templates_tenant_id_for_insert()
-            with get_db() as db:
+            with db_session.get_db() as db:
                 res = db.execute(
                     text(
                         """

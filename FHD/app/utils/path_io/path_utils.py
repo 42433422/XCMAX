@@ -78,7 +78,7 @@ def get_resource_path(*parts: str) -> str:
     return os.path.join(get_resources_dir(), *parts)
 
 
-def get_app_data_dir() -> str:
+def get_app_data_dir(*, create: bool = True) -> str:
     """
     获取应用程序数据目录
 
@@ -108,7 +108,8 @@ def get_app_data_dir() -> str:
         else:
             app_data_dir = base
 
-    os.makedirs(app_data_dir, exist_ok=True)
+    if create:
+        os.makedirs(app_data_dir, exist_ok=True)
     return app_data_dir
 
 
@@ -144,6 +145,24 @@ def get_desktop_state_dir() -> str:
     return state_dir
 
 
+def get_business_archive_dir(*, create: bool = True) -> str:
+    """用户业务原件归档根目录（微信式稳定用户数据区）。
+
+    落在 :func:`get_desktop_state_dir` 下的 ``business-archive/``，例如：
+
+    - Windows: ``%APPDATA%\\XCAGI\\business-archive``
+    - macOS: ``~/Library/Application Support/XCAGI/business-archive``
+    - 显式 ``XCAGI_DATA_DIR`` / ``XCAGI_DESKTOP_DATA_DIR`` 时：``{该目录}/business-archive``
+
+    故意不用安装目录 / ``sys._MEIPASS``（只读临时解压区），也不再用历史的
+    ``{app_data}/etl/archive``。密钥文件 ``.archive.key`` 与密文同根存放。
+    """
+    root = os.path.join(get_desktop_state_dir(), "business-archive")
+    if create:
+        os.makedirs(root, exist_ok=True, mode=0o700)
+    return root
+
+
 def get_data_dir() -> str:
     """
     获取数据目录（用于存放数据库等数据文件）
@@ -176,6 +195,16 @@ def get_log_dir() -> str:
     log_dir = os.path.join(get_app_data_dir(), "logs")
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
+
+
+def get_shipment_output_dir() -> str:
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    root = get_app_data_dir()
+    tenant = current_tenant_id()
+    if tenant is not None:
+        root = os.path.join(root, "tenants", str(tenant))
+    return os.path.join(root, "shipment_outputs")
 
 
 def get_db_path(db_name: str = "products.db") -> str:

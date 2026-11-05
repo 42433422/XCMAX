@@ -40,7 +40,7 @@ def test_verify_registry_integrity_passes() -> None:
 def test_get_routes_by_domain() -> None:
     auth_routes = get_routes_by_domain("auth")
     assert len(auth_routes) == 1
-    assert auth_routes[0].target_module.endswith("domains.auth.routes")
+    assert auth_routes[0].target_module.endswith("domains.auth.auth_routes")
 
 
 def test_get_routes_by_domain_empty_for_nonexistent() -> None:
@@ -80,7 +80,7 @@ def test_legacy_route_dataclass() -> None:
     r = LegacyRoute(
         filename="domain:auth",
         target_domain="auth",
-        target_module="app.fastapi_routes.domains.auth.routes",
+        target_module="app.fastapi_routes.domains.auth.auth_routes",
         note="test",
     )
     assert r.target_domain == "auth"

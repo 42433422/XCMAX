@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ops-delivery",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-075821",
+  "generated_at": "2026-09-29 07:58:40",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端完成：管理员登录 → 「客户交付中心」页真实渲染（定制交付工单 / 生产进行中 / 已受理·AI 生产中·待验收·待返工 阶段，及「客户安装与业务验收独立核对」交付口径）→ 提交客户定制需求在未绑定市场账号时被身份门禁拒绝（401）→ 非法 kind 被参数校验拒绝（400）→ 交付进度接口按 market_user_id 返回交付里程碑（status=planned）。本机未绑定修茈市场账号，故专属 Mod 交付的 200 正向流转不可达，相关拒绝路径为真实产品响应。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 14308,
+        "processed": 14308,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.search",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "error.occurred",
+                "evolution.index"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/ops-delivery/ops-delivery-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ops-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery/shot/00-login-form.png",
+      "sha256": "a1ed134d71385f534dd8b1850ab7de91c73585bb08387868a6f5476323c09316",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery/shot/OD1-delivery-center.png",
+      "sha256": "714b8aad9a52b44908493505eec50cbb1bcd5e7499ba2bc0f14ed04dd54edf37",
+      "visual_review": "accepted",
+      "visible_result": "「客户交付中心」页真实渲染：顶部「Mac 主控 · 四设备协同」（目标/执行设备/任务类型/关联工单）与红字「尚未绑定修茈服务器账号…」及「客户安装与业务验收独立核对；执行器报告完成不等于已交付。」；下方 CUSTOMER DELIVERY CONTROL「客户交付中心」台账：企业用户/永久购买账户/体验账户/永久待安装/待首次登录/永久交付完成/内部本机排除/定制交付工单/生产进行中 均为 0，含搜索框与「全部阶段｜定制工单」筛选。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery/shot/OD2-request-market-gate.png",
+      "sha256": "293bf83d2e813722d12419a6384627183bc57d8f294cb48ad0f5c9f6da3f82f9",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：POST /api/mod-store/private-delivery/requests → 401，success=false，error_code=http_401，message=请先登录并绑定修茈市场账号。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery/shot/OD3-invalid-kind.png",
+      "sha256": "b6aad993fd7dcf8dbbff401e1534046d80b9da2f6b7e8e9b8801b406983f3073",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：POST /api/mod-store/private-delivery/requests（kind=__bad__）→ 400，success=false，message=kind 必须是 module、employee 或 bundle。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery/shot/OD4-cs-delivery-progress.png",
+      "sha256": "ebff9bbfb517eefb94d41409136974e06245fbbfec2541f47046e3df90d7307f",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/mod/xcagi-customer-service-bridge/user-cs/delivery?market_user_id=1 → 200，success=true，delivery={milestones:[], status:'planned'}，payment={}，invoice={}。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ops-delivery",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-delivery/video/ops-delivery-web-20260929-075821.webm",
+      "sha256": "b865dd96e00e989747b2cc8fc86eebfc185db0baf769d10cf360596e684c96b3",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，17.56s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 客户交付中心 → 定制需求 401 → kind 非法 400 → 交付进度 200。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "OD1",
+      "title": "「客户交付中心」页真实渲染专属交付台账",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器导航到 /admin/delivery-center，等待 SPA 渲染后读取标题与正文。",
+      "expected": "渲染出「客户交付中心」与「定制交付工单」「生产进行中」交付阶段及独立验收口径。",
+      "observed": "{\"final_url\": \"http://127.0.0.1:42423/admin/delivery-center\", \"title\": \"客户交付中心 - XCAGI\", \"has_delivery_center\": true, \"has_custom_ticket\": true, \"has_production_stage\": true, \"has_acceptance_wording\": true, \"text_head\": \"XCMAX 服务器后台 平台运维 · 系统管理 运维对话 服务器后台总览 客户交付中心 创始人状态 自动化方针 服务器功能模块 业务审批 员工自治 信息 智能生态 知识库 编制工作台 用户管理 运维数据源 运维工具 系统设置 部分 AI 能力未就绪 版本检测中 平台运维 · 系统管理 客户交付中心 副窗 ◈ 工作区 3 Mac 主控 · 四设备协同  服务器保存任务与回执，Mac 主控编排执行。  刷新  尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization  目标 执行设备 Mac 主\"}",
+      "result": "passed"
+    },
+    {
+      "id": "OD2",
+      "title": "提交客户定制需求未绑定市场账号被拒（负例）",
+      "input": "已建立的管理员会话，但未绑定修茈市场账号；合法定制需求载荷。",
+      "actions": "页面上下文 POST /api/mod-store/private-delivery/requests。",
+      "expected": "HTTP 401，success=false，提示需先登录并绑定市场账号。",
+      "observed": "{\"status\": 401, \"message\": \"请先登录并绑定修茈市场账号\", \"error_code\": \"http_401\"}",
+      "result": "passed"
+    },
+    {
+      "id": "OD3",
+      "title": "定制需求 kind 非法被参数校验拒绝（边界）",
+      "input": "kind=__bad__，其余字段合法。",
+      "actions": "页面上下文 POST /api/mod-store/private-delivery/requests。",
+      "expected": "HTTP 400，success=false，提示 kind 必须是 module/employee/bundle。",
+      "observed": "{\"status\": 400, \"message\": \"kind 必须是 module、employee 或 bundle\"}",
+      "result": "passed"
+    },
+    {
+      "id": "OD4",
+      "title": "客户交付进度与里程碑真实读取",
+      "input": "market_user_id=1。",
+      "actions": "页面上下文 GET /api/mod/xcagi-customer-service-bridge/user-cs/delivery?market_user_id=1。",
+      "expected": "HTTP 200、success=true，delivery.status=planned，milestones 为列表。",
+      "observed": "{\"status\": 200, \"delivery\": {\"milestones\": [], \"status\": \"planned\"}, \"payment\": {}}",
+      "result": "passed"
+    }
+  ]
+}

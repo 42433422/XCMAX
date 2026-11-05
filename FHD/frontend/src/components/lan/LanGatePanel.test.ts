@@ -79,6 +79,11 @@ const requestAccessMock = container.mocks.requestAccessMock as ReturnType<typeof
 const activateMock = container.mocks.activateMock as ReturnType<typeof vi.fn>
 const initializeMock = container.mocks.initializeMock as ReturnType<typeof vi.fn>
 
+function setStatus(overrides = {}) {
+  statusRef.value = { enabled: true, in_whitelist: true, in_dynamic_allowlist: false,
+    authorized: false, is_admin_host: false, ip: '1.1.1.1', ...overrides }
+}
+
 function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
@@ -115,42 +120,21 @@ describe('LanGatePanel', () => {
   })
 
   it('renders the panel container', async () => {
-    statusRef.value = {
-      enabled: false,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ enabled: false, in_whitelist: false })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.lan-gate-panel').exists()).toBe(true)
   })
 
   it('renders page brand with FHD title when variant is page', async () => {
-    statusRef.value = {
-      enabled: false,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ enabled: false, in_whitelist: false })
     const wrapper = await mountPanel({ variant: 'page' })
     await flushPromises()
     expect(wrapper.find('.brand h1').text()).toContain('FHD')
   })
 
   it('renders compact brand when variant is modal', async () => {
-    statusRef.value = {
-      enabled: false,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ enabled: false, in_whitelist: false })
     const wrapper = await mountPanel({ variant: 'modal' })
     await flushPromises()
     expect(wrapper.find('.brand-compact').exists()).toBe(true)
@@ -158,14 +142,7 @@ describe('LanGatePanel', () => {
   })
 
   it('renders modal bar with dismiss button when variant is modal', async () => {
-    statusRef.value = {
-      enabled: false,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ enabled: false, in_whitelist: false })
     const wrapper = await mountPanel({ variant: 'modal' })
     await flushPromises()
     expect(wrapper.find('.lan-gate-modal-bar').exists()).toBe(true)
@@ -173,14 +150,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows "未启用" banner when enabled is false', async () => {
-    statusRef.value = {
-      enabled: false,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ enabled: false, in_whitelist: false })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.state-banner.ok').exists()).toBe(true)
@@ -188,42 +158,21 @@ describe('LanGatePanel', () => {
   })
 
   it('renders "进入系统" button when not enabled', async () => {
-    statusRef.value = {
-      enabled: false,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ enabled: false, in_whitelist: false })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.state-banner.ok .btn.primary').text()).toBe('进入系统')
   })
 
   it('shows gate wait section when enabled but not in whitelist and no clearance', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.gate-wait').exists()).toBe(true)
   })
 
   it('shows "非授权网络" message when not in whitelist', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.state-banner.danger').exists()).toBe(true)
@@ -231,42 +180,21 @@ describe('LanGatePanel', () => {
   })
 
   it('shows IP in danger banner', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '192.168.1.1',
-    }
+    setStatus({ in_whitelist: false, ip: '192.168.1.1' })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.text()).toContain('192.168.1.1')
   })
 
   it('shows "未知" when IP is empty', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '',
-    }
+    setStatus({ in_whitelist: false, ip: '' })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.text()).toContain('未知')
   })
 
   it('shows "普通密钥须先经审批" message when in whitelist but no clearance', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus()
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.state-banner.warn').exists()).toBe(true)
@@ -274,14 +202,7 @@ describe('LanGatePanel', () => {
   })
 
   it('renders access request form in gate wait', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.request-form').exists()).toBe(true)
@@ -289,14 +210,7 @@ describe('LanGatePanel', () => {
   })
 
   it('renders admin key entry button in gate wait', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.admin-key-entry').exists()).toBe(true)
@@ -304,14 +218,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows key form when admin key button is clicked', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('input[type="password"]').exists()).toBe(false)
@@ -320,28 +227,14 @@ describe('LanGatePanel', () => {
   })
 
   it('shows key form directly when userKeyClearance is true', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('input[type="password"]').exists()).toBe(true)
   })
 
   it('shows key form directly when bootstrap is available', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus()
     hostInfoMock.mockResolvedValue({ bootstrap_available: true, token_ttl_seconds: 28800 })
     const wrapper = await mountPanel()
     await flushPromises()
@@ -350,14 +243,7 @@ describe('LanGatePanel', () => {
   })
 
   it('renders submit button with "激活本机" text', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const wrapper = await mountPanel()
     await flushPromises()
     const btn = wrapper.find('.btn.primary.big')
@@ -366,28 +252,14 @@ describe('LanGatePanel', () => {
   })
 
   it('disables submit button when keyInput is empty', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.btn.primary.big').attributes('disabled')).toBeDefined()
   })
 
   it('enables submit button when key is entered', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const wrapper = await mountPanel()
     await flushPromises()
     await wrapper.find('input[type="password"]').setValue('my-key')
@@ -395,14 +267,7 @@ describe('LanGatePanel', () => {
   })
 
   it('calls activate API when form is submitted', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     activateMock.mockResolvedValue({ success: true, is_admin: false })
     const wrapper = await mountPanel()
     await flushPromises()
@@ -413,14 +278,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows error when activate returns success=false', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     activateMock.mockResolvedValue({ success: false, is_admin: false })
     const wrapper = await mountPanel()
     await flushPromises()
@@ -431,14 +289,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows mapped error for bad_key', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const { ApiError } = await import('@/api/core')
     activateMock.mockRejectedValue(new ApiError('bad', 400, { detail: 'bad_key' }))
     const wrapper = await mountPanel()
@@ -450,14 +301,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows mapped error for key_revoked', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const { ApiError } = await import('@/api/core')
     activateMock.mockRejectedValue(new ApiError('revoked', 400, { detail: 'key_revoked' }))
     const wrapper = await mountPanel()
@@ -469,14 +313,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows mapped error for key_expired', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const { ApiError } = await import('@/api/core')
     activateMock.mockRejectedValue(new ApiError('expired', 400, { detail: 'key_expired' }))
     const wrapper = await mountPanel()
@@ -488,14 +325,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows mapped error for lan_blocked', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const { ApiError } = await import('@/api/core')
     activateMock.mockRejectedValue(new ApiError('blocked', 400, { detail: 'lan_blocked' }))
     const wrapper = await mountPanel()
@@ -507,14 +337,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows mapped error for activation_requires_approval', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const { ApiError } = await import('@/api/core')
     activateMock.mockRejectedValue(new ApiError('approval', 400, { detail: 'activation_requires_approval' }))
     const wrapper = await mountPanel()
@@ -526,14 +349,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows mapped error for empty_key', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const { ApiError } = await import('@/api/core')
     activateMock.mockRejectedValue(new ApiError('empty', 400, { detail: 'empty_key' }))
     const wrapper = await mountPanel()
@@ -545,14 +361,7 @@ describe('LanGatePanel', () => {
   })
 
   it('renders footer meta with status text', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.meta').exists()).toBe(true)
@@ -560,42 +369,21 @@ describe('LanGatePanel', () => {
   })
 
   it('shows IP in footer when present', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '10.0.0.1',
-    }
+    setStatus({ in_dynamic_allowlist: true, ip: '10.0.0.1' })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.meta').text()).toContain('10.0.0.1')
   })
 
   it('shows "主机管理员位" when is_admin_host is true', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: true,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true, is_admin_host: true })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.meta').text()).toContain('主机管理员位')
   })
 
   it('renders ttl hours in lead text', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     hostInfoMock.mockResolvedValue({ bootstrap_available: false, token_ttl_seconds: 36000 })
     const wrapper = await mountPanel()
     await flushPromises()
@@ -603,14 +391,7 @@ describe('LanGatePanel', () => {
   })
 
   it('renders access request state when present', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     myAccessRequestMock.mockResolvedValue({
       request: {
         status: 'pending',
@@ -627,14 +408,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows "已批准" status text for approved request', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     myAccessRequestMock.mockResolvedValue({
       request: { status: 'approved', device_label: '', review_note: '' },
     })
@@ -644,14 +418,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows "已拒绝" status text for rejected request', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     myAccessRequestMock.mockResolvedValue({
       request: { status: 'rejected', device_label: '', review_note: '' },
     })
@@ -661,14 +428,7 @@ describe('LanGatePanel', () => {
   })
 
   it('submits access request when form is submitted', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     requestAccessMock.mockResolvedValue({
       request: { status: 'pending', device_label: 'PC1', review_note: '' },
     })
@@ -683,14 +443,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows "更新申请" button text when request is pending', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     myAccessRequestMock.mockResolvedValue({
       request: { status: 'pending', device_label: '', review_note: '' },
     })
@@ -701,14 +454,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows "提交访问申请" button text when no request', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     myAccessRequestMock.mockResolvedValue({ request: null })
     const wrapper = await mountPanel()
     await flushPromises()
@@ -717,14 +463,7 @@ describe('LanGatePanel', () => {
   })
 
   it('calls dismissLanGateModal when dismiss button is clicked in modal variant', async () => {
-    statusRef.value = {
-      enabled: false,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ enabled: false, in_whitelist: false })
     const wrapper = await mountPanel({ variant: 'modal' })
     await flushPromises()
     await wrapper.find('.btn-text').trigger('click')
@@ -732,14 +471,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows initialization error when load fails', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     refreshMock.mockRejectedValue(new Error('refresh failed'))
     hostInfoMock.mockRejectedValue(new Error('hostInfo failed'))
     const wrapper = await mountPanel()
@@ -748,14 +480,7 @@ describe('LanGatePanel', () => {
   })
 
   it('renders bootstrap hint box when bootstrap is available', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus()
     hostInfoMock.mockResolvedValue({ bootstrap_available: true, token_ttl_seconds: 28800 })
     const wrapper = await mountPanel()
     await flushPromises()
@@ -764,14 +489,7 @@ describe('LanGatePanel', () => {
   })
 
   it('renders label input when bootstrap is available', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus()
     hostInfoMock.mockResolvedValue({ bootstrap_available: true, token_ttl_seconds: 28800 })
     const wrapper = await mountPanel()
     await flushPromises()
@@ -779,14 +497,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows warn-lead when admin key unlocked but no clearance and no bootstrap', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus()
     hostInfoMock.mockResolvedValue({ bootstrap_available: false, token_ttl_seconds: 28800 })
     const wrapper = await mountPanel()
     await flushPromises()
@@ -796,28 +507,14 @@ describe('LanGatePanel', () => {
   })
 
   it('shows different lead text when userKeyClearance is true', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     const wrapper = await mountPanel()
     await flushPromises()
     expect(wrapper.find('.lead').text()).toContain('一级密钥')
   })
 
   it('redirects to home when authorized on load', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: true,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true, authorized: true })
     const router = makeRouter()
     await router.push('/')
     await router.isReady()
@@ -831,42 +528,21 @@ describe('LanGatePanel', () => {
   })
 
   it('uses custom redirectPath when provided', async () => {
-    statusRef.value = {
-      enabled: false,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ enabled: false, in_whitelist: false })
     const wrapper = await mountPanel({ redirectPath: '/custom' })
     await flushPromises()
     expect(wrapper.find('.lan-gate-panel').exists()).toBe(true)
   })
 
   it('uses "/" when redirectPath is empty', async () => {
-    statusRef.value = {
-      enabled: false,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ enabled: false, in_whitelist: false })
     const wrapper = await mountPanel({ redirectPath: '   ' })
     await flushPromises()
     expect(wrapper.find('.lan-gate-panel').exists()).toBe(true)
   })
 
   it('shows "正在校验…" text when submitting', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: true,
-      in_dynamic_allowlist: true,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_dynamic_allowlist: true })
     let resolveActivate: (v: unknown) => void
     activateMock.mockReturnValue(
       new Promise((resolve) => {
@@ -884,14 +560,7 @@ describe('LanGatePanel', () => {
   })
 
   it('shows "正在提交…" text when submitting access request', async () => {
-    statusRef.value = {
-      enabled: true,
-      in_whitelist: false,
-      in_dynamic_allowlist: false,
-      authorized: false,
-      is_admin_host: false,
-      ip: '1.1.1.1',
-    }
+    setStatus({ in_whitelist: false })
     let resolveRequest: (v: unknown) => void
     requestAccessMock.mockReturnValue(
       new Promise((resolve) => {
@@ -906,4 +575,61 @@ describe('LanGatePanel', () => {
     resolveRequest!({ request: null })
     await flushPromises()
   })
+  it.each([
+    ['license_misconfigured', 'LAN_LICENSE_SECRET'], ['lan_mode_disabled', '未启用局域网模式'],
+    ['admin_host_required', '管理员主机'], ['unknown_failure', 'unknown_failure'],
+  ])('reports %s during activation without losing the entered key', async (detail, expected) => {
+    setStatus({ in_dynamic_allowlist: true })
+    const { ApiError } = await import('@/api/core')
+    activateMock.mockRejectedValue(new ApiError('failed', 400, { detail }))
+    const wrapper = await mountPanel(); await flushPromises()
+    await wrapper.get('input[type="password"]').setValue(' key ')
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(wrapper.get('.error').text()).toContain(expected)
+    expect((wrapper.get('input[type="password"]').element as HTMLInputElement).value).toBe(' key ')
+    wrapper.unmount()
+  })
+
+  it('restores saved request details, blocks duplicate submissions and recovers from denial', async () => {
+    setStatus()
+    myAccessRequestMock.mockResolvedValue({ request: { status: 'unknown', device_label: '已保存的电脑', note: '已保存的用途' } })
+    const wrapper = await mountPanel(); await flushPromises()
+    expect(wrapper.findAll('.request-form input').map(input => (input.element as HTMLInputElement).value)).toEqual(['已保存的电脑', '已保存的用途'])
+    expect(wrapper.get('.request-state').text()).toContain('待管理员审核')
+    let reject!: (reason: Error) => void
+    requestAccessMock.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail }))
+    await wrapper.get('.request-form').trigger('submit'); await wrapper.get('.request-form').trigger('submit')
+    expect(requestAccessMock).toHaveBeenCalledOnce()
+    reject(new Error('申请暂不可用')); await flushPromises()
+    expect(wrapper.get('.request-form button').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.admin-key-entry button').trigger('click')
+    expect(wrapper.get('.error').text()).toContain('申请暂不可用')
+    wrapper.unmount()
+  })
+
+  it('activates a labeled administrator host once, opens its console and dismisses the modal', async () => {
+    setStatus(); hostInfoMock.mockResolvedValue({ bootstrap_available: true })
+    let finish!: (result: unknown) => void
+    activateMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = await mountPanel({ variant: 'modal' }); await flushPromises()
+    await wrapper.get('input[type="password"]').setValue(' admin-key ')
+    await wrapper.get('input[maxlength="100"]').setValue(' 财务主机 ')
+    await wrapper.get('form').trigger('submit'); await wrapper.get('form').trigger('submit')
+    expect(activateMock).toHaveBeenCalledExactlyOnceWith('admin-key', '财务主机')
+    finish({ success: true, is_admin: true }); await flushPromises()
+    expect(initializeMock).toHaveBeenCalledOnce()
+    expect(wrapper.vm.$router.currentRoute.value.path).toBe('/qsm-pro')
+    expect(dismissLanGateModalMock).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it.each(['page', 'modal'])('enters the requested destination from a disabled %s gate', async variant => {
+    setStatus({ enabled: false })
+    const wrapper = await mountPanel({ variant, redirectPath: '/qsm-pro' }); await flushPromises()
+    await wrapper.get('.state-banner button').trigger('click'); await flushPromises()
+    expect(wrapper.vm.$router.currentRoute.value.path).toBe('/qsm-pro')
+    expect(dismissLanGateModalMock).toHaveBeenCalledTimes(variant === 'modal' ? 1 : 0)
+    wrapper.unmount()
+  })
+
 })

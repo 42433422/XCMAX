@@ -15,8 +15,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.application.workflow.checkpointer import DatabaseWorkflowCheckpointer
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import PlanGraph, WorkflowNode
-from app.db.base import Base
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from app.db.db_base import Base
 
 
 @pytest.fixture()

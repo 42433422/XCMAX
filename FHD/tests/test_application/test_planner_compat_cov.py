@@ -1,168 +1,15 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import BOUNDARY_ERRORS
+"""Regression coverage for the shared Planner compatibility service."""
 
-"""Branch-coverage tests for app.application.planner_compat_service.
-
-asyncio_mode=auto is declared in pytest.ini — all async tests run automatically.
-
-Python 3.9 runtime: we load the module via importlib to bypass the broken
-`app.utils.__init__` import chain (uses `str | None` PEP-604 syntax which
-requires 3.10+).  All heavy dependencies are stubbed in sys.modules before
-the module is loaded.
-"""
-
-import importlib.util
 import sys
-from pathlib import Path
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import fastapi  # real fastapi must be available
+import fastapi
 import pytest
 
-# ---------------------------------------------------------------------------
-# One-time stub installation
-# ---------------------------------------------------------------------------
-
-_RECOVERABLE = (
-    OSError,
-    ValueError,
-    RuntimeError,
-    ImportError,
-    ConnectionError,
-    TimeoutError,
-    LookupError,
-    UnicodeError,
-    ArithmeticError,
-)
-
-
-def _build_stubs() -> dict:
-    tier_mod = MagicMock()
-    tier_mod.assert_p2_elevated_claim_or_raise = MagicMock()
-    tier_mod.resolve_ai_tier = MagicMock(return_value="standard")
-    tier_mod.runtime_context_with_tier = MagicMock(side_effect=lambda ctx, _t: ctx or {})
-
-    session_ctx_mod = MagicMock()
-    session_ctx_mod.planner_workflow_interrupt_reply = MagicMock(return_value=None)
-    session_ctx_mod.runtime_context_after_workflow_interrupt = MagicMock(return_value={})
-
-    chat_trace_mod = MagicMock()
-    chat_trace_mod.attach_chat_trace_run = MagicMock(side_effect=lambda p, **kw: p)
-    chat_trace_mod.finalize_legacy_chat_run = MagicMock(
-        return_value={"success": True, "finalized": True}
-    )
-    chat_trace_mod.start_legacy_chat_run = MagicMock(return_value=MagicMock(run_id="run-001"))
-
-    helpers_mod = MagicMock()
-    helpers_mod.XcagiCompatChatBody = MagicMock
-    helpers_mod.XcagiCompatChatBatchBody = MagicMock
-    helpers_mod._ensure_chat_db_read_authorized = MagicMock(return_value=(True, None))
-    helpers_mod._ensure_vector_index_if_needed = MagicMock(return_value=None)
-    helpers_mod._merge_runtime_context_with_message_paths = MagicMock(return_value=({}, []))
-    helpers_mod._message_requires_db_read_token = MagicMock(return_value=False)
-    helpers_mod._xcagi_chat_http_exc = MagicMock(
-        side_effect=lambda e: fastapi.HTTPException(status_code=500, detail=str(e))
-    )
-    helpers_mod._xcagi_chat_timeout_error_payload = MagicMock(
-        return_value={"success": False, "timeout": True}
-    )
-    helpers_mod._xcagi_chat_timeout_seconds = MagicMock(return_value=30)
-    helpers_mod._xcagi_compat_reply_payload = MagicMock(
-        side_effect=lambda r, **kw: {"success": True, "response": r}
-    )
-    helpers_mod._xcagi_planner_stream_bytes_async = MagicMock()
-
-    llm_client_mod = MagicMock()
-    llm_client_mod.set_mode = MagicMock()
-
-    legacy_chat_mod = MagicMock()
-    legacy_chat_mod.chat = MagicMock(return_value={"success": True, "message": "ok"})
-    legacy_chat_mod.clear_last_tool_result = MagicMock()
-
-    modstore_mod = MagicMock()
-    modstore_mod.create_modstore_openai_client_from_request = MagicMock(return_value=MagicMock())
-
-    operational_errors_mod = MagicMock()
-    operational_errors_mod.RECOVERABLE_ERRORS = _RECOVERABLE
-
-    stubs = {
-        "app": MagicMock(),
-        "app.application": MagicMock(),
-        "app.application.agent_orchestrator": MagicMock(),
-        "app.application.agent_orchestrator.chat_trace": chat_trace_mod,
-        "app.domain": MagicMock(),
-        "app.domain.ai": MagicMock(),
-        "app.domain.ai.tier": tier_mod,
-        "app.domain.context": MagicMock(),
-        "app.domain.context.session_context": session_ctx_mod,
-        "app.fastapi_routes.xcagi_compat_chat_helpers": helpers_mod,
-        "app.infrastructure": MagicMock(),
-        "app.infrastructure.llm": MagicMock(),
-        "app.infrastructure.llm.client": llm_client_mod,
-        "app.legacy": MagicMock(),
-        "app.legacy.chat": MagicMock(),
-        "app.legacy.chat.legacy_chat_adapter": legacy_chat_mod,
-        "app.services": MagicMock(),
-        "app.services.conversation": MagicMock(),
-        "app.services.conversation.modstore_adapter": modstore_mod,
-        "app.utils": MagicMock(),
-        "app.utils.operational_errors": operational_errors_mod,
-    }
-    return stubs
-
-
-# Save the real module (if already imported) so other test files' patches continue to work.
-# test_planner_compat_agent_trace.py is collected before this file (alphabetically) and binds
-# execute_compat_chat to the real module's globals; if we leave _pcs in sys.modules their
-# `patch("app.application.planner_compat_service.run_agent_chat", …)` targets _pcs instead of
-# the real module, causing the real chat() to run and make an HTTP connection to 127.0.0.1:8765.
-_real_pcs_module = sys.modules.get("app.application.planner_compat_service")
-
-# Install stubs before the module loads (only for absent packages)
-_STUBS = _build_stubs()
-_installed_stubs: list[str] = []
-for _k, _v in _STUBS.items():
-    if _k not in sys.modules:
-        sys.modules[_k] = _v
-        _installed_stubs.append(_k)
-
-# Load the module under test directly from its file path
-_SRC = Path(__file__).resolve().parents[2] / "app" / "application" / "planner_compat_service.py"
-_spec = importlib.util.spec_from_file_location("app.application.planner_compat_service", _SRC)
-assert _spec and _spec.loader, f"Cannot locate planner_compat_service at {_SRC}"
-_pcs = importlib.util.module_from_spec(_spec)
-sys.modules["app.application.planner_compat_service"] = _pcs
-_spec.loader.exec_module(_pcs)
-
-# Replace temporary stubs with real packages so other test files aren't broken.
-import importlib as _importlib
-
-for _k in _installed_stubs:
-    sys.modules.pop(_k, None)  # must remove stub first; import_module returns cached value
-    try:
-        sys.modules[_k] = _importlib.import_module(_k)
-    except BOUNDARY_ERRORS:
-        # Re-import failed (e.g. a transitive dep is still stubbed at this point).
-        # Leave the module ABSENT — every stub we installed was for a module that
-        # was absent beforehand, so removing it restores the pre-stub state and lets
-        # later code import the real module cleanly from disk. Do NOT fabricate a
-        # ModuleType stub here: a package stub with empty __path__ would silently
-        # break submodule imports for the rest of the session (e.g.
-        # `app.application.agent_orchestrator.run_repository`).
-        sys.modules.pop(_k, None)
-
-# Restore the real module so patches in other test files target the right __globals__.
-# This file's own tests use the `_pcs` alias + patch.object(_pcs, ...), so they never
-# depend on sys.modules["app.application.planner_compat_service"] pointing at our copy.
-if _real_pcs_module is not None:
-    sys.modules["app.application.planner_compat_service"] = _real_pcs_module
-else:
-    # planner_compat_service was not imported before this file loaded — do NOT leave our
-    # stub-loaded copy (whose deps are MagicMocks) in sys.modules, or later test files
-    # (e.g. test_planner_compat_agent_trace.py) would import the stubbed version and see
-    # MagicMock run ids / finalize results. Removing it forces a clean real re-import.
-    sys.modules.pop("app.application.planner_compat_service", None)
+from app.application import planner_compat_service as _pcs
 
 # Convenience aliases
 _derive_industry_from_session = _pcs._derive_industry_from_session
@@ -174,9 +21,44 @@ compat_chat_stream_async = _pcs.compat_chat_stream_async
 MOD = "app.application.planner_compat_service"
 
 
-# ---------------------------------------------------------------------------
 # Test helpers
-# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def _patch_modules(replacements):
+    """Restore explicit stubs without evicting unrelated modules imported inside."""
+    with pytest.MonkeyPatch.context() as patches:
+        for name, module in replacements.items():
+            patches.setitem(sys.modules, name, module)
+        yield
+
+
+@contextmanager
+def _execution_context():
+    """Apply the common permitted single-message execution environment in order."""
+    with (
+        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
+        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
+        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
+        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
+        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
+        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
+        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
+        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
+        patch.object(_pcs, "set_llm_mode"),
+        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+    ):
+        yield
+
+
+@contextmanager
+def _kitten_context(runtime_context):
+    """Provide fresh enrichment module mocks for one execution."""
+    kitten_mod = MagicMock()
+    kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value=runtime_context)
+    kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
+    with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
+        yield
 
 
 def _req(**headers) -> MagicMock:
@@ -185,7 +67,7 @@ def _req(**headers) -> MagicMock:
     return req
 
 
-def _body(**kw) -> MagicMock:
+def _body(**kw):
     defaults = {
         "message": "hello",
         "context": None,
@@ -197,13 +79,10 @@ def _body(**kw) -> MagicMock:
         "source": None,
     }
     defaults.update(kw)
-    b = MagicMock()
-    for k, v in defaults.items():
-        setattr(b, k, v)
-    return b
+    return _pcs.XcagiCompatChatBody(**defaults)
 
 
-def _batch_body(**kw) -> MagicMock:
+def _batch_body(**kw):
     defaults = {
         "messages": ["msg1"],
         "context": None,
@@ -215,15 +94,7 @@ def _batch_body(**kw) -> MagicMock:
         "source": None,
     }
     defaults.update(kw)
-    b = MagicMock()
-    for k, v in defaults.items():
-        setattr(b, k, v)
-    return b
-
-
-# ===========================================================================
-# 1. _derive_industry_from_session — sid is None/empty → "通用"  [63→65]
-# ===========================================================================
+    return _pcs.XcagiCompatChatBatchBody(**defaults)
 
 
 def test_derive_industry_sid_none():
@@ -232,8 +103,7 @@ def test_derive_industry_sid_none():
     meta_mod = MagicMock()
     meta_mod.load_session_account_meta = MagicMock(return_value={})
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -250,8 +120,7 @@ def test_derive_industry_sid_empty_string():
     meta_mod = MagicMock()
     meta_mod.load_session_account_meta = MagicMock(return_value={})
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -262,19 +131,13 @@ def test_derive_industry_sid_empty_string():
     assert result == "通用"
 
 
-# ===========================================================================
-# 2. _derive_industry_from_session — account_kind == "admin" → "管理端"  [67→68]
-# ===========================================================================
-
-
 def test_derive_industry_admin_kind():
     helpers_mod = MagicMock()
     helpers_mod._session_id_from_request = MagicMock(return_value="sess-123")
     meta_mod = MagicMock()
     meta_mod.load_session_account_meta = MagicMock(return_value={"account_kind": "admin"})
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -295,8 +158,7 @@ def test_derive_industry_prefers_authenticated_request_state():
     request = _req()
     request.state.industry_id = "考勤"
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -317,8 +179,7 @@ def test_derive_industry_uses_workspace_preference_before_user_row():
     prefs_mod = MagicMock()
     prefs_mod.get_workspace_prefs = MagicMock(return_value={"selected_industry_id": "考勤"})
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -329,11 +190,6 @@ def test_derive_industry_uses_workspace_preference_before_user_row():
 
     assert result == "考勤"
     prefs_mod.get_workspace_prefs.assert_called_once_with("tenant:8")
-
-
-# ===========================================================================
-# 3. _derive_industry_from_session — local_user_id found, row has industry  [71→72, 77→78]
-# ===========================================================================
 
 
 def test_derive_industry_user_has_industry():
@@ -358,8 +214,7 @@ def test_derive_industry_user_has_industry():
     user_mod = MagicMock()
     user_mod.User = MagicMock()
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -370,11 +225,6 @@ def test_derive_industry_user_has_industry():
         result = _derive_industry_from_session(_req())
 
     assert result == "涂料"
-
-
-# ===========================================================================
-# 4. _derive_industry_from_session — local_user_id present but row is None  [77→81]
-# ===========================================================================
 
 
 def test_derive_industry_user_no_row():
@@ -398,8 +248,7 @@ def test_derive_industry_user_no_row():
     user_mod = MagicMock()
     user_mod.User = MagicMock()
 
-    with patch.dict(
-        sys.modules,
+    with _patch_modules(
         {
             "app.fastapi_routes.domains.misc.helpers": helpers_mod,
             "app.application.session_account_meta": meta_mod,
@@ -410,11 +259,6 @@ def test_derive_industry_user_no_row():
         result = _derive_industry_from_session(_req())
 
     assert result == "通用"
-
-
-# ===========================================================================
-# 5. _legacy_requires_token_payload — legacy_tool_records truthy  [110→111]
-# ===========================================================================
 
 
 def test_legacy_requires_token_payload_with_records():
@@ -445,11 +289,6 @@ def test_legacy_requires_token_payload_no_records():
     assert "legacy_tool_records" not in result["data"]
 
 
-# ===========================================================================
-# 6. execute_compat_chat — ok_read=True AND message requires token  [187→188]
-# ===========================================================================
-
-
 async def test_execute_compat_chat_db_read_authorized():
     req = _req()
     body = _body(message="查询客户数据", mode=None)
@@ -478,19 +317,11 @@ async def test_execute_compat_chat_db_read_authorized():
         patch.object(_pcs, "set_llm_mode"),
     ):
         # Patch kitten enrichment inside execute_compat_chat
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={"x": 1})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({"x": 1}):
             result = await execute_compat_chat(req, body)
 
     assert result is not None
     # runtime_context should have chat_db_read_authorized set (verified via path execution)
-
-
-# ===========================================================================
-# 7. execute_compat_chat — requires_token True AND pre_run not None  [250→260]
-# ===========================================================================
 
 
 async def test_execute_compat_chat_requires_token_with_prerun():
@@ -513,30 +344,13 @@ async def test_execute_compat_chat_requires_token_with_prerun():
         ),
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
     assert result == {"success": True, "finalized": True}
-
-
-# ===========================================================================
-# 8. execute_compat_chat — TimeoutError AND pre_run not None  [272→282]
-# ===========================================================================
 
 
 async def test_execute_compat_chat_timeout_with_prerun():
@@ -549,16 +363,7 @@ async def test_execute_compat_chat_timeout_with_prerun():
     with (
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(
             _pcs,
@@ -569,18 +374,10 @@ async def test_execute_compat_chat_timeout_with_prerun():
         if False
         else patch.object(_pcs.asyncio, "wait_for", side_effect=TimeoutError("timeout")),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
-
-
-# ===========================================================================
-# 9. execute_compat_chat — TimeoutError AND pre_run is None  [282 branch]
-# ===========================================================================
 
 
 async def test_execute_compat_chat_timeout_without_prerun():
@@ -592,16 +389,7 @@ async def test_execute_compat_chat_timeout_without_prerun():
     with (
         patch.object(_pcs, "start_legacy_chat_run", side_effect=RuntimeError("skip")),
         patch.object(_pcs, "attach_chat_trace_run", attach_mock),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(
             _pcs,
@@ -610,18 +398,10 @@ async def test_execute_compat_chat_timeout_without_prerun():
         ),
         patch.object(_pcs.asyncio, "wait_for", side_effect=TimeoutError("timeout")),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             result = await execute_compat_chat(req, body)
 
     assert attach_mock.called
-
-
-# ===========================================================================
-# 10. execute_compat_chat — RECOVERABLE_ERRORS AND pre_run not None  [290→306]
-# ===========================================================================
 
 
 async def test_execute_compat_chat_recoverable_error_with_prerun():
@@ -634,16 +414,7 @@ async def test_execute_compat_chat_recoverable_error_with_prerun():
     with (
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(_pcs.asyncio, "wait_for", side_effect=ValueError("bad value")),
         patch.object(
@@ -652,19 +423,11 @@ async def test_execute_compat_chat_recoverable_error_with_prerun():
             side_effect=lambda e: fastapi.HTTPException(status_code=500, detail=str(e)),
         ),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             with pytest.raises(fastapi.HTTPException):
                 await execute_compat_chat(req, body)
 
     assert finalize_mock.called
-
-
-# ===========================================================================
-# 11. execute_compat_chat — final path with pre_run  [308→318]
-# ===========================================================================
 
 
 async def test_execute_compat_chat_final_with_prerun():
@@ -678,16 +441,7 @@ async def test_execute_compat_chat_final_with_prerun():
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
         patch.object(_pcs, "run_agent_chat", return_value={"success": True, "message": "reply"}),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(
             _pcs,
@@ -695,19 +449,11 @@ async def test_execute_compat_chat_final_with_prerun():
             side_effect=lambda r, **kw: {"success": True, "r": r},
         ),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
     assert result == {"success": True, "done": True}
-
-
-# ===========================================================================
-# 12. execute_compat_chat — mode "online" triggers set_llm_mode  [143→144 / 336→337]
-# ===========================================================================
 
 
 async def test_execute_compat_chat_mode_online():
@@ -736,18 +482,13 @@ async def test_execute_compat_chat_mode_online():
             _pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}
         ),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with patch.dict(sys.modules, {"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             await execute_compat_chat(req, body)
 
     set_mode_mock.assert_called_once_with("online")
 
 
-# ===========================================================================
 # Helper: common batch patches applied via patch.object
-# ===========================================================================
 
 
 def _batch_common_patches():
@@ -762,11 +503,6 @@ def _batch_common_patches():
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(_pcs, "set_llm_mode"),
     ]
-
-
-# ===========================================================================
-# 13. execute_compat_chat_batch — ok_read=True AND message requires token  [374→375]
-# ===========================================================================
 
 
 async def test_batch_db_read_authorized():
@@ -789,11 +525,6 @@ async def test_batch_db_read_authorized():
     assert result["batch"] is True
 
 
-# ===========================================================================
-# 14. execute_compat_chat_batch — vector_error is set  [392→393]
-# ===========================================================================
-
-
 async def test_batch_vector_error():
     req = _req()
     body = _batch_body(messages=["vector msg"])
@@ -813,11 +544,6 @@ async def test_batch_vector_error():
         result = await execute_compat_chat_batch(req, body)
 
     assert result["count"] == 1
-
-
-# ===========================================================================
-# 15. execute_compat_chat_batch — requires_token WITH pre_run  [436→437, 438→439]
-# ===========================================================================
 
 
 async def test_batch_requires_token_with_prerun():
@@ -850,11 +576,6 @@ async def test_batch_requires_token_with_prerun():
     assert result["count"] == 1
 
 
-# ===========================================================================
-# 16. execute_compat_chat_batch — requires_token WITHOUT pre_run  [438→451]
-# ===========================================================================
-
-
 async def test_batch_requires_token_without_prerun():
     req = _req()
     body = _batch_body(messages=["no prerun token"])
@@ -884,11 +605,6 @@ async def test_batch_requires_token_without_prerun():
     assert result["count"] == 1
 
 
-# ===========================================================================
-# 17. execute_compat_chat_batch — final path with pre_run  [465→478]
-# ===========================================================================
-
-
 async def test_batch_final_with_prerun():
     req = _req()
     body = _batch_body(messages=["final prerun msg"])
@@ -915,11 +631,6 @@ async def test_batch_final_with_prerun():
     assert result["count"] == 1
 
 
-# ===========================================================================
-# 18. execute_compat_chat_batch — final path WITHOUT pre_run  [478 branch]
-# ===========================================================================
-
-
 async def test_batch_final_without_prerun():
     req = _req()
     body = _batch_body(messages=["final no prerun"])
@@ -941,11 +652,6 @@ async def test_batch_final_without_prerun():
 
     assert attach_mock.called
     assert result["count"] == 1
-
-
-# ===========================================================================
-# 19. execute_compat_chat_batch — TimeoutError WITH pre_run  [489→502 (pre_run branch)]
-# ===========================================================================
 
 
 async def test_batch_timeout_with_prerun():
@@ -974,11 +680,6 @@ async def test_batch_timeout_with_prerun():
     assert result["count"] == 1
 
 
-# ===========================================================================
-# 20. execute_compat_chat_batch — TimeoutError WITHOUT pre_run  [502 else branch]
-# ===========================================================================
-
-
 async def test_batch_timeout_without_prerun():
     req = _req()
     body = _batch_body(messages=["timeout no prerun"])
@@ -1002,11 +703,6 @@ async def test_batch_timeout_without_prerun():
 
     assert attach_mock.called
     assert result["count"] == 1
-
-
-# ===========================================================================
-# 21. execute_compat_chat_batch — RECOVERABLE_ERRORS WITH pre_run  [517→530]
-# ===========================================================================
 
 
 async def test_batch_recoverable_error_with_prerun():
@@ -1033,11 +729,6 @@ async def test_batch_recoverable_error_with_prerun():
     assert result["count"] == 1
 
 
-# ===========================================================================
-# 22. execute_compat_chat_batch — batch mode "offline"  [336→337]
-# ===========================================================================
-
-
 async def test_batch_mode_offline():
     req = _req()
     body = _batch_body(messages=["offline msg"], mode="offline")
@@ -1062,15 +753,9 @@ async def test_batch_mode_offline():
     set_mode_mock.assert_called_once_with("offline")
 
 
-# ===========================================================================
-# 23. compat_chat_stream_async — body.user_id None, header fallback  [565→566, 569→570]
-# ===========================================================================
-
-
 async def test_stream_user_id_from_header():
     req = _req()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(side_effect=lambda k: "42" if k == "X-User-Id" else None)
+    req.headers = {"X-User-Id": "42"}
 
     body = _body(message="stream msg", user_id=None, system_prompt=None)
 
@@ -1086,7 +771,7 @@ async def test_stream_user_id_from_header():
         svc_mock = MagicMock()
         svc_mock.persona_service = None
         conv_mod.get_ai_conversation_service = MagicMock(return_value=svc_mock)
-        with patch.dict(sys.modules, {"app.services.conversation.manager": conv_mod}):
+        with _patch_modules({"app.domain.shared_services.conversation.manager": conv_mod}):
             chunks = []
             async for chunk in compat_chat_stream_async(req, body):
                 chunks.append(chunk)
@@ -1094,15 +779,9 @@ async def test_stream_user_id_from_header():
     assert chunks == [b"chunk"]
 
 
-# ===========================================================================
-# 24. compat_chat_stream_async — persona_svc not None, industry from ctx  [580→614, 587→614]
-# ===========================================================================
-
-
 async def test_stream_persona_industry_from_ctx():
     req = _req()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(return_value=None)
+    req.headers = {}
 
     body = _body(
         message="stream with persona",
@@ -1118,14 +797,17 @@ async def test_stream_persona_industry_from_ctx():
     svc_mock.persona_service = persona_svc_mock
     svc_mock.contexts = {}
 
-    async def _fake_stream(*args, **kwargs):
+    observed_prompts = []
+
+    async def _fake_stream(request, single, **kwargs):
+        observed_prompts.append(single.system_prompt)
         yield b"persona-chunk"
 
     conv_mod = MagicMock()
     conv_mod.get_ai_conversation_service = MagicMock(return_value=svc_mock)
 
     with (
-        patch.dict(sys.modules, {"app.services.conversation.manager": conv_mod}),
+        _patch_modules({"app.domain.shared_services.conversation.manager": conv_mod}),
         patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
         patch.object(_pcs, "_xcagi_planner_stream_bytes_async", side_effect=_fake_stream),
     ):
@@ -1134,18 +816,12 @@ async def test_stream_persona_industry_from_ctx():
             chunks.append(chunk)
 
     assert chunks == [b"persona-chunk"]
-    assert body.system_prompt == "system prompt text"
-
-
-# ===========================================================================
-# 25. compat_chat_stream_async — industry not in ctx → derive from session  [593→595]
-# ===========================================================================
+    assert observed_prompts == ["system prompt text"]
 
 
 async def test_stream_persona_industry_from_derive():
     req = _req()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(return_value=None)
+    req.headers = {}
 
     body = _body(
         message="stream derive industry",
@@ -1161,7 +837,10 @@ async def test_stream_persona_industry_from_derive():
     svc_mock.persona_service = persona_svc_mock
     svc_mock.contexts = {}
 
-    async def _fake_stream(*args, **kwargs):
+    observed_prompts = []
+
+    async def _fake_stream(request, single, **kwargs):
+        observed_prompts.append(single.system_prompt)
         yield b"derived-chunk"
 
     conv_mod = MagicMock()
@@ -1174,10 +853,9 @@ async def test_stream_persona_industry_from_derive():
     meta_mod.load_session_account_meta = MagicMock(return_value={})
 
     with (
-        patch.dict(
-            sys.modules,
+        _patch_modules(
             {
-                "app.services.conversation.manager": conv_mod,
+                "app.domain.shared_services.conversation.manager": conv_mod,
                 "app.fastapi_routes.domains.misc.helpers": helpers_mod,
                 "app.application.session_account_meta": meta_mod,
             },
@@ -1190,12 +868,10 @@ async def test_stream_persona_industry_from_derive():
             chunks.append(chunk)
 
     assert chunks == [b"derived-chunk"]
-    assert body.system_prompt == "derived prompt"
+    assert observed_prompts == ["derived prompt"]
 
 
-# ---------------------------------------------------------------------------
 # Context manager helper for nesting multiple patch() calls
-# ---------------------------------------------------------------------------
 
 from contextlib import ExitStack
 

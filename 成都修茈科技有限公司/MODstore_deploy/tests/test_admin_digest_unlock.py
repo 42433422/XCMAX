@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import types
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 
 def _override_admin(app, market_shared_module):
@@ -21,7 +21,7 @@ def test_verify_digest_code_success(client):
     plain = "A1B2C3"
     th = hashlib.sha256(plain.encode("utf-8")).hexdigest()
     sf = models.get_session_factory()
-    expires_at = datetime.utcnow() + timedelta(hours=24)
+    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=24)
     with sf() as s:
         s.add(
             models.OpsApprovalToken(
@@ -58,7 +58,7 @@ def test_verify_digest_code_accepts_copied_spacing(client):
     plain = "A1B2C3"
     th = hashlib.sha256(plain.encode("utf-8")).hexdigest()
     sf = models.get_session_factory()
-    expires_at = datetime.utcnow() + timedelta(hours=24)
+    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=24)
     with sf() as s:
         s.add(
             models.OpsApprovalToken(
@@ -114,7 +114,7 @@ def test_verify_digest_code_expired(client):
                 kind="digest_identity",
                 payload_json='{"scope":"daily_digest"}',
                 authorized_email="u@qq.com",
-                expires_at=datetime.utcnow() - timedelta(hours=1),
+                expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
             )
         )
         s.commit()
@@ -148,7 +148,7 @@ def test_verify_digest_code_does_not_consume_used_at(client):
                 kind="digest_identity",
                 payload_json='{"scope":"daily_digest"}',
                 authorized_email="u@qq.com",
-                expires_at=datetime.utcnow() + timedelta(hours=24),
+                expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=24),
             )
         )
         s.commit()

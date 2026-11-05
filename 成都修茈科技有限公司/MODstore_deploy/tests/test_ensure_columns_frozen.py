@@ -6,7 +6,7 @@ import ast
 import re
 from pathlib import Path
 
-BASE_PATH = Path(__file__).resolve().parents[1] / "modstore_server" / "db" / "base.py"
+BASE_PATH = Path(__file__).resolve().parents[1] / "modstore_server" / "db" / "db_base.py"
 
 _ADD_COLUMN_COL_RE = re.compile(r"ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", re.IGNORECASE)
 
@@ -66,7 +66,7 @@ def _patches_from_source(source: str) -> set[tuple[str, str]]:
                     ):
                         patches.add((t0.value, t1.value))
             return patches
-    raise AssertionError("_ensure_columns not found in modstore_server/db/base.py")
+    raise AssertionError("_ensure_columns not found in modstore_server/db/db_base.py")
 
 
 def test_modstore_ensure_columns_frozen() -> None:
@@ -94,4 +94,4 @@ def test_modstore_ensure_columns_no_raw_add_column_outside_helper() -> None:
         segment = ast.get_source_segment(source, node) or ""
         if _ADD_COLUMN_COL_RE.search(segment):
             offenders.append(node.name)
-    assert not offenders, f"unexpected ADD COLUMN callsites in db/base.py: {offenders}"
+    assert not offenders, f"unexpected ADD COLUMN callsites in db/db_base.py: {offenders}"

@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -34,11 +34,9 @@ def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
 
 
 def _read_ledger(tmp_path):
-    path = tmp_path / "model_usage_ledger.json"
-    if not path.is_file():
-        return []
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return data.get("entries") or []
+    from app.infrastructure.billing.model_usage import list_model_usage_entries
+
+    return list_model_usage_entries(limit=1000)
 
 
 class TestAgentRuntimeHooksSwitch:
@@ -87,7 +85,10 @@ class TestHooksGatePipelineContracts:
     def test_remember_primitive_does_not_self_gate(self, monkeypatch):
         monkeypatch.delenv("XCAGI_AGENT_RUNTIME_HOOKS", raising=False)
         with (
-            patch("app.services.conversation_service.ConversationService", lambda: MagicMock()),
+            patch(
+                "app.domain.shared_services.conversation_service.ConversationService",
+                lambda: MagicMock(),
+            ),
             patch(
                 "app.application.user_memory_vector_app_service."
                 "get_user_memory_vector_ingest_app_service",
@@ -174,7 +175,7 @@ class TestRecallKnowledgeContext:
             "citations": [{"index": 1, "text": "7 天无理由退货"}],
         }
         monkeypatch.setattr(
-            "app.application.dataset_rag_app_service_part05.get_dataset_rag_app_service",
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
             lambda: svc,
         )
         result = recall_knowledge_context(query="退货政策", dataset_id="ds1", top_k=3)
@@ -191,7 +192,7 @@ class TestRecallKnowledgeContext:
             raise RuntimeError("dataset backend down")
 
         monkeypatch.setattr(
-            "app.application.dataset_rag_app_service_part05.get_dataset_rag_app_service",
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
             _boom,
         )
         result = recall_knowledge_context(query="q", dataset_id="ds1")
@@ -206,7 +207,9 @@ class TestRememberRunOutcome:
 
         svc = MagicMock()
         svc.save_message.side_effect = lambda *a, **k: saved.append(a)
-        monkeypatch.setattr("app.services.conversation_service.ConversationService", lambda: svc)
+        monkeypatch.setattr(
+            "app.domain.shared_services.conversation_service.ConversationService", lambda: svc
+        )
 
         from app.application.user_memory_vector_app_service import UserMemoryVectorChunk
 
@@ -243,7 +246,9 @@ class TestRememberRunOutcome:
 
         svc = MagicMock()
         svc.save_message.side_effect = RuntimeError("db down")
-        monkeypatch.setattr("app.services.conversation_service.ConversationService", lambda: svc)
+        monkeypatch.setattr(
+            "app.domain.shared_services.conversation_service.ConversationService", lambda: svc
+        )
         monkeypatch.setattr(
             "app.application.user_memory_vector_app_service."
             "get_user_memory_vector_ingest_app_service",
@@ -262,7 +267,7 @@ class TestOrchestratorMainLinkWiring:
         return AgentOrchestrator(repository=InMemoryAgentRunRepository())
 
     def test_plan_memory_recall_lands_on_run(self):
-        from app.application.workflow.types import PlanGraph
+        from app.application.workflow.workflow_types import PlanGraph
 
         plan = PlanGraph(plan_id="p1", intent="test")
         plan.metadata["memory_recall"] = {
@@ -443,7 +448,7 @@ class TestOrchestratorMainLinkWiring:
     def test_full_run_records_writeback_event(self, monkeypatch):
         """端到端：start_run_from_plan 全流程 → completed + runtime.memory_writeback。"""
         monkeypatch.setenv("XCAGI_AGENT_RUNTIME_HOOKS", "1")
-        from app.application.workflow.types import PlanGraph, WorkflowNode
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
         plan = PlanGraph(
             plan_id="p1",
@@ -478,58 +483,35 @@ class TestOrchestratorMainLinkWiring:
 
 
 class TestPlannerGatewayMetering:
-    def test_direct_key_path_meters(self, tmp_path):
+    @pytest.mark.parametrize("has_response", [True, False])
+    def test_common_provider_is_metered_only_on_completion(
+        self, tmp_path, monkeypatch, has_response
+    ):
         from app.application.workflow import planner_llm_gateway
+        from app.infrastructure.llm.providers import registry
 
-        ai_service = MagicMock()
-        ai_service.api_key = "sk-test"
-        ai_service.api_url = "http://llm.test/v1/chat/completions"
-        ai_service.model = "test-model"
-
-        response = MagicMock()
-        response.status_code = 200
-        response.json.return_value = {
+        payload = {
             "model": "test-model",
             "choices": [{"message": {"content": "plan"}}],
             "usage": {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
         }
-        http_client = MagicMock()
-        http_client.post.return_value = response
-
+        provider = MagicMock()
+        provider.chat_completion = AsyncMock(return_value=payload if has_response else None)
+        monkeypatch.setattr(registry, "get_active_provider", lambda **kwargs: provider)
         result = planner_llm_gateway.request_planner_completion(
-            ai_service=ai_service,
+            ai_service=object(),
             context={},
             messages=[{"role": "user", "content": "plan this"}],
-            http_client_factory=lambda: http_client,
         )
-        assert result is not None
         entries = _read_ledger(tmp_path)
-        assert len(entries) == 1
-        assert entries[0]["source"] == "agent_planner"
-        assert entries[0]["model"] == "test-model"
-        assert entries[0]["total_tokens"] == 20
-
-    def test_failed_http_call_does_not_meter(self, tmp_path):
-        from app.application.workflow import planner_llm_gateway
-
-        ai_service = MagicMock()
-        ai_service.api_key = "sk-test"
-        ai_service.api_url = "http://llm.test/v1/chat/completions"
-        ai_service.model = "test-model"
-
-        response = MagicMock()
-        response.status_code = 500
-        http_client = MagicMock()
-        http_client.post.return_value = response
-
-        result = planner_llm_gateway.request_planner_completion(
-            ai_service=ai_service,
-            context={},
-            messages=[{"role": "user", "content": "plan this"}],
-            http_client_factory=lambda: http_client,
-        )
-        assert result is None
-        assert _read_ledger(tmp_path) == []
+        if has_response:
+            assert result == payload
+            assert len(entries) == 1
+            assert entries[0]["source"] == "agent_planner"
+            assert entries[0]["model"] == "test-model"
+            assert entries[0]["total_tokens"] == 20
+        else:
+            assert result is None and entries == []
 
 
 class TestEmployeeAgentLoopMetering:

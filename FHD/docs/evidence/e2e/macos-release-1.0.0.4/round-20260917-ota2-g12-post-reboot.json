@@ -1,0 +1,72 @@
+{
+  "round": "2026-09-17",
+  "gate": "G12 整机冷启动复验（对本次 OTA 后的 1.0.0.4 安装）",
+  "status": "PASS",
+  "reboot_proof": {
+    "kern_boottime": "{ sec = 1789626349, usec = 217651 } Thu Sep 17 14:25:49 2026",
+    "previous_known_boot_sec": 1789579911,
+    "previous_boot_time": "Thu Sep 17 01:31:51 2026",
+    "uptime_at_verify": "55 secs（脚本 14:26:44 运行时）",
+    "last_reboot_output": ["reboot time Thu Sep 17 14:25", "shutdown time Thu Sep 17 14:25", "reboot time Thu Sep 17 01:31"],
+    "verdict": "确为真实整机重启（boottime 变化 + shutdown/reboot 记录），非进程重启"
+  },
+  "cold_start_subject": {
+    "installed_version": "1.0.0.4",
+    "git_sha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "install_provenance": "本轮 21:18:32Z 由 ShipIt 从官方 1.0.0.4 产物换入（app.asar/主可执行 sha256 与官方产物一致）",
+    "why_this_is_the_gap_that_was_closed": "此前 01:31 的冷启动覆盖的是降级前那份 1.0.0.4 目录；本项补上了 ShipIt 换入的新目录实例经历 OS 冷启动的验证，实现零缺口"
+  },
+  "app_start_provenance": {
+    "app_pid": 641,
+    "app_lstart": "Thu Sep 17 14:26:12 2026（boot 后 23 秒）",
+    "script_observation": "app_already_running=641 / app_launched_by_script=no（脚本 14:26:44 检查时应用已在运行）",
+    "honest_note": "应用在 boot 后 23 秒即存在，早于脚本 40 秒的兜底启动点，故脚本未触发 open。其来源**未单独取证**（可能为 macOS 重启后还原已打开应用，或用户手动打开），不写成「产品自动启动」——本机登录项为空（既有事实）",
+    "consequence": "G12 核心判据（冷启动后后端可用、数据完好、业务可用）不依赖该来源；「开机自启」属产品设计项，单独记为未启用"
+  },
+  "health": {"status": 200, "version": "1.0.0.4", "git_sha": "280225ac77ce", "service": "xcagi-fastapi", "raw": "round-20260917-ota2-g12-boot1789626349217651-health.json"},
+  "db_integrity": {
+    "tool": "sqlite3 PRAGMA quick_check（file:...?mode=ro 只读）",
+    "result": "ok",
+    "mods_count_api": 62,
+    "raw": "round-20260917-ota2-g12-boot1789626349217651-quick-check.txt"
+  },
+  "data_retention": {
+    "baseline": "round-20260917-ota2-postinstall-digest.json（本 OS 会话启动前，1.0.0.4 装机态）",
+    "current": "round-20260917-ota2-g12-boot1789626349217651-digest.json",
+    "keys": 16, "same": 9, "diff": 7,
+    "diffs_all_attributed": [
+      {"key": "rows.templates", "change": "25 -> 26", "attribution": "本脚本自身的 G7 复测上传了 1 个模板（template_id db:27），测试副作用，非丢失"},
+      {"key": "uploads.files", "change": "170 -> 171", "attribution": "同上（测试上传物）"},
+      {"key": "uploads.templates.files", "change": "24 -> 25", "attribution": "同上"},
+      {"key": "xcagi.db.bytes", "change": "987402240 -> 987504640 (+102400B)", "attribution": "同上（新增 1 模板 + 1 发货单记录）"},
+      {"key": "xcagi.db.wal.bytes", "change": "1161872 -> 0", "attribution": "干净关机触发 WAL checkpoint，符合预期（WAL 已并入主库）"},
+      {"key": "backups.latest", "change": "xcagi-unknown-20260916211545.db -> xcagi-unknown-20260917002127.db", "attribution": "自动备份按计划新增（backups.files 计数不变 → 轮转），非丢失"},
+      {"key": "mods.files", "change": "1239 -> 1243 (+4)", "attribution": "代码树 glob 条目（含目录）增量：Mod 刷新会剥离 __pycache__，运行期重新生成 .pyc / __pycache__ 目录；/api/mods 仍 62、业务计数无变化，非业务数据"}
+    ],
+    "verdict": "无业务数据丢失；全部差异可归因到测试自身副作用、WAL checkpoint 与自动备份轮转/字节码缓存"
+  },
+  "business_chain": {
+    "status": "PASS",
+    "raw": "round-20260917-ota2-g12-boot1789626349217651-g7-retest.json",
+    "steps": "health 200/1.0.0.4/280225ac77ce → login 200 → templates_upload 200（db:27）→ shipment_generate 200（发货单_26-0900001A_20260917_142647.xlsx, agent_status=completed）→ file_download 200（5196B, xlsx_magic=true, sha256 d2881126a7a5bc48d1bca5b3a4618d1de9fb0ababb8be5ab08bed056ed133abb）"
+  },
+  "armed_job": {
+    "plist": "~/Library/LaunchAgents/com.xcagi.ota2-g12.plist (RunAtLoad)",
+    "fired": true,
+    "finished_at": "14:26:44 +0800（脚本日志 onboot-g12 起）",
+    "self_cleaned": true,
+    "self_cleaned_evidence": "plist 与 .g12-creds 均已不存在（自删条件：new_boot=yes 且 disk_version=1.0.0.4）"
+  },
+  "tooling_defects_found_and_fixed_mid_run": [
+    {"issue": "证据文件名内混入换行", "cause": "sysctl 输出中 'usec = ' 含子串 'sec = '，grep -oE 'sec = [0-9]+' 同时命中 usec", "impact": "仅文件名可读性，数据无损", "fix": "已把 4 个文件重命名为 round-20260917-ota2-g12-boot1789626349217651-*"},
+    {"issue": "LaunchAgent 极简 PATH", "fix": "脚本内 export PATH=/usr/bin:/bin:/usr/sbin:/sbin"},
+    {"issue": "复测产物可能沿用上一轮旧文件造成假 PASS", "fix": "复测前 rm -f g7-retest-10004.json 并记录 g7_retest_fresh"}
+  ],
+  "evidence_files": [
+    "round-20260917-ota2-g12-boot1789626349217651-health.json",
+    "round-20260917-ota2-g12-boot1789626349217651-digest.json",
+    "round-20260917-ota2-g12-boot1789626349217651-quick-check.txt",
+    "round-20260917-ota2-g12-boot1789626349217651-g7-retest.json"
+  ],
+  "verdict": "G12 PASS（真实整机重启 + 冷启动后 1.0.0.4 healthy + PRAGMA quick_check=ok + 无业务数据丢失 + 业务链全绿）；「开机自启」为产品设计未启用项，不并入本判定"
+}

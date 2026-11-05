@@ -13,7 +13,24 @@
   "verify_script": "verify_vendor.py",
   "fetch_time_utc": "2026-08-17T13:00:00Z",
   "verification": {
-    "method": "本地吸收副本与上游锁定 release commit 字节级比对 + MANIFEST.sha256 完整性 + LICENSE 校验",
-    "note": "吸收源取自 langgraph 仓库锁定 commit fcdf520938469c8e0992ca2075d6a9582c33260f 的 libs/checkpoint-postgres/langgraph + LICENSE，字节级一致。version 3.1.1 与 pyproject 一致。"
+    "method": "Locked upstream commit + UPSTREAM_MANIFEST.sha256, replayable local patches, installed MANIFEST.sha256, and MIT LICENSE verification",
+    "note": "Runtime baseline is upstream 3.1.1 plus explicit XCAGI runtime-hardening changes and only the direct-batch namespace-label validation backport from upstream PR #9217 (merged commit bfcfea5). This is not a claim of full upstream 3.1.2 or 3.1.3 content."
+  },
+  "upstream_sha256_manifest": "UPSTREAM_MANIFEST.sha256",
+  "upstream_manifest_sha256": "9c96498e82f1ceb980cf16e3736968b26152d95a913bc5cde395c0ae0d80c967",
+  "local_version": "3.1.1+xcagi.1",
+  "local_patches": [
+    {
+      "path": "patches/xcagi-runtime-hardening-and-namespace-validation.patch.b64",
+      "sha256": "6089bd8f683cacbc8c7308ea3450d71f90eddc33080f89ebdad0670ba03d55ab",
+      "description": "Existing XCAGI runtime hardening plus the direct-batch namespace validation portion of langchain-ai/langgraph PR #9217 (merged bfcfea5); does not include the other 3.1.2/3.1.3 changes. Stored base64-encoded to preserve exact upstream whitespace in the replay patch."
+    }
+  ],
+  "security_backport": {
+    "reported_ci_finding": "pip-audit reported CVE-2026-115883 and fix version 3.1.3; the local vendored editable package is not published to PyPI, so pip-audit does not analyze its source.",
+    "upstream_pull_request": "https://github.com/langchain-ai/langgraph/pull/9217",
+    "merged_commit": "bfcfea554ed5c7f7be562cebf8825e911b493ab1",
+    "release_pull_request": "https://github.com/langchain-ai/langgraph/pull/9287",
+    "scope": "Reject empty, non-string, and dotted namespace labels in Postgres direct GetOp/PutOp/SearchOp/ListNamespacesOp batches before SQL. Sync batch() and async abatch() both pass through _group_ops. Standard store API checks were already present in the vendored checkpoint 4.1.1 core. No other Postgres 3.1.2/3.1.3 features are claimed."
   }
 }

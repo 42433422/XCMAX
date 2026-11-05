@@ -1,0 +1,7 @@
+[15:20:01] feature=erp-report platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-report
+[15:20:14] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:20:17] case RP1: passed - 经营看板与销售/库存/采购报表真实读取
+[15:20:17] case RP2: passed - 真实导出报表文件
+[15:20:17] case RP3: passed - 非法方法/路径被拒（负例）
+[15:20:17] video: erp-report-web-20260929-152001.webm (1180473 bytes)
+[15:20:17] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-report/log/erp-report-web-20260929-152001.log

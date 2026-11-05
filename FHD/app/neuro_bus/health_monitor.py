@@ -265,7 +265,7 @@ def configure_runtime_health_monitor(
     返回 ``(monitor, durable_available)``。fail-safe：若持久化事件存储不可用，监控可
     继续，但自动修复被禁用（不注册 handler），因此绝无 recovered 声明。
     """
-    from app.desktop_runtime.paths import get_desktop_data_dir
+    from app.desktop_runtime.desktop_runtime_paths import get_desktop_data_dir
 
     monitor = get_health_monitor()
     # 先显式注销固定自愈动作，再尝试持久化存储构建。这样即使本次调用失败，先前已成功

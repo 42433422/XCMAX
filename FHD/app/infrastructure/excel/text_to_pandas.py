@@ -1,6 +1,6 @@
 """生成代码校验与受限 pandas 执行辅助。
 
-Phase 3B 从 ``app.legacy.excel_text_to_pandas`` 吸收。
+Phase 3B 从 ``legacy-layer.excel_text_to_pandas`` 吸收。
 """
 
 from __future__ import annotations

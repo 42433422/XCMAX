@@ -27,27 +27,16 @@ describe('productsApi', () => {
     expect(apiMock.download).toHaveBeenCalledTimes(2)
   })
 
-  it('searchProducts builds params conditionally', async () => {
-    await productsApi.searchProducts('  ', undefined)
-    expect(apiMock.get).toHaveBeenLastCalledWith(expect.stringContaining('/products/list'), {
-      page: 1,
-      per_page: 20,
-    })
-    await productsApi.searchProducts('paint', 'u1')
-    expect(apiMock.get).toHaveBeenLastCalledWith(expect.any(String), {
-      page: 1,
-      per_page: 20,
-      keyword: 'paint',
-      unit: 'u1',
-    })
+  it.each([
+    ['  ', undefined, { page: 1, per_page: 20 }],
+    ['paint', 'u1', { page: 1, per_page: 20, keyword: 'paint', unit: 'u1' }],
+  ] as const)('searchProducts preserves params for %s', async (query, unit, expected) => {
+    await productsApi.searchProducts(query, unit)
+    expect(apiMock.get).toHaveBeenLastCalledWith(expect.stringContaining('/products/list'), expected)
   })
 
-  it('getProductUnits handles array, nested, and empty shapes', async () => {
-    apiMock.get.mockResolvedValueOnce({ data: [' a ', '', 'b'] })
-    expect((await productsApi.getProductUnits()).data).toEqual(['a', 'b'])
-    apiMock.get.mockResolvedValueOnce({ data: { units: ['x', 'y'] } })
-    expect((await productsApi.getProductUnits()).data).toEqual(['x', 'y'])
-    apiMock.get.mockResolvedValueOnce({ data: null })
-    expect((await productsApi.getProductUnits()).count).toBe(0)
+  it.each([[[' a ', '', 'b'], ['a', 'b'], 3], [{ units: ['x', 'y'] }, ['x', 'y'], 2], [null, [], 0]])('normalizes product units %j', async (data, expected, count) => {
+    apiMock.get.mockResolvedValueOnce({ data })
+    expect(await productsApi.getProductUnits()).toMatchObject({ data: expected, count })
   })
 })

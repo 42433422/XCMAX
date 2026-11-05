@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-10-15T21:26:41.729045+08:00",
+  "applicationExitedNormally": true,
+  "remainingApplicationProcesses": [],
+  "canonicalApp": {
+    "schema_version": 1,
+    "gitSha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+    "builtAt": "2026-10-12T09:51:04.060Z"
+  },
+  "canonicalMatchesOriginalBackupContent": true,
+  "launchEnvironmentRestored": {
+    "XCAGI_DESKTOP_USER_DATA_DIR": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer",
+    "XCAGI_DESKTOP_PORT": null,
+    "XCAGI_DESKTOP_API_HOST": null,
+    "XCAGI_UPDATE_URL": "http://127.0.0.1:8765"
+  },
+  "taskFeedServerStopRequested": "SIGINT only owned HTTP server46390",
+  "sharedCustomerDataFailureInjection": false,
+  "sharedCustomerDataByteUnchangedClaim": false,
+  "note": "Early operator getApp launches inherited shared startup environment; no business operations or fault injection were performed there. No comparable pre-turn shared DB fingerprint was taken, so byte-unchanged is not asserted."
+}

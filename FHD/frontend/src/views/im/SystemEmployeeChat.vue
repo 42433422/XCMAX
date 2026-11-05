@@ -28,34 +28,6 @@
     </header>
     <div class="im-system-employee-body">
       <div class="im-system-employee-profile">
-        <section class="im-system-employee-card">
-          <div
-            :class="[
-              'im-system-employee-avatar',
-              {
-                'im-system-employee-avatar--super-tool': superEmployeeAvatarKey(activeSystemEntry),
-                [`im-system-employee-avatar--${superEmployeeAvatarKey(activeSystemEntry)}`]: superEmployeeAvatarKey(activeSystemEntry),
-                'im-system-employee-avatar--duty': isDutyEmployeeEntry(activeSystemEntry),
-              },
-            ]"
-            aria-hidden="true"
-          >
-            <img
-              v-if="superEmployeeAvatarSrc(activeSystemEntry)"
-              class="im-super-tool-icon"
-              :src="superEmployeeAvatarSrc(activeSystemEntry) || undefined"
-              alt=""
-              decoding="async"
-              draggable="false"
-            />
-            <template v-else>{{ pinnedAvatarText(activeSystemEntry) }}</template>
-          </div>
-          <h3>{{ activeSystemEntry.display_name }}</h3>
-          <p>{{ activeSystemEntry.subtitle }}</p>
-          <p v-if="isDutyEmployeeEntry(activeSystemEntry)" class="im-system-employee-responsibility">
-            职责：{{ activeSystemEntry.description }}
-          </p>
-        </section>
         <dl class="im-system-status-grid im-system-status-grid--identity">
           <div>
             <dt>身份</dt>
@@ -63,7 +35,14 @@
           </div>
         </dl>
         <details class="im-system-status-details">
-          <summary>详情（调度/状态/最近任务）</summary>
+          <summary>员工资料与运行详情</summary>
+          <section class="im-system-employee-card">
+            <h3>{{ activeSystemEntry.display_name }}</h3>
+            <p>{{ activeSystemEntry.subtitle }}</p>
+            <p v-if="isDutyEmployeeEntry(activeSystemEntry)" class="im-system-employee-responsibility">
+              职责：{{ activeSystemEntry.description }}
+            </p>
+          </section>
           <dl class="im-system-status-grid">
             <div>
               <dt>{{ isSuperEmployeeEntry(activeSystemEntry) ? '调度' : '联系方式' }}</dt>

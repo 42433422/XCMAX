@@ -23,7 +23,9 @@ _DESKTOP_REQUIRED_ROUTES = {
     "workspace_prefs",
     "business_bridge",
     "mod_store",
-    "etl",
+    "elt_api",
+    "elt_sources",
+    "elt_targets",
 }
 
 
@@ -81,6 +83,15 @@ def _load_taiyangniao_attendance_compat_router():
         )
         return APIRouter(tags=["sunbird-attendance-compat-skipped"])
     return __import__("app.legacy.routes.taiyangniao_attendance_compat", fromlist=["router"]).router
+
+
+def _load_mobile_api_router():
+    """Load mobile route components before returning their shared public router."""
+    # mobile_api_extensions imports the stable get_mobile_user dependency from
+    # mobile_api; import it first so it can attach a fully built extension router
+    # without the former partially initialized circular-import path.
+    __import__("app.fastapi_routes.mobile_api_extensions", fromlist=["extension_router"])
+    return __import__("app.fastapi_routes.mobile_api", fromlist=["router"]).router
 
 
 def _mount(
@@ -178,7 +189,9 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         registry,
         "admin_audit",
         lambda: (
-            __import__("app.fastapi_routes.domains.admin_audit.routes", fromlist=["router"]).router
+            __import__(
+                "app.fastapi_routes.domains.admin_audit.admin_audit_routes", fromlist=["router"]
+            ).router
         ),
         priority=10,
     )
@@ -186,7 +199,9 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         registry,
         "genai_traces",
         lambda: (
-            __import__("app.fastapi_routes.domains.genai_traces.routes", fromlist=["router"]).router
+            __import__(
+                "app.fastapi_routes.domains.genai_traces.genai_traces_routes", fromlist=["router"]
+            ).router
         ),
         priority=10,
     )
@@ -199,7 +214,9 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "agent",
-        lambda: __import__("app.fastapi_routes.domains.agent.routes", fromlist=["router"]).router,
+        lambda: (
+            __import__("app.fastapi_routes.domains.agent.agent_routes", fromlist=["router"]).router
+        ),
         priority=12,
     )
     _mount(
@@ -217,15 +234,29 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
-        "etl",
-        lambda: __import__("app.fastapi_routes.etl", fromlist=["router"]).router,
+        "elt_api",
+        lambda: __import__("app.fastapi_routes.elt", fromlist=["router"]).router,
         priority=13,
         required_in_ci=True,
     )
     _mount(
         registry,
-        "etl_targets",
-        lambda: __import__("app.fastapi_routes.etl_targets", fromlist=["router"]).router,
+        "elt_auto_ingest",
+        lambda: __import__("app.fastapi_routes.elt_auto_ingest", fromlist=["router"]).router,
+        priority=13,
+        required_in_ci=True,
+    )
+    _mount(
+        registry,
+        "elt_targets",
+        lambda: __import__("app.fastapi_routes.elt_targets", fromlist=["router"]).router,
+        priority=13,
+        required_in_ci=True,
+    )
+    _mount(
+        registry,
+        "elt_sources",
+        lambda: __import__("app.fastapi_routes.elt", fromlist=["sources_router"]).sources_router,
         priority=13,
         required_in_ci=True,
     )
@@ -296,7 +327,7 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "control",
-        lambda: __import__("app.control.routes", fromlist=["router"]).router,
+        lambda: __import__("app.control.control_routes", fromlist=["router"]).router,
         prefix="/api/control",
         tags=["control"],
     )
@@ -308,7 +339,7 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "mobile_api",
-        lambda: __import__("app.fastapi_routes.mobile_api", fromlist=["router"]).router,
+        _load_mobile_api_router,
     )
     _mount(
         registry,

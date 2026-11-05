@@ -52,6 +52,15 @@ async function mountView(query: Record<string, string> = {}, sku = 'generic') {
   return { wrapper, router }
 }
 
+async function fillAndSubmit(wrapper: Awaited<ReturnType<typeof mountView>>['wrapper'], username = 'user') {
+  await wrapper.find('input[name="username"]').setValue(username)
+  await wrapper.find('input[name="password"]').setValue('password123')
+  await wrapper.find('input[name="confirm-password"]').setValue('password123')
+  await wrapper.find('form').trigger('submit')
+  await wrapper.vm.$nextTick()
+  await wrapper.vm.$nextTick()
+}
+
 describe('RegisterView.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -62,6 +71,11 @@ describe('RegisterView.vue', () => {
   it('renders the registration heading', async () => {
     const { wrapper } = await mountView()
     expect(wrapper.find('.login-heading').text()).toBe('账号注册')
+  })
+
+  it('refreshes the runtime edition when opening registration', async () => {
+    await mountView({}, 'enterprise')
+    expect(fetchProductSku).toHaveBeenCalledWith(true)
   })
 
   it('renders username, password, and confirm password inputs', async () => {
@@ -126,12 +140,7 @@ describe('RegisterView.vue', () => {
     register.mockResolvedValue({ success: true, user: { id: 1 } })
     const { wrapper, router } = await mountView()
     const replaceSpy = vi.spyOn(router, 'replace')
-    await wrapper.find('input[name="username"]').setValue('newuser')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper, 'newuser')
     expect(register).toHaveBeenCalledWith(
       expect.objectContaining({
         username: 'newuser',
@@ -145,12 +154,7 @@ describe('RegisterView.vue', () => {
   it('shows error when registration returns success=false', async () => {
     register.mockResolvedValue({ success: false, message: '用户名已存在' })
     const { wrapper } = await mountView()
-    await wrapper.find('input[name="username"]').setValue('existing')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper, 'existing')
     expect(wrapper.find('.login-error').text()).toBe('用户名已存在')
   })
 
@@ -160,12 +164,7 @@ describe('RegisterView.vue', () => {
       error: { message: '邮箱已被注册' },
     })
     const { wrapper } = await mountView()
-    await wrapper.find('input[name="username"]').setValue('user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(wrapper.find('.login-error').text()).toBe('邮箱已被注册')
   })
 
@@ -173,12 +172,7 @@ describe('RegisterView.vue', () => {
     const apiError = new ApiError('fail', 400, { message: '服务器错误' })
     register.mockRejectedValue(apiError)
     const { wrapper } = await mountView()
-    await wrapper.find('input[name="username"]').setValue('user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(wrapper.find('.login-error').text()).toBe('服务器错误')
   })
 
@@ -186,36 +180,21 @@ describe('RegisterView.vue', () => {
     const apiError = new ApiError('fail', 400, { error: { message: '嵌套错误' } })
     register.mockRejectedValue(apiError)
     const { wrapper } = await mountView()
-    await wrapper.find('input[name="username"]').setValue('user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(wrapper.find('.login-error').text()).toBe('嵌套错误')
   })
 
   it('handles generic Error on register', async () => {
     register.mockRejectedValue(new Error('网络超时'))
     const { wrapper } = await mountView()
-    await wrapper.find('input[name="username"]').setValue('user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(wrapper.find('.login-error').text()).toBe('网络超时')
   })
 
   it('shows default error for unknown error type', async () => {
     register.mockRejectedValue({})
     const { wrapper } = await mountView()
-    await wrapper.find('input[name="username"]').setValue('user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(wrapper.find('.login-error').text()).toBe('注册失败，请稍后再试')
   })
 
@@ -223,12 +202,7 @@ describe('RegisterView.vue', () => {
     register.mockResolvedValue({ success: true })
     const { wrapper, router } = await mountView({ redirect: '/dashboard' })
     const replaceSpy = vi.spyOn(router, 'replace')
-    await wrapper.find('input[name="username"]').setValue('user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(replaceSpy).toHaveBeenCalledWith('/dashboard')
   })
 
@@ -236,12 +210,7 @@ describe('RegisterView.vue', () => {
     register.mockResolvedValue({ success: true })
     const { wrapper, router } = await mountView({ redirect: '/login' })
     const replaceSpy = vi.spyOn(router, 'replace')
-    await wrapper.find('input[name="username"]').setValue('user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(replaceSpy).toHaveBeenCalledWith('/')
   })
 
@@ -249,12 +218,7 @@ describe('RegisterView.vue', () => {
     register.mockResolvedValue({ success: true })
     const { wrapper, router } = await mountView({ redirect: '//evil.com' })
     const replaceSpy = vi.spyOn(router, 'replace')
-    await wrapper.find('input[name="username"]').setValue('user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(replaceSpy).toHaveBeenCalledWith('/')
   })
 
@@ -264,12 +228,7 @@ describe('RegisterView.vue', () => {
       redirect: '/login?redirect=%2Fdashboard',
     })
     const replaceSpy = vi.spyOn(router, 'replace')
-    await wrapper.find('input[name="username"]').setValue('user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(replaceSpy).toHaveBeenCalledWith('/dashboard')
   })
 
@@ -372,12 +331,8 @@ describe('RegisterView.vue', () => {
 
   it('asks for verification after an optional enterprise email is entered', async () => {
     const { wrapper } = await mountView({}, 'enterprise')
-    await wrapper.find('input[name="username"]').setValue('user')
     await wrapper.find('input[name="email"]').setValue('user@example.com')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(wrapper.find('.login-error').text()).toContain('验证码')
   })
 
@@ -399,12 +354,7 @@ describe('RegisterView.vue', () => {
     })
     const { wrapper, router } = await mountView({}, 'enterprise')
     const replaceSpy = vi.spyOn(router, 'replace')
-    await wrapper.find('input[name="username"]').setValue('pending-user')
-    await wrapper.find('input[name="password"]').setValue('password123')
-    await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper, 'pending-user')
 
     expect(wrapper.text()).toContain('账号注册成功')
     expect(wrapper.text()).toContain('选择 XCAGI 方案')

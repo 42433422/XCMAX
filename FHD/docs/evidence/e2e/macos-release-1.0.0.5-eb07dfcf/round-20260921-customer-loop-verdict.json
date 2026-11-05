@@ -1,0 +1,78 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-closed-loop",
+  "platform": "macos",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "release_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+  "artifact_under_test": {
+    "app_path": "/Applications/XCAGI.app",
+    "build_info": {
+      "gitSha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-eb07dfcf372532292dc87c187b67c0ee620640b2"
+    },
+    "download_url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg"
+  },
+  "steps": {
+    "S1_website_and_download": {
+      "checks": {
+        "site_root": 200,
+        "dmg_http": 206,
+        "ota_feed": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml productVersion=1.0.0.5 buildSha=eb07dfcf372532292dc87c187b67c0ee620640b2",
+        "market_health": "https://xiu-ci.com/api/health -> 200",
+        "market_login_endpoint": "POST https://xiu-ci.com/api/auth/login -> 401（错误口令）"
+      },
+      "verdict": "PASS"
+    },
+    "S2_first_launch_login_entitlement": {
+      "evidence": "FHD/docs/evidence/e2e/macos-release-1.0.0.5-eb07dfcf/round-20260921-gui-customer-chain.json (G1/G2/G3) 与 round-20260921-clean-env-customer-chain-runtime.json (C4/C5/C6)",
+      "verdict": "PASS"
+    },
+    "S3_industry_mod_preparation": {
+      "strict_gate": "FAIL",
+      "bypass_gate": "PASS（页面自带「先进入，稍后再设置」/「先使用对话」）",
+      "observed_missing_required": ["taiyangniao-pro"],
+      "note": "本轮已修复客户端自身造成的不可满足必需项 wechat-contacts-ai-employee（见 round-20260921-g4-wechat-dangling-required-fix.json）。剩余唯一缺失项 taiyangniao-pro 属市场侧私有交付，客户端行为正确并给出精确错误文案。",
+      "verdict": "BLOCKED"
+    },
+    "S4_real_business_save_export": {
+      "evidence": "round-20260921-clean-env-customer-chain-runtime.json C8（模板上传→客户查重 400→发货单出单→xlsx 回读 sha256 一致）",
+      "verdict": "PASS"
+    },
+    "S5_restart_persistence": {
+      "evidence": "round-20260921-clean-env-customer-chain-runtime.json C9（退出→端口释放→重启→会话/模板/客户/单据全部保留）",
+      "verdict": "PASS"
+    },
+    "S6_ota_upgrade_continue": {
+      "feed": "1.0.0.5（与本机已装一致 → isUpdateAvailable=false，属预期）",
+      "note": "OTA 升级链路在 1.0.0.4 → 1.0.0.5 轮次已验证（FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-g8/g9/g10/g11/g12）。本轮无更高版本可升。",
+      "verdict": "NOT_COVERED_THIS_ROUND"
+    }
+  },
+  "blocking_gate": {
+    "gate": "S3_industry_mod_preparation / 严格装包门",
+    "classification": "MARKET_SIDE_PROVISIONING_GAP",
+    "blocked_items": [
+      {
+        "mod_id": "taiyangniao-pro",
+        "client_message": "当前账号没有该客户 Mod 的私有版本",
+        "market_state": "修茈市场无 customer-delivery-artifacts 目录；私有发布需经 CS 工单验收（CustomerServiceTicket intent=custom_delivery, acceptance_status=accepted）后才可见。"
+      },
+      {
+        "mod_id": "sunbird-attendance-custom",
+        "client_message": "远端 Mod 包下载失败 404: {\"detail\":\"交付种子文件缺失\"}",
+        "market_state": "catalog_data/packages.json 有 sunbird-delivery-seed 1.0.0 记录（stored_filename=sunbird-delivery-seed-1.0.0.zip, sha256=68b412e7204996b9e439cbad544c984d41673bdb3d5b4f5070af7857fb8b8510, size=245745），但 catalog_data/files/ 缺该文件。"
+      }
+    ],
+    "unblock_conditions": [
+      "在市场主机执行 FHD/scripts/package/publish-sunbird-delivery-seed.py --version 1.0.0，重建并登记 sunbird-delivery-seed-1.0.0.zip 到 catalog_data/files/（或经 admin 接口上传）。",
+      "把已签名 taiyangniao-pro.xcmod 放入 <library>.parent/customer-delivery-artifacts/<SUNBIRD 市场 user id>/taiyangniao-pro/，且其 manifest.delivery_ticket_id 指向 user_id=owner、intent=custom_delivery、evidence.acceptance_status=accepted 的 CustomerServiceTicket。",
+      "确认 SUNBIRD 市场权益含 taiyangniao-pro（scripts/provision_enterprise_delivery.py --delivery sunbird）。"
+    ],
+    "not_blocked_by": "客户端代码；本轮已修复客户端自身的不可满足必需项 wechat-contacts-ai-employee。"
+  },
+  "verdict": "FAIL",
+  "verdict_note": "客户闭环在最终正式安装包上未完全通过：S1/S2/S4/S5 真实通过，S3 严格装包门被市场侧私有交付资产缺失阻断（外部依赖），S6 本轮无更高版本可升。中间状态不存在——按用户要求如实标记 FAIL，并给出精确解除条件。",
+  "finished_at_utc": "2026-09-21T03:00:00+00:00"
+}

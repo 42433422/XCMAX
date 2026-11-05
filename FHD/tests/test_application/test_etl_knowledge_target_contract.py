@@ -6,13 +6,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application.etl.errors import EtlError
-from app.application.etl.targets import knowledge
+from app.application.elt.errors import EltError
+from app.application.elt.targets import knowledge
 
 
 def test_knowledge_validation_hash_and_source_fallbacks() -> None:
     adapter = knowledge.KnowledgeAdapter()
-    assert adapter.validate({})[0]["code"] == "ETL_KNOWLEDGE_CONTENT_REQUIRED"
+    assert adapter.validate({})[0]["code"] == "ELT_KNOWLEDGE_CONTENT_REQUIRED"
     assert adapter.validate({"content": "x"}) == []
     assert (
         adapter._content_hash({"content": "正文"}, {})
@@ -50,9 +50,9 @@ def test_documents_status_cache_success_and_rejects_invalid_inventory() -> None:
                 return_value=service,
             ),
         ):
-            with pytest.raises(EtlError) as error:
+            with pytest.raises(EltError) as error:
                 adapter._documents({})
-            assert error.value.code == "ETL_KNOWLEDGE_STATUS_FAILED"
+            assert error.value.code == "ELT_KNOWLEDGE_STATUS_FAILED"
 
 
 def test_preview_validation_duplicate_and_source_replacement_decisions() -> None:
@@ -65,7 +65,7 @@ def test_preview_validation_duplicate_and_source_replacement_decisions() -> None
             context={},
         )
     assert decision.action == "error"
-    assert {item["code"] for item in decision.issues or []} == {"ETL_DOCUMENT_PATH_FORBIDDEN"}
+    assert {item["code"] for item in decision.issues or []} == {"ELT_DOCUMENT_PATH_FORBIDDEN"}
 
     digest = hashlib.sha256(b"same").hexdigest()
     duplicate = {"document_id": "d1", "metadata": {"content_hash": digest}}
@@ -115,7 +115,7 @@ def test_preview_validation_duplicate_and_source_replacement_decisions() -> None
 def test_execute_row_rejects_untrusted_path_and_handles_service_results() -> None:
     adapter = knowledge.KnowledgeAdapter()
     with patch.object(knowledge, "is_uploaded_document_path", return_value=False):
-        with pytest.raises(EtlError):
+        with pytest.raises(EltError):
             adapter.execute_row(
                 None,
                 {"document_path": "/outside/file.pdf"},
@@ -135,7 +135,7 @@ def test_execute_row_rejects_untrusted_path_and_handles_service_results() -> Non
             return_value=service,
         ),
     )
-    with patches[0], patches[1], patches[2], pytest.raises(EtlError):
+    with patches[0], patches[1], patches[2], pytest.raises(EltError):
         adapter.execute_row(
             None,
             {"content": "正文", "source_key": "s"},
@@ -204,7 +204,7 @@ def test_rollback_row_success_and_failure() -> None:
             "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
             return_value=service,
         ),
-        pytest.raises(EtlError),
+        pytest.raises(EltError),
     ):
         adapter.rollback_row(
             None,
@@ -220,11 +220,11 @@ def test_rollback_without_receipt_never_calls_delete() -> None:
     with patch(
         "app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=service
     ):
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             knowledge.KnowledgeAdapter().rollback_row(
                 None, match_ref="d1", before={}, after={}, context={"run_id": "r"}
             )
-    assert error.value.code == "ETL_KNOWLEDGE_ROLLBACK_RECEIPT_REQUIRED"
+    assert error.value.code == "ELT_KNOWLEDGE_ROLLBACK_RECEIPT_REQUIRED"
     service.delete_document.assert_not_called()
 
 
@@ -238,7 +238,7 @@ def test_missing_write_receipt_is_not_success(receipt) -> None:
     with patch(
         "app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=service
     ):
-        with pytest.raises(EtlError) as error:
+        with pytest.raises(EltError) as error:
             knowledge.KnowledgeAdapter().execute_row(
                 None,
                 {"content": "synthetic"},
@@ -247,4 +247,4 @@ def test_missing_write_receipt_is_not_success(receipt) -> None:
                 allowed_update_fields=set(),
                 context={"run_id": "r"},
             )
-    assert error.value.code == "ETL_KNOWLEDGE_INGEST_FAILED"
+    assert error.value.code == "ELT_KNOWLEDGE_INGEST_FAILED"

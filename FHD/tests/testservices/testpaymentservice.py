@@ -24,7 +24,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application import paymentservice as psvc
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import Customer, JournalEntry, ReceivableAllocation, SalesOrder
 from app.infrastructure.tenant_scope import tenant_scope
 from app.services import accounting_services as asvc

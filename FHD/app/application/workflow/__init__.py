@@ -7,7 +7,7 @@ from .checkpointer import DatabaseWorkflowCheckpointer, WorkflowCheckpointer
 from .engine import WorkflowEngine
 from .planner import LLMWorkflowPlanner
 from .risk_gate import HybridRiskGate, RiskDecision
-from .types import (
+from .workflow_types import (
     ApprovalRequest,
     ApprovalRule,
     ApprovalStatus,

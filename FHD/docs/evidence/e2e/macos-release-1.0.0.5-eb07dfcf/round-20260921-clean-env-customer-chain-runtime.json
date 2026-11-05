@@ -1,0 +1,241 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "clean-env-customer-chain-runtime",
+  "platform": "macos",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "release_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+  "session_tag": "CLEAN-569a6af9",
+  "started_at_utc": "2026-09-20T16:16:54.587930+00:00",
+  "steps": {
+    "C4_first_launch_health": {
+      "health_ready_seconds": 0.0,
+      "snapshot": {
+        "reachable": true,
+        "top_status": "healthy",
+        "degradedReasons": [],
+        "runtime_status": "healthy",
+        "components_total": 37,
+        "components_ok": 37,
+        "required_total": 11,
+        "required_failed": [],
+        "runtime_failures": [],
+        "runtime_blockers": [],
+        "version": "1.0.0.5",
+        "git_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+        "release_id": "xcagi-1.0.0.5-eb07dfcf372532292dc87c187b67c0ee620640b2"
+      },
+      "verdict": "PASS",
+      "backend_cmdline": "86644 /private/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/AppTranslocation/C7CBECD4-3D8B-4382-9213-A4030D255EDD/d/XCAGI.app/Contents/Resources/backend/xcagi-backend --desktop --headless --host 0.0.0.0 --port 17500 --data-dir /Users/a4243342/Library/Application Support/XCAGI",
+      "datadir_is_fresh_default": true,
+      "data_root_size": "18M",
+      "data_root_is_new": true
+    },
+    "C5_login_binding": {
+      "endpoint": "POST /api/auth/login",
+      "status": 200,
+      "success": true,
+      "session_id_prefix": "9293eea5",
+      "user": {
+        "id": 2,
+        "username": "SUNBIRD",
+        "display_name": "SUNBIRD",
+        "email": "sunbird@xcagi.local",
+        "role": "user"
+      },
+      "market_token_present": true,
+      "me": {
+        "status": 200,
+        "success": true,
+        "username": "SUNBIRD",
+        "user_id": 2,
+        "permission_count": 15,
+        "has_shipment_edit": true,
+        "permissions": [
+          "product.edit",
+          "dataset.write",
+          "product.view",
+          "print.label",
+          "etl.execute",
+          "customer.view",
+          "etl.template.manage",
+          "shipment.create",
+          "material.edit",
+          "customer.edit",
+          "dataset.read",
+          "shipment.view",
+          "material.view",
+          "shipment.edit",
+          "etl.read"
+        ]
+      },
+      "verdict": "PASS"
+    },
+    "C6_entitlement": {
+      "model_payment": {
+        "status": 200,
+        "success": true,
+        "payload": "{\"success\": true, \"data\": {\"entitlements\": [], \"backend\": \"json\"}}"
+      },
+      "visible_mods": {
+        "status": 200,
+        "count": 24,
+        "sample": [
+          "xcagi-erp-domain-bridge",
+          "xcagi-planner-bridge",
+          "xcagi-office-employee-pack-bridge",
+          "xcagi-planner-excel-tools",
+          "xcagi-lan-license-bridge",
+          "xcagi-neuro-bus-bridge",
+          "xcagi-core-workflow-employees",
+          "accessories-packaging-industry",
+          "xcagi-customer-service-bridge",
+          "xcagi-model-payment-bridge"
+        ]
+      },
+      "verdict": "PASS"
+    },
+    "C7_mod_loading": {
+      "status": 200,
+      "success": true,
+      "mods_root": "/Users/a4243342/Library/Application Support/XCAGI/mods",
+      "discovered": 14,
+      "installed": 14,
+      "loaded": 14,
+      "load_mismatch": false,
+      "load_errors": [],
+      "manifest_errors": [
+        {
+          "mod_id": "unknown",
+          "error": "加载失败"
+        }
+      ],
+      "blueprint_errors": [],
+      "partial_failure": false,
+      "mods_disabled": false,
+      "erp_mod_present": true,
+      "installed_mod_ids": [
+        "xcagi-erp-domain-bridge",
+        "xcagi-planner-bridge",
+        "xcagi-office-employee-pack-bridge",
+        "xcagi-planner-excel-tools",
+        "xcagi-lan-license-bridge",
+        "xcagi-neuro-bus-bridge",
+        "xcagi-core-workflow-employees",
+        "accessories-packaging-industry",
+        "xcagi-customer-service-bridge",
+        "xcagi-model-payment-bridge",
+        "xcagi-approval-bridge",
+        "attendance-industry",
+        "lan-gate-ai-employee",
+        "xcagi-workflow-visualization-bridge"
+      ],
+      "verdict": "PASS"
+    },
+    "C8_real_business": {
+      "business_input": {
+        "file": "business-input-template.xlsx",
+        "size": 5000,
+        "sha256": "a51756b92f0560ab5b666ddd244504b3d9c5947d9ffaff74c1e0d9655d8ec8bb",
+        "data_rows": 2
+      },
+      "templates_upload": {
+        "status": 200,
+        "template_id": "db:2",
+        "message": "解析并入库模版库成功"
+      },
+      "templates_list": {
+        "status": 200,
+        "probe_present": true
+      },
+      "customers_create": {
+        "status": 200,
+        "success": true,
+        "message": null
+      },
+      "customers_dedup": {
+        "status": 400,
+        "rejected_duplicate": true,
+        "message": "客户名称已存在"
+      },
+      "shipment_generate": {
+        "status": 200,
+        "success": true,
+        "message": "发货单生成成功",
+        "doc_name": "发货单_26-0900001A_20260921_001717.xlsx"
+      },
+      "file_download": {
+        "status": 200,
+        "bytes": 5177,
+        "xlsx_magic": true,
+        "sha256": "060a32eed1ce0a4089f8717d792bfe6a47789a4293fe7f95c9cc98b9a4e1469d",
+        "filename": "发货单_26-0900001A_20260921_001717.xlsx"
+      },
+      "verdict": "PASS"
+    },
+    "C9_restart_persistence": {
+      "data_before": {
+        "xcagi.db.bytes": 1695744,
+        "mod_dbs.files": 0,
+        "uploads.files": 2,
+        "mods.files": 430
+      },
+      "main_pid_before": "86637",
+      "port_released": true,
+      "app_stopped": true,
+      "health_after": {
+        "ok": true,
+        "seconds": 3.2,
+        "snapshot": {
+          "reachable": true,
+          "top_status": "healthy",
+          "degradedReasons": [],
+          "runtime_status": "healthy",
+          "components_total": 37,
+          "components_ok": 37,
+          "required_total": 11,
+          "required_failed": [],
+          "runtime_failures": [],
+          "runtime_blockers": [],
+          "version": "1.0.0.5",
+          "git_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+          "release_id": "xcagi-1.0.0.5-eb07dfcf372532292dc87c187b67c0ee620640b2"
+        }
+      },
+      "session_reused_after_restart": {
+        "status": 200,
+        "success": true,
+        "username": "SUNBIRD"
+      },
+      "template_persisted": true,
+      "customer_persisted": true,
+      "shipment_doc_persisted": {
+        "status": 200,
+        "bytes": 5177,
+        "xlsx_magic": true
+      },
+      "data_after": {
+        "xcagi.db.bytes": 1736704,
+        "mod_dbs.files": 0,
+        "uploads.files": 2,
+        "mods.files": 430
+      },
+      "verdict": "PASS"
+    }
+  },
+  "verdict": "PASS",
+  "finished_at_utc": "2026-09-20T16:17:21.992072+00:00",
+  "log": [
+    "[00:16:54] === 运行时客户链 1.0.0.5 @ eb07dfcf3725 tag=CLEAN-569a6af9 ===",
+    "[00:16:54] C4 首次启动后台健康（全新数据根）",
+    "[00:16:54]   runtime=healthy required_failed=[] top=healthy [] verdict=PASS",
+    "[00:16:54] C5 登录绑定（企业租户 SUNBIRD，市场优先登录）",
+    "[00:17:11]   session=9293eea5 perms=15 verdict=PASS",
+    "[00:17:11] C6 权益 / C7 Mod 加载",
+    "[00:17:17]   visible_mods=24 installed=14 loaded=14 erp=True verdict=PASS",
+    "[00:17:17] C8 真实业务：模板上传 → 客户查重 → 发货单出单 → xlsx 回读",
+    "[00:17:17]   upload=200 dedup=True shipment=200 doc=发货单_26-0900001A_20260921_001717.xlsx verdict=PASS",
+    "[00:17:17] C9 重启复验：退出 → 端口释放 → 重启 → 会话与业务数据保留",
+    "[00:17:21]   port_released=True health=True session=True template=True customer=True verdict=PASS"
+  ]
+}

@@ -1,0 +1,7 @@
+[08:29:03] feature=base-account-security base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-account-security
+[08:29:15] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:29:15] case BS1: passed - MFA(TOTP) 绑定接口真实返回密钥
+[08:29:15] case BS2: passed - 原密码错误拒绝改密（负例）
+[08:29:17] case BS3: passed - 无会话上下文 MFA 绑定被拒（负例）
+[08:29:17] video: base-account-security-web-20260929-082903.webm (593919 bytes)
+[08:29:17] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-account-security/log/base-account-security-web-20260929-082903.log

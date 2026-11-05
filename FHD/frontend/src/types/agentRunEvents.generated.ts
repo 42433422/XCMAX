@@ -30,6 +30,7 @@ export type AgentRunEventType =
   | 'run.continue_ignored'
   | 'run.created'
   | 'run.failed'
+  | 'run.observation_interrupted'
   | 'step.approved'
   | 'step.blocked'
   | 'step.llm_repair_failed'
@@ -41,6 +42,7 @@ export type AgentRunEventType =
   | 'task.approval_required'
   | 'tool.completed'
   | 'tool.failed'
+  | 'tool.receipt_observed'
   | 'tool.started';
 
 export const TERMINAL_AGENT_RUN_EVENT_TYPES: ReadonlySet<AgentRunEventType> = new Set([

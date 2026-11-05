@@ -6,6 +6,8 @@ from html.parser import HTMLParser
 from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from modstore_server.api.csrf import _machine_webhook_path
+
 # Paths whose bodies must NOT be rewritten: signatures are computed over the
 # raw bytes, and any mutation (even stripping <script>) breaks the HMAC/RSA
 # verification performed by the downstream handler.
@@ -20,6 +22,8 @@ _BYPASS_PATHS: frozenset[str] = frozenset(
 
 
 def _is_bypass_path(path: str) -> bool:
+    if _machine_webhook_path(path):
+        return True
     for prefix in _BYPASS_PATHS:
         if path == prefix or path.startswith(prefix + "/"):
             return True

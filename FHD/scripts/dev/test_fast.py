@@ -2,8 +2,8 @@
 """后端「快车道」测试 —— 排除已知红文件，给出可复现的本地绿色信号。
 
 用于在重构（绞杀者式路由收口等）后快速验证「未引入新回归」，无需等待全量套件
-（本分支 CI 与本地全量均红：含幽灵测试/环境耦合/API 漂移，见
-docs/architecture/REFACTOR_DECOMPOSITION_PLAN.md §6）。
+（本分支 CI 与本地全量均红：含幽灵测试/环境耦合/API 漂移；隔离名单见
+tests/quarantine_known_red.txt）。
 
 隔离名单 ``tests/quarantine_known_red.txt`` 是**债务燃尽清单**（显式可见、非隐藏跳过）：
 修复一个文件就从名单删一行，快车道覆盖面随之扩大。

@@ -1,0 +1,642 @@
+{
+  "schema": "xcagi.product_lines_status/v1",
+  "generated_at": "2026-11-04 09:14 UTC",
+  "generator": "FHD/scripts/dev/product_lines_status.py",
+  "config": "FHD/config/product_lines.yaml",
+  "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
+  "version": {
+    "product": "1.0.0.7",
+    "toolchain": "1.0.0",
+    "source": "FHD/VERSION.md"
+  },
+  "release": {
+    "history": [
+      {
+        "kind": "release",
+        "publication_state": "published",
+        "publication_scope": "historical-manual-download",
+        "version": "1.0.0.6",
+        "date": "2026-10-13",
+        "title": "统一桌面发布",
+        "channel": "稳定版（手动下载）",
+        "notes": [
+          "1.0.0.6 已于 2026-10-17 部署到生产；Windows x64 与 macOS Apple Silicon 安装包已完成实机安装验收和公网全量下载校验，发布在官网 1.0.0.6 版本目录，可手动下载，安装前请核对 SHA-256。",
+          "Windows 安装包未做 Authenticode 签名，不进入自动更新；macOS 应用内自动更新仍停留在 1.0.0.5，1.0.0.6 暂未推送应用内更新，请手动下载覆盖安装。"
+        ],
+        "platforms": [
+          "Windows x64 手动下载（未签名）",
+          "macOS Apple Silicon 手动下载"
+        ]
+      },
+      {
+        "kind": "release",
+        "publication_state": "unknown",
+        "version": "1.0.0.5",
+        "date": "2026-09-17",
+        "title": "Mac 应用内更新自动退出与自动重启验证版本",
+        "channel": "macOS 稳定版",
+        "notes": [
+          "在 1.0.0.4 已包含“退出前预置应用退出标志”修复的基础上发布 1.0.0.5，实机验证太阳鸟等已授权客户从应用内完成下载、bundle 替换与自动重启的完整更新链路。",
+          "升级过程中旧后端随应用退出释放 17500 端口，新 bundle 首次可用即回报与本次发布一致的版本与构建 SHA，不再先出现旧版本再自愈。",
+          "macOS Apple Silicon 安装包完成 Developer ID 签名与公证并发布到稳定更新源；对外正式版本一律以线上 download-release.json 指针为准。"
+        ],
+        "platforms": [
+          "macOS Apple Silicon 1.0.0.5 稳定版"
+        ]
+      },
+      {
+        "kind": "release",
+        "publication_state": "unknown",
+        "version": "1.0.0.4",
+        "date": "2026-09-14",
+        "title": "Mac 应用内更新退出与发货单修复",
+        "channel": "历史发布记录（制品待对账）",
+        "notes": [
+          "主线 CHANGELOG 记载本版发布：修复 macOS 应用内安装更新无法退出、OTA 失败后退出状态残留，以及发货单模板与生成下载链路。",
+          "此条补齐有源码依据的版本演进；安装包、签名、公证、下载和验收身份仍须对账，不据此开放任何当前下载或 OTA 入口。"
+        ],
+        "provenance": {
+          "repository": "42433422/XCMAX",
+          "commit": "54d4541cbe4cd77e258163c75e3e9fc8c886b507",
+          "path": "FHD/CHANGELOG.md",
+          "section": "1.0.0.4（2026-09-14 发布）",
+          "artifact_reconciliation": "pending"
+        }
+      },
+      {
+        "kind": "release",
+        "publication_state": "unknown",
+        "version": "1.0.0.3",
+        "date": "2026-09-13",
+        "title": "Mac 模板上传写入修复",
+        "channel": "macOS 稳定版",
+        "notes": [
+          "修复太阳鸟等已授权客户的 macOS 正式包模板上传写入受限路径，模板导入不再报错。",
+          "修复新建发货单调用旧接口导致模板列表、生成与下载失效的问题。",
+          "1.0.0.3 安装包已上传稳定下载目录并公开 SHA-256，但更新清单尚未发布、对外发布指针未推进（release_ready=false），对外版本仍为 1.0.0.2。",
+          "以上为历史下载说明的当时状态；CHANGELOG 另记正式发布及随后恢复元数据发布。两种时间点记录保留，制品待对账，不据此判定当前可下载。"
+        ],
+        "platforms": [
+          "macOS Apple Silicon 1.0.0.3 稳定版"
+        ]
+      },
+      {
+        "kind": "release",
+        "publication_state": "unknown",
+        "version": "1.0.0.2",
+        "date": "2026-09-13",
+        "title": "Mac 模板导入与行业能力修复",
+        "channel": "macOS 稳定版",
+        "notes": [
+          "修复发货单模板上传入口，恢复模板导入与出单链路。",
+          "修复太阳鸟等已授权行业 Mod 的宿主兼容问题，保留原有账号权益和业务数据。",
+          "macOS Apple Silicon 安装包完成 Developer ID 签名与公证，稳定更新源发布 1.0.0.2。"
+        ],
+        "platforms": [
+          "macOS Apple Silicon 1.0.0.2 稳定版"
+        ]
+      },
+      {
+        "kind": "release",
+        "publication_state": "unknown",
+        "version": "1.0.0.1",
+        "date": "2026-09-02",
+        "title": "太阳鸟行业考勤归并与企业交付可见",
+        "channel": "平台分阶段发布",
+        "notes": [
+          "太阳鸟账号按饰品包装行业归类，原有单独考勤入口归并到行业通用考勤；工作台统一进入 /attendance-industry，并保留 /attendance-industry/settings 设置入口。",
+          "已登录的太阳鸟桌面会话会在升级后自愈行业能力，不要求退出重登；既有宿主、工作区和入门完成状态继续保留。",
+          "客户交付中心新增客户设备当前安装版本与平台展示；历史回执未携带版本时明确显示未上报，不再把未知值当作有效版本。",
+          "安装与首次登录成功后上报版本、构建 SHA 和平台；展示只采用最近一次成功安装回执，失败升级不会覆盖客户已安装版本。",
+          "macOS Apple Silicon 1.0.0.1 通过 Developer ID 签名、公证与稳定更新源校验后发布；Android 继续使用已验收的 1.0.0.0。",
+          "Windows 64 位企业临时交付包已构建并公开 SHA-256，但尚未完成 Authenticode 代码签名；仅供管理员确认来源后安装，不进入稳定自动更新通道。",
+          "桌面发布流程会原子更新安装包、下载中心与更新日志，并核验版本、构建 SHA、文件大小和 SHA-256；正式 Windows 稳定版继续执行代码签名硬门禁。"
+        ],
+        "platforms": [
+          "Windows 64 位临时交付",
+          "macOS Apple Silicon 1.0.0.1 稳定版",
+          "Android 1.0.0.0 稳定版"
+        ]
+      },
+      {
+        "kind": "release",
+        "publication_state": "unknown",
+        "version": "1.0.0.0",
+        "date": "2026-07-13",
+        "title": "企业版稳定发布基线",
+        "channel": "稳定版",
+        "notes": [
+          "在历史 v1–v10 产品演进之后重新建立稳定发布基线；对外产品版本统一为 1.0.0.0。",
+          "企业版进入公开稳定渠道，个人版冻结；统一 AI 员工工作台、智能对话与行业 Mod 装载入口。",
+          "Windows、macOS Apple Silicon 与 Android 企业版安装包均公开文件大小及 SHA-256 校验信息。",
+          "桌面端接入 stable 自动更新通道，产品四段版本与 Electron/Apple 三段工具链版本分开管理。"
+        ],
+        "platforms": [
+          "Windows 64 位",
+          "macOS Apple Silicon",
+          "Android"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "10.0.0",
+        "date": "2026-06-03",
+        "title": "单轨收敛与六线打通",
+        "channel": "历史里程碑",
+        "notes": [
+          "移除双事件入口，统一为单轨事件总线与 ProductionLineOrchestrator。",
+          "运营、伙伴、网站、Mod、软件与归档六线贯通，伙伴生态 B1–B5 正式落编。",
+          "CI 覆盖率门禁提升，历史 shim 与重复入口继续清零。"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "9.0.x",
+        "date": "2026-05-29",
+        "title": "认证、异步、锁与 CI 全面硬化",
+        "channel": "历史里程碑",
+        "notes": [
+          "FastAPI Depends 统一登录、权限与角色认证路径。",
+          "补齐 sync/async 双路径装饰器与 Redis token + Lua 分布式锁。",
+          "Bandit、Safety、Flake8、mypy、OpenAPI 一致性与全量 pytest 进入硬门禁。"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "8.0.0",
+        "date": "2026-05-21",
+        "title": "跨行业 UI 与行业预设",
+        "channel": "历史版本",
+        "notes": [
+          "引入通用、涂料、考勤、批发等行业预设。",
+          "Mod 源码库支持行业选择与 manifest.industry。",
+          "菜单、欢迎语、快捷按钮及模板随行业切换。"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "7.0.0",
+        "date": "2026-04-29",
+        "title": "桌面版与 Web 并行交付",
+        "channel": "历史里程碑",
+        "notes": [
+          "Electron 桌面壳支持 Windows 与 macOS，本地 FastAPI 子进程承载核心能力。",
+          "Web 版继续并行交付，同一业务代码覆盖桌面与浏览器。",
+          "接入 electron-updater 与 Mod OTA 灰度更新路径。"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "6.0.0",
+        "date": "2026-04-28",
+        "title": "商业模式与 Mod 生态成型",
+        "channel": "历史版本",
+        "notes": [
+          "形成订阅、交易与服务三层商业模型。",
+          "ModStore、沙箱执行、创作者上架与分成流程成型。",
+          "会员体系与企业能力交付边界进入产品主线。"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "5.0.0",
+        "date": "2026-04-20",
+        "title": "Neuro-DDD 与审批流",
+        "channel": "历史里程碑",
+        "notes": [
+          "建立 Entry、Route、Application、Domain、Infrastructure 分层。",
+          "引入 NeuroBus、性能监控与多级审批流。",
+          "微信小程序与企业业务流程开始共用平台能力。"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "4.0.0",
+        "date": "2026-04-05",
+        "title": "AI 员工体系与多模态交互",
+        "channel": "历史里程碑",
+        "notes": [
+          "产品从被动工具升级为角色化 AI 员工平台。",
+          "图像、语音、文本三态融合，员工路由按意图分发任务。",
+          "神经域事件协作成为业务自动化基础。"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "3.0.0",
+        "date": "2026-03-15",
+        "title": "混合意图引擎与任务 Agent",
+        "channel": "历史版本",
+        "notes": [
+          "混合意图识别整合 BERT、规则与大模型能力。",
+          "加入 TTS 语音合成与异步任务 Agent 编排。",
+          "数据库迁移和队列机制支撑长任务执行。"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "2.0.0",
+        "date": "2026-02-20",
+        "title": "Vue 3、AI 对话与 OCR",
+        "channel": "历史版本",
+        "notes": [
+          "使用 Vue 3 与 Vite 重构前端并建立 Web 工作台。",
+          "接入 AI 对话、OCR 双通道识别与标签打印引擎。",
+          "FastAPI REST 接口开始拆分桌面单体逻辑。"
+        ]
+      },
+      {
+        "kind": "milestone",
+        "publication_state": "unknown",
+        "version": "1.0.0",
+        "date": "2026-01-15",
+        "title": "Excel 解析与标签打印起点",
+        "channel": "历史版本",
+        "notes": [
+          "建立 Excel 单据解析、标签模板和出货单生成能力。",
+          "以单一桌面应用承载最早期业务流程。",
+          "形成后续 AI、Web 与自动化演进的产品基础。"
+        ]
+      }
+    ],
+    "train": {
+      "epoch": "1.0.0.0",
+      "product_version": "1.0.0.7",
+      "current": "1.0.0.7",
+      "day_index": 2,
+      "last_bump_at": "2026-08-18T00:04:28.127731+00:00"
+    },
+    "download": {
+      "history_generations": 17,
+      "history_scope": "product_evolution_not_published_release_count",
+      "version_lock": "1.0.0.7",
+      "download_version": "1.0.0.7",
+      "marketing_version": "1.0.0.7",
+      "android_version": "1.0.0.0",
+      "release_ready": false,
+      "channel_release_ready": null,
+      "active_skus": [
+        "enterprise"
+      ],
+      "frozen_skus": [
+        "personal"
+      ],
+      "artifacts": {
+        "enterprise": {
+          "win": "XCAGI-Enterprise-Setup-1.0.0.7-x64.exe",
+          "mac_arm64": "XCAGI-Enterprise-1.0.0.7-mac-arm64.dmg",
+          "mac_x64": "XCAGI-Enterprise-1.0.0.7-mac-x64.dmg",
+          "android": "XCAGI-Enterprise-Android-1.0.0.0.apk"
+        }
+      },
+      "channels": {
+        "desktop": "stable",
+        "android": "stable"
+      }
+    }
+  },
+  "platform_levels": {
+    "Windows 桌面": "签约级",
+    "macOS 桌面": "签约级",
+    "Web / 后端": "签约级",
+    "Android": "实验骨架·非签约级"
+  },
+  "coverage": {
+    "source": "FHD/metrics/coverage-dual-summary.json",
+    "committed_head": {
+      "captured_at": "2026-07-25T11:34:00Z",
+      "commit": "92505cab6",
+      "status": "green_above_floor",
+      "backend_line_pct": 88.19,
+      "backend_branch_pct": 81.5,
+      "backend_statements": 115046,
+      "frontend_line_pct": 93.21,
+      "frontend_branch_pct": 82.45,
+      "frontend_function_pct": 91.39,
+      "frontend_statements_pct": 93.21,
+      "note": "2026-07-25 PR#616 CI 实测；ETL/模板解析吸收后下调 floor 至 line 88 / branch 81。"
+    },
+    "ratchet_floors": {
+      "backend_line": 78,
+      "backend_branch": 69,
+      "branch_floor": 69,
+      "frontend_lines": 92,
+      "frontend_branches": 81,
+      "frontend_functions": 90,
+      "frontend_statements": 92,
+      "source": "pyproject.toml fail_under + metrics/coverage_ratchet_baseline.json"
+    },
+    "quality_gate": {
+      "status": "passed",
+      "reason": "2026-09-01（D2-5）coverage_ramp stub 82 个清零迁出后，总口径与真实行为口径合一：floor 自行为口径 line 78 / branch 69 起步，只升不降（ADR-0005）",
+      "backend_line_floor": 78,
+      "backend_branch_floor": 69,
+      "head_backend_line_delta": 10.19,
+      "head_backend_branch_delta": 12.5,
+      "wip_backend_line_delta": 10.19,
+      "wip_backend_branch_delta": 12.5,
+      "frontend_lines_delta": 1.21,
+      "frontend_branches_delta": 1.45,
+      "frontend_functions_delta": 1.39,
+      "frontend_statements_delta": 1.21
+    }
+  },
+  "capability_totals": {
+    "total": 157,
+    "by_status": {
+      "verified": 106,
+      "partial": 15,
+      "implemented": 3,
+      "planned": 33
+    },
+    "cancelled_count": 0,
+    "domains": 10,
+    "modules": 28,
+    "verified_total": 106,
+    "last_verified_at": "2026-09-30",
+    "platform_counts": {
+      "windows": 98,
+      "macos": 99,
+      "web": 128,
+      "android": 8,
+      "ios": 1
+    },
+    "platform_coverage": {
+      "windows": {
+        "applicable": 98,
+        "verified": 97,
+        "partial": 0,
+        "pending": 1,
+        "last_verified_at": "2026-09-29"
+      },
+      "macos": {
+        "applicable": 99,
+        "verified": 82,
+        "partial": 13,
+        "pending": 4,
+        "last_verified_at": "2026-09-30"
+      },
+      "web": {
+        "applicable": 128,
+        "verified": 127,
+        "partial": 0,
+        "pending": 1,
+        "last_verified_at": "2026-09-29"
+      },
+      "android": {
+        "applicable": 8,
+        "verified": 0,
+        "partial": 0,
+        "pending": 8,
+        "last_verified_at": null
+      },
+      "ios": {
+        "applicable": 1,
+        "verified": 0,
+        "partial": 0,
+        "pending": 1,
+        "last_verified_at": null
+      }
+    },
+    "completion": 75
+  },
+  "capability_warnings": [
+    "[base-account-security] 实现路径不存在: FHD/app/application/account_security.py",
+    "[base-device-bind] 实现路径不存在: FHD/app/services/mobile_relay_pairing.py",
+    "[base-update-mgmt] 实现路径不存在: FHD/app/application/enterprise_deploy_pull.py",
+    "[base-update-mgmt] 实现路径不存在: FHD/app/application/admin_deploy_push.py",
+    "[ai-chat-core] 实现路径不存在: FHD/app/domain/services/conversation/chat_tool_intent.py",
+    "[ai-intent] 实现路径不存在: FHD/app/domain/services/conversation/chat_tool_intent.py",
+    "[ai-model-access] 实现路径不存在: FHD/app/services/conversation/llm_adapter.py",
+    "[ai-multimodal] 实现路径不存在: FHD/app/services/conversation",
+    "[ai-run-monitor] 实现路径不存在: FHD/app/services/task_context_service.py",
+    "[ai-csv] 实现路径不存在: FHD/app/services/report_export.py",
+    "[ai-pdf] 实现路径不存在: FHD/app/services/document_templates_service.py",
+    "[ai-ppt] 实现路径不存在: FHD/app/services/document_templates_service.py",
+    "[ai-word] 实现路径不存在: FHD/app/services/document_templates_service.py",
+    "[ai-ocr-doc] 实现路径不存在: FHD/app/services/ocr_service.py",
+    "[ai-ocr-doc] 实现路径不存在: FHD/app/services/paddle_ocr_runner.py",
+    "[ai-vector-rag] 实现路径不存在: FHD/app/services/tools_workflow_memory_rag.py",
+    "[erp-master-data] 实现路径不存在: FHD/app/services/products_service.py",
+    "[erp-master-data] 实现路径不存在: FHD/app/services/business_db_customer_mutations.py",
+    "[erp-purchase-inbound] 实现路径不存在: FHD/app/services/purchase_service.py",
+    "[erp-inventory-warehouse] 实现路径不存在: FHD/app/services/inventory_warehouses.py",
+    "[erp-inventory-warehouse] 实现路径不存在: FHD/app/services/inventory_movements.py",
+    "[erp-replenishment] 实现路径不存在: FHD/app/services/replenishment_service.py",
+    "[erp-uom] 实现路径不存在: FHD/app/services/uom_service.py",
+    "[erp-ar-ap] 实现路径不存在: FHD/app/services/accounting_services.py",
+    "[erp-report] 实现路径不存在: FHD/app/services/report_service.py",
+    "[erp-invoice] 实现路径不存在: FHD/app/services/tax_invoice_provider.py",
+    "[erp-reconcile] 实现路径不存在: FHD/app/services/fhd_payment_reconciliation.py",
+    "[erp-contract] 实现路径不存在: FHD/app/services/contract_lifecycle.py",
+    "[erp-ocr] 实现路径不存在: FHD/app/services/ocr_service.py",
+    "[ch-notify] 实现路径不存在: FHD/app/services/mobile_push.py",
+    "[ch-task-center] 实现路径不存在: FHD/app/application/approval_notifications.py",
+    "[ch-mobile-pair] 实现路径不存在: FHD/app/services/mobile_relay_pairing.py",
+    "[mods-pack-io] 实现路径不存在: FHD/app/services/mod_zip_normalize.py",
+    "[mods-store-sync] 实现路径不存在: FHD/app/services/modstore_library_sync.py",
+    "[mods-store-sync] 实现路径不存在: FHD/app/services/catalog_visibility.py",
+    "[ind-workspace] 实现路径不存在: FHD/app/application/attendance_reference_data.py",
+    "[pay-refund] 实现路径不存在: FHD/app/services/reconciliation_scheduler.py",
+    "[pay-author-revenue] 实现路径不存在: FHD/app/services/catalog_client.py",
+    "[ops-work-order] 实现路径不存在: FHD/app/services/work_order_acceptance.py",
+    "[ops-work-order] 实现路径不存在: FHD/app/services/work_order_ssot.py",
+    "[ops-customer-value] 实现路径不存在: FHD/app/application/founder_autonomy_primary_gates.py",
+    "[sec-audit] 实现路径不存在: FHD/app/application/audit_log_reader.py",
+    "[sec-ai-trace] 实现路径不存在: FHD/app/services/ai_action_audit_service.py",
+    "[sec-model-gate] 实现路径不存在: FHD/app/services/conversation/llm_adapter.py"
+  ],
+  "capability_domains_unassigned": [],
+  "lines": [
+    {
+      "id": "desktop-erp",
+      "name": "企业桌面 ERP + AI",
+      "priority": "P0",
+      "role": "主交付",
+      "paths": [
+        "FHD/"
+      ],
+      "paths_ok": true,
+      "entry": "FHD/docs/START_HERE.md",
+      "entry_ok": true,
+      "workflows": [
+        ".github/workflows/fhd-ci-cd.yml",
+        ".github/workflows/fhd-release-desktop.yml",
+        ".github/workflows/fhd-release-desktop-mac-ota.yml"
+      ],
+      "capability": {
+        "domains": [
+          "base",
+          "ai",
+          "erp",
+          "desktop",
+          "sec",
+          "ops"
+        ],
+        "total": 102,
+        "by_status": {
+          "verified": 72,
+          "partial": 5,
+          "planned": 25
+        },
+        "verified": 72
+      },
+      "releases": {
+        "macos": {
+          "source": "FHD/docs/MACOS_RELEASE_SSOT.md",
+          "section": "6. Release Gate 状态（最终候选待构建；历史 EDF 证据仅作工程组件结果）",
+          "gates": {
+            "G1": "YELLOW",
+            "G2": "YELLOW",
+            "G3": "YELLOW",
+            "G4": "YELLOW",
+            "G5": "UNKNOWN",
+            "G6": "YELLOW",
+            "G7": "UNKNOWN",
+            "G8": "UNKNOWN",
+            "G9": "YELLOW",
+            "G10": "YELLOW",
+            "G11": "UNKNOWN",
+            "G12": "UNKNOWN",
+            "G13": "YELLOW"
+          },
+          "summary": {
+            "GREEN": 0,
+            "YELLOW": 8,
+            "RED": 0,
+            "UNKNOWN": 5,
+            "total": 13
+          }
+        },
+        "windows": {
+          "source": "FHD/docs/WINDOWS_RELEASE_SSOT.md",
+          "section": "4. Release Gate 状态",
+          "gates": {
+            "G1": "YELLOW",
+            "G2": "YELLOW",
+            "G3": "YELLOW",
+            "G4": "RED",
+            "G5": "YELLOW",
+            "G6": "RED",
+            "G7": "RED",
+            "G8": "YELLOW",
+            "G9": "YELLOW",
+            "G10": "UNKNOWN",
+            "G11": "UNKNOWN",
+            "G12": "UNKNOWN",
+            "G13": "UNKNOWN"
+          },
+          "summary": {
+            "GREEN": 0,
+            "YELLOW": 6,
+            "RED": 3,
+            "UNKNOWN": 4,
+            "total": 13
+          }
+        }
+      }
+    },
+    {
+      "id": "ai-store",
+      "name": "AI 员工商店",
+      "priority": "P1",
+      "role": "商业化线",
+      "paths": [
+        "成都修茈科技有限公司/"
+      ],
+      "paths_ok": true,
+      "entry": "成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md",
+      "entry_ok": true,
+      "workflows": [
+        ".github/workflows/modstore-ci-backend-python.yml",
+        ".github/workflows/market-ci.yml",
+        ".github/workflows/corp-marketing-site.yml"
+      ],
+      "capability": {
+        "domains": [
+          "mods",
+          "pay",
+          "industry"
+        ],
+        "total": 38,
+        "by_status": {
+          "verified": 31,
+          "planned": 5,
+          "partial": 2
+        },
+        "verified": 31
+      },
+      "releases": {
+        "web": {
+          "source": "成都修茈科技有限公司/release/VERSION"
+        }
+      }
+    },
+    {
+      "id": "mobile-app",
+      "name": "移动 AI 协同 App",
+      "priority": "P2",
+      "role": "配套线",
+      "paths": [
+        "FHD/mobile-flutter-poc/"
+      ],
+      "paths_ok": true,
+      "entry": "FHD/mobile-flutter-poc/README.md",
+      "entry_ok": true,
+      "workflows": [
+        ".github/workflows/fhd-ci-mobile-flutter.yml",
+        ".github/workflows/fhd-release-android.yml"
+      ],
+      "capability": {
+        "domains": [
+          "channel"
+        ],
+        "total": 17,
+        "by_status": {
+          "partial": 8,
+          "verified": 3,
+          "planned": 3,
+          "implemented": 3
+        },
+        "verified": 3
+      },
+      "releases": {
+        "android": {
+          "source": "FHD/config/download_release.json"
+        }
+      }
+    }
+  ],
+  "drift": [
+    {
+      "id": "release-not-closed",
+      "level": "info",
+      "source": "download_release.release_ready=false",
+      "detail": "1.0.0.7 源码发布意图未闭环；不否定同版本历史交付，当前各渠道需读回原制品证据"
+    },
+    {
+      "id": "declared-mirror",
+      "level": "info",
+      "source": "成都修茈科技有限公司/FHD/config/release_train.json",
+      "detail": "已声明镜像且版本身份字段与 canonical 一致（epoch, product_version, current）；MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写； 保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对"
+    }
+  ],
+  "drift_summary": {
+    "error": 0,
+    "info": 2
+  },
+  "script_hardcode_census": {
+    "files": 0,
+    "occurrences": 0,
+    "stale": 0
+  }
+}

@@ -1,0 +1,30 @@
+{
+ "schema": "xcagi.gate.evidence.v1",
+ "gate": "M08.mods-and-entitlement",
+ "platform": "macos",
+ "round": "M04-M16-2026-10-12",
+ "product_version": "1.0.0.5",
+ "release_sha": "e3ac9f1049cb3f25c73dd41c184f6787bb24f897",
+ "mods_root": "/Users/Shared/xcagi-t6-tools/macos-final-m04-m16-e3ac9f1049/runtime/arm64-userdata/mods",
+ "mods_listed": 23,
+ "mods_loaded": 13,
+ "primary_mod_count": 2,
+ "load_mismatch": false,
+ "load_errors": [],
+ "manifest_errors": [],
+ "blueprint_errors": [],
+ "partial_failure": false,
+ "mods_disabled": false,
+ "promised_mods": {
+  "xcagi-erp-domain-bridge": "present（ERP 业务领域门面）",
+  "xcagi-approval-bridge": "present（审批中心）",
+  "attendance-industry": "present（通用考勤）",
+  "xcagi-planner-bridge": "present（对话 Planner）"
+ },
+ "identity_isolation": {
+  "sunbird_private_mod_loaded": false,
+  "note": "sunbird-attendance-custom 私有 Mod 未向 xcagi-enterprise-demo 下发：租户权益/身份隔离正确（私有 Mod 仅随 SUNBIRD 私有交付）"
+ },
+ "captured_at_utc": "2026-10-12T10:38:00Z",
+ "verdict": "PASS"
+}

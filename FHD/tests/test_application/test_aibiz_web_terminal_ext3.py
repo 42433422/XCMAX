@@ -158,13 +158,11 @@ class TestPngHttpResponse:
 
     def test_cacheable_view(self):
         resp = _png_http_response(b"\x89PNG\r\n", view="thumb")
-        assert "max-age" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
     def test_non_cacheable_view(self):
         resp = _png_http_response(b"\x89PNG\r\n", view="full")
-        assert "no-cache" in resp.headers.get(
-            "Cache-Control", ""
-        ) or "max-age" not in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("Cache-Control", "") == "private, no-store"
 
 
 # ---------------------------------------------------------------------------

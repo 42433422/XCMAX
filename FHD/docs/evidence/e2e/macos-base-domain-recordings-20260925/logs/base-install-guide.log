@@ -1,0 +1,9 @@
+feature=base-install-guide
+platform=macos
+result=PARTIAL
+verified_at=2026-09-25T00:29:42.010Z
+product_version=1.0.0.5
+app_git_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f
+target=/onboarding
+observed=页面成功打开并渲染
+scope=初始化引导第一步打开并渲染；未提交向导或验证重启后持久化。

@@ -147,7 +147,15 @@ def test_release_observations_survive_reopen_and_failure_cannot_complete_custome
     with Session(engine) as db:
         task = accept(db, actor="fixture", key="delivery-fixture", request={"message": "fixture"})
         task.snapshot_json = json.dumps(
-            {"reports": [{"applied": True, "status": "completed", "report": json.dumps(RECEIPT)}]}
+            {
+                "reports": [
+                    {
+                        "applied": True,
+                        "status": "completed",
+                        "report": json.dumps(RECEIPT),
+                    }
+                ]
+            }
         )
         db.commit()
         task_id = task.id

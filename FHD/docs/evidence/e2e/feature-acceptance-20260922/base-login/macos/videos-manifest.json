@@ -1,0 +1,14 @@
+[
+  {
+    "name": "03-login-operation.mov",
+    "bytes": 192444408,
+    "sha256": "c7c136aa0a1e85bf4ad8243cc856984feb163ad4f97bd25ba494afc85a21970c",
+    "archive_path": "/Users/Shared/xcagi-t6-tools/feature-acceptance-20260922/base-login/macos/03-login-operation.mov"
+  },
+  {
+    "name": "05c-gui-logout-operation.mov",
+    "bytes": 108916825,
+    "sha256": "b39240c396edf579eca5e02f7af084391c19125394f7400c075683759add95ac",
+    "archive_path": "/Users/Shared/xcagi-t6-tools/feature-acceptance-20260922/base-login/macos/05c-gui-logout-operation.mov"
+  }
+]

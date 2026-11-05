@@ -1,0 +1,494 @@
+{
+  "bucket": "xcagi-evidence-1374207682",
+  "region": "ap-chengdu",
+  "acl": "private",
+  "prefix": "software-loop/1.0.0.6-nodes12-15/",
+  "objects": [
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/c5-dmg-vs-zip-app-content-comparison.json",
+      "bytes": 421,
+      "sha256": "0c7f83be05e5d27ea0f4e4380e5ef7881143139e8e158c58dd13e9b925ba1c02",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/c5-dmg-vs-zip-app-content-dryrun.txt",
+      "bytes": 238925,
+      "sha256": "dc9911cf354631ebf26d2dc24174bcf95a8d0c7f248baec9a0d17549562e6d11",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/c5-dmg-vs-zip-app-dryrun.txt",
+      "bytes": 299781,
+      "sha256": "6c30a1db8c92379dc6d6ad2a523b98975f5d1fd8cd70361d9ad5f8601bcadd90",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/c5-install-copy-comparison.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/c5-package-verification.json",
+      "bytes": 2375,
+      "sha256": "77032c56f2c641379b2acc101644fc5f3e26614fc56b29403defe81264b7fe5e",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/c5-preupdate-baseline.json",
+      "bytes": 820,
+      "sha256": "af5d76496151e4b644fcd89d3305e792b789b86aeecd57879c6b18f018208806",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/c5-preupdate-snapshot.json",
+      "bytes": 177252,
+      "sha256": "3c00e1f4f6e42634b0317f23da5dbcc13207fb78e8dab7d6c214f1a2be304638",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/c5-synthetic-attachment-upload.json",
+      "bytes": 842,
+      "sha256": "1fcaa2cc66f9b1495203d9b86d1273b3f9aee6bd0aabfd415a89ebd3437c3717",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/candidate-cache-cleanup.json",
+      "bytes": 1016,
+      "sha256": "0e9f6b73c47c31e489f059a017cffaf9f9c695d76bd583447636887209ddb33f",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/clean-install-final-pass-timestamp-correction.json",
+      "bytes": 1686,
+      "sha256": "a7b6bdcb01962fcc0a38940b8b5d1a3ac7f3e40d8be3d2d3efde4c67aa68d6c0",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/clean-install-first-launch.json",
+      "bytes": 1003,
+      "sha256": "5fd886effe9d4f258d9d4a6dfd59d11a66bafa897ede51e0121fe78aea43ec14",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/final-environment-and-restoration.json",
+      "bytes": 1084,
+      "sha256": "415591f97f91247563bbbf138b688a59f53c6c4b1b0e7e55a7abbebd3645df76",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/final-process-space-proof.json",
+      "bytes": 672,
+      "sha256": "005a34609f5a2b0880302d67e82733cb6172c80f7230255740104babbc55d0e3",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/final-report-reference-consistency.json",
+      "bytes": 2383,
+      "sha256": "3711c909d90afdcef61589294ab2251471b2476acd06ead55166d4b08f936ce9",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/history/node12-node13-candidate-reconciliation-before-reference-correction-5bf6f767954a.json",
+      "bytes": 7598,
+      "sha256": "5bf6f767954ae5dc2c375004e8b761a86c152592dd7f797dfcaa9208214b40f3",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/history/node13-joint-verification-final-before-reference-correction-ffa2c3645c6f.json",
+      "bytes": 22718,
+      "sha256": "ffa2c3645c6f8ec8bd6669fba268f6b29416d07d41ac2b0d413950f2df4df61e",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/history/node14-server-publication-progress-bf3f842d9a9a.json",
+      "bytes": 1989,
+      "sha256": "bf3f842d9a9a78fe1ba941d8a92d3a4bc72a926d18b63ff87b37570e8ec5ee8b",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/history/node15-delivery-preparation-before-final-45c9cbb18f5a.json",
+      "bytes": 2965,
+      "sha256": "45c9cbb18f5a4eefd7c706762c547052c2d61ad00e777d44de30dfcea17b8473",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/lifecycle_snapshot.py",
+      "bytes": 1801,
+      "sha256": "09718cd878de8b6fd18de7c3d9d7bb8f9b9e600c4ef3781d6671cc1f93444d2d",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/mac-c5-completion-audit.json",
+      "bytes": 19097,
+      "sha256": "9afa16034ff41eeb0e73d7a58ac1bb5be687cc1c2d91137986b2e112de8eecef",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/mac-c5-lifecycle-final.json",
+      "bytes": 16193,
+      "sha256": "bf473b6bc8368011eb4458f1c936d90962b5a90d672b538b6f56969885bed2f6",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node12-node13-candidate-reconciliation.json",
+      "bytes": 7599,
+      "sha256": "8957f5f62646b0924d848465e54751d03af3f73428bef8bb02b965dea4b705d1",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node12-node13-joint-conclusion.md",
+      "bytes": 1863,
+      "sha256": "e35baf1c0d5c605b8fe2e3d9e8eaec8d745bd5da80efd9039ad4379ad54c737b",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node13-joint-verification-final.json",
+      "bytes": 22719,
+      "sha256": "ab40b1c8d0fcc054ad411620f7eef5fc3c1e584a38acbb359aeb73e55fd10257",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-download-power-assertions.json",
+      "bytes": 390,
+      "sha256": "0900375bd7e239b677681ce6352c3c0a6f508b148b6d022ab2597ee7d1e127c5",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-final-local-state-and-space.json",
+      "bytes": 961,
+      "sha256": "520a144306f123c0350429db8814c62816f4863732dc82898d6cce8e57187e04",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-initial-metadata-snapshot-preservation.json",
+      "bytes": 1141,
+      "sha256": "4a493f043ca222809c30128a38682d980a29bd3bbad058dcb88c2b0edbe47561",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-node15-final-reference-consistency.json",
+      "bytes": 459,
+      "sha256": "089ad572ed6c0beef163fd82019396988f3b41986d40d9e878b294022bae47f4",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-node15-server-delivery-final.json",
+      "bytes": 5876,
+      "sha256": "459e85bb1093c052a23fbd4a708695cd9fb98c25e2ae1b5ce099feee329236be",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.json",
+      "bytes": 2524,
+      "sha256": "01ef4bd9c5768d500166a912356924cb44def40ab8662b0d450dd5d70eab4793",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.json",
+      "bytes": 2415,
+      "sha256": "3b15b3808e300e7488a962b1c5aacb9e9a37d3f26c78e901dc8d9e6a5c040548",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-public-download-connection-adjustment.json",
+      "bytes": 344,
+      "sha256": "8f2b932ac3f22a6f5c0bc357c2912a064112960491cc5c8457092914c33c5509",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-public-metadata-verification-final.json",
+      "bytes": 1170,
+      "sha256": "35f704e061caa8495faff1d6e654cf9eb17766b6494b0cb987b758b1143d870d",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-public-metadata-verification.json",
+      "bytes": 851,
+      "sha256": "a37bbf2d1d38cad08f3de27b1ca587eaf9db13a18272d7097c4c60dbaf2f3848",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-public-package-response-headers.json",
+      "bytes": 1481,
+      "sha256": "0c6eb44a3d226c5451320714a76d58fafd0c6ba75e12927c5eafe5f657aa165b",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-range-temporary-cleanup-and-recovery-index.json",
+      "bytes": 19972,
+      "sha256": "58130e35e4c3ad39ba917af6254007b1351e8909f0c016c2b614967c83207713",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-server-access-originals/xiu-ci.com.access.log",
+      "bytes": 17990,
+      "sha256": "702b3b14132af5a736baf6d074dec219eaadafe8b73fa09a65a6b27da9fce40a",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-server-distribution-final.json",
+      "bytes": 5180,
+      "sha256": "64c941c13e6b0e24855c8de17b3226f365c28034aff881e6423ecd58abbdb691",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-server-final-state.json",
+      "bytes": 1698,
+      "sha256": "af300592abf8c4dba2b74b2e776e9eef020ea52b2623c3407026bab038c1c430",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-server-package-verification.json",
+      "bytes": 1481,
+      "sha256": "9177cbeb5d2e79a72d6c0cba9973beb40c79cf11c96038ee605962b69625bd65",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-server-publication-progress.json",
+      "bytes": 3166,
+      "sha256": "f561cde5ac2050d64f4648de43663cbfcc573e23f357549b67752490ab7c8c4d",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-unused-server-transfer-cleanup.json",
+      "bytes": 460,
+      "sha256": "6f9d628f15e2bfeba7676c9cd0b39a86e9c0793642d162f666ab21c9f3b79536",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-verifier-transition-correction.json",
+      "bytes": 5189,
+      "sha256": "0cab6e60e0c57980c85200356394f7c9566444545b0f34931e0e72d1c723e4cc",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-windows-public-download-verification.json",
+      "bytes": 871,
+      "sha256": "d0ac509059959987ce3c6cb9a8063a68ca759f5aef14f4f75e8abc4750c9cc54",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-workspace-cleanup-original.log",
+      "bytes": 6687,
+      "sha256": "813633073be933e1e2b6cebd41213074e3fb842f13ab42d71930f36e2cfb46c7",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node14-workspace-cleanup-result.json",
+      "bytes": 7852,
+      "sha256": "73c55be637054e310d9025c55ea75fe67478989db897166596613c519f8ca78d",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node15-delivery-preparation.json",
+      "bytes": 3339,
+      "sha256": "15941507ddc0a8d68b510159a6feba2a3fbac4d2ac57279acf7dd5b5265ff3db",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node15-user-conditional-acceptance-final.json",
+      "bytes": 4232,
+      "sha256": "b01d2bdaedaa8ebc18d12f96083859632b6b5f858bc14a7e176cfed98ba86334",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/node15-user-conditional-acceptance-source.json",
+      "bytes": 1344,
+      "sha256": "02c6f7fa329a07d73e94012a06a11f43842a9dffba7cdac684f63fbf9e69e1d0",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/original-app-backup-rsync-dryrun.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/original-app-restored-rsync-dryrun.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/ota-attempt-misconfigured-target.json",
+      "bytes": 925,
+      "sha256": "9a59e2b5ec7f9fdd88cd7108548dfd01702d3546047758864b439b4f563628f1",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/ota-r2-operator-interruption.json",
+      "bytes": 1364,
+      "sha256": "f3eb13689f5abe796312cd7caebacadbe36099c635dd278671d899c3862a5c5d",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/recovery_port_guard.py",
+      "bytes": 14013,
+      "sha256": "cdec07ae6cca2965057fe0be49d3c65866caf3508f5b23d8c3c68f78b28c6756",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/recovery_port_guard_r1_no_reuse.py",
+      "bytes": 14013,
+      "sha256": "cdec07ae6cca2965057fe0be49d3c65866caf3508f5b23d8c3c68f78b28c6756",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/shipit-through-r2-original.log",
+      "bytes": 23020,
+      "sha256": "11099e1ee869ec13cf40b5d23c75333683977d5b4a3b73d93b9c10db31ec6ad3",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/source-alignment-current.json",
+      "bytes": 1171,
+      "sha256": "6c320d04195ad85674b3755ab22e965215ce9fd18ec9b1299acf97089047042d",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/storage-location.json",
+      "bytes": 147,
+      "sha256": "4f5c28eaa387be98bc19d70c90a58f37a7560ddbcf888d43e8dce9c15169f958",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/ui-screenshots/2026-10-15T130854-015Z-1.jpg",
+      "bytes": 143100,
+      "sha256": "09967b84af9613450f8ab138300d01fd5f0fd3f512cc5b9f68f909d9f191e028",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/ui-screenshots/2026-10-15T131202-546Z-1.jpg",
+      "bytes": 169984,
+      "sha256": "b91e5292cdcac91cdf9709186b762ea071af446c69f25254849c2a96e7ef99f9",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/ui-screenshots/2026-10-15T132325-584Z-1.jpg",
+      "bytes": 20023,
+      "sha256": "2151399b186d97700a7dc29685ffc1a527d3c7a5d8a16107aaa740c001012dea",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/ui-screenshots/2026-10-15T132549-172Z-1.jpg",
+      "bytes": 171127,
+      "sha256": "9a97b3e5ca1af592a9f95d9c823021a8b140c859f9744dde9bd5394a64b6841a",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/ui-screenshots/original-image-index.json",
+      "bytes": 1973,
+      "sha256": "eee026c48cefa6e5a87ea9312d2f0ef946d4d839d45387ef3fe63fb468628b15",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/user-acceptance-policy-confirmation.json",
+      "bytes": 774,
+      "sha256": "adc4495b3691954a2ea4710a73664b392739060ac1b3d161d59ce76ecbb88187",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/windows-c5-existing-artifact-identity.json",
+      "bytes": 6651,
+      "sha256": "97b448b9990efbda49624456a58dbba83ed569e98b49628e1faec5965a4e1fe0",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/windows-existing-acceptance-joint-audit.json",
+      "bytes": 30516,
+      "sha256": "1264f2a5c6a1539ed7d2fe77886c2effb2c8aa8e1c5bc6f594304bc16470c2c6",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/windows-published-receipt-6190996826.json",
+      "bytes": 6955,
+      "sha256": "1873eee6727cb123cecd4f18a0b0761c7d6df9f5b6c7d72ada89f595f4a07b0a",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/windows-published-receipt-6191186660.json",
+      "bytes": 3471,
+      "sha256": "1be544a5bee4c780b02ea78af5be71d1b200c3a0eee4069507f128836d16c39a",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/workspace-cleanup-original.log",
+      "bytes": 6687,
+      "sha256": "813633073be933e1e2b6cebd41213074e3fb842f13ab42d71930f36e2cfb46c7",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/mac-c5/evidence/workspace-cleanup-result.json",
+      "bytes": 7740,
+      "sha256": "bcc9e312a29d2ae1d73078b78f463214956cf8c5a2afc0803a6bc1942d3c8239",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node13-final/evidence-file-manifest.json",
+      "bytes": 24497,
+      "sha256": "3b4cbf7a1fd53d73c782bab4fa4be6d52c519de41fb1328761b3411bbef8687e",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node13-final/node12-node13-joint-conclusion.md",
+      "bytes": 1863,
+      "sha256": "e35baf1c0d5c605b8fe2e3d9e8eaec8d745bd5da80efd9039ad4379ad54c737b",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node13-final/node12-node13-mac-c5-evidence.zip",
+      "bytes": 807614,
+      "sha256": "9abb4eb83a2fb8df12466592175bde2a28325abcb8b27687020a4c9742e2a80d",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node13-final/node13-joint-verification-final.json",
+      "bytes": 22719,
+      "sha256": "ab40b1c8d0fcc054ad411620f7eef5fc3c1e584a38acbb359aeb73e55fd10257",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node15-final/node12-node15-bundle-verification-final.json",
+      "bytes": 750,
+      "sha256": "2c8b03aaba43c60f05ab28b49800aadc302b654bb3b127e9c9fef07f23d2a58b",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node15-final/node12-node15-delivery-evidence.zip",
+      "bytes": 836465,
+      "sha256": "bc3b5372ab1fd8b5578249efe8428872c2e99c251698cea293d9865692560d26",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node15-final/node12-node15-evidence-file-manifest.json",
+      "bytes": 15599,
+      "sha256": "59d2b351acacce3f09991cadf00680f5ac0a887c2ad9c9972babd65a8d3abefa",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node15-final/node14-node15-final-reference-consistency.json",
+      "bytes": 459,
+      "sha256": "089ad572ed6c0beef163fd82019396988f3b41986d40d9e878b294022bae47f4",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node15-final/node14-node15-server-delivery-final.json",
+      "bytes": 5876,
+      "sha256": "459e85bb1093c052a23fbd4a708695cd9fb98c25e2ae1b5ce099feee329236be",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node15-final/node14-server-distribution-final.json",
+      "bytes": 5180,
+      "sha256": "64c941c13e6b0e24855c8de17b3226f365c28034aff881e6423ecd58abbdb691",
+      "redownload_sha256_match": true
+    },
+    {
+      "key": "software-loop/1.0.0.6-nodes12-15/node12-node15-final/node15-user-conditional-acceptance-final.json",
+      "bytes": 4232,
+      "sha256": "b01d2bdaedaa8ebc18d12f96083859632b6b5f858bc14a7e176cfed98ba86334",
+      "redownload_sha256_match": true
+    }
+  ]
+}

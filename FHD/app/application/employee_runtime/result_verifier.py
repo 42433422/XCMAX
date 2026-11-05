@@ -12,37 +12,12 @@ def verify_employee_run_result(
     require_non_empty: bool = True,
 ) -> tuple[bool, str]:
     data = output if isinstance(output, dict) else {}
-    if data.get("success") is False:
-        return False, str(
-            data.get("error")
-            or data.get("message")
-            or data.get("summary")
-            or "员工返回 success=false"
-        )
-    if data.get("ok") is False:
-        return False, str(data.get("error") or data.get("summary") or "员工返回 ok=false")
-
-    # ``EmployeeAgent.run`` wraps the handler payload under ``result``.  The
-    # admin execution route must validate that canonical envelope instead of
-    # incorrectly rejecting a successful direct_python run for lacking
-    # top-level summary/items/sheets.
+    error = execution_result_error(data)
+    if error:
+        return False, error
     nested = data.get("result")
     payload = nested if isinstance(nested, dict) else data
-    if payload.get("ok") is False:
-        return False, str(payload.get("error") or payload.get("summary") or "员工结果返回 ok=false")
     outputs = payload.get("outputs")
-    if isinstance(outputs, list):
-        for item in outputs:
-            if isinstance(item, dict) and item.get("ok") is False:
-                child = item.get("output") if isinstance(item.get("output"), dict) else {}
-                if not isinstance(child, dict):
-                    child = {}
-                return False, str(
-                    item.get("error")
-                    or child.get("error")
-                    or child.get("summary")
-                    or "员工处理器执行失败"
-                )
     if require_non_empty:
         if not payload and not payload.get("items") and not payload.get("summary"):
             return False, "员工输出为空"
@@ -56,3 +31,70 @@ def verify_employee_run_result(
     ):
         return False, "缺少 summary/items/sheets"
     return True, "ok"
+
+
+def execution_result_error(data: dict[str, Any]) -> str:
+    """Inspect canonical result envelopes, never infer success from HTTP delivery."""
+    if data.get("error"):
+        return str(data["error"])
+    states = {
+        str(data.get(key) or "").strip().lower() for key in ("execution_state", "status", "outcome")
+    }
+    if (
+        states & {"unknown", "pending", "accepted", "running", "failed", "blocked", "cancelled"}
+        or data.get("reconciliation_required")
+        or data.get("requires_reconciliation")
+        or data.get("pending_approval")
+    ):
+        return str(data.get("message") or "员工执行尚未完成")
+    for key in ("result", "output"):
+        nested = data.get(key)
+        if isinstance(nested, dict):
+            error = execution_result_error(nested)
+            if error:
+                return error
+    outputs = data.get("outputs")
+    if isinstance(outputs, list):
+        for item in outputs:
+            if not isinstance(item, dict):
+                return "员工处理器结果无效"
+            error = execution_result_error(item)
+            if error:
+                return error
+    if data.get("success") is False or data.get("ok") is False:
+        return str(data.get("message") or data.get("summary") or "员工执行失败")
+    return ""
+
+
+def execution_result_requires_reconciliation(data: dict[str, Any]) -> bool:
+    """Preserve unknown identity through the same envelopes used by verification."""
+    states = {
+        str(data.get(key) or "").strip().lower() for key in ("execution_state", "status", "outcome")
+    }
+    if (
+        states & {"unknown", "accepted", "pending", "running"}
+        or data.get("reconciliation_required")
+        or data.get("requires_reconciliation")
+    ):
+        return True
+    children = [data.get("result"), data.get("output")]
+    outputs = data.get("outputs")
+    if isinstance(outputs, list):
+        children.extend(outputs)
+    return any(
+        execution_result_requires_reconciliation(item)
+        for item in children
+        if isinstance(item, dict)
+    )
+
+
+def execution_result_awaits_approval(data: dict[str, Any]) -> bool:
+    if data.get("pending_approval"):
+        return True
+    children = [data.get("result"), data.get("output")]
+    outputs = data.get("outputs")
+    if isinstance(outputs, list):
+        children.extend(outputs)
+    return any(
+        execution_result_awaits_approval(item) for item in children if isinstance(item, dict)
+    )

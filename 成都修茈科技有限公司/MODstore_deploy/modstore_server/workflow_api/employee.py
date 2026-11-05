@@ -12,12 +12,7 @@ from modman.repo_config import load_config, resolved_library
 from modman.store import iter_mod_dirs
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import (
-    User,
-    Workflow,
-    WorkflowNode,
-    get_user_mod_ids,
-)
+from modstore_server.models import User, Workflow, WorkflowNode, get_user_mod_ids
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workflow_api.helpers import (
     _employee_id_matches,

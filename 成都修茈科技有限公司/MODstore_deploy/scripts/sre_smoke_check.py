@@ -28,7 +28,9 @@ def _join(base_url: str, path: str) -> str:
 
 
 def _request_json(url: str, timeout: float) -> tuple[int, Any, str]:
-    request = urllib.request.Request(url, headers={"User-Agent": "modstore-sre-smoke/1.0"})
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "modstore-sre-smoke/1.0"}
+    )
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read(256 * 1024)
         text = body.decode("utf-8", errors="replace")
@@ -57,7 +59,9 @@ def check_http(
             if payload.get("status") in {"degraded", "down"}:
                 ok = False
                 message = json.dumps(payload, ensure_ascii=False)[:300]
-        return CheckResult(name=name, ok=ok, status=status, latency_ms=elapsed_ms, message=message)
+        return CheckResult(
+            name=name, ok=ok, status=status, latency_ms=elapsed_ms, message=message
+        )
     except urllib.error.HTTPError as exc:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         try:
@@ -83,7 +87,9 @@ def check_prometheus_targets(prometheus_url: str, timeout: float) -> CheckResult
         status, payload, text = _request_json(url, timeout)
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         if status != 200 or not isinstance(payload, dict):
-            return CheckResult("prometheus.targets", False, status, elapsed_ms, text[:300])
+            return CheckResult(
+                "prometheus.targets", False, status, elapsed_ms, text[:300]
+            )
         active_targets = payload.get("data", {}).get("activeTargets", [])
         unhealthy = [
             f"{target.get('labels', {}).get('job')}:{target.get('health')}"
@@ -100,15 +106,21 @@ def check_prometheus_targets(prometheus_url: str, timeout: float) -> CheckResult
         )
     except RECOVERABLE_ERRORS as exc:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
-        return CheckResult("prometheus.targets", False, latency_ms=elapsed_ms, message=str(exc))
+        return CheckResult(
+            "prometheus.targets", False, latency_ms=elapsed_ms, message=str(exc)
+        )
 
 
 def build_checks(args: argparse.Namespace) -> list[CheckResult]:
     checks = [
-        check_http("api.legacy_health", _join(args.base_url, "/api/health"), args.timeout),
+        check_http(
+            "api.legacy_health", _join(args.base_url, "/api/health"), args.timeout
+        ),
         check_http("api.health", _join(args.base_url, "/health/"), args.timeout),
         check_http("api.liveness", _join(args.base_url, "/health/live"), args.timeout),
-        check_http("api.readiness", _join(args.base_url, "/health/ready"), args.timeout),
+        check_http(
+            "api.readiness", _join(args.base_url, "/health/ready"), args.timeout
+        ),
         check_http(
             "api.market_catalog",
             _join(args.base_url, "/api/market/catalog"),
@@ -117,10 +129,16 @@ def build_checks(args: argparse.Namespace) -> list[CheckResult]:
         ),
     ]
     if args.market_url:
-        checks.append(check_http("market.index", _join(args.market_url, "/market/"), args.timeout))
+        checks.append(
+            check_http("market.index", _join(args.market_url, "/market/"), args.timeout)
+        )
     if args.payment_url:
         checks.append(
-            check_http("payment.health", _join(args.payment_url, "/actuator/health"), args.timeout)
+            check_http(
+                "payment.health",
+                _join(args.payment_url, "/actuator/health"),
+                args.timeout,
+            )
         )
         checks.append(
             check_http(
@@ -132,7 +150,9 @@ def build_checks(args: argparse.Namespace) -> list[CheckResult]:
         )
     if args.prometheus_url:
         checks.append(
-            check_http("prometheus.ready", _join(args.prometheus_url, "/-/ready"), args.timeout)
+            check_http(
+                "prometheus.ready", _join(args.prometheus_url, "/-/ready"), args.timeout
+            )
         )
         checks.append(check_prometheus_targets(args.prometheus_url, args.timeout))
     return checks
@@ -140,9 +160,13 @@ def build_checks(args: argparse.Namespace) -> list[CheckResult]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run MODstore SRE smoke checks.")
-    parser.add_argument("--base-url", default="http://127.0.0.1:8765", help="FastAPI base URL")
     parser.add_argument(
-        "--market-url", default="", help="Market/Nginx base URL, for example http://127.0.0.1:4173"
+        "--base-url", default="http://127.0.0.1:8765", help="FastAPI base URL"
+    )
+    parser.add_argument(
+        "--market-url",
+        default="",
+        help="Market/Nginx base URL, for example http://127.0.0.1:4173",
     )
     parser.add_argument(
         "--payment-url",
@@ -150,7 +174,9 @@ def main() -> int:
         help="Java payment service URL, for example http://127.0.0.1:8080",
     )
     parser.add_argument(
-        "--prometheus-url", default="", help="Prometheus URL, for example http://127.0.0.1:9090"
+        "--prometheus-url",
+        default="",
+        help="Prometheus URL, for example http://127.0.0.1:9090",
     )
     parser.add_argument("--timeout", type=float, default=5.0)
     args = parser.parse_args()

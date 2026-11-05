@@ -45,24 +45,32 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/mobile/v1", tags=["mobile-api"])
+router: APIRouter = APIRouter(prefix="/api/mobile/v1", tags=["mobile-api"])
 
 
 async def get_mobile_user(
     request: Request,
     authorization: str | None = Header(default=None, alias="Authorization"),
-):
+) -> Any:
     """Bearer 移动端 JWT 或会话 Cookie / X-Session-ID。"""
     from app.db.models import User
     from app.db.session import get_db
 
     authorization_value = authorization or ""
-    jwt_payload = None
+    jwt_payload: dict[str, Any] = {}
     if authorization_value.startswith("Bearer "):
-        jwt_payload = verify_mobile_jwt(authorization_value[7:].strip())
+        jwt_payload = verify_mobile_jwt(authorization_value[7:].strip()) or {}
+    from app.infrastructure.auth.mobile_session import ADMIN_ACCOUNT_KINDS, current_mobile_admin
+
+    if str(jwt_payload.get("account_kind") or "").strip().lower() in ADMIN_ACCOUNT_KINDS:
+        if jwt_payload.get("typ") != "access":
+            return None
+        user = current_mobile_admin(jwt_payload.get("user_id"), jwt_payload.get("session_id"))
+        _bind_mobile_user_tenant_to_request(request, user)
+        return user
     uid = user_id_from_mobile_bearer(authorization_value)
     if uid is None and authorization_value.startswith("Bearer "):
-        fallback_user = _mobile_user_from_jwt_payload(jwt_payload or {})
+        fallback_user = _mobile_user_from_jwt_payload(jwt_payload)
         if fallback_user is not None:
             _bind_mobile_user_tenant_to_request(request, fallback_user)
             return fallback_user
@@ -72,15 +80,6 @@ async def get_mobile_user(
             with get_db() as db:
                 user = db.query(User).filter(User.id == uid).first()
                 if user and user.is_active:
-                    jwt_account_kind = (
-                        str((jwt_payload or {}).get("account_kind") or "").strip().lower()
-                    )
-                    jwt_admin = jwt_account_kind in {"admin", "admin_portal"}
-                    user_role = str(getattr(user, "role", "") or "").strip()
-                    if jwt_admin and user_role not in {"admin", "super_admin", "owner"}:
-                        fallback = _mobile_user_from_jwt_payload(jwt_payload or {})
-                        if fallback is not None:
-                            return fallback
                     _ = (
                         user.id,
                         user.username,
@@ -97,7 +96,7 @@ async def get_mobile_user(
                     return user
         except RECOVERABLE_ERRORS as exc:
             logger.warning("mobile user db lookup failed, falling back to JWT: %s", exc)
-            fallback_user = _mobile_user_from_jwt_payload(jwt_payload or {})
+            fallback_user = _mobile_user_from_jwt_payload(jwt_payload)
             if fallback_user is not None:
                 _bind_mobile_user_tenant_to_request(request, fallback_user)
                 return fallback_user
@@ -111,13 +110,15 @@ async def get_mobile_user(
                     "message": "用户状态暂时不可用，请稍后重试",
                 },
             )
-        fallback_user = _mobile_user_from_jwt_payload(jwt_payload or {})
+        fallback_user = _mobile_user_from_jwt_payload(jwt_payload)
         _bind_mobile_user_tenant_to_request(request, fallback_user)
         return fallback_user
 
     from app.infrastructure.auth.dependencies import resolve_session_user
 
     user = resolve_session_user(request)
+    if user is not None and not getattr(user, "is_active", False):
+        user = None
     _bind_mobile_user_tenant_to_request(request, user)
     return user
 
@@ -161,7 +162,7 @@ def _mobile_auth_error_response(
 async def mobile_auth_register(body: MobileRegisterRequest):
     """移动端注册：复用桌面 ``/api/auth/register``，成功后直接签发 mobile JWT。"""
     from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.routes import auth_register
+    from app.fastapi_routes.domains.auth.auth_routes import auth_register
     from app.mod_sdk.product_skus import resolve_product_sku
 
     sku = resolve_product_sku()
@@ -218,7 +219,7 @@ async def mobile_auth_register(body: MobileRegisterRequest):
 async def mobile_auth_login(body: MobileLoginRequest):
     """与 Web ``POST /api/auth/login`` 共用认证逻辑（市场校验、JIT、account_kind、市场 token）。"""
     from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.routes import auth_login
+    from app.fastapi_routes.domains.auth.auth_routes import auth_login
     from app.mod_sdk.product_skus import resolve_product_sku
 
     sku = resolve_product_sku()
@@ -292,7 +293,7 @@ async def mobile_auth_login(body: MobileLoginRequest):
 async def mobile_auth_login_with_phone(body: dict):
     """与 Web ``POST /api/auth/login-with-phone-code`` 共用逻辑。"""
     from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.routes import auth_login_with_phone_code
+    from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
     from app.mod_sdk.product_skus import resolve_product_sku
 
     sku = resolve_product_sku()
@@ -452,8 +453,3 @@ async def mobile_health():
     return format_mobile_response(
         data={"service": "xcagi-mobile", "status": "ok"},
     )
-
-
-from app.fastapi_routes.mobile_api_extensions import extension_router  # noqa: E402
-
-router.include_router(extension_router)

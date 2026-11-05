@@ -92,6 +92,7 @@ async def execute_workflow(
         failure_message = str(e)
         execution.status = "failed"
         execution.error_message = failure_message
+        execution.output_data = json.dumps(getattr(e, "evidence", {}), ensure_ascii=False)
         execution.completed_at = datetime.now(UTC)
     db.commit()
 

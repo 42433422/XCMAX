@@ -1,0 +1,48 @@
+{
+  "result": "PASS",
+  "time": "2026-10-15T22:52:44.077016+08:00",
+  "packages": [
+    {
+      "file": "/var/www/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "bytes": 568802820,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "result": "PASS"
+    },
+    {
+      "file": "/var/www/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "result": "PASS"
+    },
+    {
+      "file": "/var/www/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "bytes": 331819335,
+      "sha256": "9d7025e9367bb934868adb79be7a99bbb8dae728727aa7ace00c492c45f40100",
+      "result": "PASS"
+    }
+  ],
+  "stableObservations": [
+    {
+      "file": "/var/www/update/releases/stable/enterprise/latest-mac.yml",
+      "sha256": "cba4a1afe7c385849b3558a018a981f0516766c71dce15f4611810156fb39303",
+      "matchesPreUploadObservation": true
+    },
+    {
+      "file": "/var/www/update/releases/stable/manifest.json",
+      "sha256": "0b0d5a469ea87032a9f14ef08abe94a9f47610f8f8126f72cd1d85beb3733557",
+      "matchesPreUploadObservation": true
+    }
+  ],
+  "foreignStagingRetained": [],
+  "ownEmptyPullDirectoryRemoved": true,
+  "serverFreeBytes": 93679529984,
+  "logs": [
+    {
+      "source": "/var/log/nginx/xiu-ci.com.access.log",
+      "bytes": 17990,
+      "lines": 106,
+      "sha256": "702b3b14132af5a736baf6d074dec219eaadafe8b73fa09a65a6b27da9fce40a",
+      "savedOriginalSelectedLines": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-access-originals/xiu-ci.com.access.log"
+    }
+  ]
+}

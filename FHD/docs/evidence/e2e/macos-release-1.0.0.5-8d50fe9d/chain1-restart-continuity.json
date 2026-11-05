@@ -1,0 +1,40 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-continuity-ui",
+  "session_tag": "FRESH",
+  "data_root": "/private/tmp/xcagi-custchain/userdata-fresh",
+  "ui_evidence_dir": "/private/tmp/xcagi-custchain/evidence-8d50fe9d",
+  "at_utc": "2026-09-21T10:41:15Z",
+  "checks": {
+    "ui_evidence": {
+      "template_created_by_ui": "客户送货单模板-UI",
+      "doc_from_ui": "发货单_26-09-00001A_20260921_183924.xlsx",
+      "unit_from_ui": "UI客户-0921"
+    },
+    "relogin": {
+      "status": 200,
+      "success": true,
+      "me_status": 200,
+      "username": "SUNBIRD",
+      "has_shipment_edit": true
+    },
+    "template_present": {
+      "status": 200,
+      "probe": "客户送货单模板-UI",
+      "found": false
+    },
+    "unit_present": {
+      "status": 200,
+      "probe": "UI客户-0921",
+      "found": false
+    },
+    "prior_document": {
+      "doc_name": "发货单_26-09-00001A_20260921_183924.xlsx",
+      "status": 404,
+      "bytes": 45,
+      "xlsx_magic": false,
+      "sha256": "0f66f644464474f2b911d2a5ff64f1fac0d246eaa3a21a04a2ba52f3d6025ec9"
+    }
+  },
+  "verdict": "BLOCKED"
+}

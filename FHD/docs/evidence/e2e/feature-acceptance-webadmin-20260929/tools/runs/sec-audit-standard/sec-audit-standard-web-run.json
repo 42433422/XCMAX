@@ -1,0 +1,344 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "sec-audit-standard",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-084414",
+  "generated_at": "2026-09-29 08:44:29",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 5,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器读取运行中 Web 后端暴露的审计基准 SSOT：audit_benchmark_ssot.json（18 域 / 每域 3 个商业对标锚点 / 1 个开源达标锚点 / 90 分与 60 分锚线 / measurement_status=anchors_defined_not_benchmarked）与生成阅读视图 AUDIT_BENCHMARK_SSOT.md；并在本机真实执行 audit_benchmark_ssot.py check 与 ssot_cli.py check audit-benchmark。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 26898,
+        "processed": 26898,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.search",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "error.occurred",
+                "evolution.index"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/sec-audit-standard/sec-audit-standard-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "sec-audit-standard",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-audit-standard/shot/00-login-form.png",
+      "sha256": "60c9caf50c5c8bcad7259904bd9036eea0bc81c5ec4f50383a24d68977285912",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-audit-standard",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-audit-standard/shot/A1-audit-catalog.png",
+      "sha256": "6f899d3035913eaf77f6e7abf71c208020a02c32b6e17b9b06d1c91e2cb1b391",
+      "visual_review": "accepted",
+      "visible_result": "浏览器直接渲染运行中后端返回的 /xcmax-dashboard/FHD/config/audit_benchmark_ssot.json：可见 standard_version 1.0.0、scoring_version external-anchors-v1、domain_count 18、commercial_anchor_score 90、open_source_pass_score 60 等真实 JSON 原文。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-audit-standard",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-audit-standard/shot/A2-reading-view.png",
+      "sha256": "86ccc9252957ee8148136c87c143dbdd2abd15d165317969a41670691e49393f",
+      "visual_review": "accepted",
+      "visible_result": "浏览器以 text/markdown 渲染生成阅读视图 AUDIT_BENCHMARK_SSOT.md，正文开头即「# XCMAX 审计对标 SSOT · 生成视图 · 唯一维护源：FHD/config/audit_benchmark_ssot.json」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-audit-standard",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-audit-standard/shot/A3-anchor-invariants.png",
+      "sha256": "6f899d3035913eaf77f6e7abf71c208020a02c32b6e17b9b06d1c91e2cb1b391",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染基准目录的锚点与状态字段（measurement_status=anchors_defined_not_benchmarked 等），真实 JSON 原文。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-audit-standard",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-audit-standard/video/sec-audit-standard-web-20260929-084414.webm",
+      "sha256": "9d95769a382c0dd55331d84c6a5478b189324e75e440bcb78a58eb4c21b782d1",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 读取审计基准目录与生成阅读视图 → 锚点不变量核对。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "A1",
+      "title": "审计基准目录 SSOT 在 Web 后端真实可读且锚点完整",
+      "input": "运行中的 Web 后端（端口 42423）与已建立的管理端会话。",
+      "actions": "真实浏览器导航到 /xcmax-dashboard/FHD/config/audit_benchmark_ssot.json，解析渲染出的 JSON 并核对锚点不变量。",
+      "expected": "HTTP 200；18 个域、每域恰好 3 个商业对标锚点、每域都有开源达标锚点；商业锚线 90 / 开源达标锚线 60。",
+      "observed": "{\"http_status\": 200, \"schema_version\": 1, \"standard_version\": \"1.0.0\", \"scoring_version\": \"external-anchors-v1\", \"domain_count\": 18, \"domains_len\": 18, \"commercial_refs_per_domain\": [3], \"every_domain_has_open_source_anchor\": true, \"anchors\": [90, 60], \"review_interval_days\": 90, \"domain_sample\": [[1, \"architecture\", \"依赖注入与分层\"], [2, \"erp\", \"ERP 订单与资金闭环\"], [3, \"agent-orchestration\", \"Agent 编排与审批\"]]}",
+      "result": "passed"
+    },
+    {
+      "id": "A2",
+      "title": "生成阅读视图与唯一维护源一致地对外可读",
+      "input": "同上。",
+      "actions": "真实浏览器导航到 /xcmax-dashboard/FHD/docs/AUDIT_BENCHMARK_SSOT.md。",
+      "expected": "HTTP 200 且以 markdown 提供；正文声明这是生成视图并指明唯一维护源为 audit_benchmark_ssot.json。",
+      "observed": "{\"http_status\": 200, \"content_type\": \"text/markdown; charset=utf-8\", \"starts_with_generated_view_note\": true, \"mentions_sole_source\": true, \"text_head\": \"# XCMAX 审计对标 SSOT  > 生成视图。唯一维护源：`FHD/config/audit_benchmark_ssot.json`。 > 修改 JSON 后运行 `python scripts/dev/audit_benchmark_ssot.py generate`；CI 用 `check` 验证一致性。  标准版本：**1.0.0**；评分版本：`external-anchors-v1`；资料核对：2026-09-08。 \", \"chars\": 33935}",
+      "result": "passed"
+    },
+    {
+      "id": "A3",
+      "title": "标准校验器在本机真实执行通过（正例）",
+      "input": "FHD 仓库工作树。",
+      "actions": "在本机真实执行 python3 scripts/dev/audit_benchmark_ssot.py check，记录真实 stdout 与退出码。",
+      "expected": "退出码 0，输出 standard valid（18 domains / 54 commercial / 18 OSS slots）且声明不代表产品通过审计。",
+      "observed": "{\"argv\": \"check\", \"exit_code\": 0, \"stdout_tail\": \"audit-benchmark: standard valid (18 domains / 54 commercial / 18 OSS slots); no product score asserted\", \"stderr_tail\": \"\"}",
+      "result": "passed"
+    },
+    {
+      "id": "A4",
+      "title": "SSOT 统一 CLI 的 audit-benchmark 域在本机真实校验通过",
+      "input": "同上。",
+      "actions": "在本机真实执行 python3 scripts/dev/ssot_cli.py check audit-benchmark。",
+      "expected": "退出码 0，输出 audit-benchmark: OK。",
+      "observed": "{\"argv\": \"check audit-benchmark\", \"exit_code\": 0, \"stdout_tail\": \"audit-benchmark: standard valid (18 domains / 54 commercial / 18 OSS slots); no product score asserted\\naudit-benchmark: OK\", \"stderr_tail\": \"\"}",
+      "result": "passed"
+    },
+    {
+      "id": "A5",
+      "title": "标准只定义锚点、不声明产品得分；历史分数不可换算（边界）",
+      "input": "同上。",
+      "actions": "在真实浏览器里核对基准目录的 measurement_status、legacy_scores_not_convertible 与是否存在任何产品得分字段。",
+      "expected": "measurement_status=anchors_defined_not_benchmarked；历史 73.3 / 77.1 明确标记为不可换算；不存在 product_score 之类已断言的产品得分。",
+      "observed": "{\"http_status\": 200, \"measurement_status\": \"anchors_defined_not_benchmarked\", \"legacy_scores_not_convertible\": [73.3, 77.1], \"score_named_top_fields\": [\"commercial_anchor_score\", \"open_source_pass_score\", \"legacy_scores_not_convertible\"], \"product_score_asserted\": false, \"required_audit_record_fields\": [\"standard_version\", \"scoring_version\", \"source_sha\", \"main_sha\", \"artifact_sha256\", \"installed_git_sha\", \"reference_versions_editions_regions\", \"dataset_hash\", \"task_protocol\", \"predeclared_metrics_and_tolerances\", \"model_and_budget\", \"environment\", \"evidence_ids\", \"observed_results\", \"unknowns\", \"axis_levels\", \"domain_status\", \"score\", \"auditor\", \"observed_at\"], \"policies_type\": \"list\", \"policies_len\": 14}",
+      "result": "passed"
+    }
+  ]
+}

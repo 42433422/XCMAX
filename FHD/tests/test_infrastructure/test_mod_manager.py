@@ -624,7 +624,7 @@ class TestGetRoutes:
         with (
             patch(
                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                side_effect=ImportError,
+                return_value=True,
             ),
             patch.object(mm, "all_mods_roots", return_value=[str(mods_dir)]),
         ):
@@ -662,7 +662,7 @@ class TestLoadAllMods:
         with (
             patch(
                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                side_effect=ImportError,
+                return_value=True,
             ),
             patch.object(mm, "load_mod", return_value=True),
             patch.object(mm, "all_mods_roots", return_value=[str(mods_dir)]),
@@ -694,7 +694,7 @@ class TestScanModsFromBuildIndex:
         (mod_dir / "manifest.json").write_text(
             json.dumps({"id": "idx-mod", "name": "Idx Mod", "version": "1.0"})
         )
-        index_path = tmp_path / "mods-index.json"
+        index_path = mods_dir / "mods-index.json"
         index_path.write_text(
             json.dumps(
                 {
@@ -703,10 +703,11 @@ class TestScanModsFromBuildIndex:
                 }
             )
         )
-        mm = ModManager(mods_root=str(tmp_path))
+        mm = ModManager(mods_root=str(mods_dir))
         result = mm._scan_mods_from_build_index("fp1")
         assert result is not None
         assert len(result) == 1
+        assert result[0].mod_path == str(mod_dir)
 
 
 # ========================= ModManager._load_mod_backend ==================

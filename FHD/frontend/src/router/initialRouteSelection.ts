@@ -5,6 +5,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 const SANDBOX_ALLOWED = new Set([
   'login',
   'login-help',
+  'login-legal',
   'login-register',
   'login-forgot-account',
   'login-forgot-password',

@@ -1,0 +1,10 @@
+feature=ind-coating
+at=2026-09-29T11:10:10.670Z
+route=/ai-ecosystem
+landed=/ai-ecosystem
+title=智能生态 - XCAGI
+heading=智能生态
+redirected=false
+navError=
+apis=[{"api":"/api/mods","status":200,"body":"{\"success\":true,\"data\":[{\"id\":\"accessories-packaging-industry\",\"name\":\"饰品包装行业包\",\"version\":\"1.0.0\",\"author\":\"成都修茈科技有限公司\",\"description\":\"饰品与包装制品行业壳：提供产品、订单、库存、客户与标签业务语义；考勤由通用 attendance-industry 模块提供。\",\"primary\":false,\"artifact\":\"mod\",\"scope\":\"global\",\"industry\":{\"id\":\"饰品包装\",\"name\":\"饰品包装行业\",\"description\":\"适用于饰品、展示包装与包装制品的产品、订单、库存和标签管理\",\"units\":{\"primary\":\"件\",\"secondary\":\"箱\",\"primary_label\":\"件数\",\"sec"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 智能生态 SUNBIRD 副窗 ◈ 工作区 AI生态应用 智慧分析 接入可视化 AI 员工，上传表格、对话洞察、生成 ECharts 图表与报告 AIOPEN 开放智控 企业级 AI Agent 接入平台，基于 MCP/API 标准协议，提供远程 UI 操控与白名单业务接口开放 生产员工 进入客户交付中心，承接企业客户的标准交付与定制生产闭环 员工商店 MOD 扩展浏览、安装与本机 .xcmod 目录 小C助理

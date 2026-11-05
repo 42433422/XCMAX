@@ -39,6 +39,30 @@ SKIP_SUFFIXES = frozenset({".xlsx", ".xls", ".csv.gz"})
 # 避免双份漂移。见 commit 6804159c3（attendance-industry 迁移）。
 # 治理工具必须跟上代码意图：双路径查找（a34114a0a）+ 导出副本 SSOT 模型。
 EXPORT_ONLY_MODS = frozenset({"attendance-industry"})
+SOURCE_ONLY_MODS = frozenset({"sunbird-attendance-custom"})
+
+# debt19 (#2631): XCAGI dual-tree shrink — SSOT remains FHD/mods; these mods intentionally
+# have no FHD/XCAGI/mods export (avoids blueprints.py / dual-copy growth).
+NO_XCAGI_EXPORT_MODS = frozenset(
+    {
+        "accessories-packaging-industry",
+        "coating-industry",
+        "lan-gate-ai-employee",
+        "sz-qsm-pro",
+        "taiyangniao-pro",
+        "xcagi-approval-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-customer-service-bridge",
+        "xcagi-erp-domain-bridge",
+        "xcagi-lan-license-bridge",
+        "xcagi-model-payment-bridge",
+        "xcagi-neuro-bus-bridge",
+        "xcagi-office-employee-pack-bridge",
+        "xcagi-planner-bridge",
+        "xcagi-planner-excel-tools",
+        "xcagi-workflow-visualization-bridge",
+    }
+)
 
 
 def _skip_path(rel: Path) -> bool:
@@ -90,6 +114,16 @@ def compare_mod(mod_id: str) -> list[str]:
     if not src.is_dir():
         issues.append(f"{mod_id}: SSOT 目录不存在")
         return issues
+    if mod_id in SOURCE_ONLY_MODS:
+        if dst.exists():
+            issues.append(f"{mod_id}: 私有源码不得导出到 XCAGI/mods")
+        return issues
+    if mod_id in NO_XCAGI_EXPORT_MODS:
+        if dst.exists():
+            issues.append(
+                f"{mod_id}: debt19 禁止导出到 XCAGI/mods（请删除导出副本，SSOT 仅 FHD/mods）"
+            )
+        return issues
     if not dst.is_dir():
         issues.append(f"{mod_id}: 导出副本缺失（请运行 sync）")
         return issues
@@ -108,6 +142,10 @@ def compare_mod(mod_id: str) -> list[str]:
 
 
 def sync_mod(mod_id: str, *, dry_run: bool, prune: bool) -> None:
+    if mod_id in SOURCE_ONLY_MODS:
+        raise SystemExit(f"私有 Mod 不允许导出到 XCAGI/mods: {mod_id}")
+    if mod_id in NO_XCAGI_EXPORT_MODS:
+        raise SystemExit(f"debt19: Mod 不允许导出到 XCAGI/mods: {mod_id}")
     src = SSOT_ROOT / mod_id
     dst = EXPORT_ROOT / mod_id
     if not src.is_dir():
@@ -176,7 +214,7 @@ def cmd_sync(mod_ids: list[str], *, dry_run: bool, prune: bool) -> int:
     if not SSOT_ROOT.is_dir():
         print(f"SSOT 根目录不存在: {SSOT_ROOT}", file=sys.stderr)
         return 2
-    targets = mod_ids or list_mod_ids(SSOT_ROOT)
+    targets = mod_ids or [mid for mid in list_mod_ids(SSOT_ROOT) if mid not in SOURCE_ONLY_MODS and mid not in NO_XCAGI_EXPORT_MODS]
     if not targets:
         print("SSOT 下未发现带 manifest.json 的 Mod", file=sys.stderr)
         return 2

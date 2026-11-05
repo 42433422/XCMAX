@@ -7,3 +7,13 @@
 -r ../requirements.txt
 -r ../requirements-ml.txt
 -r ../deploy/requirements-dev.txt
+
+# LangGraph 运行时：app.infrastructure.workflow 顶层导入 langgraph（checkpoint_bridge），
+# 桌面/本地安装走本清单时缺失会导致启动即崩（ModuleNotFoundError）。
+# 与 pyproject.toml [project] 依赖、requirements-server-api.txt 同源（仓库内 vendored 源码）。
+-e ../packages/xcagi_langgraph_core
+-e ../packages/xcagi_langgraph_checkpoint
+-e ../packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite
+-e ../packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres
+-e ../packages/xcagi_langgraph_prebuilt
+-e ../packages/xcagi_langgraph_sdk

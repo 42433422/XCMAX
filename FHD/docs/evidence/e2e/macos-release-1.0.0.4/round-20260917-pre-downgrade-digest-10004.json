@@ -1,0 +1,18 @@
+{
+  "xcagi.db.bytes": 987402240,
+  "xcagi.db.wal.bytes": 576832,
+  "excel_vectors.db.bytes": -1,
+  "mod_dbs.files": 0,
+  "uploads.files": 169,
+  "uploads.templates.files": 23,
+  "routing_policies.files": 1,
+  "mods.files": 1259,
+  "models.files": 1,
+  "backups.files": 5,
+  "backups.latest": "xcagi-unknown-20260916173738.db",
+  "rows.templates": 24,
+  "rows.sales_orders": 0,
+  "rows.manufacturing_orders": 0,
+  "rows.customers": 0,
+  "rows.users": 6
+}

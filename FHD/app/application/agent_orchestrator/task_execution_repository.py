@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 import threading
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
@@ -124,7 +123,13 @@ class InMemoryTaskExecutionRepository:
         current = str(now or utc_now_iso())
         with self._lock:
             row = self._rows.get(str(run_id or ""))
-            if row is None or row.state != "claimed" or row.lease_owner != owner_id:
+            if (
+                row is None
+                or row.state != "claimed"
+                or row.lease_owner != owner_id
+                or not row.lease_expires_at
+                or row.lease_expires_at <= current
+            ):
                 return False
             row.heartbeat_at = current
             row.lease_expires_at = _deadline(current, lease_seconds)
@@ -141,7 +146,13 @@ class InMemoryTaskExecutionRepository:
     ) -> AgentTaskExecution | None:
         with self._lock:
             row = self._rows.get(str(run_id or ""))
-            if row is None or row.state != "claimed" or row.lease_owner != owner_id:
+            if (
+                row is None
+                or row.state != "claimed"
+                or row.lease_owner != owner_id
+                or not row.lease_expires_at
+                or row.lease_expires_at <= utc_now_iso()
+            ):
                 return None
             return self._transition_locked(row, state, error_code=error_code)
 
@@ -186,20 +197,19 @@ _task_execution_repository: TaskExecutionRepository | None = None
 
 
 def get_task_execution_repository() -> TaskExecutionRepository:
+    from app.application.agent_orchestrator.run_repository import agent_memory_mode_enabled
+
     global _task_execution_repository
     if _task_execution_repository is None:
-        try:
-            repository = SQLAlchemyTaskExecutionRepository()
-            repository.get("")
-            _task_execution_repository = repository
-        except RECOVERABLE_ERRORS as exc:
-            require_durable = os.environ.get(
-                "XCAGI_AGENT_RUN_REQUIRE_DURABLE", ""
-            ).strip().lower() in {"1", "true", "yes", "on"}
-            if require_durable:
-                raise RuntimeError("durable task execution queue unavailable") from exc
-            logger.warning("Task execution SQL queue unavailable, using memory: %s", exc)
+        if agent_memory_mode_enabled():
             _task_execution_repository = InMemoryTaskExecutionRepository()
+        else:
+            try:
+                repository = SQLAlchemyTaskExecutionRepository()
+                repository.get("")
+            except RECOVERABLE_ERRORS as exc:
+                raise RuntimeError("durable task execution queue unavailable") from exc
+            _task_execution_repository = repository
     return _task_execution_repository
 
 

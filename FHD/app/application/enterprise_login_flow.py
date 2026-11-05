@@ -6,6 +6,7 @@ import logging
 import secrets
 from typing import Any
 
+from fastapi import BackgroundTasks
 from fastapi.responses import JSONResponse
 
 from app.application.desktop_admin_gate import (
@@ -160,6 +161,13 @@ async def ensure_local_user_after_market(
         )
 
     if not exists:
+        from app.db.bootstrap.guarded import enabled
+
+        if enabled():
+            return None, JSONResponse(
+                {"success": False, "message": "Guarded login requires an existing account"},
+                status_code=409,
+            )
         email = market_user_email_from_raw(market_result.get("raw"))
         blob = extract_market_user_blob(market_result)
         if not email and blob.get("email"):
@@ -193,6 +201,18 @@ def bind_tenant_for_login(
     username: str,
 ) -> dict[str, Any]:
     """登录后绑定/创建租户，返回 tenant_id / tenant_name。"""
+    from app.db.bootstrap.guarded import enabled
+
+    if enabled():
+        from app.db.models import Tenant, User
+        from app.db.session import get_host_db
+
+        with get_host_db() as db:
+            user = db.get(User, user_id)
+            tenant = db.get(Tenant, user.tenant_id) if user and user.tenant_id else None
+            if user is None or not user.is_active or tenant is None or not tenant.is_active:
+                raise RuntimeError("guarded login requires existing tenant binding")
+            return {"tenant_id": tenant.id, "tenant_name": tenant.name}
     out: dict[str, Any] = {"tenant_id": None, "tenant_name": ""}
     try:
         from app.application.tenant_subscription_app_service import (
@@ -270,6 +290,8 @@ async def run_market_first_login(
     market_user_email_from_raw: Any,
     login_market_fn: Any | None = None,
     totp_code: str | None = None,
+    invitation_code: str = "",
+    background_tasks: BackgroundTasks | None = None,
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """企业 SKU：市场先行，再本地 session + finalize。"""
     # 桌面端：显式 admin 入口直接拒绝（即使市场可达也不开管理员会话）
@@ -306,6 +328,7 @@ async def run_market_first_login(
                             username=login_username,
                             sku=sku,
                             skip_market_sync=True,
+                            background_tasks=background_tasks,
                         )
                         # finalize skip_market_sync 分支不写 market_is_admin/market_is_enterprise，此处补充
                         # enterprise SKU 管理员默认拥有企业版权益（市场不可达时）
@@ -372,7 +395,7 @@ async def run_market_first_login(
                 },
                 status_code=_login_client_http_status(403),
             )
-        login_username = username or resolve_market_username(market_result or {})
+        login_username = resolve_market_username(market_result or {}) or username
         if not login_username:
             return None, JSONResponse(
                 {
@@ -413,6 +436,8 @@ async def run_market_first_login(
             account_kind=account_kind,
             username=login_username,
             sku=sku,
+            invitation_code=invitation_code,
+            background_tasks=background_tasks,
         )
     return result, None
 
@@ -424,6 +449,7 @@ async def finalize_auth_after_oidc(
     oidc_access_token: str = "",
     account_kind: AccountKind,
     sku: str,
+    background_tasks: BackgroundTasks | None = None,
 ) -> dict[str, Any]:
     """OIDC 本地会话创建后，自动桥接 MODstore JWT 并走统一 finalize。"""
     from app.fastapi_routes.market_account import login_market_for_oidc_profile
@@ -454,4 +480,5 @@ async def finalize_auth_after_oidc(
         username=username,
         sku=sku,
         skip_market_sync=not bool(market_result.get("success")),
+        background_tasks=background_tasks,
     )

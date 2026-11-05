@@ -1,0 +1,8 @@
+[06:58:56] feature=pay-reconcile base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-reconcile
+[06:59:08] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:59:13] case PR1: passed - 统一账本对账口径真实读取（自托管）
+[06:59:17] case PR2: passed - 服务间对账区间接口未带内部 Key 即失败关闭
+[06:59:20] case PR3: passed - 对账区间接口缺少必要参数被参数校验拒绝
+[06:59:21] case PR4: passed - 市场发票对账接口未绑定市场账号被拒
+[06:59:21] video: pay-reconcile-web-20260929-065856.webm (1542524 bytes)
+[06:59:21] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-reconcile/log/pay-reconcile-web-20260929-065856.log

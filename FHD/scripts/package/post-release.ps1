@@ -1,10 +1,12 @@
 param(
-  [string]$Version = '1.0.0.0',
+  [string]$Version = '',
   [switch]$Upload,
   [switch]$DryRunUpload
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 Set-Location $Root
 

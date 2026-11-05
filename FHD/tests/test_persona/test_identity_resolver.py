@@ -6,7 +6,7 @@ import pytest
 
 from app.domain.persona.entities import PersonaProfile
 from app.domain.persona.value_objects import PersonaIdentity, RapportScore
-from app.services.persona.identity_resolver import IdentityResolver
+from app.domain.shared_services.persona.identity_resolver import IdentityResolver
 
 
 class TestIdentityResolver:

@@ -39,11 +39,12 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 if str(FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(FHD_ROOT))
 
+from app.neuro_bus.routing.policy_paths import resolve_policy_file
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-DEFAULT_LOG = FHD_ROOT / "resources" / "routing_policies" / "routing_decisions.jsonl"
-STATE_FILE = FHD_ROOT / "resources" / "routing_policies" / ".online_update_state.json"
-CANARY_STATE_FILE = FHD_ROOT / "resources" / "routing_policies" / "canary_state.json"
+DEFAULT_LOG = resolve_policy_file("routing_decisions.jsonl")
+STATE_FILE = resolve_policy_file(".online_update_state.json", for_write=True)
+CANARY_STATE_FILE = resolve_policy_file("canary_state.json", for_write=True)
 
 logger = logging.getLogger("online_update_daemon")
 

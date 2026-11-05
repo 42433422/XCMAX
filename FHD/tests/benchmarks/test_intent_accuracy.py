@@ -17,8 +17,9 @@ from pathlib import Path
 
 import pytest
 
+from scripts.dev.benchmark_evidence import evidence_identity, write_report
+
 GOLDEN_PATH = Path(__file__).with_name("intent_golden_set.json")
-REPORT_DIR = Path(__file__).resolve().parents[2] / "test_reports"
 
 
 def _load_golden() -> list[dict]:
@@ -30,11 +31,11 @@ def _load_golden() -> list[dict]:
 def _match_case(result: dict, case: dict, text: str) -> bool:
     check = case.get("check")
     if check == "greeting":
-        from app.services.intent_service import is_greeting
+        from app.domain.shared_services.intent_service import is_greeting
 
         return is_greeting(text)
     if check == "goodbye":
-        from app.services.intent_service import is_goodbye
+        from app.domain.shared_services.intent_service import is_goodbye
 
         return is_goodbye(text)
 
@@ -60,7 +61,7 @@ def golden_cases():
     reason="需要完整意图栈/DB；本地设 INTENT_BENCHMARK_RUN=1 再跑（见 intent-benchmark.yml）",
 )
 def test_intent_golden_set_accuracy(golden_cases):
-    from app.services.intent_service import recognize_intents
+    from app.domain.shared_services.intent_service import recognize_intents
 
     correct = 0
     failures: list[dict] = []
@@ -94,7 +95,6 @@ def test_intent_golden_set_accuracy(golden_cases):
         for tier, (hit, miss) in tier_stat.items()
     }
 
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report = {
         "total": len(golden_cases),
         "correct": correct,
@@ -103,14 +103,17 @@ def test_intent_golden_set_accuracy(golden_cases):
         "tier_accuracy": tier_accuracy,
         "failures": failures[:20],
     }
-    (REPORT_DIR / "intent_benchmark_latest.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
 
     core_n = sum(tier_stat.get("core", [0, 0]))
     core_hit = tier_stat.get("core", [0, 0])[0]
     core_acc = (core_hit / core_n) if core_n else 0.0
+    report.update(evidence_identity(GOLDEN_PATH, execution_mode="rule_only"))
+    report.update({"acceptance_mode": "gate", "gate_passed": core_acc >= min_acc})
+    if min_acc_semantic is not None:
+        report["gate_passed"] = report["gate_passed"] and tier_accuracy.get("semantic", 0) >= float(
+            min_acc_semantic
+        )
+    write_report("intent_benchmark_latest.json", report)
     assert core_acc >= min_acc, (
         f"Intent core accuracy {core_acc:.2%} below threshold {min_acc:.2%}; "
         f"failures sample: {tier_failures.get('core', failures)[:3]}"

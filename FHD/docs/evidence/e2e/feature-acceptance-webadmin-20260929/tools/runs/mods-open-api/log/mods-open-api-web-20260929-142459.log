@@ -1,0 +1,9 @@
+[14:24:59] feature=mods-open-api platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-open-api
+[14:25:12] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:25:14] case A1: passed - AIOPEN 协议清单真实读取
+[14:25:15] case A2: passed - 接入指南与端点真实读取
+[14:25:15] case A3: passed - 开放面板路由真实读取
+[14:25:15] case A4: passed - 开放 API 能力闭环自检通过
+[14:25:18] case A5: passed - 缺 tool 的开放调用被拒（负例/边界）
+[14:25:18] video: mods-open-api-web-20260929-142459.webm (1697089 bytes)
+[14:25:18] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-open-api/log/mods-open-api-web-20260929-142459.log

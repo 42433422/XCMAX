@@ -1,0 +1,33 @@
+{
+  "observed_at": "2026-10-06T00:51:16.450193+08:00",
+  "scope": "readonly diagnostic, requires normal UI readback",
+  "integrity": "ok",
+  "orders": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "order_no": "SO20261006004727",
+      "customer_id": 1,
+      "customer_name": "A006",
+      "state": "confirmed",
+      "status": "quote",
+      "total_amount": 20,
+      "currency": "CNY",
+      "created_at": "2026-10-06 00:47:27.371158"
+    }
+  ],
+  "items": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "order_id": 1,
+      "product_id": null,
+      "product_name": null,
+      "quantity": 2,
+      "unit_price": 10,
+      "amount": 20,
+      "reserved_quantity": 0,
+      "delivered_quantity": 0
+    }
+  ]
+}

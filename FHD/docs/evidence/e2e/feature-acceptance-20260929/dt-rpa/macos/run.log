@@ -1,0 +1,6 @@
+2026-09-29T13:06:05+0800 [dt-rpa] 开始验收 dt-rpa 桌面自动化与运行时状态；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:06:05+0800 [dt-rpa] M1 failed :: 受阻：本机客户端构建未安装桌面自动化后端：GET /api/desktop/automation/status 显示 drivers 全为 false；写入 profile 返回「desktop automation backend not installed in this build」
+2026-09-29T13:06:05+0800 [dt-rpa] M2 failed :: 受阻：GET /api/desktop/automation/find-element 返回「desktop automation backend not installed in this build」
+2026-09-29T13:06:05+0800 [dt-rpa] M3 failed :: 受阻：POST /api/desktop/automation/workflow/run 返回「desktop automation backend not installed in this build」
+2026-09-29T13:06:06+0800 [dt-rpa] screenshot result.png
+2026-09-29T13:06:07+0800 [dt-rpa] video operation.webm bytes=95169

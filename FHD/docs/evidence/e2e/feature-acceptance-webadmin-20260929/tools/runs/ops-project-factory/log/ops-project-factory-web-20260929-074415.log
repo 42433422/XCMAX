@@ -1,0 +1,8 @@
+[07:44:15] feature=ops-project-factory base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-project-factory
+[07:44:26] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:44:30] case F1: passed - 工厂项目工作区清单真实读取
+[07:44:35] case F2: passed - 工厂员工与派工端点真实读取
+[07:44:40] case F3: passed - 项目工厂页真实渲染
+[07:44:44] case F4: passed - 无会话访问工作区清单被拒（负例）
+[07:44:44] video: ops-project-factory-web-20260929-074415.webm (2092187 bytes)
+[07:44:44] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ops-project-factory/log/ops-project-factory-web-20260929-074415.log

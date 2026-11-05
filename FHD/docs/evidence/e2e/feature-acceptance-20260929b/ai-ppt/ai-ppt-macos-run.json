@@ -1,0 +1,75 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。账号仅记录用户名。",
+  "kind": "feature-acceptance",
+  "feature": "ai-ppt",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929b",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
+  "app_version": "1.0.0.5",
+  "account": "SUNBIRD",
+  "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "账号 SUNBIRD，构建 027c8ec59。passed。员工工作流管理。有流程可视化、进入员工空间、六部门编制图。正文写按六线六部门分组展示 52 岗 AI 员工。 各步结果均为通过。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "POST /api/mod/ppt-generate-employee/employees/ppt-generate-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790685111\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSE",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/ppt-generate-employee/employees/ppt-generate-employee/run（写操作自动附带 CSRF）：PPT 生成员工：由文本生成 .pptx",
+      "expected": "ok=true 且产出 .pptx 文件",
+      "observed": "HTTP 200 54ms；ok=True；{\"output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790685111/outputs/output.pptx\", \"slide_count\": 1, \"title\": \"MAC验收0929 汇报\", \"output_schema\": [\"title\", \"slides\", \"slide",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "POST /api/mod/ppt-full-read-employee/employees/ppt-full-read-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790685111\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSE",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/ppt-full-read-employee/employees/ppt-full-read-employee/run（写操作自动附带 CSRF）：PPT 读取员工：解析刚生成的 .pptx",
+      "expected": "ok=true 且写出解析结果 JSON",
+      "observed": "HTTP 200 116ms；ok=True；{\"output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790685111/outputs/ppt-read.json\", \"meta_output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "POST /api/platform-shell/workspace-read-files 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-ppt-1790685111\", \"file_paths\": [\"/Users/Shared/XCAGI-FULLCLO",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/platform-shell/workspace-read-files（写操作自动附带 CSRF）：读回 PPT 解析结果（界面同一读取接口）",
+      "expected": "解析结果含原文「太阳鸟」「包装盒」",
+      "observed": "HTTP 200 33ms；{\"success\": true, \"data\": {\"files\": [{\"path\": \"temp_excel/mac0929-ai-ppt-1790685111/outputs/ppt-read.json\", \"kind\": \"json\", \"json\": {\"title\": \"MAC验收0929 汇报\", \"slide_count\": 1, \"outline\": [{\"level\": 1,",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "input": "界面路由 /mod/xcagi-office-employee-pack-bridge/other-tools",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-office-employee-pack-bridge/other-tools，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod/xcagi-office-employee-pack-bridge/other-tools，页面可见 员工，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-office-employee-pack-bridge/other-tools；命中文本 ['员工']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 员工工作流 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 员工工作流管理 | 流程与员工 |  | 在此查看与管理副窗中的固定六类与当前 manifest 已声明的扩展工作流员工；开关样式与",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ai-ppt",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-ppt/macos/result.png",
+      "sha256": "cea16e58c42e360f5db63652c5fbc7b5972a3b35651812cc15de56f3a042f62e",
+      "visual_review": "accepted",
+      "visible_result": "员工工作流管理。有流程可视化、进入员工空间、六部门编制图。正文写按六线六部门分组展示 52 岗 AI 员工。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ai-ppt",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-ppt/macos/operation.webm",
+      "sha256": "59a9b7c675e43614b277f547c7c67481cb2b88cbfb593593b29ca364235e6aff",
+      "visual_review": "accepted",
+      "visible_result": "录屏结束停在上述结果画面。员工工作流管理。有流程可视化、进入员工空间、六部门编制图。正文写按六线六部门分组展示 52 岗 AI 员工。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929b/ai-ppt/macos/run.log",
+    "sha256": "80ef2f0be50454bcd18e8f2e9954e9e437098055a360a73de4566d02b624dbe4",
+    "bytes": 1878
+  }
+}

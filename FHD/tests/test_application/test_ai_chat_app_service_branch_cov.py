@@ -1,39 +1,4 @@
-"""测试 ai_chat_app_service 的分支覆盖（聚焦未覆盖方法与边界分支）。
-
-覆盖目标：
-- _looks_like_explicit_workflow_tool_intent（静态方法，多分支）
-- _workflow_output_preview / _workflow_output_message（静态方法）
-- _iter_agentic_artifact_payloads（静态方法）
-- _agent_plan_can_auto_execute（静态方法）
-- _attach_deterministic_workflow_trace（静态方法）
-- _format_workflow_tool_success_line（实例方法）
-- _format_agent_run_response（实例方法）
-- _start_deterministic_import_agent_run（实例方法）
-- _start_agentic_workflow_agent_run（实例方法）
-- _bridge_agentic_workflow_result_to_agent_run（实例方法）
-- _workflow_products_float_query（实例方法，补充分支）
-- _build_workflow_thinking_steps（实例方法，补充分支）
-- _normal_slot_dispatch_chat_overlay（静态方法，补充分支）
-- _dispatch_workflow_tool（实例方法，补充分支）
-- _execute_pro_mode_tools（实例方法，补充分支）
-- _build_order_text_from_products（实例方法，补充分支）
-- _try_merge_split_model（实例方法，补充分支）
-- _execute_customers_intent（实例方法，补充分支）
-- _execute_shipment_generate（实例方法，补充分支）
-- _execute_shipments_query（实例方法，补充分支）
-- _handle_tool_call（实例方法，补充分支）
-- _build_response（实例方法，补充分支）
-- _persist_chat_turn（实例方法，补充分支）
-- _inject_excel_vector_context（实例方法，补充分支）
-- _resolve_unit_price_column（静态方法，补充分支）
-- _merge_user_intent_for_price_resolution（静态方法，补充分支）
-- _price_column_buckets（静态方法，补充分支）
-- _header_hint_column_roles（静态方法，补充分支）
-- _infer_excel_column_roles（实例方法，补充分支）
-- _fallback_excel_product_name_column / _fallback_excel_model_number_column（补充分支）
-- _extract_excel_import_records（实例方法，补充分支）
-- _try_handle_dynamic_workflow（实例方法，补充分支）
-"""
+"""AI chat service branch and confirmation-boundary regressions."""
 
 from __future__ import annotations
 
@@ -49,65 +14,13 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-
-# ---------------------------------------------------------------------------
-# helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_svc() -> AIChatApplicationService:
-    """构造能正常实例化的服务（模拟所有构造依赖）。"""
-    with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
-        patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
-        patch("app.application.ai_chat_app_service.HybridRiskGate"),
-        patch("app.application.ai_chat_app_service.WorkflowEngine"),
-        patch("app.application.ai_chat_app_service.get_approval_service"),
-    ):
-        return AIChatApplicationService()
-
-
-def _make_plan(
-    *,
-    plan_id: str = "plan_test",
-    intent: str = "test_intent",
-    nodes=None,
-    todo_steps=None,
-    risk_level: str = "low",
-    metadata=None,
-):
-    """构造一个简单的 plan 对象（避免依赖真实 PlanGraph）。"""
-    return SimpleNamespace(
-        plan_id=plan_id,
-        intent=intent,
-        nodes=nodes or [],
-        todo_steps=todo_steps or [],
-        risk_level=risk_level,
-        metadata=metadata or {},
-    )
-
-
-def _make_node(
-    *,
-    node_id: str = "n1",
-    tool_id: str = "products",
-    action: str = "query",
-    params=None,
-    risk: str = "low",
-    idempotent: bool = True,
-    depends_on=None,
-    description: str = "",
-):
-    return SimpleNamespace(
-        node_id=node_id,
-        tool_id=tool_id,
-        action=action,
-        params=params or {},
-        risk=risk,
-        idempotent=idempotent,
-        depends_on=depends_on or [],
-        description=description,
-    )
+from tests.test_application.ai_chat_test_helpers import (
+    _make_node,
+    _make_node_result,
+    _make_plan,
+    _make_run_result,
+    _make_svc,
+)
 
 
 def _make_step(
@@ -160,59 +73,6 @@ def _make_agent_run(
         message=message,
         user_id=user_id,
     )
-
-
-def _make_node_result(
-    *,
-    node_id: str = "n1",
-    tool_id: str = "products",
-    action: str = "query",
-    success: bool = True,
-    output=None,
-    error: str = "",
-    params=None,
-    retryable: bool = True,
-    retries: int = 0,
-    recovery_hint: str = "",
-    started_at: str = "",
-    finished_at: str = "",
-    duration_ms: int = 0,
-):
-    return SimpleNamespace(
-        node_id=node_id,
-        tool_id=tool_id,
-        action=action,
-        success=success,
-        output=output or {},
-        error=error,
-        params=params or {},
-        retryable=retryable,
-        retries=retries,
-        recovery_hint=recovery_hint,
-        started_at=started_at,
-        finished_at=finished_at,
-        duration_ms=duration_ms,
-    )
-
-
-def _make_run_result(
-    *,
-    success: bool = True,
-    message: str = "",
-    node_results=None,
-    final_context=None,
-):
-    return SimpleNamespace(
-        success=success,
-        message=message,
-        node_results=node_results or [],
-        final_context=final_context or {},
-    )
-
-
-# ---------------------------------------------------------------------------
-# _looks_like_explicit_workflow_tool_intent
-# ---------------------------------------------------------------------------
 
 
 class TestLooksLikeExplicitWorkflowToolIntent:
@@ -330,11 +190,6 @@ class TestLooksLikeExplicitWorkflowToolIntent:
         )
 
 
-# ---------------------------------------------------------------------------
-# _workflow_output_preview
-# ---------------------------------------------------------------------------
-
-
 class TestWorkflowOutputPreview:
     """_workflow_output_preview 分支测试。"""
 
@@ -407,11 +262,6 @@ class TestWorkflowOutputPreview:
         assert result == "{}"
 
 
-# ---------------------------------------------------------------------------
-# _workflow_output_message
-# ---------------------------------------------------------------------------
-
-
 class TestWorkflowOutputMessage:
     """_workflow_output_message 分支测试。"""
 
@@ -440,11 +290,6 @@ class TestWorkflowOutputMessage:
         assert (
             AIChatApplicationService._workflow_output_message({"message": "  spaced  "}) == "spaced"
         )
-
-
-# ---------------------------------------------------------------------------
-# _iter_agentic_artifact_payloads
-# ---------------------------------------------------------------------------
 
 
 class TestIterAgenticArtifactPayloads:
@@ -483,11 +328,6 @@ class TestIterAgenticArtifactPayloads:
 
     def test_artifacts_empty_list_returns_empty(self):
         assert AIChatApplicationService._iter_agentic_artifact_payloads({"artifacts": []}) == []
-
-
-# ---------------------------------------------------------------------------
-# _agent_plan_can_auto_execute
-# ---------------------------------------------------------------------------
 
 
 class TestAgentPlanCanAutoExecute:
@@ -598,11 +438,6 @@ class TestAgentPlanCanAutoExecute:
         assert result is False
 
 
-# ---------------------------------------------------------------------------
-# _attach_deterministic_workflow_trace
-# ---------------------------------------------------------------------------
-
-
 class TestAttachDeterministicWorkflowTrace:
     """_attach_deterministic_workflow_trace 分支测试。"""
 
@@ -611,7 +446,11 @@ class TestAttachDeterministicWorkflowTrace:
         payload = {"success": True, "message": "ok"}
         import sys
 
-        saved = sys.modules.pop("app.application.agent_orchestrator.chat_trace", None)
+        module_name = "app.application.agent_orchestrator.chat_trace"
+        parent = sys.modules["app.application.agent_orchestrator"]
+        missing = object()
+        saved = sys.modules.pop(module_name, missing)
+        saved_attribute = getattr(parent, "chat_trace", missing)
         try:
             result = AIChatApplicationService._attach_deterministic_workflow_trace(
                 payload,
@@ -622,9 +461,33 @@ class TestAttachDeterministicWorkflowTrace:
                 intent="test",
             )
         finally:
-            if saved is not None:
-                sys.modules["app.application.agent_orchestrator.chat_trace"] = saved
+            if saved is missing:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = saved
+            # Re-import also writes the parent package attribute. Restore both
+            # identities so later patches target the module used by imports.
+            if saved_attribute is missing:
+                parent.__dict__.pop("chat_trace", None)
+            else:
+                parent.chat_trace = saved_attribute
         assert result is payload
+
+    @pytest.mark.parametrize("preloaded", [False, True])
+    def test_import_error_restores_module_and_parent_identity(self, monkeypatch, preloaded):
+        import importlib
+        import sys
+
+        name = "app.application.agent_orchestrator.chat_trace"
+        original = importlib.import_module(name)
+        parent = sys.modules["app.application.agent_orchestrator"]
+        monkeypatch.setattr(parent, "chat_trace", original)
+        if not preloaded:
+            monkeypatch.delitem(sys.modules, name)
+            monkeypatch.delattr(parent, "chat_trace")
+        self.test_import_error_returns_payload_unchanged()
+        assert sys.modules.get(name) is (original if preloaded else None)
+        assert getattr(parent, "chat_trace", None) is (original if preloaded else None)
 
     def test_with_file_context_attaches_trace(self):
         payload = {"success": True, "message": "ok"}
@@ -703,11 +566,6 @@ class TestAttachDeterministicWorkflowTrace:
         call_kwargs = mock_attach.call_args
         runtime_ctx = call_kwargs.kwargs.get("runtime_context")
         assert "file_context" not in runtime_ctx
-
-
-# ---------------------------------------------------------------------------
-# _format_workflow_tool_success_line
-# ---------------------------------------------------------------------------
 
 
 class TestFormatWorkflowToolSuccessLine:
@@ -851,11 +709,6 @@ class TestFormatWorkflowToolSuccessLine:
         )
         result = svc._format_workflow_tool_success_line(item, {})
         assert len(result) >= 1
-
-
-# ---------------------------------------------------------------------------
-# _format_agent_run_response
-# ---------------------------------------------------------------------------
 
 
 class TestFormatAgentRunResponse:
@@ -1010,11 +863,6 @@ class TestFormatAgentRunResponse:
         assert len(result["data"]["data"]["node_results"]) == 1
 
 
-# ---------------------------------------------------------------------------
-# _start_deterministic_import_agent_run
-# ---------------------------------------------------------------------------
-
-
 class TestStartDeterministicImportAgentRun:
     """_start_deterministic_import_agent_run 分支测试。"""
 
@@ -1109,11 +957,6 @@ class TestStartDeterministicImportAgentRun:
         assert result["data"]["data"]["artifact_count"] == 1
 
 
-# ---------------------------------------------------------------------------
-# _start_agentic_workflow_agent_run
-# ---------------------------------------------------------------------------
-
-
 class TestStartAgenticWorkflowAgentRun:
     """_start_agentic_workflow_agent_run 分支测试。"""
 
@@ -1164,11 +1007,6 @@ class TestStartAgenticWorkflowAgentRun:
                 runtime_context=None,
             )
         assert result is saved_run
-
-
-# ---------------------------------------------------------------------------
-# _bridge_agentic_workflow_result_to_agent_run
-# ---------------------------------------------------------------------------
 
 
 class TestBridgeAgenticWorkflowResultToAgentRun:
@@ -1401,11 +1239,6 @@ class TestBridgeAgenticWorkflowResultToAgentRun:
         assert len(run.artifacts) == 0
 
 
-# ---------------------------------------------------------------------------
-# _workflow_products_float_query
-# ---------------------------------------------------------------------------
-
-
 class TestWorkflowProductsFloatQuery:
     """_workflow_products_float_query 补充分支测试。"""
 
@@ -1511,11 +1344,6 @@ class TestWorkflowProductsFloatQuery:
         assert result == "msg"
 
 
-# ---------------------------------------------------------------------------
-# _build_workflow_thinking_steps
-# ---------------------------------------------------------------------------
-
-
 class TestBuildWorkflowThinkingSteps:
     """_build_workflow_thinking_steps 补充分支测试。"""
 
@@ -1603,11 +1431,6 @@ class TestBuildWorkflowThinkingSteps:
         assert long_preview not in result
 
 
-# ---------------------------------------------------------------------------
-# _normal_slot_dispatch_chat_overlay
-# ---------------------------------------------------------------------------
-
-
 class TestNormalSlotDispatchChatOverlay:
     """_normal_slot_dispatch_chat_overlay 补充分支测试。"""
 
@@ -1686,11 +1509,6 @@ class TestNormalSlotDispatchChatOverlay:
         assert result == {}
 
 
-# ---------------------------------------------------------------------------
-# _dispatch_workflow_tool
-# ---------------------------------------------------------------------------
-
-
 class TestDispatchWorkflowTool:
     """_dispatch_workflow_tool 补充分支测试。"""
 
@@ -1713,11 +1531,6 @@ class TestDispatchWorkflowTool:
         assert result["success"] is False
         assert result["message"] == "工作流工具调度失败"
         assert "tool crashed" not in result["message"]
-
-
-# ---------------------------------------------------------------------------
-# _execute_pro_mode_tools
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteProModeTools:
@@ -1838,11 +1651,6 @@ class TestExecuteProModeTools:
         assert "toolCall" in result
 
 
-# ---------------------------------------------------------------------------
-# _build_order_text_from_products
-# ---------------------------------------------------------------------------
-
-
 class TestBuildOrderTextFromProducts:
     """_build_order_text_from_products 补充分支测试。"""
 
@@ -1912,11 +1720,6 @@ class TestBuildOrderTextFromProducts:
         assert "ACME" in result
 
 
-# ---------------------------------------------------------------------------
-# _try_merge_split_model
-# ---------------------------------------------------------------------------
-
-
 class TestTryMergeSplitModel:
     """_try_merge_split_model 补充分支测试。"""
 
@@ -1953,11 +1756,6 @@ class TestTryMergeSplitModel:
             {"quantity_tins": 1},
         )
         assert result == ""
-
-
-# ---------------------------------------------------------------------------
-# _execute_customers_intent
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteCustomersIntent:
@@ -2047,11 +1845,6 @@ class TestExecuteCustomersIntent:
         assert "已创建" in result["response"]
 
 
-# ---------------------------------------------------------------------------
-# _execute_shipment_generate
-# ---------------------------------------------------------------------------
-
-
 class TestExecuteShipmentGenerate:
     """_execute_shipment_generate 补充分支测试。"""
 
@@ -2128,7 +1921,8 @@ class TestExecuteShipmentGenerate:
             )
         assert "生成发货单失败" in result["response"]
 
-    def test_order_text_fallback_to_ai_text(self):
+    def test_order_text_prefers_original_message(self):
+        """#2067：订单文本必须优先取用户原话，而不是助手回复。"""
         svc = _make_svc()
         with patch(
             "app.application.facades.tools_facade._parse_order_text",
@@ -2140,14 +1934,20 @@ class TestExecuteShipmentGenerate:
                     "success": True,
                     "doc_name": "d",
                 }
-                svc._execute_shipment_generate({"data": {}}, {}, {"text": "ai text"})
-        parse_arg = mock_parse.call_args[0][0]
-        assert parse_arg == "ai text"
+                svc._execute_shipment_generate(
+                    {"data": {}}, {}, {"text": "ai text"}, "用户原话 5桶"
+                )
+        assert mock_parse.call_args[0][0] == "用户原话 5桶"
 
-
-# ---------------------------------------------------------------------------
-# _execute_shipments_query
-# ---------------------------------------------------------------------------
+    def test_assistant_text_is_not_used_as_order_text(self):
+        """#2067：无用户原话时不得把助手回复当作订单文本解析。"""
+        svc = _make_svc()
+        with patch(
+            "app.application.facades.tools_facade._parse_order_text",
+            return_value={"success": False, "message": "x"},
+        ) as mock_parse:
+            svc._execute_shipment_generate({"data": {}}, {}, {"text": "ai text"})
+        assert mock_parse.call_args[0][0] == ""
 
 
 class TestExecuteShipmentsQuery:
@@ -2217,11 +2017,6 @@ class TestExecuteShipmentsQuery:
         assert "暂无" in result["response"]
 
 
-# ---------------------------------------------------------------------------
-# _handle_tool_call
-# ---------------------------------------------------------------------------
-
-
 class TestHandleToolCall:
     """_handle_tool_call 补充分支测试。"""
 
@@ -2259,11 +2054,6 @@ class TestHandleToolCall:
             "msg",
         )
         assert result["normal"] is True
-
-
-# ---------------------------------------------------------------------------
-# _build_response
-# ---------------------------------------------------------------------------
 
 
 class TestBuildResponse:
@@ -2316,11 +2106,6 @@ class TestBuildResponse:
         assert "autoAction" not in result
 
 
-# ---------------------------------------------------------------------------
-# _persist_chat_turn
-# ---------------------------------------------------------------------------
-
-
 class TestPersistChatTurn:
     """_persist_chat_turn 补充分支测试。"""
 
@@ -2336,7 +2121,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "sess1"},
+                {"session_id": "sess1", "local_user_id": 17},
                 {
                     "success": True,
                     "response": "reply",
@@ -2352,7 +2137,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"conversation_id": "conv1"},
+                {"conversation_id": "conv1", "local_user_id": 17},
                 {
                     "success": True,
                     "data": {"data": {"tool_key": "products"}},
@@ -2368,7 +2153,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "s1"},
+                {"session_id": "s1", "local_user_id": 17},
                 {
                     "success": True,
                     "data": {"data": {"intent": "excel_import_to_db", "result": {"imported": 5}}},
@@ -2385,7 +2170,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "s1"},
+                {"session_id": "s1", "local_user_id": 17},
                 {
                     "success": True,
                     "data": {"data": {"document": {"doc_name": "test.docx"}}},
@@ -2394,11 +2179,6 @@ class TestPersistChatTurn:
         call_args = mock_conv.save_message.call_args_list
         meta = call_args[0][1]["metadata"]
         assert "test.docx" in meta
-
-
-# ---------------------------------------------------------------------------
-# _inject_excel_vector_context
-# ---------------------------------------------------------------------------
 
 
 class TestInjectExcelVectorContext:
@@ -2471,11 +2251,6 @@ class TestInjectExcelVectorContext:
         with patch.dict(sys.modules, {"app.application": None}):
             result = svc._inject_excel_vector_context("msg", ctx)
         assert result is ctx
-
-
-# ---------------------------------------------------------------------------
-# _resolve_unit_price_column
-# ---------------------------------------------------------------------------
 
 
 class TestResolveUnitPriceColumn:
@@ -2583,11 +2358,6 @@ class TestResolveUnitPriceColumn:
         assert result == ("", None)
 
 
-# ---------------------------------------------------------------------------
-# _merge_user_intent_for_price_resolution
-# ---------------------------------------------------------------------------
-
-
 class TestMergeUserIntentForPriceResolution:
     """_merge_user_intent_for_price_resolution 补充分支测试。"""
 
@@ -2680,11 +2450,6 @@ class TestMergeUserIntentForPriceResolution:
         assert len(result) <= 8000
 
 
-# ---------------------------------------------------------------------------
-# _price_column_buckets
-# ---------------------------------------------------------------------------
-
-
 class TestPriceColumnBuckets:
     """_price_column_buckets 补充分支测试。"""
 
@@ -2771,11 +2536,6 @@ class TestPriceColumnBuckets:
         assert len(generic) == 2
 
 
-# ---------------------------------------------------------------------------
-# _header_hint_column_roles
-# ---------------------------------------------------------------------------
-
-
 class TestHeaderHintColumnRoles:
     """_header_hint_column_roles 补充分支测试。"""
 
@@ -2839,11 +2599,6 @@ class TestHeaderHintColumnRoles:
         assert roles["product_name"] == ""
 
 
-# ---------------------------------------------------------------------------
-# _infer_excel_column_roles
-# ---------------------------------------------------------------------------
-
-
 class TestInferExcelColumnRoles:
     """_infer_excel_column_roles 补充分支测试。"""
 
@@ -2895,11 +2650,6 @@ class TestInferExcelColumnRoles:
         # Only one column, so only one role gets it
         assigned = [k for k, v in roles.items() if v]
         assert len(assigned) >= 1
-
-
-# ---------------------------------------------------------------------------
-# _fallback_excel_product_name_column / _fallback_excel_model_number_column
-# ---------------------------------------------------------------------------
 
 
 class TestFallbackExcelColumns:
@@ -2963,11 +2713,6 @@ class TestFallbackExcelColumns:
         records = [{"model": "M123B", "name": "product"}]
         result = svc._fallback_excel_model_number_column(records, set())
         assert result == "model"
-
-
-# ---------------------------------------------------------------------------
-# _extract_excel_import_records
-# ---------------------------------------------------------------------------
 
 
 class TestExtractExcelImportRecords:
@@ -3125,11 +2870,6 @@ class TestExtractExcelImportRecords:
             assert records[0]["unit_name"] == "ACME"
 
 
-# ---------------------------------------------------------------------------
-# _try_handle_dynamic_workflow
-# ---------------------------------------------------------------------------
-
-
 class TestTryHandleDynamicWorkflow:
     """_try_handle_dynamic_workflow 补充分支测试。"""
 
@@ -3235,9 +2975,166 @@ class TestTryHandleDynamicWorkflow:
         assert result is not None
         assert "调价" in result["response"] or "价格" in result["response"]
 
+    @pytest.mark.parametrize(
+        "customer,missing",
+        [
+            ("Mac验收客户-49B26CC9", False),
+            ("用户需提供", True),
+            ("需要用户提供", True),
+            ("请用户提供", True),
+        ],
+    )
+    @pytest.mark.parametrize("previous_customer", [None, "用户需提供"])
+    @pytest.mark.parametrize("profile", ["normal", "pro_default"])
+    def test_shipment_missing_inputs_resume_through_validation(
+        self, customer, missing, previous_customer, profile
+    ):
+        from app.application.workflow.clarification_node import needs_clarification
+        from app.application.workflow.planner import LLMWorkflowPlanner
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+        svc = _make_svc()
+        svc.workflow_engine.run = Mock(side_effect=AssertionError("must await approval"))
+        original = (
+            f"给客户「{previous_customer}」创建出货记录：产品验收商品，数量2箱，规格10kg，单价12.5元。"
+            if previous_customer
+            else "请创建一条出货记录。"
+        )
+        node = WorkflowNode(
+            node_id="ship",
+            tool_id="business_db" if previous_customer else "shipment_records",
+            action="write" if previous_customer else "create",
+            params={"entity": "shipment_records", "payload": {"unit_name": previous_customer}}
+            if previous_customer
+            else {},
+            risk="high",
+            idempotent=False,
+        )
+        svc._pending_workflows["u1"] = {
+            "kind": "clarification",
+            "plan": PlanGraph(plan_id="missing", intent="shipment_create", nodes=[node]),
+            "target_node_id": "ship",
+            "clarification": {"reason": "missing_required"},
+            "runtime_context": {"message": original},
+        }
+        planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+        svc.workflow_planner.plan.side_effect = lambda **kw: planner._fallback_plan(
+            "continued", kw["message"], kw["tool_registry"]
+        )
+        svc._open_clarification_gate = Mock(
+            side_effect=lambda **kw: {
+                "missing": bool(needs_clarification(kw["plan"], kw["tool_registry"]))
+            }
+        )
+        message = f"客户名称是「{customer}」，" + (
+            "其他出货参数沿用刚才提供的内容，需要人工审批后执行。"
+            if previous_customer
+            else "产品验收商品，数量2箱，规格10kg，单价12.5元，请创建这条出货记录并交人工审批。"
+        )
+        result = svc._try_handle_dynamic_workflow_after_excel(
+            "u1", message, "normal", {"tool_execution_profile": profile}, message, False
+        )
+        assert result == {"missing": missing}
+        payload = next(
+            n.params["payload"]
+            for n in svc._open_clarification_gate.call_args.kwargs["plan"].nodes
+            if n.tool_id == "business_db"
+        )
+        assert payload["unit_name"] == customer
+        assert payload["products"][0]["product_name"] == "验收商品"
+        assert original in svc.workflow_planner.plan.call_args.kwargs["message"]
+        assert "u1" not in svc._pending_workflows
+        svc.workflow_engine.run.assert_not_called()
+        svc.approval_service.create_approval_request.assert_not_called()
+
+    @pytest.mark.parametrize("complete", [False, True])
+    def test_sales_missing_inputs_replan_before_approval(self, complete):
+        from app.application.workflow.clarification_node import needs_clarification
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+        svc = _make_svc()
+        original = "请创建销售订单，必须先人工审批。"
+        node = WorkflowNode(
+            node_id="sale",
+            tool_id="sales",
+            action="create_order",
+            params={},
+            risk="high",
+            idempotent=False,
+        )
+        svc._pending_workflows["u1"] = {
+            "kind": "clarification",
+            "plan": PlanGraph(plan_id="missing-sale", intent="sales_create_order", nodes=[node]),
+            "target_node_id": "sale",
+            "clarification": {"reason": "missing_required"},
+            "runtime_context": {"message": original},
+        }
+        params = {
+            "customer_name": "Mac验收客户",
+            "items": [{"product_id": 1, "quantity": 2, "unit_price": 9.9}],
+        }
+        if not complete:
+            params.pop("items")
+        svc.workflow_planner.plan.return_value = PlanGraph(
+            plan_id="continued-sale",
+            intent="sales_create_order",
+            nodes=[
+                WorkflowNode(
+                    node_id="sale",
+                    tool_id="sales",
+                    action="create_order",
+                    params=params,
+                    risk="high",
+                    idempotent=False,
+                )
+            ],
+        )
+        svc._open_clarification_gate = Mock(
+            side_effect=lambda **kw: {
+                "missing": bool(needs_clarification(kw["plan"], kw["tool_registry"]))
+            }
+        )
+        message = "客户名称 Mac验收客户，产品ID 1，数量2，单价9.90元，先人工审批。"
+        result = svc._try_handle_dynamic_workflow_after_excel(
+            "u1", message, "normal", {"tool_execution_profile": "normal"}, message, False
+        )
+        assert result == {"missing": not complete}
+        assert original in svc.workflow_planner.plan.call_args.kwargs["message"]
+        assert message in svc.workflow_planner.plan.call_args.kwargs["message"]
+        assert "u1" not in svc._pending_workflows
+        svc.workflow_engine.run.assert_not_called()
+        svc.approval_service.create_approval_request.assert_not_called()
+
+    @pytest.mark.parametrize("message", ["刚才修改的客户联系人是什么", "查询刚才那个客户"])
+    @pytest.mark.parametrize("target", [None, {"entity": "customers", "id": 42}])
+    def test_recent_record_followup_uses_only_session_target(self, message, target):
+        svc = _make_svc()
+        svc.workflow_planner.plan.return_value = None
+        with patch(
+            "app.domain.shared_services.tools_workflow_registered.get_recent_business_db_target",
+            return_value=target,
+        ) as recent:
+            result = svc._try_handle_dynamic_workflow_after_excel(
+                "owner-session",
+                message,
+                "pro",
+                {"tool_execution_profile": "pro_default"},
+                message,
+                False,
+            )
+        recent.assert_called_once_with("owner-session")
+        if target is None:
+            assert result["data"]["data"]["reason"] == "missing_recent_database_target"
+            svc.workflow_planner.plan.assert_not_called()
+        else:
+            assert (
+                svc.workflow_planner.plan.call_args.kwargs["message"]
+                == f"{message}；数据库客户 ID: 42"
+            )
+
     def test_pending_workflow_confirm(self):
         svc = _make_svc()
-        plan = _make_plan()
+        plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"message": "hello"},
@@ -3263,7 +3160,7 @@ class TestTryHandleDynamicWorkflow:
 
     def test_pending_workflow_cancel(self):
         svc = _make_svc()
-        plan = _make_plan()
+        plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"tenant_id": "42", "local_user_id": "7"},
@@ -3277,7 +3174,7 @@ class TestTryHandleDynamicWorkflow:
 
     def test_pending_workflow_confirm_with_agent_run(self):
         svc = _make_svc()
-        plan = _make_plan()
+        plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
             "runtime_context": {"message": "hello"},
@@ -3297,6 +3194,10 @@ class TestTryHandleDynamicWorkflow:
             ):
                 result = svc._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result["from_agent"] is True
+        mock_inst.continue_run.assert_called_once_with(
+            "run_1", approved_by="u1", runtime_context={"message": "hello"}
+        )
+        assert "u1" not in svc._pending_workflows
 
     def test_pending_workflow_confirm_with_approval(self):
         svc = _make_svc()
@@ -3380,11 +3281,6 @@ class TestTryHandleDynamicWorkflow:
                     {},
                 )
         assert result["imported"] is True
-
-
-# ---------------------------------------------------------------------------
-# _execute_products_query
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteProductsQuery:
@@ -3478,11 +3374,6 @@ class TestExecuteProductsQuery:
         assert "未找到" in result["response"]
 
 
-# ---------------------------------------------------------------------------
-# _execute_customers_query
-# ---------------------------------------------------------------------------
-
-
 class TestExecuteCustomersQuery:
     """_execute_customers_query 补充分支测试。"""
 
@@ -3517,11 +3408,6 @@ class TestExecuteCustomersQuery:
         assert "查询客户失败" in result["response"]
 
 
-# ---------------------------------------------------------------------------
-# _execute_normal_mode_tools
-# ---------------------------------------------------------------------------
-
-
 class TestExecuteNormalModeTools:
     """_execute_normal_mode_tools 补充分支测试。"""
 
@@ -3549,11 +3435,6 @@ class TestExecuteNormalModeTools:
         assert result["toolCall"]["tool_id"] == "unknown"
         assert result["toolCall"]["params"]["p"] == "v"
         assert result["toolCall"]["params"]["extra"] == "val"
-
-
-# ---------------------------------------------------------------------------
-# _handle_confirmation_flow
-# ---------------------------------------------------------------------------
 
 
 class TestHandleConfirmationFlow:
@@ -3628,11 +3509,6 @@ class TestHandleConfirmationFlow:
         svc.ai_service.set_pending_confirmation.assert_called_once()
         call_args = svc.ai_service.set_pending_confirmation.call_args[0][1]
         assert call_args["params"]["unit_name"] == "Beta"
-
-
-# ---------------------------------------------------------------------------
-# _skip_pro_excel_deterministic_import (补充边界)
-# ---------------------------------------------------------------------------
 
 
 class TestSkipProExcelDeterministicImportEdge:

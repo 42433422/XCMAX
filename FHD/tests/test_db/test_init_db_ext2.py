@@ -549,7 +549,7 @@ class TestEnsureUserPreferencesBootstrapDeep:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", return_value=mock_insp),
-            patch("app.db.base.Base.metadata.create_all") as mock_create,
+            patch("app.db.db_base.Base.metadata.create_all") as mock_create,
         ):
             ensure_user_preferences_bootstrap(None)
         mock_create.assert_called_once()
@@ -559,7 +559,7 @@ class TestEnsureUserPreferencesBootstrapDeep:
 
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=None),
-            patch("app.db.base.Base.metadata.create_all") as mock_create,
+            patch("app.db.db_base.Base.metadata.create_all") as mock_create,
         ):
             ensure_user_preferences_bootstrap(None)
         # No engine resolved -> early return before any table creation
@@ -576,7 +576,7 @@ class TestEnsureUserPreferencesBootstrapDeep:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", return_value=mock_insp),
-            patch("app.db.base.Base.metadata.create_all") as mock_create,
+            patch("app.db.db_base.Base.metadata.create_all") as mock_create,
         ):
             ensure_user_preferences_bootstrap(mock_engine)
         # table absent -> create_all invoked for UserPreference table
@@ -593,7 +593,7 @@ class TestEnsureUserPreferencesBootstrapDeep:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", return_value=mock_insp),
-            patch("app.db.base.Base.metadata.create_all") as mock_create,
+            patch("app.db.db_base.Base.metadata.create_all") as mock_create,
         ):
             ensure_user_preferences_bootstrap(mock_engine)
         # table already present -> no create_all
@@ -607,7 +607,7 @@ class TestEnsureUserPreferencesBootstrapDeep:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
-            patch("app.db.base.Base.metadata.create_all") as mock_create,
+            patch("app.db.db_base.Base.metadata.create_all") as mock_create,
         ):
             # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise
             ensure_user_preferences_bootstrap(None, swallow_errors=True)
@@ -1137,7 +1137,7 @@ class TestEnsureSqliteInventoryBootstrapCreatesTables:
         assert "financial_transactions" in tables
 
     def test_backfills_summary_tables_when_inventory_tables_already_exist(self):
-        from app.db.base import Base
+        from app.db.db_base import Base
         from app.db.init_db import ensure_sqlite_inventory_bootstrap
         from app.db.models.inventory import Warehouse
 
@@ -1165,7 +1165,7 @@ class TestEnsureSqliteInventoryBootstrapCreatesTables:
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
             patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
-            patch("app.db.base.Base.metadata.create_all") as mock_create,
+            patch("app.db.db_base.Base.metadata.create_all") as mock_create,
         ):
             # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise
             ensure_sqlite_inventory_bootstrap(None, swallow_errors=True)
@@ -1194,7 +1194,7 @@ class TestEnsureSqliteAuthBootstrapCreatesTables:
 
         engine = create_engine("sqlite:///:memory:")
         # Pre-create users and sessions tables
-        from app.db.base import Base
+        from app.db.db_base import Base
         from app.db.models.user import Session, User
 
         Base.metadata.create_all(

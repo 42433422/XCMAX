@@ -1,0 +1,10 @@
+feature=erp-label
+at=2026-09-29T11:07:18.193Z
+route=/label-editor
+landed=/label-editor
+title=标签编辑器 - XCAGI
+heading=模板编辑器
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 模板编辑器 SUNBIRD 副窗 ◈ 工作区 标签模板编辑器 上传识别 返回 保存新模板 模板名称 保存模板后，可在标签输出与打印页选择业务产品，生成标签 PDF 并核对后打印。 缩放： 100% 网格线 合并单元格 字段列表 添加字段 暂无字段 上传标签图片自动识别或手动添加 小C助理

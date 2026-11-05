@@ -1,0 +1,43 @@
+{
+  "step": "shipment_records_via_ui",
+  "actions": [
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-business/ui-16-records.png",
+      "bytes": 352812
+    },
+    {
+      "select_unit": {
+        "ok": true,
+        "value": "UI客户-0921",
+        "text": "UI客户-0921"
+      }
+    },
+    {
+      "click": "查看记录",
+      "label": "查看记录",
+      "rect": {
+        "x": 1184.9765625,
+        "y": 94,
+        "w": 87.328125,
+        "h": 34,
+        "text": "查看记录"
+      }
+    },
+    {
+      "state": {
+        "url": "http://127.0.0.1:17500/shipment-records",
+        "title": "业务记录 - XCAGI",
+        "h1": "出货记录管理",
+        "dialogs": []
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-business/ui-16b-records-rows.png",
+      "bytes": 339105
+    }
+  ],
+  "verdict": "PASS",
+  "rows": [
+    "1UI客户-0921UI验收商品-0921UI-0921-A60024253.52100未打印2026-09-21T18:44:56.005230编辑删除"
+  ]
+}

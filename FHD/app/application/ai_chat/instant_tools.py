@@ -20,6 +20,7 @@ class AIChatInstantToolsMixin:
         parsed_params: dict[str, Any],
         ai_result: dict[str, Any],
         original_message: str = "",
+        runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """执行专业模式工具"""
         if tool_key == "products":
@@ -30,6 +31,7 @@ class AIChatInstantToolsMixin:
                 slots=slots,
                 parsed_params=parsed_params,
                 original_message=original_message,
+                runtime_context=runtime_context,
             )
         elif tool_key == "shipment_generate":
             unit_name = slots.get("unit_name") or parsed_params.get("unit_name", "")
@@ -115,10 +117,13 @@ class AIChatInstantToolsMixin:
         parsed_params: dict[str, Any],
         ai_result: dict[str, Any],
         result_data: dict[str, Any],
+        original_message: str = "",
     ) -> dict[str, Any]:
         """执行普通模式工具"""
         if tool_key == "shipment_generate":
-            return self._execute_shipment_generate(response_data, parsed_params, ai_result)
+            return self._execute_shipment_generate(
+                response_data, parsed_params, ai_result, original_message
+            )
         elif tool_key == "shipments":
             return self._execute_shipments_query(response_data)
         else:
@@ -230,6 +235,7 @@ class AIChatInstantToolsMixin:
         slots: dict[str, Any],
         parsed_params: dict[str, Any],
         original_message: str = "",
+        runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         text = str(original_message or "").strip()
         lower = text.lower()
@@ -265,7 +271,10 @@ class AIChatInstantToolsMixin:
                 created = execute_registered_workflow_tool(
                     tool_id="customers",
                     action="ensure_exists",
-                    params={"unit_name": unit_name},
+                    params={
+                        "unit_name": unit_name,
+                        "_runtime_context": dict(runtime_context or {}),
+                    },
                 )
                 if created.get("success"):
                     if created.get("created"):
@@ -275,6 +284,7 @@ class AIChatInstantToolsMixin:
                     response_data["data"]["data"] = created
                     return response_data
                 response_data["response"] = created.get("message", "处理单位失败")
+                response_data["data"]["data"] = created
                 return response_data
             except RECOVERABLE_ERRORS:
                 logger.exception("customers 添加意图执行失败")
@@ -379,13 +389,21 @@ class AIChatInstantToolsMixin:
         response_data: dict[str, Any],
         parsed_params: dict[str, Any],
         ai_result: dict[str, Any],
+        original_message: str = "",
     ) -> dict[str, Any]:
         """执行发货单生成"""
         try:
             from app.application.facades.tools_facade import _parse_order_text
             from app.bootstrap import get_shipment_app_service
 
-            order_text = parsed_params.get("order_text") or ai_result.get("text", "")
+            # #2067：优先使用用户原始消息，绝不把助手自己的回复（如「已识别订单，
+            # 正在生成发货单…」）当作订单文本来解析，否则会抽出垃圾客户名。
+            order_text = (
+                original_message
+                or parsed_params.get("order_text")
+                or parsed_params.get("raw_text")
+                or ""
+            )
             parsed = _parse_order_text(order_text)
 
             if parsed.get("success"):
@@ -407,6 +425,7 @@ class AIChatInstantToolsMixin:
                     raw_text=order_text,
                 )
                 response_data["data"]["data"] = {"document": doc_result}
+                response_data["success"] = bool(doc_result.get("success"))
 
                 if doc_result.get("success"):
                     doc_name = doc_result.get("doc_name") or ""
@@ -416,6 +435,7 @@ class AIChatInstantToolsMixin:
                 else:
                     response_data["response"] = doc_result.get("message", "生成发货单失败")
             else:
+                response_data["success"] = False
                 response_data["response"] = parsed.get("message", "订单解析失败")
         except RECOVERABLE_ERRORS:
             logger.exception("自动执行 shipment_generate 失败")

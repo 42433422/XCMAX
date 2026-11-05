@@ -1,0 +1,76 @@
+{
+  "node": 15,
+  "result": "PASS",
+  "issuedAt": "2026-10-15T22:55:16.946647+08:00",
+  "acceptanceType": "User personally gave explicit conditional acceptance; executed condition now satisfied",
+  "recipient": "User personally in the directly verified original human realtime message",
+  "recipientEnterprise": null,
+  "originalHumanStatement": "如果能正常下的话就说明可以了,然后我这边就通过了。如果没法正常下载,你再看核查什么问题就行",
+  "originalHumanSource": {
+    "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node15-user-conditional-acceptance-source.json",
+    "sha256": "02c6f7fa329a07d73e94012a06a11f43842a9dffba7cdac684f63fbf9e69e1d0",
+    "threadTitle": "第一个闭环联合核证",
+    "humanMessageId": "01a13ffe-0408-79e0-8e13-b4a49bc204f2",
+    "sourceTurnStartedAtUnix": 1792074961,
+    "coordinatorRecordedAtUTC": "2026-10-15T14:36:43Z",
+    "timestampBoundary": "read_thread provides source turn start, not a separate human message send timestamp; coordinator time is recorded observation time"
+  },
+  "condition": "All three actual published package files download normally and match approved complete sizes and SHA256",
+  "conditionSatisfied": true,
+  "conditionSatisfiedAt": "2026-10-15T22:49:47.363298+08:00",
+  "effectiveAcceptanceAt": "2026-10-15T22:49:47.363298+08:00",
+  "conditionEvidence": {
+    "file": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-server-distribution-final.json",
+    "sha256": "64c941c13e6b0e24855c8de17b3226f365c28034aff881e6423ecd58abbdb691"
+  },
+  "version": "1.0.0.6",
+  "artifacts": [
+    {
+      "version": "1.0.0.6",
+      "platform": "macArm64",
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "bytes": 568802820,
+      "sha256": "25c473c94ee0f7d41c83dd748a827417384cf160c15d172915440524f9eb9b7f",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:40:16.295848+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.dmg.json",
+      "originalReceiptSha256": "01ef4bd9c5768d500166a912356924cb44def40ab8662b0d450dd5d70eab4793"
+    },
+    {
+      "version": "1.0.0.6",
+      "platform": "macArm64",
+      "file": "XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "sourceSha": "c5e066acff7f50edf5f1e506abcca33372cc6033",
+      "buildRun": 38730362964,
+      "bytes": 528146028,
+      "sha256": "a4e06614b0a4473b0778af868a158ad6800849bfe0cc9a24ed0a8698cd994503",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-1.0.0.6-mac-arm64.zip",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:48:24.033622+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-public-download-XCAGI-Enterprise-1.0.0.6-mac-arm64.zip.json",
+      "originalReceiptSha256": "3b15b3808e300e7488a962b1c5aacb9e9a37d3f26c78e901dc8d9e6a5c040548"
+    },
+    {
+      "version": "1.0.0.6",
+      "platform": "windowsX64",
+      "file": "XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "sourceSha": "7102b713df1136ae83848eed5814a60ede66a355",
+      "buildRun": "local-windows-longpath-20261015-114026",
+      "bytes": 331819335,
+      "sha256": "9d7025e9367bb934868adb79be7a99bbb8dae728727aa7ace00c492c45f40100",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.6/enterprise/XCAGI-Enterprise-Setup-1.0.0.6-x64.exe",
+      "result": "PASS",
+      "downloadVerifiedAt": "2026-10-15T22:16:30.824973+08:00",
+      "originalReceipt": "/private/tmp/xcagi-mac-c5-20261015/evidence/node14-windows-public-download-verification.json",
+      "originalReceiptSha256": "d0ac509059959987ce3c6cb9a8063a68ca759f5aef14f4f75e8abc4750c9cc54"
+    }
+  ],
+  "scope": "Installation/update lifecycle handoff only. User authorized using agent-executed public download verification as acceptance basis.",
+  "userPersonallyDownloadedOrInstalledClaimed": false,
+  "independentExternalCustomerSignatureOrOperationClaimed": false,
+  "secondIdenticalConfirmationRequired": false,
+  "windowsSigningRequired": false
+}

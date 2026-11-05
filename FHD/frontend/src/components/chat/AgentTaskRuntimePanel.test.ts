@@ -1,6 +1,10 @@
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
 import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
+import agentRunsApi from '@/api/agentRuns'
+import { downloadBlob } from '@/utils'
+
+vi.mock('@/utils', () => ({ downloadBlob: vi.fn() }))
 
 const task = {
   id: 'agent_task_task-1',
@@ -27,6 +31,36 @@ describe('AgentTaskRuntimePanel', () => {
       props: { task: { ...task, ...overrides } },
       global: { mocks: { $t: (key: string) => key } },
     })
+
+  it('downloads an owned artifact and retains a retry action after failure', async () => {
+    const blob = new Blob(['spreadsheet'])
+    const download = vi
+      .spyOn(agentRunsApi, 'downloadArtifact')
+      .mockRejectedValueOnce(new Error('expired session'))
+      .mockResolvedValueOnce({ blob: async () => blob } as Response)
+    const wrapper = mountTask({
+      status: 'success',
+      payload: {
+        activeRunId: 'run-1',
+        artifacts: [
+          { artifact_id: 'xlsx-1', artifact_type: 'file', name: '销售报表.xlsx', uri: '/api/agent/runs/run-1/artifacts/xlsx-1' },
+          { artifact_id: 'foreign', artifact_type: 'file', name: 'foreign.xlsx', uri: '/api/agent/runs/other/artifacts/foreign' },
+        ],
+      },
+    })
+    const button = wrapper.get('.agent-artifact-downloads button')
+    expect(wrapper.findAll('.agent-artifact-downloads button')).toHaveLength(1)
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('下载失败')
+    expect(downloadBlob).not.toHaveBeenCalled()
+    await button.trigger('click')
+    await flushPromises()
+    expect(download).toHaveBeenLastCalledWith('run-1', 'xlsx-1')
+    expect(downloadBlob).toHaveBeenCalledWith(blob, '销售报表.xlsx')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    download.mockRestore()
+  })
 
   it('shows traceable runtime details and controls the exact task', async () => {
     const wrapper = mountTask()

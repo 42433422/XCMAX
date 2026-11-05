@@ -84,7 +84,7 @@ NeuroDomain 在 MODstore 中表示“自治业务域”。每个域应有清晰�
 | CatalogDomain      | `catalog_api.py`、`catalog_store.py`、`market_api.py`               | 公网目录、本地包索引、检索、购买入口     |
 | AuthoringDomain    | `authoring.py`、`mod_ai_scaffold.py`、`mod_scaffold_runner.py`      | Mod 制作、AI 脚手架、manifest 读写与校验 |
 | EmployeeDomain     | `employee_api.py`、`employee_runtime.py`、`employee_pack_export.py` | AI 员工配置、员工包导出、员工运行态      |
-| WorkflowDomain     | `workflow_api.py`、`workflow_engine.py`、`workflow_scheduler.py`    | 工作流图、沙盒运行、调度与变量           |
+| WorkflowDomain     | `workflow_api/`、`workflow_engine.py`、`workflow_scheduler.py`    | 工作流图、沙盒运行、调度与变量           |
 | PaymentDomain      | `payment_api.py`、`java_payment_service/.../PaymentController.java` | 下单、支付回调、订单状态                 |
 | WalletDomain       | `java_payment_service/.../WalletController.java`                    | 钱包余额、充值、交易记录                 |
 | EntitlementDomain  | `java_payment_service/.../EntitlementService.java`                  | 支付成功后的购买权益与套餐额度           |

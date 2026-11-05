@@ -1,0 +1,18 @@
+{
+ "g6_attendance_capabilities": {
+  "status": 200,
+  "body": "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/vite.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>XCAGI · 登录</title>\n    <!-- 与服务器 PostgreSQL 账号库一致：登录等 /api 请求走 Nginx 前缀（如 /f"
+ },
+ "g7_upload": {
+  "status": 405,
+  "body": "{\"success\":false,\"error_code\":\"http_405\",\"message\":\"Method Not Allowed\",\"path\":\"/api/templates/upload\"}"
+ },
+ "g7_next_number": {
+  "status": 200,
+  "body": "{\"success\":true,\"data\":{\"order_number\":\"26-09-00001A\",\"sequence\":1,\"year_month\":\"26-09\"}}"
+ },
+ "g7_generate": {
+  "status": 500,
+  "body": "{\"success\":false,\"message\":\"出货单操作失败\",\"doc_name\":null,\"file_path\":null,\"products_source\":\"request\",\"template_resolution\":{\"template_id\":null,\"template_name\":null,\"template_type\":null,\"source\":null,\"reason\":\"no_template_found\",\"path\":null,\"score\":null,\"error_code\":\"TEMPLATE_NOT_FOUND\",\"ok\":false},\"run_id\":\"run_48aafc5cfa3e49b9973a77f1e21c39a1\",\"agent_run_id\":\"run_48aafc5cfa3e49b9973a77f1e21c39a1\",\"agent_status\":\"failed\"}"
+ }
+}

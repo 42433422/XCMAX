@@ -1,0 +1,8 @@
+[14:13:55] feature=mods-host-mount platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-host-mount
+[14:14:08] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:14:11] case H1: passed - 宿主已装 Mod 注册表真实读取
+[14:14:13] case H2: passed - 后端声明的路由挂载清单真实读取
+[14:14:14] case H3: passed - Mod 加载根与状态真实读取
+[14:14:16] case H4: passed - 未签名扩展的运行时挂载被拒（负例/边界）
+[14:14:17] video: mods-host-mount-web-20260929-141355.webm (1895131 bytes)
+[14:14:17] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-host-mount/log/mods-host-mount-web-20260929-141355.log

@@ -9,13 +9,6 @@ from fastapi import APIRouter, Body, Query, Request
 
 logger = logging.getLogger(__name__)
 
-HOST_DOMAIN_PREFIXES = [
-    "/api/products",
-    "/api/customers",
-    "/api/orders",
-    "/api/shipment",
-]
-
 
 def _invoke(domain: str, action: str, **kwargs: Any):
     from app.mod_sdk.erp_domain_dispatch import invoke_erp_domain_handler
@@ -74,6 +67,11 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             unit=unit,
         )
 
+    from app.mod_sdk.host_services import products_export_docx, products_export_xlsx
+
+    router.add_api_route("/products/export.xlsx", products_export_xlsx, methods=["GET"])
+    router.add_api_route("/products/export.docx", products_export_docx, methods=["GET"])
+
     @router.get("/products/{product_id:int}")
     def mod_products_get(request: Request, product_id: int):
         return _invoke("products", "get", request=request, product_id=product_id)
@@ -107,6 +105,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return _invoke("products", "batch", body=body or {})
 
     # ── 客户（G2：domain_handlers）──────────────────────────────────
+    from app.mod_sdk.erp_customers_facade import customers_export
+
+    router.add_api_route("/customers/export", customers_export, methods=["GET"])
+
     @router.get("/customers/list")
     def mod_customers_list(
         request: Request,
@@ -159,11 +161,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     def mod_shipment_units():
         return _invoke("shipment", "records_units")
 
-    @router.get("/shipment/download/{filename:path}")
-    def mod_shipment_download(filename: str):
-        from app.mod_sdk.host_services import shipment_download
+    from app.mod_sdk.erp_domain_compat import register_tenant_shipment_routes
 
-        return shipment_download(filename)
+    register_tenant_shipment_routes(router)
 
     @router.get("/orders")
     def mod_orders_list(limit: int = Query(default=100, ge=1, le=5000)):
