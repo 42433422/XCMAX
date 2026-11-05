@@ -227,8 +227,10 @@ def normalize_reference_ids(
     review: dict | None = None,
 ) -> dict:
     """Fail closed on unknown IDs or primary evidence outside the proposed region."""
+    from app.application.reviewed_excel_partition import coerce_payload_document_labels
     from app.application.reviewed_excel_template import _validate_template_schema
 
+    data = coerce_payload_document_labels(data)
     if not _validate_template_schema(id_schema, data):
         raise ReviewedExcelError("模型证据编号不在本批白名单")
     if "documents" in id_schema["properties"]:

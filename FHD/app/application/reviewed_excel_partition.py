@@ -48,9 +48,36 @@ def normalize_document_labels(labels, allowed: frozenset[str] | None = None) -> 
 
 
 def coerce_payload_document_labels(payload: dict) -> dict:
-    """Repair freestyle region labels before schema / domain validation."""
+    """Repair freestyle region labels and flattened source ranges before validation."""
     if not isinstance(payload, dict):
         return payload
+    documents = payload.get("documents")
+    if isinstance(documents, list) and documents:
+        area_keys = ("sheet_name", "row_start", "row_end", "column_start", "column_end")
+        summary_reason = payload.get("reason")
+        coerced = []
+        for document in documents:
+            if (
+                isinstance(document, dict)
+                and "ranges" not in document
+                and all(key in document for key in area_keys)
+                and set(document) <= {*area_keys, "reason"}
+            ):
+                reason = document.get("reason") or summary_reason
+                coerced.append(
+                    {
+                        "ranges": [{key: document[key] for key in area_keys}],
+                        "reason": reason
+                        if isinstance(reason, str) and reason.strip()
+                        else "模型返回的源工作表分段",
+                    }
+                )
+            else:
+                coerced.append(document)
+        if set(payload) == {"documents", "reason"}:
+            payload = {"documents": coerced}
+        else:
+            payload = {**payload, "documents": coerced}
     for key in ("physical_regions", "regions"):
         regions = payload.get(key)
         if not isinstance(regions, list):
