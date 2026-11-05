@@ -1,5 +1,5 @@
 {
-  "lines": 2413654,
+  "lines": 2413275,
   "updated": "2026-11-05",
-  "note": "棘轮下调：移除交接材料与清理报告（计入口径净删 487，含 CHANGELOG +1）。相对 main 2414141。"
+  "note": "P1 nav reliability: add shared intent helpers; truncate retort absorption log history (git retains full log)"
 }

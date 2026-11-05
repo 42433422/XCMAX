@@ -72,10 +72,10 @@ export function clearAppNavIntentIfCurrent(intentId: number): void {
 
 export function classifyNavigationFailure(error: unknown): AppNavStatus | null {
   if (!isNavigationFailure(error)) return null
-  // duplicated: already at / navigating to the same location — not an error for UX
-  if (error.type === NavigationFailureType.duplicated) return 'duplicate'
-  if (error.type === NavigationFailureType.cancelled) return 'cancelled'
-  if (error.type === NavigationFailureType.aborted) return 'aborted'
+  // Prefer the typed overload: comparing enum members against ErrorTypes trips TS2367.
+  if (isNavigationFailure(error, NavigationFailureType.duplicated)) return 'duplicate'
+  if (isNavigationFailure(error, NavigationFailureType.cancelled)) return 'cancelled'
+  if (isNavigationFailure(error, NavigationFailureType.aborted)) return 'aborted'
   return 'unresolved'
 }
 

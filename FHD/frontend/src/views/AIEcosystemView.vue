@@ -97,9 +97,9 @@ const goShellPage = (name, query = {}) => {
   // Share the shell intent channel so a later sidebar/settings click can supersede this.
   void navigateFromSidebarKey(router, name, { source: 'ecosystem-card' }).then((applied) => {
     if (applied) {
-      if (hasQuery) {
-        void router.replace(modPath ? { path: modPath, query: q } : { name, query: q })
-      }
+      // Prefer planner mod path when enabled; otherwise attach query onto the named route.
+      if (modPath) void router.replace({ path: modPath, query: q })
+      else if (hasQuery) void router.replace({ name, query: q })
       return
     }
     // Named target unresolved (e.g. host route not registered): fall back to planner path / name.
