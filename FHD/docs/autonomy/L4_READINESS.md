@@ -28,5 +28,5 @@ bash FHD/scripts/deploy/check-staging-health.sh --ssh    # + CVM 本机 :5101
 | 缺口 | 落地 |
 |------|------|
 | 显式 callback | `FHD/scripts/autonomy/autonomy_callback.py`（`autonomy_callback` / `report_callback` / `deploy_callback`）；deploy 失败 freeze 经 callback 通知 ingest |
-| runtime↔source | `MODstore_deploy/scripts/sync-runtime-to-source.sh` + `install-sync-runtime-to-source-cron.sh` |
+| runtime↔source | 公开回写已移除；运行日志留在本机运行目录，不进入公开仓库。 |
 | 连接点 4 | ledger `implement-pack` → `gh workflow run fhd-ai-issue-implement.yml`；orchestrator 开 issue 时不再打 `ai-implement` 标签 |
