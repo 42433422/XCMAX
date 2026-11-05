@@ -181,9 +181,7 @@ def _windows_wrap_handle(handle: int, flags: int) -> int:
     descriptor: int | None = None
     accepted = False
     try:
-        descriptor = vars(msvcrt)["open_osfhandle"](
-            handle, flags | _windows_binary_flag()
-        )
+        descriptor = vars(msvcrt)["open_osfhandle"](handle, flags | _windows_binary_flag())
         if _windows_file_attributes(handle) & 0x400:
             raise ShipmentEtlPathError("output path contains a reparse point")
         accepted = True
@@ -339,9 +337,7 @@ def _windows_rename_relative(file_fd: int, parent_fd: int, target_name: str) -> 
     buffer = ctypes.create_string_buffer(size)
     info = ctypes.cast(buffer, ctypes.POINTER(FileRenameInfo)).contents
     info.ReplaceIfExists = 1
-    info.RootDirectory = wintypes.HANDLE(
-        vars(msvcrt)["get_osfhandle"](parent_fd)
-    )
+    info.RootDirectory = wintypes.HANDLE(vars(msvcrt)["get_osfhandle"](parent_fd))
     info.FileNameLength = len(encoded)
     ctypes.memmove(ctypes.addressof(info) + FileRenameInfo.FileName.offset, encoded, len(encoded))
     handle = wintypes.HANDLE(vars(msvcrt)["get_osfhandle"](file_fd))
