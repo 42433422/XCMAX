@@ -87,7 +87,7 @@ def test_grouping_contract_has_stable_template_across_model_fragments():
     assert fingerprints[0] == fingerprints[1]
     assert (
         fingerprints[0]["schema_template_sha256"]
-        == "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2"
+        == "2218f5c2d25cc91006ee83db14ec4bf9431c019641cb493034882fa2309eb137"
     )
 
 

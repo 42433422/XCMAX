@@ -345,7 +345,11 @@ def source_ranges_schema(sheets: list[dict]) -> dict:
         "required": ["documents"],
         "additionalProperties": False,
         "properties": {
-            "documents": {"type": "array", "minItems": 1, "maxItems": 100, "items": document}
+            "documents": {"type": "array", "minItems": 1, "maxItems": 100, "items": document},
+            # Some providers wrap the document list with one informational summary.
+            # It is never used for geometry; accepting it avoids turning a complete,
+            # otherwise valid answer into an opaque model-processing failure.
+            "reason": {"type": "string", "maxLength": 4000},
         },
     }
 
