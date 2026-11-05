@@ -276,9 +276,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                     synchronize_session=False,
                 )
                 executed = result.get("executed")
-                run.executed_rows = previous + int(
-                    eligible_count if executed is None else executed
-                )
+                run.executed_rows = previous + int(eligible_count if executed is None else executed)
                 run.receipt_json = dump_json(result.get("receipt") or {})
                 db.commit()
             else:
@@ -295,8 +293,8 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                     context,
                 )
             run = self._owned_run(db, run_id, owner_user_id)
-            rows_written = int(run.executed_rows or 0) + int(run.new_rows or 0) + int(
-                run.update_rows or 0
+            rows_written = (
+                int(run.executed_rows or 0) + int(run.new_rows or 0) + int(run.update_rows or 0)
             )
             # No exception is not the same as rows written — keep completed but flag empty.
             run.status = "completed"
