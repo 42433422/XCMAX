@@ -1,6 +1,7 @@
 """Extract model-grouped documents from a previously validated classification result."""
 
 import re
+from typing import Any, cast
 
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
@@ -79,7 +80,7 @@ def _model_region_for_fragment(known: dict, fragment: dict) -> dict:
             continue
         kc1, kr1, kc2, kr2 = bounded_range(region_range)
         if kc1 <= c1 and c2 <= kc2 and kr1 <= r1 and r2 <= kr2:
-            return region
+            return cast(dict[Any, Any], region)
     raise ReviewedExcelError("切后复核产生了模型区域之外的片段，不能保证保真提取")
 
 

@@ -1218,12 +1218,12 @@ class TestProcessChatEdge:
                 "app.application.ai_chat_app_service.AIChatApplicationService._persist_chat_turn",
             ),
             patch("asyncio.set_event_loop"),
+            patch(
+                "app.utils.async_runtime.run_coroutine_sync",
+                side_effect=ConnectionError("conn failed"),
+            ),
         ):
-            with patch("asyncio.new_event_loop") as mock_new_loop:
-                mock_loop = MagicMock()
-                mock_loop.run_until_complete.side_effect = ConnectionError("conn failed")
-                mock_new_loop.return_value = mock_loop
-                result = svc.process_chat("u1", "测试消息", None, None, None)
+            result = svc.process_chat("u1", "测试消息", None, None, None)
         assert "AI 服务连接失败" in result["message"]
 
     def test_timeout_error_returns_fallback(self):
@@ -1245,12 +1245,12 @@ class TestProcessChatEdge:
                 "app.application.ai_chat_app_service.AIChatApplicationService._persist_chat_turn",
             ),
             patch("asyncio.set_event_loop"),
+            patch(
+                "app.utils.async_runtime.run_coroutine_sync",
+                side_effect=TimeoutError("timed out"),
+            ),
         ):
-            with patch("asyncio.new_event_loop") as mock_new_loop:
-                mock_loop = MagicMock()
-                mock_loop.run_until_complete.side_effect = TimeoutError("timed out")
-                mock_new_loop.return_value = mock_loop
-                result = svc.process_chat("u1", "测试消息", None, None, None)
+            result = svc.process_chat("u1", "测试消息", None, None, None)
         assert "AI 服务响应超时" in result["message"]
 
     @pytest.mark.parametrize("error", ["API_KEY invalid", "connection refused", "unknown error"])
@@ -1273,12 +1273,12 @@ class TestProcessChatEdge:
                 "app.application.ai_chat_app_service.AIChatApplicationService._persist_chat_turn",
             ),
             patch("asyncio.set_event_loop"),
+            patch(
+                "app.utils.async_runtime.run_coroutine_sync",
+                side_effect=RuntimeError(error),
+            ),
         ):
-            with patch("asyncio.new_event_loop") as mock_new_loop:
-                mock_loop = MagicMock()
-                mock_loop.run_until_complete.side_effect = RuntimeError(error)
-                mock_new_loop.return_value = mock_loop
-                result = svc.process_chat("u1", "测试消息", None, None, None)
+            result = svc.process_chat("u1", "测试消息", None, None, None)
         assert "AI 服务暂时不可用" in result["message"]
 
     def test_workflow_result_returns_finalized(self):
@@ -1324,16 +1324,13 @@ class TestProcessChatEdge:
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._persist_chat_turn",
             ),
-            patch("asyncio.new_event_loop") as mock_new_loop,
             patch("asyncio.set_event_loop"),
+            patch("app.utils.async_runtime.run_coroutine_sync", return_value=ai_result),
             patch(
                 "app.application.ai_chat_app_service.AIChatApplicationService._build_response",
                 return_value={"success": True, "response": "ok"},
             ),
         ):
-            mock_loop = MagicMock()
-            mock_loop.run_until_complete.return_value = ai_result
-            mock_new_loop.return_value = mock_loop
             file_context = {"file_path": "/tmp/test.xlsx", "sheet_name": "Sheet1"}
             result = svc.process_chat("u1", "随便说点什么", {}, None, file_context)
         assert result["response"] == "ok"

@@ -282,6 +282,21 @@ export async function showDbRecoveryDialogIfNeeded(status: Record<string, unknow
  */
 export const BACKEND_STABLE_WINDOW_MS = 60_000
 
+/**
+ * 启动前等待端口释放。上一个实例可能刚收到退出信号但尚未完成 socket 关闭，
+ * 单次预检会把这段正常收尾误判成“端口被占用”。
+ */
+async function waitForPortAvailable(port: number, timeoutMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() <= deadline) {
+    if (await isPortAvailable(port)) {
+      return true
+    }
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  return false
+}
+
 export async function startBackend(): Promise<void> {
   if (migrationStopInProgress || backendStopAttempt || app.isQuitting) return
   if (desktopRuntime.backendProcess) {
@@ -301,13 +316,13 @@ export async function startBackend(): Promise<void> {
   }
 
   // 桌面模式不做端口避让：启动前预检 DEFAULT_PORT，被占则直接引导用户，避免后端
-  // 启动后立即退出再触发无意义的自动重启。
-  const portFree = await isPortAvailable(DEFAULT_PORT)
+  // 启动后立即退出再触发无意义的自动重启。先等待数秒，给上一实例的收尾让路。
+  const portFree = await waitForPortAvailable(DEFAULT_PORT)
   // The port probe yields; rollback/quit or another start may have won meanwhile.
   if (migrationStopInProgress || backendStopAttempt || app.isQuitting || desktopRuntime.backendProcess) return
   if (!portFree) {
     const hint = portOccupiedHint(DEFAULT_PORT)
-    writeBackendLog(`[error] port ${DEFAULT_PORT} occupied, abort backend spawn\n`)
+    writeBackendLog(`[error] port ${DEFAULT_PORT} occupied after retry, abort backend spawn\n`)
     showBackendErrorBox(`端口 ${DEFAULT_PORT} 已被占用`, hint)
     return
   }
@@ -331,6 +346,8 @@ export async function startBackend(): Promise<void> {
         process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC || '45',
       LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
       XCAGI_DESKTOP_FAST_START: '1',
+      // 后端父进程看门狗：Electron 崩溃/被强杀时后端自行退出，避免残留进程占住端口。
+      XCAGI_PARENT_PID: String(process.pid),
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
     }, app.isPackaged ? undefined : repoRoot(), app.isPackaged ? process.resourcesPath : undefined),

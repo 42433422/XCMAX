@@ -117,6 +117,7 @@ describe('packaged backend build identity resource handoff', () => {
     expect(options.env.XCAGI_DESKTOP_RESOURCES).toBe(resources)
     expect(options.env.XCAGI_DATA_DIR).toBe(state.userData)
     expect(options.env.XCAGI_DESKTOP_RESOURCES).not.toBe(state.userData)
+    expect(options.env.XCAGI_PARENT_PID).toBe(String(process.pid))
   })
 
   it('hands the same Resources to the actual migration spawn', async () => {
