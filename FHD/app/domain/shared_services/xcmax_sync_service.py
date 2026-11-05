@@ -308,7 +308,7 @@ def _apply_personnel(item: dict[str, Any]) -> None:
         conn.commit()
         conn.close()
     except RECOVERABLE_ERRORS as exc:
-        logger.warning("apply_personnel failed for %s: %s", name, exc)
+        logger.warning("apply_personnel failed: %s", exc)
 
 
 @register_entity_applier("department")

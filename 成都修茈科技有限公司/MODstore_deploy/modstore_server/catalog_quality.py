@@ -74,7 +74,7 @@ def resolve_employee_pack_dir(pkg_id: str) -> Optional[Path]:
         mod_dir = find_mod_dir_by_manifest_id(lib, pid)
         return mod_dir if mod_dir.is_dir() else None
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.debug("resolve_employee_pack_dir failed for %s: %s", pid, exc)
+        logger.debug("resolve_employee_pack_dir failed: %s", exc)
         return None
 
 

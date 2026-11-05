@@ -12,7 +12,12 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from modman.manifest_util import read_manifest, save_manifest_validated
+from modman.manifest_util import (
+    get_public_workflow_rows,
+    read_manifest,
+    save_manifest_validated,
+    set_public_workflow_rows,
+)
 from modstore_server import authoring_inspection
 from modstore_server.api.auth_deps import assert_user_owns_mod, require_user
 from modstore_server.api.dto import (
@@ -295,7 +300,7 @@ def api_attach_catalog_employee(
     data, err = read_manifest(d)
     if err or not data:
         raise HTTPException(400, err or "manifest 无效")
-    rows = data.get("workflow_employees")
+    rows = get_public_workflow_rows(data)
     if not isinstance(rows, list):
         rows = []
     for row in rows:
@@ -322,7 +327,7 @@ def api_attach_catalog_employee(
             "catalog_pkg_id": pkg_id,
         }
     )
-    data["workflow_employees"] = rows
+    set_public_workflow_rows(data, rows)
     save_err = save_manifest_validated(d, data)
     if save_err:
         raise HTTPException(400, save_err)

@@ -1378,9 +1378,7 @@ async def butler_corp_intake_fill(
     draft = _validate_intake_draft(parsed.get("draft"))
     if not draft:
         logger.warning(
-            "corp-intake-fill empty draft after parse (provider=%s model=%s text_len=%s)",
-            provider,
-            model,
+            "corp-intake-fill empty draft after parse (text_len=%s)",
             len(text),
         )
     return {"success": True, "reply": reply, "draft": draft}

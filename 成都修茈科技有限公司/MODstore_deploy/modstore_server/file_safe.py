@@ -44,6 +44,15 @@ def resolve_under_mod(mod_dir: Path, rel: str) -> Path:
     return candidate
 
 
+def path_under(root: Path, *parts: str) -> Path:
+    """Join ``parts`` below ``root``; reject results that resolve outside it."""
+    root_text = os.path.realpath(os.path.abspath(str(root)))
+    candidate = os.path.realpath(os.path.abspath(os.path.join(root_text, *parts)))
+    if not candidate.startswith(root_text.rstrip(os.sep) + os.sep):
+        raise ValueError("路径越界")
+    return Path(candidate)
+
+
 def read_text_file(path: Path) -> str:
     if not path.is_file():
         raise FileNotFoundError("不是文件或不存在")

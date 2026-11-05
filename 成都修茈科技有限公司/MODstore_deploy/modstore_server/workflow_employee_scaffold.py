@@ -15,7 +15,7 @@ from modman.manifest_util import (
     save_manifest_validated,
     set_public_workflow_rows,
 )
-from modstore_server.file_safe import write_text_file
+from modstore_server.file_safe import path_under, write_text_file
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -150,7 +150,7 @@ def run_workflow_employee_scaffold(
     merged_blueprint = False
 
     stub_pkg = _ensure_employee_stubs_pkg(mod_dir)
-    stub_path = stub_pkg / f"{safe_mod}.py"
+    stub_path = path_under(stub_pkg, f"{safe_mod}.py")
     if stub_path.is_file():
         raise ValueError(
             f"占位文件已存在: backend/employee_stubs/{safe_mod}.py（请换 id 或手动删除）"
