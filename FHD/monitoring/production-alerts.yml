@@ -1,0 +1,98 @@
+# Production alert rules loaded by prometheus.production.yml.  Selectors must
+# match the real scrape inventory (job/instance/environment/service labels);
+# tests/test_production_prometheus_config.py enforces that.
+groups:
+  - name: xcmax_production_scrape
+    rules:
+      - alert: XcmaxProductionTargetDown
+        expr: up{environment="production",job=~"fhd-api-stable|modstore-api-production"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} 生产抓取失败 ({{ $labels.instance }})"
+          description: "Prometheus 连续 2 分钟无法抓取 {{ $labels.job }}。"
+
+      - alert: XcmaxProductionTargetAbsent
+        expr: >-
+          absent(up{environment="production",job="fhd-api-stable",service="fhd",instance="127.0.0.1:5100"})
+          or absent(up{environment="production",job="modstore-api-production",service="modstore",instance="127.0.0.1:9999"})
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "生产抓取目标从 Prometheus 清单中消失"
+          description: "fhd-api-stable 或 modstore-api-production 的 up 序列缺失，检查 /opt/prometheus/config/prometheus.yml。"
+
+      - alert: XcmaxProductionScrapeCoverageBelow99
+        expr: avg_over_time(up{environment="production",job=~"fhd-api-stable|modstore-api-production"}[24h]) < 0.99
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} 近 24h 抓取覆盖率 {{ $value | humanizePercentage }} < 99%"
+          description: "L4-18 门槛被击穿，SLO 证据将判定为不可采信。"
+
+  - name: xcmax_production_slo
+    rules:
+      - alert: XcmaxApiErrorBudgetFastBurn
+        # 14.4x burn of the 99.9% availability budget (SLO-API-01/03).
+        expr: >-
+          (sum(rate(api_requests_total{environment="production",status=~"5.."}[5m])) or vector(0))
+          / (sum(rate(api_requests_total{environment="production"}[5m])) > 0) > 0.0144
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "生产 5xx 比例 {{ $value | humanizePercentage }}，错误预算快速燃烧"
+          description: "SLO-API-01/03 目标 5xx < 0.1%。"
+
+      - alert: XcmaxLoginP95High
+        expr: >-
+          histogram_quantile(0.95, sum by (le) (rate(api_request_duration_seconds_bucket{environment="production",endpoint="/api/auth/login"}[15m]))) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "登录 P95 {{ $value | humanizeDuration }} 超过 500ms (SLO-API-02)"
+
+      - alert: XcmaxChatFirstByteP95High
+        expr: >-
+          histogram_quantile(0.95, sum by (le) (rate(chat_stream_first_byte_seconds_bucket{environment="production"}[15m]))) > 1.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI 首包 P95 {{ $value | humanizeDuration }} 超过 1.5s (SLO-AI-01)"
+
+      - alert: XcmaxNeurobusDeliveryLow
+        expr: >-
+          1 - (((sum(rate(neurobus_events_dead_lettered_total{environment="production"}[1h])) or vector(0))
+          + (sum(rate(neurobus_events_lost_total{environment="production"}[1h])) or vector(0)))
+          / (sum(rate(neurobus_events_published_total{environment="production"}[1h])) > 0)) < 0.9995
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NeuroBus 投递率 {{ $value | humanizePercentage }} 低于 99.95% (SLO-BUS-01)"
+
+      - alert: XcmaxModInstallFailureRateHigh
+        expr: >-
+          (sum(increase(mod_install_total{environment="production",device_scope="external_customer",status="error"}[1h])) or vector(0))
+          / (sum(increase(mod_install_total{environment="production",device_scope="external_customer"}[1h])) > 0) > 0.01
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "外部客户 Mod 安装失败率 {{ $value | humanizePercentage }} 超过 1% (SLO-BIZ-05)"
+
+  - name: xcmax_alert_drill
+    rules:
+      - alert: XcmaxControlledAlertDrill
+        expr: up{job="alert-drill",environment="drill"} == 0
+        for: 1m
+        labels:
+          severity: drill
+        annotations:
+          summary: "受控告警演练（非真实故障）drill_id={{ $labels.drill_id }}"
+          description: "由 run_alert_drill.sh 注入的不可达抓取目标；演练结束后自动恢复。"
