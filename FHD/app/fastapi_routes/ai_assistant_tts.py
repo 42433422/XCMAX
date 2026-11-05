@@ -150,5 +150,3 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
             body=payload,
         )
         return JSONResponse(traced, status_code=503)
-
-

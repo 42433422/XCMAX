@@ -1,5 +1,5 @@
 {
-  "lines": 2414124,
+  "lines": 2414127,
   "updated": "2026-11-05",
-  "note": "CI 修复：Edge 语音边界改用 BOUNDARY_ERRORS，读重试只覆盖传输失败/超时/5xx，离线语音失败不再静默改走系统朗读，并让登录、标签、打印测试覆盖这一次重试。用户要求合入 main，不删无关代码凑数。"
+  "note": "CI 修复：Edge 语音边界改用 BOUNDARY_ERRORS，读重试只覆盖传输失败/超时/5xx，离线语音失败不再静默改走系统朗读。另 +3 行：ruff format 把会话删除断言换行，并去掉 TTS 路由文件末尾空行，让 backend-quality 的 format check 通过。用户要求合入 main，不删无关代码凑数。"
 }

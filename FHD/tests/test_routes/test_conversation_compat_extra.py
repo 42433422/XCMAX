@@ -301,7 +301,12 @@ class TestConversationsDelete:
         assert resp.status_code == 200
         assert data["success"] is True
         assert data["deleted"] is True
-        assert client.get("/conversations/delete-me", params={"user_id": "u_delete"}).json()["messages"] == []
+        assert (
+            client.get("/conversations/delete-me", params={"user_id": "u_delete"}).json()[
+                "messages"
+            ]
+            == []
+        )
 
     def test_delete_missing_session_is_idempotent(self):
         client = TestClient(_make_app())
