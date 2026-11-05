@@ -756,8 +756,7 @@ class TestChatStreamTextExtraEdge:
                     "analyze", client=mock_client, model="test-model", max_iterations=1
                 )
             )
-        text_parts = [p for p in parts if isinstance(p, str)]
-        assert any("调用工具" in p for p in text_parts)
+        assert any(p.get("_planner_sse") == "tool_progress" and "调用工具" in p["text"] for p in parts if isinstance(p, dict))
 
     def test_finish_reason_stop_returns(self):
         chunk = _text_chunk("Hello", "stop")
@@ -782,8 +781,7 @@ class TestChatStreamTextExtraEdge:
                 )
             )
         # 应该包含 post_tool_round_hint
-        text_parts = [p for p in parts if isinstance(p, str)]
-        assert any("工具已返回" in p for p in text_parts)
+        assert any(p.get("_planner_sse") == "tool_progress" and "工具已返回" in p["text"] for p in parts if isinstance(p, dict))
 
     def test_slow_tool_wait_message_yielded(self):
         chunk = _tool_chunk("import_excel_to_database", "{}")
@@ -796,9 +794,8 @@ class TestChatStreamTextExtraEdge:
             parts = list(
                 chat_stream_text("import", client=mock_client, model="test-model", max_iterations=1)
             )
-        text_parts = [p for p in parts if isinstance(p, str)]
         # 应该包含 slow tool wait message
-        assert any("导入数据库" in p for p in text_parts)
+        assert any(p.get("_planner_sse") == "tool_progress" and "导入数据库" in p["text"] for p in parts if isinstance(p, dict))
 
     def test_with_system_prompt(self):
         chunk = _text_chunk("Hello", "stop")

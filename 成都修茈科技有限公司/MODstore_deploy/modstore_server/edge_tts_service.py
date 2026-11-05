@@ -7,9 +7,21 @@ import asyncio
 import hashlib
 import logging
 from collections import OrderedDict
+from importlib import import_module
 from typing import AsyncIterator, Optional
 
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from fastapi import HTTPException
+
+UPSTREAM_ERRORS: tuple[type[Exception], ...] = (OSError, TimeoutError)
+for module_name, error_name in (
+    ("aiohttp", "ClientError"),
+    ("httpx", "HTTPError"),
+    ("edge_tts.exceptions", "EdgeTTSException"),
+):
+    try:
+        UPSTREAM_ERRORS += (getattr(import_module(module_name), error_name),)
+    except ImportError:
+        pass
 
 _LOG = logging.getLogger(__name__)
 
@@ -29,6 +41,7 @@ _warm_lock = asyncio.Lock()
 _cache: OrderedDict[str, bytes] = OrderedDict()
 _CACHE_MAX = 48
 _CACHE_MAX_TEXT_LEN = 32
+_UPSTREAM_TIMEOUT_S = 60.0
 _sem = asyncio.Semaphore(4)
 
 
@@ -77,15 +90,23 @@ async def warm_voice(voice: str, rs: str) -> None:
         if key in _warmed_keys:
             return
         try:
-            async with _sem:
-                comm = _EDGE_TTS.Communicate(WARMUP_TEXT, voice=voice, rate=rs)
-                async for chunk in comm.stream():
-                    if chunk.get("type") == "audio" and chunk.get("data"):
-                        put_cache(WARMUP_TEXT, voice, rs, chunk["data"])
-                        break
-        except RECOVERABLE_ERRORS:
+            buf = bytearray()
+            async with asyncio.timeout(_UPSTREAM_TIMEOUT_S):
+                async with _sem:
+                    comm = _EDGE_TTS.Communicate(WARMUP_TEXT, voice=voice, rate=rs)
+                    async for chunk in comm.stream():
+                        if not isinstance(chunk, dict):
+                            return
+                        if chunk.get("type") == "audio":
+                            data = chunk.get("data")
+                            if not isinstance(data, bytes):
+                                return
+                            buf.extend(data)
+            if buf:
+                put_cache(WARMUP_TEXT, voice, rs, bytes(buf))
+                _warmed_keys.add(key)
+        except UPSTREAM_ERRORS:
             _LOG.debug("edge-tts warm failed voice=%s", voice, exc_info=True)
-        _warmed_keys.add(key)
 
 
 async def warm_defaults() -> None:
@@ -99,22 +120,44 @@ async def stream_audio(text: str, voice: str, rs: str) -> AsyncIterator[bytes]:
     if not t:
         return
 
-    await warm_voice(voice, rs)
+    deadline = asyncio.get_running_loop().time() + _UPSTREAM_TIMEOUT_S
+    await asyncio.wait_for(warm_voice(voice, rs), _UPSTREAM_TIMEOUT_S)
     cached = get_cached(t, voice, rs)
     if cached:
         yield cached
         return
 
     buf = bytearray()
+    acquired = False
     try:
-        async with _sem:
+        await asyncio.wait_for(
+            _sem.acquire(), max(0, deadline - asyncio.get_running_loop().time())
+        )
+        acquired = True
+        try:
             comm = _EDGE_TTS.Communicate(t, voice=voice, rate=rs)
-            async for chunk in comm.stream():
-                if chunk.get("type") == "audio" and chunk.get("data"):
-                    data = chunk["data"]
+            chunks = comm.stream()
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(
+                        anext(chunks), max(0, deadline - asyncio.get_running_loop().time())
+                    )
+                except StopAsyncIteration:
+                    break
+                if not isinstance(chunk, dict):
+                    raise HTTPException(502, "TTS 上游返回无效响应")
+                if chunk.get("type") == "audio":
+                    data = chunk.get("data")
+                    if not isinstance(data, bytes):
+                        raise HTTPException(502, "TTS 上游返回无效音频")
+                    if not data:
+                        continue
                     buf.extend(data)
                     yield data
-    except RECOVERABLE_ERRORS:
+        finally:
+            if acquired:
+                _sem.release()
+    except UPSTREAM_ERRORS:
         _LOG.warning("edge-tts stream failed text_len=%d voice=%s", len(t), voice, exc_info=True)
         raise
 

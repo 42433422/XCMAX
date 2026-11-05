@@ -300,6 +300,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
+    tool_progress: list[str] = []
     pre_run = None
     planner_runtime_context = {**(runtime_context or {}), "message": body.message}
     try:
@@ -377,6 +378,12 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 if not ev.get("ephemeral"):
                     reply_parts.append(text)
                 yield _facade()._sse_event_line(ev)
+            elif et == "tool_progress":
+                if ev.get("phase") not in {"started", "accepted"}:
+                    text = str(ev.get("text") or ev.get("label") or "").strip()
+                    if text and text not in tool_progress:
+                        tool_progress.append(text)
+                yield _facade()._sse_event_line(ev)
             elif et == "requires_token":
                 if pre_run is not None:
                     payload = {
@@ -441,6 +448,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
         if not thinking:
             thinking = marker_lines
+        thinking = "\n".join(dict.fromkeys([*tool_progress, *(thinking or "").splitlines()])) or None
         done_reply = {
             "response": visible_text,
             "thinking_steps": thinking,

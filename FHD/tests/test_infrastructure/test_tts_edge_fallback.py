@@ -436,6 +436,7 @@ class TestEdgeUpstreamFailure:
             "_run_edge_sync",
             lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
         )
+        monkeypatch.setattr(tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake()))
         first = ai_assistant_tts.compat_tts({"text": "first"})
         clock[0] += 20.0
         second = ai_assistant_tts.compat_tts({"text": "second"})
@@ -446,6 +447,7 @@ class TestEdgeUpstreamFailure:
     @pytest.mark.parametrize(
         "cooldown, expected",
         [("30", "30"), ("60", "60"), ("30.5", "31"), ("invalid", "300")],
+        "cooldown, expected", [("30", "30"), ("60", "60"), ("30.5", "31"), ("invalid", "300")]
     )
     def test_tts_route_retry_after_matches_configured_cooldown(
         self, monkeypatch, cooldown, expected
@@ -464,6 +466,7 @@ class TestEdgeUpstreamFailure:
             "_run_edge_sync",
             lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
         )
+        monkeypatch.setattr(tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake()))
         monkeypatch.setattr(ai_assistant_tts, "_trace", lambda payload, **kwargs: payload)
 
         response = ai_assistant_tts.compat_tts({"text": "hello"})
@@ -487,7 +490,7 @@ class TestEdgeUpstreamFailure:
         with pytest.raises(tts.TtsUpstreamBlockedError, match="已暂停重试"):
             synthesize_to_data_uri(text="hi again")
 
-    def test_unknown_sdk_exception_becomes_runtime_error(self, monkeypatch) -> None:
+    def test_unknown_sdk_exception_propagates(self, monkeypatch) -> None:
         class WeirdSdkError(Exception):
             pass
 
@@ -495,7 +498,7 @@ class TestEdgeUpstreamFailure:
             raise WeirdSdkError("boom")
 
         monkeypatch.setattr(tts, "_synthesize_mp3_bytes", _weird)
-        with pytest.raises(RuntimeError, match="Edge TTS 调用失败：WeirdSdkError"):
+        with pytest.raises(WeirdSdkError, match="boom"):
             synthesize_to_data_uri(text="hi")
 
 

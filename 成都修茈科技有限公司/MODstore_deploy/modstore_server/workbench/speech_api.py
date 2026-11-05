@@ -8,11 +8,11 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from fastapi import Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from modstore_server.api.deps import _get_current_user
+from modstore_server.edge_tts_service import UPSTREAM_ERRORS
 from modstore_server.models import User
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workbench.schemas import (
     WorkbenchEdgeTtsBody,
     WorkbenchUnifiedTtsBody,
@@ -49,8 +49,14 @@ async def _edge_tts_stream_chunks(text: str, voice: str, rate_str: str):
 
 def _edge_tts_http_exception(exc: Exception) -> HTTPException:
     """把 edge-tts 上游失败转为可诊断状态；不把含签名的上游 URL 回显给客户端。"""
-    status = getattr(exc, "status", None)
+    status = getattr(exc, "status", None) or getattr(
+        getattr(exc, "response", None), "status_code", None
+    )
     text = str(exc or "")
+    if isinstance(exc, TimeoutError) or type(exc).__name__.endswith("Timeout"):
+        return HTTPException(504, "TTS 上游请求超时")
+    if status in (429, 503, 504):
+        return HTTPException(status, "TTS 上游暂不可用")
     if status == 403 or ("Invalid response status" in text and "403" in text):
         return HTTPException(
             503,
@@ -58,6 +64,54 @@ def _edge_tts_http_exception(exc: Exception) -> HTTPException:
             "或配置 MiMo 语音或改用浏览器离线语音。",
         )
     return HTTPException(502, f"TTS 合成失败（{type(exc).__name__}）")
+
+
+async def _checked_edge_chunks(text: str, voice: str, rate: str):
+    chunks = _edge_tts_stream_chunks(text, voice, rate)
+    try:
+        async for chunk in chunks:
+            if not isinstance(chunk, bytes):
+                raise HTTPException(502, "TTS 上游返回无效音频")
+            if chunk:
+                return chunk, chunks
+    except UPSTREAM_ERRORS as exc:
+        await chunks.aclose()
+        raise _edge_tts_http_exception(exc) from exc
+    except BaseException:
+        await chunks.aclose()
+        raise
+    await chunks.aclose()
+    raise HTTPException(502, "TTS 上游未返回音频")
+
+
+async def _edge_response(body: WorkbenchEdgeTtsBody, ports: SpeechPorts):
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(422, "text 不能为空")
+    if ports.edge is None:
+        raise HTTPException(503, "服务端未安装 edge-tts")
+    voice = (body.voice or "").strip() or "zh-CN-XiaoxiaoNeural"
+    first, chunks = await _checked_edge_chunks(text, voice, _edge_tts_rate_str(body.rate))
+
+    async def stream():
+        try:
+            yield first
+            async for chunk in chunks:
+                if not isinstance(chunk, bytes):
+                    raise TypeError("TTS 上游返回无效音频")
+                if chunk:
+                    yield chunk
+        except UPSTREAM_ERRORS as exc:
+            _LOG.warning("edge-tts stream interrupted: %s", type(exc).__name__)
+            raise
+        finally:
+            await chunks.aclose()
+
+    return StreamingResponse(
+        stream(),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 async def workbench_unified_tts(
@@ -71,41 +125,41 @@ async def workbench_unified_tts(
 
     text = body.text.strip()
     if not text:
-        raise HTTPException(400, "text 不能为空")
-    try:
-        from modstore_server.mimo_tts_service import DEFAULT_VOICE as MIMO_VOICE
-        from modstore_server.mimo_tts_service import synthesize_mimo_tts_async
+        raise HTTPException(422, "text 不能为空")
+    from modstore_server.mimo_tts_service import DEFAULT_VOICE as MIMO_VOICE
+    from modstore_server.mimo_tts_service import synthesize_mimo_tts_async
 
-        mimo_voice = (body.voice or "").strip() or MIMO_VOICE
-        audio, err, meta = await synthesize_mimo_tts_async(text, voice=mimo_voice)
-        if audio and (not err):
-            mime = str(meta.get("mime") or "audio/wav")
-            return Response(
-                content=audio,
-                media_type=mime,
-                headers={
-                    "Cache-Control": "no-cache",
-                    "X-TTS-Provider": "mimo",
-                    "X-TTS-Voice": str(meta.get("voice") or mimo_voice),
-                },
-            )
-    except RECOVERABLE_ERRORS:
-        pass
+    mimo_voice = (body.voice or "").strip() or MIMO_VOICE
+    audio, err, meta = await synthesize_mimo_tts_async(text, voice=mimo_voice)
+    if audio and (not err):
+        mime = str(meta.get("mime") or "audio/wav")
+        return Response(
+            content=audio,
+            media_type=mime,
+            headers={
+                "Cache-Control": "no-cache",
+                "X-TTS-Provider": "mimo",
+                "X-TTS-Voice": str(meta.get("voice") or mimo_voice),
+            },
+        )
     if ports.edge is None:
+        status = meta.get("status")
         raise HTTPException(
-            503,
+            status if status in (429, 502, 503, 504) else 503,
             "MiMo 与 edge-tts 均不可用。请配置 MIMO_API_KEY 或 pip install edge-tts",
         )
-    edge_voice = (body.edge_voice or "zh-CN-XiaoxiaoNeural").strip()
+    edge_voice = (body.edge_voice or "").strip() or "zh-CN-XiaoxiaoNeural"
     rate_str = _edge_tts_rate_str(body.rate)
     try:
         chunks: list[bytes] = []
         async for data in _edge_tts_stream_chunks(text, edge_voice, rate_str):
+            if not isinstance(data, bytes):
+                raise HTTPException(502, "TTS 上游返回无效音频")
             if data:
                 chunks.append(data)
         mp3 = b"".join(chunks)
         if not mp3:
-            raise RuntimeError("edge-tts empty")
+            raise HTTPException(502, "TTS 上游未返回音频")
         return Response(
             content=mp3,
             media_type="audio/mpeg",
@@ -117,7 +171,7 @@ async def workbench_unified_tts(
         )
     except HTTPException:
         raise
-    except RECOVERABLE_ERRORS as exc:
+    except UPSTREAM_ERRORS as exc:
         raise _edge_tts_http_exception(exc) from exc
 
 
@@ -127,25 +181,23 @@ async def workbench_edge_tts(
     *,
     ports: SpeechPorts,
 ):
-    if ports.edge is None:
-        raise HTTPException(
-            503,
-            "服务端未安装 edge-tts。请在部署环境执行: pip install 'modstore[web]' 或 pip install edge-tts",
-        )
     text = body.text.strip()
     if not text:
-        raise HTTPException(400, "text 不能为空")
-    voice = (body.voice or "zh-CN-XiaoxiaoNeural").strip()
-    rate_str = _edge_tts_rate_str(body.rate)
+        raise HTTPException(422, "text 不能为空")
+    if ports.edge is None:
+        raise HTTPException(503, "服务端未安装 edge-tts")
+    voice = (body.voice or "").strip() or "zh-CN-XiaoxiaoNeural"
     try:
-        return StreamingResponse(
-            _edge_tts_stream_chunks(text, voice, rate_str),
-            media_type="audio/mpeg",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS as exc:
+        parts = []
+        async for chunk in _edge_tts_stream_chunks(text, voice, _edge_tts_rate_str(body.rate)):
+            if not isinstance(chunk, bytes):
+                raise HTTPException(502, "TTS 上游返回无效音频")
+            parts.append(chunk)
+        audio = b"".join(parts)
+        if not audio:
+            raise HTTPException(502, "TTS 上游未返回音频")
+        return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "no-cache"})
+    except UPSTREAM_ERRORS as exc:
         raise _edge_tts_http_exception(exc) from exc
 
 
@@ -155,23 +207,4 @@ async def workbench_edge_tts_stream(
     *,
     ports: SpeechPorts,
 ):
-    if ports.edge is None:
-        raise HTTPException(
-            503,
-            "服务端未安装 edge-tts。请在部署环境执行: pip install 'modstore[web]' 或 pip install edge-tts",
-        )
-    text = body.text.strip()
-    if not text:
-        raise HTTPException(400, "text 不能为空")
-    voice = (body.voice or "zh-CN-XiaoxiaoNeural").strip()
-    rate_str = _edge_tts_rate_str(body.rate)
-    try:
-        return StreamingResponse(
-            _edge_tts_stream_chunks(text, voice, rate_str),
-            media_type="audio/mpeg",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS as exc:
-        raise _edge_tts_http_exception(exc) from exc
+    return await _edge_response(body, ports)

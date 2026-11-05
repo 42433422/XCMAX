@@ -437,7 +437,7 @@ class TestAiAssistantBranches:
             patch("app.application.facades.tts_facade.synthesize_to_data_uri") as mock_synth,
         ):
             mock_synth.return_value = {
-                "audioBase64": "abc",
+                "audioBase64": "data:audio/mpeg;base64,YWJj",
                 "voice": "zh-CN-XiaoxiaoNeural",
                 "lang": "zh",
             }
@@ -447,14 +447,14 @@ class TestAiAssistantBranches:
                     "text": "你好",
                     "speakerId": "spk-1",
                     "voice": "zh-CN-XiaoxiaoNeural",
-                    "rate": 1.0,
-                    "pitch": 1.0,
+                    "rate": "+0%",
+                    "pitch": "+0Hz",
                     "lang": "ZH",
                 },
             )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["data"]["audioBase64"] == "abc"
+        assert body["data"]["audioBase64"] == "data:audio/mpeg;base64,YWJj"
         assert body["data"]["speakerId"] == "spk-1"
         # lang 应被 lower()
         call_kwargs = mock_synth.call_args.kwargs
