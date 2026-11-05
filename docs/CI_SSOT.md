@@ -350,6 +350,34 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 > Phase 1（供应链）起 cosign **keyless**（Sigstore + GitHub OIDC）签名**免私钥**，不新增长期密钥。生产部署不依赖 kubeconfig。
 
+## 超大源码增长审查
+
+800 行仍是提醒线，不是文件长度硬上限。沿用 `scripts/dev/source_governance.py`
+的全栈生产源码范围及测试/生成目录排除。PR 从真实 merge-base 到 head 的净行数
+增加，且最终超过 800 行时（含新增或首次越线），required `arch-fitness` 检查
+`scripts/dev/source_growth_review.py`。存量不增长、缩短、纯重命名不触发；从测试或
+未治理目录移入生产范围按新增处理。等行重写及用删行抵消新增不由本门禁判定质量。
+
+审查请求的唯一登记文件是 `config/source_growth_reviews.json`。先提交源码，再运行
+`python scripts/dev/source_growth_review.py --base origin/main --head HEAD --print-template`，
+将对应条目合入登记文件，补全后提交。每个路径绑定本次前后 blob、前后行数及原路径；
+新增文件的 base_file/base_blob 为 null。继续修改源码后必须重新核对这些值，不能用
+刷新 source_governance_baseline、提高总行数基线或借旧请求消除本次增长记录。
+
+每条请求填写：reason（为什么增加）、boundary（为什么仍属同一职责，或后续可按什么
+业务边界拆分）、validation（测试命令、结果与尚未验证部分）、follow_up（负责人及
+后续动作，确无拆分计划时写理由）、review_owner（GitHub @用户或 @组织/团队）。
+字段不能留空或仅放占位词。只校验本 PR 增长文件，历史请求不阻塞无关变更；
+不设置周期续期要求。后续增长仍须匹配对应的前后内容；相同变更记录不代表新 PR 已经获批。
+
+评审者应在 PR 中逐项确认这些说明、职责内聚与测试证据，拒绝只为凑行数的
+part/mixin 分片、动态 facade 回调和同职责搬家。PR 正文列出触发文件与净增量，
+标注审查待完成；review_owner 是请求负责人，不是已获批准的证明。CI 只验证记录的
+完整性和精确变更绑定，不认证审批、说明真实性或架构质量；GitHub 的实际评审和
+既有保护流程仍必须执行。本次不改 branch protection，不自动 approve/合并。
+既有路由数、重复源码、机械分片以及 FHD 已登记文件增长棘轮保持独立阻断；本登记
+不豁免它们。必要的既有基线调整仍须说明并经评审，不能删除无关代码凑净删除。
+
 ## Branch protection（main）
 
 > 合入顺序与**快车道**（小修复类 PR 可优先于主序列合入的条件、判定权与合入后流程）以仓根 [AGENTS.md](../AGENTS.md#合入顺序与快车道2026-10-19-0337-用户定) 为准；快车道不豁免下列 required checks。
