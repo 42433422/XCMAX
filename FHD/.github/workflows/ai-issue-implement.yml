@@ -24,6 +24,10 @@ on:
       issue_number:
         description: "Issue 编号（手动触发用）"
         required: true
+      control_task_id:
+        description: "恢复已有控制任务（从 Issue 回执复制），不重新派单"
+        required: false
+        default: ""
       target_branch:
         description: "修复 PR 的目标分支（自愈事件传入原失败分支）"
         required: false
@@ -90,11 +94,13 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ steps.resolve.outputs.issue_number }}
           BASE_BRANCH: ${{ github.event.inputs.target_branch || 'main' }}
+          CONTROL_TASK_ID: ${{ github.event.inputs.control_task_id || '' }}
         run: |
           python scripts/dev/para_issue_dispatch.py \
             --issue-number "$ISSUE_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --base-branch "$BASE_BRANCH" \
+            --control-task-id "$CONTROL_TASK_ID" \
             --tool cursor
 
       - name: Upload implementation log
