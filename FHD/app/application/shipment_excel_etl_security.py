@@ -152,7 +152,7 @@ def list_etl_directory_names(
 def _windows_os_error():
     import ctypes
 
-    return ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+    return ctypes.WinError(ctypes.get_last_error())
 
 
 def _windows_binary_flag() -> int:
