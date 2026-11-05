@@ -3,6 +3,23 @@
  * 覆盖：useAdminModHostView 主路径、loaderKey、load 成功/失败、无 loader 回退
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { effectScope } from 'vue'
+import { flushPromises } from '@vue/test-utils'
+
+const findModViewLoader = vi.hoisted(() => vi.fn())
+const markRouteChunkError = vi.hoisted(() => vi.fn())
+
+vi.mock('@/router/modViews', () => ({
+  findModViewLoader: (...args: unknown[]) => findModViewLoader(...args),
+}))
+
+vi.mock('@/utils/routeLoadState', async () => {
+  const actual = await vi.importActual<typeof import('@/utils/routeLoadState')>('@/utils/routeLoadState')
+  return {
+    ...actual,
+    markRouteChunkError: (...args: unknown[]) => markRouteChunkError(...args),
+  }
+})
 
 // Mock ModRequiredView to avoid importing the actual component
 vi.mock('@/components/ModRequiredView.vue', () => ({
@@ -18,6 +35,7 @@ vi.mock('@/components/ModRequiredView.vue', () => ({
 describe('useAdminModHostView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    findModViewLoader.mockReturnValue(undefined)
   })
 
   it('returns ModRequiredView when no loader exists for the given modId/viewFile', async () => {
@@ -44,6 +62,48 @@ describe('useAdminModHostView', () => {
     expect(View).toHaveProperty('value')
     // Default value should be truthy (ModRequiredView)
     expect(View.value).toBeTruthy()
+  })
+
+  it('installs a loaded physical view and ignores a result that arrives after dispose', async () => {
+    let resolveLoad!: (value: { default?: { name: string } | null }) => void
+    findModViewLoader.mockReturnValue(() => new Promise((resolve) => { resolveLoad = resolve }))
+    const { useAdminModHostView } = await import('./useAdminModHostView')
+    const scope = effectScope()
+    const hosted = scope.run(() => useAdminModHostView('erp', 'OrdersView', '订单'))
+    expect(hosted).toBeTruthy()
+    scope.stop()
+    resolveLoad({ default: { name: 'LateView' } })
+    await flushPromises()
+    expect(hosted!.View.value).toBeNull()
+  })
+
+  it('shows the loaded component, then the required view when loading fails', async () => {
+    const Loaded = { name: 'LoadedView' }
+    findModViewLoader.mockReturnValueOnce(async () => ({ default: Loaded }))
+    const { useAdminModHostView } = await import('./useAdminModHostView')
+    const loaded = useAdminModHostView('erp', 'OrdersView', '订单')
+    await flushPromises()
+    expect(loaded.View.value).toBe(Loaded)
+
+    findModViewLoader.mockReturnValueOnce(async () => ({ default: null }))
+    const empty = useAdminModHostView('erp', 'EmptyView', '空')
+    await flushPromises()
+    expect(empty.View.value).toBeNull()
+
+    findModViewLoader.mockReturnValueOnce(async () => {
+      throw new Error('Failed to fetch dynamically imported module')
+    })
+    const failed = useAdminModHostView('erp', 'MissingView', '缺失')
+    await flushPromises()
+    expect(failed.View.value).toMatchObject({ name: 'ModRequiredView' })
+    expect(markRouteChunkError).toHaveBeenCalled()
+
+    markRouteChunkError.mockClear()
+    findModViewLoader.mockReturnValueOnce(async () => { throw new Error('ordinary failure') })
+    const ordinary = useAdminModHostView('erp', 'BrokenView', '损坏')
+    await flushPromises()
+    expect(ordinary.View.value).toMatchObject({ name: 'ModRequiredView' })
+    expect(markRouteChunkError).not.toHaveBeenCalled()
   })
 
   it('loaderKey constructs correct path', async () => {

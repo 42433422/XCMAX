@@ -246,6 +246,16 @@ describe('TTS speech dispatch and playback', () => {
     expect(onError).not.toHaveBeenCalled()
     expect(onEnd).toHaveBeenCalledOnce(); expect(audio).toHaveLength(0)
   })
+  it('uses ready offline audio when the online request fails', async () => {
+    mocks.offline.isOfflineReady.mockReturnValue(true)
+    mocks.apiFetch.mockRejectedValue(new Error('upstream down'))
+    const onError = vi.fn()
+    await tts.speakText('在线失败', { onError })
+    expect(mocks.offline.synthesizeOffline).toHaveBeenCalledWith('在线失败')
+    expect(mocks.offline.playOfflinePcm).toHaveBeenCalledWith(new Float32Array([0, 0]), 16000)
+    expect(onError).not.toHaveBeenCalled()
+    expect(speech.speak).not.toHaveBeenCalled()
+  })
   it('shows an actionable browser permission error', async () => {
     playback = 'blocked'
     const onEnd = vi.fn(), onError = vi.fn()

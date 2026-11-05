@@ -33,6 +33,7 @@ describe('productSku', () => {
     const sku = await fetchProductSku(true)
     expect(sku).toBe('enterprise')
     expect(apiFetchMock).toHaveBeenCalledWith('/api/runtime/product-sku', { timeoutMs: 8000 })
+    await expect(fetchProductSku()).resolves.toBe('enterprise')
     expect(apiFetchMock).toHaveBeenCalledTimes(1)
   })
 
