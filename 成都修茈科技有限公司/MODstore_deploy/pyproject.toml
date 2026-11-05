@@ -153,8 +153,6 @@ packages = ["modstore_server", "modman"]
 # 动态产物与沙箱跑一次脚本目录：不参与类型门禁（与 coverage.omit 对齐）。
 exclude = [
     "(?x)^modstore_server/workbench_script_runs/",
-    # debt24 mechanical merges (runtime _facade().T annotations)
-    "(?x)^modstore_server/.+_merged[.]py$",
 ]
 # 全仓默认检查；以下为当前仍有大量推断债的遗留模块列表（可随时从列表移除以恢复检查）。
 # 重新生成：`python scripts/export_mypy_ignore_modules.py --toml-fragment`
@@ -173,6 +171,56 @@ module = [
 ]
 ignore_errors = false
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# Type debt that the debt24 `_merged` exclude used to hide; folding the fragments back exposed it.
+# Shrink-only: FHD/scripts/arch_fitness.py ratchets the count (mypy_ignored_modules).
+module = [
+    "modstore_server.admin_duty_graph_api",
+    "modstore_server.agent_butler_api",
+    "modstore_server.agent_butler_orchestrate",
+    "modstore_server.api.authoring",
+    "modstore_server.api.market_routes",
+    "modstore_server.craft_steps",
+    "modstore_server.customer_service_orchestrator",
+    "modstore_server.daily_digest",
+    "modstore_server.daily_digest_surface_audit",
+    "modstore_server.digest_vibe_prep",
+    "modstore_server.duty_workforce_burnin",
+    "modstore_server.employee_ai_pipeline",
+    "modstore_server.employee_ai_scaffold",
+    "modstore_server.employee_asset_pipeline",
+    "modstore_server.employee_autonomy_service",
+    "modstore_server.employee_bench",
+    "modstore_server.employee_executor",
+    "modstore_server.integrations.ops_action_handlers",
+    "modstore_server.llm_api",
+    "modstore_server.llm_catalog",
+    "modstore_server.llm_runtime_autopilot",
+    "modstore_server.market_auth_api",
+    "modstore_server.mod_employee_agent_runner",
+    "modstore_server.mod_scaffold_runner",
+    "modstore_server.openapi_connector_execution",
+    "modstore_server.para_delegate_handler",
+    "modstore_server.production_line_orchestrator",
+    "modstore_server.public_visualization_api",
+    "modstore_server.release_train",
+    "modstore_server.routes_registry",
+    "modstore_server.scripts.onboard_yuangon_employees",
+    "modstore_server.scripts.seed_csv_employees",
+    "modstore_server.scripts.seed_excel_employees",
+    "modstore_server.scripts.seed_word_employees",
+    "modstore_server.self_evolution_knowledge",
+    "modstore_server.self_evolution_metrics_job",
+    "modstore_server.telemetry_backlog_loop",
+    "modstore_server.time_rail_workflow",
+    "modstore_server.workbench_script_runner",
+    "modstore_server.workflow_engine",
+    "modstore_server.workflow_nl_graph",
+    "modstore_server.workflow_scheduler",
+    "modstore_server.xcmax_admin_api",
+]
+ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
@@ -213,51 +261,4 @@ module = [
 ]
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = [
-    "modstore_server.admin_duty_graph_api_merged",
-    "modstore_server.agent_butler_api_merged",
-    "modstore_server.api.app_factory_merged",
-    "modstore_server.api.authoring_merged",
-    "modstore_server.api.market_routes_merged",
-    "modstore_server.craft_steps_merged",
-    "modstore_server.customer_service_orchestrator_merged",
-    "modstore_server.daily_digest_merged",
-    "modstore_server.daily_digest_surface_audit_merged",
-    "modstore_server.employee_ai_pipeline_merged",
-    "modstore_server.employee_ai_scaffold_merged",
-    "modstore_server.employee_executor_merged",
-    "modstore_server.employee_executor_merged_mod1",
-    "modstore_server.employee_executor_merged_mod2",
-    "modstore_server.employee_asset_pipeline_merged",
-    "modstore_server.employee_asset_pipeline_merged_mod1",
-    "modstore_server.employee_asset_pipeline_merged_mod1_r1",
-    "modstore_server.employee_asset_pipeline_merged_mod1_r2",
-    "modstore_server.employee_asset_pipeline_merged_mod2",
-    "modstore_server.mod_scaffold_runner_merged",
-    "modstore_server.mod_scaffold_runner_merged_mod1",
-    "modstore_server.mod_scaffold_runner_merged_mod2",
-    "modstore_server.employee_autonomy_service_merged",
-    "modstore_server.employee_bench_merged",
-    "modstore_server.llm_api_merged",
-    "modstore_server.llm_catalog_merged",
-    "modstore_server.llm_runtime_autopilot_merged",
-    "modstore_server.market_auth_api_merged",
-    "modstore_server.market_catalog_browse_routes_merged",
-    "modstore_server.mod_ai_scaffold_merged",
-    "modstore_server.mod_employee_agent_runner_merged",
-    "modstore_server.openapi_connector_runtime_merged",
-    "modstore_server.para_delegate_handler_merged",
-    "modstore_server.production_line_orchestrator_merged",
-    "modstore_server.public_visualization_api_merged",
-    "modstore_server.release_train_merged",
-    "modstore_server.research_tools_merged",
-    "modstore_server.retort_clarification_operations_merged",
-    "modstore_server.routes_registry_merged",
-    "modstore_server.self_evolution_operations_merged",
-    "modstore_server.strategic_layer_api_merged",
-    "modstore_server.time_rail_workflow_merged",
-    "modstore_server.workflow_scheduler_merged",
-]
-ignore_errors = true
 

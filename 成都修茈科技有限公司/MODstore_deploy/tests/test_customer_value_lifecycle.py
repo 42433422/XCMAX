@@ -375,7 +375,6 @@ def test_enterprise_identity_is_single_assignment(tmp_path, monkeypatch) -> None
 
 def test_java_payment_identity_is_frozen_before_local_commit(tmp_path, monkeypatch) -> None:
     sf = _init_db(tmp_path, monkeypatch)
-    import modstore_server.api.market_enterprise_identity as routes
     import modstore_server.api.market_routes as market_routes
 
     with sf() as session:
@@ -424,7 +423,7 @@ def test_java_payment_identity_is_frozen_before_local_commit(tmp_path, monkeypat
     monkeypatch.setenv("PAYMENT_BACKEND", "java")
     monkeypatch.setenv("MODSTORE_INTERNAL_API_KEY", "internal-key")
     monkeypatch.setenv("JAVA_PAYMENT_SERVICE_URL", "http://payment-service:8080")
-    monkeypatch.setattr(routes.httpx, "post", post)
+    monkeypatch.setattr(market_routes.httpx, "post", post)
     result = market_routes.api_admin_verify_enterprise_identity(
         32,
         market_routes.EnterpriseIdentityDTO(

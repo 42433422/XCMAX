@@ -1499,7 +1499,6 @@ def test_ticket_number_collision_retry_is_bounded(client, monkeypatch, always_co
     from sqlalchemy.exc import IntegrityError
 
     from modstore_server import customer_service_orchestrator as facade
-    from modstore_server import customer_service_orchestrator_merged as implementation
     from modstore_server.models_cs import CustomerServiceSession
 
     user = _make_user("number_collision")
@@ -1509,7 +1508,7 @@ def test_ticket_number_collision_retry_is_bounded(client, monkeypatch, always_co
         calls.append(1)
         return SimpleNamespace(hex="collision" if always_collides or len(calls) < 3 else "unique")
 
-    monkeypatch.setattr(implementation, "uuid4", number)
+    monkeypatch.setattr(facade, "uuid4", number)
     with get_session_factory()() as db:
         session = CustomerServiceSession(user_id=user.id)
         db.add(session)

@@ -1,10 +1,8 @@
 # mypy: disable-error-code="arg-type, assignment"
-# ruff: noqa: F401 -- dynamic route modules import these facade exports
 """XC AGI 在线市场 API：目录浏览、搜索、评价、收藏、投诉。"""
 
 from __future__ import annotations
 
-import importlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -148,25 +146,6 @@ class CatalogComplaintReviewDTO(BaseModel):
     admin_note: str = Field(default="", max_length=4000)
     rank_delta: float = Field(default=0.0)
     delist_reason: str = Field(default="", max_length=1000)
-
-
-_BROWSE_EXPORTS = {
-    "api_market_facets",
-    "api_market_catalog",
-    "api_office_employee_pack_bundle",
-    "api_host_foundation_employee_pack_download",
-    "api_workflow_employee_pack_bundle",
-    "api_market_catalog_detail",
-    "_enrich_catalog_creator_profile",
-}
-
-
-def __getattr__(name: str):
-    """Lazy browse-route aliases — avoid import cycle with browse_routes_merged."""
-    if name in _BROWSE_EXPORTS:
-        mod = importlib.import_module("modstore_server.market_catalog_browse_routes")
-        return getattr(mod, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @router.get("/market/catalog/{item_id}/quality")
@@ -457,7 +436,426 @@ def api_admin_review_catalog_complaint(
         }
 
 
-# Browse list/detail/facets live in market_catalog_browse_routes_merged and
-# decorate this module's router at import time. Eager-load so create_app
-# include_router(market_catalog_api.router) mounts /market/catalog.
-importlib.import_module("modstore_server.market_catalog_browse_routes")
+@router.get("/market/facets")
+def api_market_facets():
+    from modstore_server.catalog_store import market_item_available
+
+    sf = get_session_factory()
+    with sf() as session:
+        pub_filters = _market_catalog_visibility_filters()
+        rows = [
+            row
+            for row in session.query(CatalogItem).filter(*pub_filters).all()
+            if market_item_available(row)
+        ]
+        industries = sorted({r.industry for r in rows if r.industry})
+        artifacts = sorted({r.artifact for r in rows if r.artifact})
+        security_levels = sorted({r.security_level for r in rows if r.security_level})
+        material_categories = sorted(
+            {
+                _normalize_material_category(r.material_category, r.artifact)
+                for r in rows
+                if _normalize_material_category(r.material_category, r.artifact)
+            }
+        )
+        license_scopes = sorted(
+            {
+                _normalize_license_scope(r.license_scope, 0)
+                for r in rows
+                if _normalize_license_scope(r.license_scope, 0)
+            }
+        )
+        compliance_statuses = sorted({r.compliance_status for r in rows if r.compliance_status})
+        result = {
+            "industries": industries,
+            "artifacts": artifacts,
+            "material_categories": material_categories,
+            "material_category_labels": MATERIAL_CATEGORY_LABELS,
+            "license_scopes": license_scopes,
+            "license_scope_labels": LICENSE_SCOPE_LABELS,
+            "security_levels": security_levels,
+            "compliance_statuses": compliance_statuses,
+        }
+    return result
+
+
+@router.get("/market/catalog")
+def api_market_catalog(
+    q: Optional[str] = Query(None),
+    artifact: Optional[str] = Query(None),
+    material_category: Optional[str] = Query(None),
+    industry: Optional[str] = Query(None),
+    license_scope: Optional[str] = Query(None),
+    security_level: Optional[str] = Query(None),
+    collection: Optional[str] = Query(
+        None,
+        description="主题集合：office_employee_pack=办公员工包（10 个表格类）；office_employee_aux_pack_1=办公员工附属包1",
+    ),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    user: Optional[User] = Depends(_optional_current_user),
+):
+    from modstore_server.catalog_store import market_item_available
+
+    sf = get_session_factory()
+    with sf() as session:
+        query = session.query(CatalogItem).filter(*_market_catalog_visibility_filters())
+        if q:
+            ql = q.lower()
+            query = query.filter(
+                CatalogItem.name.ilike(f"%{ql}%")
+                | CatalogItem.pkg_id.ilike(f"%{ql}%")
+                | CatalogItem.description.ilike(f"%{ql}%")
+            )
+        if artifact:
+            query = query.filter(CatalogItem.artifact == artifact)
+        if material_category:
+            mapped_artifacts = {
+                "ai_employee": ["employee_pack"],
+                "workflow_template": ["workflow_template"],
+                "page_style": ["surface"],
+                "mod_asset": ["mod", "bundle"],
+            }.get(material_category, [])
+            cond = CatalogItem.material_category == material_category
+            if mapped_artifacts:
+                cond = cond | (CatalogItem.material_category == "") & CatalogItem.artifact.in_(
+                    mapped_artifacts
+                )
+            query = query.filter(cond)
+        if industry:
+            query = query.filter(CatalogItem.industry == industry)
+        if license_scope:
+            query = query.filter(CatalogItem.license_scope == license_scope)
+        if security_level:
+            query = query.filter(CatalogItem.security_level == security_level)
+        if collection == "office_employee_pack":
+            from modstore_server.office_employee_pack import OFFICE_EMPLOYEE_PKG_IDS
+
+            query = query.filter(CatalogItem.pkg_id.in_(list(OFFICE_EMPLOYEE_PKG_IDS)))
+        elif collection == "office_employee_aux_pack_1":
+            from modstore_server.office_employee_aux_pack_1 import (
+                OFFICE_AUX_PACK_1_PKG_IDS_LIST,
+            )
+
+            query = query.filter(CatalogItem.pkg_id.in_(OFFICE_AUX_PACK_1_PKG_IDS_LIST))
+        elif collection == "workflow_employee":
+            from modstore_server.workflow_employee_pack import WORKFLOW_EMPLOYEE_PKG_IDS
+
+            query = query.filter(CatalogItem.pkg_id.in_(list(WORKFLOW_EMPLOYEE_PKG_IDS)))
+        elif collection == "host_foundation":
+            from modstore_server.host_foundation_pack import (
+                HOST_FOUNDATION_EMPLOYEE_PACK_ID,
+            )
+
+            query = query.filter(CatalogItem.pkg_id == HOST_FOUNDATION_EMPLOYEE_PACK_ID)
+        elif not collection:
+            from modstore_server.host_foundation_pack import INFRASTRUCTURE_PKG_IDS
+
+            query = query.filter(~CatalogItem.pkg_id.in_(list(INFRASTRUCTURE_PKG_IDS)))
+            query = query.filter(~CatalogItem.pkg_id.like("xcagi-%-bridge"))
+        available_rows = query.order_by(
+            CatalogItem.rank_score.desc(),
+            CatalogItem.created_at.desc(),
+        ).all()
+        available_rows = [row for row in available_rows if market_item_available(row)]
+        total = len(available_rows)
+        rows = available_rows[offset : offset + limit]
+        purchased_ids = set()
+        favorited_ids = set()
+        if user:
+            purchased_rows = (
+                session.query(Purchase.catalog_id).filter(Purchase.user_id == user.id).all()
+            )
+            purchased_ids = {r[0] for r in purchased_rows}
+        complaint_counts: Dict[int, int] = {}
+        favorite_counts: Dict[int, int] = {}
+        if rows:
+            ids = [r.id for r in rows]
+            if user:
+                try:
+                    fav_rows = (
+                        session.query(Favorite.catalog_id)
+                        .filter(
+                            Favorite.user_id == user.id,
+                            Favorite.catalog_id.in_(ids),
+                        )
+                        .all()
+                    )
+                    favorited_ids = {int(r[0]) for r in fav_rows}
+                except RECOVERABLE_ERRORS as exc:
+                    logger.warning("market catalog: favorited ids unavailable (%s)", exc)
+            try:
+                from sqlalchemy import func
+
+                count_rows = (
+                    session.query(Favorite.catalog_id, func.count(Favorite.id))
+                    .filter(Favorite.catalog_id.in_(ids))
+                    .group_by(Favorite.catalog_id)
+                    .all()
+                )
+                favorite_counts = {int(cid): int(cnt) for cid, cnt in count_rows}
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("market catalog: favorite counts unavailable (%s)", exc)
+            try:
+                counts = (
+                    session.query(
+                        CatalogComplaint.catalog_id,
+                        CatalogComplaint.id,
+                    )
+                    .filter(CatalogComplaint.catalog_id.in_(ids))
+                    .all()
+                )
+                for catalog_id, _ in counts:
+                    complaint_counts[int(catalog_id)] = complaint_counts.get(int(catalog_id), 0) + 1
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("market catalog: complaint counts unavailable (%s)", exc)
+        result = {
+            "items": [
+                _catalog_item_payload(
+                    r,
+                    purchased=r.id in purchased_ids,
+                    favorited=int(r.id) in favorited_ids,
+                    favorite_count=favorite_counts.get(int(r.id), 0),
+                    complaint_count=complaint_counts.get(int(r.id), 0),
+                )
+                for r in rows
+            ],
+            "total": total,
+        }
+    return result
+
+
+@router.get("/market/catalog/office-employee-pack/bundle")
+def api_office_employee_pack_bundle(
+    user: User = Depends(_get_current_user),
+):
+    """一键下载办公员工包：10 个表格类 AI 员工 ZIP 合集。"""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+
+    from modstore_server.office_employee_pack import (
+        BUNDLE_ARCHIVE_NAME,
+        build_office_employee_bundle_zip,
+    )
+
+    sf = get_session_factory()
+    with sf() as session:
+        data = build_office_employee_bundle_zip(session)
+    buf = BytesIO(data)
+    buf.seek(0)
+
+    def generate():
+        while chunk := buf.read(8192):
+            yield chunk
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename={BUNDLE_ARCHIVE_NAME}",
+            "Content-Length": str(len(data)),
+        },
+    )
+
+
+@router.get("/market/catalog/host-foundation-employee-pack/download")
+def api_host_foundation_employee_pack_download(
+    user: User = Depends(_get_current_user),
+):
+    """下载宿主基础能力预装员工包（.xcemp）。"""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+
+    from modstore_server.catalog_store import market_archive_path
+    from modstore_server.host_foundation_pack import (
+        BUNDLE_ARCHIVE_NAME,
+        HOST_FOUNDATION_EMPLOYEE_PACK_ID,
+    )
+
+    sf = get_session_factory()
+    with sf() as session:
+        item = (
+            session.query(CatalogItem)
+            .filter(
+                CatalogItem.pkg_id == HOST_FOUNDATION_EMPLOYEE_PACK_ID,
+                CatalogItem.is_public.is_(True),
+                CatalogItem.compliance_status != "delisted",
+            )
+            .order_by(CatalogItem.id.desc())
+            .first()
+        )
+        if not item or not item.stored_filename:
+            raise HTTPException(404, "宿主基础员工包尚未上架或文件缺失")
+        path = market_archive_path(item.stored_filename, item.sha256)
+        if path is None:
+            raise HTTPException(404, "宿主基础员工包文件不可用")
+        data = path.read_bytes()
+    buf = BytesIO(data)
+    buf.seek(0)
+
+    def generate():
+        while chunk := buf.read(8192):
+            yield chunk
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f"attachment; filename={BUNDLE_ARCHIVE_NAME}",
+            "Content-Length": str(len(data)),
+        },
+    )
+
+
+@router.get("/market/catalog/workflow-employee-pack/bundle")
+def api_workflow_employee_pack_bundle(
+    user: User = Depends(_get_current_user),
+):
+    """一键下载工作流员工包：6 个独立工作流员工 Mod ZIP 合集。"""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+
+    from modstore_server.workflow_employee_pack import (
+        BUNDLE_ARCHIVE_NAME,
+        build_workflow_employee_bundle_zip,
+    )
+
+    sf = get_session_factory()
+    with sf() as session:
+        data = build_workflow_employee_bundle_zip(session)
+    buf = BytesIO(data)
+    buf.seek(0)
+
+    def generate():
+        while chunk := buf.read(8192):
+            yield chunk
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename={BUNDLE_ARCHIVE_NAME}",
+            "Content-Length": str(len(data)),
+        },
+    )
+
+
+@router.get("/market/catalog/{item_id}")
+def api_market_catalog_detail(
+    item_id: int,
+    user: Optional[User] = Depends(_optional_current_user),
+):
+    sf = get_session_factory()
+    with sf() as session:
+        item = session.query(CatalogItem).filter(CatalogItem.id == item_id).first()
+        if not item:
+            raise HTTPException(404, "商品不存在")
+        _reject_internal_duty_catalog_item(item)
+        purchased = False
+        favorited = False
+        user_has_review = False
+        if user:
+            purchased = (
+                session.query(Purchase)
+                .filter(
+                    Purchase.user_id == user.id,
+                    Purchase.catalog_id == item.id,
+                )
+                .first()
+                is not None
+            )
+            if not _market_item_visible_to_user(item, user, purchased=purchased):
+                raise HTTPException(404, "商品不存在")
+            favorited = (
+                session.query(Favorite)
+                .filter(
+                    Favorite.user_id == user.id,
+                    Favorite.catalog_id == item.id,
+                )
+                .first()
+                is not None
+            )
+            user_has_review = (
+                session.query(Review)
+                .filter(
+                    Review.user_id == user.id,
+                    Review.catalog_id == item.id,
+                )
+                .first()
+                is not None
+            )
+        elif not _market_item_public(item):
+            raise HTTPException(404, "商品不存在")
+        from modstore_server.catalog_store import market_item_available
+
+        if not market_item_available(item):
+            raise HTTPException(404, "商品文件不可用")
+        try:
+            complaint_count = (
+                session.query(CatalogComplaint)
+                .filter(CatalogComplaint.catalog_id == item.id)
+                .count()
+            )
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("market catalog detail: complaint count skipped (%s)", exc)
+            complaint_count = 0
+        payload = _catalog_item_payload(
+            item,
+            purchased=purchased,
+            favorited=favorited,
+            user_has_review=user_has_review,
+            complaint_count=complaint_count,
+        )
+        if item.artifact == "employee_pack" and item.pkg_id:
+            _enrich_payload_with_manifest(payload, item.pkg_id, session)
+        _enrich_catalog_creator_profile(session, item, payload)
+        return payload
+
+
+def _enrich_catalog_creator_profile(session, item: CatalogItem, payload: Dict[str, Any]) -> None:
+    """详情页创作者主页区：作者信息、安装/收藏/评价统计。"""
+    payload["install_count"] = int(getattr(item, "install_count", 0) or 0)
+    fav_count = 0
+    review_count = 0
+    avg_rating = 0.0
+    try:
+        fav_count = session.query(Favorite).filter(Favorite.catalog_id == item.id).count()
+        reviews = session.query(Review).filter(Review.catalog_id == item.id).all()
+        review_count = len(reviews)
+        if reviews:
+            avg_rating = round(sum((int(r.rating or 0) for r in reviews)) / len(reviews), 2)
+    except RECOVERABLE_ERRORS as exc:
+        logger.debug("creator stats skipped for catalog %s: %s", item.id, exc)
+    works_count = 0
+    author_payload: Optional[Dict[str, Any]] = None
+    if item.author_id:
+        try:
+            author = session.query(User).filter(User.id == item.author_id).first()
+            if author:
+                uname = str(author.username or "").strip() or f"用户{item.author_id}"
+                author_payload = {
+                    "id": int(author.id),
+                    "username": uname,
+                    "avatar_initial": (uname[0] if uname else "创").upper(),
+                }
+            works_count = (
+                session.query(CatalogItem)
+                .filter(
+                    CatalogItem.author_id == item.author_id,
+                    CatalogItem.is_public.is_(True),
+                    CatalogItem.compliance_status != "delisted",
+                )
+                .count()
+            )
+        except RECOVERABLE_ERRORS as exc:
+            logger.debug("creator author skipped for catalog %s: %s", item.id, exc)
+    payload["author"] = author_payload
+    payload["creator_stats"] = {
+        "favorite_count": fav_count,
+        "review_count": review_count,
+        "average_rating": avg_rating,
+        "works_count": works_count,
+    }
