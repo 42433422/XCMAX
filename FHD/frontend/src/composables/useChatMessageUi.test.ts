@@ -38,6 +38,7 @@ describe('useChatMessageUi', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(speakText).mockImplementation(() => new Promise(() => {}))
     messages = ref([
       { content: 'Hello', role: 'user' },
       { content: 'Hi there!', role: 'ai' },
@@ -156,6 +157,59 @@ describe('useChatMessageUi', () => {
     expect(ui.playingMsgIdx.value).toBe(1)
     vi.mocked(speakText).mock.calls.at(-1)![1]!.onEnd?.()
     expect(ui.playingMsgIdx.value).toBe(-1)
+  })
+
+  it('restores the button after playback resolves without an end callback', async () => {
+    let finish!: () => void
+    vi.mocked(speakText).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const ui = useChatMessageUi({ messages, chatMessagesRef })
+    await ui.toggleMessageTts(1, 'Hello')
+    expect(ui.playingMsgIdx.value).toBe(1)
+    finish()
+    await vi.waitFor(() => expect(ui.playingMsgIdx.value).toBe(-1))
+    await ui.toggleMessageTts(1, 'Hello again')
+    expect(speakText).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a canceled playback rejection after replay', async () => {
+    let reject!: (error: Error) => void
+    vi.mocked(speakText).mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
+    vi.mocked(speakText).mockImplementationOnce(() => new Promise(() => {}))
+    const ui = useChatMessageUi({ messages, chatMessagesRef })
+    await ui.toggleMessageTts(1, 'first')
+    await ui.toggleMessageTts(1, 'stop')
+    await ui.toggleMessageTts(1, 'replay')
+    reject(new Error('canceled'))
+    await Promise.resolve()
+    expect(ui.playingMsgIdx.value).toBe(1)
+  })
+
+  it('restores the button after a playback rejection and allows retry', async () => {
+    let reject!: (error: Error) => void
+    vi.mocked(speakText).mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
+    const ui = useChatMessageUi({ messages, chatMessagesRef })
+    await ui.toggleMessageTts(1, 'first')
+    reject(new Error('playback failed'))
+    await Promise.resolve()
+    expect(ui.playingMsgIdx.value).toBe(-1)
+    await ui.toggleMessageTts(1, 'retry')
+    expect(ui.playingMsgIdx.value).toBe(1)
+    expect(speakText).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['session', 'messages'])('cancels playback when %s changes and permits replay', async change => {
+    const sessionKey = ref('first')
+    const ui = useChatMessageUi({ messages, chatMessagesRef, sessionKey })
+    await ui.toggleMessageTts(1, 'first')
+    const old = vi.mocked(speakText).mock.calls.at(-1)![1]!
+    vi.mocked(clearVoiceQueue).mockClear()
+    if (change === 'session') sessionKey.value = 'second'
+    else messages.value = [{ content: 'new reply', role: 'ai' }]
+    expect(clearVoiceQueue).toHaveBeenCalledOnce()
+    expect(ui.playingMsgIdx.value).toBe(-1)
+    await ui.toggleMessageTts(0, 'new reply')
+    old.onEnd?.()
+    expect(ui.playingMsgIdx.value).toBe(0)
   })
 
   it('stopMessageTts stops speaking and resets index', () => {

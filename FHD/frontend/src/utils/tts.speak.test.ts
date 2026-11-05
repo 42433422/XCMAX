@@ -251,10 +251,158 @@ describe('TTS speech dispatch and playback', () => {
     mocks.apiFetch.mockRejectedValue(new Error('upstream down'))
     const onError = vi.fn()
     await tts.speakText('在线失败', { onError })
-    expect(mocks.offline.synthesizeOffline).toHaveBeenCalledWith('在线失败')
-    expect(mocks.offline.playOfflinePcm).toHaveBeenCalledWith(new Float32Array([0, 0]), 16000)
+    expect(mocks.offline.synthesizeOffline).toHaveBeenCalledWith('在线失败', expect.any(AbortSignal))
+    expect(mocks.offline.playOfflinePcm).toHaveBeenCalledWith(new Float32Array([0, 0]), 16000, expect.any(AbortSignal))
     expect(onError).not.toHaveBeenCalled()
     expect(speech.speak).not.toHaveBeenCalled()
+  })
+  it.each(['stop', 'switch'] as const)('does not play an offline fallback after %s during synthesis', async (action) => {
+    const pending = deferred<{ audio: Float32Array; samplingRate: number }>(), started = deferred<void>()
+    mocks.offline.isOfflineReady.mockReturnValue(true)
+    mocks.apiFetch.mockRejectedValueOnce(new Error('network'))
+    mocks.offline.synthesizeOffline.mockImplementationOnce(() => { started.resolve(); return pending.promise })
+    const onEnd = vi.fn(), onError = vi.fn()
+    const first = tts.speakText('旧回退', { onEnd, onError })
+    await started.promise
+    if (action === 'stop') tts.stopSpeaking()
+    else await tts.speakText('新语音')
+    pending.resolve({ audio: new Float32Array([1]), samplingRate: 16000 })
+    await first
+    expect(mocks.offline.playOfflinePcm).not.toHaveBeenCalled()
+    expect(speech.speak).not.toHaveBeenCalled()
+    expect(onEnd).toHaveBeenCalledOnce(); expect(onError).not.toHaveBeenCalled()
+    expect(mocks.toast).not.toHaveBeenCalled()
+  })
+  it('settles a stopped system fallback even when cancellation emits no event', async () => {
+    mocks.apiFetch.mockRejectedValueOnce(new Error('network'))
+    const started = deferred<void>(), onEnd = vi.fn(), onError = vi.fn()
+    speech.speak.mockImplementation(() => { speech.speaking = true; started.resolve() })
+    const speaking = tts.speakText('停止系统语音', { onEnd, onError })
+    await started.promise
+    tts.stopSpeaking()
+    await vi.waitFor(() => expect(onEnd).toHaveBeenCalledOnce(), { timeout: 200 })
+    await speaking
+    expect(speech.cancel).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled(); expect(mocks.toast).not.toHaveBeenCalled()
+  })
+  it('times out a system fallback that never starts or emits an event', async () => {
+    vi.useFakeTimers()
+    mocks.apiFetch.mockRejectedValueOnce(new Error('network'))
+    speech.speak.mockImplementation(() => {})
+    const onEnd = vi.fn(), onError = vi.fn()
+    const speaking = tts.speakText('无事件', { onEnd, onError })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(onEnd).toHaveBeenCalledOnce()
+    await speaking
+    expect(speech.cancel).toHaveBeenCalledOnce()
+    expect(onError).toHaveBeenCalledOnce(); expect(mocks.toast).toHaveBeenCalledOnce()
+  })
+  it('finishes a started system fallback if the engine becomes idle without an end event', async () => {
+    vi.useFakeTimers()
+    mocks.apiFetch.mockRejectedValueOnce(new Error('network'))
+    speech.speak.mockImplementation((u) => { speech.speaking = true; u.onstart?.() })
+    const onEnd = vi.fn(), onError = vi.fn()
+    const speaking = tts.speakText('系统语音中断', { onEnd, onError })
+    await vi.advanceTimersByTimeAsync(0)
+    speech.speaking = false
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(onEnd).toHaveBeenCalledOnce()
+    await speaking
+    expect(onError).toHaveBeenCalledOnce()
+  })
+  it('does not cut off a system fallback that has started a long message', async () => {
+    vi.useFakeTimers()
+    mocks.apiFetch.mockRejectedValueOnce(new Error('network'))
+    let utterance: { onstart?: () => void; onend?: () => void } | undefined
+    speech.speak.mockImplementation((u) => { speech.speaking = true; utterance = u; u.onstart?.() })
+    const onEnd = vi.fn()
+    const speaking = tts.speakText('长语音'.repeat(1000), { onEnd })
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(onEnd).not.toHaveBeenCalled(); expect(speech.cancel).not.toHaveBeenCalled()
+    utterance?.onend?.(); await speaking
+    expect(onEnd).toHaveBeenCalledOnce(); expect(mocks.toast).not.toHaveBeenCalled()
+  })
+  it('settles promptly when stopped while waiting for system voices', async () => {
+    vi.useFakeTimers(); vi.resetModules(); speech.getVoices.mockReturnValue([])
+    tts = await import('./tts')
+    mocks.apiFetch.mockRejectedValueOnce(new Error('network'))
+    const onEnd = vi.fn(), onError = vi.fn()
+    const speaking = tts.speakText('准备中', { onEnd, onError })
+    await vi.advanceTimersByTimeAsync(0)
+    tts.stopSpeaking()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onEnd).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled(); expect(speech.speak).not.toHaveBeenCalled()
+    await speaking
+  })
+  it('allows system fallback after an online timeout and cancels it on stop', async () => {
+    vi.useFakeTimers()
+    mocks.apiFetch.mockImplementation((_url, init) => abortable(new Promise<never>(() => {}), init.signal))
+    speech.speak.mockImplementation(() => { speech.speaking = true })
+    const onEnd = vi.fn(), onError = vi.fn()
+    const speaking = tts.speakText('超时后回退', { onEnd, onError })
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(speech.speak).toHaveBeenCalledOnce()
+    tts.stopSpeaking()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onEnd).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled(); expect(mocks.toast).not.toHaveBeenCalled()
+    await speaking
+  })
+  it('does not impose a fixed playback deadline after system speech starts', async () => {
+    vi.useFakeTimers()
+    mocks.apiFetch.mockRejectedValueOnce(new Error('network'))
+    let utterance: { onstart?: () => void; onend?: () => void } | undefined
+    speech.speak.mockImplementation((u) => { speech.speaking = true; utterance = u; u.onstart?.() })
+    const onEnd = vi.fn()
+    const speaking = tts.speakText('长时间播放', { onEnd })
+    await vi.advanceTimersByTimeAsync(180_000)
+    expect(onEnd).not.toHaveBeenCalled(); expect(speech.cancel).not.toHaveBeenCalled()
+    utterance?.onend?.(); await speaking
+    expect(onEnd).toHaveBeenCalledOnce()
+  })
+  it('does not stop started system speech when its estimated duration expires', async () => {
+    vi.useFakeTimers()
+    mocks.apiFetch.mockRejectedValueOnce(new Error('network'))
+    let utterance: { onstart?: () => void; onend?: () => void } | undefined
+    speech.speak.mockImplementation((u) => { speech.speaking = true; utterance = u; u.onstart?.() })
+    const onEnd = vi.fn()
+    const speaking = tts.speakText('长语音', { onEnd })
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(onEnd).not.toHaveBeenCalled()
+    expect(speech.cancel).not.toHaveBeenCalled()
+    utterance?.onend?.(); await speaking
+  })
+  it.each(['stop', 'switch'] as const)('settles system fallback after online timeout on %s', async (action) => {
+    vi.useFakeTimers()
+    mocks.apiFetch.mockImplementationOnce((_url, init) => abortable(new Promise<never>(() => {}), init.signal))
+    speech.speak.mockImplementation(() => { speech.speaking = true })
+    const onEnd = vi.fn(), onError = vi.fn()
+    const first = tts.speakText('超时后回退', { onEnd, onError })
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(speech.speak).toHaveBeenCalledOnce()
+    if (action === 'stop') tts.stopSpeaking()
+    else await tts.speakText('新语音')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onEnd).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled(); expect(mocks.toast).not.toHaveBeenCalled()
+    await first
+  })
+  it.each(['offline', 'fallback'] as const)('settles stopped %s synthesis without waiting for its result', async (mode) => {
+    const pending = deferred<{ audio: Float32Array; samplingRate: number }>(), started = deferred<void>()
+    if (mode === 'offline') tts.setEngineMode('offline')
+    else { mocks.offline.isOfflineReady.mockReturnValue(true); mocks.apiFetch.mockRejectedValueOnce(new Error('network')) }
+    mocks.offline.synthesizeOffline.mockImplementationOnce(() => { started.resolve(); return pending.promise })
+    const onEnd = vi.fn(), onError = vi.fn()
+    const speaking = tts.speakText('离线合成', { onEnd, onError })
+    await started.promise
+    tts.stopSpeaking()
+    await vi.waitFor(() => expect(onEnd).toHaveBeenCalledOnce(), { timeout: 200 })
+    await speaking
+    pending.resolve({ audio: new Float32Array([1]), samplingRate: 16000 })
+    await Promise.resolve()
+    expect(mocks.offline.playOfflinePcm).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled(); expect(mocks.toast).not.toHaveBeenCalled()
   })
   it('shows an actionable browser permission error', async () => {
     playback = 'blocked'
@@ -270,13 +418,52 @@ describe('TTS speech dispatch and playback', () => {
     if (mode === 'playback failure') mocks.offline.playOfflinePcm.mockRejectedValueOnce(new Error(mode))
     const onEnd = vi.fn(), onError = vi.fn()
     await tts.speakText('离线朗读', { onEnd, onError })
-    expect(mocks.offline.synthesizeOffline).toHaveBeenCalledWith('离线朗读')
+    expect(mocks.offline.synthesizeOffline).toHaveBeenCalledWith('离线朗读', expect.any(AbortSignal))
     if (mode === 'success') {
-      expect(mocks.offline.playOfflinePcm).toHaveBeenCalledWith(new Float32Array([0, 0]), 16000)
+      expect(mocks.offline.playOfflinePcm).toHaveBeenCalledWith(new Float32Array([0, 0]), 16000, expect.any(AbortSignal))
       expect(onError).not.toHaveBeenCalled()
     } else expect(onError).toHaveBeenCalledWith(new Error(mode))
     expect(onEnd).toHaveBeenCalledOnce(); expect(mocks.apiFetch).not.toHaveBeenCalled()
     expect(tts.getTtsStatus().effectiveEngine).toBe('offline')
+  })
+  it.each(['offline', 'fallback'] as const)('passes the cancellation signal to %s synthesis and ignores late audio', async (mode) => {
+    const pending = deferred<{ audio: Float32Array; samplingRate: number }>(), started = deferred<void>()
+    if (mode === 'offline') tts.setEngineMode('offline')
+    else { mocks.offline.isOfflineReady.mockReturnValue(true); mocks.apiFetch.mockRejectedValueOnce(new Error('network')) }
+    mocks.offline.synthesizeOffline.mockImplementationOnce((_text, signal) => {
+      started.resolve()
+      return signal ? abortable(pending.promise, signal) : pending.promise
+    })
+    const onEnd = vi.fn(), onError = vi.fn()
+    const speaking = tts.speakText('取消离线合成', { onEnd, onError })
+    await started.promise
+    const signal = mocks.offline.synthesizeOffline.mock.calls[0][1] as AbortSignal | undefined
+    tts.stopSpeaking()
+    expect(signal?.aborted).toBe(true)
+    await speaking
+    pending.resolve({ audio: new Float32Array([1]), samplingRate: 16000 })
+    await Promise.resolve()
+    expect(mocks.offline.playOfflinePcm).not.toHaveBeenCalled()
+    expect(onEnd).toHaveBeenCalledOnce(); expect(onError).not.toHaveBeenCalled()
+    expect(mocks.toast).not.toHaveBeenCalled()
+  })
+  it.each(['offline', 'fallback'] as const)('passes the cancellation signal to %s PCM playback', async (mode) => {
+    const pending = deferred<void>(), started = deferred<void>()
+    if (mode === 'offline') tts.setEngineMode('offline')
+    else { mocks.offline.isOfflineReady.mockReturnValue(true); mocks.apiFetch.mockRejectedValueOnce(new Error('network')) }
+    mocks.offline.playOfflinePcm.mockImplementationOnce((_pcm, _rate, signal) => {
+      started.resolve()
+      return signal ? abortable(pending.promise, signal) : pending.promise
+    })
+    const onEnd = vi.fn(), onError = vi.fn()
+    const speaking = tts.speakText('取消离线播放', { onEnd, onError })
+    await started.promise
+    const signal = mocks.offline.playOfflinePcm.mock.calls[0][2] as AbortSignal | undefined
+    tts.stopSpeaking()
+    expect(signal?.aborted).toBe(true)
+    await speaking
+    expect(onEnd).toHaveBeenCalledOnce(); expect(onError).not.toHaveBeenCalled()
+    expect(mocks.toast).not.toHaveBeenCalled()
   })
   it('chooses Yunxi, configures utterances and reports concrete availability', async () => {
     expect(tts.pickBestChineseVoice([{ name: 'English', lang: 'en-US' } as SpeechSynthesisVoice, voice])).toBe(voice)
@@ -305,7 +492,20 @@ describe('voice loading and offline warmup', () => {
     }
     expect(listener).toHaveBeenCalledOnce(); off()
     await vi.advanceTimersByTimeAsync(2000)
-    expect(await tts.ensureVoicesLoaded()).toEqual(mode === 'voiceschanged' ? [voice] : [])
+    const retry = tts.ensureVoicesLoaded()
+    if (mode === 'timeout') await vi.advanceTimersByTimeAsync(2000)
+    expect(await retry).toEqual(mode === 'voiceschanged' ? [voice] : [])
+  })
+  it('cleans up timed-out voice discovery and retries when voices appear later', async () => {
+    vi.useFakeTimers(); vi.resetModules(); speech.getVoices.mockReturnValue([])
+    const remove = vi.spyOn(speech, 'removeEventListener')
+    tts = await import('./tts')
+    const first = tts.ensureVoicesLoaded()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(await first).toEqual([])
+    expect(remove).toHaveBeenCalledWith('voiceschanged', expect.any(Function))
+    speech.getVoices.mockReturnValue([voice])
+    expect(await tts.ensureVoicesLoaded()).toEqual([voice])
   })
   it('selects newly available voices synchronously while the asynchronous load is pending', async () => {
     vi.useFakeTimers(); vi.resetModules(); speech.getVoices.mockReturnValue([])

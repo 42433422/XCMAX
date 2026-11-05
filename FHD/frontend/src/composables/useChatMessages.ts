@@ -28,7 +28,7 @@ async function playNextVoice(generation = voiceGeneration) {
   const text = voiceQueue.shift()
   if (!text) { isPlayingVoice = false; return }
   isPlayingVoice = true
-  await speakText(text)
+  try { await speakText(text) } catch { if (generation !== voiceGeneration) return }
   if (generation !== voiceGeneration) return
   voiceTimer = setTimeout(() => { void playNextVoice(generation) }, 350)
 }

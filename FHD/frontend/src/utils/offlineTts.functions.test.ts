@@ -99,6 +99,46 @@ describe('offlineTts ensureOfflineReady and synthesis', () => {
   })
 
   describe('synthesizeOffline after load', () => {
+    it('removes its abort listener when a segment finishes', async () => {
+      const synth = vi.fn().mockResolvedValue({ audio: new Float32Array([1]), sampling_rate: 16000 })
+      mockPipeline.mockResolvedValue(synth)
+      const { ensureOfflineReady, synthesizeOffline } = await importFresh()
+      await ensureOfflineReady()
+      const controller = new AbortController()
+      const add = vi.spyOn(controller.signal, 'addEventListener')
+      const remove = vi.spyOn(controller.signal, 'removeEventListener')
+      await synthesizeOffline('文本', controller.signal)
+      expect(add).toHaveBeenCalledWith('abort', expect.any(Function), expect.anything())
+      expect(remove).toHaveBeenCalledWith('abort', add.mock.calls[0][1])
+    })
+
+    it('rejects immediately when cancelled during a segment and skips remaining segments', async () => {
+      let finish!: (value: { audio: Float32Array; sampling_rate: number }) => void
+      const synth = vi.fn(() => new Promise<{ audio: Float32Array; sampling_rate: number }>((resolve) => { finish = resolve }))
+      mockPipeline.mockResolvedValue(synth)
+      const { ensureOfflineReady, synthesizeOffline } = await importFresh()
+      await ensureOfflineReady()
+      const controller = new AbortController()
+      const result = synthesizeOffline('第一句。第二句。', controller.signal)
+      const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+      controller.abort()
+      await rejected
+      finish({ audio: new Float32Array([1]), sampling_rate: 16000 })
+      await Promise.resolve()
+      expect(synth).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not start synthesis when already cancelled', async () => {
+      const synth = vi.fn()
+      mockPipeline.mockResolvedValue(synth)
+      const { ensureOfflineReady, synthesizeOffline } = await importFresh()
+      await ensureOfflineReady()
+      const controller = new AbortController()
+      controller.abort()
+      await expect(synthesizeOffline('文本', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+      expect(synth).not.toHaveBeenCalled()
+    })
+
     it('returns empty audio for empty text segments', async () => {
       const synth = vi.fn().mockResolvedValue({ audio: new Float32Array([0.1]), sampling_rate: 16000 })
       mockPipeline.mockResolvedValue(synth)
@@ -144,6 +184,76 @@ describe('offlineTts ensureOfflineReady and synthesis', () => {
   })
 
   describe('playOfflinePcm edge cases', () => {
+    it('settles stopped playback even when stop throws and no ended event fires', async () => {
+      const source = { buffer: null, connect: vi.fn(), start: vi.fn(), stop: vi.fn(() => { throw new Error('stop failed') }), disconnect: vi.fn(), onended: null }
+      const context = { createBuffer: vi.fn(() => ({ copyToChannel: vi.fn() })), createBufferSource: vi.fn(() => source), destination: {} }
+      vi.stubGlobal('AudioContext', vi.fn(function () { return context }))
+      try {
+        const { playOfflinePcm, stopOffline } = await importFresh()
+        const result = playOfflinePcm(new Float32Array([1]), 16000)
+        stopOffline()
+        await expect(result).resolves.toBeUndefined()
+        expect(source.disconnect).toHaveBeenCalledOnce()
+        expect(source.onended).toBeNull()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('does not let cancelling an earlier playback stop the current playback', async () => {
+      const sources = Array.from({ length: 2 }, () => ({ buffer: null, connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn(), onended: null as (() => void) | null }))
+      const context = { createBuffer: vi.fn(() => ({ copyToChannel: vi.fn() })), createBufferSource: vi.fn().mockReturnValueOnce(sources[0]).mockReturnValueOnce(sources[1]), destination: {} }
+      vi.stubGlobal('AudioContext', vi.fn(function () { return context }))
+      try {
+        const { playOfflinePcm } = await importFresh()
+        const controller = new AbortController()
+        const first = playOfflinePcm(new Float32Array([1]), 16000, controller.signal)
+        const rejected = expect(first).rejects.toMatchObject({ name: 'AbortError' })
+        const second = playOfflinePcm(new Float32Array([2]), 16000)
+        controller.abort()
+        await rejected
+        expect(sources[0].stop).toHaveBeenCalledOnce()
+        expect(sources[1].stop).not.toHaveBeenCalled()
+        sources[1].onended?.()
+        await expect(second).resolves.toBeUndefined()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('stops and settles playback on cancellation without an ended event', async () => {
+      const source = { buffer: null, connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn(), onended: null }
+      const context = { createBuffer: vi.fn(() => ({ copyToChannel: vi.fn() })), createBufferSource: vi.fn(() => source), destination: {} }
+      vi.stubGlobal('AudioContext', vi.fn(function () { return context }))
+      try {
+        const { playOfflinePcm } = await importFresh()
+        const controller = new AbortController()
+        const result = playOfflinePcm(new Float32Array([1]), 16000, controller.signal)
+        const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+        controller.abort()
+        await rejected
+        expect(source.stop).toHaveBeenCalledOnce()
+        expect(source.disconnect).toHaveBeenCalledOnce()
+        expect(source.onended).toBeNull()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('does not create an audio context when already cancelled', async () => {
+      const context = vi.fn()
+      vi.stubGlobal('AudioContext', context)
+      try {
+        const { playOfflinePcm } = await importFresh()
+        const controller = new AbortController()
+        controller.abort()
+        await expect(playOfflinePcm(new Float32Array([1]), 16000, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+        expect(context).not.toHaveBeenCalled()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
     it('resolves immediately for null-length PCM', async () => {
       const { playOfflinePcm } = await importFresh()
       await expect(playOfflinePcm(new Float32Array(0), 16000)).resolves.toBeUndefined()

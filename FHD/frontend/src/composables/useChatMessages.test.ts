@@ -653,6 +653,35 @@ describe('queueVoice and clearVoiceQueue', () => {
     finish[2]!()
     vi.mocked(speakText).mockResolvedValue(undefined)
   })
+
+  it('continues the current queue when a canceled old playback rejects late', async () => {
+    const pending: Array<{ resolve: () => void; reject: (error: Error) => void }> = []
+    vi.mocked(speakText).mockImplementation(() => new Promise((resolve, reject) => { pending.push({ resolve, reject }) }))
+    queueVoice('old')
+    clearVoiceQueue()
+    queueVoice('new')
+    queueVoice('next')
+    pending[0]!.reject(new Error('canceled'))
+    await vi.advanceTimersByTimeAsync(350)
+    expect(speakText).toHaveBeenCalledTimes(2)
+    pending[1]!.resolve()
+    await vi.advanceTimersByTimeAsync(350)
+    expect(speakText).toHaveBeenCalledTimes(3)
+    expect(speakText).toHaveBeenLastCalledWith('next')
+    pending[2]!.resolve()
+    vi.mocked(speakText).mockResolvedValue(undefined)
+  })
+
+  it('continues queued playback after the current playback rejects', async () => {
+    let reject!: (error: Error) => void
+    vi.mocked(speakText).mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
+    queueVoice('failed')
+    queueVoice('next')
+    reject(new Error('playback failed'))
+    await vi.advanceTimersByTimeAsync(350)
+    expect(speakText).toHaveBeenCalledTimes(2)
+    expect(speakText).toHaveBeenLastCalledWith('next')
+  })
 })
 
  it('batches synthetic token cache writes and flushes into the original session', async () => {
