@@ -819,6 +819,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+          filter: blob:none
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v7
@@ -837,6 +839,13 @@ jobs:
 
       - name: Check sync data-access import contracts
         run: lint-imports --config pyproject.toml --no-cache
+
+      - name: Require traceable oversized-source growth review requests
+        if: github.event_name == 'pull_request'
+        env:
+          GROWTH_BASE: ${{ github.event.pull_request.base.sha }}
+          GROWTH_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python ../scripts/dev/source_growth_review.py --base "$GROWTH_BASE" --head "$GROWTH_HEAD"
 
       - name: Run architecture fitness checks
         run: python scripts/arch_fitness.py
