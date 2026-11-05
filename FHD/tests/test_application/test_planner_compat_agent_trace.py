@@ -586,15 +586,28 @@ def test_stream_preserves_typed_tool_progress_in_thinking_steps() -> None:
         {"type": "done", "result": {}},
     ]
     with (
-        patch("app.application.agent_orchestrator.chat_trace.get_agent_run_repository", return_value=repo),
-        patch("app.application.get_ai_chat_app_service", return_value=MagicMock(_pending_workflows={})),
-        patch.object(stream_helpers, "_runtime_context_with_authenticated_actor", side_effect=lambda _, ctx: ctx),
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+        patch(
+            "app.application.get_ai_chat_app_service", return_value=MagicMock(_pending_workflows={})
+        ),
+        patch.object(
+            stream_helpers,
+            "_runtime_context_with_authenticated_actor",
+            side_effect=lambda _, ctx: ctx,
+        ),
         patch.object(stream_helpers, "_ensure_chat_db_read_authorized", return_value=(True, None)),
         patch.object(stream_helpers, "_message_requires_db_read_token", return_value=False),
         _stream_trace_context(),
-        patch.object(stream_helpers, "_xcagi_guarded_planner_stream_events", return_value=iter(events)),
+        patch.object(
+            stream_helpers, "_xcagi_guarded_planner_stream_events", return_value=iter(events)
+        ),
     ):
-        payloads = _sse_payloads(list(stream_helpers._xcagi_planner_stream_bytes(_make_request(), body, ai_tier="p1")))
+        payloads = _sse_payloads(
+            list(stream_helpers._xcagi_planner_stream_bytes(_make_request(), body, ai_tier="p1"))
+        )
     done = next(payload["result"] for payload in payloads if payload["type"] == "done")
     assert done["response"] == "最终答案。"
     assert "正在调用工具" in str(done["data"].get("thinking_steps"))

@@ -449,7 +449,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
         if not thinking:
             thinking = marker_lines
-        thinking = "\n".join(dict.fromkeys([*tool_progress, *(thinking or "").splitlines()])) or None
+        thinking = (
+            "\n".join(dict.fromkeys([*tool_progress, *(thinking or "").splitlines()])) or None
+        )
         done_reply = {
             "response": visible_text,
             "thinking_steps": thinking,

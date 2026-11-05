@@ -50,7 +50,7 @@ def _chat_completions_url(root: str) -> str:
     return f"{root.rstrip('/')}/v1/chat/completions"
 
 
-def _decode_response(data: Any, voice: str, fmt: str, model: str):
+def _decode_response(data: Any, voice: str, fmt: str, model: str) -> Tuple[Optional[bytes], str, Dict[str, Any]]:
     choices = data.get("choices") if isinstance(data, dict) else None
     choice = choices[0] if isinstance(choices, list) and choices else None
     message = choice.get("message") if isinstance(choice, dict) else None
@@ -72,7 +72,7 @@ def _decode_response(data: Any, voice: str, fmt: str, model: str):
     )
 
 
-def _request_failure(exc: Exception, voice: str):
+def _request_failure(exc: Exception, voice: str) -> Tuple[Optional[bytes], str, Dict[str, Any]]:
     import httpx
 
     status = getattr(getattr(exc, "response", None), "status_code", None)

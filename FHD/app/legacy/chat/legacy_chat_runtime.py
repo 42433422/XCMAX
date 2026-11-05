@@ -305,10 +305,18 @@ def chat_stream_text(
                 raw_args = str(v.get("function", {}).get("arguments") or "")
                 if tool_name:
                     label = _facade()._tool_stream_call_label(tool_name, raw_args)
-                    yield {"_planner_sse": "tool_progress", "phase": "running", "text": f"[正在调用工具: {label}]"}
+                    yield {
+                        "_planner_sse": "tool_progress",
+                        "phase": "running",
+                        "text": f"[正在调用工具: {label}]",
+                    }
                     slow = _facade()._slow_tool_wait_message(tool_name, raw_args)
                     if slow:
-                        yield {"_planner_sse": "tool_progress", "phase": "running", "text": slow.strip()}
+                        yield {
+                            "_planner_sse": "tool_progress",
+                            "phase": "running",
+                            "text": slow.strip(),
+                        }
         if finish_reason == "tool_calls" or tool_calls_by_idx:
             tcs = [
                 SimpleNamespace(
@@ -367,7 +375,11 @@ def chat_stream_text(
                     "message": _NO_PROGRESS,
                 }
                 return
-            yield {"_planner_sse": "tool_progress", "phase": "returned", "text": _facade()._post_tool_round_hint(tcs, tool_payloads).strip()}
+            yield {
+                "_planner_sse": "tool_progress",
+                "phase": "returned",
+                "text": _facade()._post_tool_round_hint(tcs, tool_payloads).strip(),
+            }
             tool_choice = "auto"
             continue
         if backup_required:
@@ -402,16 +414,27 @@ def chat_stream_sse_events(
 ):
     pending = ""
     prefixes = (
-        "[正在调用工具:", "[正在调用工具：", "【正在调用工具:", "【正在调用工具：",
-        "[工具已返回", "【工具已返回", "[工具未成功", "【工具未成功",
-        "（正在将 Excel 导入数据库", "（正在生成 Word 文档", "（正在生成 Excel 工作簿", "（正在生成可下载文件",
+        "[正在调用工具:",
+        "[正在调用工具：",
+        "【正在调用工具:",
+        "【正在调用工具：",
+        "[工具已返回",
+        "【工具已返回",
+        "[工具未成功",
+        "【工具未成功",
+        "（正在将 Excel 导入数据库",
+        "（正在生成 Word 文档",
+        "（正在生成 Excel 工作簿",
+        "（正在生成可下载文件",
     )
 
     def consume(text: str, final: bool = False):
         nonlocal pending
         pending += text
         while pending:
-            start = min((index for char in "[【（" if (index := pending.find(char)) >= 0), default=-1)
+            start = min(
+                (index for char in "[【（" if (index := pending.find(char)) >= 0), default=-1
+            )
             if start < 0:
                 yield {"type": "token", "text": pending}
                 pending = ""
@@ -419,7 +442,9 @@ def chat_stream_sse_events(
             if start:
                 yield {"type": "token", "text": pending[:start]}
                 pending = pending[start:]
-            if not any(prefix.startswith(pending) or pending.startswith(prefix) for prefix in prefixes):
+            if not any(
+                prefix.startswith(pending) or pending.startswith(prefix) for prefix in prefixes
+            ):
                 yield {"type": "token", "text": pending[0]}
                 pending = pending[1:]
                 continue
@@ -465,7 +490,11 @@ def chat_stream_sse_events(
                 continue
             yield from consume("", final=True)
             if isinstance(item, dict) and item.get("_planner_sse") == "tool_progress":
-                yield {"type": "tool_progress", "phase": item.get("phase"), "text": item.get("text")}
+                yield {
+                    "type": "tool_progress",
+                    "phase": item.get("phase"),
+                    "text": item.get("text"),
+                }
                 continue
             if isinstance(item, dict) and item.get("_planner_sse") == "error":
                 yield {

@@ -437,6 +437,7 @@ class TestEdgeUpstreamFailure:
             lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
         )
         monkeypatch.setattr(tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake()))
+            tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake())
         first = ai_assistant_tts.compat_tts({"text": "first"})
         clock[0] += 20.0
         second = ai_assistant_tts.compat_tts({"text": "second"})
@@ -467,6 +468,7 @@ class TestEdgeUpstreamFailure:
             lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
         )
         monkeypatch.setattr(tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake()))
+            tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake())
         monkeypatch.setattr(ai_assistant_tts, "_trace", lambda payload, **kwargs: payload)
 
         response = ai_assistant_tts.compat_tts({"text": "hello"})
