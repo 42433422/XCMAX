@@ -57,6 +57,23 @@ def test_source_proves_all_cells_without_model_numbering(monkeypatch):
     assert result["logical_documents"][0]["document_id"].startswith("source-")
 
 
+def test_provider_envelope_reason_is_ignored(monkeypatch):
+    # Live providers sometimes wrap the verified document list in one
+    # informational root reason (and may append stray closing brackets).
+    raw = answer(region())
+    raw["reason"] = "整表为一张单据，按结构拆分为互不重叠的完整区域。"
+    result = execute(monkeypatch, source(["A1", "B1", "C1"]), raw)
+    assert result["regions"][0]["range"] == "A1:C1"
+    assert result["input_summary"]["reference_response"]["reason"] == raw["reason"]
+
+
+def test_unknown_envelope_field_is_still_rejected(monkeypatch):
+    raw = answer(region())
+    raw["summary"] = "not part of the source range contract"
+    with pytest.raises(ReviewedExcelError):
+        execute(monkeypatch, source(["A1", "B1", "C1"]), raw)
+
+
 @pytest.mark.parametrize(
     "key,value",
     [
@@ -256,7 +273,7 @@ def test_range_schema_fingerprint_and_boolean_dimension_drift():
     assert hashes["version"] == "independent-excel-v10-document-ranges"
     assert (
         hashes["schema_template_sha256"]
-        == "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2"
+        == "2218f5c2d25cc91006ee83db14ec4bf9431c019641cb493034882fa2309eb137"
     )
     schema["properties"]["documents"]["items"]["properties"]["ranges"]["items"]["properties"][
         "row_end"
