@@ -66,7 +66,7 @@ def _slice_filename(
     raise ReviewedExcelError("无法分配唯一切片文件名")
 
 
-def _model_region_for_fragment(known: dict, fragment: dict) -> dict:
+def _model_region_for_fragment(known: dict[tuple[str, str], dict], fragment: dict) -> dict:
     """Resolve a verified fragment to the model region that contains it.
 
     verify_after_cut may resplit one model region into smaller documents, so an exact
