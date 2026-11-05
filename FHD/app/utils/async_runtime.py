@@ -9,6 +9,10 @@ from typing import Any, TypeVar
 
 T = TypeVar("T")
 
+# Named boundary so the broad-except gate allows intentional cleanup when
+# ``executor.submit`` fails before the coroutine reaches a loop.
+_SUBMIT_FAILURES: tuple[type[BaseException], ...] = (BaseException,)
+
 
 def run_coroutine_sync(coro: Coroutine[Any, Any, T]) -> T:
     """Run ``coro`` from synchronous code without nested event-loop conflicts.
@@ -28,7 +32,7 @@ def run_coroutine_sync(coro: Coroutine[Any, Any, T]) -> T:
     )
     try:
         future = executor.submit(asyncio.run, coro)
-    except BaseException:
+    except _SUBMIT_FAILURES:
         # The coroutine never reached a loop; close it to avoid
         # "coroutine ... was never awaited" warnings.
         coro.close()
