@@ -66,6 +66,23 @@ def _slice_filename(
     raise ReviewedExcelError("无法分配唯一切片文件名")
 
 
+def _model_region_for_fragment(known: dict[tuple[str, str], dict], fragment: dict) -> dict:
+    """Resolve a verified fragment to the model region that contains it.
+
+    verify_after_cut may resplit one model region into smaller documents, so an exact
+    range lookup is not sufficient; every fragment must still stay inside a model region.
+    """
+    sheet = fragment.get("sheet")
+    c1, r1, c2, r2 = bounded_range(fragment["range"])
+    for (region_sheet, region_range), region in known.items():
+        if region_sheet != sheet:
+            continue
+        kc1, kr1, kc2, kr2 = bounded_range(region_range)
+        if kc1 <= c1 and c2 <= kc2 and kr1 <= r1 and r2 <= kr2:
+            return region
+    raise ReviewedExcelError("切后复核产生了模型区域之外的片段，不能保证保真提取")
+
+
 def derive_classified_documents(body: bytes, classification: dict) -> list[dict]:
     """Export only documents with explicit model grouping, without inferring missing groups.
 
@@ -146,7 +163,7 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
     used_names: set[str] = set()
     for fragments, basis, reason in groups:
         for fragment in fragments:
-            region = known[(fragment["sheet"], fragment["range"])]
+            region = _model_region_for_fragment(known, fragment)
             for ref in region.get("dependencies", []):
                 column, row = coordinate_from_string(ref["cell"])
                 col = column_index_from_string(column)
