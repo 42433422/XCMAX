@@ -114,6 +114,69 @@ describe('MainLayout.vue', () => {
     wrapper.unmount()
   })
 
+  it('keeps the actual route highlighted while navigation is pending and after it fails', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const router = createTestRouter()
+    await router.push('/settings')
+    let finish!: (applied: boolean) => void
+    const navigation = vi.spyOn(sidebarNavigation, 'navigateFromSidebarKey').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = mount(MainLayout, { global: { plugins: [pinia, router] } })
+    try {
+      await wrapper.get('.sidebar-chat').trigger('click')
+      expect(wrapper.getComponent({ name: 'Sidebar' }).props('activeView')).toBe('settings')
+      finish(false)
+      await flushPromises()
+      expect(wrapper.getComponent({ name: 'Sidebar' }).props('activeView')).toBe('settings')
+      expect(wrapper.get('[role="alert"]').text()).toContain('页面加载失败')
+    } finally {
+      wrapper.unmount(); navigation.mockRestore()
+    }
+  })
+
+  it('invalidates a pending request when another navigation changes the route', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const router = createTestRouter()
+    await router.push('/settings')
+    let finish!: (applied: boolean) => void
+    const navigation = vi.spyOn(sidebarNavigation, 'navigateFromSidebarKey').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = mount(MainLayout, { global: { plugins: [pinia, router] } })
+    try {
+      await wrapper.get('.sidebar-chat').trigger('click')
+      await router.push('/workflow-employee-space')
+      await flushPromises()
+      expect(wrapper.getComponent({ name: 'Sidebar' }).props('activeView')).toBe('workflow-employee-space')
+      expect(wrapper.find('.route-nav-feedback').exists()).toBe(false)
+      finish(false)
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      await wrapper.get('.sidebar-chat').trigger('click')
+      expect(navigation).toHaveBeenCalledTimes(2)
+    } finally {
+      wrapper.unmount(); navigation.mockRestore()
+    }
+  })
+
+  it('clears failed navigation on a query-only external route change', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const router = createTestRouter()
+    await router.push('/settings')
+    const navigation = vi.spyOn(sidebarNavigation, 'navigateFromSidebarKey').mockResolvedValue(false)
+    const wrapper = mount(MainLayout, { global: { plugins: [pinia, router] } })
+    try {
+      await wrapper.get('.sidebar-chat').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+      await router.push('/settings?tab=profile')
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    } finally {
+      wrapper.unmount(); navigation.mockRestore()
+    }
+  })
+
   it('shows slow navigation in the content region and ignores repeat clicks to that target', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
     const pinia = createPinia()
