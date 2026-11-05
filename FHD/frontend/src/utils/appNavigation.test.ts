@@ -306,4 +306,39 @@ describe('appNavigation + real Vue Router', () => {
     await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('settings'))
     expect(isSidebarNavigationPending()).toBe(false)
   })
+
+  it('auth-required redirects to login and reports unresolved (retryable) without clearing newer intent', async () => {
+    const router = makeAppRouter()
+    await router.push('/')
+    await router.isReady()
+    const intent = beginAppNavIntent('auth-required', 'sidebar')
+    const result = await pushWithAppNavIntent(router, { name: 'auth-required' }, intent, {
+      match: { name: 'auth-required', key: 'auth-required' },
+    })
+    expect(['unresolved', 'aborted']).toContain(result.status)
+    expect(shouldShowNavFailure(result.status)).toBe(true)
+    expect(router.currentRoute.value.name).toBe('login')
+    const newer = beginAppNavIntent('settings', 'retry')
+    clearAppNavIntentIfCurrent(intent.id)
+    expect(isAppNavIntentCurrent(newer.id)).toBe(true)
+  })
+
+  it('mod registration delay aborted by newer click never pushes the stale customers target last', async () => {
+    const router = makeAppRouter()
+    await router.push('/')
+    await router.isReady()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const { registerAllModRoutesFromGlob } = await import('@/router/registerModRoutes')
+    vi.mocked(registerAllModRoutesFromGlob).mockImplementationOnce(async () => { await gate })
+    const first = navigateFromSidebarKey(router, 'customers', {
+      source: 'sidebar',
+      getModRoutes: () => [{ id: 'customers' }],
+    })
+    await Promise.resolve()
+    const second = navigateFromSidebarKey(router, 'settings', { source: 'top-settings' })
+    release()
+    await Promise.all([first, second])
+    expect(router.currentRoute.value.name).toBe('settings')
+  })
 })
