@@ -232,7 +232,7 @@ const currentRouteName = computed(() => {
 const pendingSidebarView = ref('')
 const failedSidebarView = ref('')
 let routeNavGeneration = 0
-const displayedActiveView = computed(() => pendingSidebarView.value || currentRouteName.value)
+const displayedActiveView = computed(() => currentRouteName.value)
 
 function syncPendingSidebarWithRoute() {
   if (!pendingSidebarView.value) return

@@ -163,6 +163,9 @@ async function pushSidebarRoute(
     isStale: () => isStale() || !isAppNavIntentCurrent(intentId),
     match: { name: matchName, path: matchPath, key: targetKey },
   })
+  // Soft router failures settle as false so coalesced callers keep independent
+  // promises and MainLayout can mark a retryable fail without inheriting throws.
+  if (result.status === 'aborted' || result.status === 'cancelled') return false
   if (shouldShowNavFailure(result.status)) {
     throw result.error ?? new Error(result.message)
   }
