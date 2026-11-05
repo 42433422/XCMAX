@@ -162,3 +162,11 @@ def _resolve_tenant_for_access(
             ),
         )
     return (actor_tenant, None)
+
+
+def ambient_tenant_id() -> str:
+    """Request tenant from the infrastructure scope. Domain must not import it."""
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    value = current_tenant_id()
+    return "" if value is None else str(value)

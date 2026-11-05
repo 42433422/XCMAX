@@ -81,10 +81,9 @@ def _registered_router_dataset_rag(
         ) or as_bool(runtime_context.get("dataset_admin"), default=False)
         if not has_explicit_context and (not permissions) and (not is_admin):
             if not tenant_id:
-                from app.infrastructure.tenant_scope import current_tenant_id
+                from app.application.dataset_rag.access_policy import ambient_tenant_id
 
-                ambient = current_tenant_id()
-                tenant_id = str(ambient) if ambient is not None else ""
+                tenant_id = ambient_tenant_id()
             if not tenant_id:
                 return None
             permissions = {_required_permission}
