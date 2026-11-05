@@ -7,6 +7,9 @@
 
 # 历史归档已迁出工作区（见 ARCHIVE_POINTER.md）；禁止提交 _archive 实体目录。
 _archive/
+
+# 运行日志不得再进入公开树（见私有台账 xcmax-Li）。
+成都修茈科技有限公司/MODstore_deploy/modstore_server/data/runtime_sync/*.jsonl
 !ARCHIVE_POINTER.md
 
 # 脱敏快照：scripts/cleanup_archive_secrets.py 把敏感文件原内容迁移至此。
