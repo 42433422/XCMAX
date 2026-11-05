@@ -86,11 +86,14 @@ def test_auto_ingest_thread_keeps_confirming_mod_after_request_ends(
     preview_store, tmp_path, monkeypatch
 ):
     from app.application.elt import auto_ingest_service
+    from app.infrastructure.tenant_scope import tenant_scope
 
     service = auto_ingest_service.AutoIngestService()
-    monkeypatch.setattr(auto_ingest_service, "get_app_data_dir", lambda: str(tmp_path))
-    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    source = tmp_path / "confirmed.txt"
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    owner_root = tmp_path / "etl" / "uploads" / "1" / "7"
+    owner_root.mkdir(parents=True)
+    source = owner_root / "confirmed.txt"
     source.write_text("confirmed")
     release, completed = Event(), Event()
     observed = []
@@ -105,12 +108,13 @@ def test_auto_ingest_thread_keeps_confirming_mod_after_request_ends(
     monkeypatch.setattr(service, "run", run)
     token = set_request_active_mod_id("confirmed-mod")
     try:
-        service.start_background(
-            owner_user_id=7,
-            tenant_id=1,
-            source_path=source,
-            prepared_plan={"run_id": "confirmed-preview", "mod_id": "confirmed-mod"},
-        )
+        with tenant_scope(1):
+            service.start_background(
+                owner_user_id=7,
+                tenant_id=1,
+                source_path=source,
+                prepared_plan={"run_id": "confirmed-preview", "mod_id": "confirmed-mod"},
+            )
     finally:
         reset_request_active_mod_id(token)
         release.set()
