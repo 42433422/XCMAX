@@ -108,6 +108,40 @@ def test_rejects_cross_sheet_model_group_and_flattens_cut_merged_cell():
     assert "A1:B1" not in {str(r) for r in first.merged_cells.ranges}
 
 
+def test_resplit_ledger_fragments_resolve_to_their_model_region():
+    """verify-after-cut may resplit one model region; export must not crash on range lookup."""
+    from app.application.reviewed_excel_evidence import bounded_range
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "客户档案"
+    sheet["A1"] = "客户档案"
+    sheet["A2"], sheet["B2"] = "客户编号", "合作起始"
+    for i in range(40):
+        row = 3 + i
+        sheet.cell(row, 1, f"C-{i + 1:04d}")
+        sheet.cell(row, 2, f"2023-{i % 12 + 1:02d}-{i % 27 + 1:02d}")
+        sheet.cell(row, 8, "华东")
+    stream = BytesIO()
+    book.save(stream)
+    body = stream.getvalue()
+    result = derive_classified_documents(
+        body,
+        {
+            "source_sha256": inspect_workbook(body)["sha256"],
+            "model_status": "returned",
+            "regions": [{"sheet": "客户档案", "range": "A1:H42", "dependencies": []}],
+            "suggested_documents": [{"fragments": [{"sheet": "客户档案", "range": "A1:H42"}]}],
+        },
+    )
+    assert len(result) >= 2
+    for item in result:
+        for fragment in item["fragments"]:
+            c1, r1, c2, r2 = bounded_range(fragment["range"])
+            assert fragment["sheet"] == "客户档案"
+            assert c1 >= 1 and c2 <= 8 and r1 >= 1 and r2 <= 42
+
+
 def test_chinese_names_are_bounded_unique_and_neutral_if_no_title():
     from app.application.reviewed_excel_auto_slice import _slice_filename
 
