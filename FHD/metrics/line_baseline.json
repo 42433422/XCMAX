@@ -1,5 +1,5 @@
 {
-  "lines": 2414684,
+  "lines": 2415090,
   "updated": "2026-11-06",
-  "note": "PR #3018: align SSOT type-debt max-noqa with workflow ratchet 222"
+  "note": "refresh line_baseline after CI net-deletion DRIFT on tip 73ca5256"
 }
