@@ -224,9 +224,7 @@ class TestSynthesizeEmpty:
 class TestSynthesizeCacheHit:
     def test_cache_hit_returns_payload(self) -> None:
         cache_voice = f"mimo:{tts.DEFAULT_MIMO_VOICE}|edge:{DEFAULT_EDGE_VOICE}"
-        key = _normalize_cache_key(
-            text="hi", voice=cache_voice, lang="zh", rate=None, pitch=None
-        )
+        key = _normalize_cache_key(text="hi", voice=cache_voice, lang="zh", rate=None, pitch=None)
         cached = {
             "audioBase64": "data:audio/mpeg;base64,QUJD",
             "voice": DEFAULT_EDGE_VOICE,
@@ -391,9 +389,7 @@ class TestNestedLoopFallback:
         with pytest.raises(RuntimeError, match="some other error"):
             synthesize_to_data_uri(text="hi")
 
-    def test_runtime_error_with_asyncio_run_message_uses_new_loop(
-        self, monkeypatch
-    ) -> None:
+    def test_runtime_error_with_asyncio_run_message_uses_new_loop(self, monkeypatch) -> None:
         # When the existing event loop is "running", asyncio.run() raises a
         # RuntimeError with a specific message. Verify the fallback path.
         calls = {"n": 0}
@@ -403,9 +399,7 @@ class TestNestedLoopFallback:
             if calls["n"] == 1:
 
                 async def _raise_nested() -> bytes:
-                    raise RuntimeError(
-                        "asyncio.run() cannot be called from a running event loop"
-                    )
+                    raise RuntimeError("asyncio.run() cannot be called from a running event loop")
 
                 return _raise_nested()
 
@@ -433,9 +427,7 @@ class TestEdgeUpstreamFailure:
         monkeypatch.setattr(tts.time, "monotonic", lambda: clock[0])
         monkeypatch.setenv("XCAGI_TTS_EDGE_COOLDOWN_S", "30.5")
         monkeypatch.setattr(tts_facade, "trigger_common_tts_warmup", lambda: None)
-        monkeypatch.setattr(
-            ai_assistant_tts, "_trace", lambda payload, **kwargs: payload
-        )
+        monkeypatch.setattr(ai_assistant_tts, "_trace", lambda payload, **kwargs: payload)
 
         class ForbiddenHandshake(Exception):
             status = 403
@@ -473,9 +465,7 @@ class TestEdgeUpstreamFailure:
             "_run_edge_sync",
             lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
         )
-        monkeypatch.setattr(
-            ai_assistant_tts, "_trace", lambda payload, **kwargs: payload
-        )
+        monkeypatch.setattr(ai_assistant_tts, "_trace", lambda payload, **kwargs: payload)
 
         response = ai_assistant_tts.compat_tts({"text": "hello"})
 
