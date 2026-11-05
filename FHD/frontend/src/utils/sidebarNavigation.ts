@@ -27,6 +27,8 @@ export type NavigateFromSidebarOptions = {
   modMenuItems?: SidebarModMenuItem[]
   routeNameMap?: Record<string, string>
   getModRoutes?: () => unknown[] | undefined
+  /** Caller identity for shared app-nav intent (sidebar / top-settings / ecosystem). */
+  source?: string
 }
 
 let sidebarNavGeneration = 0
