@@ -552,8 +552,7 @@ async def test_managed_asr_catalog_has_no_chat_default(database):
 
 
 def test_revision_guard_without_master_key_rejects_rotation(database, monkeypatch):
-    from modstore_server.llm_api import LlmChatDTO
-    from modstore_server.llm_api import _requested_chat_snapshot
+    from modstore_server.llm_api import LlmChatDTO, _requested_chat_snapshot
 
     monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY")
     monkeypatch.setenv("OPENAI_API_KEY", "environment-test-alpha")

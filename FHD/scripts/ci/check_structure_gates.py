@@ -51,13 +51,16 @@ BASELINE = {
     # G10: MODstore_deploy mechanical part* files (ratchet down; forbid growth)
     "modstore_part_files": 0,
     # G11: repo-wide *.py > 40KB (ratchet; especially tests)
-    "py_gt_40kb": 179,
+    # Raised 2026-11-05 Asia/Shanghai for #2995 (G11 179→187, G12 0→3): folding the
+    # MODstore `_facade()`/`_merged` fragments back into their owners makes their real
+    # size visible; no code was added. Shrink by domain splits, not by line-count fragments.
+    "py_gt_40kb": 187,
     "py_gt_40kb_testish": 123,
     # debt19 ratchets
     "ports_repo_wide": 15,
     "ports_layer_count": 3,
     "blueprints_py": 40,
-    "py_gt_100kb_nontest": 0,
+    "py_gt_100kb_nontest": 3,
     "fastapi_routes_ports": 0,
 }
 
