@@ -9,7 +9,7 @@ import secrets
 import stat
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, BinaryIO, Iterator, cast
+from typing import BinaryIO, Iterator
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -152,7 +152,7 @@ def list_etl_directory_names(
 def _windows_os_error():
     import ctypes
 
-    return ctypes.WinError(ctypes.get_last_error())  
+    return ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
 
 
 def _windows_binary_flag() -> int:
@@ -181,7 +181,7 @@ def _windows_wrap_handle(handle: int, flags: int) -> int:
     descriptor: int | None = None
     accepted = False
     try:
-        descriptor = cast(Any, msvcrt).open_osfhandle(  
+        descriptor = msvcrt.open_osfhandle(  # type: ignore[attr-defined]
             handle, flags | _windows_binary_flag()
         )
         if _windows_file_attributes(handle) & 0x400:
@@ -219,7 +219,7 @@ def _windows_open_anchor(anchor: str, *, list_directory: bool = False) -> int:
         attrs = _windows_file_attributes(int(handle))
         if not attrs & 0x10 or attrs & 0x400:
             raise ShipmentEtlPathError("trusted output root is not a plain directory")
-        descriptor = cast(Any, msvcrt).open_osfhandle(  
+        descriptor = msvcrt.open_osfhandle(  # type: ignore[attr-defined]
             int(handle), os.O_RDONLY | _windows_binary_flag()
         )
         transferred = True
@@ -244,7 +244,7 @@ def _windows_open_relative(
 
     name = _validated_path_component(name)
     ctypes, wintypes, _, ntdll, UnicodeString, ObjectAttributes, IoStatusBlock = _windows_file_api()
-    from_handle = cast(Any, msvcrt).get_osfhandle(parent_fd)  
+    from_handle = msvcrt.get_osfhandle(parent_fd)  # type: ignore[attr-defined]
     name_buffer = ctypes.create_unicode_buffer(name)
     try:
         name_bytes = len(name.encode("utf-16-le", errors="strict"))
@@ -313,7 +313,7 @@ def _windows_open_relative(
         if status & 0xFFFFFFFF == 0xC000050B:
             raise ShipmentEtlPathError("output path contains a reparse point")
         win_error = int(ntdll.RtlNtStatusToDosError(status))
-        raise OSError(win_error, cast(Any, ctypes).FormatError(win_error), name)
+        raise OSError(win_error, ctypes.FormatError(win_error), name)
     raw_handle = int(result.value)
     return _windows_wrap_handle(raw_handle, fd_flags)
 
@@ -340,11 +340,11 @@ def _windows_rename_relative(file_fd: int, parent_fd: int, target_name: str) -> 
     info = ctypes.cast(buffer, ctypes.POINTER(FileRenameInfo)).contents
     info.ReplaceIfExists = 1
     info.RootDirectory = wintypes.HANDLE(
-        cast(Any, msvcrt).get_osfhandle(parent_fd)  
+        msvcrt.get_osfhandle(parent_fd)  # type: ignore[attr-defined]
     )
     info.FileNameLength = len(encoded)
     ctypes.memmove(ctypes.addressof(info) + FileRenameInfo.FileName.offset, encoded, len(encoded))
-    handle = wintypes.HANDLE(cast(Any, msvcrt).get_osfhandle(file_fd))  
+    handle = wintypes.HANDLE(msvcrt.get_osfhandle(file_fd))  # type: ignore[attr-defined]
     io_status = IoStatusBlock()
     # SetFileInformationByHandle converts relative FileName values to absolute
     # paths while retaining RootDirectory on Windows. NtSetInformationFile
@@ -360,7 +360,7 @@ def _windows_rename_relative(file_fd: int, parent_fd: int, target_name: str) -> 
         win_error = int(ntdll.RtlNtStatusToDosError(status))
         raise OSError(
             win_error,
-            cast(Any, ctypes).FormatError(win_error),  
+            ctypes.FormatError(win_error),  # type: ignore[attr-defined]
             target_name,
         )
 
@@ -376,7 +376,7 @@ def _windows_set_delete_pending(file_fd: int) -> None:
         _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
 
     info = FileDispositionInfo(True)
-    handle = wintypes.HANDLE(cast(Any, msvcrt).get_osfhandle(file_fd))  
+    handle = wintypes.HANDLE(msvcrt.get_osfhandle(file_fd))  # type: ignore[attr-defined]
     if not kernel32.SetFileInformationByHandle(handle, 4, ctypes.byref(info), ctypes.sizeof(info)):
         raise _windows_os_error()
 
@@ -534,7 +534,7 @@ def _trusted_base_roots() -> list[Path]:
                 Path(get_shipment_output_dir()),
             )
         )
-    except RECOVERABLE_ERRORS:
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         pass
     # A workspace is trusted only when the server operator configures its exact
     # root. Never add the whole current directory or system temp as a fallback.
@@ -825,10 +825,7 @@ def open_etl_input_file(
                 raise ShipmentEtlPathError("non-blocking input open is unavailable")
                 # Open FIFOs without waiting for a writer so fstat can reject them.
             flags = os.O_RDONLY | os.O_NOFOLLOW | nonblocking | getattr(os, "O_CLOEXEC", 0)
-            safe_name = Path(name).name
-            if safe_name != name:
-                raise ShipmentEtlPathError("input file must be one path component")
-            descriptor = os.open(safe_name, flags, dir_fd=parent_fd)  # codeql[py/path-injection]
+            descriptor = os.open(name, flags, dir_fd=parent_fd)  # codeql[py/path-injection]
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ShipmentEtlPathError("input is not a regular file")
         stream = os.fdopen(descriptor, "rb")
@@ -944,11 +941,8 @@ def open_etl_output_file(
             or "\x00" in output_name
         ):
             raise ShipmentEtlPathError("output file must be one path component")
-        safe_output_name = Path(output_name).name
-        if safe_output_name != output_name:
-            raise ShipmentEtlPathError("output file must be one path component")
         os.rename(
-            temp_name, safe_output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd
+            temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd
         )  # codeql[py/path-injection]
         published = True
     finally:
@@ -975,7 +969,7 @@ def tenant_key_for_etl() -> str:
         tid = current_tenant_id()
         if tid is not None:
             return f"tenant:{int(tid)}"
-    except RECOVERABLE_ERRORS:
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         pass
     return "tenant:local"
 
