@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import os
 import re
 import threading
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 
@@ -16,12 +18,20 @@ DEFAULT_EDGE_VOICE = "zh-CN-XiaoxiaoNeural"
 DEFAULT_MIMO_VOICE = "冰糖"
 _CACHE_MAX_SIZE = 50
 _EDGE_TIMEOUT_S = 15.0
+_EDGE_COOLDOWN_S = 300.0
+
+
+class TtsUpstreamBlockedError(RuntimeError):
+    """语音上游拒绝握手（例如 edge-tts 403），需冷却后重试或改用离线朗读。"""
+
 
 _EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2,3}-[A-Za-z]+Neural$")
 _TTS_CACHE: OrderedDict[tuple[str, str, str, str, str], dict[str, str]] = OrderedDict()
 _CACHE_LOCK = threading.Lock()
 _WARMUP_STARTED = False
 _WARMUP_LOCK = threading.Lock()
+_EDGE_BLOCKED_UNTIL = 0.0
+_EDGE_BLOCK_LOCK = threading.Lock()
 
 _HARDCODED_PRO_PHRASES = [
     "您好，我是修茈。我可以帮您控制整个系统：产品管理、原材料仓库、出货单、客户管理、标签打印等。请告诉我您需要做什么？",
@@ -170,6 +180,47 @@ def _set_cache(key: tuple[str, str, str, str, str], payload: dict[str, str]) -> 
             _TTS_CACHE.popitem(last=False)
 
 
+def _edge_cooldown_seconds() -> float:
+    try:
+        return max(0.0, float(os.environ.get("XCAGI_TTS_EDGE_COOLDOWN_S", _EDGE_COOLDOWN_S)))
+    except (TypeError, ValueError):
+        return _EDGE_COOLDOWN_S
+
+
+def _is_edge_forbidden(exc: BaseException) -> bool:
+    """识别 edge-tts / aiohttp 的 403 握手拒绝，而不是把它当成普通 500。"""
+    status = getattr(exc, "status", None)
+    if status is None:
+        response = getattr(exc, "response", None)
+        status = getattr(response, "status", None)
+    if status == 403:
+        return True
+    text = str(exc or "")
+    return "Invalid response status" in text and "403" in text
+
+
+def _raise_if_edge_blocked() -> None:
+    with _EDGE_BLOCK_LOCK:
+        remaining = _EDGE_BLOCKED_UNTIL - time.monotonic()
+    if remaining > 0:
+        raise TtsUpstreamBlockedError(
+            "Edge 语音上游此前拒绝了握手（HTTP 403），已暂停重试约 "
+            f"{int(remaining)} 秒；请检查系统时间/网络，或改用离线语音包。"
+        )
+
+
+def _trip_edge_block(exc: BaseException) -> None:
+    global _EDGE_BLOCKED_UNTIL
+    cooldown = _edge_cooldown_seconds()
+    with _EDGE_BLOCK_LOCK:
+        _EDGE_BLOCKED_UNTIL = max(_EDGE_BLOCKED_UNTIL, time.monotonic() + cooldown)
+    logger.warning(
+        "Edge TTS 上游握手被拒绝（403），暂停调用 %.0f 秒：%s",
+        cooldown,
+        type(exc).__name__,
+    )
+
+
 def trigger_common_tts_warmup() -> None:
     """
     后台预热 50 条高频短语，减少专业模式首轮播报时延。
@@ -180,6 +231,10 @@ def trigger_common_tts_warmup() -> None:
         for phrase in _build_warmup_phrases(_CACHE_MAX_SIZE):
             try:
                 synthesize_to_data_uri(text=phrase, lang="zh", voice=DEFAULT_EDGE_VOICE)
+            except TtsUpstreamBlockedError:
+                # 上游 403 已触发熔断，继续重试只会加重拒绝，直接结束预热。
+                logger.info("TTS 预热因上游 403 停止，后续请求将快速失败并提示离线方案")
+                break
             except RECOVERABLE_ERRORS:
                 # 预热失败不影响主流程；首次真实请求仍可按需合成。
                 continue
@@ -213,7 +268,7 @@ async def _synthesize_mp3_bytes(req: TtsRequest) -> bytes:
     return b"".join(chunks)
 
 
-def _synthesize_edge_mp3(req: TtsRequest) -> bytes:
+def _run_edge_sync(req: TtsRequest) -> bytes:
     try:
         return asyncio.run(_synthesize_mp3_bytes(req))
     except RuntimeError as e:
@@ -229,6 +284,26 @@ def _synthesize_edge_mp3(req: TtsRequest) -> bytes:
                 loop.close()
             finally:
                 asyncio.set_event_loop(None)
+
+
+def _synthesize_edge_mp3(req: TtsRequest) -> bytes:
+    _raise_if_edge_blocked()
+    try:
+        return _run_edge_sync(req)
+    except TtsUpstreamBlockedError:
+        raise
+    except Exception as e:  # noqa: BLE001 - 第三方语音 SDK 的异常类型不稳定
+        # 语音 SDK 抛出的自定义异常可能不属于 RECOVERABLE_ERRORS；
+        # 这里是集成边界，必须转换为可诊断错误，不能让 /api/tts 变成 500。
+        if _is_edge_forbidden(e):
+            _trip_edge_block(e)
+            raise TtsUpstreamBlockedError(
+                "Edge 语音上游拒绝了握手（HTTP 403）；已暂停重试，请检查系统时间/网络，"
+                "或改用离线语音包。"
+            ) from e
+        if isinstance(e, RECOVERABLE_ERRORS):
+            raise
+        raise RuntimeError(f"Edge TTS 调用失败：{type(e).__name__}") from e
 
 
 def synthesize_to_data_uri(

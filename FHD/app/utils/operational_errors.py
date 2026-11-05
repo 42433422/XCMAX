@@ -45,6 +45,16 @@ try:
 except ImportError:
     pass
 
+# aiohttp（edge-tts / 语音上游 WebSocket）的异常不继承内建 OSError/ConnectionError，
+# 也不在 httpx 族里；不显式纳入时，握手 403 或超时会穿透到 HTTP 边界变成 500。
+_aiohttp_extra: tuple[type[Exception], ...] = ()
+try:
+    import aiohttp
+
+    _aiohttp_extra = (aiohttp.ClientError, aiohttp.ClientConnectionError)
+except ImportError:
+    pass
+
 # redis-py 的连接/超时错误继承自 ``redis.exceptions.RedisError(Exception)``，
 # 而非内建 ``ConnectionError``/``TimeoutError``（OSError 族），因此必须显式纳入，
 # 否则 redis 宕机时所有 ``except RECOVERABLE_ERRORS`` 探针都会 500。
@@ -68,6 +78,7 @@ INFRA_TRANSIENT: tuple[type[Exception], ...] = (
     ArithmeticError,
     *_operational_extra,
     *_httpx_extra,
+    *_aiohttp_extra,
     *_redis_extra,
 )
 

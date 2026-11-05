@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
+from app.domain.shared_services.tts_service import TtsUpstreamBlockedError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -115,16 +116,39 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
             body=payload,
         )
         return JSONResponse(traced)
+    except TtsUpstreamBlockedError as error:
+        logger.warning("TTS 上游拒绝握手: %s", error)
+        traced = _trace(
+            {
+                "success": False,
+                "code": "TTS_UPSTREAM_FORBIDDEN",
+                "message": str(error),
+                "data": {
+                    "reason": "edge_403",
+                    "fallback": "offline_tts",
+                },
+            },
+            route="/api/tts",
+            action="tts_synthesize",
+            body=payload,
+        )
+        return JSONResponse(
+            traced,
+            status_code=503,
+            headers={"Retry-After": "300", "Cache-Control": "no-store"},
+        )
     except RECOVERABLE_ERRORS as error:
-        logger.warning("TTS 不可用（MiMo/Edge）: %s", error)
+        logger.warning("TTS 不可用（MiMo/Edge）: %s (type=%s)", error, type(error).__name__)
         traced = _trace(
             {
                 "success": False,
                 "message": "TTS 服务暂不可用（已尝试 MiMo 与 Edge 神经音）",
-                "data": {},
+                "data": {"reason": "tts_unavailable"},
             },
             route="/api/tts",
             action="tts_synthesize",
             body=payload,
         )
         return JSONResponse(traced, status_code=503)
+
+

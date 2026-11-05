@@ -86,8 +86,11 @@ class TestBertIntentClassifierDummy:
             clf = BertIntentClassifier(local_files_only=True)
             result = clf.predict("你好", return_probs=True)
             assert "all_probs" in result
-            assert isinstance(result["all_probs"], dict)
-            assert len(result["all_probs"]) > 0
+            assert result["all_probs"] == {}
+            assert result["degraded"] is True
+            assert result["available"] is False
+            assert result["intent"] == "unk"
+            assert result["confidence"] == 0.0
 
     def test_dummy_predict_no_probs_by_default(self):
         with patch(
@@ -142,6 +145,19 @@ class TestBertIntentClassifierDummy:
             clf = BertIntentClassifier(local_files_only=True)
             result = clf.predict("测试")
             assert 0.0 <= result["confidence"] <= 1.0
+
+    def test_dummy_predict_is_deterministic(self):
+        """模型缺失时不得返回随机意图，必须显式降级为 unk。"""
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
+            side_effect=ImportError("no torch"),
+        ):
+            clf = BertIntentClassifier(local_files_only=True)
+            first = clf.predict("测试随机性")
+            second = clf.predict("测试随机性")
+            assert first["intent"] == second["intent"] == "unk"
+            assert first["confidence"] == second["confidence"] == 0.0
+            assert first["reason"] == "model_unavailable"
 
     def test_init_with_explicit_device(self):
         with patch(
