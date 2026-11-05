@@ -668,11 +668,11 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 _EXPECTED = {
     "identify": (
         "b6975fbed527549c18da809214e071543d5221937a34bfc741dd8270e2ab9ec1",
-        "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
+        "2218f5c2d25cc91006ee83db14ec4bf9431c019641cb493034882fa2309eb137",
     ),
     "group_ranges": (
         "0819219ae5c36ab236daf334630a45e0f7ca92862d7f745e7c8a357b718c34b6",
-        "06548a8c4a41b87333a2e19dba43320f23ead21993ff7884ff884c54c60699e2",
+        "2218f5c2d25cc91006ee83db14ec4bf9431c019641cb493034882fa2309eb137",
     ),
     "identify_atoms": (
         "681768c2961ea4575978ab01ab904f2e39d8ee7b3f7b28f5de690703425f0ce0",
