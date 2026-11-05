@@ -1,5 +1,5 @@
 {
-  "lines": 2413280,
+  "lines": 2413450,
   "updated": "2026-11-05",
-  "note": "P1 nav reliability CI unblock (+shared intent helpers; retort absorption log truncated, git retains history)"
+  "note": "nav P1 + coverage bump tests; line_baseline +170"
 }

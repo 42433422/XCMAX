@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   createMemoryHistory,
   createRouter,
+  isNavigationFailure,
+  NavigationFailureType,
   type Router,
   type RouteRecordRaw,
 } from 'vue-router'
@@ -15,6 +17,7 @@ import {
   resetAppNavigationForTests,
   routeMatchesTarget,
   shouldShowNavFailure,
+  isSuccessfulNav,
 } from '@/utils/appNavigation'
 import {
   navigateFromSidebarKey,
@@ -341,4 +344,171 @@ describe('appNavigation + real Vue Router', () => {
     await Promise.all([first, second])
     expect(router.currentRoute.value.name).toBe('settings')
   })
+
+
+  it('isSuccessfulNav / shouldShowNavFailure cover all statuses', () => {
+    expect(isSuccessfulNav('arrived')).toBe(true)
+    expect(isSuccessfulNav('duplicate')).toBe(true)
+    expect(isSuccessfulNav('superseded')).toBe(true)
+    expect(isSuccessfulNav('cancelled')).toBe(false)
+    expect(shouldShowNavFailure('aborted')).toBe(true)
+    expect(shouldShowNavFailure('cancelled')).toBe(true)
+    expect(shouldShowNavFailure('timeout')).toBe(true)
+    expect(shouldShowNavFailure('error')).toBe(true)
+    expect(shouldShowNavFailure('unresolved')).toBe(true)
+    expect(shouldShowNavFailure('arrived')).toBe(false)
+  })
+
+  it('classifyNavigationFailure returns null for plain errors', () => {
+    expect(classifyNavigationFailure(new Error('boom'))).toBeNull()
+  })
+
+  it('cancelled failure while already on target counts as arrived', async () => {
+    const router = makeAppRouter()
+    await router.push('/settings')
+    const template = await router.push('/settings')
+    const sym = Object.getOwnPropertySymbols(template as object)[0]
+    await router.push('/')
+    await router.isReady()
+    const intent = beginAppNavIntent('settings', 'sidebar')
+    const failure = Object.assign(new Error('cancelled'), {
+      type: NavigationFailureType.cancelled,
+      from: router.currentRoute.value,
+      to: router.resolve({ name: 'settings' }),
+    })
+    Object.defineProperty(failure, sym, { value: true })
+    const spy = vi.spyOn(router, 'push').mockImplementation(async () => {
+      await router.replace('/settings')
+      return failure as never
+    })
+    const result = await pushWithAppNavIntent(router, { name: 'settings' }, intent, {
+      match: { name: 'settings', key: 'settings' },
+    })
+    expect(result.status).toBe('arrived')
+    spy.mockRestore()
+  })
+
+
+  it('cancelled failure off-target stays cancelled; stale becomes superseded', async () => {
+    const router = makeAppRouter()
+    await router.push('/')
+    await router.isReady()
+    // Borrow the private NavigationFailure symbol from a real duplicated failure.
+    await router.push('/settings')
+    const template = await router.push('/settings')
+    expect(isNavigationFailure(template)).toBe(true)
+    const sym = Object.getOwnPropertySymbols(template as object)[0]
+    await router.push('/')
+
+    const intent = beginAppNavIntent('customers', 'sidebar')
+    const failure = Object.assign(new Error('cancelled'), {
+      type: NavigationFailureType.cancelled,
+      from: router.currentRoute.value,
+      to: router.resolve({ name: 'customers' }),
+    })
+    Object.defineProperty(failure, sym, { value: true })
+    const pushSpy = vi.spyOn(router, 'push').mockResolvedValue(failure as never)
+    const cancelled = await pushWithAppNavIntent(router, { name: 'customers' }, intent, {
+      match: { name: 'customers', key: 'customers' },
+    })
+    expect(cancelled.status).toBe('cancelled')
+    pushSpy.mockRestore()
+
+    const intent2 = beginAppNavIntent('customers', 'sidebar')
+    const pushSpy2 = vi.spyOn(router, 'push').mockResolvedValue(failure as never)
+    const superseded = await pushWithAppNavIntent(router, { name: 'customers' }, intent2, {
+      match: { name: 'customers', key: 'customers' },
+      isStale: () => true,
+    })
+    expect(superseded.status).toBe('superseded')
+    pushSpy2.mockRestore()
+  })
+
+  it('aborted failure on-target is arrived; aborted+stale is superseded; else aborted', async () => {
+    const router = makeAppRouter()
+    await router.push('/settings')
+    const template = await router.push('/settings')
+    const sym = Object.getOwnPropertySymbols(template as object)[0]
+    await router.push('/')
+    await router.isReady()
+
+    const makeAbort = () => {
+      const failure = Object.assign(new Error('aborted'), {
+        type: NavigationFailureType.aborted,
+        from: router.currentRoute.value,
+        to: router.resolve({ name: 'customers' }),
+      })
+      Object.defineProperty(failure, sym, { value: true })
+      return failure
+    }
+
+    const intentOn = beginAppNavIntent('customers', 'sidebar')
+    const spyOn = vi.spyOn(router, 'push').mockImplementation(async () => {
+      await router.replace('/customers')
+      return makeAbort() as never
+    })
+    const arrived = await pushWithAppNavIntent(router, { name: 'customers' }, intentOn, {
+      match: { name: 'customers', key: 'customers' },
+    })
+    expect(arrived.status).toBe('arrived')
+    spyOn.mockRestore()
+
+    await router.push('/')
+    const intentAbort = beginAppNavIntent('customers', 'sidebar')
+    const spyAbort = vi.spyOn(router, 'push').mockResolvedValue(makeAbort() as never)
+    const aborted = await pushWithAppNavIntent(router, { name: 'customers' }, intentAbort, {
+      match: { name: 'customers', key: 'customers' },
+    })
+    expect(aborted.status).toBe('aborted')
+    spyAbort.mockRestore()
+
+    const intentStale = beginAppNavIntent('customers', 'sidebar')
+    const spyStale = vi.spyOn(router, 'push').mockResolvedValue(makeAbort() as never)
+    const stale = await pushWithAppNavIntent(router, { name: 'customers' }, intentStale, {
+      match: { name: 'customers', key: 'customers' },
+      isStale: () => true,
+    })
+    expect(stale.status).toBe('superseded')
+    spyStale.mockRestore()
+  })
+
+  it('ok push that lands elsewhere reports unresolved when intent still current', async () => {
+    const router = makeAppRouter()
+    await router.push('/')
+    await router.isReady()
+    const intent = beginAppNavIntent('customers', 'sidebar')
+    const spy = vi.spyOn(router, 'push').mockImplementation(async () => {
+      await router.replace('/settings')
+      return undefined as never
+    })
+    const result = await pushWithAppNavIntent(router, { name: 'customers' }, intent, {
+      match: { name: 'customers', key: 'customers' },
+    })
+    expect(result.status).toBe('unresolved')
+    spy.mockRestore()
+  })
+
+  it('duplicated failure off-target is still duplicate', async () => {
+    const router = makeAppRouter()
+    await router.push('/settings')
+    const template = await router.push('/settings')
+    const sym = Object.getOwnPropertySymbols(template as object)[0]
+    await router.push('/')
+    await router.isReady()
+    const intent = beginAppNavIntent('customers', 'sidebar')
+    const failure = Object.assign(new Error('duplicated'), {
+      type: NavigationFailureType.duplicated,
+      from: router.currentRoute.value,
+      to: router.resolve({ name: 'customers' }),
+    })
+    Object.defineProperty(failure, sym, { value: true })
+    const spy = vi.spyOn(router, 'push').mockResolvedValue(failure as never)
+    const result = await pushWithAppNavIntent(router, { name: 'customers' }, intent, {
+      match: { name: 'customers', key: 'customers' },
+    })
+    expect(result.status).toBe('duplicate')
+    expect(result.message).toContain('重复')
+    spy.mockRestore()
+  })
+
 })
