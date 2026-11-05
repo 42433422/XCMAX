@@ -20,9 +20,7 @@ from modstore_server.workbench.schemas import (
 async def test_mimo_long_text_is_not_silently_truncated(monkeypatch, asynchronous):
     monkeypatch.setenv("MIMO_API_KEY", "test-key")
     requests = []
-    transport = httpx.MockTransport(
-        lambda request: requests.append(request) or httpx.Response(500)
-    )
+    transport = httpx.MockTransport(lambda request: requests.append(request) or httpx.Response(500))
     if asynchronous:
         client = httpx.AsyncClient(transport=transport)
         monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)
@@ -51,8 +49,7 @@ async def test_edge_warmup_caches_complete_audio(monkeypatch):
     monkeypatch.setattr(edge_tts_service, "_cache", edge_tts_service.OrderedDict())
     await edge_tts_service.warm_voice("voice", "+0%")
     assert (
-        edge_tts_service.get_cached(edge_tts_service.WARMUP_TEXT, "voice", "+0%")
-        == b"firstsecond"
+        edge_tts_service.get_cached(edge_tts_service.WARMUP_TEXT, "voice", "+0%") == b"firstsecond"
     )
 
 
@@ -70,10 +67,7 @@ async def test_edge_warmup_failure_does_not_cache_partial_audio(monkeypatch):
     monkeypatch.setattr(edge_tts_service, "_warmed_keys", set())
     monkeypatch.setattr(edge_tts_service, "_cache", edge_tts_service.OrderedDict())
     await edge_tts_service.warm_voice("voice", "+0%")
-    assert (
-        edge_tts_service.get_cached(edge_tts_service.WARMUP_TEXT, "voice", "+0%")
-        is None
-    )
+    assert edge_tts_service.get_cached(edge_tts_service.WARMUP_TEXT, "voice", "+0%") is None
     assert ("voice", "+0%") not in edge_tts_service._warmed_keys
 
 
@@ -145,9 +139,7 @@ async def test_mimo_async_overall_deadline(monkeypatch):
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(delayed))
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)
-    audio, error, meta = await mimo_tts_service.synthesize_mimo_tts_async(
-        "hello", timeout_s=0.03
-    )
+    audio, error, meta = await mimo_tts_service.synthesize_mimo_tts_async("hello", timeout_s=0.03)
     assert audio is None
     assert error
     assert meta["status"] == 504
@@ -177,9 +169,7 @@ def test_nonstreaming_endpoints_report_late_upstream_failure(monkeypatch, path):
         raise TimeoutError()
 
     monkeypatch.setattr(speech_api, "_edge_tts_stream_chunks", interrupted)
-    response = TestClient(app, raise_server_exceptions=False).post(
-        path, json={"text": "hello"}
-    )
+    response = TestClient(app, raise_server_exceptions=False).post(path, json={"text": "hello"})
     assert response.status_code == 504
 
 
