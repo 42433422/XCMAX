@@ -167,7 +167,7 @@ def test_model(model_path: str, texts: list[str]):
     classifier = BertIntentClassifier(model_path=model_path)
 
     if not classifier.is_available():
-        logger.warning("模型不可用，使用虚拟预测")
+        logger.warning("模型不可用：输出 unk/0 置信度，请先完成训练或配置模型目录")
 
     for text in texts:
         result = classifier.predict(text, return_probs=True)

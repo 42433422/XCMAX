@@ -58,8 +58,8 @@ def _registered_router_dataset_rag(
         return set()
 
     def access_context(_required_permission: str) -> DatasetAccessContext | None:
-        raw_context = params.get("access_context") or runtime_context.get("dataset_access_context")
-        context_payload = as_dict(raw_context)
+        # Grants come only from the trusted runtime context, never from model-supplied params.
+        context_payload = as_dict(runtime_context.get("dataset_access_context"))
         has_explicit_context = bool(context_payload)
         tenant_id = str(
             context_payload.get("tenant_id")
@@ -71,22 +71,22 @@ def _registered_router_dataset_rag(
         actor_id = str(
             context_payload.get("actor_id")
             or context_payload.get("user_id")
-            or params.get("actor_id")
-            or params.get("user_id")
             or runtime_context.get("user_id")
             or ""
         ).strip()
         permissions = parse_permissions(context_payload.get("permissions"))
-        permissions.update(parse_permissions(params.get("permissions")))
         permissions.update(parse_permissions(runtime_context.get("dataset_permissions")))
         is_admin = as_bool(
-            params.get("dataset_admin")
-            if "dataset_admin" in params
-            else context_payload.get("is_admin", context_payload.get("admin")),
-            default=False,
+            context_payload.get("is_admin", context_payload.get("admin")), default=False
         ) or as_bool(runtime_context.get("dataset_admin"), default=False)
         if not has_explicit_context and (not permissions) and (not is_admin):
-            return None
+            if not tenant_id:
+                from app.application.dataset_rag.access_policy import ambient_tenant_id
+
+                tenant_id = ambient_tenant_id()
+            if not tenant_id:
+                return None
+            permissions = {_required_permission}
         return DatasetAccessContext(
             actor_id=actor_id,
             tenant_id=tenant_id,

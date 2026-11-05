@@ -131,6 +131,8 @@ describe('selected label template editing', () => {
   it('shows load failure without sample fields and disables saving until retry succeeds', async () => {
     failLoad = true
     await openEditor()
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await flushPromises()
     expect(wrapper!.get('[role="alert"]').text()).toContain('所选模板暂时无法读取')
     expect(wrapper!.findAll('.field-item')).toHaveLength(0)
     expect(saveButton().attributes()).toHaveProperty('disabled')

@@ -48,6 +48,10 @@ const chartEl = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 let renderTimer: ReturnType<typeof setTimeout> | null = null
+let retryRenderTimer: ReturnType<typeof setTimeout> | null = null
+let retryRenderAttempts = 0
+/** 容器隐藏时 ECharts 会得到奇异变换矩阵并抛出空值下标异常，须等布局有尺寸后再渲染。 */
+const MAX_RENDER_RETRIES = 5
 let lastRenderKey = ''
 /** Above this, turn off continuous force animation — main source of UI jank. */
 const FORCE_ANIMATION_NODE_LIMIT = 36
@@ -376,16 +380,56 @@ function graphRenderKey(): string {
   ].join('|')
 }
 
+function hasUsableChartSize(): boolean {
+  const el = chartEl.value
+  return Boolean(el && el.clientWidth > 0 && el.clientHeight > 0)
+}
+
+function scheduleRenderRetry(delayMs = 200): void {
+  if (retryRenderTimer || retryRenderAttempts >= MAX_RENDER_RETRIES) return
+  retryRenderAttempts += 1
+  retryRenderTimer = setTimeout(() => {
+    retryRenderTimer = null
+    renderGraph(true)
+  }, delayMs)
+}
+
+function disposeChart(): void {
+  if (!chart) return
+  try {
+    chart.off('click', handleChartClick)
+    chart.dispose()
+  } catch {
+    /* ECharts 可能已在异常中销毁自身 */
+  }
+  chart = null
+}
+
 function renderGraph(force = false): void {
   if (!chartEl.value) return
+  // 路由切换 / 图谱页隐藏时容器尺寸为 0，ECharts 6 的视图矩阵求逆返回 null，
+  // 后续 copyTransform 读取 null[0] 会抛出「Cannot read properties of null」。
+  if (!hasUsableChartSize()) {
+    lastRenderKey = ''
+    scheduleRenderRetry()
+    return
+  }
   const key = graphRenderKey()
   if (!force && key === lastRenderKey && chart) return
   lastRenderKey = key
-  if (!chart) {
-    chart = echarts.init(chartEl.value, undefined, { renderer: 'canvas' })
-    chart.on('click', handleChartClick)
+  try {
+    if (!chart) {
+      chart = echarts.init(chartEl.value, undefined, { renderer: 'canvas' })
+      chart.on('click', handleChartClick)
+    }
+    chart.setOption(buildOption(), { notMerge: true, lazyUpdate: true })
+    retryRenderAttempts = 0
+  } catch (error) {
+    console.warn('[PersyKnowledgeGraph] 图谱渲染失败，等待容器可见后重试', error)
+    disposeChart()
+    lastRenderKey = ''
+    scheduleRenderRetry(500)
   }
-  chart.setOption(buildOption(), { notMerge: true, lazyUpdate: true })
 }
 
 function scheduleRender(force = false): void {
@@ -397,13 +441,27 @@ function scheduleRender(force = false): void {
 }
 
 function handleWindowResize(): void {
-  chart?.resize()
+  if (!hasUsableChartSize()) {
+    lastRenderKey = ''
+    return
+  }
+  if (!chart || lastRenderKey === '') {
+    renderGraph(true)
+    return
+  }
+  try {
+    chart.resize()
+  } catch (error) {
+    console.warn('[PersyKnowledgeGraph] 图谱尺寸更新失败', error)
+    disposeChart()
+    scheduleRenderRetry(500)
+  }
 }
 
 function resetView(): void {
   lastRenderKey = ''
   renderGraph(true)
-  chart?.resize()
+  handleWindowResize()
 }
 
 watch(
@@ -423,7 +481,7 @@ onMounted(() => {
   nextTick(() => renderGraph(true))
   window.addEventListener('resize', handleWindowResize)
   if (chartEl.value && typeof ResizeObserver !== 'undefined') {
-    resizeObserver = new ResizeObserver(() => chart?.resize())
+    resizeObserver = new ResizeObserver(() => handleWindowResize())
     resizeObserver.observe(chartEl.value)
   }
 })
@@ -431,12 +489,12 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (renderTimer) clearTimeout(renderTimer)
   renderTimer = null
+  if (retryRenderTimer) clearTimeout(retryRenderTimer)
+  retryRenderTimer = null
   window.removeEventListener('resize', handleWindowResize)
   resizeObserver?.disconnect()
   resizeObserver = null
-  chart?.off('click', handleChartClick)
-  chart?.dispose()
-  chart = null
+  disposeChart()
 })
 
 defineExpose({ resetView })

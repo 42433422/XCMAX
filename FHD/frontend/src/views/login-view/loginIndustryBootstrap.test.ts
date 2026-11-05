@@ -91,8 +91,10 @@ describe('normal login workspace readiness', () => {
   const pending = calls.find(c => c.url === '/api/system/industry')!
   expect(pending.signal).toBeDefined()
   await vi.advanceTimersByTimeAsync(8000)
-  await login.submitting
   expect(pending.signal?.aborted).toBe(true)
+  // 读超时会再试一次：8s + 250ms 退避 + 8s。
+  await vi.advanceTimersByTimeAsync(8_250)
+  await login.submitting
   expect(login.state.loading.value).toBe(false)
   expect(login.state.errorMessage.value).toContain('重新登录')
   expect(login.router.replace).not.toHaveBeenCalled()

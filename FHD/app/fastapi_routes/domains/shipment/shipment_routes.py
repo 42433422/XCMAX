@@ -5,15 +5,34 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Depends
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.domains.misc.helpers import _dispatch_tool_for_approval
+from app.infrastructure.auth.dependencies import get_logged_in_user
+from app.infrastructure.auth.tenant_context import tenant_id_for_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["legacy-workflow"], deprecated=True)
+router = APIRouter(
+    tags=["legacy-workflow"], deprecated=True, dependencies=[Depends(get_logged_in_user)]
+)
+
+
+def _visible_to(req: Any, user: Any) -> bool:
+    return getattr(req, "tenant_id", None) == tenant_id_for_user(user)
+
+
+def _owned_request_id(
+    approval_service: Any, user: Any, request_id: str, plan_id: str
+) -> str | None:
+    if request_id:
+        req = approval_service.get_pending_request(request_id)
+    else:
+        req = approval_service.get_pending_request_by_plan(plan_id)
+    found = None if req is None or not _visible_to(req, user) else getattr(req, "request_id", None)
+    return None if found is None else str(found)
 
 
 def _trace_approval_route(
@@ -56,12 +75,14 @@ def _trace_approval_route(
 
 
 @router.get("/api/ai/approval/pending")
-def ai_approval_pending():
+def ai_approval_pending(user: Any = Depends(get_logged_in_user)):
     from app.application.workflow import get_approval_service
 
     approval_service = get_approval_service()
     all_pending = []
     for req in approval_service._pending_requests.values():
+        if not _visible_to(req, user):
+            continue
         all_pending.append(
             {
                 "request_id": req.request_id,
@@ -122,7 +143,9 @@ def ai_config_approval_post(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/ai/approval/request")
-def ai_approval_request(body: dict = Body(default_factory=dict)):
+def ai_approval_request(
+    body: dict = Body(default_factory=dict), user: Any = Depends(get_logged_in_user)
+):
     try:
         payload = body or {}
         plan_id = payload.get("plan_id") or ""
@@ -138,7 +161,11 @@ def ai_approval_request(body: dict = Body(default_factory=dict)):
 
         approval_service = get_approval_service()
         node = WorkflowNode(node_id=node_id, tool_id=tool_id, action=action, params=params)
-        approval_req = approval_service.create_approval_request(plan_id=plan_id, node=node)
+        approval_req = approval_service.create_approval_request(
+            plan_id=plan_id,
+            node=node,
+            runtime_context={"tenant_id": tenant_id_for_user(user), "user_id": user.id},
+        )
         return _trace_approval_route(
             {
                 "success": True,
@@ -167,7 +194,9 @@ def ai_approval_request(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/ai/approval/approve")
-def ai_approval_approve(body: dict = Body(default_factory=dict)):
+def ai_approval_approve(
+    body: dict = Body(default_factory=dict), user: Any = Depends(get_logged_in_user)
+):
     try:
         payload = body or {}
         request_id = payload.get("request_id") or ""
@@ -176,22 +205,14 @@ def ai_approval_approve(body: dict = Body(default_factory=dict)):
         from app.application.workflow import WorkflowEngine, get_approval_service
 
         approval_service = get_approval_service()
-        actual_request_id = None
-        if request_id:
-            success = approval_service.approve(request_id, comment)
-            actual_request_id = request_id
-        elif plan_id:
-            pending_req = approval_service.get_pending_request_by_plan(plan_id)
-            if not pending_req:
-                return JSONResponse(
-                    {"success": False, "message": "没有待审批的请求"}, status_code=404
-                )
-            success = approval_service.approve(pending_req.request_id, comment)
-            actual_request_id = pending_req.request_id
-        else:
+        if not request_id and not plan_id:
             return JSONResponse(
                 {"success": False, "message": "缺少 request_id 或 plan_id"}, status_code=400
             )
+        actual_request_id = _owned_request_id(approval_service, user, request_id, plan_id)
+        if not actual_request_id:
+            return JSONResponse({"success": False, "message": "没有待审批的请求"}, status_code=404)
+        success = approval_service.approve(actual_request_id, comment)
 
         if not success:
             return JSONResponse({"success": False, "message": "审批失败"}, status_code=400)
@@ -243,7 +264,9 @@ def ai_approval_approve(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/ai/approval/reject")
-def ai_approval_reject(body: dict = Body(default_factory=dict)):
+def ai_approval_reject(
+    body: dict = Body(default_factory=dict), user: Any = Depends(get_logged_in_user)
+):
     try:
         payload = body or {}
         request_id = payload.get("request_id") or ""
@@ -252,19 +275,14 @@ def ai_approval_reject(body: dict = Body(default_factory=dict)):
         from app.application.workflow import get_approval_service
 
         approval_service = get_approval_service()
-        if request_id:
-            success = approval_service.reject(request_id, comment)
-        elif plan_id:
-            pending_req = approval_service.get_pending_request_by_plan(plan_id)
-            if not pending_req:
-                return JSONResponse(
-                    {"success": False, "message": "没有待审批的请求"}, status_code=404
-                )
-            success = approval_service.reject(pending_req.request_id, comment)
-        else:
+        if not request_id and not plan_id:
             return JSONResponse(
                 {"success": False, "message": "缺少 request_id 或 plan_id"}, status_code=400
             )
+        owned_id = _owned_request_id(approval_service, user, request_id, plan_id)
+        if not owned_id:
+            return JSONResponse({"success": False, "message": "没有待审批的请求"}, status_code=404)
+        success = approval_service.reject(owned_id, comment)
         if success:
             return _trace_approval_route(
                 {

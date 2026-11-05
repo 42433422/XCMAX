@@ -254,6 +254,22 @@ def client(app):
 
 
 @pytest.fixture
+def logged_in_session(monkeypatch):
+    """Stub a validated session user with all permissions; mutate ``tenant_id`` per test."""
+    from types import SimpleNamespace
+
+    user = SimpleNamespace(id=1, tenant_id=None, is_active=True, tier="enterprise")
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user", lambda _request: user
+    )
+    monkeypatch.setattr(
+        "app.application.facades.session_facade.get_auth_service",
+        lambda: SimpleNamespace(has_permission=lambda _user, _code: True),
+    )
+    return user
+
+
+@pytest.fixture
 def mock_external_api():
     """Mock 常见外部 API 客户端。"""
     mocks = {

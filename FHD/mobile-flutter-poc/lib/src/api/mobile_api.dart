@@ -59,6 +59,7 @@ abstract class _ApiRootBase {
   int _authGeneration = 0;
   Future<void> _sessionWrites = Future<void>.value();
   Future<bool>? _refreshInFlight;
+  DateTime? _authRefreshBlockedUntil;
   DateTime? _lastLanProbeAt;
   bool? _lastLanProbeOk;
 

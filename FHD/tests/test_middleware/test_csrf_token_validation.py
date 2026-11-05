@@ -57,6 +57,10 @@ def client():
     def mobile_refresh():
         return {"success": True}
 
+    @app.post("/api/mobile/v1/items")
+    def mobile_create_item():
+        return {"success": True, "created": True}
+
     @app.post("/api/mod-store/install")
     def install():
         return {"success": True}
@@ -114,8 +118,19 @@ def test_mutating_matching_csrf_allowed(client):
 
 
 def test_unverified_bearer_does_not_bypass_csrf(client):
+    """浏览器/机器接口的失效 Bearer 仍按 CSRF 失败返回 403。"""
     r = client.post("/api/items", headers={"Authorization": "Bearer attacker-controlled"})
     assert r.status_code == 403
+
+
+def test_expired_mobile_bearer_is_auth_failure_not_csrf_missing(client):
+    """移动端接口应返回 401（触发客户端刷新），而不是误报 CSRF 403。"""
+    r = client.post(
+        "/api/mobile/v1/items",
+        headers={"Authorization": "Bearer attacker-controlled"},
+    )
+    assert r.status_code == 401
+    assert r.json()["code"] == "UNAUTHORIZED"
 
 
 def test_verified_mobile_access_bearer_bypasses_csrf(client, monkeypatch):

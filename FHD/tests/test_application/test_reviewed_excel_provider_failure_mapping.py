@@ -34,6 +34,21 @@ def test_unknown_after_send_keeps_outcome_unknown():
     assert is_definite_provider_failure(ReviewedExcelError("x", provider_status=404))
 
 
+def test_generic_model_failure_message_keeps_public_reason():
+    from app.middleware.error_handler import _elt_model_error
+
+    mapped = _elt_model_error(
+        {
+            "code": "model_processing_failed",
+            "message": "模型处理未完成。模型边界未完整覆盖本批主体，不能自动补齐",
+            "retryable": False,
+            "outcome_unknown": True,
+        }
+    )
+    assert mapped["outcome_unknown"] is True
+    assert "模型边界未完整覆盖本批主体" in mapped["message"]
+
+
 def test_platform_error_valueerror_status_extracted():
     exc = ValueError("平台错误(404): 模型供应商请求失败，请检查密钥、模型、额度或服务状态")
     assert provider_http_status(exc) == 404

@@ -7,8 +7,6 @@
 from __future__ import annotations
 
 import logging
-import os
-import secrets
 import threading
 import time
 import uuid
@@ -16,6 +14,7 @@ from typing import Any
 
 import jwt
 
+from app.security.jwt_signing_key import resolve_jwt_signing_key
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -26,26 +25,35 @@ MOBILE_JWT_ALG = "HS256"
 MOBILE_ACCESS_TTL_HOURS = 24
 MOBILE_REFRESH_TTL_HOURS = 168
 
-# 未配置 SECRET_KEY 时的进程级随机回退（不可预测），替代旧的硬编码
-# ``xcagi-dev-secret``。生产应显式配置 SECRET_KEY；否则进程重启后历史 token
-# 自然失效（安全优先，绝不使用可预测的固定默认值）。
-_FALLBACK_SECRET = secrets.token_urlsafe(48)
-_warned_missing_secret = False
-
 # 已消费的 refresh token jti（一次性使用）；进程内内存 + 可选 Redis 跨副本共享。
 _used_refresh_jti: set[str] = set()
 _used_refresh_lock = threading.Lock()
 
 
 def _secret_key() -> str:
-    secret = os.environ.get("SECRET_KEY", "").strip()
-    if secret:
-        return secret
-    global _warned_missing_secret
-    if not _warned_missing_secret:
-        logger.warning("SECRET_KEY 未配置，移动端 JWT 使用进程级随机密钥（重启后历史 token 失效）")
-        _warned_missing_secret = True
-    return _FALLBACK_SECRET
+    """稳定签名密钥：环境变量优先，未配置时使用持久化实例密钥（跨重启有效）。"""
+    return resolve_jwt_signing_key()
+
+
+def _mobile_session_is_live(session_id: str) -> bool:
+    """refresh 前校验底层会话仍然有效，避免给已失效会话续签 token。
+
+    relay 会话是配对时生成的轻量会话，不落 sessions 表，直接放行。
+    数据库瞬时不可用时按「未知」处理并允许续签（token 本身仍验签通过），
+    避免把一次基础设施抖动误判为登出。
+    """
+    sid = session_id.strip()
+    if not sid:
+        return False
+    if sid.startswith("mobile-relay-"):
+        return True
+    try:
+        from app.application.facades.session_facade import get_session_service
+
+        return get_session_service().get_session_info(sid) is not None
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("mobile refresh session check unavailable: %s", exc)
+        return True
 
 
 def _redis_blacklist():
@@ -138,9 +146,16 @@ def refresh_mobile_access_token(refresh_token: str) -> dict[str, str] | None:
         return None
     from app.infrastructure.auth.mobile_session import ADMIN_ACCOUNT_KINDS, current_mobile_admin
 
-    if str(payload.get("account_kind") or "").strip().lower() in ADMIN_ACCOUNT_KINDS:
+    account_kind = str(payload.get("account_kind") or "").strip().lower()
+    if account_kind in ADMIN_ACCOUNT_KINDS:
+        # 管理端仍走市场管理员会话校验（main 的既有语义）。
         if current_mobile_admin(uid, sid) is None:
             return None
+    elif not _mobile_session_is_live(str(sid)):
+        # 普通/企业会话已删除或过期时拒绝续签：否则客户端会拿到新 token
+        # 却仍在 session 相关接口收到 401，形成「refresh 成功 + 业务 401」循环。
+        logger.info("mobile refresh rejected: session %s is no longer valid", sid)
+        return None
     exp = int(payload.get("exp") or 0)
     ttl = max(1, exp - int(time.time())) if exp else MOBILE_REFRESH_TTL_HOURS * 3600
     _mark_refresh_jti_used(jti, ttl)

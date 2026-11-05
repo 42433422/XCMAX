@@ -4,6 +4,7 @@ import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCoo
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
 import { resolveErpApiPathWhenReady } from '@/utils/erpDomainPaths'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 /**
  * 后端 LanLicenseGuard 返回 401 + error=license_* 时派发；
@@ -110,16 +111,73 @@ export class ApiError extends Error {
   }
 }
 
+export class AccountSwitchedError extends ApiError {
+  constructor() {
+    super('账号已切换，已丢弃旧账号的请求结果', 0, null)
+    this.name = 'AccountSwitchedError'
+  }
+}
+
+// Auth endpoints drive the account switch themselves, so their responses must not be discarded.
+const ACCOUNT_SWITCH_EXEMPT_PATH = /\/api\/(auth|market\/auth|session)\b/
+
 export interface RequestOptions extends RequestInit {
   skipDefaultJsonHeader?: boolean
   responseType?: 'json' | 'blob'
   timeoutMs?: number
+  /** 显式预算的读请求（如登录行业 8s）不再自动再等一轮。 */
+  retry?: boolean
 }
 
 export type { ApiResponse } from '@/types/api'
 
+const READ_RETRY_DELAY_MS = 250
+const READ_RETRYABLE_STATUSES = new Set([408, 429])
+
+function isTransientReadFailure(error: ApiError): boolean {
+  if (error.status >= 500 || READ_RETRYABLE_STATUSES.has(error.status)) return true
+  if (error.status !== 0) return false
+  const message = error.message
+  // 只重试传输失败和调用方设置的超时。响应形状错误不能再读一次。
+  return message.startsWith('请求超时')
+    || message === '网络错误'
+    || /failed to fetch|network|econn|abort/i.test(message)
+}
+
+function shouldRetryRead(error: unknown, options: RequestOptions): boolean {
+  if (options.retry === false || options.signal?.aborted) return false
+  // 切账号必须丢弃结果，不能当成网络失败再读一次新账号的数据。
+  if (error instanceof AccountSwitchedError) return false
+  const method = String(options.method || 'GET').toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD') return false
+  return error instanceof ApiError && isTransientReadFailure(error)
+}
+
 async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
-  const fullUrl = buildApiUrl(await resolveErpApiPathWhenReady(url))
+  const resolvedUrl = await resolveErpApiPathWhenReady(url)
+  const accountEpoch = productReadAccountEpoch.value
+  try {
+    return await requestOnce<T>(resolvedUrl, options, accountEpoch)
+  } catch (error) {
+    if (!shouldRetryRead(error, options)) throw error
+    if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(resolvedUrl)) {
+      throw new AccountSwitchedError()
+    }
+    await new Promise((resolve) => setTimeout(resolve, READ_RETRY_DELAY_MS))
+    if (options.signal?.aborted) throw error
+    if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(resolvedUrl)) {
+      throw new AccountSwitchedError()
+    }
+    return requestOnce<T>(resolvedUrl, options, accountEpoch)
+  }
+}
+
+async function requestOnce<T = unknown>(
+  url: string,
+  options: RequestOptions = {},
+  accountEpoch = productReadAccountEpoch.value,
+): Promise<T | Response> {
+  const fullUrl = buildApiUrl(url)
   const { skipDefaultJsonHeader = false, responseType = 'json', timeoutMs, signal: callerSignal, ...requestOptions } = options
   const timeoutController = typeof timeoutMs === 'number' && timeoutMs > 0 ? new AbortController() : null
   let timeoutId: ReturnType<typeof setTimeout> | null = null
@@ -159,8 +217,15 @@ async function request<T = unknown>(url: string, options: RequestOptions = {}): 
     }
   }
 
+  const assertSameAccount = () => {
+    if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(url)) {
+      throw new AccountSwitchedError()
+    }
+  }
+
   try {
     const response = await fetch(fullUrl, config)
+    assertSameAccount()
     const contentType = response.headers.get('content-type') || ''
 
     if (!response.ok) {
@@ -195,7 +260,9 @@ async function request<T = unknown>(url: string, options: RequestOptions = {}): 
     }
 
     if (contentType.includes('application/json')) {
-      return (await response.json()) as T
+      const body = (await response.json()) as T
+      assertSameAccount()
+      return body
     }
 
     return response

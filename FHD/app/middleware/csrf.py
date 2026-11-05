@@ -38,6 +38,35 @@ def _has_verified_bearer(request: Request) -> bool:
         return False
 
 
+def _csrf_or_auth_rejection(request: Request, csrf_message: str) -> JSONResponse:
+    """移动端写请求区分「CSRF 缺失」与「Bearer 已失效」。
+
+    移动端写请求没有 CSRF Cookie，只带 Bearer。若 access token 过期，旧逻辑会返回
+    403（CSRF token missing），客户端不会触发 refresh，表现为部分写接口莫名 403。
+    因此仅对 ``/api/mobile/v1/`` 的 Bearer 请求把该 403 纠正为 401，让客户端走统一
+    刷新/重新登录流程；浏览器与机器调用仍返回 403，保持原有 CSRF 语义。
+    """
+    path = request.url.path or ""
+    authorization = request.headers.get("authorization", "")
+    if (
+        path.startswith("/api/mobile/v1/")
+        and isinstance(authorization, str)
+        and authorization.lower().startswith("bearer ")
+    ):
+        return JSONResponse(
+            {
+                "success": False,
+                "code": "UNAUTHORIZED",
+                "message": "登录状态已失效，请重新登录",
+            },
+            status_code=401,
+        )
+    return JSONResponse(
+        {"success": False, "message": csrf_message},
+        status_code=403,
+    )
+
+
 def _csrf_exempt_sandbox_modstore_install(scope: Scope) -> bool:
     """MODstore 服务端用 httpx 推送 .xcmod；部分反向代理会剥离 Authorization，导致仅靠 Bearer 仍 403。"""
     if (os.environ.get("XCAGI_SANDBOX_INSTANCE") or "").strip() != "1":
@@ -249,18 +278,12 @@ class CSRFMiddleware:
             csrf_header = request.headers.get("x-csrf-token")
 
             if not csrf_cookie or not csrf_header:
-                response = JSONResponse(
-                    {"success": False, "message": "CSRF token missing"},
-                    status_code=403,
-                )
+                response = _csrf_or_auth_rejection(request, "CSRF token missing")
                 await response(scope, receive, send)
                 return
 
             if not secrets.compare_digest(csrf_cookie, csrf_header):
-                response = JSONResponse(
-                    {"success": False, "message": "CSRF token mismatch"},
-                    status_code=403,
-                )
+                response = _csrf_or_auth_rejection(request, "CSRF token mismatch")
                 await response(scope, receive, send)
                 return
 

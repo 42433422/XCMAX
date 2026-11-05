@@ -734,14 +734,14 @@ def actual_append_tools(monkeypatch, execute, workers=1):
     import json
     import sys
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from contextvars import copy_context
+    from contextvars import ContextVar, copy_context
 
     monkeypatch.setitem(sys.modules, "app.infrastructure.chat_stream_lifetime", life)
     state = set()
     namespace = {
         "copy": copy,
         "json": json,
-        "_LAST_TOOL_TRACE": threading.local(),
+        "_LAST_TOOL_TRACE": ContextVar("_LAST_TOOL_TRACE", default=None),
         "_TOKEN_ORDER_SENSITIVE_TOOLS": set(),
         "_TOOL_DEDUP_LOCK": threading.Lock(),
         "_tool_dedup_state": lambda: state,

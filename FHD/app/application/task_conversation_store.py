@@ -214,6 +214,27 @@ class TaskConversationStore:
             )
             return [_session_row(session) for session in sessions]
 
+    def delete_session(self, *, session_id: str, user_id: int) -> bool:
+        """Delete one owner-scoped session and its messages; missing/foreign sessions are no-ops."""
+        with get_db() as db:
+            session = (
+                db.query(AIConversationSession)
+                .filter(
+                    AIConversationSession.session_id == session_id,
+                    AIConversationSession.user_id == user_id,
+                )
+                .first()
+            )
+            if session is None:
+                return False
+            # 会话已按 owner 校验，消息表按 session_id 清理以覆盖历史 user_id 为空的数据。
+            db.query(AIConversation).filter(
+                AIConversation.session_id == session_id,
+            ).delete(synchronize_session=False)
+            db.delete(session)
+            db.commit()
+            return True
+
     def clear_sessions(self, *, user_id: int) -> int:
         with get_db() as db:
             sessions = (

@@ -69,7 +69,9 @@ def _resolve_chat_execute_tool():
 
 _TOOL_DEDUP: ContextVar[set[str] | None] = ContextVar("_TOOL_DEDUP", default=None)
 _TOOL_DEDUP_LOCK = threading.Lock()
-_LAST_TOOL_TRACE = threading.local()
+_LAST_TOOL_TRACE: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+    "_LAST_TOOL_TRACE", default=None
+)
 _LAST_TOOL_RESULT: ContextVar[dict[str, Any] | None] = ContextVar("_LAST_TOOL_RESULT", default=None)
 
 # 这些工具可能在首轮就返回 requires_token,后续工具在串行语义下不应被执行;并行会改变该顺序。
@@ -103,11 +105,11 @@ def _tool_dedup_state() -> set[str]:
 
 
 def clear_last_tool_result() -> None:
-    _LAST_TOOL_TRACE.records = []
+    _LAST_TOOL_TRACE.set([])
 
 
 def get_last_tool_records() -> list[dict[str, Any]]:
-    records = getattr(_LAST_TOOL_TRACE, "records", [])
+    records = _LAST_TOOL_TRACE.get()
     if not isinstance(records, list):
         return []
     return copy.deepcopy([item for item in records if isinstance(item, dict)])
@@ -156,7 +158,7 @@ def _append_last_tool_record(
             params = {}
     except json.JSONDecodeError:
         params = {}
-    records = getattr(_LAST_TOOL_TRACE, "records", [])
+    records = _LAST_TOOL_TRACE.get()
     if not isinstance(records, list):
         records = []
     output = (
@@ -173,7 +175,7 @@ def _append_last_tool_record(
             "tool_call_id": str(getattr(tc, "id", "") or ""),
         }
     )
-    _LAST_TOOL_TRACE.records = records
+    _LAST_TOOL_TRACE.set(records)
     from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
 
     publish_stream_tool_record(copy.deepcopy(records[-1]))

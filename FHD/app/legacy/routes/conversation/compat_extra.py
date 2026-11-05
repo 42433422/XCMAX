@@ -363,6 +363,49 @@ def conversations_get(
     }
 
 
+@router.delete("/conversations/{conversation_id}")
+def conversations_delete(
+    request: Request,
+    conversation_id: str,
+    user_id: str = Query(default="default"),
+    mod_id: str = Query(default=""),
+) -> dict:
+    """删除会话；幂等返回成功，避免客户端在已删除会话上重复操作时报错。"""
+    cid = str(conversation_id or "").strip()
+    resolved_user_id = _xcagi_request_user_id(request, user_id)
+    scope = _xcagi_resolve_session_scope(resolved_user_id, mod_id)
+    numeric_user_id = durable_user_id(scope[0])
+    if numeric_user_id is not None:
+        deleted = task_conversation_store.delete_session(
+            session_id=cid,
+            user_id=numeric_user_id,
+        )
+    else:
+        deleted = False
+        with _conversation_lock:
+            bucket = _xcagi_user_sessions.get(scope)
+            if bucket is not None and cid in bucket:
+                bucket.pop(cid, None)
+                if not bucket:
+                    _xcagi_user_sessions.pop(scope, None)
+                deleted = True
+            elif not scope[1]:
+                for key, candidate in list(_xcagi_user_sessions.items()):
+                    if key[0] != scope[0] or cid not in candidate:
+                        continue
+                    candidate.pop(cid, None)
+                    if not candidate:
+                        _xcagi_user_sessions.pop(key, None)
+                    deleted = True
+                    break
+    return {
+        "success": True,
+        "deleted": deleted,
+        "id": cid,
+        "mod_id": scope[1],
+    }
+
+
 @router.post("/conversations/{conversation_id}/messages")
 def conversations_post_message(
     request: Request,

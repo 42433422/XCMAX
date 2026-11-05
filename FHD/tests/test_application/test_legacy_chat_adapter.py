@@ -493,7 +493,7 @@ class TestChatStreamSseEvents:
         }
 
         def stream(*args, **kwargs):
-            adapter._LAST_TOOL_TRACE.records = [record]
+            adapter._LAST_TOOL_TRACE.set([record])
             yield "needs customer"
 
         monkeypatch.setattr(adapter, "chat_stream_text", stream)

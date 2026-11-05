@@ -69,6 +69,13 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+/** jsdom 默认所有元素尺寸为 0；真实可见容器才有布局尺寸。 */
+function stubChartSize(wrapper: ReturnType<typeof mount>): void {
+  const el = wrapper.find('[data-testid="persy-graph-canvas"]').element as HTMLElement
+  Object.defineProperty(el, 'clientWidth', { configurable: true, value: 640 })
+  Object.defineProperty(el, 'clientHeight', { configurable: true, value: 480 })
+}
+
 describe('PersyKnowledgeGraph', () => {
 
   it('renders real graph nodes and recall edges', async () => {
@@ -88,6 +95,7 @@ describe('PersyKnowledgeGraph', () => {
         },
       },
     })
+    stubChartSize(wrapper)
     await flushPromises()
 
     expect(mocks.init).toHaveBeenCalledTimes(1)
@@ -106,6 +114,14 @@ describe('PersyKnowledgeGraph', () => {
     expect(mocks.chart.dispose).toHaveBeenCalledTimes(1)
   })
 
+  it('defers chart creation while the container has no layout size', async () => {
+    const wrapper = mount(PersyKnowledgeGraph, { props: { graph } })
+    await flushPromises()
+
+    expect(mocks.init).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('emits real onboarding actions from an empty graph', async () => {
     const wrapper = mount(PersyKnowledgeGraph, {
       props: {
@@ -117,6 +133,7 @@ describe('PersyKnowledgeGraph', () => {
         },
       },
     })
+    stubChartSize(wrapper)
     await flushPromises()
 
     const option = mocks.chart.setOption.mock.calls.at(-1)?.[0]
@@ -131,6 +148,7 @@ describe('PersyKnowledgeGraph', () => {
 
   it('emits the selected knowledge node for the detail panel', async () => {
     const wrapper = mount(PersyKnowledgeGraph, { props: { graph } })
+    stubChartSize(wrapper)
     await flushPromises()
 
     const option = mocks.chart.setOption.mock.calls.at(-1)?.[0]
@@ -172,6 +190,7 @@ describe('PersyKnowledgeGraph', () => {
         },
       },
     })
+    stubChartSize(wrapper)
     await flushPromises()
 
     const option = mocks.chart.setOption.mock.calls.at(-1)?.[0]
@@ -199,6 +218,7 @@ it('caps dense graphs by strength, keeps sticky nodes, escapes tooltips and refr
     edges: [{ id: 'valid', source: 'k69', target: 'topic', type: 'related', weight: 0.9 },
       { id: 'missing', source: 'k0', target: 'missing', type: 'related' }] },
     selectedNodeId: 'k69', recall: { query: 'An unmatched question with more than twenty eight letters', chunks: [{ source: 'guide.md+rerank', chunk_index: 68 }] } } })
+  stubChartSize(wrapper)
   await flushPromises()
   const option = () => mocks.chart.setOption.mock.calls.at(-1)![0]
   expect(option().series[0].data).toHaveLength(56)

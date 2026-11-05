@@ -1,9 +1,9 @@
 /**
  * 统一 TTS 入口：
- *   - online（默认 / auto）：`POST /api/tts` → 服务端优先 MiMo-V2.5 TTS，失败回退 Edge 神经音
- *     （默认回退音色 zh-CN-XiaoxiaoNeural）。**不使用**浏览器系统 `speechSynthesis`。
- *   - offline：可选 MMS-TTS（需用户显式启用）；auto 模式不再回退到 offline/system
- *   - system：保留设置项兼容，但 `speakText` 在 auto/online 路径下不会调用
+ *   - online（默认 / auto）：`POST /api/tts` → 服务端优先 MiMo-V2.5 TTS，失败回退 Edge 神经音。
+ *   - 在线合成失败时：优先使用已下载的离线包；否则回退浏览器/系统中文语音，避免彻底无声。
+ *   - offline：可选 MMS-TTS（需用户显式启用）；失败不再回退系统 TTS。
+ *   - system：保留设置项兼容。
  */
 
 import { apiFetch } from './apiBase'
@@ -408,6 +408,42 @@ async function playOnlineTts(text: string, controller: AbortController): Promise
   })
 }
 
+async function speakWithSystemVoice(text: string): Promise<boolean> {
+  if (!hasSpeechSynthesis()) return false
+  let voices = voicesCache
+  if (!voices.length) voices = await loadVoicesOnce()
+  if (!pickBestChineseVoice(voices)) return false
+  return new Promise<boolean>((resolve) => {
+    let settled = false
+    const finish = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      resolve(ok)
+    }
+    try {
+      const u = createChineseUtterance(text)
+      u.onend = () => finish(true)
+      u.onerror = () => finish(false)
+      window.speechSynthesis.speak(u)
+    } catch {
+      finish(false)
+    }
+  })
+}
+
+async function speakWithFallback(text: string): Promise<boolean> {
+  if (isOfflineReady()) {
+    try {
+      const { audio, samplingRate } = await synthesizeOffline(text)
+      await playOfflinePcm(audio, samplingRate)
+      return true
+    } catch {
+      /* fall through to system voice */
+    }
+  }
+  return speakWithSystemVoice(text)
+}
+
 /** 朗读完成、失败或主动停止后结束；失败统一提示，取消静默。 */
 export async function speakText(text: string, options?: { onEnd?: () => void; onError?: (e: unknown) => void }): Promise<void> {
   const plain = String(text || '').trim()
@@ -425,11 +461,21 @@ export async function speakText(text: string, options?: { onEnd?: () => void; on
     }
   } catch (e) {
     const error = controller.signal.aborted ? controller.signal.reason : e
-    if (!controller.signal.aborted || error?.name === 'TimeoutError') {
-      showAppToast(error?.name === 'NotAllowedError'
-        ? '语音播放被浏览器阻止，请点击朗读按钮重试。'
-        : error?.name === 'TimeoutError' ? '语音服务响应超时，请稍后重试。' : '语音播放失败，请稍后重试。')
-      options?.onError?.(error)
+    const abortedByUser = controller.signal.aborted && error?.name !== 'TimeoutError'
+    const message = String(error?.message || '')
+    const playbackError = error?.name === 'NotAllowedError'
+      || error?.name === 'AbortError'
+      || message.includes('音频播放失败')
+      || message.includes('play rejected')
+    const offlineMode = getEngineMode() === 'offline'
+    const fallbackOk = offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(plain)
+    if (!fallbackOk) {
+      if (!controller.signal.aborted || error?.name === 'TimeoutError') {
+        showAppToast(error?.name === 'NotAllowedError'
+          ? '语音播放被浏览器阻止，请点击朗读按钮重试。'
+          : error?.name === 'TimeoutError' ? '语音服务响应超时，请稍后重试。' : '语音播放失败，请稍后重试。')
+        options?.onError?.(error)
+      }
     }
   } finally {
     if (speechController === controller) speechController = null

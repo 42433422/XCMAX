@@ -1142,9 +1142,9 @@ def test_model_status_requires_real_session_and_its_market_binding(
     outbound.assert_not_called()
 
 
-@pytest.mark.parametrize("status", [400, 401, 503])
+@pytest.mark.parametrize(("status", "expected"), [(400, 400), (401, 401), (503, 200)])
 def test_model_status_failure_never_exposes_upstream_error_body(
-    desktop_model_status_client, monkeypatch, status
+    desktop_model_status_client, monkeypatch, status, expected
 ):
     monkeypatch.setattr(
         facade,
@@ -1161,10 +1161,14 @@ def test_model_status_failure_never_exposes_upstream_error_body(
     )
     desktop_model_status_client.cookies.set("session_id", "synthetic-session-71")
     response = desktop_model_status_client.get("/api/conversation/model-status")
-    assert response.status_code == status
+    assert response.status_code == expected
     assert "synthetic-secret" not in response.text
     assert "private.invalid" not in response.text
-    assert "模型" in response.json()["detail"]
+    if expected == 200:
+        assert response.json()["degraded"] is True
+        assert "模型" in response.json()["reason"]
+    else:
+        assert "模型" in response.json()["detail"]
 
 
 @pytest.mark.parametrize("mode", ["sync", "async", "stream", "async-stream"])

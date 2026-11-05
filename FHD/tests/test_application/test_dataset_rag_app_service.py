@@ -1163,16 +1163,14 @@ def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, 
                     node_id="direct-rebuild",
                     tool_id="dataset_rag",
                     action="rebuild_index",
-                    params={
-                        "dataset_id": "host-queue",
-                        "background": True,
-                        "access_context": {
-                            "tenant_id": "host-tenant",
-                            "permissions": ["dataset.read", "dataset.write"],
-                        },
-                    },
+                    params={"dataset_id": "host-queue", "background": True},
                 ),
-                runtime_context={},
+                runtime_context={
+                    "dataset_access_context": {
+                        "tenant_id": "host-tenant",
+                        "permissions": ["dataset.read", "dataset.write"],
+                    },
+                },
                 deadline_monotonic=time.monotonic() + 10,
             )
         assert reply["job"]["status"] == "queued"

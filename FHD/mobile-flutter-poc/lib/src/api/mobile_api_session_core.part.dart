@@ -82,6 +82,7 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
 
   int _beginAuthChange() {
     _refreshInFlight = null;
+    _authRefreshBlockedUntil = null;
     return ++_authGeneration;
   }
 

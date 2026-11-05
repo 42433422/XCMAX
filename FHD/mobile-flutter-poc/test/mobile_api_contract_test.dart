@@ -632,6 +632,47 @@ void main() {
     },
   );
 
+  test('rate-limited response exposes error code and retry-after', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final httpClient = HttpClient();
+    addTearDown(() => httpClient.close(force: true));
+    addTearDown(() => server.close(force: true));
+
+    final requestDone = server.first.then((request) async {
+      request.response.statusCode = HttpStatus.tooManyRequests;
+      request.response.headers.contentType = ContentType.json;
+      request.response.headers.set('Retry-After', '7');
+      request.response.write(
+        jsonEncode({
+          'success': false,
+          'code': 'RATE_LIMITED',
+          'message': '请求过于频繁，请稍后再试',
+          'retry_after': 7,
+        }),
+      );
+      await request.response.close();
+    });
+
+    final api = MobileApiClient(
+      config: MobileApiConfig(
+        baseUrl: 'http://${server.address.address}:${server.port}/',
+      ),
+      sessionStore: MemoryMobileSessionStore(const MobileSessionData()),
+      httpClient: httpClient,
+    );
+
+    try {
+      await api.getJson(XcagiMobileEndpoints.health);
+      fail('expected MobileApiException');
+    } on MobileApiException catch (error) {
+      expect(error.statusCode, HttpStatus.tooManyRequests);
+      expect(error.errorCode, 'RATE_LIMITED');
+      expect(error.retryAfterSeconds, 7);
+      expect(error.message, '请求过于频繁，请稍后再试');
+    }
+    await requestDone;
+  });
+
   test('AI chat request matches the mobile client envelope', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final httpClient = HttpClient();

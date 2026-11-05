@@ -245,7 +245,9 @@ describe('actual Mod label output flow', () => {
   it('never substitutes a template when loading fails and permits retry', async () => {
     failDetail = true
     await wrapper!.get('#label-product').setValue('2')
-    await wrapper!.get('#label-template').setValue('db:42'); await flushPromises()
+    await wrapper!.get('#label-template').setValue('db:42')
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await flushPromises()
     expect(button('生成标签 PDF').attributes('disabled')).toBeDefined()
     expect(wrapper!.text()).toContain('模板载入失败')
     failDetail = false

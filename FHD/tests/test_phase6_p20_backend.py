@@ -71,7 +71,7 @@ def tmp_dir():
 
 
 @pytest.fixture
-def shipment_client() -> Iterator[TestClient]:
+def shipment_client(logged_in_session) -> Iterator[TestClient]:
     from app.fastapi_routes.domains.shipment import routes as shipment_routes
 
     app = FastAPI()
@@ -1211,6 +1211,7 @@ class TestShipmentApprovalApproveRoute:
             ),
         ):
             svc = MagicMock()
+            svc.get_pending_request.return_value.tenant_id = None
             svc.approve.return_value = True
             svc.get_pending_workflow.return_value = None
             mock_get.return_value = svc
@@ -1240,6 +1241,7 @@ class TestShipmentApprovalApproveRoute:
     def test_approve_fail_returns_400(self, shipment_client: TestClient):
         with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
+            svc.get_pending_request.return_value.tenant_id = None
             svc.approve.return_value = False
             mock_get.return_value = svc
             r = shipment_client.post(
@@ -1257,6 +1259,7 @@ class TestShipmentApprovalApproveRoute:
             ),
         ):
             svc = MagicMock()
+            svc.get_pending_request.return_value.tenant_id = None
             svc.approve.return_value = True
             plan_obj = MagicMock()
             plan_obj.plan_id = "p1"
@@ -1307,6 +1310,7 @@ class TestShipmentApprovalRejectRoute:
             ),
         ):
             svc = MagicMock()
+            svc.get_pending_request.return_value.tenant_id = None
             svc.reject.return_value = True
             mock_get.return_value = svc
             r = shipment_client.post(
@@ -1335,6 +1339,7 @@ class TestShipmentApprovalRejectRoute:
     def test_reject_fail_returns_400(self, shipment_client: TestClient):
         with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
+            svc.get_pending_request.return_value.tenant_id = None
             svc.reject.return_value = False
             mock_get.return_value = svc
             r = shipment_client.post(

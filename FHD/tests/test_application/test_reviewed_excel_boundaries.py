@@ -112,6 +112,24 @@ def test_missing_and_duplicate_coverage_rejected(monkeypatch):
             execute(monkeypatch, source(["A1", "C1"]), raw)
 
 
+def test_flat_source_range_documents_are_coerced_before_validation(monkeypatch):
+    raw = {
+        "documents": [
+            {
+                "sheet_name": SHEET,
+                "row_start": 1,
+                "row_end": 1,
+                "column_start": 1,
+                "column_end": 3,
+                "reason": "生产打印单分段",
+            }
+        ],
+        "reason": "整表分段",
+    }
+    result = execute(monkeypatch, source(["A1", "B1", "C1"]), raw)
+    assert result["regions"][0]["range"] == "A1:C1"
+
+
 def test_real_special_sheet_name_not_batch_number(monkeypatch):
     review = source(["A1"], second=True)
     result = execute(

@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.mobile_auth_support import (
@@ -96,6 +96,20 @@ async def get_mobile_user(
                     return user
         except RECOVERABLE_ERRORS as exc:
             logger.warning("mobile user db lookup failed, falling back to JWT: %s", exc)
+            fallback_user = _mobile_user_from_jwt_payload(jwt_payload)
+            if fallback_user is not None:
+                _bind_mobile_user_tenant_to_request(request, fallback_user)
+                return fallback_user
+            # 数据库瞬时不可用不能被误报为「未授权」：否则客户端会误判登录失效，
+            # 反复触发 refresh（refresh 本身能通过验签），形成 401 循环。
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "success": False,
+                    "code": "AUTH_BACKEND_UNAVAILABLE",
+                    "message": "用户状态暂时不可用，请稍后重试",
+                },
+            )
         fallback_user = _mobile_user_from_jwt_payload(jwt_payload)
         _bind_mobile_user_tenant_to_request(request, fallback_user)
         return fallback_user
@@ -332,8 +346,8 @@ async def mobile_auth_refresh(body: MobileRefreshRequest):
     if not tokens:
         return JSONResponse(
             format_mobile_response(
-                data=None,
-                message="refresh_token 无效或已过期",
+                data={"reason": "session_invalid"},
+                message="登录会话已失效，请重新登录",
                 success=False,
                 code=401,
             ),

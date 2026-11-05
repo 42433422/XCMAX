@@ -21,6 +21,25 @@ void main() {
         mobileProductErrorMessage('FCM registration missing', 'fallback'),
         '消息提醒未开启，不影响登录和员工同步',
       );
+      expect(
+        mobileProductErrorMessage('MobileApiException(403): 权限不足', 'fallback'),
+        '当前账号没有权限，请切换账号或重新绑定',
+      );
+      expect(
+        mobileProductErrorMessage('MobileApiException(404): 接口不存在', 'fallback'),
+        '接口或数据不存在，可能是客户端与服务端版本不一致，请更新后重试',
+      );
+      expect(
+        mobileProductErrorMessage('MobileApiException(409): 任务状态冲突', 'fallback'),
+        '数据已被他人更新，请刷新后重试',
+      );
+      expect(
+        mobileProductErrorMessage(
+          'MobileApiException(429, RATE_LIMITED, retry_after=5s): 请求过于频繁',
+          'fallback',
+        ),
+        '请求过于频繁，请稍后重试',
+      );
       expect(mobileProductErrorMessage('', 'fallback'), 'fallback');
       expect(mobileProductErrorMessage('服务繁忙', 'fallback'), '服务繁忙');
       expect(mobileProductErrorMessage('x' * 81, 'fallback'), 'fallback');

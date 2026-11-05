@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.domain.shared_services import tts_service as tts
 from app.domain.shared_services.tts_service import (
     _EDGE_VOICE_RE,
     DEFAULT_EDGE_VOICE,
@@ -36,7 +37,6 @@ from app.domain.shared_services.tts_service import (
     synthesize_to_data_uri,
     trigger_common_tts_warmup,
 )
-from app.services import tts_service as tts
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +44,7 @@ def _reset_tts_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear cache + warmup latch between tests; default skip MiMo so Edge path is exercised."""
     monkeypatch.setattr(tts, "_TTS_CACHE", tts.OrderedDict())
     monkeypatch.setattr(tts, "_WARMUP_STARTED", False)
+    monkeypatch.setattr(tts, "_EDGE_BLOCKED_UNTIL", 0.0)
     monkeypatch.setattr(
         "app.domain.shared_services.mimo_tts_service.is_configured",
         lambda: False,
@@ -415,6 +416,34 @@ class TestNestedLoopFallback:
         b64 = out["audioBase64"].split(",", 1)[1]
         assert base64.b64decode(b64) == b"RECOVERED"
         assert calls["n"] == 2
+
+
+class TestEdgeUpstreamFailure:
+    def test_403_trips_circuit_breaker(self, monkeypatch) -> None:
+        class ForbiddenHandshake(Exception):
+            status = 403
+
+        async def _forbidden(_req) -> bytes:  # noqa: ARG001
+            raise ForbiddenHandshake("Invalid response status")
+
+        monkeypatch.setattr(tts, "_synthesize_mp3_bytes", _forbidden)
+        with pytest.raises(tts.TtsUpstreamBlockedError, match="403"):
+            synthesize_to_data_uri(text="hi")
+
+        # 熔断期间第二次调用必须快速失败，不再触达 edge-tts。
+        with pytest.raises(tts.TtsUpstreamBlockedError, match="已暂停重试"):
+            synthesize_to_data_uri(text="hi again")
+
+    def test_unknown_sdk_exception_becomes_runtime_error(self, monkeypatch) -> None:
+        class WeirdSdkError(Exception):
+            pass
+
+        async def _weird(_req) -> bytes:  # noqa: ARG001
+            raise WeirdSdkError("boom")
+
+        monkeypatch.setattr(tts, "_synthesize_mp3_bytes", _weird)
+        with pytest.raises(RuntimeError, match="Edge TTS 调用失败：WeirdSdkError"):
+            synthesize_to_data_uri(text="hi")
 
 
 # ---------------------------------------------------------------------------

@@ -419,13 +419,13 @@ class TestClearAndGetLastToolEdge:
 
     def test_get_last_tool_records_filters_non_dict(self):
         # 直接操作内部状态来测试过滤
-        _LAST_TOOL_TRACE.records = ["not a dict", {"valid": "record"}]
+        _LAST_TOOL_TRACE.set(["not a dict", {"valid": "record"}])
         records = get_last_tool_records()
         assert len(records) == 1
         assert records[0] == {"valid": "record"}
 
     def test_get_last_tool_records_non_list_records(self):
-        _LAST_TOOL_TRACE.records = "not a list"
+        _LAST_TOOL_TRACE.set("not a list")
         records = get_last_tool_records()
         assert records == []
 

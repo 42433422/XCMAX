@@ -61,6 +61,7 @@ function extractRoutesFromModule(m: Record<string, unknown>): RouteRecordRaw[] {
 }
 
 import { modRouteGlob } from '@/constants/modRouteGlob'
+import { isChunkLoadError, markRouteChunkError } from '@/utils/routeLoadState'
 
 const modRouteLoaders = modRouteGlob
 
@@ -228,6 +229,11 @@ export async function registerModRoutes(router: Router, entries: ModRouteApiEntr
       }
     } catch (e) {
       console.error(`[mods] Failed to load routes for "${mod_id}":`, e)
+      if (isChunkLoadError(e)) {
+        // 构建哈希变化后旧 Mod chunk 已删除；由 RouteFallbackPanel 提供刷新入口。
+        markRouteChunkError(currentRefreshFullPath(router))
+        continue
+      }
       if (import.meta.env.DEV) {
         console.info('[mods] Hint: after adding mods/*/frontend/routes.js, run `npm run build` (or dev restart) so Vite includes the glob.')
       }

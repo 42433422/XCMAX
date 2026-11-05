@@ -80,7 +80,11 @@ async def _http_get_json(
     timeout = httpx.Timeout(5.0, read=15.0, write=5.0, connect=5.0)
     for attempt in range(1, max_attempts + 1):
         try:
-            async with httpx.AsyncClient(timeout=timeout, verify=shared_ssl_context()) as client:
+            # 目录服务是服务端到服务端的直连，不能让桌面系统代理（尤其是
+            # 失效的 PAC/HTTP_PROXY）把请求带偏成 TLS/DNS/超时假故障。
+            async with httpx.AsyncClient(
+                timeout=timeout, verify=shared_ssl_context(), trust_env=False
+            ) as client:
                 request_headers = _catalog_headers()
                 if headers:
                     request_headers.update(headers)

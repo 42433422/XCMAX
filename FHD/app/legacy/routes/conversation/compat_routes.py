@@ -62,6 +62,22 @@ def conversation_model_status(request: Request, _user=Depends(get_logged_in_user
                 "message": "已保存的模型不支持聊天，请选择聊天模型或恢复跟随平台。",
                 "recovery": "choose_chat_model_or_follow_platform",
             }
+            raise HTTPException(status_code=400, detail=detail, headers=headers) from None
+        if status in {502, 503, 504}:
+            # 状态接口是“报告状态”，不是“探测上游”。市场超时/5xx 时返回
+            # degraded 快照，避免前端把“上游暂时不可达”误判为本地接口故障。
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "degraded": True,
+                    "provider": "",
+                    "model": "",
+                    "route_source": "unavailable",
+                    "key_source": "unavailable",
+                    "reason": detail,
+                },
+                headers=headers,
+            )
         raise HTTPException(status_code=status, detail=detail, headers=headers) from None
     return JSONResponse({"ok": True, **metadata}, headers=headers)
 

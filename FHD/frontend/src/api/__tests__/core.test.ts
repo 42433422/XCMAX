@@ -37,7 +37,8 @@ describe('api core types', () => {
       name: 'ApiError',
       message: expect.stringContaining('请求超时'),
     })
-    await vi.advanceTimersByTimeAsync(251)
+    // 读请求超时后会自动重试一次，总时长 = 首次超时 + 退避 + 二次超时。
+    await vi.advanceTimersByTimeAsync(900)
     await rejection
   })
 })

@@ -1622,6 +1622,22 @@ class TestBodySnippet:
 
 class TestProxyJsonRetries:
     @pytest.mark.asyncio
+    async def test_zero_retries_still_attempts_once(self):
+        """retries=0 是“不重试”，不能退化成“一个请求都不发”。"""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": True}
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
+            mock_client.request = AsyncMock(return_value=mock_response)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await ma._proxy_json("GET", "/test", retries=0)
+        assert result == {"ok": True}
+        mock_client.request.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_retry_then_success(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_HTTP_RETRIES", "2")
         mock_response = MagicMock()

@@ -9,7 +9,11 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
-from app.domain.shared_services.bert_intent_labels import ID_TO_LABEL, INTENT_LABELS, LABEL_TO_ID
+from app.domain.shared_services.bert_intent_labels import (  # noqa: F401
+    ID_TO_LABEL,
+    INTENT_LABELS,
+    LABEL_TO_ID,
+)
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -176,8 +180,8 @@ class BertIntentClassifier:
         )
 
     def _setup_dummy_model(self):
-        """设置虚拟模型（用于演示或测试）"""
-        logger.warning("使用虚拟模型，仅返回随机结果")
+        """标记模型不可用；不做随机猜测，避免把噪声当成意图识别结果。"""
+        logger.warning("意图模型不可用：降级为规则引擎，不再返回虚拟随机预测")
         self.model = None
         self.tokenizer = None
 
@@ -297,24 +301,19 @@ class BertIntentClassifier:
         return results
 
     def _dummy_predict(self, text: str, return_probs: bool = False) -> dict[str, Any]:
-        """虚拟预测（当模型不可用时）"""
-        import random
-
-        intent = random.choice(INTENT_LABELS[:-1])
-        confidence = round(random.uniform(0.5, 0.9), 4)
-
+        """模型不可用时的确定性降级结果；不返回随机意图，避免污染业务决策。"""
         result: dict[str, Any] = {
             "text": text,
-            "intent": intent,
-            "confidence": confidence,
+            "intent": "unk",
+            "confidence": 0.0,
             "model": "dummy",
+            "degraded": True,
+            "available": False,
+            "reason": "model_unavailable",
         }
 
         if return_probs:
-            result["all_probs"] = {
-                label: round(random.random() * 0.3, 4) for label in INTENT_LABELS
-            }
-            result["all_probs"][intent] = confidence
+            result["all_probs"] = {}
 
         return result
 
