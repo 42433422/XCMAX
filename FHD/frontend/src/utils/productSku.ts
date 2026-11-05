@@ -34,14 +34,14 @@ export async function fetchProductSku(force = false): Promise<string> {
           break
         }
       } catch {
-        break
+        // 冷启动网络中断或 8 秒超时也退避重试；最后一次仍失败才回退。
+        if (attempt === PRODUCT_SKU_RETRY_DELAYS_MS.length) break
       }
       if (attempt < PRODUCT_SKU_RETRY_DELAYS_MS.length) {
         await new Promise(resolve => setTimeout(resolve, PRODUCT_SKU_RETRY_DELAYS_MS[attempt]))
       }
     }
-    // A temporary startup failure must not make the fallback SKU sticky for the
-    // lifetime of the renderer. A later route mount can then resolve the real SKU.
+    // 临时失败不写缓存，后续路由守卫可重新探测真实 SKU，避免企业版被永久降级为 generic。
     return viteSku || cachedSku || 'generic'
   })()
   try {

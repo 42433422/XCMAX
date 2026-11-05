@@ -33,13 +33,15 @@ describe('productSku', () => {
     const sku = await fetchProductSku(true)
     expect(sku).toBe('enterprise')
     expect(apiFetchMock).toHaveBeenCalledWith('/api/runtime/product-sku', { timeoutMs: 8000 })
+    expect(apiFetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('fetchProductSku falls back to generic on failure', async () => {
+  it('fetchProductSku retries network failures and falls back to generic', async () => {
     const { fetchProductSku } = await loadProductSku()
     apiFetchMock.mockRejectedValue(new Error('offline'))
     const sku = await fetchProductSku(true)
     expect(sku).toBe('generic')
+    expect(apiFetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('retries a runtime SKU route that is temporarily unavailable during startup', async () => {

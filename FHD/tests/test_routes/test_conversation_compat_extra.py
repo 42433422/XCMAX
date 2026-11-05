@@ -286,6 +286,32 @@ class TestConversationsSessionsClear:
         assert data["success"] is True
 
 
+class TestConversationsDelete:
+    def test_delete_saved_in_memory_session(self):
+        client = TestClient(_make_app())
+        with patch(
+            "app.neuro_bus.route_event_publisher.publish_simple_event",
+        ):
+            client.post(
+                "/conversations/message",
+                json={"session_id": "delete-me", "content": "hi", "user_id": "u_delete"},
+            )
+        resp = client.delete("/conversations/delete-me", params={"user_id": "u_delete"})
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["success"] is True
+        assert data["deleted"] is True
+        assert client.get("/conversations/delete-me", params={"user_id": "u_delete"}).json()["messages"] == []
+
+    def test_delete_missing_session_is_idempotent(self):
+        client = TestClient(_make_app())
+        resp = client.delete("/conversations/not-exist")
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["success"] is True
+        assert data["deleted"] is False
+
+
 class TestAiConversationNew:
     def test_new_with_session_id(self):
         client = TestClient(_make_app())

@@ -142,8 +142,11 @@ async function bootstrap() {
   const app = createApp(App)
   const pinia = createPinia()
 
-  app.config.errorHandler = (err, _instance, info) => {
-    console.error('[Vue]', info || 'vue', err)
+  app.config.errorHandler = (err, instance, info) => {
+    const componentOptions = instance?.$options as { name?: string; __name?: string } | undefined
+    const componentName = componentOptions?.name || componentOptions?.__name || ''
+    // 带组件名记录，避免崩溃报告只剩「unknown / insertBefore」这类无法定位的信息。
+    console.error(`[Vue] ${info || 'vue'}${componentName ? ` (${componentName})` : ''}`, err)
     reportDesktopRendererFault(err, typeof info === 'string' ? info : undefined)
   }
   window.addEventListener('unhandledrejection', (event) => {

@@ -118,8 +118,34 @@ export interface RequestOptions extends RequestInit {
 
 export type { ApiResponse } from '@/types/api'
 
+const READ_RETRY_DELAY_MS = 250
+const READ_RETRYABLE_STATUSES = new Set([408, 429])
+
+function shouldRetryRead(error: unknown, options: RequestOptions): boolean {
+  if (options.signal?.aborted) return false
+  const method = String(options.method || 'GET').toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD') return false
+  if (error instanceof ApiError) {
+    // status=0 覆盖网络中断与超时；5xx / 408 / 429 对幂等读请求可安全重试一次。
+    return error.status === 0 || error.status >= 500 || READ_RETRYABLE_STATUSES.has(error.status)
+  }
+  return true
+}
+
 async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
-  const fullUrl = buildApiUrl(await resolveErpApiPathWhenReady(url))
+  const resolvedUrl = await resolveErpApiPathWhenReady(url)
+  try {
+    return await requestOnce<T>(resolvedUrl, options)
+  } catch (error) {
+    if (!shouldRetryRead(error, options)) throw error
+    await new Promise((resolve) => setTimeout(resolve, READ_RETRY_DELAY_MS))
+    if (options.signal?.aborted) throw error
+    return requestOnce<T>(resolvedUrl, options)
+  }
+}
+
+async function requestOnce<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
+  const fullUrl = buildApiUrl(url)
   const { skipDefaultJsonHeader = false, responseType = 'json', timeoutMs, signal: callerSignal, ...requestOptions } = options
   const timeoutController = typeof timeoutMs === 'number' && timeoutMs > 0 ? new AbortController() : null
   let timeoutId: ReturnType<typeof setTimeout> | null = null

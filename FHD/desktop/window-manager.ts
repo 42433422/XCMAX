@@ -322,9 +322,21 @@ export async function createWindow(): Promise<void> {
     reportMainRenderer('renderer:unresponsive', 'renderer process is unresponsive')
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    const summary = `reason=${details.reason} exitCode=${details.exitCode}`
+    let crashDumpsPath = 'unavailable'
+    let source = desktopInitialUrl()
+    try {
+      crashDumpsPath = app.getPath('crashDumps')
+    } catch {
+      /* 崩溃路径不可用时仍要记录进程退出原因 */
+    }
+    try {
+      source = mainWindow.webContents.getURL() || source
+    } catch {
+      /* webContents 可能已随渲染进程销毁 */
+    }
+    const summary = `reason=${details.reason} exitCode=${details.exitCode} crashDumps=${crashDumpsPath}`
     writeBackendLog(`[crash] renderer gone ${summary}\n`)
-    reportMainRenderer('renderer:gone', summary)
+    reportMainRenderer('renderer:gone', summary, source)
     if (checkPendingRollback()) {
       desktopRuntime.rendererFailedDuringStartup = true
       return
@@ -352,11 +364,21 @@ export async function createWindow(): Promise<void> {
   })
   updateSplashProgress(8, '正在启动本地服务…')
 
+  // 版本/构建哈希变化后必须先完成缓存清理，再加载入口页；否则旧 index.html 会继续
+  // 引用已被删除的 JS/CSS chunk，表现为动态 import、图片和模块路由成批加载失败。
+  let frontendCacheReady: Promise<void> = Promise.resolve()
   if (shouldClearFrontendCache()) {
-    void mainWindow.webContents.session
+    frontendCacheReady = mainWindow.webContents.session
       .clearCache()
-      .then(() => markFrontendCacheCleared())
-      .catch(() => undefined)
+      .then(() => {
+        markFrontendCacheCleared()
+        writeBackendLog('[cache] frontend cache cleared for new build\n')
+      })
+      .catch(error => {
+        writeBackendLog(
+          `[cache] frontend cache clear failed: ${error instanceof Error ? error.message : String(error)}\n`,
+        )
+      })
   }
 
   const loadMainApplication = async (): Promise<void> => {
@@ -365,6 +387,7 @@ export async function createWindow(): Promise<void> {
     }
     try {
       updateSplashProgress(92, '正在打开主界面…')
+      await frontendCacheReady
       await desktopRuntime.mainWindow.loadURL(desktopInitialUrl(), {
         extraHeaders: 'Cache-Control: no-cache\r\n'
       })

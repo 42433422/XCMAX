@@ -113,6 +113,20 @@ def test_task_conversation_is_owner_scoped(store: TaskConversationStore) -> None
         )
 
 
+def test_delete_session_removes_messages_and_is_owner_scoped(store: TaskConversationStore) -> None:
+    store.save_message(session_id="owner-a", user_id=41, role="user", content="A")
+    store.save_message(session_id="owner-b", user_id=42, role="user", content="B")
+
+    assert store.delete_session(session_id="owner-a", user_id=41) is True
+    assert store.get_conversation(session_id="owner-a", user_id=41)["messages"] == []
+    assert store.list_sessions(user_id=41, limit=20) == []
+    assert store.get_conversation(session_id="owner-b", user_id=42)["messages"][0]["content"] == "B"
+    # 其他用户不能通过 session_id 删除已归属会话。
+    assert store.delete_session(session_id="owner-b", user_id=41) is False
+    # 重复删除保持幂等。
+    assert store.delete_session(session_id="owner-a", user_id=41) is False
+
+
 def test_clear_removes_only_current_users_sessions(store: TaskConversationStore) -> None:
     store.save_message(session_id="owner-a", user_id=41, role="user", content="A")
     store.save_message(session_id="owner-b", user_id=42, role="user", content="B")
