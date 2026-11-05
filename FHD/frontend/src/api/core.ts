@@ -134,6 +134,8 @@ const READ_RETRYABLE_STATUSES = new Set([408, 429])
 
 function shouldRetryRead(error: unknown, options: RequestOptions): boolean {
   if (options.signal?.aborted) return false
+  // 切账号必须丢弃结果，不能当成网络失败再读一次新账号的数据。
+  if (error instanceof AccountSwitchedError) return false
   const method = String(options.method || 'GET').toUpperCase()
   if (method !== 'GET' && method !== 'HEAD') return false
   if (error instanceof ApiError) {
@@ -145,17 +147,28 @@ function shouldRetryRead(error: unknown, options: RequestOptions): boolean {
 
 async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
   const resolvedUrl = await resolveErpApiPathWhenReady(url)
+  const accountEpoch = productReadAccountEpoch.value
   try {
-    return await requestOnce<T>(resolvedUrl, options)
+    return await requestOnce<T>(resolvedUrl, options, accountEpoch)
   } catch (error) {
     if (!shouldRetryRead(error, options)) throw error
+    if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(resolvedUrl)) {
+      throw new AccountSwitchedError()
+    }
     await new Promise((resolve) => setTimeout(resolve, READ_RETRY_DELAY_MS))
     if (options.signal?.aborted) throw error
-    return requestOnce<T>(resolvedUrl, options)
+    if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(resolvedUrl)) {
+      throw new AccountSwitchedError()
+    }
+    return requestOnce<T>(resolvedUrl, options, accountEpoch)
   }
 }
 
-async function requestOnce<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
+async function requestOnce<T = unknown>(
+  url: string,
+  options: RequestOptions = {},
+  accountEpoch = productReadAccountEpoch.value,
+): Promise<T | Response> {
   const fullUrl = buildApiUrl(url)
   const { skipDefaultJsonHeader = false, responseType = 'json', timeoutMs, signal: callerSignal, ...requestOptions } = options
   const timeoutController = typeof timeoutMs === 'number' && timeoutMs > 0 ? new AbortController() : null
@@ -196,7 +209,6 @@ async function requestOnce<T = unknown>(url: string, options: RequestOptions = {
     }
   }
 
-  const accountEpoch = productReadAccountEpoch.value
   const assertSameAccount = () => {
     if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(url)) {
       throw new AccountSwitchedError()

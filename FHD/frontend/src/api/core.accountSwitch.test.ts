@@ -49,4 +49,23 @@ describe('api core account switch guard', () => {
     release()
     await expect(api.get('/api/orders')).resolves.toMatchObject({ data: ['tenant-a'] })
   })
+
+  it('does not retry a read into the new account after a network failure', async () => {
+    let rejectFetch!: (error: Error) => void
+    const gate = new Promise<Response>((_resolve, reject) => { rejectFetch = reject })
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => gate)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: ['tenant-b'] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const pending = api.get('/api/orders')
+    await Promise.resolve()
+    await Promise.resolve()
+    productReadAccountEpoch.value++
+    rejectFetch(new TypeError('network down'))
+    await expect(pending).rejects.toBeInstanceOf(AccountSwitchedError)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })
