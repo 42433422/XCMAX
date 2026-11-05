@@ -97,7 +97,7 @@
         <span>知识空间</span>
       </div>
       <div>
-        <strong>{{ semanticAvailable ? '语义' : '关键词' }}</strong>
+        <strong>{{ semanticAvailable ? '语义' : (Number(omniscient.document_count || 0) > 0 ? '未建索引' : '未就绪') }}</strong>
         <span>召回</span>
       </div>
       <p v-if="omniscientHint" class="omniscient-strip__hint">{{ omniscientHint }}</p>

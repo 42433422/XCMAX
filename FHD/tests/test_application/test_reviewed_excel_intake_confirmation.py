@@ -175,7 +175,9 @@ def test_auto_ingest_start_failure_keeps_safe_diagnostics_and_saved_receipt(
     assert replay["replayed"] and replay["auto_ingest"] == failure
 
 
-def test_exact_prepared_run_is_confirmed_once_without_recleaning(intake_store, monkeypatch):
+def test_exact_prepared_run_reuses_original_for_ingest_and_cleans_for_template(
+    intake_store, monkeypatch
+):
     store = intake_store
     data, plan, business = prepare(store)
     assert plan["target_type"] == "customers"
@@ -185,11 +187,18 @@ def test_exact_prepared_run_is_confirmed_once_without_recleaning(intake_store, m
     with store.factory() as db:
         before = (db.query(EltRun).count(), db.query(EltUpload).count())
         prepared = Path(db.get(EltUpload, plan["upload_id"]).storage_path).read_bytes()
+        # Staged intake upload is the original workbook (sha equals review source).
+        assert plan["candidate_sha256"] == db.get(EltUpload, plan["upload_id"]).sha256
+        assert plan["source_sha256"] == plan["candidate_sha256"]
 
-    def no_reclean(*args, **kwargs):
-        raise AssertionError("confirmed candidate must reuse the staged bytes")
+    clean_calls = {"n": 0}
+    real_clean = routes.clean_workbook
 
-    monkeypatch.setattr(routes, "clean_workbook", no_reclean)
+    def counting_clean(*args, **kwargs):
+        clean_calls["n"] += 1
+        return real_clean(*args, **kwargs)
+
+    monkeypatch.setattr(routes, "clean_workbook", counting_clean)
     release = Event()
     store.executor.submit(release.wait, 10)
     try:
@@ -202,6 +211,7 @@ def test_exact_prepared_run_is_confirmed_once_without_recleaning(intake_store, m
     finally:
         release.set()
     store.executor.futures[-1].result(timeout=10)
+    assert clean_calls["n"] >= 1  # template file uses cleaned copy on save
     receipt = store.intake.get_batch(
         tenant_id=1, owner_user_id=7, batch_id=result["auto_ingest"]["batch_id"]
     )
@@ -210,6 +220,7 @@ def test_exact_prepared_run_is_confirmed_once_without_recleaning(intake_store, m
     assert len(store.starts) == 1
     assert store.starts[0]["prepared_plan"]["run_id"] == plan["run_id"]
     assert store.starts[0]["prepared_plan"]["preview_revision"] == data["preview_revision"]
+    # Ingest path must reuse the staged ORIGINAL bytes.
     assert Path(store.starts[0]["source_path"]).read_bytes() == prepared
     replay = store.client.post(f"{BASE}/save", data=data)
     assert replay.status_code == 200 and replay.json()["replayed"] is True

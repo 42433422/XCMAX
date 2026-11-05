@@ -1565,16 +1565,18 @@ def reviewed_excel_intake_preview(
             key = _intake_selection_key(
                 review, proposal_version, candidate_id, selected, name, composer_note
             )
-            cleaned = clean_workbook(
-                _source(db, review, tenant, owner), review.file_sha256, selected
-            )
+            # Template cleanup and ingest must diverge: cleaned bytes are for the
+            # saved template file only. Intake preview / knowledge / business runs
+            # must parse the original workbook or empty cleared cells starve ingest.
+            original = _source(db, review, tenant, owner)
+            clean_workbook(original, review.file_sha256, selected)  # validate selections
             service = get_elt_service()
             upload = service.save_upload(
                 db,
                 owner_user_id=owner,
                 file_name=f"{name.strip()}.xlsx",
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                stream=BytesIO(cleaned),
+                stream=BytesIO(original),
             )
             source = service._owned_upload(db, upload["upload_id"], owner)
             if source.tenant_id != tenant:
@@ -1772,12 +1774,9 @@ async def reviewed_excel_save(
                     "preview_revision": preview_revision,
                     "valid_rows_only": valid_rows_only,
                 }
-                from app.application.shipment_excel_etl_security import open_etl_input_file
-
-                with open_etl_input_file(
-                    prepared_path, owner_user_id=upload.owner_user_id
-                ) as source:
-                    cleaned = source.read()
+                # Staged upload is the original workbook for ingest/knowledge.
+                # Template library still receives the cleaned copy derived here.
+                cleaned = clean_workbook(body, run.file_sha256, selected)
             else:
                 # Old template-library clients authorize one template only, never implicit business writes.
                 cleaned = clean_workbook(body, run.file_sha256, selected)
