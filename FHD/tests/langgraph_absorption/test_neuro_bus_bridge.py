@@ -27,7 +27,7 @@ from app.neuro_bus.events.events_base import NeuroEvent
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
 # Reviewed with PR #2749 bounded entity dispatch, plus the desktop cap that drops
 # the oldest half of the event buffer once it passes 2000 entries.
-_BUS_SHA256 = "3d4d8c38e3554b8a64aac860d95e60a5ca39362a95447009107bf7b348f94d9f"
+_BUS_SHA256 = "e6f51d3341c96bcf6d0b4d0494ce2ad1892238fd8fa75da0f940ddda10cdc3c7"
 
 
 class RecordingBus:
