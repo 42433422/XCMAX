@@ -145,6 +145,20 @@ def test_check_event_queue_degraded_dropped(monitor):
     assert "丢弃" in result.message
 
 
+def test_check_event_queue_ignores_old_cumulative_drops(monitor):
+    # 历史累计丢过 200 条，但最近 60 秒为 0：不应继续告警。
+    fake_bus = MagicMock()
+    fake_bus.get_stats.return_value = {
+        "queue_size": 100,
+        "dropped": 200,
+        "dropped_recent": 0,
+    }
+    with patch.object(hm, "get_neuro_bus", return_value=fake_bus):
+        result = monitor._check_event_queue()
+    assert result.status == HealthStatus.HEALTHY
+    assert result.details["dropped_recent"] == 0
+
+
 def test_check_event_queue_exception(monitor):
     with patch.object(hm, "get_neuro_bus", side_effect=RuntimeError("err")):
         result = monitor._check_event_queue()
@@ -309,6 +323,19 @@ def test_evaluate_alert_callback_exception_swallowed(monitor):
     monitor.on_alert(bad_callback)
     res = HealthCheckResult("comp-cb", HealthStatus.UNHEALTHY, "down", 0.1)
     monitor._evaluate_alert(res)  # 不抛
+
+
+def test_evaluate_alert_does_not_repeat_same_alert(monitor):
+    from app.neuro_bus.health_monitor import HealthCheckResult
+
+    res = HealthCheckResult("comp-repeat", HealthStatus.DEGRADED, "still slow", 200.0)
+    monitor._evaluate_alert(res)
+    first_count = len(monitor._alerts)
+    # 计数类文案会变，但同一组件同一等级不应产生第二条告警。
+    changed = HealthCheckResult("comp-repeat", HealthStatus.DEGRADED, "still slow: 12/60s", 210.0)
+    monitor._evaluate_alert(changed)
+    assert len(monitor._alerts) == first_count
+    assert monitor._active_alerts["comp-repeat"].message == "still slow: 12/60s"
 
 
 def test_evaluate_alert_healthy_resolves_existing(monitor):

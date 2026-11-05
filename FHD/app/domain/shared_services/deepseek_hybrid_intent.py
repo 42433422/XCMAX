@@ -414,14 +414,10 @@ class HybridIntentWithDeepSeek:
         return slots
 
     def recognize_sync(self, message: str) -> dict[str, Any]:
-        import asyncio
-
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                return asyncio.run(self.recognize(message))
-            else:
-                return asyncio.run(self.recognize(message))
+            from app.utils.async_runtime import run_coroutine_sync
+
+            return run_coroutine_sync(self.recognize(message))
         except RECOVERABLE_ERRORS as e:
             logger.error("混合意图识别失败: %s", e)
             from .intent_service import recognize_intents

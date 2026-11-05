@@ -390,18 +390,14 @@ class UnifiedIntentRecognizer:
     ) -> dict[str, Any] | None:
         """DeepSeek模型识别"""
         try:
-            import asyncio
+            from app.utils.async_runtime import run_coroutine_sync
 
             if not self._deepseek_recognizer:
                 return None
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(
-                    self._deepseek_recognizer.recognize(message, context)
-                )
-            finally:
-                loop.close()
+            # 同步入口可能被异步路由直接调用：当前线程已有事件循环时，
+            # 新建/运行另一个 loop 会抛 "Cannot run the event loop while
+            # another loop is running"，协程也会变成 never awaited。
+            result = run_coroutine_sync(self._deepseek_recognizer.recognize(message, context))
             if result and result.get("intent"):
                 return {
                     "primary_intent": result["intent"],

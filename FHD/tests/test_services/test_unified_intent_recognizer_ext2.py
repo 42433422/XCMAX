@@ -308,6 +308,27 @@ class TestRecognizeDeepseek:
         result = fresh_recognizer._recognize_deepseek("msg")
         assert result is None
 
+    def test_deepseek_from_running_event_loop(
+        self, fresh_recognizer: UnifiedIntentRecognizer
+    ) -> None:
+        import asyncio
+
+        mock_ds = MagicMock()
+
+        async def fake_recognize(msg, ctx):
+            return {"intent": "order", "confidence": 0.9, "slots": {}}
+
+        mock_ds.recognize = fake_recognize
+        fresh_recognizer._deepseek_recognizer = mock_ds
+
+        async def call_from_loop() -> dict[str, Any]:
+            # 同步入口在已运行 loop 的线程里被调用：不得再新建/运行 loop。
+            return fresh_recognizer._recognize_deepseek("msg")
+
+        result = asyncio.run(call_from_loop())
+        assert result is not None
+        assert result["primary_intent"] == "order"
+
 
 class TestMergeResults:
     def test_merge_empty_results_short_message(

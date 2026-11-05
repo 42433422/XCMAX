@@ -327,6 +327,34 @@ class TestCrashReport:
         assert response.status_code == 415
 
 
+class TestCrashReportClientDisconnect:
+    def test_disconnect_returns_204_without_raising(self, tmp_path: Path) -> None:
+        import asyncio
+        from types import SimpleNamespace
+
+        from starlette.requests import ClientDisconnect
+
+        from app.fastapi_routes.desktop_runtime import receive_crash_report
+
+        class _DisconnectingRequest:
+            headers = {"content-type": "application/json"}
+            client = SimpleNamespace(host="testclient")
+
+            async def body(self):
+                raise ClientDisconnect()
+
+        with (
+            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
+            patch(
+                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
+                return_value={"root": tmp_path},
+            ),
+        ):
+            response = asyncio.run(receive_crash_report(_DisconnectingRequest()))
+
+        assert response.status_code == 204
+
+
 class TestDesktopDeploymentModes:
     def test_deployment_status_uses_ssot_catalog(
         self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

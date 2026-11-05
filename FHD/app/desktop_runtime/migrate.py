@@ -338,6 +338,23 @@ def repair_unknown_stamped_revision(
     known = _known_alembic_revisions()
     if stamped in known:
         return None
+    # 库内戳比当前包的迁移链更新：说明该库来自更新版本的安装包。
+    # 此时把它回退（restamp）到旧链头会导致后续升级重复/漏跑迁移，
+    # 必须保持原戳并跳过 upgrade，等用户装回较新版本时再继续。
+    stamped_date = _REVISION_DATE_RE.match(stamped)
+    dated_known = [
+        (match.group(1), rev) for rev in known if (match := _REVISION_DATE_RE.match(rev))
+    ]
+    if stamped_date and dated_known:
+        newest_date, newest_rev = max(dated_known)
+        if stamped_date.group(1) > newest_date:
+            logger.warning(
+                "alembic revision %s is newer than packaged chain head %s; "
+                "keeping stamp and skipping upgrade instead of downgrading",
+                stamped,
+                newest_rev,
+            )
+            return {"action": "newer_than_package", "from": stamped, "to": newest_rev}
     target = _pick_recovery_revision(stamped, known)
     logger.warning(
         "alembic revision %s missing from packaged chain; "
@@ -365,7 +382,15 @@ def run_alembic_upgrade(
             bootstrap_sqlite_schema(data_dir)
             _run_alembic_cli("stamp", "head")
             return
-        repair_unknown_stamped_revision(data_dir)
+        repair = repair_unknown_stamped_revision(data_dir)
+        if repair and repair.get("action") == "newer_than_package":
+            logger.warning(
+                "skip alembic upgrade: database stamped %s belongs to a newer build "
+                "than this package (packaged head %s)",
+                repair.get("from"),
+                repair.get("to"),
+            )
+            return
         _run_alembic_cli("upgrade", version)
 
 

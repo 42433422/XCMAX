@@ -147,6 +147,45 @@ def test_repair_skips_when_stamp_is_in_chain(tmp_path) -> None:
     backup.assert_not_called()
 
 
+def test_repair_keeps_stamp_from_newer_build_and_skips_upgrade(tmp_path) -> None:
+    import sqlite3
+
+    from app.desktop_runtime import migrate
+
+    data_dir = tmp_path / "xcagi-root"
+    db_dir = data_dir / "data"
+    db_dir.mkdir(parents=True)
+    db = db_dir / "xcagi.db"
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute("create table alembic_version (version_num varchar(32) not null)")
+        conn.execute("insert into alembic_version values ('2026_10_29_etl_archive')")
+
+    with (
+        patch.object(
+            migrate,
+            "_known_alembic_revisions",
+            return_value={"2026_09_05_etl_operation_lease", "2026_09_06_wechat_sync"},
+        ),
+        patch.object(migrate, "backup_database") as backup,
+        patch.object(migrate, "_run_alembic_cli") as cli,
+    ):
+        result = migrate.repair_unknown_stamped_revision(data_dir)
+
+    assert result == {
+        "action": "newer_than_package",
+        "from": "2026_10_29_etl_archive",
+        "to": "2026_09_06_wechat_sync",
+    }
+    # 不得把更新版本库的迁移戳回退到旧链。
+    with sqlite3.connect(str(db)) as conn:
+        assert (
+            conn.execute("select version_num from alembic_version").fetchone()[0]
+            == "2026_10_29_etl_archive"
+        )
+    backup.assert_not_called()
+    cli.assert_not_called()
+
+
 def test_repair_skips_without_alembic_version_table(tmp_path) -> None:
     import sqlite3
 

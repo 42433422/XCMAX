@@ -15,6 +15,7 @@ import asyncio
 import logging
 import os
 import threading
+import time
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
@@ -65,7 +66,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         self._event_queue = PriorityEventQueue(
             max_size=max_queue_size,
             partition_key=event_partition_key,
-            on_evict=self._discard_event,
+            on_evict=lambda event: self._discard_event(event, "queue_evict"),
         )
         self._handlers: dict[str, list[HandlerSubscription]] = defaultdict(list)
         self._domain_handlers: dict[str, dict[str, list[HandlerSubscription]]] = defaultdict(
@@ -99,6 +100,11 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         self._error_count = 0
 
         self._dropped_count = 0
+        # 滚动窗口丢弃计数 + 丢因：健康检查只看“最近是否仍在丢”，不受历史累计影响。
+        self._drop_window_started_at = time.monotonic()
+        self._dropped_in_window = 0
+        self._drop_reason_counts: dict[str, int] = {}
+        self._drop_logged_at = 0.0
         # Event to signal new items in the queue; created when start() runs on the event loop.
         self._event_available: asyncio.Event | None = None
 
@@ -249,7 +255,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             # Threads cannot be killed safely; start() rejects outstanding ones.
             self._executor.shutdown(wait=False, cancel_futures=True)
             while (event := self._event_queue.get()) is not None:
-                self._discard_event(event)
+                self._discard_event(event, "shutdown")
             self._stopping = False
             logger.info("NeuroBus stopped")
 
@@ -257,8 +263,49 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         if self._loop is not None and not self._loop.is_closed() and self._event_available:
             self._loop.call_soon_threadsafe(self._event_available.set)
 
-    def _discard_event(self, event: NeuroEvent) -> None:
+    _DROP_WINDOW_SECONDS = 60.0
+    _DROP_LOG_INTERVAL_SECONDS = 60.0
+
+    def _record_drop(self, reason: str) -> None:
         self._dropped_count += 1
+        self._drop_reason_counts[reason] = self._drop_reason_counts.get(reason, 0) + 1
+        now = time.monotonic()
+        if now - self._drop_window_started_at >= self._DROP_WINDOW_SECONDS:
+            self._drop_window_started_at = now
+            self._dropped_in_window = 0
+        self._dropped_in_window += 1
+
+    def dropped_recent(self) -> int:
+        """最近 60 秒内被丢弃的事件数（窗口过期后为 0）。"""
+        if time.monotonic() - self._drop_window_started_at >= self._DROP_WINDOW_SECONDS:
+            return 0
+        return self._dropped_in_window
+
+    def _drop_log_due(self) -> bool:
+        """限制丢弃日志频率，避免积压时刷屏。"""
+        now = time.monotonic()
+        if now - self._drop_logged_at < self._DROP_LOG_INTERVAL_SECONDS:
+            return False
+        self._drop_logged_at = now
+        return True
+
+    def get_stats(self) -> dict[str, Any]:
+        """总线统计；额外暴露近 60 秒丢弃与丢因，便于定位“持续告警”。"""
+        stats = super().get_stats()
+        stats["dropped_recent"] = self.dropped_recent()
+        stats["dropped_reasons"] = dict(self._drop_reason_counts)
+        return stats
+
+    def _discard_event(self, event: NeuroEvent, reason: str = "unknown") -> None:
+        self._record_drop(reason)
+        if reason != "shutdown" and self._drop_log_due():
+            logger.warning(
+                "NeuroBus dropped event reason=%s event=%s dropped_total=%s dropped_recent=%s",
+                reason,
+                event,
+                self._dropped_count,
+                self.dropped_recent(),
+            )
         record_delivery_metric(self._enable_metrics, "lost")
         if self._rel_dedup is not None:
             self._rel_dedup.remove(event)
@@ -297,7 +344,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                     if event is None:
                         break
                     if event.is_expired():
-                        self._discard_event(event)
+                        self._discard_event(event, "expired")
                         continue
                     self._active_partitions.add(event_partition_key(event))
                     self._inflight.add(asyncio.create_task(self._process_partition_event(event)))
@@ -481,6 +528,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                 self._redis_bridge.publish_remote(event)
             self._wake_processor()
         else:
+            self._record_drop("enqueue_rejected")
             record_delivery_metric(self._enable_metrics, "lost")
             if self._rel_dedup is not None:
                 self._rel_dedup.remove(event)
@@ -506,7 +554,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             record_delivery_metric(self._enable_metrics, "published")
             self._wake_processor()
         else:
-            self._discard_event(event)
+            self._discard_event(event, "enqueue_rejected")
         return success
 
 
