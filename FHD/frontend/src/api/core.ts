@@ -4,6 +4,7 @@ import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCoo
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
 import { resolveErpApiPathWhenReady } from '@/utils/erpDomainPaths'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 /**
  * 后端 LanLicenseGuard 返回 401 + error=license_* 时派发；
@@ -110,6 +111,16 @@ export class ApiError extends Error {
   }
 }
 
+export class AccountSwitchedError extends ApiError {
+  constructor() {
+    super('账号已切换，已丢弃旧账号的请求结果', 0, null)
+    this.name = 'AccountSwitchedError'
+  }
+}
+
+// Auth endpoints drive the account switch themselves, so their responses must not be discarded.
+const ACCOUNT_SWITCH_EXEMPT_PATH = /\/api\/(auth|market\/auth|session)\b/
+
 export interface RequestOptions extends RequestInit {
   skipDefaultJsonHeader?: boolean
   responseType?: 'json' | 'blob'
@@ -185,8 +196,16 @@ async function requestOnce<T = unknown>(url: string, options: RequestOptions = {
     }
   }
 
+  const accountEpoch = productReadAccountEpoch.value
+  const assertSameAccount = () => {
+    if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(url)) {
+      throw new AccountSwitchedError()
+    }
+  }
+
   try {
     const response = await fetch(fullUrl, config)
+    assertSameAccount()
     const contentType = response.headers.get('content-type') || ''
 
     if (!response.ok) {
@@ -221,7 +240,9 @@ async function requestOnce<T = unknown>(url: string, options: RequestOptions = {
     }
 
     if (contentType.includes('application/json')) {
-      return (await response.json()) as T
+      const body = (await response.json()) as T
+      assertSameAccount()
+      return body
     }
 
     return response

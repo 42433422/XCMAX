@@ -34,7 +34,7 @@ class TestBasePayload:
         }
         p = _base_payload(doc)
         assert p["username"] == "admin"
-        assert p["password"] == "pass123"
+        assert p["password"] == ""
         assert p["is_enterprise"] is True
         assert p["password_recorded"] is True
 

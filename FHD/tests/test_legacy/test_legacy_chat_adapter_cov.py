@@ -118,17 +118,19 @@ class TestGetLastToolResult:
         import app.legacy.chat.legacy_chat_adapter as _mod
         from app.legacy.chat.legacy_chat_adapter import get_last_tool_result
 
-        _mod._LAST_TOOL_TRACE.records = [
-            {
-                "tool_id": "products",
-                "tool_name": "products",
-                "output": {"success": True, "data": []},
-                "tool_call_id": "x",
-                "action": "execute",
-                "params": {},
-                "success": True,
-            }
-        ]
+        _mod._LAST_TOOL_TRACE.set(
+            [
+                {
+                    "tool_id": "products",
+                    "tool_name": "products",
+                    "output": {"success": True, "data": []},
+                    "tool_call_id": "x",
+                    "action": "execute",
+                    "params": {},
+                    "success": True,
+                }
+            ]
+        )
         result = get_last_tool_result()
         assert result["tool_key"] == "products"
 
@@ -136,17 +138,19 @@ class TestGetLastToolResult:
         import app.legacy.chat.legacy_chat_adapter as _mod
         from app.legacy.chat.legacy_chat_adapter import get_last_tool_result
 
-        _mod._LAST_TOOL_TRACE.records = [
-            {
-                "tool_id": "products",
-                "tool_name": "products",
-                "output": "some string",
-                "tool_call_id": "x",
-                "action": "execute",
-                "params": {},
-                "success": False,
-            }
-        ]
+        _mod._LAST_TOOL_TRACE.set(
+            [
+                {
+                    "tool_id": "products",
+                    "tool_name": "products",
+                    "output": "some string",
+                    "tool_call_id": "x",
+                    "action": "execute",
+                    "params": {},
+                    "success": False,
+                }
+            ]
+        )
         result = get_last_tool_result()
         assert "message" in result
 
@@ -154,7 +158,7 @@ class TestGetLastToolResult:
         import app.legacy.chat.legacy_chat_adapter as _mod
         from app.legacy.chat.legacy_chat_adapter import get_last_tool_records
 
-        _mod._LAST_TOOL_TRACE.records = "not_a_list"
+        _mod._LAST_TOOL_TRACE.set("not_a_list")
         result = get_last_tool_records()
         assert result == []
 
