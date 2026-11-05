@@ -87,6 +87,7 @@ import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarA
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 import { isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
+import { clearAppNavIntentIfCurrent, getActiveAppNavIntent } from '@/utils/appNavigation'
 import RouteLoadingFeedback from './shell/RouteLoadingFeedback.vue'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
@@ -240,9 +241,21 @@ function syncPendingSidebarWithRoute() {
   }
 }
 
+function syncAppNavIntentWithRoute() {
+  const intent = getActiveAppNavIntent()
+  if (!intent) return
+  // Browser back/forward or external redirect landed on the intended page — release intent.
+  const key = String(intent.targetKey || '').replace(/^mod-/, '')
+  const current = String(currentRouteName.value || '').replace(/^mod-/, '')
+  if (key && current && (key === current || current.includes(key) || key.includes(current))) {
+    clearAppNavIntentIfCurrent(intent.id)
+  }
+}
+
 watch([currentRouteName, routeChunkErrorPath], () => {
   failedSidebarView.value = ''
   syncPendingSidebarWithRoute()
+  syncAppNavIntentWithRoute()
 })
 
 /** 对话与信息页收起悬浮入口，避免遮挡客服和员工的输入工具条。 */
@@ -300,9 +313,12 @@ const pendingViewStage = computed(() => {
   return title ? `正在打开「${title}」` : '正在打开页面'
 })
 
-async function navigateToView(viewKey) {
+async function navigateToView(viewKey, source = 'shell') {
   const normalized = String(viewKey || '').trim()
-  if (!normalized || pendingSidebarView.value === normalized) return
+  if (!normalized) return
+  // Same target while already pending: ignore duplicate click noise.
+  // Same target after failure: allow retry (failedSidebarView is set, pending cleared).
+  if (pendingSidebarView.value === normalized && !failedSidebarView.value) return
   const generation = ++routeNavGeneration
   // Optimistic: highlight immediately so cold chunk / mod-route wait does not look like a dead click.
   pendingSidebarView.value = normalized
@@ -312,12 +328,20 @@ async function navigateToView(viewKey) {
       modMenuItems: modMenuItems.value,
       routeNameMap,
       getModRoutes: () => modsStore.modRoutes,
+      source,
     })
-    if (!applied && generation === routeNavGeneration && !routeChunkErrorPath.value) failedSidebarView.value = normalized
+    if (!applied && generation === routeNavGeneration && !routeChunkErrorPath.value) {
+      // Not applied and still current: either superseded race lost (shouldn't with matching gen)
+      // or target unresolved — show retry.
+      failedSidebarView.value = normalized
+    }
   } catch (error) {
-    if (generation === routeNavGeneration && !routeChunkErrorPath.value) failedSidebarView.value = normalized
+    if (generation === routeNavGeneration && !routeChunkErrorPath.value) {
+      failedSidebarView.value = normalized
+    }
     console.warn('[MainLayout] 页面切换失败', error)
   } finally {
+    // Never let an older request clear a newer pending highlight.
     if (generation === routeNavGeneration) {
       pendingSidebarView.value = ''
     }
@@ -326,11 +350,12 @@ async function navigateToView(viewKey) {
 
 const handleViewChange = (viewKey) => {
   // Fire-and-forget: do not serialize UI behind a prior slow navigate promise.
-  void navigateToView(viewKey)
+  void navigateToView(viewKey, 'sidebar-or-quicknav')
 }
 
 function openSettings() {
-  void router.push({ name: 'settings' })
+  // Share the same intent channel as sidebar / ecosystem so races invalidate correctly.
+  void navigateToView('settings', 'top-settings')
 }
 
 const clearSidebarCollapseTimer = () => {
