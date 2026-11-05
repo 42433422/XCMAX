@@ -91,69 +91,39 @@ jobs:
             exit 1
           }
 
-      - name: Open authenticated production Prometheus SSH tunnel
-        id: prometheus_tunnel
+      - name: Open production SSH channel and ensure Prometheus is serving
+        id: prometheus_channel
         continue-on-error: true
         env:
           FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
           FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
-          PRODUCTION_PROMETHEUS_URL: ${{ secrets.PRODUCTION_PROMETHEUS_URL }}
-          PRODUCTION_PROMETHEUS_TOKEN: ${{ secrets.PRODUCTION_PROMETHEUS_TOKEN }}
-          NO_PROXY: 127.0.0.1,localhost
         run: |
           set -euo pipefail
           test -n "${FHD_PUSH_HOST:-}"
           test -n "${FHD_PUSH_SSH_KEY_RAW:-}"
-          test -n "${PRODUCTION_PROMETHEUS_URL:-}"
-          test -n "${PRODUCTION_PROMETHEUS_TOKEN:-}"
-          test "$PRODUCTION_PROMETHEUS_URL" = "http://127.0.0.1:19091"
           key_file="${RUNNER_TEMP}/fhd_prometheus_metrics_key"
           control_socket="${RUNNER_TEMP}/fhd_prometheus_metrics_ssh"
-          echo "PROMETHEUS_SSH_CONTROL=$control_socket" >> "$GITHUB_ENV"
+          remote="${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
           printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$key_file"
           chmod 600 "$key_file"
+          # Exec channel only: since 2026-10-17 every forwarded connection to
+          # :9091 was reset, so queries run as `ssh host curl` instead of -L.
           ssh -i "$key_file" \
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=30 \
-            -o ExitOnForwardFailure=yes \
-            -o TCPKeepAlive=yes \
             -o ServerAliveInterval=10 \
             -o ServerAliveCountMax=6 \
-            -M -S "$control_socket" -fN \
-            -L 127.0.0.1:19091:127.0.0.1:9091 \
-            "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
-          # Probe /-/ready and authenticated query API before collect.
-          # 2026-10-29 ConnectionResetError happened after ready-only checks.
-          for probe in 1 2 3 4 5; do
-            if curl -fsS --retry 2 --retry-all-errors --connect-timeout 5 --max-time 20 \
-              -H "Authorization: Bearer ${PRODUCTION_PROMETHEUS_TOKEN}" \
-              -H "Connection: close" \
-              "${PRODUCTION_PROMETHEUS_URL}/-/ready" >/dev/null \
-            && curl -fsS --retry 2 --retry-all-errors --connect-timeout 5 --max-time 20 \
-              -H "Authorization: Bearer ${PRODUCTION_PROMETHEUS_TOKEN}" \
-              -H "Connection: close" \
-              --get --data-urlencode 'query=vector(1)' \
-              "${PRODUCTION_PROMETHEUS_URL}/api/v1/query" \
-              | python3 -c 'import json,sys; data=json.load(sys.stdin); raise SystemExit(0 if data.get("status")=="success" else 1)'; then
-              echo "Prometheus tunnel query probe succeeded (attempt ${probe})"
-              break
-            fi
-            if [ "$probe" -eq 5 ]; then
-              echo "::error::Prometheus tunnel query probe failed after retries"
-              exit 1
-            fi
-            sleep $((probe * 2))
-          done
+            -M -S "$control_socket" -fN "$remote"
+          echo "PRODUCTION_PROMETHEUS_SSH_CONTROL=$control_socket" >> "$GITHUB_ENV"
+          echo "PRODUCTION_PROMETHEUS_SSH_TARGET=$remote" >> "$GITHUB_ENV"
+          ssh -S "$control_socket" "$remote" 'bash -s' \
+            < scripts/observability/ensure_production_prometheus.sh \
+            | tee "${RUNNER_TEMP}/prometheus-health.json"
 
       - name: Collect SLO from Prometheus
         id: slo_collect
         continue-on-error: true
-        env:
-          PRODUCTION_PROMETHEUS_URL: ${{ secrets.PRODUCTION_PROMETHEUS_URL }}
-          PRODUCTION_PROMETHEUS_TOKEN: ${{ secrets.PRODUCTION_PROMETHEUS_TOKEN }}
-          PRODUCTION_PROMETHEUS_RETENTION_DAYS: ${{ vars.PRODUCTION_PROMETHEUS_RETENTION_DAYS }}
-          NO_PROXY: 127.0.0.1,localhost
         run: |
           set -euo pipefail
           args=(
@@ -169,19 +139,24 @@ jobs:
           fi
           python3 scripts/observability/collect_slo_metrics.py "${args[@]}"
 
-      - name: Close production Prometheus SSH tunnel
+      - name: Close production SSH channel
         if: always()
         continue-on-error: true
-        env:
-          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
-          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
         run: |
           set -euo pipefail
           trap 'rm -f "${RUNNER_TEMP}/fhd_prometheus_metrics_key"' EXIT
-          if [ -n "${PROMETHEUS_SSH_CONTROL:-}" ]; then
-            ssh -S "$PROMETHEUS_SSH_CONTROL" -O exit \
-              "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
+          if [ -n "${PRODUCTION_PROMETHEUS_SSH_CONTROL:-}" ]; then
+            ssh -S "$PRODUCTION_PROMETHEUS_SSH_CONTROL" -O exit "$PRODUCTION_PROMETHEUS_SSH_TARGET"
           fi
+
+      - name: Upload Prometheus host health
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-prometheus-health-${{ github.run_id }}
+          path: ${{ runner.temp }}/prometheus-health.json
+          retention-days: 120
+          if-no-files-found: warn
 
       - name: Fetch authoritative production deploy events
         id: dora_source

@@ -11,7 +11,7 @@ import argparse
 import json
 from pathlib import Path
 
-from collect_slo_metrics import QUERIES, SCRAPE_QUERIES, SCRAPE_TARGETS
+from collect_slo_metrics import QUERIES, SCRAPE_QUERIES, SCRAPE_SERVICES, SCRAPE_TARGETS
 
 RATIOS = ("SLO-API-01", "SLO-API-03", "SLO-BUS-01", "SLO-BIZ-02", "SLO-BIZ-05")
 
@@ -66,7 +66,9 @@ def fixture() -> dict:
     for item in resets[:2]:
         item["values"] = "0 1 2 3 4 0 1 2 3 4 5"
     scrapes = [
-        series("up", "1+0x5760", f'job="{job}",instance="{instance}"')
+        series(
+            "up", "1+0x5760", f'job="{job}",instance="{instance}",service="{SCRAPE_SERVICES[job]}"'
+        )
         for job, instance in SCRAPE_TARGETS.items()
     ]
     scrape_tests = [
