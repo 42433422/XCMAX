@@ -1,12 +1,5 @@
-# Nightly 全量验证（SSOT: docs/CI_SSOT.md「四级验证」之夜间全量 CI）。
-#
-# 已自带每日 cron 的套件不在此重复派发（避免一天跑两遍）：
-#   fhd-ci-cd.yml 16:00 UTC —— 全量 backend-test / frontend-test / frontend-e2e / release-verify
-#   fhd-performance-smoke.yml 17:00 UTC
-#   e2e.yml 18:00 UTC —— 完整 P0 关键路径
-#   fhd-neuro-migration-check.yml 02:00 UTC
-#   fhd-ci-mobile-android-smoke.yml
-# 本 workflow 补齐「没有每日覆盖」的重活，提供统一夜间入口与单一失败信号。
+# Nightly 全量验证（SSOT: docs/CI_SSOT.md「四级验证」）。
+# 仅派发没有每日覆盖的重活；已有每日计划的套件独立运行，避免重复。
 name: Nightly Full CI
 
 on:
@@ -53,4 +46,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ steps.target.outputs.ref }}
           RELEASE_SHA: ${{ steps.target.outputs.sha }}
-        run: bash FHD/scripts/ci/aggregate_nightly_results.sh
+        run: bash -n scripts/ci/aggregate_nightly_results.sh && bash scripts/ci/aggregate_nightly_results.sh
