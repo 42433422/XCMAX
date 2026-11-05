@@ -534,7 +534,7 @@ def _trusted_base_roots() -> list[Path]:
                 Path(get_shipment_output_dir()),
             )
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         pass
     # A workspace is trusted only when the server operator configures its exact
     # root. Never add the whole current directory or system temp as a fallback.
@@ -969,7 +969,7 @@ def tenant_key_for_etl() -> str:
         tid = current_tenant_id()
         if tid is not None:
             return f"tenant:{int(tid)}"
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         pass
     return "tenant:local"
 
