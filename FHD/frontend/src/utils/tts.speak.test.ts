@@ -54,7 +54,7 @@ beforeEach(async () => {
   mocks.offline.isOfflineReady.mockReturnValue(false)
   mocks.offline.isOfflineLoading.mockReturnValue(false)
   mocks.offline.getOfflineProgress.mockReturnValue(0)
-  speech = Object.assign(new EventTarget(), { getVoices: vi.fn(() => [voice]), speak: vi.fn(), cancel: vi.fn(), speaking: false, pending: false })
+  speech = Object.assign(new EventTarget(), { getVoices: vi.fn(() => [voice]), speak: vi.fn((u: { onend?: () => void }) => u.onend?.()), cancel: vi.fn(), speaking: false, pending: false })
   vi.stubGlobal('speechSynthesis', speech)
   vi.stubGlobal('SpeechSynthesisUtterance', class { constructor(public text: string) {} })
   audio = []; playback = 'end'
@@ -91,13 +91,14 @@ describe('TTS speech dispatch and playback', () => {
     ['invalid JSON', async () => ({ ok: false, status: 502, json: async () => { throw new Error('invalid') } }), '在线 TTS 失败（HTTP 502）'],
     ['missing audio', async () => ({ ok: true, json: async () => ({ success: true }) }), '在线 TTS 响应缺少音频'],
     ['invalid audio', async () => ({ ok: true, json: async () => ({ success: true, data: { audioBase64: 42 } }) }), '在线 TTS 响应缺少音频'],
-  ])('reports %s and finishes once without falling back to system speech', async (_label, response, message) => {
+  ])('falls back to system speech when synthesis fails: %s', async (_label, response) => {
     mocks.apiFetch.mockImplementation(response as () => Promise<unknown>)
     const onEnd = vi.fn(), onError = vi.fn()
     await tts.speakText('测试', { onEnd, onError })
-    expect(onError).toHaveBeenCalledWith(new Error(message as string))
-    expect(mocks.toast).toHaveBeenCalledExactlyOnceWith('语音播放失败，请稍后重试。')
-    expect(onEnd).toHaveBeenCalledOnce(); expect(speech.speak).not.toHaveBeenCalled()
+    expect(speech.speak).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled()
+    expect(mocks.toast).not.toHaveBeenCalled()
+    expect(onEnd).toHaveBeenCalledOnce()
   })
   it.each(['success', 'failure'])('primes absent CSRF with best-effort health request (%s)', async (mode) => {
     mocks.csrf.mockReturnValue('')
@@ -195,7 +196,7 @@ describe('TTS speech dispatch and playback', () => {
     audio[0].onended?.(); await speaking
     expect(onEnd).toHaveBeenCalledOnce(); expect(mocks.toast).not.toHaveBeenCalled()
   })
-  it.each(['health', 'post', 'json'] as const)('aborts timed out %s with one visible error', async (stage) => {
+  it.each(['health', 'post', 'json'] as const)('falls back after timed out %s', async (stage) => {
     vi.useFakeTimers()
     mocks.csrf.mockReturnValue(stage === 'health' ? '' : 'csrf-token')
     let requestSignal: AbortSignal
@@ -210,11 +211,12 @@ describe('TTS speech dispatch and playback', () => {
     expect(onEnd).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1); await speaking
     expect(requestSignal!.aborted).toBe(true)
-    expect(onError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ name: 'TimeoutError' }))
+    expect(speech.speak).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled()
     expect(onEnd).toHaveBeenCalledOnce(); expect(audio).toHaveLength(0)
-    expect(mocks.toast).toHaveBeenCalledExactlyOnceWith('语音服务响应超时，请稍后重试。')
+    expect(mocks.toast).not.toHaveBeenCalled()
   })
-  it('limits stalled audio loading to 15 seconds', async () => {
+  it('limits stalled audio loading to 15 seconds and falls back', async () => {
     vi.useFakeTimers(); playback = 'loading'
     const onEnd = vi.fn(), onError = vi.fn()
     const speaking = tts.speakText('加载失败', { onEnd, onError })
@@ -222,9 +224,10 @@ describe('TTS speech dispatch and playback', () => {
     expect(onEnd).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1); await speaking
     expect(onEnd).toHaveBeenCalledOnce()
-    expect(onError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ name: 'TimeoutError' }))
+    expect(speech.speak).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled()
     expect(audio[0].pause).toHaveBeenCalledOnce(); expect(audio[0].src).toBe('')
-    expect(mocks.toast).toHaveBeenCalledExactlyOnceWith('语音服务响应超时，请稍后重试。')
+    expect(mocks.toast).not.toHaveBeenCalled()
   })
   it('shares the synthesis deadline across health, POST and response-body reads', async () => {
     vi.useFakeTimers(); mocks.csrf.mockReturnValue('')
@@ -239,7 +242,8 @@ describe('TTS speech dispatch and playback', () => {
     await vi.advanceTimersByTimeAsync(5_999)
     expect(onEnd).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1); await speaking
-    expect(onError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ name: 'TimeoutError' }))
+    expect(speech.speak).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled()
     expect(onEnd).toHaveBeenCalledOnce(); expect(audio).toHaveLength(0)
   })
   it('shows an actionable browser permission error', async () => {

@@ -139,13 +139,11 @@ class UnifiedIntentRecognizer:
                     model_path=chinese_bert_path, local_files_only=True
                 )
             else:
-                logger.warning("本地模型不存在，使用虚拟模型（规则引擎将作为主要识别器）")
-                self._bert_recognizer = BertIntentClassifier(
-                    model_name="chinese-bert-wwm", local_files_only=True
-                )
-            if self._bert_recognizer.is_available():
+                logger.warning("本地意图模型不存在：降级为规则引擎，不启用虚拟随机模型")
+                self._bert_recognizer = None
+            if self._bert_recognizer is not None and self._bert_recognizer.is_available():
                 logger.info("BERT识别器已加载")
-            else:
+            elif self._bert_recognizer is not None:
                 logger.warning("BERT识别器不可用")
                 self._bert_recognizer = None
         except RECOVERABLE_ERRORS as e:

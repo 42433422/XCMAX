@@ -47,6 +47,19 @@ async def _edge_tts_stream_chunks(text: str, voice: str, rate_str: str):
         yield data
 
 
+def _edge_tts_http_exception(exc: Exception) -> HTTPException:
+    """把 edge-tts 上游失败转为可诊断状态；不把含签名的上游 URL 回显给客户端。"""
+    status = getattr(exc, "status", None)
+    text = str(exc or "")
+    if status == 403 or ("Invalid response status" in text and "403" in text):
+        return HTTPException(
+            503,
+            "Edge 语音上游拒绝了握手（HTTP 403）；请检查系统时间/网络，"
+            "或配置 MiMo 语音或改用浏览器离线语音。",
+        )
+    return HTTPException(502, f"TTS 合成失败（{type(exc).__name__}）")
+
+
 async def workbench_unified_tts(
     body: WorkbenchUnifiedTtsBody,
     _user: User = Depends(_get_current_user),
@@ -105,7 +118,7 @@ async def workbench_unified_tts(
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS as exc:
-        raise HTTPException(502, f"TTS 合成失败: {exc}") from exc
+        raise _edge_tts_http_exception(exc) from exc
 
 
 async def workbench_edge_tts(
@@ -133,7 +146,7 @@ async def workbench_edge_tts(
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS as exc:
-        raise HTTPException(502, f"TTS 合成失败: {exc}") from exc
+        raise _edge_tts_http_exception(exc) from exc
 
 
 async def workbench_edge_tts_stream(
@@ -161,4 +174,4 @@ async def workbench_edge_tts_stream(
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS as exc:
-        raise HTTPException(502, f"TTS 合成失败: {exc}") from exc
+        raise _edge_tts_http_exception(exc) from exc

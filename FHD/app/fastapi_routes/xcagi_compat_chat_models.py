@@ -89,6 +89,41 @@ def _market_connection_label() -> str:
         return "修茈市场"
 
 
+def _model_upstream_http_exc(status_code: int) -> HTTPException | None:
+    """把模型/端点上游状态码映射为可操作的本地错误，而不是一律 502。"""
+    if not isinstance(status_code, int) or isinstance(status_code, bool):
+        return None
+    mapping = {
+        400: (
+            400,
+            "模型服务未接受请求：模型不存在、端点不匹配或参数不受支持；请核对模型配置。",
+        ),
+        401: (
+            401,
+            "模型服务鉴权失败：API Key 无效或已过期，请更新模型凭据后重试。",
+        ),
+        403: (
+            403,
+            "模型服务拒绝访问：当前账号无权使用该模型或端点，请检查模型授权。",
+        ),
+        404: (
+            404,
+            "模型或模型服务端点不存在：请核对模型名称、Base URL 与供应商配置。",
+        ),
+        408: (504, "模型服务响应超时，请检查连接后重试。"),
+        409: (409, "本轮模型配置已变化，请重新发送本次请求。"),
+        429: (429, "模型服务请求受限，请稍后重试并检查可用额度。"),
+        503: (503, "模型服务暂不可用，请查看模型状态后重试。"),
+        504: (504, "模型服务响应超时，请检查连接后重试。"),
+    }
+    if status_code in mapping:
+        code, message = mapping[status_code]
+        return HTTPException(status_code=code, detail=message)
+    if status_code >= 500:
+        return HTTPException(status_code=502, detail="模型服务请求失败，请稍后重试。")
+    return None
+
+
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
     if isinstance(exc, MarketModelError):
         if exc.status_code == 402 or "余额不足" in str(exc):
@@ -102,6 +137,10 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
     try:
         import httpx
 
+        if isinstance(exc, httpx.HTTPStatusError):
+            mapped = _model_upstream_http_exc(exc.response.status_code)
+            if mapped is not None:
+                return mapped
         if isinstance(exc, httpx.TimeoutException):
             return HTTPException(status_code=504, detail="模型服务响应超时，请检查连接后重试。")
         if isinstance(exc, httpx.ConnectError):
@@ -113,6 +152,11 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
             return HTTPException(status_code=502, detail="修茈平台 LLM 请求失败")
     except ImportError:
         pass
+    upstream_status = getattr(exc, "status_code", None)
+    if isinstance(upstream_status, int):
+        mapped = _model_upstream_http_exc(upstream_status)
+        if mapped is not None:
+            return mapped
     if isinstance(exc, AuthenticationError):
         return HTTPException(status_code=401, detail=f"大模型鉴权失败: {exc}")
     if isinstance(exc, RateLimitError):
