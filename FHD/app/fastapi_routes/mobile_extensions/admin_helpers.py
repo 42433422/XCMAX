@@ -115,7 +115,9 @@ async def _load_market_ai_employee_profile_index() -> tuple[dict[str, dict[str, 
             }
         )
         return profiles, True, ""
-    except RECOVERABLE_ERRORS as exc:  # pragma: no cover - network availability is environment-specific
+    except (
+        RECOVERABLE_ERRORS
+    ) as exc:  # pragma: no cover - network availability is environment-specific
         error = _compact_text(exc)
         if isinstance(cached_profiles, dict) and cached_profiles:
             _MARKET_AI_EMPLOYEE_CACHE.update(

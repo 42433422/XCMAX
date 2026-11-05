@@ -81,7 +81,7 @@ def set_chat_stream_port(port: ChatStreamPort | None) -> None:
 def get_chat_tool_result_port() -> ChatToolResultPort:
     global _tool_port
     if _tool_port is None:
-        _tool_port = _default_adapter()  
+        _tool_port = _default_adapter()
     return _tool_port
 
 

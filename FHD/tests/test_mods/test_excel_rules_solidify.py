@@ -376,6 +376,7 @@ def test_solidify_convert_action_end_to_end(tmp_path: Path) -> None:
     # 固化产物可直接复跑（零 LLM）：加载脚本重算 records
     import importlib.util
     from types import ModuleType
+
     solidified = ModuleType("solidified_script")
     script_path = tmp_path / "_solidified_script.py"
     script_path.write_text(script, encoding="utf-8")
@@ -446,6 +447,7 @@ def test_solidified_example_passes_golden_gate(tmp_path: Path) -> None:
     assert "taiyangniao" not in code.replace("taiyangniao 依赖", "")
     import importlib.util
     from types import ModuleType
+
     solidified = ModuleType("sunbird_solidified_example")
     spec = importlib.util.spec_from_file_location(solidified.__name__, SOLIDIFIED_EXAMPLE)
     assert spec is not None and spec.loader is not None

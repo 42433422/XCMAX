@@ -31,7 +31,7 @@ _installed = False
 def _owns_console() -> bool:
     """True when children inherit our console and cannot open a new window."""
     try:
-        return bool(cast(Any, ctypes).windll.kernel32.GetConsoleWindow())  
+        return bool(cast(Any, ctypes).windll.kernel32.GetConsoleWindow())
     except (AttributeError, OSError):
         return True
 
@@ -65,6 +65,6 @@ def install_no_console_child_defaults() -> bool:
         )
         return original(*bound.args, **bound.kwargs)
 
-    cast(Any, subprocess.Popen).__init__ = _patched  
+    cast(Any, subprocess.Popen).__init__ = _patched
     _installed = True
     return True

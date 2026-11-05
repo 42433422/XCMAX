@@ -66,21 +66,33 @@ def _registered_router_business_db(
         read_params = dict(params)
         read_params.setdefault("keyword", params.get("keyword") or params.get("query") or "")
         if entity == "customers":
-            return cast(dict[Any, Any], _facade()._registered_router_customers(
-                "query", read_params, runtime_context, profile, user_message
-            ))
+            return cast(
+                dict[Any, Any],
+                _facade()._registered_router_customers(
+                    "query", read_params, runtime_context, profile, user_message
+                ),
+            )
         if entity == "products":
-            return cast(dict[Any, Any], _facade()._registered_router_products(
-                "query", read_params, runtime_context, "admin", user_message
-            ))
+            return cast(
+                dict[Any, Any],
+                _facade()._registered_router_products(
+                    "query", read_params, runtime_context, "admin", user_message
+                ),
+            )
         if entity == "materials":
-            return cast(dict[Any, Any], _facade()._registered_router_materials(
-                "query", read_params, runtime_context, profile, user_message
-            ))
+            return cast(
+                dict[Any, Any],
+                _facade()._registered_router_materials(
+                    "query", read_params, runtime_context, profile, user_message
+                ),
+            )
         if entity == "shipment_records":
-            return cast(dict[Any, Any], _facade()._registered_router_shipment_records(
-                "query", read_params, runtime_context, profile, user_message
-            ))
+            return cast(
+                dict[Any, Any],
+                _facade()._registered_router_shipment_records(
+                    "query", read_params, runtime_context, profile, user_message
+                ),
+            )
     if action != "write":
         return {"success": False, "message": f"未注册的 business_db 动作: {action}"}
     operation = str(params.get("operation") or params.get("op") or "create").strip().lower()

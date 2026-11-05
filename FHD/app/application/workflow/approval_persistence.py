@@ -178,11 +178,7 @@ def _resolve_applicant(db, runtime_context: dict[str, Any] | None):
     if text_value.isdigit():
         return db.query(User).filter(User.id == int(text_value), User.is_active == True).first()
 
-    user = (
-        db.query(User)
-        .filter(User.username == text_value, User.is_active == True)
-        .first()
-    )
+    user = db.query(User).filter(User.username == text_value, User.is_active == True).first()
     if user is not None:
         return user
     matches = (

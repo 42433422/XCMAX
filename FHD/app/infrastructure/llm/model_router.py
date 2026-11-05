@@ -101,11 +101,11 @@ class RoutingRequest:
         if self.profile is not None:
             self.profile = str(self.profile).strip().lower() or None
         try:
-            self.tool_count = int(self.tool_count)  
+            self.tool_count = int(self.tool_count)
         except (TypeError, ValueError):
             self.tool_count = 0
         try:
-            self.conversation_history_len = int(self.conversation_history_len)  
+            self.conversation_history_len = int(self.conversation_history_len)
         except (TypeError, ValueError):
             self.conversation_history_len = 0
 
@@ -153,7 +153,7 @@ def _coerce_bool(raw: str | None, default: bool = False) -> bool:
 
 def _coerce_int(value: Any, default: int, *, minimum: int = 0) -> int:
     try:
-        v = int(value)  
+        v = int(value)
         return max(minimum, v)
     except (TypeError, ValueError):
         return default

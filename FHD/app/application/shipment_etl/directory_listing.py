@@ -51,7 +51,7 @@ def _windows_directory_names(directory_fd: int) -> list[str]:
     import msvcrt
     from ctypes import wintypes
 
-    kernel32 = cast(Any, ctypes).WinDLL("kernel32", use_last_error=True)  
+    kernel32 = cast(Any, ctypes).WinDLL("kernel32", use_last_error=True)
     kernel32.GetFileInformationByHandleEx.argtypes = [
         wintypes.HANDLE,
         ctypes.c_int,
@@ -59,16 +59,16 @@ def _windows_directory_names(directory_fd: int) -> list[str]:
         wintypes.DWORD,
     ]
     kernel32.GetFileInformationByHandleEx.restype = wintypes.BOOL
-    handle = wintypes.HANDLE(cast(Any, msvcrt).get_osfhandle(directory_fd))  
+    handle = wintypes.HANDLE(cast(Any, msvcrt).get_osfhandle(directory_fd))
     buffer = ctypes.create_string_buffer(64 * 1024)
     names: list[str] = []
     info_class = _FILE_ID_BOTH_DIRECTORY_RESTART_INFO
     while True:
         if not kernel32.GetFileInformationByHandleEx(handle, info_class, buffer, len(buffer)):
-            error = cast(Any, ctypes).get_last_error()  
+            error = cast(Any, ctypes).get_last_error()
             if error == 18:  # ERROR_NO_MORE_FILES
                 return names
-            raise cast(Any, ctypes).WinError(error)  
+            raise cast(Any, ctypes).WinError(error)
         info_class = _FILE_ID_BOTH_DIRECTORY_INFO
         page = ctypes.string_at(ctypes.addressof(buffer), len(buffer))
         names.extend(_parse_windows_directory_page(page))

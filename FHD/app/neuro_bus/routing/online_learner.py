@@ -24,8 +24,8 @@ try:
     import torch
     import torch.nn as nn
 except ImportError:  # pragma: no cover
-    torch = None  
-    nn = None  
+    torch = None
+    nn = None
 
 
 def _manifest_path() -> Path:

@@ -40,9 +40,7 @@ def parse_customer_product_regions(
     sheet_domain_hints: dict[str, str] = {}
     try:
         for worksheet in workbook.worksheets:
-            recent: deque[tuple[int, tuple[Any, ...]]] = _facade().deque(
-                maxlen=5
-            )
+            recent: deque[tuple[int, tuple[Any, ...]]] = _facade().deque(maxlen=5)
             active: dict[str, Any] | None = None
             sheet_candidates = 0
             for row_number, raw_values in enumerate(worksheet.iter_rows(values_only=True), start=1):
@@ -436,28 +434,31 @@ def parse_customer_product_regions(
         companion_sheet_counts=companion_sheet_counts,
         sheet_domain_hints=sheet_domain_hints,
     )
-    return cast("ParsedDataset", _facade().ParsedDataset(
-        headers=all_headers,
-        rows=parsed_rows,
-        source_features={
-            "structure_detection": "deterministic_regions_v1",
-            **_facade().region_source_features(
-                target_type=target_type, regions=regions, rows=len(parsed_rows)
-            ),
-            "regions": regions,
-            "shipment_history_product_candidates": companion_candidate_count,
-            "latest_record_selection": {
-                "basis": "source_date_then_same_sheet_row",
-                "unique_candidates": companion_candidate_count,
-                "stale_records_skipped": companion_stale_records_skipped,
-                "future_dated_records_skipped": len(future_dated_source_rows),
-                "same_date_conflicts": same_date_source_conflicts,
-                "model_identity_ambiguity_groups": model_identity_ambiguity_count,
+    return cast(
+        "ParsedDataset",
+        _facade().ParsedDataset(
+            headers=all_headers,
+            rows=parsed_rows,
+            source_features={
+                "structure_detection": "deterministic_regions_v1",
+                **_facade().region_source_features(
+                    target_type=target_type, regions=regions, rows=len(parsed_rows)
+                ),
+                "regions": regions,
+                "shipment_history_product_candidates": companion_candidate_count,
+                "latest_record_selection": {
+                    "basis": "source_date_then_same_sheet_row",
+                    "unique_candidates": companion_candidate_count,
+                    "stale_records_skipped": companion_stale_records_skipped,
+                    "future_dated_records_skipped": len(future_dated_source_rows),
+                    "same_date_conflicts": same_date_source_conflicts,
+                    "model_identity_ambiguity_groups": model_identity_ambiguity_count,
+                },
+                "sheet_plan": sheet_plan,
+                "skipped_sheets": skipped_sheets,
+                "headers": all_headers,
+                "llm_structure": {**llm.public_metadata(), "suggestion_count": len(llm_by_region)},
             },
-            "sheet_plan": sheet_plan,
-            "skipped_sheets": skipped_sheets,
-            "headers": all_headers,
-            "llm_structure": {**llm.public_metadata(), "suggestion_count": len(llm_by_region)},
-        },
-        warnings=warnings,
-    ))
+            warnings=warnings,
+        ),
+    )

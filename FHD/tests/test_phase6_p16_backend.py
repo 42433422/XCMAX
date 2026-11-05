@@ -20,7 +20,6 @@ Coverage scenarios per 铁律3:
 - Exception paths (RECOVERABLE_ERRORS: RuntimeError, ValueError, OSError)
 """
 
-
 from __future__ import annotations
 
 import os

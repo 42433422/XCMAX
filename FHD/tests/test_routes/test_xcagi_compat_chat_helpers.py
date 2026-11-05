@@ -57,9 +57,7 @@ def _make_real_app_service():
             workflow_checkpointer=real_checkpointer,
         )
     svc.approval_service = ApprovalService()
-    svc.approval_service._persist_request_to_db = lambda req, **k: {
-        "request_no": req.request_id
-    }
+    svc.approval_service._persist_request_to_db = lambda req, **k: {"request_no": req.request_id}
     svc._persist_plan_state = lambda *a, **k: None
     svc.workflow_planner._ai_service = _LLMBomb()
     return svc
