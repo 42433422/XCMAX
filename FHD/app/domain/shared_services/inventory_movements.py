@@ -164,8 +164,8 @@ class InventoryMovementsMixin:
                     location_id=location_id,
                     batch_no=batch_no,
                     quantity=quantity,
-                    before_quantity=float(ledger.quantity) - quantity,
-                    after_quantity=float(ledger.quantity),
+                    before_quantity=float(ledger.quantity or 0) - quantity,
+                    after_quantity=float(ledger.quantity or 0),
                     unit_price=unit_price,
                     total_amount=quantity * unit_price if unit_price else None,
                     reference_type=reference_type,
@@ -184,7 +184,7 @@ class InventoryMovementsMixin:
                     "data": {
                         "ledger_id": ledger.id,
                         "quantity": quantity,
-                        "total_quantity": float(ledger.quantity),
+                        "total_quantity": float(ledger.quantity or 0),
                     },
                 }
             except RECOVERABLE_ERRORS as e:
