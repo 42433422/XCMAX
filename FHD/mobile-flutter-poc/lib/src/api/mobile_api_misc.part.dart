@@ -6,14 +6,29 @@ class MobileApiException implements Exception {
     required this.statusCode,
     required this.message,
     required this.body,
+    this.errorCode = '',
+    this.retryAfterSeconds,
   });
 
   final int statusCode;
   final String message;
   final Map<String, Object?> body;
 
+  /// 服务端稳定错误码（如 RATE_LIMITED / UNAUTHORIZED），用于区分限流与权限。
+  final String errorCode;
+
+  /// 429/503 建议等待秒数（来自 Retry-After 或响应体 retry_after）。
+  final int? retryAfterSeconds;
+
   @override
-  String toString() => 'MobileApiException($statusCode): $message';
+  String toString() {
+    final meta = [
+      if (errorCode.isNotEmpty) errorCode,
+      if (retryAfterSeconds != null) 'retry_after=${retryAfterSeconds}s',
+    ].join(', ');
+    final suffix = meta.isEmpty ? '' : ', $meta';
+    return 'MobileApiException($statusCode$suffix): $message';
+  }
 }
 
 Map<String, Object?> _asObjectMap(Object? value) {

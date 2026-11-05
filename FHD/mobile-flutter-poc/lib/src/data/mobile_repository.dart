@@ -41,11 +41,16 @@ class MobileRepository extends _RepoBusinessBase {
 abstract class _RepoRootBase {
   _RepoRootBase({MobileApiClient? client, ImWebSocketClient? imWebSocket})
       : _client = client ?? MobileApiClient(),
-        _imWebSocket = imWebSocket ?? ImWebSocketClient();
+        _imWebSocket = imWebSocket ?? ImWebSocketClient() {
+    _imAuthFailureSubscription = _imWebSocket.authFailures.listen((_) {
+      unawaited(_client.clearActiveAuth().catchError((_) {}));
+    });
+  }
 
   final MobileApiClient _client;
   final ImWebSocketClient _imWebSocket;
   StreamSubscription<Map<String, Object?>>? _imWebSocketSubscription;
+  StreamSubscription<void>? _imAuthFailureSubscription;
 
   MobileApiClient get client => _client;
   bool get imWebSocketConnected => _imWebSocket.connected;

@@ -66,6 +66,7 @@ def test_auth_rate_limit_returns_429(monkeypatch, rate_limit_app):
         assert r.status_code == 200
     r3 = client.post("/api/auth/login", json={"username": "a", "password": "b"})
     assert r3.status_code == 429
+    assert r3.headers.get("Retry-After")
     body = r3.json()
     assert body.get("code") == "RATE_LIMITED"
 
@@ -81,6 +82,7 @@ def test_global_rate_limit_returns_429(monkeypatch, rate_limit_app):
         assert client.get("/api/other/ping").status_code == 200
     r = client.get("/api/other/ping")
     assert r.status_code == 429
+    assert r.headers.get("Retry-After")
     assert r.json().get("code") == "RATE_LIMITED"
 
 

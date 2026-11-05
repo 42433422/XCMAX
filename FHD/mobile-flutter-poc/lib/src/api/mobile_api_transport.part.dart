@@ -156,14 +156,28 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
 
   /// Keep the saved login when the access JWT expires but refresh_token is
   /// still valid.
+  /// 刷新失败的负缓存窗口：避免多个接口连续 401 时反复打 refresh 接口
+  /// （既放大日志与限流压力，也会让 refresh token 被反复轮转/判重）。
+  static const _authRefreshCooldown = Duration(seconds: 10);
+
   Future<bool> _refreshFhdAccessToken() async {
+    final blockedUntil = _authRefreshBlockedUntil;
+    if (blockedUntil != null && DateTime.now().isBefore(blockedUntil)) {
+      return false;
+    }
     if (_refreshInFlight != null) {
       return _refreshInFlight!;
     }
     final future = _refreshFhdAccessTokenImpl();
     _refreshInFlight = future;
     try {
-      return await future;
+      final refreshed = await future;
+      if (!refreshed) {
+        _authRefreshBlockedUntil = DateTime.now().add(_authRefreshCooldown);
+      } else {
+        _authRefreshBlockedUntil = null;
+      }
+      return refreshed;
     } finally {
       if (identical(_refreshInFlight, future)) {
         _refreshInFlight = null;
@@ -175,7 +189,10 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
     final generation = _authGeneration;
     final session = await loadSession();
     final refresh = session.refreshToken.trim();
-    if (refresh.isEmpty || generation != _authGeneration) return false;
+    if (refresh.isEmpty || generation != _authGeneration) {
+      // 无 refresh token 时不重复清空会话；保持本地身份，由 UI 引导重新登录。
+      return false;
+    }
     bool ownsSession(MobileSessionData current) =>
         generation == _authGeneration &&
         current.refreshToken.trim() == refresh &&
@@ -282,7 +299,7 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
     } on MobileApiException catch (error) {
       if (generation != _authGeneration ||
           !allowAuthRefresh ||
-          error.statusCode != 401 ||
+          !_isRetryableAuthError(error) ||
           MobileAuthHeaderPolicy.isPublicAuthWriteRequest(path)) {
         rethrow;
       }
@@ -290,6 +307,15 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
       if (!refreshed || generation != _authGeneration) rethrow;
       return perform();
     }
+  }
+
+  /// 401 是标准登录失效；旧服务端在 Bearer 过期时会把 CSRF 校验失败误报为
+  /// 403，这里兼容识别为可刷新错误，避免写接口在实际仍登录时表现为无权限。
+  bool _isRetryableAuthError(MobileApiException error) {
+    if (error.statusCode == 401) return true;
+    if (error.statusCode != 403) return false;
+    if (error.errorCode == 'UNAUTHORIZED') return true;
+    return error.message.toLowerCase().contains('csrf');
   }
 
   Future<Map<String, Object?>> getJson(
@@ -470,12 +496,60 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
     if (status < 200 || status >= 300) {
       throw MobileApiException(
         statusCode: status,
-        message: body['message']?.toString() ??
-            body['error']?.toString() ??
-            'HTTP $status',
+        message: _errorMessageFromBody(body, status),
         body: body,
+        errorCode: _errorCodeFromBody(body),
+        retryAfterSeconds:
+            _retryAfterSeconds(response.headers.value('retry-after'), body),
       );
     }
     return body;
   }
+}
+
+String _errorMessageFromBody(Map<String, Object?> body, int status) {
+  final detail = _asObjectMap(body['detail']);
+  final errorMap = _asObjectMap(body['error']);
+  final candidates = <String>[
+    (body['message'] ?? '').toString().trim(),
+    (detail['message'] ?? '').toString().trim(),
+    (errorMap['message'] ?? '').toString().trim(),
+    (body['error'] is String ? body['error'] : '').toString().trim(),
+  ];
+  for (final candidate in candidates) {
+    if (candidate.isNotEmpty) return candidate;
+  }
+  return 'HTTP $status';
+}
+
+String _errorCodeFromBody(Map<String, Object?> body) {
+  final direct = body['code'];
+  if (direct is String && direct.trim().isNotEmpty) return direct.trim();
+  final detail = _asObjectMap(body['detail']);
+  final nested = detail['code'];
+  if (nested is String && nested.trim().isNotEmpty) return nested.trim();
+  final error = _asObjectMap(body['error']);
+  final fromError = error['code'];
+  if (fromError is String && fromError.trim().isNotEmpty) return fromError.trim();
+  return '';
+}
+
+int? _retryAfterSeconds(String? headerValue, Map<String, Object?> body) {
+  int? parse(Object? raw) {
+    if (raw is int) return raw > 0 ? raw : null;
+    if (raw is num) {
+      final seconds = raw.toInt();
+      return seconds > 0 ? seconds : null;
+    }
+    if (raw is String) {
+      final seconds = int.tryParse(raw.trim());
+      return seconds != null && seconds > 0 ? seconds : null;
+    }
+    return null;
+  }
+
+  final fromHeader = parse(headerValue);
+  if (fromHeader != null) return fromHeader;
+  return parse(body['retry_after']) ??
+      parse(_asObjectMap(body['detail'])['retry_after']);
 }

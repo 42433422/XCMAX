@@ -373,6 +373,38 @@ class TestMobileMeLogic:
         assert resolved == []
 
     @pytest.mark.asyncio
+    async def test_get_mobile_user_db_outage_is_503_not_401(self, monkeypatch):
+        """数据库瞬时不可用不能被当成未登录，否则客户端会反复 refresh 并收到 401。"""
+        from fastapi import HTTPException, Request
+
+        monkeypatch.setattr(
+            "app.fastapi_routes.mobile_api.verify_mobile_jwt",
+            lambda token: {
+                "typ": "access",
+                "user_id": 7,
+                "session_id": "session-7",
+                "account_kind": "enterprise",
+                "username": "bob",
+            },
+        )
+        monkeypatch.setattr(
+            "app.fastapi_routes.mobile_api.user_id_from_mobile_bearer",
+            lambda authorization: 7,
+        )
+
+        def broken_get_db():
+            raise RuntimeError("database unavailable")
+
+        monkeypatch.setattr("app.db.session.get_db", broken_get_db)
+
+        request = Request({"type": "http", "headers": []})
+        with pytest.raises(HTTPException) as exc_info:
+            await get_mobile_user(request, authorization="Bearer token")
+
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail["code"] == "AUTH_BACKEND_UNAVAILABLE"
+
+    @pytest.mark.asyncio
     async def test_get_mobile_user_expunges_bearer_user_before_session_commit(self, monkeypatch):
         from fastapi import Request
 
