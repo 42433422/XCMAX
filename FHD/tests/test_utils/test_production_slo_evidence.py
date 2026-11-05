@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 
-def _module():
+def _module(*, live_retention: bool = False):
     script = (
         Path(__file__).resolve().parents[2] / "scripts" / "observability" / "collect_slo_metrics.py"
     )
@@ -17,6 +17,8 @@ def _module():
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if not live_retention:
+        module.measure_retention_days = lambda *_a, **_k: None
     return module
 
 
@@ -34,20 +36,17 @@ def _verifier_module():
     return module
 
 
-def test_daily_workflow_uses_private_authenticated_prometheus_tunnel() -> None:
+def test_daily_workflow_queries_prometheus_over_ssh_exec_not_port_forward() -> None:
     workflow = (
         Path(__file__).resolve().parents[2] / ".github" / "workflows" / "slo-metrics-collect.yml"
     ).read_text(encoding="utf-8")
 
-    assert "Open authenticated production Prometheus SSH tunnel" in workflow
-    assert "-L 127.0.0.1:19091:127.0.0.1:9091" in workflow
-    assert 'test "$PRODUCTION_PROMETHEUS_URL" = "http://127.0.0.1:19091"' in workflow
-    assert "PRODUCTION_PROMETHEUS_TOKEN" in workflow
-    assert "NO_PROXY: 127.0.0.1,localhost" in workflow
-    assert "Close production Prometheus SSH tunnel" in workflow
-    assert "TCPKeepAlive=yes" in workflow
-    assert "query=vector(1)" in workflow
-    assert "/api/v1/query" in workflow
+    assert "Open production SSH channel and ensure Prometheus is serving" in workflow
+    assert "-L 127.0.0.1" not in workflow
+    assert "ensure_production_prometheus.sh" in workflow
+    assert "PRODUCTION_PROMETHEUS_SSH_TARGET" in workflow
+    assert "PRODUCTION_PROMETHEUS_SSH_CONTROL" in workflow
+    assert "Close production SSH channel" in workflow
     assert "always() && steps.slo_collect.outcome != 'success'" in workflow
     assert "seed" not in workflow.lower()
 
@@ -66,8 +65,12 @@ def test_observability_installer_paths_resolve_under_published_working_directory
     )
     lines = command.splitlines()
     index = next(i for i, line in enumerate(lines) if line.strip().startswith("scp "))
-    sources = [line.strip().rstrip("\\").strip() for line in lines[index + 1 : index + 3]]
-    assert len(sources) == 2
+    sources = []
+    for line in lines[index + 1 :]:
+        if line.strip().startswith('"${remote}'):
+            break
+        sources.append(line.strip().rstrip("\\").strip())
+    assert len(sources) == 6
     assert all((cwd / path).is_file() for path in sources)
 
 
@@ -142,6 +145,7 @@ def test_real_samples_are_required_and_evidence_is_hash_chained(
         expr: str,
         bearer_token: str = "",
         query_at: datetime | None = None,
+        **_kwargs,
     ) -> str:
         assert bearer_token == "prod-token"
         assert query_at is not None
@@ -258,7 +262,7 @@ def test_verifier_requires_90_continuous_hash_chained_formal_days(
         "SLO-BIZ-05": 1.0,
     }
 
-    def fake_query(_url, expr, bearer_token="", query_at=None):
+    def fake_query(_url, expr, bearer_token="", query_at=None, **_kwargs):
         if expr in collector.SCRAPE_QUERIES.values():
             return "5760"
         for slo_id, template in collector.SAMPLE_QUERIES.items():
@@ -301,18 +305,20 @@ def test_scrape_inventory_matches_production_configuration():
     path = Path(__file__).resolve().parents[2] / "monitoring/prometheus.production.yml"
     config = yaml.safe_load(path.read_text())
     assert config["global"]["scrape_interval"] == f"{mod.SCRAPE_INTERVAL_SECONDS}s"
-    targets = {
-        job["job_name"]: entry["targets"][0]
+    production = {
+        job["job_name"]: entry
         for job in config["scrape_configs"]
-        for entry in job["static_configs"]
+        for entry in job.get("static_configs", [])
         if entry["labels"].get("environment") == "production"
     }
-    assert targets == mod.SCRAPE_TARGETS
-    assert all(
-        len(entry["targets"]) == 1
-        for job in config["scrape_configs"]
-        for entry in job["static_configs"]
-    )
+    assert {job: entry["targets"][0] for job, entry in production.items()} == mod.SCRAPE_TARGETS
+    assert {
+        job: entry["labels"]["service"] for job, entry in production.items()
+    } == mod.SCRAPE_SERVICES
+    for job, entry in production.items():
+        assert len(entry["targets"]) == 1
+        assert entry["labels"]["env"] == entry["labels"]["environment"] == "production"
+        assert f'service="{mod.SCRAPE_SERVICES[job]}"' in mod.SCRAPE_QUERIES[job]
 
 
 @pytest.mark.parametrize(
@@ -436,3 +442,103 @@ def test_empty_coverage_fails_preflight_gate(tmp_path: Path, monkeypatch) -> Non
     assert payload["source_status"] == "available"
     assert payload["coverage"] == 0
     assert mod.telemetry_admissible(payload) is False
+
+
+def test_ssh_exec_transport_sends_promql_on_stdin_without_port_forward(
+    tmp_path: Path, monkeypatch
+) -> None:
+    mod = _module(live_retention=True)
+    calls: list[tuple[list[str], bytes]] = []
+
+    class Done:
+        returncode = 0
+
+        def __init__(self, body: str) -> None:
+            self.stdout = body.encode()
+
+    def fake_run(command, input, **_kwargs):
+        calls.append((command, input))
+        if "/api/v1/status/flags" in command[-1]:
+            return Done('{"status":"success","data":{"storage.tsdb.retention.time":"17w1d"}}')
+        return Done('{"status":"success","data":{"result":[{"value":[0,"5760"]}]}}')
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    ssh = mod.SshTransport("root@prod.example.invalid", "/tmp/ctl")
+    payload, _ = mod.collect(
+        prom_url=mod.HOST_LOCAL_PROMETHEUS,
+        prom_token="",
+        window="1d",
+        mode="preflight",
+        release_id="",
+        raw_retention_days=0,
+        out_path=tmp_path / "ssh.json",
+        ssh=ssh,
+    )
+    assert payload["transport"] == "ssh-exec"
+    assert payload["source_status"] == "available"
+    assert payload["raw_metric_retention_days"] == 120
+    assert payload["raw_metric_retention_source"] == "prometheus_flags"
+    for command, stdin in calls:
+        assert "-L" not in command
+        assert command[command.index("-S") + 1] == "/tmp/ctl"
+        assert command[-1].startswith("curl -fsS")
+        assert "up{" not in command[-1]
+    assert any(b'service="modstore"' in stdin for _command, stdin in calls)
+
+
+def test_ssh_exec_failure_is_retried_then_recorded_fail_closed(tmp_path: Path, monkeypatch) -> None:
+    mod = _module(live_retention=True)
+
+    class Failed:
+        returncode = 255
+        stdout = b""
+
+    monkeypatch.setattr(mod.subprocess, "run", lambda *_a, **_k: Failed())
+    monkeypatch.setattr(mod.time, "sleep", lambda *_: None)
+    payload, all_pass = mod.collect(
+        prom_url=mod.HOST_LOCAL_PROMETHEUS,
+        prom_token="",
+        window="1d",
+        mode="preflight",
+        release_id="",
+        raw_retention_days=0,
+        out_path=tmp_path / "fail.json",
+        ssh=mod.SshTransport("root@prod.example.invalid"),
+    )
+    assert all_pass is False
+    assert payload["source_status"] == "source_unavailable"
+    assert "SLO-API-01:source_unavailable:ConnectionError" in payload["source_errors"]
+    assert payload["raw_metric_retention_source"] == "declared"
+
+
+def test_seven_day_observation_ledger_records_every_gap(tmp_path: Path, monkeypatch) -> None:
+    mod = _module()
+    verifier = _verifier_module()
+    start = datetime(2026, 11, 1, 12, tzinfo=UTC)
+    monkeypatch.setattr(mod, "measure_retention_days", lambda *_a, **_k: 120.0)
+    for offset in range(7):
+        if offset == 3:
+            continue
+
+        def query(_url, expr, offset=offset, **_kwargs):
+            if expr in mod.SCRAPE_QUERIES.values():
+                return "5000" if offset == 5 else "5760"
+            return "1"
+
+        monkeypatch.setattr(mod, "prom_query", query)
+        mod.collect(
+            prom_url="https://prometheus.example.invalid",
+            prom_token="prod-token",
+            window="1d",
+            mode="preflight",
+            release_id="",
+            raw_retention_days=0,
+            out_path=tmp_path / f"{offset:03d}.json",
+            now=start + timedelta(days=offset),
+        )
+    ledger = verifier.observation_ledger(tmp_path, days=7)
+    assert ledger["passed"] is False
+    assert len(ledger["days"]) == 7
+    assert "2026-11-04:no_collection_record" in ledger["gaps"]
+    assert any(g.startswith("2026-11-06:fhd-api-stable:scrape_coverage") for g in ledger["gaps"])
+    assert ledger["retention"] == {"days": 120.0, "source": "prometheus_flags"}

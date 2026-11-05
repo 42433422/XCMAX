@@ -1,0 +1,29 @@
+# Production Alertmanager (127.0.0.1:19093, container xcmax-alertmanager).  The ops channel URL is never
+# committed: install_production_prometheus_config.sh writes it from the
+# OPS_ALERT_WEBHOOK_URL secret into the url_file below (mode 600).
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: ops-webhook
+  group_by: ["alertname", "service", "instance"]
+  group_wait: 30s
+  group_interval: 2m
+  repeat_interval: 4h
+  routes:
+    - matchers: ['severity="drill"']
+      receiver: ops-webhook
+      group_wait: 0s
+      group_interval: 30s
+      repeat_interval: 1h
+
+receivers:
+  - name: ops-webhook
+    webhook_configs:
+      - url_file: /etc/alertmanager/secrets/ops_webhook_url
+        send_resolved: true
+
+inhibit_rules:
+  - source_matchers: ['severity="critical"']
+    target_matchers: ['severity="warning"']
+    equal: ["service", "instance"]
