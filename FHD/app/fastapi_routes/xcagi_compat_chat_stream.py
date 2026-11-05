@@ -144,6 +144,7 @@ def _classify_and_submit_client_issue(
 
 
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
+    sse_event_line = _facade()._sse_event_line
     m = (body.mode or "").strip().lower()
     if m in ("online", "offline"):
         _facade().set_llm_mode(m)
@@ -301,7 +302,6 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
     tool_progress: list[str] = []
-    sse_event_line = _facade()._sse_event_line
     pre_run = None
     planner_runtime_context = {**(runtime_context or {}), "message": body.message}
     try:
