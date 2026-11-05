@@ -110,18 +110,86 @@ def verify_window(
     }
 
 
+def observation_ledger(evidence_dir: Path, *, days: int = 7) -> dict[str, Any]:
+    """Day-by-day collection/scrape ledger: every gap or fault stays on record."""
+    by_day: dict[date, dict[str, Any]] = {}
+    for path in sorted(evidence_dir.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError):
+            continue
+        day = _day(payload) if isinstance(payload, dict) else None
+        if day is not None:
+            by_day[day] = payload
+    if not by_day:
+        return {"passed": False, "days": [], "gaps": ["no_evidence"], "retention": None}
+    end = max(by_day)
+    entries: list[dict[str, Any]] = []
+    gaps: list[str] = []
+    for offset in range(days - 1, -1, -1):
+        day = end - timedelta(days=offset)
+        payload = by_day.get(day)
+        if payload is None:
+            gaps.append(f"{day}:no_collection_record")
+            entries.append({"day": day.isoformat(), "recorded": False})
+            continue
+        targets = {
+            job: item.get("coverage")
+            for job, item in (payload.get("scrape_evidence") or {}).items()
+            if isinstance(item, dict)
+        }
+        faults = sorted(
+            e for e in payload.get("errors") or [] if "scrape" in e or "source_unavailable" in e
+        )
+        if payload.get("source_status") != "available":
+            gaps.append(f"{day}:source_unavailable")
+        for job, coverage in targets.items():
+            if coverage is None or float(coverage) < 0.99:
+                gaps.append(f"{day}:{job}:scrape_coverage:{coverage}")
+        entries.append(
+            {
+                "day": day.isoformat(),
+                "recorded": True,
+                "source_status": payload.get("source_status"),
+                "target_coverage": targets,
+                "faults": faults,
+            }
+        )
+    latest = by_day[end]
+    retention = {
+        "days": latest.get("raw_metric_retention_days"),
+        "source": latest.get("raw_metric_retention_source", "declared"),
+    }
+    if retention["source"] != "prometheus_flags" or float(retention["days"] or 0) < 120:
+        gaps.append(f"retention_not_measured_or_below_120d:{retention}")
+    return {
+        "schema": "xcagi.production_observation_ledger/v1",
+        "passed": not gaps,
+        "window": f"{(end - timedelta(days=days - 1)).isoformat()}..{end.isoformat()}",
+        "days": entries,
+        "gaps": gaps,
+        "retention": retention,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-dir", type=Path, required=True)
-    parser.add_argument("--release-id", required=True)
+    parser.add_argument("--release-id", default="")
     parser.add_argument("--required-days", type=int, default=90)
+    parser.add_argument("--observation-days", type=int, default=0)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    result = verify_window(
-        args.evidence_dir,
-        release_id=args.release_id,
-        required_days=args.required_days,
-    )
+    if args.observation_days:
+        result = observation_ledger(args.evidence_dir, days=args.observation_days)
+    elif not args.release_id:
+        parser.error("--release-id is required unless --observation-days is set")
+    else:
+        result = verify_window(
+            args.evidence_dir,
+            release_id=args.release_id,
+            required_days=args.required_days,
+        )
     rendered = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

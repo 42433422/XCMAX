@@ -12,6 +12,9 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import shlex
+import subprocess
 import sys
 import time
 import urllib.error
@@ -33,10 +36,19 @@ SCRAPE_TARGETS = {
     "fhd-api-stable": "127.0.0.1:5100",
     "modstore-api-production": "127.0.0.1:9999",
 }
+SCRAPE_SERVICES = {
+    "fhd-api-stable": "fhd",
+    "modstore-api-production": "modstore",
+}
 SCRAPE_QUERIES = {
-    job: f'sum(sum_over_time(up{{environment="production",job="{job}",instance="{instance}"}}[1d]))'
+    job: (
+        f'sum(sum_over_time(up{{environment="production",job="{job}",'
+        f'instance="{instance}",service="{SCRAPE_SERVICES[job]}"}}[1d]))'
+    )
     for job, instance in SCRAPE_TARGETS.items()
 }
+# Host-local Prometheus address queried over `ssh host curl` (no TCP forwarding).
+HOST_LOCAL_PROMETHEUS = "http://127.0.0.1:9091"
 
 # Ratio denominators use the actual count. PromQL `> 0` (without `bool`)
 # filters missing/zero traffic without rounding sparse traffic up to one RPS.
@@ -131,14 +143,95 @@ def _canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-# Transient transport failures observed through the production SSH tunnel
-# (ConnectionResetError on 2026-10-29). Retry with backoff; never invent readings.
+# Transient transport failures (ConnectionResetError on every run since
+# 2026-10-17 through the forwarded port). Retry with backoff; never invent readings.
 _TRANSIENT_QUERY_ERRORS = (
-    ConnectionResetError,
+    ConnectionError,
     TimeoutError,
     urllib.error.URLError,
-    BrokenPipeError,
 )
+
+
+class SshTransport:
+    """Run `curl` against the host-local Prometheus through an SSH exec channel.
+
+    Exec channels do not depend on sshd TCP forwarding, so a disabled forward or
+    a reset tunnel can no longer silently drop every reading.
+    """
+
+    def __init__(self, target: str, control_path: str = "") -> None:
+        self.target = target
+        self.control_path = control_path
+
+    def get(self, path: str, params: dict[str, str]) -> dict[str, Any]:
+        remote = ["curl", "-fsS", "--max-time", "60", "-G"]
+        if "query" in params:
+            remote += ["--data-urlencode", "query@-"]
+        for key, value in params.items():
+            if key != "query":
+                remote += ["--data-urlencode", f"{key}={value}"]
+        remote.append(f"{HOST_LOCAL_PROMETHEUS}{path}")
+        command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20"]
+        if self.control_path:
+            command += ["-S", self.control_path]
+        command += [self.target, shlex.join(remote)]
+        try:
+            proc = subprocess.run(
+                command,
+                input=params.get("query", "").encode(),
+                capture_output=True,
+                timeout=90,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise TimeoutError("ssh_exec_timeout") from exc
+        if proc.returncode != 0:
+            raise ConnectionError(f"ssh_exec_exit_{proc.returncode}")
+        return json.loads(proc.stdout.decode())
+
+
+def _prom_get(
+    base_url: str,
+    path: str,
+    params: dict[str, str],
+    bearer_token: str = "",
+    ssh: SshTransport | None = None,
+) -> dict[str, Any]:
+    if ssh is not None:
+        return ssh.get(path, params)
+    url = f"{base_url.rstrip('/')}{path}?{urllib.parse.urlencode(params)}"
+    headers = {"Connection": "close"}
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode())
+
+
+_DURATION_UNITS = {
+    "y": 365.0,
+    "w": 7.0,
+    "d": 1.0,
+    "h": 1 / 24,
+    "m": 1 / 1440,
+    "s": 1 / 86400,
+    "ms": 1 / 86_400_000,
+}
+
+
+def measure_retention_days(
+    base_url: str, bearer_token: str = "", ssh: SshTransport | None = None
+) -> float | None:
+    """Read --storage.tsdb.retention.time from the live server, not from a CI variable."""
+    try:
+        flags = _prom_get(base_url, "/api/v1/status/flags", {}, bearer_token, ssh)
+    except (OSError, ValueError, TypeError):
+        return None
+    raw = str((flags.get("data") or {}).get("storage.tsdb.retention.time") or "")
+    parts = re.findall(r"(\d+)(ms|y|w|d|h|m|s)", raw)
+    if not parts or "".join(n + u for n, u in parts) != raw:
+        return None
+    return sum(int(n) * _DURATION_UNITS[u] for n, u in parts)
 
 
 def prom_query(
@@ -149,22 +242,15 @@ def prom_query(
     *,
     attempts: int = 4,
     backoff_seconds: float = 0.75,
+    ssh: SshTransport | None = None,
 ) -> str | None:
     params = {"query": expr}
     if query_at is not None:
         params["time"] = query_at.astimezone(UTC).isoformat().replace("+00:00", "Z")
-    url = f"{base_url.rstrip('/')}/api/v1/query?{urllib.parse.urlencode(params)}"
-    headers = {
-        "Authorization": f"Bearer {bearer_token}" if bearer_token else "",
-        "Connection": "close",
-    }
-    headers = {key: value for key, value in headers.items() if value}
     last_error: Exception | None = None
     for attempt in range(1, max(attempts, 1) + 1):
-        req = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode())
+            data = _prom_get(base_url, "/api/v1/query", params, bearer_token, ssh)
             if data.get("status") != "success":
                 raise RuntimeError("prometheus_query_failed")
             results = data.get("data", {}).get("result", [])
@@ -247,6 +333,7 @@ def collect(
     now: datetime | None = None,
     evidence_at: datetime | None = None,
     backfill_reason: str = "",
+    ssh: SshTransport | None = None,
 ) -> tuple[dict[str, Any], bool]:
     recorded_at = (now or datetime.now(UTC)).astimezone(UTC)
     current = (evidence_at or recorded_at).astimezone(UTC)
@@ -260,10 +347,15 @@ def collect(
     errors: list[str] = []
     source_errors: list[str] = []
     readings: dict[str, dict[str, Any]] = {}
-    credentials_available = bool(prom_url.strip() and prom_token.strip())
+    credentials_available = ssh is not None or bool(prom_url.strip() and prom_token.strip())
     if not credentials_available:
         source_errors.append("production_prometheus_credentials_unavailable")
         errors.extend(source_errors)
+    retention_source = "declared"
+    if credentials_available:
+        measured = measure_retention_days(prom_url, prom_token, ssh)
+        if measured is not None:
+            raw_retention_days, retention_source = measured, "prometheus_flags"
     if raw_retention_days < 120:
         errors.append(f"raw_metric_retention_below_120_days:{raw_retention_days}")
 
@@ -274,7 +366,9 @@ def collect(
         if credentials_available:
             try:
                 successful_scrapes = _numeric(
-                    prom_query(prom_url, expr, bearer_token=prom_token, query_at=current)
+                    prom_query(
+                        prom_url, expr, bearer_token=prom_token, query_at=current, ssh=ssh
+                    )
                 )
             except (OSError, ValueError, TypeError, RuntimeError) as exc:
                 source_error = f"{job}:scrape_source_unavailable:{type(exc).__name__}"
@@ -312,9 +406,9 @@ def collect(
         sample_raw: str | None = None
         if credentials_available:
             try:
-                raw = prom_query(prom_url, expr, bearer_token=prom_token, query_at=current)
+                raw = prom_query(prom_url, expr, bearer_token=prom_token, query_at=current, ssh=ssh)
                 sample_raw = prom_query(
-                    prom_url, sample_expr, bearer_token=prom_token, query_at=current
+                    prom_url, sample_expr, bearer_token=prom_token, query_at=current, ssh=ssh
                 )
             except (OSError, ValueError, TypeError, RuntimeError) as exc:
                 source_error = f"{slo_id}:source_unavailable:{type(exc).__name__}"
@@ -365,8 +459,10 @@ def collect(
         "mode": mode,
         "release_id": release_id,
         "prometheus_url": prom_url,
+        "transport": "ssh-exec" if ssh is not None else "http",
         "window": window,
         "raw_metric_retention_days": raw_retention_days,
+        "raw_metric_retention_source": retention_source,
         "source_status": source_status,
         "source_errors": sorted(set(source_errors)),
         "coverage": coverage,
@@ -407,8 +503,17 @@ def main() -> int:
         type=int,
         default=int(os.environ.get("PRODUCTION_PROMETHEUS_RETENTION_DAYS", "0") or 0),
     )
+    parser.add_argument(
+        "--ssh-target", default=os.environ.get("PRODUCTION_PROMETHEUS_SSH_TARGET", "")
+    )
+    parser.add_argument(
+        "--ssh-control", default=os.environ.get("PRODUCTION_PROMETHEUS_SSH_CONTROL", "")
+    )
     parser.add_argument("--out", default="")
     args = parser.parse_args()
+    ssh = SshTransport(args.ssh_target, args.ssh_control) if args.ssh_target else None
+    if ssh is not None:
+        args.prom_url = HOST_LOCAL_PROMETHEUS
 
     if args.mode == "formal" and not args.release_id:
         parser.error("--release-id is required in formal mode")
@@ -443,6 +548,7 @@ def main() -> int:
         now=recorded_at,
         evidence_at=evidence_at,
         backfill_reason=args.backfill_reason,
+        ssh=ssh,
     )
     print(
         f"Wrote {out_path} source_status={payload['source_status']} "
