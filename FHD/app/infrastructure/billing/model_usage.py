@@ -112,7 +112,7 @@ def _safe_metadata(value: Any) -> dict[str, Any]:
     try:
         json.dumps(value, ensure_ascii=False, default=str)
         return dict(value)
-    except TypeError:
+    except TypeError:  # noqa: intentional JSON-safe coerce
         return {str(key): str(item) for key, item in value.items()}
 
 

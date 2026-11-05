@@ -129,7 +129,7 @@ def invoke_init_hook(
             return
     try:
         sig.bind(**kwargs)
-    except TypeError:
+    except TypeError:  # noqa: bind may reject unexpected kwargs; fall back to no-arg init
         init_fn()
         return
     init_fn(**kwargs)
