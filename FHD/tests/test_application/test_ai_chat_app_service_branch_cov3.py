@@ -1219,6 +1219,7 @@ class TestProcessChatEdge:
             ),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def raise_conn_error(*args, **kwargs):
                 raise ConnectionError("conn failed")
 
@@ -1246,6 +1247,7 @@ class TestProcessChatEdge:
             ),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def raise_timeout(*args, **kwargs):
                 raise TimeoutError("timed out")
 
@@ -1274,6 +1276,7 @@ class TestProcessChatEdge:
             ),
             patch.object(svc.ai_service, "chat", new_callable=AsyncMock) as mock_chat,
         ):
+
             async def raise_runtime(*args, **kwargs):
                 raise RuntimeError(error)
 
