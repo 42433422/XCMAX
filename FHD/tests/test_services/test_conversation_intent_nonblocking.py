@@ -42,10 +42,14 @@ def test_concurrent_intent_calls_keep_loop_responsive_and_contexts_isolated(
             time.sleep(0.2)
             observed.append((message, before, loop_ticks - ticks_before))
             result = _build_result(before)
-            return SimpleNamespace(recognizer_result=result) if neuro_enabled else result
+            return (
+                SimpleNamespace(recognizer_result=result) if neuro_enabled else result
+            )
 
     host = IntentMixin()
-    host.user_preference_service = SimpleNamespace(get_preference=lambda *args: "online")
+    host.user_preference_service = SimpleNamespace(
+        get_preference=lambda *args: "online"
+    )
     host.unified_recognizer = Recognizer()
     monkeypatch.setenv("XCAGI_NEURO_INTENT", "1" if neuro_enabled else "0")
     monkeypatch.setenv("XCAGI_SKIP_INTENT_LLM", "0")

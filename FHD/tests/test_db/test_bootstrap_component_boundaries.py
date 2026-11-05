@@ -15,7 +15,10 @@ from sqlalchemy import create_engine, inspect, text
 
 import app.db as database
 from app.db import init_db
-from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+from app.request_active_mod_ctx import (
+    reset_request_active_mod_id,
+    set_request_active_mod_id,
+)
 
 
 def test_auth_resolves_a_proxy_but_column_repair_uses_the_supplied_engine(monkeypatch):
@@ -48,9 +51,13 @@ def test_explicit_url_selects_the_database_before_the_supplied_engine(monkeypatc
             connection.execute(text("CREATE TABLE sessions (id INTEGER PRIMARY KEY)"))
     create = MagicMock(return_value=chosen)
     monkeypatch.setattr(database, "_create_engine_for_url", create)
-    monkeypatch.setattr(database, "_get_engine", MagicMock(side_effect=AssertionError("global")))
+    monkeypatch.setattr(
+        database, "_get_engine", MagicMock(side_effect=AssertionError("global"))
+    )
 
-    init_db.ensure_sessions_market_refresh_token_column(other, database_url=" sqlite:///chosen.db ")
+    init_db.ensure_sessions_market_refresh_token_column(
+        other, database_url=" sqlite:///chosen.db "
+    )
 
     create.assert_called_once_with("sqlite:///chosen.db")
     assert "market_refresh_token" in {
@@ -99,14 +106,20 @@ def test_runtime_bootstrap_uses_late_bound_steps_in_dependency_order(monkeypatch
 
     init_db.ensure_runtime_auth_bootstrap(engine, database_url=f" {url} ")
 
-    first = list(_SQLITE_ONLY) if url.startswith("sqlite") else ["ensure_postgresql_auth_bootstrap"]
+    first = (
+        list(_SQLITE_ONLY)
+        if url.startswith("sqlite")
+        else ["ensure_postgresql_auth_bootstrap"]
+    )
     last = (
         ["ensure_sqlite_elt_bootstrap", "ensure_erp_bootstrap"]
         if url.startswith("sqlite")
         else ["ensure_erp_bootstrap"]
     )
     assert [name for name, *_ in calls] == first + list(_COMMON) + last
-    assert all(actual is engine and actual_url == url for _, actual, actual_url, _ in calls)
+    assert all(
+        actual is engine and actual_url == url for _, actual, actual_url, _ in calls
+    )
     assert all(
         swallow is (None if name == "ensure_postgresql_auth_bootstrap" else False)
         for name, _, _, swallow in calls
@@ -114,7 +127,9 @@ def test_runtime_bootstrap_uses_late_bound_steps_in_dependency_order(monkeypatch
 
 
 @pytest.mark.parametrize("required", [False, True])
-def test_only_access_token_repair_requires_the_column_after_a_ddl_failure(monkeypatch, required):
+def test_only_access_token_repair_requires_the_column_after_a_ddl_failure(
+    monkeypatch, required
+):
     engine = MagicMock()
     engine.dialect.name = "sqlite"
     engine.begin.side_effect = OSError("DDL unavailable")
@@ -129,7 +144,9 @@ def test_only_access_token_repair_requires_the_column_after_a_ddl_failure(monkey
         init_db.ensure_sessions_market_refresh_token_column(engine)
 
 
-def test_mod_seed_copies_preserve_existing_content_and_use_first_seed(monkeypatch, tmp_path):
+def test_mod_seed_copies_preserve_existing_content_and_use_first_seed(
+    monkeypatch, tmp_path
+):
     work = tmp_path / "work"
     seeds = [tmp_path / "first", tmp_path / "second"]
     for directory, value in zip(seeds, (1, 2), strict=True):
@@ -138,10 +155,14 @@ def test_mod_seed_copies_preserve_existing_content_and_use_first_seed(monkeypatc
             connection.execute("CREATE TABLE seed (value INTEGER)")
             connection.execute("INSERT INTO seed VALUES (?)", (value,))
     monkeypatch.setattr(init_db, "get_app_data_dir", lambda: str(work))
-    monkeypatch.setattr(init_db, "_iter_seed_dirs", lambda: [str(path) for path in seeds])
+    monkeypatch.setattr(
+        init_db, "_iter_seed_dirs", lambda: [str(path) for path in seeds]
+    )
 
     init_db.initialize_databases(["products.db"])
-    init_db.ensure_sqlite_per_mod_database_copies(["alpha", "beta", "alpha"], ["products.db"])
+    init_db.ensure_sqlite_per_mod_database_copies(
+        ["alpha", "beta", "alpha"], ["products.db"]
+    )
     token = set_request_active_mod_id("alpha")
     try:
         active_path = Path(init_db.get_db_path())
@@ -158,13 +179,19 @@ def test_mod_seed_copies_preserve_existing_content_and_use_first_seed(monkeypatc
         ("products__beta.db", 1),
     ):
         with sqlite3.connect(work / filename) as connection:
-            assert connection.execute("SELECT value FROM seed").fetchall() == [(expected,)]
+            assert connection.execute("SELECT value FROM seed").fetchall() == [
+                (expected,)
+            ]
 
 
 @pytest.mark.parametrize(
-    "factory", [list, tuple, lambda names: (name for name in names)], ids=["list", "tuple", "generator"]
+    "factory",
+    [list, tuple, lambda names: (name for name in names)],
+    ids=["list", "tuple", "generator"],
 )
-def test_mod_seed_copies_are_identical_for_each_input_type(monkeypatch, tmp_path, factory):
+def test_mod_seed_copies_are_identical_for_each_input_type(
+    monkeypatch, tmp_path, factory
+):
     monkeypatch.setattr(init_db, "get_app_data_dir", lambda: str(tmp_path))
     for name in ("products.db", "orders.db"):
         with sqlite3.connect(tmp_path / name) as connection:
@@ -223,8 +250,12 @@ class _PortableConnection:
         self.connection = connection
 
     def execute(self, statement, parameters=None):
-        sql = str(statement).replace("BIGSERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
-        sql = sql.replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN").replace("JSONB", "TEXT")
+        sql = str(statement).replace(
+            "BIGSERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT"
+        )
+        sql = sql.replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN").replace(
+            "JSONB", "TEXT"
+        )
         return self.connection.execute(text(sql), parameters or {})
 
 
@@ -247,7 +278,9 @@ def test_postgresql_sequence_prepares_existing_profile_columns_before_admin_seed
             """)
             )
     postgres = _PostgresSequenceOnSQLite(underlying)
-    monkeypatch.setattr(init_db, "_resolve_auth_bootstrap_engine", lambda *args, **kwargs: postgres)
+    monkeypatch.setattr(
+        init_db, "_resolve_auth_bootstrap_engine", lambda *args, **kwargs: postgres
+    )
     monkeypatch.setattr(
         sqlalchemy,
         "inspect",
@@ -267,12 +300,16 @@ def test_postgresql_sequence_prepares_existing_profile_columns_before_admin_seed
         ).fetchone() == (0, 0)
     with underlying.begin() as connection:
         connection.execute(
-            text("UPDATE users SET display_name = 'retained', password = 'existing-hash'")
+            text(
+                "UPDATE users SET display_name = 'retained', password = 'existing-hash'"
+            )
         )
     init_db.ensure_postgresql_auth_bootstrap(postgres)
     with underlying.connect() as connection:
         assert connection.execute(text("SELECT COUNT(*) FROM users")).scalar_one() == 1
-        assert connection.execute(text("SELECT display_name, password FROM users")).fetchone() == (
+        assert connection.execute(
+            text("SELECT display_name, password FROM users")
+        ).fetchone() == (
             "retained",
             "existing-hash",
         )
@@ -288,14 +325,18 @@ def test_im_migration_step_has_only_its_historical_schema_and_preserves_rows():
 
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE im_messages (id INTEGER PRIMARY KEY, body TEXT)"))
+        connection.execute(
+            text("CREATE TABLE im_messages (id INTEGER PRIMARY KEY, body TEXT)")
+        )
         connection.execute(text("INSERT INTO im_messages VALUES (1, 'retained')"))
         for _ in range(2):
             apply_message_provenance(Operations(MigrationContext.configure(connection)))
     init_db.ensure_im_customer_service_columns(engine)
     inspector = inspect(engine)
     assert inspector.get_table_names() == ["im_messages"]
-    columns = {column["name"]: column for column in inspector.get_columns("im_messages")}
+    columns = {
+        column["name"]: column for column in inspector.get_columns("im_messages")
+    }
     assert set(columns) == {"id", "body", "origin", "operator_user_id"}
     assert columns["origin"]["nullable"] is False
     assert str(columns["origin"]["type"]) == "VARCHAR(32)"
@@ -312,7 +353,9 @@ def test_im_migration_step_has_only_its_historical_schema_and_preserves_rows():
             (1, "retained", "user", None)
         ]
     with pytest.raises(IntegrityError), engine.begin() as connection:
-        connection.execute(text("INSERT INTO im_messages (id, origin) VALUES (2, NULL)"))
+        connection.execute(
+            text("INSERT INTO im_messages (id, origin) VALUES (2, NULL)")
+        )
     engine.dispose()
 
 
@@ -337,12 +380,21 @@ def test_postgresql_im_migration_compiles_concurrent_safe_ddl(monkeypatch):
     for _ in range(2):
         apply_message_provenance(operations)
     statements = output.getvalue()
-    assert len([statement for statement in statements.split(";") if statement.strip()]) == 6
     assert (
-        statements.count("ADD COLUMN IF NOT EXISTS origin VARCHAR(32) DEFAULT 'user' NOT NULL") == 2
+        len([statement for statement in statements.split(";") if statement.strip()])
+        == 6
+    )
+    assert (
+        statements.count(
+            "ADD COLUMN IF NOT EXISTS origin VARCHAR(32) DEFAULT 'user' NOT NULL"
+        )
+        == 2
     )
     assert statements.count("ADD COLUMN IF NOT EXISTS operator_user_id INTEGER") == 2
-    assert statements.count("CREATE INDEX IF NOT EXISTS ix_im_messages_operator_user_id") == 2
+    assert (
+        statements.count("CREATE INDEX IF NOT EXISTS ix_im_messages_operator_user_id")
+        == 2
+    )
     assert "im_cs_automation_states" not in statements
     assert "alembic_version" not in statements
 
@@ -356,8 +408,12 @@ def test_existing_im_revision_keeps_its_upgrade_and_downgrade_behavior():
     revision = load_python_file(str(directory), "2026_08_31_enterprise_cs_ai.py")
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE im_conversations (id INTEGER PRIMARY KEY)"))
-        connection.execute(text("CREATE TABLE im_messages (id INTEGER PRIMARY KEY, body TEXT)"))
+        connection.execute(
+            text("CREATE TABLE im_conversations (id INTEGER PRIMARY KEY)")
+        )
+        connection.execute(
+            text("CREATE TABLE im_messages (id INTEGER PRIMARY KEY, body TEXT)")
+        )
         connection.execute(text("INSERT INTO im_messages VALUES (1, 'retained')"))
         with Operations.context(MigrationContext.configure(connection)):
             revision.upgrade()
@@ -367,11 +423,18 @@ def test_existing_im_revision_keeps_its_upgrade_and_downgrade_behavior():
                 "im_messages",
                 "im_cs_automation_states",
             }
-            assert connection.execute(text("SELECT body, origin FROM im_messages")).fetchone() == (
+            assert connection.execute(
+                text("SELECT body, origin FROM im_messages")
+            ).fetchone() == (
                 "retained",
                 "user",
             )
             revision.downgrade()
-        assert set(inspect(connection).get_table_names()) == {"im_conversations", "im_messages"}
-        assert connection.execute(text("SELECT * FROM im_messages")).fetchall() == [(1, "retained")]
+        assert set(inspect(connection).get_table_names()) == {
+            "im_conversations",
+            "im_messages",
+        }
+        assert connection.execute(text("SELECT * FROM im_messages")).fetchall() == [
+            (1, "retained")
+        ]
     engine.dispose()
