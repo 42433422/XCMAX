@@ -104,7 +104,7 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
                 or not lower <= int(value[: -len(unit)]) <= upper
             ):
                 valid = False
-    if not valid:
+    if not valid or not isinstance(text, str):
         return JSONResponse(
             {"success": False, "message": "TTS 请求参数无效", "data": {}}, status_code=422
         )

@@ -89,9 +89,12 @@ def synthesize_mimo_bytes(
                 resp = await client.post(url, headers=headers, json=payload)
                 resp.raise_for_status()
                 try:
-                    return resp.json()
+                    payload_json = resp.json()
                 except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                     raise TtsUpstreamResponseError("mimo-tts returned invalid JSON") from exc
+                if not isinstance(payload_json, dict):
+                    raise TtsUpstreamResponseError("mimo-tts returned non-object JSON")
+                return payload_json
 
     data = asyncio.run(request())
 

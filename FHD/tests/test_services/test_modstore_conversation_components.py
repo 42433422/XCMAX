@@ -774,8 +774,8 @@ def test_main_chat_auto_uses_server_route_before_local_fallback(
             "UX体验测试：只回复‘测试成功’，不要执行任何业务操作。", client=client
         )
     )
-    assert [event["type"] for event in events] == ["token", "done"]
-    assert events[0]["text"] == "测试成功"
+    assert [event["type"] for event in events] == ["model_activity", "token", "done"]
+    assert events[1]["text"] == "测试成功"
     assert requests == [("GET", "/api/llm/resolve-chat-default"), ("POST", "/api/llm/chat/stream")]
 
 

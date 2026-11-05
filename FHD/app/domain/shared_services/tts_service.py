@@ -313,8 +313,14 @@ def _synthesize_edge_mp3(req: TtsRequest) -> bytes:
                 "Edge 语音上游拒绝了握手（HTTP 403）；已暂停重试，请检查系统时间/网络，"
                 "或改用离线语音包。"
             ) from e
-        from edge_tts.exceptions import EdgeTTSException
-
+        # Timeouts must propagate as TimeoutError (callers/tests assert this).
+        # Do not import edge_tts.exceptions here: tests stub edge_tts as a non-package.
+        if isinstance(e, TimeoutError):
+            raise
+        try:
+            from edge_tts.exceptions import EdgeTTSException
+        except ImportError:
+            raise
         if isinstance(e, EdgeTTSException):
             raise TtsUpstreamResponseError("edge-tts returned an invalid response") from e
         raise
