@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import os
-import secrets
 import threading
 import time
 import uuid
@@ -22,6 +21,7 @@ from typing import Any
 
 import jwt
 
+from app.security.jwt_signing_key import resolve_jwt_signing_key
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -32,13 +32,13 @@ WEB_JWT_ALG = "HS256"
 WEB_ACCESS_TTL_HOURS = 12
 WEB_REFRESH_TTL_HOURS = 336  # 14 天
 
-_FALLBACK_SECRET = secrets.token_urlsafe(48)
 _used_refresh_jti: set[str] = set()
 _used_refresh_lock = threading.Lock()
 
 
 def _secret_key() -> str:
-    return os.environ.get("SECRET_KEY", "").strip() or _FALLBACK_SECRET
+    """与移动端共用稳定签名密钥，未配置 SECRET_KEY 时也不会随重启轮换。"""
+    return resolve_jwt_signing_key()
 
 
 def web_jwt_auth_enabled() -> bool:

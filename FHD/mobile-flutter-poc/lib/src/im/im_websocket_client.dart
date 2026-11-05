@@ -23,6 +23,7 @@ class ImWebSocketClient {
   ImWebSocketClient();
 
   final _events = StreamController<Map<String, Object?>>.broadcast();
+  final _authFailures = StreamController<void>.broadcast();
   WebSocketChannel? _channel;
   StreamSubscription<Object?>? _subscription;
   Timer? _heartbeatTimer;
@@ -34,6 +35,9 @@ class ImWebSocketClient {
   var _disposed = false;
 
   Stream<Map<String, Object?>> get events => _events.stream;
+
+  /// 服务端以 4401 关闭时触发：会话已失效，应停止重连并回到登录流程。
+  Stream<void> get authFailures => _authFailures.stream;
   bool get connected => _connected;
 
   void connect({required String sessionId, required String url}) {
@@ -57,6 +61,7 @@ class ImWebSocketClient {
     _disposed = true;
     disconnect();
     _events.close();
+    _authFailures.close();
   }
 
   void _openSocket() {
@@ -96,8 +101,19 @@ class ImWebSocketClient {
   }
 
   void _onDone() {
+    final closeCode = _channel?.closeCode;
     _connected = false;
     _stopHeartbeat();
+    if (closeCode == 4401) {
+      // 服务端明确拒绝会话：继续重连只会反复 401/4401，直接停止并通知上层登出。
+      _sessionId = '';
+      _url = '';
+      _cancelReconnect();
+      if (!_authFailures.isClosed) {
+        _authFailures.add(null);
+      }
+      return;
+    }
     _scheduleReconnect();
   }
 

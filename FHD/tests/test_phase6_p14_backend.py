@@ -848,6 +848,9 @@ class TestMobileAuthRefresh:
         self, mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("SECRET_KEY", _TEST_JWT_SECRET)
+        monkeypatch.setattr(
+            "app.security.mobile_jwt._mobile_session_is_live", lambda sid: True
+        )
         from app.security.mobile_jwt import issue_mobile_tokens
 
         tokens = issue_mobile_tokens(
@@ -868,6 +871,9 @@ class TestMobileAuthRefresh:
         self, mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("SECRET_KEY", _TEST_JWT_SECRET)
+        monkeypatch.setattr(
+            "app.security.mobile_jwt._mobile_session_is_live", lambda sid: True
+        )
         from app.security.mobile_jwt import issue_mobile_tokens
 
         tokens = issue_mobile_tokens(

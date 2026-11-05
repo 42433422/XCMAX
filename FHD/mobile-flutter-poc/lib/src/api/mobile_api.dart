@@ -57,6 +57,7 @@ abstract class _ApiRootBase {
       StreamController<MobileSessionData>.broadcast();
   MobileSessionData _lastSession = MobileSessionData.empty;
   Future<bool>? _refreshInFlight;
+  DateTime? _authRefreshBlockedUntil;
   DateTime? _lastLanProbeAt;
   bool? _lastLanProbeOk;
 

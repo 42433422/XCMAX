@@ -352,7 +352,22 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
       _throwIfCancelled(isCancelled);
       await Future<void>.delayed(const Duration(seconds: 2));
       _throwIfCancelled(isCancelled);
-      final status = await _client.relayTaskStatus(taskId);
+      late final MobileEnvelope<Map<String, Object?>> status;
+      try {
+        status = await _relayTaskStatusWithBackoff(
+          taskId,
+          isCancelled: isCancelled,
+        );
+      } on MobileApiException catch (error) {
+        if (error.statusCode == 404) {
+          // 任务已被清理或服务端版本不含该任务：停止后续 resume，避免反复 404。
+          await _setInflightRelayTask(conversationId, '');
+          throw const MobileRepositoryException(
+            '执行任务已不存在（可能已结束或服务端版本不一致），请重新发起',
+          );
+        }
+        rethrow;
+      }
       final taskMap = _objectMap(status.data?['task']);
       final current = taskMap.isNotEmpty
           ? taskMap
@@ -404,6 +419,24 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
       }
     }
     throw const MobileRepositoryException('电脑工具暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。');
+  }
+
+  /// 429 是服务端正常限流：按 Retry-After 等待后重试同一任务，不当作失败。
+  Future<MobileEnvelope<Map<String, Object?>>> _relayTaskStatusWithBackoff(
+    String taskId, {
+    bool Function()? isCancelled,
+  }) async {
+    while (true) {
+      _throwIfCancelled(isCancelled);
+      try {
+        return await _client.relayTaskStatus(taskId);
+      } on MobileApiException catch (error) {
+        if (error.statusCode != 429) rethrow;
+        await Future<void>.delayed(
+          Duration(seconds: error.retryAfterSeconds ?? 5),
+        );
+      }
+    }
   }
 
 }

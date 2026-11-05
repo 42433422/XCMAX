@@ -76,13 +76,15 @@ class AuthRateLimitMiddleware(BaseHTTPMiddleware):
             window_seconds=_window_seconds(),
         )
         if not result.get("allowed", True):
+            retry_after = int(result.get("retry_after") or 60)
             return JSONResponse(
                 status_code=429,
+                headers={"Retry-After": str(max(1, retry_after))},
                 content={
                     "success": False,
                     "code": "RATE_LIMITED",
                     "message": "认证请求过于频繁，请稍后再试",
-                    "retry_after": result.get("retry_after", 60),
+                    "retry_after": retry_after,
                 },
             )
         return await call_next(request)
