@@ -322,6 +322,7 @@ export async function createWindow(): Promise<void> {
     reportMainRenderer('renderer:unresponsive', 'renderer process is unresponsive')
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit') return
     let crashDumpsPath = 'unavailable'
     let source = desktopInitialUrl()
     try {
@@ -341,7 +342,7 @@ export async function createWindow(): Promise<void> {
       desktopRuntime.rendererFailedDuringStartup = true
       return
     }
-    if (!app.isQuitting && details.reason !== 'clean-exit' && !mainWindow.isDestroyed()) {
+    if (!app.isQuitting && !mainWindow.isDestroyed()) {
       const now = Date.now()
       if (now - lastRendererReloadAt < 3000) {
         writeBackendLog(`[crash] skip reload; renderer crashed again within 3s (${summary})\n`)

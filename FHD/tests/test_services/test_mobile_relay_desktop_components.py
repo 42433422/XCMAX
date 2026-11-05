@@ -577,6 +577,43 @@ def _private_config_store(tmp_path):
     return path, store
 
 
+def test_config_component_missing_primary_does_not_restore_backup(tmp_path):
+    path, store = _private_config_store(tmp_path)
+    backup = path.with_name(path.name + ".bak")
+    backup.write_text(json.dumps({"relay_id": "old", "desktop_token": "old-private"}))
+
+    assert store.read() == {}
+    assert not path.exists()
+    assert json.loads(backup.read_text()) == {"relay_id": "old", "desktop_token": "old-private"}
+
+
+def test_config_component_missing_primary_allows_legacy_migration_after_read(tmp_path):
+    path, store = _private_config_store(tmp_path)
+    backup = path.with_name(path.name + ".bak")
+    backup.write_text(json.dumps({"relay_id": "old", "desktop_token": "old-private"}))
+    legacy = {"relay_id": "legacy", "desktop_token": "legacy-private"}
+    (tmp_path / "legacy.json").write_text(json.dumps(legacy))
+
+    assert store.read() == {}
+    store.migrate_legacy_once()
+
+    assert store.read() == legacy
+    assert json.loads(path.read_text()) == legacy
+
+
+@pytest.mark.parametrize("corrupt", ["", "{broken", "[]"])
+def test_config_component_recovers_corrupt_primary_from_backup(tmp_path, corrupt):
+    path, store = _private_config_store(tmp_path)
+    original = {"relay_id": "r", "desktop_token": "private"}
+    backup = path.with_name(path.name + ".bak")
+    backup.write_text(json.dumps(original))
+    path.write_text(corrupt)
+
+    assert store.read() == original
+    assert json.loads(path.read_text()) == original
+    assert json.loads(backup.read_text()) == original
+
+
 def test_config_component_recovers_from_backup_when_primary_is_empty(tmp_path):
     path, store = _private_config_store(tmp_path)
     original = {"relay_id": "r", "desktop_token": "private"}

@@ -133,6 +133,7 @@ class DatabaseFiles:
     def copy_for_mods(self, mod_ids: Sequence[str], db_files: Iterable[str]) -> None:
         work_dir = self.app_data_dir()
         os.makedirs(work_dir, exist_ok=True)
+        db_files = tuple(db_files)
         seen: set[str] = set()
         for raw_id in mod_ids:
             mod_id = str(raw_id or "").strip()

@@ -161,6 +161,46 @@ def test_mod_seed_copies_preserve_existing_content_and_use_first_seed(monkeypatc
             assert connection.execute("SELECT value FROM seed").fetchall() == [(expected,)]
 
 
+@pytest.mark.parametrize(
+    "factory", [list, tuple, lambda names: (name for name in names)], ids=["list", "tuple", "generator"]
+)
+def test_mod_seed_copies_are_identical_for_each_input_type(monkeypatch, tmp_path, factory):
+    monkeypatch.setattr(init_db, "get_app_data_dir", lambda: str(tmp_path))
+    for name in ("products.db", "orders.db"):
+        with sqlite3.connect(tmp_path / name) as connection:
+            connection.execute("CREATE TABLE seed (value INTEGER)")
+            connection.execute("INSERT INTO seed VALUES (7)")
+
+    init_db.ensure_sqlite_per_mod_database_copies(
+        ["alpha", "beta"], factory(("products.db", "orders.db"))
+    )
+
+    for mod in ("alpha", "beta"):
+        for name in ("products", "orders"):
+            path = tmp_path / f"{name}__{mod}.db"
+            assert path.is_file()
+            with sqlite3.connect(path) as connection:
+                assert connection.execute("SELECT value FROM seed").fetchall() == [(7,)]
+
+
+def test_mod_seed_copies_skip_missing_source_for_every_mod(monkeypatch, tmp_path):
+    monkeypatch.setattr(init_db, "get_app_data_dir", lambda: str(tmp_path))
+    with sqlite3.connect(tmp_path / "products.db") as connection:
+        connection.execute("CREATE TABLE seed (value INTEGER)")
+        connection.execute("INSERT INTO seed VALUES (7)")
+
+    init_db.ensure_sqlite_per_mod_database_copies(
+        ["alpha", "beta"], (name for name in ("products.db", "missing.db"))
+    )
+
+    for mod in ("alpha", "beta"):
+        path = tmp_path / f"products__{mod}.db"
+        assert path.is_file()
+        with sqlite3.connect(path) as connection:
+            assert connection.execute("SELECT value FROM seed").fetchall() == [(7,)]
+        assert not (tmp_path / f"missing__{mod}.db").exists()
+
+
 class _PostgresSequenceOnSQLite:
     """Exercise bootstrap order on a real schema; this is not a PostgreSQL SQL test."""
 
