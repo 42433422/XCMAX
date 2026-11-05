@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from app.infrastructure.workspace import (  # noqa: F401
+from app.infrastructure.workspace import (
     allocate_generated_workspace_file,
     resolve_existing_workspace_file,
     resolve_safe_workspace_relpath,

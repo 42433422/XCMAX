@@ -371,7 +371,7 @@ class TestParseBatchDeep:
 
     def test_none_list(self):
         parser = AIProductParser()
-        result = parser.parse_batch(None)  # type: ignore[arg-type]
+        result = parser.parse_batch(None)
         assert result == []
 
     def test_multiple_items(self):

@@ -12,7 +12,12 @@ from app.infrastructure.persistence.compat_db.writes import _customer_pg_insert
 from app.infrastructure.tenant_scope import TenantScopeError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-_QUIET = (HTTPException, TenantScopeError, SQLAlchemyError, *RECOVERABLE_ERRORS)
+_QUIET: tuple[type[BaseException], ...] = (
+    HTTPException,
+    TenantScopeError,
+    SQLAlchemyError,
+    *RECOVERABLE_ERRORS,
+)
 
 
 def remember_business_shipment(payload: dict) -> dict:
@@ -33,7 +38,7 @@ def remember_business_shipment(payload: dict) -> dict:
             str(payload.get("contact_phone") or ""),
             "",
         )
-    except _QUIET:  # type: ignore[misc]
+    except _QUIET:
         pass
     try:
         saved = get_shipment_application_service_core().record_created_shipment(
@@ -42,6 +47,6 @@ def remember_business_shipment(payload: dict) -> dict:
             contact_person=str(payload.get("contact_person") or ""),
             contact_phone=str(payload.get("contact_phone") or ""),
         )
-    except _QUIET:  # type: ignore[misc]
+    except _QUIET:
         return {"success": False}
     return saved if isinstance(saved, dict) else {"success": False}

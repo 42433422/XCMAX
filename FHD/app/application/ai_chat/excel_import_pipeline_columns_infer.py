@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined, valid-type"
 """Excel 导入管线：列语义角色推断（规则评分 + LLM 兜底）与单价列仲裁（叶子模块）。"""
 
 from __future__ import annotations
@@ -6,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -16,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class ExcelImportColumnInferMixin:
+    if TYPE_CHECKING:
+        _is_number_text: Any
+        _model_like_score: Any
+        ai_service: Any
+
     def _infer_excel_column_roles(
         self, records: list[dict[str, Any]]
     ) -> tuple[dict[str, str], float]:

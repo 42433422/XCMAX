@@ -134,8 +134,8 @@ def main() -> int:
 
         import app.application.shipment_excel_etl_fingerprint_store as fp_store
 
-        fp_store._legacy_db_path = lambda: td_path / "fps.sqlite3"  # type: ignore
-        fp_store._db_path = lambda: td_path / "fps.sqlite3"  # type: ignore
+        fp_store._legacy_db_path = lambda: td_path / "fps.sqlite3"
+        fp_store._db_path = lambda: td_path / "fps.sqlite3"
         os.environ["FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND"] = "legacy"
 
         class _FakeShipmentSvc:
@@ -162,7 +162,7 @@ def main() -> int:
 
         import app.domain.shared_services.tools_workflow_registered as tw
 
-        tw._execute_excel_import_records = lambda records: {  # type: ignore
+        tw._execute_excel_import_records = lambda records: {
             "success": True,
             "imported": len(records),
         }

@@ -50,7 +50,7 @@ def test_lazy_stores_factory_return_value():
     """杀死 _lazy 中 factory() 返回值被丢弃的变异。"""
     c = ServiceContainer()
     sentinel = {"marker": "unique_value_42"}
-    result = c._lazy("_session_service", lambda: sentinel)  # noqa: SLF001
+    result = c._lazy("_session_service", lambda: sentinel)
     assert result is sentinel
     assert result["marker"] == "unique_value_42"
 
@@ -64,8 +64,8 @@ def test_lazy_second_call_does_not_invoke_factory():
         calls.append(1)
         return object()
 
-    first = c._lazy("_auth_service", factory)  # noqa: SLF001
-    second = c._lazy("_auth_service", factory)  # noqa: SLF001
+    first = c._lazy("_auth_service", factory)
+    second = c._lazy("_auth_service", factory)
     assert first is second
     assert len(calls) == 1
 
@@ -75,7 +75,7 @@ def test_lazy_returns_none_initially_then_factory_value():
     c = ServiceContainer()
     assert c._session_service is None  # 初始为 None
     sentinel = object()
-    result = c._lazy("_session_service", lambda: sentinel)  # noqa: SLF001
+    result = c._lazy("_session_service", lambda: sentinel)
     assert result is sentinel
     assert c._session_service is sentinel  # 存储成功
 
@@ -144,21 +144,21 @@ def test_reset_then_get_creates_new_container():
 def test_invalidate_customer_clears_only_customer():
     """杀死 invalidate 清除错误属性的变异。"""
     c = ServiceContainer()
-    c._customer_application_service = object()  # noqa: SLF001
-    c._auth_service = object()  # noqa: SLF001  不应被清除
+    c._customer_application_service = object()
+    c._auth_service = object()
     c.invalidate_customer_application_service()
-    assert c._customer_application_service is None  # noqa: SLF001
-    assert c._auth_service is not None  # noqa: SLF001  其他属性不受影响
+    assert c._customer_application_service is None
+    assert c._auth_service is not None
 
 
 def test_invalidate_shipment_clears_both_core_and_facade():
     """杀死 invalidate_shipment_wiring 只清除一个的变异。"""
     c = ServiceContainer()
-    c._shipment_application_service_core = object()  # noqa: SLF001
-    c._shipment_event_primary_facade = object()  # noqa: SLF001
+    c._shipment_application_service_core = object()
+    c._shipment_event_primary_facade = object()
     c.invalidate_shipment_wiring()
-    assert c._shipment_application_service_core is None  # noqa: SLF001
-    assert c._shipment_event_primary_facade is None  # noqa: SLF001
+    assert c._shipment_application_service_core is None
+    assert c._shipment_event_primary_facade is None
 
 
 # ── set_template_application_service 强断言 ──────────────────
@@ -168,16 +168,16 @@ def test_set_template_stores_exact_value():
     """杀死 set_template 存储错误值的变异。"""
     c = ServiceContainer()
     sentinel = object()
-    c.set_template_application_service(sentinel)  # type: ignore[arg-type]
-    assert c._template_application_service is sentinel  # noqa: SLF001
+    c.set_template_application_service(sentinel)
+    assert c._template_application_service is sentinel
 
 
 def test_set_template_none_clears():
     """杀死 set_template(None) 不生效的变异。"""
     c = ServiceContainer()
-    c.set_template_application_service(object())  # type: ignore[arg-type]
+    c.set_template_application_service(object())
     c.set_template_application_service(None)
-    assert c._template_application_service is None  # noqa: SLF001
+    assert c._template_application_service is None
 
 
 # ── get_service_container (FastAPI dep) 强断言 ───────────────
@@ -278,39 +278,39 @@ def test_slots_count_matches_expected():
 def test_workflow_slots_initialized_to_none():
     """四个新增 workflow 槽位初始均为 None（fake-only，不触碰 LangGraph）。"""
     c = ServiceContainer()
-    assert c._workflow_runtime is None  # noqa: SLF001
-    assert c._workflow_checkpointer is None  # noqa: SLF001
-    assert c._workflow_shadow_checkpointer is None  # noqa: SLF001
-    assert c._workflow_resource_stack is None  # noqa: SLF001
+    assert c._workflow_runtime is None
+    assert c._workflow_checkpointer is None
+    assert c._workflow_shadow_checkpointer is None
+    assert c._workflow_resource_stack is None
 
 
 def test_close_workflow_resources_closes_stack_once_and_clears_slots():
     """close_workflow_resources 关闭注入的 fake stack 恰好一次并清空四个槽位。"""
     c = ServiceContainer()
     stack = _FakeStack()
-    c._workflow_resource_stack = stack  # noqa: SLF001
-    c._workflow_runtime = object()  # noqa: SLF001
-    c._workflow_checkpointer = object()  # noqa: SLF001
-    c._workflow_shadow_checkpointer = object()  # noqa: SLF001
+    c._workflow_resource_stack = stack
+    c._workflow_runtime = object()
+    c._workflow_checkpointer = object()
+    c._workflow_shadow_checkpointer = object()
     assert c.close_workflow_resources() is None
     assert stack.close_calls == 1
-    assert c._workflow_resource_stack is None  # noqa: SLF001
-    assert c._workflow_runtime is None  # noqa: SLF001
-    assert c._workflow_checkpointer is None  # noqa: SLF001
-    assert c._workflow_shadow_checkpointer is None  # noqa: SLF001
+    assert c._workflow_resource_stack is None
+    assert c._workflow_runtime is None
+    assert c._workflow_checkpointer is None
+    assert c._workflow_shadow_checkpointer is None
 
 
 def test_close_workflow_resources_is_idempotent_on_second_call():
     """第二次调用不再触发 close，且槽位保持为 None。"""
     c = ServiceContainer()
     stack = _FakeStack()
-    c._workflow_resource_stack = stack  # noqa: SLF001
-    c._workflow_runtime = object()  # noqa: SLF001
+    c._workflow_resource_stack = stack
+    c._workflow_runtime = object()
     c.close_workflow_resources()
     c.close_workflow_resources()
     assert stack.close_calls == 1
-    assert c._workflow_runtime is None  # noqa: SLF001
-    assert c._workflow_resource_stack is None  # noqa: SLF001
+    assert c._workflow_runtime is None
+    assert c._workflow_resource_stack is None
 
 
 def test_set_service_registry_replacement_closes_old_but_not_new():
@@ -319,8 +319,8 @@ def test_set_service_registry_replacement_closes_old_but_not_new():
     new = ServiceContainer()
     old_stack = _FakeStack()
     new_stack = _FakeStack()
-    old._workflow_resource_stack = old_stack  # noqa: SLF001
-    new._workflow_resource_stack = new_stack  # noqa: SLF001
+    old._workflow_resource_stack = old_stack
+    new._workflow_resource_stack = new_stack
     set_service_registry(old)
     set_service_registry(new)
     assert old_stack.close_calls == 1
@@ -331,7 +331,7 @@ def test_set_service_registry_identical_container_does_not_close():
     """set_service_registry 设置同一容器时不关闭其 resources。"""
     c = ServiceContainer()
     stack = _FakeStack()
-    c._workflow_resource_stack = stack  # noqa: SLF001
+    c._workflow_resource_stack = stack
     set_service_registry(c)
     set_service_registry(c)
     assert stack.close_calls == 0
@@ -357,12 +357,12 @@ def test_lazy_factory_failure_leaves_slot_unset_and_propagates():
         return object()
 
     with pytest.raises(_Boom):
-        c._lazy("_session_service", flaky)  # noqa: SLF001
-    assert c._session_service is None  # noqa: SLF001
+        c._lazy("_session_service", flaky)
+    assert c._session_service is None
 
-    ok = c._lazy("_session_service", flaky)  # noqa: SLF001
+    ok = c._lazy("_session_service", flaky)
     assert ok is not None
-    assert c._session_service is ok  # noqa: SLF001
+    assert c._session_service is ok
     assert len(calls) == 2
 
 
@@ -386,7 +386,7 @@ def test_lazy_concurrent_first_access_constructs_once():
 
     def worker():
         start.wait()
-        results.append(c._lazy("_auth_service", slow_factory))  # noqa: SLF001
+        results.append(c._lazy("_auth_service", slow_factory))
 
     threads = [threading.Thread(target=worker) for _ in range(8)]
     for t in threads:

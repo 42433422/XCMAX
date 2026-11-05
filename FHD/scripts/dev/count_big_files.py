@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """文件规模提示与路由棘轮：按职责维护 FHD/app，不机械拆分文件。
 
 守护两条大文件基线：

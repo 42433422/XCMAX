@@ -1,4 +1,3 @@
-# mypy: disable-error-code="var-annotated"
 """Branch-coverage tests for app.domain.shared_services.mobile_relay_desktop_client.
 
 Targets the helper functions and _execute_task branches not covered by
@@ -30,7 +29,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Pre-import app.application to break circular import between app.services and app.mod_sdk
-import app.application  # noqa: F401
+import app.application
 import app.domain.shared_services.mobile_relay_desktop_client as _module
 from app.domain.shared_services.mobile_relay_desktop_client import (
     _api_url,

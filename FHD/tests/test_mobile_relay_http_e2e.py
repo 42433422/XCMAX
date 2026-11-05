@@ -13,7 +13,7 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path):
-    from app.fastapi_routes import mobile_api  # noqa: F401
+    from app.fastapi_routes import mobile_api
     from app.fastapi_routes import mobile_api_extensions as ext
     from app.services import mobile_relay_service as relay
 

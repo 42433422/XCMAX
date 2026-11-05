@@ -1,4 +1,3 @@
-# mypy: disable-error-code="union-attr"
 from __future__ import annotations
 
 """Branch-coverage tests for app.neuro_bus.dead_letter_queue.

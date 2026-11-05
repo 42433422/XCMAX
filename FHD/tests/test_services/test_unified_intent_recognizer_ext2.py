@@ -1,4 +1,3 @@
-# mypy: disable-error-code="var-annotated"
 """Extended tests for ``app.domain.shared_services.unified_intent_recognizer`` covering low-coverage branches."""
 
 from __future__ import annotations
@@ -216,7 +215,7 @@ class TestRecognizeFromContext:
         # Force an attribute access error inside the try block
         ctx = MagicMock()
         ctx.get = MagicMock(side_effect=RuntimeError("ctx fail"))
-        result = fresh_recognizer._recognize_from_context("msg", ctx)  # type: ignore[arg-type]
+        result = fresh_recognizer._recognize_from_context("msg", ctx)
         assert result is None
 
 

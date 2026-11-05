@@ -77,7 +77,7 @@ def post_to_approval_ledger(
     try:
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(url, headers=headers, json=body)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open，覆盖网络/超时等
+    except RECOVERABLE_ERRORS as exc:
         print(f"[approval-ledger] http error: {exc!r}", file=sys.stderr)
         return None
 
@@ -90,7 +90,7 @@ def post_to_approval_ledger(
 
     try:
         data = resp.json()
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - 后端返回非 JSON
+    except RECOVERABLE_ERRORS as exc:
         print(f"[approval-ledger] json decode error: {exc!r}", file=sys.stderr)
         return None
 

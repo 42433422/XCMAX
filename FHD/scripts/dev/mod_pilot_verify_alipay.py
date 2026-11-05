@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="str-bytes-safe"
 """校验 Mod 试点支付宝沙箱：APPID ↔ keys 是否匹配（避免 invalid-signature）。"""
 
 from __future__ import annotations

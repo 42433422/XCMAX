@@ -1,4 +1,3 @@
-# mypy: disable-error-code="return-value"
 from __future__ import annotations
 
 """

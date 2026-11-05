@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """EmbeddingService 补充单元测试，聚焦未覆盖分支。
 
 覆盖目标：
@@ -184,7 +183,7 @@ class TestEmbedHash:
     def test_hash_none_input_uses_placeholder_token(self):
         """None 输入应被 ``str(text or "")`` 转为空串并使用占位 token。"""
         svc = EmbeddingService(mode="hash")
-        vec = svc._embed_hash(None)  # type: ignore[arg-type]
+        vec = svc._embed_hash(None)
         assert len(vec) == _HASH_EMBED_DIM
         assert any(v != 0.0 for v in vec)
 
@@ -305,7 +304,7 @@ class TestDim:
 class TestEmbedEdgeCases:
     def test_embed_empty_texts_returns_empty_in_any_mode(self):
         for mode in ("disabled", "local", "remote", "hash"):
-            svc = EmbeddingService(mode=mode)  # type: ignore[arg-type]
+            svc = EmbeddingService(mode=mode)
             assert svc.embed([]) == []
 
     def test_embed_one_returns_empty_when_embed_returns_empty(self):
@@ -318,9 +317,9 @@ class TestEmbedEdgeCases:
         assert len(vec) == _HASH_EMBED_DIM
 
     def test_embed_unknown_mode_returns_empty(self):
-        svc = EmbeddingService(mode="disabled")  # type: ignore[arg-type]
+        svc = EmbeddingService(mode="disabled")
         # 强制覆盖 mode 为非法值，触发 fallback return []
-        svc._mode = "unknown"  # type: ignore[assignment]
+        svc._mode = "unknown"
         assert svc.embed(["x"]) == []
 
     def test_embed_hash_mode_returns_one_vector_per_text(self):
@@ -758,4 +757,4 @@ class TestAvailability:
 
     def test_mode_property_returns_init_mode(self):
         for mode in ("local", "remote", "hash", "disabled"):
-            assert EmbeddingService(mode=mode).mode == mode  # type: ignore[arg-type]
+            assert EmbeddingService(mode=mode).mode == mode

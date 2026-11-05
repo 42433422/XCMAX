@@ -51,7 +51,7 @@ def optional_text(value: Any) -> str | None:
 def decimal_or_zero(value: Any) -> Decimal:
     try:
         return Decimal(str(value or "0").replace(",", ""))
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         raise EltError("ELT_NUMBER_INVALID", f"数字格式不正确: {value}") from exc
 
 
@@ -76,7 +76,7 @@ def _values_equal(current: Any, expected: Any) -> bool:
     if isinstance(current, Decimal):
         try:
             return current == Decimal(str(expected))
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             return False
     if isinstance(current, datetime):
         return current.isoformat() == str(expected)

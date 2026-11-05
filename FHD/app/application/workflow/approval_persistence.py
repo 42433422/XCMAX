@@ -176,11 +176,11 @@ def _resolve_applicant(db, runtime_context: dict[str, Any] | None):
         return None
     text_value = str(raw).strip()
     if text_value.isdigit():
-        return db.query(User).filter(User.id == int(text_value), User.is_active == True).first()  # noqa: E712
+        return db.query(User).filter(User.id == int(text_value), User.is_active == True).first()
 
     user = (
         db.query(User)
-        .filter(User.username == text_value, User.is_active == True)  # noqa: E712
+        .filter(User.username == text_value, User.is_active == True)
         .first()
     )
     if user is not None:
@@ -189,7 +189,7 @@ def _resolve_applicant(db, runtime_context: dict[str, Any] | None):
         db.query(User)
         .filter(
             (User.email == text_value) | (User.display_name == text_value),
-            User.is_active == True,  # noqa: E712
+            User.is_active == True,
         )
         .limit(2)
         .all()

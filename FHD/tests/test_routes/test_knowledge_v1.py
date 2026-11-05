@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """Knowledge routes with real RAG imports and test-scoped service mocks."""
 
 from __future__ import annotations

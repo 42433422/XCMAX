@@ -190,7 +190,7 @@ def probe_url(
                 return result
         result.ok = True
         return result
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 探测层覆盖所有异常转 ProbeResult
+    except RECOVERABLE_ERRORS as exc:
         result.error = f"http error: {exc!r}"
         return result
     finally:
@@ -199,7 +199,7 @@ def probe_url(
         if close_after:
             try:
                 client.close()
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - pragma: no cover
+            except RECOVERABLE_ERRORS:
                 pass
 
 
@@ -229,7 +229,7 @@ def run_probe(
         if close_client and client is not None:
             try:
                 client.close()
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - pragma: no cover
+            except RECOVERABLE_ERRORS:
                 pass
     report.finished_at = datetime.now(UTC).isoformat()
     return report
@@ -294,7 +294,7 @@ def _post_to_approval_ledger(
     try:
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(url, headers=headers, json=body)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - fail-open 覆盖网络/超时
+    except RECOVERABLE_ERRORS as exc:
         print(f"[corp-probe] ledger http error: {exc!r}", file=sys.stderr)
         return None
     if resp.status_code < 200 or resp.status_code >= 300:
@@ -305,7 +305,7 @@ def _post_to_approval_ledger(
         return None
     try:
         data = resp.json()
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - pragma: no cover
+    except RECOVERABLE_ERRORS as exc:
         print(f"[corp-probe] ledger json decode error: {exc!r}", file=sys.stderr)
         return None
     if not isinstance(data, dict):

@@ -85,7 +85,7 @@ class SyncRoutes:
             try:
                 try:
                     await ports.sync_circle()
-                except RECOVERABLE_ERRORS:  # noqa: BLE001 - 交流圈同步是拉取增强项，不能拖垮整次手机同步
+                except RECOVERABLE_ERRORS:
                     logger.warning(
                         "mobile sync: circle modstore report sync skipped", exc_info=True
                     )
@@ -99,7 +99,7 @@ class SyncRoutes:
                         post["author_name"] = profile["name"]
                         post["author_avatar"] = profile["avatar"] or post.get("author_avatar")
                 return posts
-            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 手机同步的其他数据不能被交流圈投影拖垮
+            except RECOVERABLE_ERRORS as exc:
                 logger.warning("mobile sync: circle posts skipped: %s", exc)
                 return []
 

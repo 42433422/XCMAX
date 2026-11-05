@@ -1,4 +1,4 @@
-# ruff: noqa: E402, F401
+# ruff: noqa: F401
 """
 AI 聊天应用服务
 
@@ -29,7 +29,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-import httpx  # noqa: F401 - compatibility patch point for legacy tests/callers
+import httpx
 
 if TYPE_CHECKING:
     # 仅用于类型标注；运行时经注入端口或 ``app.bootstrap`` 触发式解析，避免 import 期耦合。

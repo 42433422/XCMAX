@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, assignment, var-annotated"
 """测试 ai_group_chat_service 的分支覆盖（聚焦未覆盖方法与边界分支）。
 
 覆盖目标：

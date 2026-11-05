@@ -31,7 +31,9 @@ DEFAULT_QA_TESTS = (
     "tests/test_self_evolution_knowledge.py",
 )
 _RUN_LOCK = threading.Lock()
-_TYPE_LINE = re.compile(r"^(type_ignore|ts_nocheck|frontend_any)=(\d+)\b", re.MULTILINE)
+_TYPE_LINE = re.compile(
+    r"^(type_ignore|mypy_disable|noqa|ts_nocheck|frontend_any)=(\d+)\b", re.MULTILINE
+)
 
 
 def _sha256(path: Path) -> str:
@@ -127,6 +129,10 @@ def _type_debt_snapshot(root: Path) -> Dict[str, Any]:
         str(script),
         "--max-type-ignore",
         "1000000",
+        "--max-mypy-disable",
+        "1000000",
+        "--max-noqa",
+        "1000000",
         "--max-ts-nocheck",
         "1000000",
         "--max-any",
@@ -143,7 +149,8 @@ def _type_debt_snapshot(root: Path) -> Dict[str, Any]:
     if result.returncode != 0:
         raise RuntimeError("type_debt_measurement_failed")
     counts = {key: int(value) for key, value in _TYPE_LINE.findall(result.stdout or "")}
-    if set(counts) != {"type_ignore", "ts_nocheck", "frontend_any"}:
+    expected = {"type_ignore", "mypy_disable", "noqa", "ts_nocheck", "frontend_any"}
+    if set(counts) != expected:
         raise RuntimeError("type_debt_output_invalid")
     return {
         "type_debt": sum(counts.values()),

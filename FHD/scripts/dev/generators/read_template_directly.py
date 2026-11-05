@@ -54,7 +54,7 @@ try:
 
     wb.close()
 
-except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:
     print(f"错误：{e}")
     import traceback
 

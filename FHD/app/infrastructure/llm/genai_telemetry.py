@@ -105,7 +105,7 @@ def _current_business_trace() -> tuple[str | None, str | None]:
         from app.neuro_bus.tracer import current_span, current_trace
 
         return current_trace.get(), current_span.get()
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 — 桥接失败不阻断
+    except RECOVERABLE_ERRORS:
         return None, None
 
 

@@ -120,7 +120,7 @@ class TestMemoryLightDeep:
         assert out["long_term"] is None
 
     def test_with_none_context(self) -> None:
-        out = exec_mod._memory_light({})  # type: ignore[arg-type]
+        out = exec_mod._memory_light({})
         assert out["session"]["employee_id"] is None
 
     def test_with_extra_keys_in_context(self) -> None:

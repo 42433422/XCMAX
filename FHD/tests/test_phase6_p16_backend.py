@@ -20,7 +20,6 @@ Coverage scenarios per 铁律3:
 - Exception paths (RECOVERABLE_ERRORS: RuntimeError, ValueError, OSError)
 """
 
-# ruff: noqa: I001
 
 from __future__ import annotations
 

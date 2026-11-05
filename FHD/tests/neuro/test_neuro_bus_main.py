@@ -1,4 +1,3 @@
-# mypy: disable-error-code="union-attr"
 """Tests for app.neuro_bus.__main__ — Neuro-DDD Architecture Verification Script."""
 
 from __future__ import annotations

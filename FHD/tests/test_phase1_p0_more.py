@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-import app.fastapi_routes.mobile_api as mobile_api_mod  # noqa: E402 — must precede mobile_api_extensions to break circular import
+import app.fastapi_routes.mobile_api as mobile_api_mod
 import app.fastapi_routes.mobile_api_extensions as mobile_ext
 from app.application import aibiz_web_terminal_service as aibiz_mod
 from app.application.approval_workspace_app_service import (
@@ -44,7 +44,7 @@ def test_market_session_id_from_cookie() -> None:
         "path": "/",
     }
     req = Request(scope)
-    req._cookies = {"session_id": "abc123"}  # type: ignore[attr-defined]
+    req._cookies = {"session_id": "abc123"}
     assert market_mod.session_id_from_request(req) == "abc123"
 
 

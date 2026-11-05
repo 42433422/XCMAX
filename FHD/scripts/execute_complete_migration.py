@@ -38,7 +38,7 @@ def run_command(cmd: list, description: str) -> bool:
                 print(result.stderr[-500:])
             return False
 
-    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except BOUNDARY_ERRORS as e:
         print(f"[ERROR] {description} 异常: {e}")
         return False
 

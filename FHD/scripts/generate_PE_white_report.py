@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, assignment"
 """
 PE白底漆 标签网格分析报告
 """

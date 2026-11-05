@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """LG-W0-09 — LangGraph 吸收基线基准（legacy WorkflowEngine vs vendored LangGraph）。
 
 在可比较的确定性场景下测量两条执行路径：
@@ -158,7 +157,7 @@ def _legacy_fanout_plan(degree: int) -> object:
     return PlanGraph(plan_id="fanout", intent="baseline", nodes=nodes)
 
 
-def _legacy_dispatch(*, tool_id, action, params):  # noqa: ANN001,ANN202
+def _legacy_dispatch(*, tool_id, action, params):
     return {"success": True, "tool_id": tool_id, "action": action}
 
 

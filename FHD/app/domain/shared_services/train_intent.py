@@ -96,7 +96,7 @@ def evaluate_model(model_path: str, data_path: str | None = None):
     try:
         from app.domain.shared_services.bert_intent_service import (
             INTENT_LABELS,  # noqa: F401
-            BertIntentClassifier,  # noqa: F401
+            BertIntentClassifier,
             get_bert_intent_service,  # noqa: F401
         )
     except ImportError as e:
@@ -143,12 +143,12 @@ def evaluate_model(model_path: str, data_path: str | None = None):
             correct += 1
         status = "✓" if is_correct else "✗"
         logger.info(
-            f"  {status} '{text}' -> {predicted} (期望: {expected}, 置信度: {confidence:.4f})"  # noqa: G004
+            f"  {status} '{text}' -> {predicted} (期望: {expected}, 置信度: {confidence:.4f})"
         )
 
     accuracy = correct / total * 100
     logger.info("=" * 60)
-    logger.info(f"准确率: {accuracy:.2f}% ({correct}/{total})")  # noqa: G004
+    logger.info(f"准确率: {accuracy:.2f}% ({correct}/{total})")
     logger.info("=" * 60)
 
 
@@ -173,7 +173,7 @@ def test_model(model_path: str, texts: list[str]):
         result = classifier.predict(text, return_probs=True)
         logger.info("\n文本: %s", text)
         logger.info("  意图: %s", result["intent"])
-        logger.info(f"  置信度: {result['confidence']:.4f}")  # noqa: G004
+        logger.info(f"  置信度: {result['confidence']:.4f}")
         if "all_probs" in result and result["all_probs"]:
             top3 = sorted(result["all_probs"].items(), key=lambda x: x[1], reverse=True)[:3]
             logger.info("  Top-3: %s", ", ".join([f"{k}: {v:.4f}" for k, v in top3]))

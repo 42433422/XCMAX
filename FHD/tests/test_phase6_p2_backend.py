@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, attr-defined, method-assign"
 """Approval gate strategies and AI intent route regression coverage."""
 
 from __future__ import annotations
@@ -165,7 +164,7 @@ def test_gated_plan_decision_to_dict_empty_node_decisions() -> None:
     risk_decision = RiskDecision(
         requires_confirmation=False,
         reason="ok",
-        blocking_nodes=None,  # type: ignore[arg-type]
+        blocking_nodes=None,
     )
     plan_decision = GatedPlanDecision(
         plan_id="p2",

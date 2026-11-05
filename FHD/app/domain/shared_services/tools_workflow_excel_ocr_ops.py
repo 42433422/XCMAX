@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """Excel 与 OCR 操作域工作流路由：OCR 工件 / Excel 导入 / 单位产品导入。"""
 
 from __future__ import annotations

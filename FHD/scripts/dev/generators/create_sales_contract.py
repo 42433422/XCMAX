@@ -1,4 +1,3 @@
-# mypy: disable-error-code="assignment"
 import os
 from datetime import datetime
 

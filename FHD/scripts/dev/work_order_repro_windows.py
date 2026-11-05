@@ -237,7 +237,7 @@ def run_injection(spec: dict[str, Any], *, timeout_seconds: int) -> dict[str, An
         return evidence
     Path(evidence_dir).mkdir(parents=True, exist_ok=True)
     try:
-        proc = subprocess.run(  # noqa: S603 - 固定参数、隔离目录、无 shell
+        proc = subprocess.run(
             list(scenario.get("command") or []),
             capture_output=True,
             text=True,

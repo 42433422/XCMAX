@@ -73,7 +73,7 @@ class TraceStore:
                 self._queue.put_nowait(span_dict)
             except queue.Full:
                 return
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.warning("genai trace enqueue failed", exc_info=True)
 
     def start(self) -> None:
@@ -112,7 +112,7 @@ class TraceStore:
             with path.open("a", encoding="utf-8") as fh:
                 for item in batch:
                     fh.write(json.dumps(item, ensure_ascii=False, default=str) + "\n")
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.warning("genai trace flush failed", exc_info=True)
         for item in batch:
             self._export_otlp(item)
@@ -132,7 +132,7 @@ class TraceStore:
                     continue
                 if day < cutoff:
                     path.unlink(missing_ok=True)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.warning("genai trace cleanup failed", exc_info=True)
 
     # ---- 查询 ----
@@ -168,7 +168,7 @@ class TraceStore:
                     ):
                         continue
                     items.append(item)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.warning("genai trace query failed", exc_info=True)
         items.sort(key=lambda x: x.get("start_time") or 0, reverse=True)
         return items[:limit]
@@ -221,7 +221,7 @@ class TraceStore:
             with tracer.start_as_current_span(span_dict.get("name") or "chat") as ot_span:
                 for key, value in attrs.items():
                     ot_span.set_attribute(key, value)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             self._otlp_failed = True
             logger.warning("OTLP export disabled after failure", exc_info=True)
 

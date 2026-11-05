@@ -90,7 +90,7 @@ def _handle_attendance_export(
         )
     try:
         output, relpath = _create_attendance_export(rows, meta, actor)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - converted to a truthful receipt
+    except RECOVERABLE_ERRORS as exc:
         return _not_executed(
             intent,
             "考勤表未生成：文件写出失败。",
@@ -150,7 +150,7 @@ def _handle_attendance_print(
 
         service = facade._get_printer_service()
         printers = service.get_printers()
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         return _not_executed(
             intent,
             "打印未执行：无法读取系统打印机状态。",
@@ -174,7 +174,7 @@ def _handle_attendance_print(
     try:
         output, relpath = _create_attendance_export(rows, meta, actor)
         result = service.print_document(str(output))
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         return _not_executed(
             intent,
             "打印未执行：考勤文件生成或提交打印失败。",

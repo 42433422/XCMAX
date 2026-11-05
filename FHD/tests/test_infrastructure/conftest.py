@@ -30,7 +30,7 @@ def disable_real_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Force ``httpx.AsyncClient.send`` to raise ``ConnectError``."""
     import httpx
 
-    def _boom(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+    def _boom(self, *args, **kwargs):
         raise httpx.ConnectError("disabled by test")
 
     monkeypatch.setattr(httpx.AsyncClient, "send", _boom)
@@ -63,11 +63,11 @@ def compat_db_writes_test_tenant_scope(
 
     import app.infrastructure.persistence.compat_db.writes as writes
 
-    def _append_scope(where_parts, bind, column_names, *, table_name):  # type: ignore[no-untyped-def]
+    def _append_scope(where_parts, bind, column_names, *, table_name):
         where_parts.append("tenant_id = :tenant_id")
         bind["tenant_id"] = 1
 
-    def _require_scope(column_names, *, table_name):  # type: ignore[no-untyped-def]
+    def _require_scope(column_names, *, table_name):
         return 1
 
     monkeypatch.setattr(writes, "_append_tenant_scope_or_raise", _append_scope)

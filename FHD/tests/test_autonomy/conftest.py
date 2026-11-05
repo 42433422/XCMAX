@@ -28,8 +28,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter  # noqa: E402
-from scripts.autonomy.types import (  # noqa: E402
+from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter
+from scripts.autonomy.types import (
     Action,
     ActionType,
     RiskLevel,

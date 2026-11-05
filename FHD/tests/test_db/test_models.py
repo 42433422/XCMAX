@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """ORM 模型约束与行为测试。
 
 验证内容：

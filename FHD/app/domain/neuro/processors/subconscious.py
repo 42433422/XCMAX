@@ -186,9 +186,9 @@ class SubconsciousProcessor:
             if elapsed_ms > self.SLA_TARGET_MS:
                 if elapsed_ms > self.SLA_MAX_MS:
                     self._timeout_count += 1
-                    logger.warning(f"SubconsciousProcessor timeout: {elapsed_ms:.2f}ms")  # noqa: G004
+                    logger.warning(f"SubconsciousProcessor timeout: {elapsed_ms:.2f}ms")
                 else:
-                    logger.debug(f"SubconsciousProcessor SLA warning: {elapsed_ms:.2f}ms")  # noqa: G004
+                    logger.debug(f"SubconsciousProcessor SLA warning: {elapsed_ms:.2f}ms")
 
             return True
 
@@ -269,7 +269,7 @@ class SubconsciousProcessor:
             # 平均延迟
             avg_latency = elapsed_ms / len(events)
             if avg_latency > self.SLA_TARGET_MS:
-                logger.debug(f"Batch processing SLA warning: {avg_latency:.2f}ms avg")  # noqa: G004
+                logger.debug(f"Batch processing SLA warning: {avg_latency:.2f}ms avg")
 
         except RECOVERABLE_ERRORS as e:
             self._error_count += len(events)

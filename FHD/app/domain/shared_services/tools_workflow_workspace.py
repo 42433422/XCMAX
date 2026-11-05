@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """工作台域工作流路由：模板预览/打印/打印机/设置/员工。"""
 
 from __future__ import annotations

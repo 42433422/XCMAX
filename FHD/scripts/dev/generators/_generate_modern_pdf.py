@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found, import-untyped"
 import markdown
 import weasyprint
 from weasyprint import CSS
@@ -182,7 +181,7 @@ try:
         f.write(pdf)
 
     print(f"现代风格 PDF 生成成功: {pdf_path}")
-except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:
     print(f"WeasyPrint 生成失败，使用备用方案: {e}")
 
     # 备用方案：使用 ReportLab

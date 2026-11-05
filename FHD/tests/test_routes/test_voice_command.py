@@ -1,4 +1,3 @@
-# mypy: disable-error-code="var-annotated"
 """Tests for app.fastapi_routes.voice_routes — POST /api/voice/command 端到端语音指令。
 
 覆盖 ASR → 意图识别 → 可选自动执行 的关键分支：
@@ -22,8 +21,8 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-import app.application  # noqa: F401 — 先加载 app.application 打破 app.services 循环导入
-import app.domain.shared_services.intent_service  # noqa: F401 — 注册子模块，使 patch("app.domain.shared_services.intent_service.recognize_intents") 能解析
+import app.application
+import app.domain.shared_services.intent_service
 from app.fastapi_routes.voice_routes import (
     HIGH_RISK_INTENTS,
     INTENT_CONFIDENCE_THRESHOLD,

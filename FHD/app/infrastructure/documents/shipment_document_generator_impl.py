@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -13,7 +13,7 @@ try:
     _PIL_AVAILABLE = True
     _PIL_IMPORT_ERROR = ""
 except ImportError as _pil_import_error:
-    Image = ImageDraw = ImageFont = None  # type: ignore[assignment]
+    Image = ImageDraw = ImageFont = cast(Any, None)
     _PIL_AVAILABLE = False
     _PIL_IMPORT_ERROR = str(_pil_import_error)
 

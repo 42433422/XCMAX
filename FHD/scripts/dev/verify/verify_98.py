@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 import sqlite3
 import sys
 
@@ -69,7 +68,7 @@ for tbl in tables:
                 content = content.decode("utf-8", errors="replace")
             if content and "wxid_tfxzqdqt87oa22" in content and not content.startswith("<"):
                 found_text.append((tbl, row[2], content))
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"Error in {tbl}: {e}")
 
 if found_text:

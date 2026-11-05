@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """工作流工具统一分发：路由注册表与 execute_registered_workflow_tool。"""
 
 from __future__ import annotations

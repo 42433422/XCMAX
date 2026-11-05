@@ -14,8 +14,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # mobile_api 末尾才挂载 extension_router，须先 import mobile_api 打破循环依赖
-import app.fastapi_routes.mobile_api as mobile_api_mod  # noqa: E402
-import app.fastapi_routes.mobile_api_extensions as mobile_ext  # noqa: E402
+import app.fastapi_routes.mobile_api as mobile_api_mod
+import app.fastapi_routes.mobile_api_extensions as mobile_ext
 from app.application.rbac_app_service import get_rbac_app_service
 from app.db.models.permission import Permission
 from app.db.models.user import Session as UserSession
@@ -25,7 +25,7 @@ from app.fastapi_routes import rbac as rbac_routes
 from app.fastapi_routes.domains.static import routes as static_routes
 from app.infrastructure.auth import tenant_context
 from app.utils.time import utc_now_naive
-from tests.fixtures.backend_ci_isolation import isolated_login_host_db  # noqa: F401
+from tests.fixtures.backend_ci_isolation import isolated_login_host_db
 
 # ---------------------------------------------------------------------------
 # Fixtures

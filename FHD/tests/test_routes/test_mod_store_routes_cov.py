@@ -227,7 +227,7 @@ _ensure_stub(
 # ---------------------------------------------------------------------------
 # Import the module under test (AFTER stubs are in place)
 # ---------------------------------------------------------------------------
-import app.fastapi_routes.mod_store_routes as _mod  # noqa: E402
+import app.fastapi_routes.mod_store_routes as _mod
 
 # ---------------------------------------------------------------------------
 # Helpers for patching stub modules by direct attribute assignment

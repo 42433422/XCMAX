@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/dev"))
-import self_heal_loop as loop  # noqa: E402
+import self_heal_loop as loop
 
 BASE = {
     "wo": "WO-123456789abc",

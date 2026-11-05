@@ -791,12 +791,12 @@ class TestNormalize:
     def test_normalize_non_string_returns_empty(self):
         from app.domain.shared_services.intent_service import _normalize
 
-        assert _normalize(None) == ""  # type: ignore[arg-type]
+        assert _normalize(None) == ""
 
     def test_normalize_integer_returns_empty(self):
         from app.domain.shared_services.intent_service import _normalize
 
-        assert _normalize(42) == ""  # type: ignore[arg-type]
+        assert _normalize(42) == ""
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ import copy
 import logging
 import os
 import threading
-from typing import Protocol
+from typing import Protocol, cast
 
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
@@ -16,7 +16,9 @@ from app.application.agent_orchestrator.run_sql_repository import (
 )
 from app.application.agent_orchestrator.task_models import (
     AgentTask,
+    TaskControlAction,
     TaskControlCommand,
+    TaskControlStatus,
     mod_id_of_run,
     task_from_run,
     tenant_id_of_run,
@@ -263,7 +265,7 @@ class InMemoryAgentRunRepository:
             command = TaskControlCommand(
                 task_id=task_id,
                 run_id=str(run_id or ""),
-                action=str(action),  # type: ignore[arg-type]
+                action=cast(TaskControlAction, str(action)),
                 requested_by=requested_by,
             )
             self._commands[command.command_id] = copy.deepcopy(command)
@@ -288,7 +290,7 @@ class InMemoryAgentRunRepository:
             command = self._commands.get(str(command_id or ""))
             if command is None:
                 return None
-            command.status = str(status)  # type: ignore[assignment]
+            command.status = cast(TaskControlStatus, str(status))
             command.applied_at = applied_at
             self._commands[command.command_id] = copy.deepcopy(command)
             return copy.deepcopy(command)

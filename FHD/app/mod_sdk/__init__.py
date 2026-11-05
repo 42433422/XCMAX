@@ -63,7 +63,7 @@
 
 from __future__ import annotations
 
-from app.mod_sdk import (  # noqa: F401
+from app.mod_sdk import (
     ai_helpers,
     attendance,
     audit,

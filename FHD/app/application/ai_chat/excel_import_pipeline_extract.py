@@ -1,10 +1,9 @@
-# mypy: disable-error-code="attr-defined, no-any-return, valid-type"
 """Excel 导入管线：记录提取、角色合成去重入库与可执行意图短路（叶子模块）。"""
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.domain.conversation.services.chat_tool_intent import (
     looks_like_explicit_workflow_tool_intent,
@@ -15,6 +14,22 @@ logger = logging.getLogger(__name__)
 
 
 class ExcelImportExtractMixin:
+    if TYPE_CHECKING:
+        _try_structured_reload_records: Any
+        _is_number_text: Any
+        _row_values_look_like_table_headers: Any
+        _sanitize_import_scalar: Any
+        _infer_excel_column_roles: Any
+        _infer_excel_column_roles_with_llm: Any
+        _header_hint_column_roles: Any
+        _merge_user_intent_for_price_resolution: Any
+        _resolve_unit_price_column: Any
+        _default_purchase_unit_for_import: Any
+        _packaging_or_measure_ratio: Any
+        _fallback_excel_product_name_column: Any
+        _fallback_excel_model_number_column: Any
+        _excel_cell_looks_like_product_measure_unit: Any
+
     def _extract_excel_import_records(
         self,
         excel_analysis: dict[str, Any],

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 """Tests for app.application.purchase_app_service — coverage ramp C3.2-b.
 
 Covers:

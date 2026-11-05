@@ -253,7 +253,7 @@ class TestStreamChatCompletionUserIdBranch:
 
         async def _aiter_lines():
             return
-            yield  # type: ignore[misc]
+            yield
 
         mock_resp = AsyncMock()
         mock_resp.raise_for_status = MagicMock()
@@ -289,7 +289,7 @@ class TestStreamChatCompletionUserIdBranch:
 
         async def _aiter_lines():
             return
-            yield  # type: ignore[misc]
+            yield
 
         mock_resp = AsyncMock()
         mock_resp.raise_for_status = MagicMock()

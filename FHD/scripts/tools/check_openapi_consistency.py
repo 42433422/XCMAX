@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="attr-defined"
 """
 OpenAPI 文档与实际路由的一致性验证
 ====================================

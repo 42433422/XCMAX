@@ -1,4 +1,4 @@
-# ruff: noqa: F401, I001
+# ruff: noqa: F401
 """Shipment ETL and extraction-log routes for Excel data."""
 
 from __future__ import annotations

@@ -9,7 +9,7 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.process_lock import exclusive_file_lock
@@ -21,7 +21,7 @@ try:
     import urllib.parse
     import urllib.request
 except ImportError:  # pragma: no cover - 环境兜底
-    urllib = None  # type: ignore[assignment]
+    urllib = cast(Any, None)
 
 
 class _RemoteUnavailable(Exception):
@@ -42,7 +42,7 @@ _LOCK_TIMEOUT_SECONDS = 60.0
 
 # 状态机常量/折叠/分类等纯逻辑在 work_order_state（app/ 单文件 ≤500 行门禁）；
 # 此处显式重导出，保持既有调用面（wo.WO_STATES / classify_track / _fold ...）不变。
-from app.domain.shared_services.state import (  # noqa: E402  pylint: disable=wrong-import-position
+from app.domain.shared_services.state import (
     _ALLOWED_TRANSITIONS,
     _OPS_REASONS,  # noqa: F401  (重导出：外部/一致性测试经本模块访问)
     _WO_ID_RE,

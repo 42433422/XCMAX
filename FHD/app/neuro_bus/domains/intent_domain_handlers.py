@@ -35,7 +35,7 @@ def register_intent_domain_handlers(domain):
             domain._reflex_count += 1
 
         logger.debug(
-            f"Intent recognized: {intent_type} (confidence={confidence:.2f}, processor={processor})"  # noqa: G004
+            f"Intent recognized: {intent_type} (confidence={confidence:.2f}, processor={processor})"
         )
         try:
             from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
@@ -76,7 +76,7 @@ def register_intent_domain_handlers(domain):
         domain._reflex_count += 1
         reflex_type = event.payload.get("reflex_type")
         latency_ms = event.payload.get("latency_ms", 0)
-        logger.debug(f"Reflex triggered: {reflex_type} ({latency_ms:.2f}ms)")  # noqa: G004
+        logger.debug(f"Reflex triggered: {reflex_type} ({latency_ms:.2f}ms)")
         try:
             from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 

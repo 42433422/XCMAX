@@ -170,7 +170,7 @@ class ImEmployeeMixin:
                         avatar_url=meta["avatar_url"],
                     )
                     eid_to_uid[eid] = uid
-                except RECOVERABLE_ERRORS:  # noqa: BLE001 - best-effort enrichment for employee list rows
+                except RECOVERABLE_ERRORS:
                     logger.debug("ensure_employee_user failed for %s", eid, exc_info=True)
         if not eid_to_uid:
             return {}
@@ -228,7 +228,7 @@ class ImEmployeeMixin:
                             "im_last_message_at": "",
                             "im_unread_count": 0,
                         }
-                except RECOVERABLE_ERRORS:  # noqa: BLE001 - summary must tolerate one employee bootstrap failure
+                except RECOVERABLE_ERRORS:
                     logger.debug(
                         "get_or_create_direct failed for employee %s",
                         eid,
@@ -362,7 +362,7 @@ class ImEmployeeMixin:
             last_id = int(messages[-1].get("id") or 0) if messages else 0
             if last_id > 0:
                 self.mark_read(conversation_id, int(cs_id), last_id, record_sync=False)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 标已读失败不应影响读消息本身
+        except RECOVERABLE_ERRORS:
             logger.debug("cs_inbox_messages mark_read skipped", exc_info=True)
         return cast("list[dict[str, Any]]", messages)
 

@@ -155,7 +155,7 @@ def import_attendance(input_file: Path, db_file: Path, month: str | None = None)
         )
         conn.commit()
         return parsed.rows_in, rows_written
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         conn.rollback()
         raise
     finally:

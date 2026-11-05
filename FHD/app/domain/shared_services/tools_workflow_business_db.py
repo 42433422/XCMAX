@@ -1,7 +1,8 @@
-# mypy: disable-error-code="no-any-return"
 """业务数据库域工作流路由：business_db / dataset_rag / memory_v2。"""
 
 from __future__ import annotations
+
+from typing import Any, cast
 
 from app.domain.shared_services.tools_workflow_common import (
     _DEFAULT_PREPARE_BUSINESS_DB_WRITE_TARGET,
@@ -65,21 +66,21 @@ def _registered_router_business_db(
         read_params = dict(params)
         read_params.setdefault("keyword", params.get("keyword") or params.get("query") or "")
         if entity == "customers":
-            return _facade()._registered_router_customers(
+            return cast(dict[Any, Any], _facade()._registered_router_customers(
                 "query", read_params, runtime_context, profile, user_message
-            )
+            ))
         if entity == "products":
-            return _facade()._registered_router_products(
+            return cast(dict[Any, Any], _facade()._registered_router_products(
                 "query", read_params, runtime_context, "admin", user_message
-            )
+            ))
         if entity == "materials":
-            return _facade()._registered_router_materials(
+            return cast(dict[Any, Any], _facade()._registered_router_materials(
                 "query", read_params, runtime_context, profile, user_message
-            )
+            ))
         if entity == "shipment_records":
-            return _facade()._registered_router_shipment_records(
+            return cast(dict[Any, Any], _facade()._registered_router_shipment_records(
                 "query", read_params, runtime_context, profile, user_message
-            )
+            ))
     if action != "write":
         return {"success": False, "message": f"未注册的 business_db 动作: {action}"}
     operation = str(params.get("operation") or params.get("op") or "create").strip().lower()

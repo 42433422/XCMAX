@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, assignment, attr-defined, index, operator, var-annotated"
 """
 PaddleOCR 文本 + OpenCV 网格线 = 准确的表格结构
 """

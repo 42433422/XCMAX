@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """考勤工作簿导入服务（attendance_import_app_service）单元测试。
 
 覆盖：schema 建表、单元格首行提取、钉钉「每日统计」/固定模板「明细」两种解析、
@@ -342,7 +341,7 @@ class TestImportDailyRecordsIfPossible:
         def _raise(name):
             raise ModuleNotFoundError("No module named 'attendance_engine'")
 
-        fake.__getattr__ = _raise  # type: ignore[attr-defined]
+        fake.__getattr__ = _raise
         monkeypatch.setitem(sys.modules, "app.mod_sdk.attendance", fake)
         conn = self._conn()
         assert svc._import_daily_records_if_possible(conn, Path("x.xlsx"), "src", "2026-03") == (

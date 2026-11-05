@@ -27,7 +27,7 @@ def one_get(url: str, timeout: float) -> tuple[int, float]:
             code = resp.status
     except urllib.error.HTTPError as e:
         code = e.code
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         code = -1
     dt = time.perf_counter() - t0
     return code, dt

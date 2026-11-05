@@ -129,7 +129,7 @@ def invoke_init_hook(
             return
     try:
         sig.bind(**kwargs)
-    except TypeError:  # noqa: TRY003 - signature bind failure selects legacy no-arg init.
+    except TypeError:
         init_fn()
         return
     init_fn(**kwargs)

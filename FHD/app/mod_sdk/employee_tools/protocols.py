@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.mod_sdk.employee_tools.employee_tool_ports import (  # noqa: F401
+from app.mod_sdk.employee_tools.employee_tool_ports import (
     ApiCall,
     AsyncClientFactory,
     Configuration,

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="func-returns-value"
 """test_prune_stale_branches.py — scripts/dev/prune_stale_branches.py 单元测试。
 
 覆盖：

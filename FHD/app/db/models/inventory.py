@@ -133,4 +133,4 @@ class InventoryTransaction(TenantScopedMixin, Base):
     location: Mapped[Optional[StorageLocation]] = relationship("StorageLocation")
 
 
-from app.db.models.product import Product  # noqa: E402
+from app.db.models.product import Product

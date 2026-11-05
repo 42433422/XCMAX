@@ -455,7 +455,7 @@ class TestModelAsset:
         assert a.name == "bert"
         assert a.size is None
         with pytest.raises((AttributeError, TypeError)):
-            a.name = "other"  # type: ignore[misc]
+            a.name = "other"
 
 
 class TestModelsDir:

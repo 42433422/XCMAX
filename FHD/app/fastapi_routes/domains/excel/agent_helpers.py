@@ -41,7 +41,7 @@ def trace_excel_route(
             channel="excel_ai_route",
             intent=intent,
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break legacy AI routes
+    except RECOVERABLE_ERRORS:
         logger.exception("failed to attach AgentRun trace to excel route response")
         return payload
     traced = dict(payload)

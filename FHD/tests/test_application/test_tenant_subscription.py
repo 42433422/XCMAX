@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """tenant_subscription_app_service 单元测试。"""
 
 from __future__ import annotations

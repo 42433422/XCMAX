@@ -1,4 +1,3 @@
-# mypy: disable-error-code="index"
 from __future__ import annotations
 
 import json

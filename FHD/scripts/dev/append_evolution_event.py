@@ -25,7 +25,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _MODSTORE_DEPLOY = _REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"
 sys.path.insert(0, str(_MODSTORE_DEPLOY))
 
-from modstore_server.evolution_ledger import append_event  # noqa: E402
+from modstore_server.evolution_ledger import append_event
 
 
 def _parse_field(s: str) -> tuple[str, str]:

@@ -346,11 +346,11 @@ class DistillationTrainer:
             logger.info("\n=== Epoch %s/%s ===", epoch, self.epochs)
 
             train_loss, train_acc = self.train_epoch(optimizer, scheduler)
-            logger.info(f"训练损失: {train_loss:.4f}, 训练准确率: {train_acc:.4f}")  # noqa: G004
+            logger.info(f"训练损失: {train_loss:.4f}, 训练准确率: {train_acc:.4f}")
 
             eval_result = self.evaluate()
             logger.info(
-                f"验证损失: {eval_result['val_loss']:.4f}, 验证准确率: {eval_result['val_accuracy']:.4f}"  # noqa: G004
+                f"验证损失: {eval_result['val_loss']:.4f}, 验证准确率: {eval_result['val_accuracy']:.4f}"
             )
 
             last_checkpoint = os.path.join(output_dir, "last.pt")
@@ -373,7 +373,7 @@ class DistillationTrainer:
             )
             logger.info("\n分类报告:\n%s", report)
 
-        logger.info(f"\n训练完成! 最佳验证准确率: {best_accuracy:.4f} (Epoch {best_epoch})")  # noqa: G004
+        logger.info(f"\n训练完成! 最佳验证准确率: {best_accuracy:.4f} (Epoch {best_epoch})")
 
         log_path = os.path.join(
             LOG_DIR, f"training_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"

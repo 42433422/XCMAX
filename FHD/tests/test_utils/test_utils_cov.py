@@ -31,7 +31,7 @@ class TestTaskContextService:
 
     def test_set_none_plan(self):
         svc = self._make()
-        svc.set("u1", None)  # type: ignore[arg-type]
+        svc.set("u1", None)
         result = svc.get("u1")
         assert result is not None  # dict is stored (empty + updated_at)
 
@@ -58,7 +58,7 @@ class TestTaskContextService:
 
     def test_set_last_customer_none(self):
         svc = self._make()
-        svc.set_last_customer("u1", None)  # type: ignore[arg-type]
+        svc.set_last_customer("u1", None)
         result = svc.get_last_customer("u1")
         assert result is not None
 
@@ -181,7 +181,7 @@ class TestOptimizeProductData:
     def test_none_product(self):
         from app.utils.device_system.mobile_api import optimize_product_data
 
-        assert optimize_product_data(None) == {}  # type: ignore[arg-type]
+        assert optimize_product_data(None) == {}
 
     def test_full_product(self):
         from app.utils.device_system.mobile_api import optimize_product_data
@@ -225,7 +225,7 @@ class TestOptimizeCustomerData:
     def test_none(self):
         from app.utils.device_system.mobile_api import optimize_customer_data
 
-        assert optimize_customer_data(None) == {}  # type: ignore[arg-type]
+        assert optimize_customer_data(None) == {}
 
     def test_full(self):
         from app.utils.device_system.mobile_api import optimize_customer_data
@@ -252,7 +252,7 @@ class TestOptimizeShipmentData:
     def test_none(self):
         from app.utils.device_system.mobile_api import optimize_shipment_data
 
-        assert optimize_shipment_data(None) == {}  # type: ignore[arg-type]
+        assert optimize_shipment_data(None) == {}
 
     def test_full(self):
         from app.utils.device_system.mobile_api import optimize_shipment_data

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """工作流工具共享层：业务库实体别名、近期写入目标状态与纯 helper（叶子模块，禁止反向依赖路由模块）。"""
 
 from __future__ import annotations

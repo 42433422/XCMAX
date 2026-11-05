@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """Validate that coverage status files agree with the configured SSOT floors."""
 
 from __future__ import annotations

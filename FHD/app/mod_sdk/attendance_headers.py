@@ -4,7 +4,7 @@ from app.mod_sdk.attendance import ensure_attendance_engine_on_path
 
 ensure_attendance_engine_on_path()
 
-from attendance_engine.header_resolver import (  # type: ignore[import-not-found] # noqa: E402
+from attendance_engine.header_resolver import (
     ResolvedHeader as ResolvedHeader,
 )
 from attendance_engine.header_resolver import (

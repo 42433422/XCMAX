@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """SLO histogram metrics: login duration + chat stream first-byte."""
 
 from __future__ import annotations

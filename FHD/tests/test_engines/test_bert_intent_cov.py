@@ -13,7 +13,7 @@ for _mod in ("torch", "transformers"):
         sys.modules[_mod] = MagicMock()
 
 # torch.cuda.is_available must return a real bool, not a MagicMock
-import torch  # noqa: E402 — imported after stub
+import torch
 
 if not hasattr(torch, "cuda"):
     torch.cuda = MagicMock()
@@ -26,7 +26,7 @@ if not hasattr(torch, "no_grad"):
 
 torch.cuda.is_available = lambda: False
 
-from app.ai_engines.bert.intent_service import (  # noqa: E402
+from app.ai_engines.bert.intent_service import (
     ID_TO_LABEL,
     INTENT_LABELS,
     LABEL_TO_ID,

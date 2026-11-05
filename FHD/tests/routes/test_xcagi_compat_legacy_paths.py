@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, misc"
 """Tests for app.legacy.routes.xcagi_compat — coverage ramp C3.3-a.
 
 Covers the aggregated compat router and ``_register_router_events`` log path.

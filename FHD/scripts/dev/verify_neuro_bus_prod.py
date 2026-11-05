@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="return-value"
 """生产环境 Neuro Bus 开关验证脚本。
 
 通过 SSH 到 CVM 读取 /root/fhd-full.env,校验 Neuro Bus 7 个可靠性开关全部启用。

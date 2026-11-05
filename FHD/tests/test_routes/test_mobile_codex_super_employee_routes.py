@@ -13,7 +13,7 @@ from app.utils.device_system.mobile_api import format_mobile_response
 @pytest.fixture
 def ext_mod():
     from app.fastapi_routes import (
-        mobile_api,  # noqa: F401
+        mobile_api,
         mobile_api_extensions,
     )
 

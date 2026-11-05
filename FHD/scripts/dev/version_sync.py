@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 # 复用 verify_version_anchors.py 的锚点定义，保证 check/sync 同源
-from scripts.dev.verify_version_anchors import (  # noqa: E402
+from scripts.dev.verify_version_anchors import (
     ANCHORS,
     PRODUCT_VERSION,
     TOOLCHAIN_VERSION,

@@ -26,7 +26,7 @@ SCRIPT = (
 class _Handler(http.server.BaseHTTPRequestHandler):
     payload: dict[str, bytes] = {}
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         body = self.payload.get(self.path)
         if body is None:
             self.send_error(404)
@@ -36,7 +36,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_HEAD(self) -> None:  # noqa: N802
+    def do_HEAD(self) -> None:
         body = self.payload.get(self.path)
         if body is None:
             self.send_error(404)

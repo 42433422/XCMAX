@@ -123,7 +123,7 @@ class BulkServiceMigrator:
 
             return True
 
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:
             self.log(f"迁移失败 {file_path.name}: {e}", "ERROR")
             return False
 

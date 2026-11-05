@@ -9,7 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes import mobile_api  # noqa: F401
+from app.fastapi_routes import mobile_api
 from app.fastapi_routes import mobile_api_extensions as routes
 
 

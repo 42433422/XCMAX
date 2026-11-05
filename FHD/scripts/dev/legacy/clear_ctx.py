@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI")

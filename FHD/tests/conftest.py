@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-redef"
 """
 pytest 配置与 fixtures（FastAPI 版）
 """
@@ -51,7 +50,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # A few legacy coverage modules install minimal ``sys.modules`` stubs during
 # collection. Preload the real host-policy modules used by the application
@@ -110,8 +109,8 @@ def pytest_sessionfinish(session, exitstatus):
 
 # pytest-cov 采集时会多次触达 ORM；先一次性加载全部 model，避免 Table 重复注册。
 try:
-    import app.db.models  # noqa: F401
-    import app.infrastructure.mods.employee_registry  # noqa: F401
+    import app.db.models
+    import app.infrastructure.mods.employee_registry
 except BOUNDARY_ERRORS:  # pragma: no cover - 个别桌面/缺依赖环境允许后续用例自行 skip
     pass
 
@@ -167,11 +166,11 @@ def _compat_db_coverage_ramp_tenant_scope(request, monkeypatch):
 
     import app.infrastructure.persistence.compat_db.writes as writes
 
-    def _append_scope(where_parts, bind, column_names, *, table_name):  # type: ignore[no-untyped-def]
+    def _append_scope(where_parts, bind, column_names, *, table_name):
         where_parts.append("tenant_id = :tenant_id")
         bind["tenant_id"] = 1
 
-    def _require_scope(column_names, *, table_name):  # type: ignore[no-untyped-def]
+    def _require_scope(column_names, *, table_name):
         return 1
 
     monkeypatch.setattr(writes, "_append_tenant_scope_or_raise", _append_scope)

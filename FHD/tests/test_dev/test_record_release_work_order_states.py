@@ -1,4 +1,3 @@
-# mypy: disable-error-code="func-returns-value"
 """record_release_work_order_states：发布时回收 merged/released。"""
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ def _args(cfg: Path, **overrides: Any) -> Any:
         "apply": True,
     }
     values.update(overrides)
-    return type("Args", (), values)  # type: ignore[return-value]
+    return type("Args", (), values)
 
 
 class _MarketSim:

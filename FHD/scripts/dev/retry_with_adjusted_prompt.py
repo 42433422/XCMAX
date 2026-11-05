@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"))
 
-from modstore_server.evolution_ledger import append_event  # noqa: E402
+from modstore_server.evolution_ledger import append_event
 
 MAX_RETRIES = 3
 

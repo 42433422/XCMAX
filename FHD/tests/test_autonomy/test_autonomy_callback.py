@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 """autonomy_callback / report_callback / deploy_callback 契约测试。"""
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ AUTONOMY_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts" / "autonomy"
 if str(AUTONOMY_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(AUTONOMY_SCRIPTS))
 
-import autonomy_callback as cb  # noqa: E402
+import autonomy_callback as cb
 
 
 @pytest.fixture

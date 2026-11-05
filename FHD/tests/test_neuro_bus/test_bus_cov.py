@@ -1,4 +1,3 @@
-# mypy: disable-error-code="method-assign"
 from __future__ import annotations
 
 """Branch-coverage tests for app/neuro_bus/bus.py."""

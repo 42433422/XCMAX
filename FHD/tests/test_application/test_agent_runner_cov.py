@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """Agent routing, async boundaries and handler delegation regressions."""
 
 from __future__ import annotations
@@ -134,7 +133,7 @@ class TestRunAgentHandler:
         with patch(AGENT_LOOP_PATH, side_effect=fake_loop):
             result = run_agent_handler(
                 actions_cfg={},
-                reasoning=None,  # type: ignore[arg-type]
+                reasoning=None,
                 task="t",
                 employee_id="emp-1",
             )
@@ -241,7 +240,7 @@ class TestRunAgentHandler:
 
         with patch(AGENT_LOOP_PATH, side_effect=fake_loop):
             run_agent_handler(
-                actions_cfg={"max_iterations": "not-a-number"},  # type: ignore[dict-item]
+                actions_cfg={"max_iterations": "not-a-number"},
                 reasoning={},
                 task="t",
                 employee_id="emp-1",
@@ -347,7 +346,7 @@ class TestRunAgentHandler:
 
         with patch(AGENT_LOOP_PATH, side_effect=fake_loop):
             run_agent_handler(
-                actions_cfg=None,  # type: ignore[arg-type]
+                actions_cfg=None,
                 reasoning={},
                 task="t",
                 employee_id="emp-1",

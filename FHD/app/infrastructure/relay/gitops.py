@@ -101,7 +101,7 @@ def _verify_merged(wt: str, base: str) -> tuple[bool, str]:
                 r.returncode == 0,
                 "自定义验证通过" if r.returncode == 0 else (r.stderr or r.stdout)[:800],
             )
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as e:
             return False, f"验证命令异常：{str(e)[:300]}"
     # worktree 基于本地 base，故 base..HEAD = 本任务自身的改动（不含本地领先 origin 的历史）。
     diff = _git(wt, "diff", "--name-only", f"{base}..HEAD", timeout=30).stdout
@@ -351,7 +351,7 @@ def git_merge(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any
                 "本机 checkout 如需同步请 git pull。"
             ),
         }
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:
         logger.warning("git_merge 异常", exc_info=True)
         return {"ok": False, "_relay_status": "failed", "reply": f"合并异常：{str(e)[:300]}"}
     finally:

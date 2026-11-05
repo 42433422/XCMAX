@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="arg-type, misc, return-value"
 """四套基线测量工具 — 数据驱动优化的度量底座。
 
 度量四套基线(桌面端 + 手机端 + 前端):
@@ -66,7 +65,7 @@ def du_bytes(path: Path) -> int | None:
         if out.returncode == 0:
             kb = int(out.stdout.split()[0])
             return kb * 1024
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         pass
     if path.is_file():
         return path.stat().st_size
@@ -94,7 +93,7 @@ def git_context() -> dict[str, str]:
             return subprocess.run(
                 ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, timeout=10
             ).stdout.strip()
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:
             return ""
 
     return {
@@ -246,7 +245,7 @@ def _apk_breakdown(apk: Path) -> list[dict[str, Any]]:
                 if info.filename.endswith(".dex"):
                     key = "dex"
                 buckets[key] = buckets.get(key, 0) + info.compress_size
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         return [{"name": "breakdown_unavailable", "error": str(exc)}]
     items = [{"name": k, "bytes": v, "human": human(v)} for k, v in buckets.items()]
     items.sort(key=lambda c: c["bytes"], reverse=True)
@@ -393,7 +392,7 @@ def measure_runtime_perf() -> dict[str, Any]:
             r = f.stat().st_size
             try:
                 g = len(gzip.compress(f.read_bytes(), 6))
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS:
                 g = 0
             raw += r
             gz += g
@@ -653,7 +652,7 @@ def main() -> int:
     if latest_json.exists():
         try:
             prev = json.loads(latest_json.read_text())
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except BOUNDARY_ERRORS:
             prev = None
 
     md = (

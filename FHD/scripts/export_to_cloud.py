@@ -42,7 +42,7 @@ def export_customers():
             return data
         finally:
             session.close()
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"导出客户数据失败: {e}")
         return []
 
@@ -79,7 +79,7 @@ def export_products():
             return data
         finally:
             session.close()
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"导出产品数据失败: {e}")
         return []
 
@@ -119,7 +119,7 @@ def export_shipments():
             return data
         finally:
             session.close()
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"导出发货记录失败: {e}")
         return []
 
@@ -159,7 +159,7 @@ def export_materials():
             return data
         finally:
             session.close()
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"导出素材数据失败: {e}")
         return []
 

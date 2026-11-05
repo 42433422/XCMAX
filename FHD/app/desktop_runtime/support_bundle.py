@@ -124,7 +124,7 @@ def build_support_bundle_zip(
         manifest["modsLoaded"] = [
             str(m.get("id") or "") for m in get_mod_manager().list_all_mods() if m.get("id")
         ][:200]
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mod list for support bundle unavailable: %s", exc)
         manifest["modsLoaded"] = []
 
@@ -212,6 +212,6 @@ def build_evidence_ref(
                 included = sum(name.startswith("screenshots/") for name in archive.namelist())
             ref["screenshots"] = {"selected": len(screenshots), "included": included}
         return ref
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         logger.debug("support bundle evidence build failed", exc_info=True)
         return None

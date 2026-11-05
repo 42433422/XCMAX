@@ -221,7 +221,7 @@ class TestAcceptanceVerdict:
         )
         assert result["ok"] is False
         assert result["reason"] == "not_in_acceptance_window"
-        assert wo.get_work_order(wo_id)["status"] == "routed"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] == "routed"
 
     def test_accepted_without_release_identity_refused(self, isolated_store: Path) -> None:
         wo_id = self._make_verifying(issue=81)
@@ -230,7 +230,7 @@ class TestAcceptanceVerdict:
         )
         assert result["ok"] is False
         assert result["reason"] == "missing_release_identity"
-        assert wo.get_work_order(wo_id)["status"] == "verifying"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] == "verifying"
 
     def test_accepted_without_business_evidence_refused(self, isolated_store: Path) -> None:
         # 发布身份/业务验收证据缺失时拒绝关闭（CI 通过 ≠ 客户能用）
@@ -240,7 +240,7 @@ class TestAcceptanceVerdict:
         )
         assert result["ok"] is False
         assert result["reason"] == "missing_acceptance_evidence"
-        assert wo.get_work_order(wo_id)["status"] == "verifying"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] == "verifying"
         # 只有单平台健康也不够
         partial = wo.record_acceptance_verdict(
             issue_number=82,
@@ -249,7 +249,7 @@ class TestAcceptanceVerdict:
             evidence={"per_platform": {"win": {"installed": 1, "failed": 0}}},
         )
         assert partial["ok"] is False
-        assert wo.get_work_order(wo_id)["status"] == "verifying"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] == "verifying"
 
     def test_duplicate_accepted_receipt_is_idempotent(self, isolated_store: Path) -> None:
         wo_id = self._make_verifying(issue=83)
@@ -260,7 +260,7 @@ class TestAcceptanceVerdict:
             evidence=dict(self._HEALTHY),
         )
         assert first["ok"] is True
-        events_after_first = len(wo.get_work_order(wo_id)["history"])  # type: ignore[index]
+        events_after_first = len(wo.get_work_order(wo_id)["history"])
         replay = wo.record_acceptance_verdict(
             issue_number=83,
             release_version="1.0.0.2",
@@ -269,7 +269,7 @@ class TestAcceptanceVerdict:
         )
         assert replay["ok"] is True
         assert replay["reason"] == "already_closed"
-        assert len(wo.get_work_order(wo_id)["history"]) == events_after_first  # type: ignore[index]
+        assert len(wo.get_work_order(wo_id)["history"]) == events_after_first
 
     def test_stale_receipt_does_not_overwrite_new_state(self, isolated_store: Path) -> None:
         # 乱序回执：closed 后收到旧版本 rejected 不得重开
@@ -288,7 +288,7 @@ class TestAcceptanceVerdict:
         )
         assert stale["ok"] is False
         assert stale["reason"] == "stale_receipt"
-        assert wo.get_work_order(wo_id)["status"] == "closed"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] == "closed"
 
     def test_unknown_verdict_rejected(self, isolated_store: Path) -> None:
         wo_id = self._make_verifying(issue=85)
@@ -297,7 +297,7 @@ class TestAcceptanceVerdict:
         )
         assert result["ok"] is False
         assert result["reason"] == "unknown_verdict"
-        assert wo.get_work_order(wo_id)["status"] == "verifying"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] == "verifying"
 
     def test_unlinked_issue_rejected(self, isolated_store: Path) -> None:
         result = wo.record_acceptance_verdict(

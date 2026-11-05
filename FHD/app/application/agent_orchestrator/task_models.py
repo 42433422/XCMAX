@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.task_context import task_context_of
@@ -20,12 +20,15 @@ TaskControlStatus = Literal["requested", "applied", "superseded", "rejected"]
 
 
 def attention_for_status(status: str) -> TaskAttention:
-    return {
-        "waiting_user": "approval_required",
-        "blocked": "blocked",
-        "failed": "failed",
-        "completed": "result_unread",
-    }.get(str(status or ""), "")  # type: ignore[return-value]
+    return cast(
+        TaskAttention,
+        {
+            "waiting_user": "approval_required",
+            "blocked": "blocked",
+            "failed": "failed",
+            "completed": "result_unread",
+        }.get(str(status or ""), ""),
+    )
 
 
 def mod_id_of_run(run: AgentRun) -> str:
@@ -182,7 +185,7 @@ def agent_task_from_dict(data: dict[str, Any]) -> AgentTask:
         source=str(data.get("source") or "agent"),
         task_type=str(data.get("task_type") or "agent"),
         status=str(data.get("status") or "queued"),
-        attention_state=str(data.get("attention_state") or ""),  # type: ignore[arg-type]
+        attention_state=cast(TaskAttention, str(data.get("attention_state") or "")),
         active_run_id=str(data.get("active_run_id") or ""),
         root_run_id=str(data.get("root_run_id") or ""),
         conversation_id=str(data.get("conversation_id") or ""),
@@ -203,8 +206,8 @@ def task_control_from_dict(data: dict[str, Any]) -> TaskControlCommand:
         command_id=str(data.get("command_id") or "") or f"taskcmd_{uuid.uuid4().hex}",
         task_id=str(data.get("task_id") or ""),
         run_id=str(data.get("run_id") or ""),
-        action=str(data.get("action") or "pause"),  # type: ignore[arg-type]
-        status=str(data.get("status") or "requested"),  # type: ignore[arg-type]
+        action=cast(TaskControlAction, str(data.get("action") or "pause")),
+        status=cast(TaskControlStatus, str(data.get("status") or "requested")),
         requested_by=str(data.get("requested_by") or ""),
         metadata=dict(data.get("metadata") or {}),
         created_at=str(data.get("created_at") or "") or utc_now_iso(),

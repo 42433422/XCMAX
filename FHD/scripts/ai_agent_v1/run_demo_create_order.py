@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="assignment"
 """AI Agent V1 — 写链路 demo：创建客户+订单+审批门控。
 
 三种策略（由 --strategy 控制）:
@@ -60,8 +59,8 @@ def _stub_planner_rag() -> None:
     def _factory() -> _Stub:
         return _Stub()
 
-    rag_mod.get_user_memory_rag_app_service = _factory  # type: ignore[method-assign]
-    app_pkg.get_user_memory_rag_app_service = _factory  # type: ignore[attr-defined]
+    rag_mod.get_user_memory_rag_app_service = _factory
+    app_pkg.get_user_memory_rag_app_service = _factory
 
 
 def _dispatch_workflow_tool(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -81,7 +80,7 @@ def _database_reachable() -> bool:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return False
 
 

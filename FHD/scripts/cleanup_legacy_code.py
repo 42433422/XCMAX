@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="var-annotated"
 """
 传统代码清理工具
 
@@ -75,7 +74,7 @@ class LegacyCodeCleaner:
                     if imported:
                         import_graph[str(py_file)].add(imported)
 
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:
                 print(f"[WARN] 分析文件失败 {py_file}: {e}")
 
         return import_graph
@@ -147,7 +146,7 @@ class LegacyCodeCleaner:
                     self.usage_stats[file_str].unused_functions = unused
                     self.usage_stats[file_str].used_functions = len(used_functions)
 
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:
                 print(f"[WARN] 分析函数失败 {py_file}: {e}")
 
     def generate_cleanup_report(self) -> str:
@@ -251,7 +250,7 @@ class LegacyCodeCleaner:
             file_path.write_text(new_content, encoding="utf-8")
             print(f"[MARK] 已标记: {file_path}")
 
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:
             print(f"[ERROR] 标记失败 {file_path}: {e}")
 
 

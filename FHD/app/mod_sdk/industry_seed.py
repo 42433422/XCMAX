@@ -147,7 +147,7 @@ def bundled_industry_seeds_dir() -> Path | None:
         bundled = Path(_default_mods_root()).resolve()
         if bundled.is_dir():
             return bundled
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 兜底路径解析失败不应阻断安装
+    except RECOVERABLE_ERRORS:
         logger.debug("bundled mods root fallback for industry seeds skipped", exc_info=True)
     return None
 

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, union-attr"
 """
 冒烟测试：验证后端 OCR 提取功能
 """
@@ -46,7 +45,7 @@ for image_path in test_images:
         else:
             print(f"✗ 失败：{result.get('error')}")
 
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"✗ 异常：{e}")
         import traceback
 

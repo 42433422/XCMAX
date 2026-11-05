@@ -283,7 +283,7 @@ def configure_runtime_health_monitor(
             storage_path=str(data_root / HEALTH_EVENTS_DB_NAME),
         )
         durable = True
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 持久化存储边界，任何失败都必须 fail-safe
+    except RECOVERABLE_ERRORS:
         logger.warning(
             "[HealthMonitor] 持久化事件存储不可用，自动修复已禁用 (component=%s)",
             NEURO_BUS_REMEDIATION_COMPONENT,

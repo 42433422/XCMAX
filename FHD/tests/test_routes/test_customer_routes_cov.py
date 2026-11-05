@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 from __future__ import annotations
 
 """Branch-coverage ramp for app.fastapi_routes.domains.customer.routes.
@@ -433,7 +432,7 @@ class TestCustomersImport:
         fake_excel.run_customers_excel_import_bytes = lambda _: {
             "success": False,
             "message": "parse error",
-        }  # type: ignore[attr-defined]
+        }
         with patch(f"{_ROUTES}._customers_write_raise"):
             with patch(f"{_ROUTES}._business_mod_json_block", return_value=None):
                 with patch.dict(sys.modules, {"app.domain.app_pure.excel_imports": fake_excel}):

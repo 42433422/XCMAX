@@ -18,7 +18,7 @@ EMPLOYEE_STEM = "user_customer_service_officer"
 
 def _resolve_employee_mod_path() -> str:
     try:
-        from app.infrastructure.mods import get_mod_registry  # type: ignore
+        from app.infrastructure.mods.registry import get_mod_registry
 
         meta = get_mod_registry().get_mod_metadata(EMPLOYEE_MOD_ID)
         mod_path = getattr(meta, "mod_path", "") if meta else ""
@@ -43,7 +43,7 @@ async def run_user_cs_employee(payload: dict[str, Any]) -> dict[str, Any]:
     """Run the same employee pack used by the enterprise customer-service bridge."""
 
     try:
-        from app.mod_sdk.mods_bus import import_mod_backend_py  # type: ignore
+        from app.mod_sdk.mods_bus import import_mod_backend_py
 
         mod_path = _resolve_employee_mod_path()
         if not mod_path:

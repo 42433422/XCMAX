@@ -37,7 +37,7 @@ class _MemoryRepo:
     def __init__(self) -> None:
         self.items: dict[int, Shipment] = {}
         self._n = 0
-        self.fail_after = None  # type: ignore[var-annotated]
+        self.fail_after = None
 
     def save(self, shipment: Shipment) -> Shipment:
         if self.fail_after is not None and self._n >= int(self.fail_after):

@@ -33,7 +33,7 @@ _FHD_ROOT = Path(__file__).resolve().parents[2]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
 
-from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 def _repro_dir() -> Path:

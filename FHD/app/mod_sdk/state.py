@@ -6,6 +6,6 @@
 
 from __future__ import annotations
 
-from app.fastapi_routes.state import read_client_mods_off_state  # noqa: F401
+from app.fastapi_routes.state import read_client_mods_off_state
 
 __all__ = ["read_client_mods_off_state"]

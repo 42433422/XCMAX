@@ -63,7 +63,7 @@ def _build_enriched_ctx(employee_id: str, workspace_root: str) -> dict[str, Any]
                 if isinstance(result, dict)
                 else "未知错误",
             }
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  LLM 调用边界：异常转结构化结果
+        except RECOVERABLE_ERRORS as exc:
             return {"ok": False, "error": repr(exc)}
 
     ctx["call_llm"] = _call_llm

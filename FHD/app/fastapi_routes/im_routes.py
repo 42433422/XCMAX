@@ -106,7 +106,7 @@ def _is_admin_customer_service_session(request: Request, db) -> bool:
         if not sid:
             return False
         row = db.query(UserSession).filter(UserSession.session_id == sid).first()
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return False
     return bool(
         row is not None
@@ -333,7 +333,7 @@ def im_list_messages(
                         last_id,
                         record_sync=not is_enterprise_cs,
                     )
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - 标已读失败不应影响读消息本身
+            except RECOVERABLE_ERRORS:
                 logger.debug("im_list_messages auto mark_read skipped", exc_info=True)
         return {"success": True, "messages": messages}
     except PermissionError:

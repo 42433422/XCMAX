@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 import threading
+from typing import cast
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
@@ -177,7 +178,7 @@ class InMemoryTaskExecutionRepository:
         error_code: str,
     ) -> AgentTaskExecution:
         now = utc_now_iso()
-        row.state = str(state)  # type: ignore[assignment]
+        row.state = cast(ExecutionState, str(state))
         row.lease_owner = ""
         row.lease_expires_at = ""
         row.heartbeat_at = ""

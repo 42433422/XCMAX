@@ -33,14 +33,14 @@ def ensure_attendance_engine_on_path() -> str:
 
 try:
     ensure_attendance_engine_on_path()
-    from attendance_engine.convert import (  # type: ignore[import-not-found]
-        convert_attendance_file,  # noqa: E402
+    from attendance_engine.convert import (
+        convert_attendance_file,
     )
-    from attendance_engine.parser import (  # type: ignore[import-not-found]
-        parse_attendance_workbook,  # noqa: E402
+    from attendance_engine.parser import (
+        parse_attendance_workbook,
     )
-    from attendance_engine.paths import (  # type: ignore[import-not-found]
-        attendance_workspace_root,  # noqa: E402
+    from attendance_engine.paths import (
+        attendance_workspace_root,
     )
 except ModuleNotFoundError:
 

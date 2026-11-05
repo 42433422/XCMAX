@@ -18,7 +18,7 @@ import pytest
 _FHD = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_FHD))
 
-from app.mod_sdk.employee_specialized_tools import (  # noqa: E402
+from app.mod_sdk.employee_specialized_tools import (
     _MODEL_PRICES,
     _PROVIDER_PROFILES,
     EMPLOYEE_TOOLS,

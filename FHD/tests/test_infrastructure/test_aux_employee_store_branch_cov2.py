@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """测试 app.mod_sdk.aux_employee_store 的分支覆盖。
 
 覆盖目标：
@@ -255,7 +254,7 @@ class TestInjectAuxEmployeePackRows:
         with patch(
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest", return_value=manifest
         ):
-            available: list[dict] = [{"id": "lan-gate-ai-employee"}]  # type: ignore[list-item]
+            available: list[dict] = [{"id": "lan-gate-ai-employee"}]
             aux_employee_store.inject_aux_employee_pack_rows(available, set())
             assert len(available) == 1
 

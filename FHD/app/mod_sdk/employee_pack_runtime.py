@@ -21,7 +21,7 @@ def build_employee_pack(mod_id: str, stem: str, label: str, backend_dir: str) ->
 
     def _resolve_mod_path(mid: str) -> Optional[str]:
         try:
-            from app.mod_sdk.host_services import get_mod_registry  # type: ignore
+            from app.mod_sdk.host_services import get_mod_registry
 
             meta = get_mod_registry().get_mod_metadata(mid)
             mp = getattr(meta, "mod_path", "") or ""
@@ -35,7 +35,7 @@ def build_employee_pack(mod_id: str, stem: str, label: str, backend_dir: str) ->
 
     def _load_employee_module(mid: str, emp_stem: str):
         try:
-            from app.mod_sdk.mods_bus import import_mod_backend_py  # type: ignore
+            from app.mod_sdk.mods_bus import import_mod_backend_py
         except ImportError:
             return None
         mod_path = _resolve_mod_path(mid)
@@ -80,7 +80,7 @@ def build_employee_pack(mod_id: str, stem: str, label: str, backend_dir: str) ->
         }
         call_llm_available = False
         try:
-            from app.mod_sdk.mod_employee_llm import mod_employee_complete  # type: ignore
+            from app.mod_sdk.mod_employee_llm import mod_employee_complete
 
             async def _call_llm(
                 messages, *, max_tokens=1024, temperature=0.2, response_format=None
@@ -253,7 +253,7 @@ def build_employee_pack(mod_id: str, stem: str, label: str, backend_dir: str) ->
         ctx["run_sandboxed_python"] = _run_sandboxed_python
 
         try:
-            from modstore_server.mod_employee_agent_runner import build_agent_runner  # type: ignore
+            from modstore_server.mod_employee_agent_runner import build_agent_runner
 
             ctx["agent_runner"] = build_agent_runner(ctx)
         except RECOVERABLE_ERRORS as _ar_err:

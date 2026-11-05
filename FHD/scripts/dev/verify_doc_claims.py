@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """文档数字宣称校验（P2-3：文档与实测一致）。
 
 背景：本仓库多处文档（docs/**、workspace 规则、CHANGELOG）手工维护覆盖率/指标数字，

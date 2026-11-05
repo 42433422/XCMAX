@@ -231,7 +231,7 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
                     domain=str(intent_result.get("domain") or "generic"),
                 )
                 skill_route = enriched.get("skill_route")
-            except RECOVERABLE_ERRORS:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:
                 logger.debug("skill_route enrich failed", exc_info=True)
 
             # 有高分技能候选时，引导补槽而非纯「未理解」
@@ -286,7 +286,7 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
                     from app.desktop_runtime.support_bundle import build_evidence_ref
 
                     evidence_ref = build_evidence_ref()
-                except RECOVERABLE_ERRORS:  # noqa: BLE001
+                except RECOVERABLE_ERRORS:
                     logger.debug("evidence bundle build failed", exc_info=True)
                 try:
                     record_capability_proposal(
@@ -312,7 +312,7 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
                         },
                         evidence_ref=evidence_ref,
                     )
-                except RECOVERABLE_ERRORS:  # noqa: BLE001
+                except RECOVERABLE_ERRORS:
                     logger.debug("capability_proposal record failed", exc_info=True)
                 pid = str(proposal.get("proposed_skill_id") or "open")
                 question = (

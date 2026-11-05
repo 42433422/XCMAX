@@ -214,7 +214,7 @@ def dispatch_operational_tool_payload(
                 _list_excel_sheet_names,
             )
 
-            if not os.path.exists(file_path):  # noqa: F823
+            if not os.path.exists(file_path):
                 return _j({"success": False, "message": f"文件不存在：{file_path}"}, 404)
             sheet_names = _list_excel_sheet_names(file_path)
             structured = _extract_structured_excel_preview(

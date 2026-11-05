@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """Top-20 端点 SLO 棘轮（复刻 coverage_ratchet.py 思路，只升不降）。
 
 数据源：Prometheus `api_requests_total` + `api_request_duration_seconds_bucket`
@@ -76,7 +75,7 @@ def query_prometheus(prom_url: str, promql: str) -> float | None:
         if not result:
             return None
         return float(result[0]["value"][1])
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -208,7 +207,7 @@ def cmd_audit() -> int:
                 # 标准化：去掉末尾斜杠
                 path = path.rstrip("/") or "/"
                 all_endpoints.add(path)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:
             continue
 
     print(f"[audit] 静态扫描发现 {len(all_endpoints)} 个端点")
@@ -269,7 +268,7 @@ def cmd_top20(prom_url: str, window: str) -> int:
             rate = float(item["value"][1])
             print(f"  {i:2d}. {ep:60s} {rate:>10.2f} req/s")
         return 0
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"[top20] ❌ Prometheus 查询失败: {e}", file=sys.stderr)
         return 1
 

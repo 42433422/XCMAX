@@ -136,7 +136,7 @@ class MobileRelayService:
                     "tool": tool,
                 },
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 推送是尽力而为的旁路
+        except RECOVERABLE_ERRORS:
             logger.warning(
                 "relay task completion push failed task_id=%s", task.get("task_id"), exc_info=True
             )

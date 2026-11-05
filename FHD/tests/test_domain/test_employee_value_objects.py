@@ -40,7 +40,7 @@ class TestEmployeeCapability:
     def test_frozen_dataclass_is_immutable(self):
         cap = EmployeeCapability(label="x")
         with pytest.raises(Exception):
-            cap.label = "y"  # type: ignore[misc]
+            cap.label = "y"
 
     def test_coerce_from_nonempty_str(self):
         cap = _coerce("  Sales  ")
@@ -69,7 +69,7 @@ class TestEmployeeCapability:
         assert parse_capabilities(None) == []
 
     def test_parse_capabilities_non_dict_returns_empty(self):
-        assert parse_capabilities("not a dict") == []  # type: ignore[arg-type]
+        assert parse_capabilities("not a dict") == []
 
     def test_parse_capabilities_from_employee_block(self):
         caps = parse_capabilities({"employee": {"capabilities": ["a", "b"]}})
@@ -123,7 +123,7 @@ class TestCollaborationGraph:
 
     def test_add_none_deps(self):
         g = CollaborationGraph()
-        g.add("a", None)  # type: ignore[arg-type]
+        g.add("a", None)
         assert g.edges["a"] == []
 
     def test_detect_cycle_none_when_acyclic(self):
@@ -181,7 +181,7 @@ class TestEmployeeEvents:
         assert event_types_for_triggers(None) == []
 
     def test_event_types_non_dict_returns_empty(self):
-        assert event_types_for_triggers([1, 2]) == []  # type: ignore[arg-type]
+        assert event_types_for_triggers([1, 2]) == []
 
     def test_event_types_bool_true(self):
         out = event_types_for_triggers({"on_error": True, "on_quality_fail": True})

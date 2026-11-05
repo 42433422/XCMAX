@@ -158,17 +158,17 @@ def test_get_deepseek_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_import_domain_event_modules_for_coverage() -> None:
     """导入各域事件模块以覆盖类定义（实例化受 dataclass/NeuroEvent 混用限制）。"""
-    import app.neuro_bus.events.ai_events  # noqa: F401
-    import app.neuro_bus.events.auth_events  # noqa: F401
-    import app.neuro_bus.events.conversation_events  # noqa: F401
-    import app.neuro_bus.events.customer_events as customer_events  # noqa: F401
-    import app.neuro_bus.events.inventory_events  # noqa: F401
-    import app.neuro_bus.events.material_events  # noqa: F401
-    import app.neuro_bus.events.ocr_events  # noqa: F401
-    import app.neuro_bus.events.order_events  # noqa: F401
-    import app.neuro_bus.events.payment_events  # noqa: F401
-    import app.neuro_bus.events.print_events  # noqa: F401
-    import app.neuro_bus.events.shipment_events as shipment_events  # noqa: F401
+    import app.neuro_bus.events.ai_events
+    import app.neuro_bus.events.auth_events
+    import app.neuro_bus.events.conversation_events
+    import app.neuro_bus.events.customer_events as customer_events
+    import app.neuro_bus.events.inventory_events
+    import app.neuro_bus.events.material_events
+    import app.neuro_bus.events.ocr_events
+    import app.neuro_bus.events.order_events
+    import app.neuro_bus.events.payment_events
+    import app.neuro_bus.events.print_events
+    import app.neuro_bus.events.shipment_events as shipment_events
 
     assert shipment_events.ShipmentCreatedEvent.event_type == "shipment.created"
     assert customer_events.CustomerRegisteredEvent.event_type == "customer.registered"

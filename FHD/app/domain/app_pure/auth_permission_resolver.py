@@ -119,7 +119,7 @@ def resolve_permissions(
             from app.application.desktop_admin_gate import is_desktop_runtime
 
             admin_blocked_shell = bool(is_desktop_runtime())
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             admin_blocked_shell = shell in {"desktop"}
 
     return {

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found, no-any-return, union-attr"
 """规则映射员 / 质检员的 LLM 协作路径测试（mock call_llm）。
 
 分工契约：LLM 提议、确定性验证——非法提议必须被拒绝且留痕；
@@ -130,7 +129,7 @@ def test_mapper_llm_adopts_valid_bands_and_clear_zone(tmp_path: Path) -> None:
     assert {a["field"] for a in llm_ev["adopted"]} == {"bands", "clear_zone"}
     assert llm_ev["rejected"] == []
     assert any("LLM 已提议并通过机器验证" in q for q in rules["evidence"]["open_questions"])
-    assert len(call_llm.calls) == 1  # type: ignore[attr-defined]
+    assert len(call_llm.calls) == 1
 
 
 def test_mapper_llm_rejects_invalid_proposals(tmp_path: Path) -> None:
@@ -227,7 +226,7 @@ def test_mapper_convert_with_llm_ctx(tmp_path: Path) -> None:
         )
     )
     assert result2["llm"] == {"used": False}
-    assert len(call_llm.calls) == 1  # type: ignore[attr-defined]
+    assert len(call_llm.calls) == 1
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ratchet: type-safety debt (mypy ignores, ts-nocheck, frontend any)."""
+"""Ratchet: type-safety debt (mypy ignores, ts-nocheck, frontend any, noqa)."""
 
 from __future__ import annotations
 
@@ -13,8 +13,11 @@ APP_ROOT = FHD_ROOT / "app"
 FRONTEND_SRC = FHD_ROOT / "frontend" / "src"
 
 TYPE_IGNORE = re.compile(r"#\s*type:\s*ignore\b")
+MYPY_HEADER = re.compile(r"#\s*mypy:\s*(?:disable-error-code|ignore-errors)\b")
+NOQA = re.compile(r"#\s*noqa\b")
 TS_NOCHECK = re.compile(r"@ts-nocheck\b")
 ANY_WORD = re.compile(r"\bany\b")
+SKIP_PARTS = {"node_modules", ".venv", "venv", "__pycache__", ".git", "build", "dist"}
 
 
 def _count_in_tree(root: Path, pattern: re.Pattern[str], glob: str) -> tuple[int, int]:
@@ -25,7 +28,7 @@ def _count_in_tree(root: Path, pattern: re.Pattern[str], glob: str) -> tuple[int
     for path in root.rglob(glob):
         if not path.is_file():
             continue
-        if "node_modules" in path.parts:
+        if any(part in SKIP_PARTS for part in path.parts):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         hits = len(pattern.findall(text))
@@ -38,11 +41,15 @@ def _count_in_tree(root: Path, pattern: re.Pattern[str], glob: str) -> tuple[int
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--max-type-ignore", type=int, default=0)
+    parser.add_argument("--max-mypy-disable", type=int, default=0)
+    parser.add_argument("--max-noqa", type=int, default=220)
     parser.add_argument("--max-ts-nocheck", type=int, default=0)
     parser.add_argument("--max-any", type=int, default=0)
     args = parser.parse_args()
 
     ti, ti_files = _count_in_tree(APP_ROOT, TYPE_IGNORE, "*.py")
+    md, md_files = _count_in_tree(FHD_ROOT, MYPY_HEADER, "*.py")
+    nq, nq_files = _count_in_tree(FHD_ROOT, NOQA, "*.py")
     nc, nc_files = _count_in_tree(FRONTEND_SRC, TS_NOCHECK, "*")
     any_hits, any_files = 0, 0
     for ext in ("*.ts", "*.tsx", "*.vue"):
@@ -52,12 +59,20 @@ def main() -> int:
             any_files += f
 
     print(f"type_ignore={ti} ({ti_files} files)")
+    print(f"mypy_disable={md} ({md_files} files)")
+    print(f"noqa={nq} ({nq_files} files)")
     print(f"ts_nocheck={nc} ({nc_files} files)")
     print(f"frontend_any={any_hits} ({any_files} files)")
 
     failed = False
     if ti > args.max_type_ignore:
         print(f"FAIL: type_ignore > {args.max_type_ignore}", file=sys.stderr)
+        failed = True
+    if md > args.max_mypy_disable:
+        print(f"FAIL: mypy_disable > {args.max_mypy_disable}", file=sys.stderr)
+        failed = True
+    if nq > args.max_noqa:
+        print(f"FAIL: noqa > {args.max_noqa}", file=sys.stderr)
         failed = True
     if nc > args.max_ts_nocheck:
         print(f"FAIL: ts_nocheck > {args.max_ts_nocheck}", file=sys.stderr)

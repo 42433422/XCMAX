@@ -263,7 +263,7 @@ def _register_mods_endpoints(router) -> None:
 
         try:
             from app.infrastructure.mods.mod_manager import _default_mods_root
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.exception("employee pack root unavailable")
             return {"success": False, "error": _MODS_UNAVAILABLE}
         safe_pack_id = secure_filename((pack_id or "").strip())

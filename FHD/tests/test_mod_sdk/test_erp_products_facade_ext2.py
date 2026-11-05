@@ -1,4 +1,3 @@
-# mypy: disable-error-code="index"
 """Extended tests for ``app.mod_sdk.erp_products_facade`` covering low-coverage branches."""
 
 from __future__ import annotations

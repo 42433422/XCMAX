@@ -51,7 +51,7 @@ def _trace_ai_message_save(payload: dict, *, body: dict) -> dict:
         traced["run_id"] = run.run_id
         traced["agent_run_id"] = run.run_id
         return traced
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break legacy message persistence
+    except RECOVERABLE_ERRORS:
         logger.exception("failed to attach AgentRun trace to /api/ai/message/save")
         return payload
 

@@ -38,7 +38,7 @@ class TestPersonaAxes:
 
     def test_create_with_none_raises(self):
         with pytest.raises((TypeError, ValueError)):
-            PersonaAxes(warmth=None)  # type: ignore[arg-type]
+            PersonaAxes(warmth=None)
 
     def test_to_dict_returns_all_axes(self):
         axes = PersonaAxes(warmth=0.7, detail=0.4, proactivity=0.6, structure=0.8)

@@ -38,7 +38,7 @@ def test_bounded_context_meta_is_frozen_dataclass():
         handler_module="app.handlers.x",
     )
     with pytest.raises(AttributeError):
-        meta.context_id = "y"  # type: ignore[misc]
+        meta.context_id = "y"
 
 
 # ── BOUNDED_CONTEXTS 内容验证 ────────────────────────────────

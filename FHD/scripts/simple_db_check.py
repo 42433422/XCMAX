@@ -86,7 +86,7 @@ def simple_db_check():
 
                 conn.close()
 
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:
                 print(f"  ❌ 无法连接: {e}")
 
     # 检查我们统一的customer数据库
@@ -163,7 +163,7 @@ def check_sqlalchemy_config():
                                 if pattern in line:
                                     print(f"    行 {i + 1}: {line.strip()}")
 
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:
                 print(f"  ❌ 读取失败: {e}")
 
 

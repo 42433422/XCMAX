@@ -202,7 +202,7 @@ class TestValidateEventSchema:
 
     def test_non_dict_payload_raises(self):
         ev = _make_event()
-        ev.payload = ["not", "a", "dict"]  # type: ignore[assignment]
+        ev.payload = ["not", "a", "dict"]
         with pytest.raises(InvalidEventError, match="payload"):
             validate_event_schema(ev)
 
@@ -771,7 +771,7 @@ class TestConcurrency:
             try:
                 for _ in range(20):
                     store.append(_make_event(), stream_id="shared")
-            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - record for assertion
+            except BOUNDARY_ERRORS as exc:
                 errors.append(exc)
 
         threads = [threading.Thread(target=worker) for _ in range(4)]

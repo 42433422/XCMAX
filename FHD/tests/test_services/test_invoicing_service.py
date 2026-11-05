@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """
 开票/贷项通知单 & 记账服务测试（ODOO-W1-04）
 

@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from openpyxl import Workbook  # type: ignore[import-untyped]
+from openpyxl import Workbook
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -81,7 +81,7 @@ def courses(
         return {"success": True, "data": data}
     except TutorialServiceError as exc:
         return _error(exc)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - public boundary must never expose raw backend text
+    except RECOVERABLE_ERRORS:
         return _unexpected("courses")
 
 
@@ -99,7 +99,7 @@ def create_or_resume_run(
         }
     except TutorialServiceError as exc:
         return _error(exc)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return _unexpected("start_run")
 
 
@@ -118,7 +118,7 @@ def current_run(
         return {"success": True, "data": service.run_dto(run) if run else None}
     except TutorialServiceError as exc:
         return _error(exc)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return _unexpected("current_run")
 
 
@@ -136,7 +136,7 @@ def enter_run(
         return response
     except TutorialServiceError as exc:
         return _error(exc)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return _unexpected("enter_run")
 
 
@@ -153,7 +153,7 @@ def leave_run(
         return response
     except TutorialServiceError as exc:
         return _error(exc)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return _unexpected("leave_run")
 
 
@@ -199,7 +199,7 @@ def verify_step(
         return response
     except TutorialServiceError as exc:
         return _error(exc)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return _unexpected("verify_step")
 
 
@@ -217,7 +217,7 @@ def reset_run(
         return response
     except TutorialServiceError as exc:
         return _error(exc)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return _unexpected("reset_run")
 
 
@@ -230,7 +230,7 @@ def reports(
         return {"success": True, "data": service.reports(db, user)}
     except TutorialServiceError as exc:
         return _error(exc)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return _unexpected("reports")
 
 

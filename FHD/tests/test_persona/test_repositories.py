@@ -31,7 +31,7 @@ class TestPersonaProfileRepositoryContract:
     def test_cannot_instantiate_abstract_class(self):
         """抽象类不可直接实例化。"""
         with pytest.raises(TypeError):
-            PersonaProfileRepository()  # type: ignore[abstract]
+            PersonaProfileRepository()
 
     @pytest.mark.parametrize(
         "method_name",

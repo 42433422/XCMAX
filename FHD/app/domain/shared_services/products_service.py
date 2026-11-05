@@ -264,7 +264,7 @@ class ProductsService(NeuroEventPublisherMixin):
 
                 duration_ms = (time.perf_counter() - start_time) * 1000
                 logger.info(
-                    f"批量添加产品完成: {batch_result.success_count} 成功, {batch_result.failed_count} 失败, 耗时 {duration_ms:.2f}ms"  # noqa: G004
+                    f"批量添加产品完成: {batch_result.success_count} 成功, {batch_result.failed_count} 失败, 耗时 {duration_ms:.2f}ms"
                 )
 
                 self._invalidate_product_cache()

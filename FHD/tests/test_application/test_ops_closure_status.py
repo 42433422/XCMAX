@@ -324,7 +324,7 @@ class TestBuildOpsClosureStatus:
             "app.application.ops_closure_status.all_planned_duty_employee_ids",
             return_value=[],
         ):
-            result = build_ops_closure_status("not-a-dict")  # type: ignore[arg-type]
+            result = build_ops_closure_status("not-a-dict")
         assert result["deliverable"] is True
 
     def test_missing_remote_employees_creates_blocker(self):

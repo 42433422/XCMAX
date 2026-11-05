@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """Tests for app.application.shipment_app_service — coverage ramp C3.2-b.
 
 Covers:

@@ -316,7 +316,7 @@ class IntentReflexArc:
 
         except RECOVERABLE_ERRORS as e:
             elapsed_us = (time.perf_counter() - start_time) * 1_000_000
-            logger.exception(f"Reflex arc error after {elapsed_us:.0f}us: {e}")  # noqa: G004
+            logger.exception(f"Reflex arc error after {elapsed_us:.0f}us: {e}")
             return ReflexResult(
                 triggered=False,
                 reflex_type=ReflexType.UNKNOWN,

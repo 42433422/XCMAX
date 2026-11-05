@@ -100,6 +100,6 @@ def notify_boss_im(
                 file=sys.stderr,
             )
         return ok
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
+    except RECOVERABLE_ERRORS as exc:
         print(f"[im-notify] http error ({source}): {exc!r}", file=sys.stderr)
         return False

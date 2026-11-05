@@ -8,8 +8,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import app.fastapi_routes.mobile_api as _mobile_api_mod  # noqa: F401,E402 — must precede mobile_api_extensions to break circular import
-from app.fastapi_routes import mobile_api_extensions as mobile_ext  # noqa: E402
+import app.fastapi_routes.mobile_api as _mobile_api_mod
+from app.fastapi_routes import mobile_api_extensions as mobile_ext
 
 
 @pytest.fixture

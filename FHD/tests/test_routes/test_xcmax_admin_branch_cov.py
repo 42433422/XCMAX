@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """Branch-coverage tests for app.fastapi_routes.xcmax_admin (round 2).
 
 Targets the remaining missing branches identified by coverage analysis:
@@ -448,7 +447,7 @@ class TestAdminListWallets:
                 await admin_routes.admin_list_market_users.__wrapped__(req)
                 if hasattr(admin_routes.admin_list_market_users, "__wrapped__")
                 else await admin_routes.admin_list_wallets(req)
-            )  # type: ignore[attr-defined]
+            )
         # The route handler is admin_list_wallets
         assert result == proxy_result
 

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="func-returns-value"
 """Tests for app.neuro_bus.domains.finance_domain_handlers.
 
 Covers:

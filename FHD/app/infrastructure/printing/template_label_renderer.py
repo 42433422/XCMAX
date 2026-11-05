@@ -9,10 +9,10 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from reportlab.lib.utils import ImageReader  # type: ignore[import-untyped]
-from reportlab.pdfbase import pdfmetrics  # type: ignore[import-untyped]
-from reportlab.pdfbase.ttfonts import TTFont  # type: ignore[import-untyped]
-from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
 
 _FONT_PATH = Path(__file__).resolve().parents[3] / "resources" / "fonts" / "NotoSansSC-Regular.ttf"
 _FONT_NAME = "XCAGILabelNotoSC"

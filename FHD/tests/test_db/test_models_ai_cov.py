@@ -239,19 +239,19 @@ class TestAIModelImport:
     """Ensure all AI model classes are importable."""
 
     def test_import_ai_tool_category(self):
-        from app.db.models.ai import AIToolCategory  # noqa: F401
+        from app.db.models.ai import AIToolCategory
 
     def test_import_ai_tool(self):
-        from app.db.models.ai import AITool  # noqa: F401
+        from app.db.models.ai import AITool
 
     def test_import_ai_conversation(self):
-        from app.db.models.ai import AIConversation  # noqa: F401
+        from app.db.models.ai import AIConversation
 
     def test_import_ai_conversation_session(self):
-        from app.db.models.ai import AIConversationSession  # noqa: F401
+        from app.db.models.ai import AIConversationSession
 
     def test_import_user_preference(self):
-        from app.db.models.ai import UserPreference  # noqa: F401
+        from app.db.models.ai import UserPreference
 
     def test_import_user_memory(self):
-        from app.db.models.ai import UserMemory  # noqa: F401
+        from app.db.models.ai import UserMemory

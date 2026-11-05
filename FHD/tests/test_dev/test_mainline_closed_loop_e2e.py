@@ -334,7 +334,7 @@ class TestAcceptanceCloseout:
         # 重开后允许回到 in_dev 继续修，闭环直到关闭
         moved = wo.record_transition(wo_id, "in_dev", note="修复后重新开发")
         assert moved["ok"] is True
-        assert wo.get_work_order(wo_id)["status"] == "in_dev"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] == "in_dev"
 
     def test_pending_verdict_does_not_close_or_advance(self, isolated_stores: Path) -> None:
         wo_id = self._routed_wo(isolated_stores, 203)
@@ -347,7 +347,7 @@ class TestAcceptanceCloseout:
         assert result["ok"] is False
         view = wo.get_work_order(wo_id)
         assert view is not None
-        assert view["status"] != "closed"  # type: ignore[index]
+        assert view["status"] != "closed"
         assert view["status"] == "routed", "pending 回执不得把 routed 推进到完成阶段"
         assert view["history"] == before_events, "pending 回执不得改写历史"
 
@@ -525,7 +525,7 @@ class TestReopenReacceptLoop:
             issue_number=310, release_version="1.0.0", verdict="rejected"
         )
         assert first["ok"] is True
-        assert wo.get_work_order(wo_id)["status"] == "reopened"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] == "reopened"
         # 修复后沿原主线重新走完完成阶段（回执不再替开发/合并/发布补状态）
         for state in ("in_dev", "merged", "released", "verifying"):
             assert wo.record_transition(wo_id, state)["ok"] is True
@@ -542,8 +542,8 @@ class TestReopenReacceptLoop:
         )
         assert second["ok"] is True
         view = wo.get_work_order(wo_id)
-        assert view["status"] == "closed"  # type: ignore[index]
-        assert view["wo_id"] == wo_id, "重开再验收仍是原单"  # type: ignore[index]
+        assert view["status"] == "closed"
+        assert view["wo_id"] == wo_id, "重开再验收仍是原单"
         # 两次验收之间不得有重复关闭事件
         closed_events = [
             e for e in view["history"] if e.get("event") == "transition" and e.get("to") == "closed"
@@ -568,14 +568,14 @@ class TestReopenReacceptLoop:
             issue_number=311, release_version="1.0.0", verdict="accepted", evidence=evidence
         )
         assert first["ok"] is True
-        count_after_first = len(wo.get_work_order(wo_id)["history"])  # type: ignore[index]
+        count_after_first = len(wo.get_work_order(wo_id)["history"])
         for _ in range(2):
             replay = wo.record_acceptance_verdict(
                 issue_number=311, release_version="1.0.0", verdict="accepted", evidence=evidence
             )
             assert replay["ok"] is True
             assert replay["reason"] == "already_closed"
-        assert len(wo.get_work_order(wo_id)["history"]) == count_after_first  # type: ignore[index]
+        assert len(wo.get_work_order(wo_id)["history"]) == count_after_first
 
 
 class TestCloseoutNetworkTimeout:

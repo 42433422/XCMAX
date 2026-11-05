@@ -16,7 +16,7 @@ class TestParseOrderTextEmptyAndInvalid:
         assert result["success"] is False
 
     def test_none_input(self):
-        result = _parse_order_text(None)  # type: ignore[arg-type]
+        result = _parse_order_text(None)
         assert result["success"] is False
 
     def test_whitespace_only(self):

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """test_coverage_ratchet.py — scripts/dev/coverage_ratchet.py 单元测试。
 
 覆盖：

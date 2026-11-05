@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, union-attr"
 """Tests for app.infrastructure.skills.skill_maker.skill_maker."""
 
 from __future__ import annotations

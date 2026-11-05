@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 """escalate_to_human.py 单元测试。
 
 覆盖：
@@ -27,7 +26,7 @@ for _p in (DEV_SCRIPTS, CI_SCRIPTS):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-import escalate_to_human as esc  # noqa: E402
+import escalate_to_human as esc
 
 
 def test_script_help_imports_app_from_fhd_working_directory() -> None:

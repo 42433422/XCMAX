@@ -137,7 +137,7 @@ class HealthRemediationMixin:
             store.append(event, stream_id=stream_id)
             return True
         # 存储边界 fail-safe：任何 append 失败都不得使健康检查崩溃或泄漏原始细节
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 事件存储边界，任何失败都必须安全降级
+        except RECOVERABLE_ERRORS:
             # 仅记录固定组件名，绝不记录异常文本 / 类型 / 消息，防止原始细节泄漏
             logger.error("[HealthMonitor] 事件存储写入失败 (component=%s)", component)
             return False

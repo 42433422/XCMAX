@@ -29,8 +29,8 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from app.db.init_db import DEFAULT_DB_FILES, get_db_path  # type: ignore
-from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir  # type: ignore
+from app.db.init_db import DEFAULT_DB_FILES, get_db_path
+from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir
 
 # 与业务相关的常见库（DEFAULT_DB_FILES + users）
 _EXTRA_DB = ("users.db",)
@@ -169,7 +169,7 @@ def main() -> int:
             print(line)
         print("完成。请重启后端再打开前端。")
         return 0
-    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except BOUNDARY_ERRORS as e:
         print(f"失败: {e}", file=sys.stderr)
         return 1
 

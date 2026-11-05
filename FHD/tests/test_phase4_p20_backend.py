@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """COVERAGE_RAMP Phase 4 round 20: service_optimizers (0%→) — cache/monitor/dedup wrappers."""
 
 from __future__ import annotations
@@ -184,7 +183,7 @@ def test_optimize_ai_service_decorator() -> None:
         def __init__(self) -> None:
             self.ready = True
 
-        def chat(self, user_id, message, **kwargs):  # noqa: ANN001
+        def chat(self, user_id, message, **kwargs):
             return {"text": f"{user_id}:{message}"}
 
     d = Dummy()

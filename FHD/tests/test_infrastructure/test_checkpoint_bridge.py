@@ -1,4 +1,3 @@
-# mypy: disable-error-code="index"
 """LG-W1-T4 — LangGraph checkpoint bridge verification (round 2).
 
 Verifies the ``LanggraphCheckpointBridge`` adapter:

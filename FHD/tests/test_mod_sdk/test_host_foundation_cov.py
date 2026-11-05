@@ -43,7 +43,7 @@ class TestIsHostBridgeMod:
         assert is_host_bridge_mod_id("") is False
 
     def test_none_returns_false(self):
-        assert is_host_bridge_mod_id(None) is False  # type: ignore[arg-type]
+        assert is_host_bridge_mod_id(None) is False
 
     def test_generic_host_mod_ids(self):
         from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS
@@ -135,7 +135,7 @@ class TestIsAuxEmployeePack:
         assert is_aux_employee_pack_mod_id("unknown-pack") is False
 
     def test_none(self):
-        assert is_aux_employee_pack_mod_id(None) is False  # type: ignore[arg-type]
+        assert is_aux_employee_pack_mod_id(None) is False
 
 
 # ===========================================================================
@@ -361,7 +361,7 @@ class TestInstallAuxEmployeePackFromRepoSeed:
 
 class TestCatalogStoreCollection:
     def test_non_dict_returns_industry(self):
-        assert catalog_store_collection("not-a-dict") == STORE_COLLECTION_INDUSTRY_MOD  # type: ignore[arg-type]
+        assert catalog_store_collection("not-a-dict") == STORE_COLLECTION_INDUSTRY_MOD
 
     def test_store_collection_field_used(self):
         row = {"store_collection": "custom_col"}

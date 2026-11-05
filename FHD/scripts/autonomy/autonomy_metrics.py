@@ -10,16 +10,16 @@ import sys
 if __package__ in {None, ""} and sys.path:
     sys.path.pop(0)
 
-import argparse  # noqa: E402
-import json  # noqa: E402
-from pathlib import Path  # noqa: E402
+import argparse
+import json
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.application.autonomy.audit_log import summarize_autonomy_audit  # noqa: E402
-from app.domain.autonomy.operating_metrics import evaluate_autonomy_window  # noqa: E402
+from app.application.autonomy.audit_log import summarize_autonomy_audit
+from app.domain.autonomy.operating_metrics import evaluate_autonomy_window
 
 
 def evaluate_window(days: int, *, include_synthetic: bool = False) -> dict[str, object]:

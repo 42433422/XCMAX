@@ -34,7 +34,7 @@ def _has_verified_bearer(request: Request) -> bool:
         from app.application.facades.session_facade import get_session_service
 
         return get_session_service().validate_session(token) is not None
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - authentication failure must fail closed
+    except RECOVERABLE_ERRORS:
         return False
 
 

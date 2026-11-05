@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.ai_helpers import format_money, safe_float  # noqa: F401
+from app.utils.ai_helpers import format_money, safe_float
 
 __all__ = ["format_money", "safe_float"]

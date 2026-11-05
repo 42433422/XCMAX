@@ -74,7 +74,7 @@ class EventDeduplicator:
                 age = time.time() - entry.timestamp
 
                 if age < self._ttl:
-                    logger.debug(f"Duplicate detected: {dedup_key[:16]}... (age={age:.1f}s)")  # noqa: G004
+                    logger.debug(f"Duplicate detected: {dedup_key[:16]}... (age={age:.1f}s)")
                     return True
                 else:
                     # 已过期，删除旧记录

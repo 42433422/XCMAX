@@ -8,7 +8,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.dev.mods_ssot import EXPORT_ONLY_MODS, EXPORT_ROOT, SSOT_ROOT  # noqa: E402
+from scripts.dev.mods_ssot import EXPORT_ONLY_MODS, EXPORT_ROOT, SSOT_ROOT
 
 
 def test_enterprise_bundle_covers_required_host_bridges():

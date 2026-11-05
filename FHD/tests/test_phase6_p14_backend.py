@@ -1,4 +1,3 @@
-# mypy: disable-error-code="assignment, func-returns-value, misc"
 """COVERAGE_RAMP Phase 6 round 14: backend low-coverage modules.
 
 Targets:
@@ -76,7 +75,7 @@ from app.infrastructure.mods.mod_manager import (
 class _ConversationHost(AIConversationService):
     """Test host that bypasses __init__ heavy LLM/service wiring."""
 
-    def __init__(self) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self) -> None:
         # Skip parent __init__ — set only what's needed for tests.
         self.contexts: dict[str, ConversationContext] = {}
         self.user_memory = MagicMock()

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """发货与单据域工作流路由：发货单/出货记录/供应商/MRP/业务对接/Excel 分析/标签与文档模板/系统维护。"""
 
 from __future__ import annotations

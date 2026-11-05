@@ -132,7 +132,7 @@ def _trace_intent_test_run(
             channel="intent_test_route",
             intent="intent_recognition",
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break intent recognition
+    except RECOVERABLE_ERRORS:
         logger.exception("failed to attach AgentRun trace to intent test route")
         return payload
     traced = dict(payload)

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="union-attr"
 """测试 :mod:`app.application.agent_orchestrator.context_window_manager` 的单元测试。
 
 覆盖场景（遵循 ``.trae/rules/test-coverage-90-prompt.md`` 铁律 3）：

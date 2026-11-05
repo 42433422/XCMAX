@@ -10,6 +10,7 @@ exception handler 打印，导致后端日志被同一异常刷屏（win32 实�
 from __future__ import annotations
 
 import asyncio
+from typing import Any, cast
 
 
 def install_proactor_reset_filter() -> None:
@@ -36,5 +37,5 @@ def install_proactor_reset_filter() -> None:
         else:
             current_loop.default_exception_handler(context)
 
-    _filtered_handler._xcagi_proactor_filter = True  # type: ignore[attr-defined]
+    cast(Any, _filtered_handler)._xcagi_proactor_filter = True
     loop.set_exception_handler(_filtered_handler)

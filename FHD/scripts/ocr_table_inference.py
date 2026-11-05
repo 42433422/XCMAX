@@ -1,4 +1,3 @@
-# mypy: disable-error-code="assignment, var-annotated"
 """
 使用 PaddleOCR 文本位置推断表格结构 - 修正版
 """

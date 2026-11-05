@@ -187,7 +187,7 @@ def _custom_track_blocked(issue: dict[str, Any], issue_number: int) -> tuple[boo
         from app.domain.shared_services.ssot import find_by_issue
 
         view = find_by_issue(issue_number)
-    except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单视图读取失败不阻断通用轨道派发
+    except BOUNDARY_ERRORS:
         logger.debug("work_order track lookup skipped", exc_info=True)
         return False, ""
     if view is None:
@@ -289,7 +289,7 @@ def run(args: argparse.Namespace) -> int:
         issue = _gh_get(f"{api}/issues/{issue_number}", args.token)
         comment = _gh_get(f"{api}/issues/comments/{approval_comment_id}", args.token)
         comments = _gh_get(f"{api}/issues/{issue_number}/comments?per_page=100", args.token)
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - audit report must survive API errors
+    except BOUNDARY_ERRORS as exc:
         return _finish(result, ok=False, status="failed", reason=f"GitHub read failed: {exc}")
 
     valid, reason = _validate_promotion(
@@ -352,11 +352,11 @@ def run(args: argparse.Namespace) -> int:
         result.receipt_comment_id = int(receipt.get("id") or 0)
         if not result.receipt_comment_id:
             raise RuntimeError("GitHub did not return a receipt comment id")
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         if added_implement_label:
             try:
                 _gh_delete_label(args.repo, issue_number, IMPLEMENT_LABEL, args.token)
-            except BOUNDARY_ERRORS as rollback_exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as rollback_exc:
                 logger.error("label rollback failed: %s", rollback_exc)
         return _finish(result, ok=False, status="failed", reason=f"promotion prepare failed: {exc}")
 
@@ -373,7 +373,7 @@ def run(args: argparse.Namespace) -> int:
             },
         )
         result.dispatch_requested = True
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         failure_body = _receipt_body(
             marker,
             status="failed",
@@ -389,12 +389,12 @@ def run(args: argparse.Namespace) -> int:
                 args.token,
                 {"body": failure_body},
             )
-        except BOUNDARY_ERRORS as receipt_exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as receipt_exc:
             logger.error("failed to update dispatch failure receipt: %s", receipt_exc)
         if added_implement_label:
             try:
                 _gh_delete_label(args.repo, issue_number, IMPLEMENT_LABEL, args.token)
-            except BOUNDARY_ERRORS as rollback_exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as rollback_exc:
                 logger.error("label rollback failed: %s", rollback_exc)
         return _finish(result, ok=False, status="dispatch_failed", reason=str(exc))
 
@@ -412,7 +412,7 @@ def run(args: argparse.Namespace) -> int:
             args.token,
             {"body": completed_body},
         )
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         return _finish(
             result,
             ok=False,
@@ -447,7 +447,7 @@ def _record_in_dev_transition(issue_number: int) -> None:
             note="owner 批准并派发实现工作流",
             source="capability_proposal_promote",
         )
-    except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单写入失败不阻塞派发回执
+    except BOUNDARY_ERRORS:
         logger.debug("work_order in_dev transition skipped", exc_info=True)
 
 

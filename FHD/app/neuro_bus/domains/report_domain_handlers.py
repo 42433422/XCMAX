@@ -131,7 +131,7 @@ async def handle_monthly_summary_requested(event: NeuroEvent) -> dict[str, Any]:
 
     try:
         result = gen_fn(tenant_id, year, month)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 — 任何异常都不能崩溃总线
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("[ReportServiceDomain] generate_monthly_finance_summary 抛异常: %s", exc)
         _publish_event(
             REPORT_MONTHLY_SUMMARY_FAILED,

@@ -30,7 +30,7 @@ def store_webhook_secret(owner_user_id: int, secret: str) -> str:
     ref = f"etl:{owner_user_id}:{uuid.uuid4()}"
     try:
         keyring.set_password(_SERVICE_NAME, ref, secret)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 不返回系统异常细节
+    except RECOVERABLE_ERRORS as exc:
         raise EltError(
             "ELT_CREDENTIAL_STORE_WRITE_FAILED",
             "系统凭据管理器写入失败，Webhook 配置未保存",
@@ -55,7 +55,7 @@ def read_webhook_secret(secret_ref: str | None) -> str:
         import keyring
 
         value = keyring.get_password(_SERVICE_NAME, ref)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         raise EltError(
             "ELT_CREDENTIAL_UNAVAILABLE", "Webhook 凭据无法读取，已拒绝发送", status_code=503
         ) from exc
@@ -74,5 +74,5 @@ def delete_webhook_secret(secret_ref: str | None) -> None:
         import keyring
 
         keyring.delete_password(_SERVICE_NAME, ref)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 删除配置不泄露后端信息
+    except RECOVERABLE_ERRORS:
         return

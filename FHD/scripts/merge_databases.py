@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="attr-defined, operator, return-value"
 """
 数据库合并脚本 - 将 customers.db 合并到 products.db
 
@@ -150,7 +149,7 @@ def merge_purchase_units(dry_run: bool = True) -> dict:
         conn.commit()
         print(f"\n✅ 成功合并 {results['records_copied']} 条记录")
 
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         conn.rollback()
         results["errors"].append(str(e))
         print(f"\n❌ 合并失败: {e}")

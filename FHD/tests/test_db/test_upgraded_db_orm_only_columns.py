@@ -101,7 +101,7 @@ def _indexes(db: Path, table: str) -> set[str]:
 
 
 def _fresh_create_all_db(db: Path) -> None:
-    import app.db.models  # noqa: F401
+    import app.db.models
     from app.db.db_base import Base
 
     engine = sa.create_engine(_url(db))
@@ -130,7 +130,7 @@ def _assert_matches_fresh(repaired: Path, fresh: Path) -> None:
 
 
 def _assert_orm_queries_work(db: Path) -> None:
-    import app.db.models  # noqa: F401
+    import app.db.models
     from app.db.models.customer import Customer
     from app.db.models.finance import FinancialTransaction
 

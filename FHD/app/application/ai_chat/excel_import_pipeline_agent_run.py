@@ -1,11 +1,10 @@
-# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Excel 导入管线：确定性工作流的 AgentRun 追踪与导入确认流（叶子模块）。"""
 
 from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from app.application.ai_chat.excel_import_policy import _enrich_confirmation_inner
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -14,6 +13,11 @@ logger = logging.getLogger(__name__)
 
 
 class ExcelImportAgentRunMixin:
+    if TYPE_CHECKING:
+        _merge_tool_runtime_context: Any
+        _format_agent_run_response: Callable[..., dict[str, Any]]
+        _pending_workflows: Any
+
     @staticmethod
     def _attach_deterministic_workflow_trace(
         payload: dict[str, Any],

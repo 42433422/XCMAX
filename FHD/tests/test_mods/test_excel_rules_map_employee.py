@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found, no-any-return, union-attr"
 from __future__ import annotations
 
 import asyncio

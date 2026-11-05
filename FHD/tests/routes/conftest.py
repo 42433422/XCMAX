@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined, misc"
 """Shared fixtures for tests/routes/ — coverage ramp C3.3-a.
 
 Provides:

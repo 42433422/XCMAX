@@ -323,7 +323,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 ):
                     run = self._owned_run(db, run_id, owner_user_id)
                     self._record_execution_metrics(run, started_at, "failed")
-            except RECOVERABLE_ERRORS:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 logger.exception("Unable to persist ETL execution failure for %s", run_id)
         finally:
@@ -339,7 +339,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             etl_run_duration_seconds.labels("execute", run.target_type).observe(
                 max(0.0, time.monotonic() - started_at)
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.debug("ETL execution metrics unavailable", exc_info=True)
 
     def _execute_rows(
@@ -382,7 +382,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 run.executed_rows = executed
                 run.progress = min(99, int((chunk_start + len(chunk)) / max(1, total) * 100))
                 db.commit()
-            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+            except RECOVERABLE_ERRORS as exc:
                 if isinstance(exc, EltError) and exc.code == "ELT_OPERATION_LEASE_LOST":
                     db.rollback()
                     raise
@@ -469,7 +469,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             from app.utils.metrics import etl_retries_total
 
             etl_retries_total.labels(run.target_type).inc()
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.debug("ETL retry metrics unavailable", exc_info=True)
         if rerun_parse:
             self._submit_preview(run_id, tenant_id, owner_user_id, operation_token=operation.token)

@@ -24,7 +24,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _MODSTORE_DEPLOY = _REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"
 sys.path.insert(0, str(_MODSTORE_DEPLOY))
 
-from modstore_server.evolution_ledger import list_events, mark_audited  # noqa: E402
+from modstore_server.evolution_ledger import list_events, mark_audited
 
 
 def _parse_since(since: str | None) -> float | None:

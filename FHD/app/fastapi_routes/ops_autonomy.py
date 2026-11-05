@@ -67,7 +67,7 @@ def _auth(
 
             if is_admin_account_session():
                 return
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 旁路失败走 webhook token
+        except RECOVERABLE_ERRORS:
             pass
     expected = _expected_token()
     supplied = str(x_autonomy_token or "").strip()

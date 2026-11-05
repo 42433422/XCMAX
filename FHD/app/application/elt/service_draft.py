@@ -153,7 +153,7 @@ class DraftServiceMixin:
                 etl_manual_corrections_total.labels("mapping").inc()
             if overrides:
                 etl_manual_corrections_total.labels("row_action").inc(len(overrides))
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.debug("ETL correction metrics unavailable", exc_info=True)
 
     def _submit_revalidation(
@@ -210,7 +210,7 @@ class DraftServiceMixin:
                     with tenant_scope(tenant_id):
                         if operation is not None:
                             fail_operation(db, operation, code=code, message=message)
-                except RECOVERABLE_ERRORS:  # noqa: BLE001
+                except RECOVERABLE_ERRORS:
                     db.rollback()
                     logger.exception("Unable to persist ETL revalidation failure for %s", run_id)
             finally:

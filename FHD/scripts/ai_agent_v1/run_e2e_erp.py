@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="assignment"
 """AI Agent V1 端到端 — ERP：客户下单 → AI 自动审单 → 自动发货 → 通知 → Excel。
 
 完整链路：
@@ -50,8 +49,8 @@ def _stub_planner_rag() -> None:
     def _factory() -> _Stub:
         return _Stub()
 
-    rag_mod.get_user_memory_rag_app_service = _factory  # type: ignore[method-assign]
-    app_pkg.get_user_memory_rag_app_service = _factory  # type: ignore[attr-defined]
+    rag_mod.get_user_memory_rag_app_service = _factory
+    app_pkg.get_user_memory_rag_app_service = _factory
 
 
 def _build_erp_plan(plan_id: str) -> Any:

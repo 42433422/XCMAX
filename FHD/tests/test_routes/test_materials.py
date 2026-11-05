@@ -1,4 +1,3 @@
-# mypy: disable-error-code="misc"
 """原材料管理路由冒烟（FastAPI 版）。
 
 历史：

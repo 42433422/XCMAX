@@ -113,7 +113,7 @@ def frontend_smoke_test():
                 print(f"  - ID: {unit[0]}, 名称: {unit[1]}")
 
         conn.close()
-    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except BOUNDARY_ERRORS as e:
         print(f"❌ 检查customer数据库失败: {e}")
 
     # 测试4: 检查前端可能使用的其他数据源
@@ -161,7 +161,7 @@ def frontend_smoke_test():
 
         except FileNotFoundError:
             print(f"❌ 文件不存在: {js_file}")
-        except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except BOUNDARY_ERRORS as e:
             print(f"❌ 读取文件失败: {e}")
 
     print("\n" + "=" * 60)
@@ -209,7 +209,7 @@ def check_backend_implementation():
                     if pattern in content:
                         print(f"  ✅ 使用服务: {pattern}")
 
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"❌ 检查后端实现失败: {e}")
 
 

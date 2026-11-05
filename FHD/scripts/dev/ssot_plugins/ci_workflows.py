@@ -20,7 +20,7 @@ _FHD_ROOT = Path(__file__).resolve().parents[3]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
 
-from scripts.dev.ssot_plugins.plugin_base import run_command  # noqa: E402
+from scripts.dev.ssot_plugins.plugin_base import run_command
 
 REPO_ROOT = _FHD_ROOT.parent  # 仓根（publish 脚本在 scripts/dev/ 而非 FHD/scripts/dev/）
 GENERATED_PREFIX = "fhd-"

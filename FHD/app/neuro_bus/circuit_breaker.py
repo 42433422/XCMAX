@@ -144,7 +144,7 @@ class CircuitBreaker(CircuitBreakerExecutionMixin):
         for callback in self._state_change_callbacks:
             try:
                 callback(old_state, new_state, ctx)
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - 回调异常不应影响熔断
+            except RECOVERABLE_ERRORS as e:
                 logger.warning("Circuit [%s] state change callback failed: %s", self._name, e)
 
     def can_execute(self) -> bool:

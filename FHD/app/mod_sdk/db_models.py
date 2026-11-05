@@ -11,6 +11,6 @@
 
 from __future__ import annotations
 
-from app.db.models import PurchaseUnit  # noqa: F401
+from app.db.models import PurchaseUnit
 
 __all__ = ["PurchaseUnit"]

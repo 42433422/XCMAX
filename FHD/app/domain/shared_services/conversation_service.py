@@ -161,7 +161,7 @@ class ConversationService(NeuroEventPublisherMixin):
                         "channel": "xcagi_chat",
                     },
                 )
-            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  推送边界：失败不影响消息保存
+            except RECOVERABLE_ERRORS as exc:
                 logger.warning("conversation push notify failed: %s", exc)
 
         return message_id

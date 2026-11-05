@@ -24,6 +24,7 @@ from app.application.agent_orchestrator.run_record_mapping import (
 )
 from app.application.agent_orchestrator.task_models import (
     AgentTask,
+    TaskControlAction,
     TaskControlCommand,
     mod_id_of_run,
     task_from_run,
@@ -560,7 +561,7 @@ class SQLAlchemyAgentRunRepository:
         command = TaskControlCommand(
             task_id=self._run_task_id(run),
             run_id=str(run_id or ""),
-            action=str(action),  # type: ignore[arg-type]
+            action=cast(TaskControlAction, str(action)),
             requested_by=str(requested_by or ""),
         )
         with self._session_scope() as db:

@@ -298,7 +298,7 @@ class TestDeliveryCloseout:
         assert call["evidence"]["per_platform"]["win"]["installed"] == 1
         assert call["evidence"]["per_platform"]["mac"]["installed"] == 1
         # 远端权威，本地 JSONL 视图不重复写
-        assert wo.get_work_order(wo_id)["status"] != "closed"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] != "closed"
         assert [label["name"] for label in pipeline.gh.issues[number]["labels"]] == [
             "customer-accepted"
         ]
@@ -410,7 +410,7 @@ class TestDeliveryCloseout:
 
         # 回写失败 → 不推进工单（不得误报已验收）；运行器报错返回 1
         assert rc == 1
-        assert wo.get_work_order(wo_id)["status"] != "closed"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] != "closed"
 
     def test_repeated_receipts_idempotent(self, isolates: Path, pipeline: SimpleNamespace) -> None:
         version = "1.0.0.4"
@@ -512,5 +512,5 @@ class TestDeliveryCloseout:
 
         rc = closeout.run(_args(_config(isolates, version, released_sha, [number])))
         assert rc == 0
-        assert wo.get_work_order(wo_id)["status"] != "closed"  # type: ignore[index]
+        assert wo.get_work_order(wo_id)["status"] != "closed"
         assert pipeline.gh.comment_count == 0, "pending 不得回写/关闭"

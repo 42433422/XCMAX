@@ -101,6 +101,7 @@ dev = [
     "types-psutil",
     "types-aiofiles",
     "types-pillow",
+    "types-reportlab",
     "types-openpyxl",
     "types-defusedxml",
     "celery-types",
@@ -138,7 +139,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001"]
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001", "RUF100"]
 ignore = [
     "E501",    # line too long (handled by formatter)
     "E402",    # module-import-not-at-top (历史遗留；DI registry 延迟导入由测试单独禁止)
@@ -217,6 +218,7 @@ line-ending = "auto"
 [tool.mypy]
 python_version = "3.11"
 warn_return_any = true
+warn_unused_ignores = true
 warn_unused_configs = true
 ignore_missing_imports = false
 explicit_package_bases = true
@@ -250,6 +252,7 @@ ignore_errors = true
 # core type gate remains independent of platform-only or ML-only distributions.
 [[tool.mypy.overrides]]
 module = [
+    "attendance_engine.*",
     "alipay.*",
     "barcode.*",
     "cv2.*",

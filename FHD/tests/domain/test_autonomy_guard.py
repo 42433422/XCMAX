@@ -1,4 +1,3 @@
-# mypy: disable-error-code="func-returns-value, index, operator"
 from __future__ import annotations
 
 import copy

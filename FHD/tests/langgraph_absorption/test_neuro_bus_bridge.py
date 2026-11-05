@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """LG-W1-T5 — NeuroBusEventBridge 事件桥验收。
 
 校验 ``app/infrastructure/workflow/neuro_bus_bridge.py``：
@@ -123,10 +122,10 @@ def test_event_bus_port_publish_plain_dict_sets_type():
 def test_fail_soft_when_bus_publish_raises(exc):
     bus = RecordingBus()
 
-    def _boom(event: NeuroEvent) -> bool:  # noqa: ARG001
+    def _boom(event: NeuroEvent) -> bool:
         raise exc("simulated failure")
 
-    bus.publish = _boom  # type: ignore[method-assign]
+    bus.publish = _boom
     bridge = NeuroBusEventBridge(bus=bus)
     # 总线抛任意异常（含不在 RECOVERABLE_ERRORS 内的 TypeError/AttributeError）：
     # 绝不外抛，保证端口「never raise」契约

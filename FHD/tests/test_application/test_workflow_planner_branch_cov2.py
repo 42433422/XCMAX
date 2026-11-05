@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """Workflow planner parsing, dispatch, validation and fallback regression."""
 
 from __future__ import annotations

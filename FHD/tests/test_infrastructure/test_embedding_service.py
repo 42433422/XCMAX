@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """EmbeddingService 单元测试。
 
 覆盖：

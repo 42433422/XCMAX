@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """ODOO-W0-01 source boundary tests.
 
 Mutation-kill coverage for the Odoo 18 Community source boundary verifier:
@@ -781,6 +780,6 @@ def test_online_integration_real_network():
             _load("source_manifest.json"),
             fetch=retry_throttled_fetch(vs.default_fetcher(vs.EXPECTED_COMMIT)),
         )
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         pytest.skip(f"network unavailable: {exc}")
     assert errors == []

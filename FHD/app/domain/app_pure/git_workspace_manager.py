@@ -59,7 +59,7 @@ class GitWorkspaceManager:
         try:
             r = self.git(cwd, "rev-parse", "--is-inside-work-tree", timeout=15)
             return r.returncode == 0 and r.stdout.strip() == "true"
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             return False
 
     @staticmethod
@@ -97,14 +97,14 @@ class GitWorkspaceManager:
                 f"+refs/heads/{branch}:refs/remotes/origin/{branch}",
                 timeout=120,
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             pass
         for ref in (f"origin/{branch}", branch):
             try:
                 r = self.git(base_cwd, "rev-parse", "--verify", "--quiet", ref, timeout=15)
                 if r.returncode == 0:
                     return ref
-            except RECOVERABLE_ERRORS:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:
                 continue
         return ""
 
@@ -134,7 +134,7 @@ class GitWorkspaceManager:
             return  # 持久复用 worktree：保留以供下个任务复用，不删（下次 prepare 时重置为干净基线）。
         try:
             self.git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=60)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.warning("worktree remove 失败 %s", wt_path, exc_info=True)
 
     def commit_and_push(self, cwd: str, branch: str, text: str) -> tuple[bool, str]:
@@ -155,7 +155,7 @@ class GitWorkspaceManager:
                     :300
                 ]
             return True, f"已 push 到 origin/{branch}"
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as e:
             return False, f"git 异常：{str(e)[:300]}"
 
 

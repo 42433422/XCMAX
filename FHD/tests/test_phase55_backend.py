@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, misc, return-value"
 """COVERAGE_RAMP Phase 55: finance_app_service, app.db pool/health, rate_limiter redis client,
 security_headers, user_memory_service (mocked I/O)."""
 

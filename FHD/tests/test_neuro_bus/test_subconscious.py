@@ -58,7 +58,7 @@ class TestLocalEmbedder:
     def test_embed_query_none_returns_zero_vector(self):
         """None 输入返回零向量。"""
         emb = LocalEmbedder(dim=64)
-        vec = emb.embed_query(None)  # type: ignore[arg-type]
+        vec = emb.embed_query(None)
         assert len(vec) == 64
         assert all(v == 0.0 for v in vec)
 

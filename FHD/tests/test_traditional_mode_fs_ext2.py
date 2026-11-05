@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined, index"
 """Extended tests for ``app.traditional_mode_fs`` covering low-coverage branches."""
 
 from __future__ import annotations

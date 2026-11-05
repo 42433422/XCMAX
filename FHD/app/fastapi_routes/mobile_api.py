@@ -405,7 +405,7 @@ async def mobile_me(request: Request, user=Depends(get_mobile_user)):
     auth_app = get_auth_app_service()
     try:
         permissions = auth_app.get_user_permissions(user)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  # pragma: no cover - production schema drift guard
+    except RECOVERABLE_ERRORS as exc:  # pragma: no cover - production schema drift guard
         logger.warning("mobile me permissions fallback: %s", exc)
         role = str(getattr(user, "role", "") or "").strip()
         permissions = ["*"] if role in {"admin", "super_admin", "owner"} else []

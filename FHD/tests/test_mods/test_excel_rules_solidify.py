@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, import-not-found, no-any-return, union-attr"
 """固化循环测试：LLM 写 records 生产者脚本 → 金样对账 → 固化。
 
 金样判据全确定性（反读器 + diff）；LLM 用 mock 演练协作契约：
@@ -322,7 +321,7 @@ def test_solidify_iterates_on_feedback(tmp_path: Path) -> None:
     assert len(result["iterations"]) == 2
     assert "band 未定义" in result["iterations"][0]["error"]
     # 第二轮 prompt 里带了失败反馈
-    second_prompt = call_llm.calls[1][1]["content"]  # type: ignore[attr-defined]
+    second_prompt = call_llm.calls[1][1]["content"]
     assert "上一轮失败反馈" in second_prompt
 
 
@@ -376,7 +375,7 @@ def test_solidify_convert_action_end_to_end(tmp_path: Path) -> None:
 
     # 固化产物可直接复跑（零 LLM）：加载脚本重算 records
     namespace: dict = {}
-    exec(compile(script, "<t>", "exec"), namespace)  # noqa: S102
+    exec(compile(script, "<t>", "exec"), namespace)
     records = namespace["produce_records"](_source_workbook(), rules)
     assert len(records) == 3
 
@@ -440,7 +439,7 @@ def test_solidified_example_passes_golden_gate(tmp_path: Path) -> None:
     code = SOLIDIFIED_EXAMPLE.read_text(encoding="utf-8")
     assert "taiyangniao" not in code.replace("taiyangniao 依赖", "")
     namespace: dict = {}
-    exec(compile(code, str(SOLIDIFIED_EXAMPLE), "exec"), namespace)  # noqa: S102
+    exec(compile(code, str(SOLIDIFIED_EXAMPLE), "exec"), namespace)
     source_wb = _read_json(reader, SUNBIRD_SOURCE, tmp_path / "src_wb.json")
     records = namespace["produce_records"](source_wb, rules)
 

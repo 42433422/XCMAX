@@ -69,7 +69,7 @@ class ApprovalService:
                 return True
             if requires_write_approval(node.tool_id, node.action):
                 return True
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             # fail-closed：风险注册表缺失或查询异常时默认要求审批，绝不静默放行写动作。
             logger.warning(
                 "risk_actions registry lookup failed; fail-closed requiring approval for %s.%s",

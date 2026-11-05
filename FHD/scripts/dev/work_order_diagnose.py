@@ -38,11 +38,11 @@ _FHD_ROOT = Path(__file__).resolve().parents[2]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
 
-from app.domain.shared_services.capability_proposal_recorder import (  # noqa: E402
+from app.domain.shared_services.capability_proposal_recorder import (
     list_pending_proposals,
 )
-from app.domain.shared_services.ssot import derive_wo_id  # noqa: E402
-from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
+from app.domain.shared_services.ssot import derive_wo_id
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 _DIAGNOSIS_DIR = Path(
     os.environ.get("WORK_ORDER_DIAGNOSIS_DIR") or (_FHD_ROOT / "test_reports" / "diagnosis")

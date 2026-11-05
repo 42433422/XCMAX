@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 from __future__ import annotations
 
 """Branch-coverage supplement for dataset_rag_app_service.py.

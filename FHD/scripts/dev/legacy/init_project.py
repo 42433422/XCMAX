@@ -56,7 +56,7 @@ def init_db_tables():
         initialize_databases()
         init_distillation_tables(engine)
         print("数据库表初始化完成")
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"数据库初始化失败: {e}")
         print("注意: 如果数据库已存在此操作是安全的")
 

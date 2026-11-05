@@ -134,7 +134,7 @@ def import_bandao_fengqing():
 
         return True
 
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"导入过程中出错: {e}")
         return False
 
@@ -179,7 +179,7 @@ def check_import_result():
 
         conn.close()
 
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"检查导入结果时出错: {e}")
 
 

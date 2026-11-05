@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """ERP 域工作流路由：客户/产品/物料/库存/采购/销售/报表/资金。"""
 
 from __future__ import annotations
@@ -384,10 +383,10 @@ def _registered_router_reports(
         "purchase": ("start_date", "end_date", "group_by"),
     }
 
-    def query(kind):
-        return getattr(svc, f"get_{kind}_report")(
+    def query(kind: str) -> dict[str, Any]:
+        return cast(dict[str, Any], getattr(svc, f"get_{kind}_report")(
             **{key: params[key] for key in filters[kind] if params.get(key) is not None}
-        )
+        ))
 
     if action.endswith("_summary") and action.removesuffix("_summary") in filters:
         return query(action.removesuffix("_summary"))

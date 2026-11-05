@@ -84,7 +84,7 @@ class WorkflowPlanStore:
                 tables=[cast("Table", WorkflowPlan.__table__)],
                 checkfirst=True,
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 建表失败不阻断主流程，仅告警
+        except RECOVERABLE_ERRORS:
             logger.warning("workflow_plans 建表失败，计划持久化降级", exc_info=True)
         finally:
             self._schema_ensured = True

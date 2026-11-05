@@ -61,6 +61,6 @@ def audit_log(
                 "severity": severity,
             }
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 审计副作用必须吞掉一切异常
+    except RECOVERABLE_ERRORS:
         pass
     return audit_id

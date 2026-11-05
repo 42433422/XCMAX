@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """ERP 主数据域工作流路由：产品 / 物料。"""
 
 from __future__ import annotations

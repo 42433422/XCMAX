@@ -33,7 +33,7 @@ def validate_compatibility_preset(
         available = {
             str(item.get("id") or "").strip() for item in list_profiles() if isinstance(item, dict)
         }
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - fail closed if the registry is unavailable
+    except RECOVERABLE_ERRORS as exc:
         raise EltError(
             "ELT_COMPATIBILITY_PRESET_UNAVAILABLE",
             "兼容预设暂时不可用，请选择自动识别",

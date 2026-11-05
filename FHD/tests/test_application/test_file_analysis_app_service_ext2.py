@@ -352,8 +352,8 @@ def test_analyze_sqlite_db_pragma_error(tmp_path) -> None:
     ).fetchall
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cur
-    mock_conn.__enter__ = lambda self: mock_conn  # type: ignore[method-assign]
-    mock_conn.__exit__ = lambda self, *a: None  # type: ignore[method-assign]
+    mock_conn.__enter__ = lambda self: mock_conn
+    mock_conn.__exit__ = lambda self, *a: None
     with patch(
         "app.application.file_analysis_app_service.sqlite_conn",
         return_value=mock_conn,

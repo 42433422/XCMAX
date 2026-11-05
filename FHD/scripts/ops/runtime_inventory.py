@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """运行时真相清单：desired（拓扑 SSOT）× actual（端口/进程/systemd/health）。
 
 用法:
@@ -102,7 +101,7 @@ def http_health(url: str, timeout: float = 2.0) -> bool | None:
         return None
     try:
         req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return 200 <= int(resp.status) < 400
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
         return False

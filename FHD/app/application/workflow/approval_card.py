@@ -31,7 +31,7 @@ def build_approval_card_payload(*, action: str, inner: dict[str, Any]) -> dict[s
             if tool_id and get_action_approval(tool_id, act) == "always":
                 approval_required = True
                 confirm_mode = "approval"
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         pass
 
     return {

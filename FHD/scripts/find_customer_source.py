@@ -70,7 +70,7 @@ def find_customer_data_source():
 
                 conn.close()
 
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:
                 print(f"  ❌ 检查数据库时出错: {e}")
 
     # 检查前端可能使用的其他数据源
@@ -132,7 +132,7 @@ def check_frontend_customer_data():
 
             conn.close()
 
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:
             print(f"  ❌ 检查数据库时出错: {e}")
     else:
         print("  ❌ 数据库文件不存在")

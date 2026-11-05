@@ -1,4 +1,3 @@
-# mypy: disable-error-code="func-returns-value, import-not-found"
 """ai_self_heal.py 单元测试。
 
 覆盖：
@@ -33,7 +32,7 @@ CI_SCRIPTS = FHD_ROOT / "scripts" / "ci"
 if str(CI_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(CI_SCRIPTS))
 
-import ai_self_heal as heal  # noqa: E402
+import ai_self_heal as heal
 
 
 def test_script_help_imports_app_from_fhd_working_directory() -> None:
@@ -105,7 +104,7 @@ class TestExtractErrors:
 
     def test_empty_log_returns_empty_list(self) -> None:
         assert heal.extract_errors("") == []
-        assert heal.extract_errors(None) == []  # type: ignore[arg-type]
+        assert heal.extract_errors(None) == []
 
     def test_dedup_identical_errors(self) -> None:
         log = (
@@ -794,7 +793,7 @@ class TestAutonomyRecursion:
         assert heal.is_autonomy_branch("feature/foo") is False
         assert heal.is_autonomy_branch("main") is False
         assert heal.is_autonomy_branch("") is False
-        assert heal.is_autonomy_branch(None) is False  # type: ignore[arg-type]
+        assert heal.is_autonomy_branch(None) is False
 
     def test_main_skips_autonomy_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # autonomy/ 分支应直接 return 0，不调用 fetch_workflow_logs

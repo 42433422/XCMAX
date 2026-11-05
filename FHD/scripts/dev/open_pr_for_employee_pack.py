@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """创建分支 + commit + push + 开 PR。"""
 
 from __future__ import annotations

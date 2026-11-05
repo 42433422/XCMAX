@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 import sqlite3
 import sys
 

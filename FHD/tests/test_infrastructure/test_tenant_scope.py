@@ -111,7 +111,7 @@ class TestGlobalTenantEvent:
 
     @pytest.fixture()
     def db(self):
-        import app.db.models  # noqa: F401  导入触发全局事件安装
+        import app.db.models
         from app.db.models.material import Material
         from app.db.models.user import User
 

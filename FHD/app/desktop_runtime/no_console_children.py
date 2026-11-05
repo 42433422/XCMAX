@@ -19,6 +19,7 @@ import ctypes
 import inspect
 import subprocess
 import sys
+from typing import Any, cast
 
 CREATE_NO_WINDOW = 0x08000000
 # DETACHED_PROCESS | CREATE_NEW_CONSOLE — the caller asked for its own console.
@@ -30,7 +31,7 @@ _installed = False
 def _owns_console() -> bool:
     """True when children inherit our console and cannot open a new window."""
     try:
-        return bool(ctypes.windll.kernel32.GetConsoleWindow())  # type: ignore[attr-defined]
+        return bool(cast(Any, ctypes).windll.kernel32.GetConsoleWindow())  
     except (AttributeError, OSError):
         return True
 
@@ -64,6 +65,6 @@ def install_no_console_child_defaults() -> bool:
         )
         return original(*bound.args, **bound.kwargs)
 
-    subprocess.Popen.__init__ = _patched  # type: ignore[method-assign]
+    cast(Any, subprocess.Popen).__init__ = _patched  
     _installed = True
     return True

@@ -452,7 +452,7 @@ class WorkflowDefinitionAppService:
             from dataclasses import asdict
 
             return asdict(node)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 兜底序列化，所有异常都退化为 node_id 字符串
+        except RECOVERABLE_ERRORS:
             return {"node_id": str(node)}
 
 

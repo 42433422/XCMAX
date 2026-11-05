@@ -275,7 +275,7 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
                 summary = load_json(run.summary_json, {})
                 if summary.get("llm_degraded"):
                     etl_llm_degradations_total.labels(run.target_type).inc()
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.debug("ETL preview metrics unavailable", exc_info=True)
 
     def _suggest_mappings(
