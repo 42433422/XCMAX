@@ -147,6 +147,7 @@ def test_local_bridge_forwards_session_bound_token_only() -> None:
         (401, "fresh", 200),
         (401, "", 200),
         (403, "fresh", 200),
+        (502, "fresh", 200),
         (503, "fresh", 200),
         (401, "fresh", 401),
     ],
@@ -187,7 +188,9 @@ async def test_bridge_recovers_only_before_sending(method, initial, refresh_toke
     else:
         refresh.assert_not_awaited()
     recovered = initial == 401 and bool(refresh_token)
-    assert len([r for r in requests if r[0] == "GET"]) == (2 if recovered else 1)
+    # 502/503/504 是网关瞬时故障，GET 预检会多尝试一次；POST 仍只发一次。
+    transient = initial in {502, 503, 504}
+    assert len([r for r in requests if r[0] == "GET"]) == (2 if recovered or transient else 1)
     assert len([r for r in requests if r[0] == "POST"]) == int(recovered and method == "POST")
     assert response.status_code == (
         post_status if recovered and method == "POST" else 200 if recovered else initial

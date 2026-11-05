@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from _thread import LockType
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -84,7 +85,18 @@ class RelayTaskDelivery:
             body = response.json()
             data = body.get("data") if isinstance(body, dict) else {}
             tasks = data.get("tasks") if isinstance(data, dict) else []
-        changes: JsonObject = {"last_relay_sync_at": int(self.ports.now())}
+        changes: JsonObject = {}
+        now_epoch = int(self.ports.now())
+        try:
+            sync_persist_interval = max(
+                4, int(os.environ.get("XCAGI_RELAY_SYNC_PERSIST_INTERVAL_SEC") or "60")
+            )
+        except (TypeError, ValueError):
+            sync_persist_interval = 60
+        # 心跳时间戳不需要每轮 poll 都写盘；降频可显著降低 Windows 上
+        # 临时文件替换次数，也减少异常退出时配置被破坏的窗口。
+        if now_epoch - int(config.get("last_relay_sync_at") or 0) >= sync_persist_interval:
+            changes["last_relay_sync_at"] = now_epoch
         desktop = data.get("desktop") if isinstance(data, dict) else None
         if isinstance(desktop, dict):
             is_paired = (

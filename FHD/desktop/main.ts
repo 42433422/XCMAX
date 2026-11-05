@@ -279,6 +279,8 @@ function bootstrap(): void {
           writeBackendLog(`[updater] install receipt deferred: ${error instanceof Error ? error.message : error}\n`)
         }
         if (!isE2ERun) {
+          // 市场 502/尚未绑定市场账号时先落本机 outbox；15 分钟内重试，
+          // 而不是等到下一次启动或 6 小时心跳，避免安装回执长期滞留。
           const heartbeat = setInterval(() => {
             void reportPendingUpdateInstallation({
               backendPort: DEFAULT_PORT,
@@ -289,7 +291,7 @@ function bootstrap(): void {
             }).catch(error => {
               writeBackendLog(`[updater] installation heartbeat deferred: ${error instanceof Error ? error.message : error}\n`)
             })
-          }, 6 * 60 * 60 * 1000)
+          }, 15 * 60 * 1000)
           heartbeat.unref()
         }
         // 更新日志（What's New）：版本变化时弹一次原生提示（首次运行与测试/E2E 模式跳过）。
