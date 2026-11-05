@@ -225,6 +225,7 @@ class ApprovalRequest:
     approved_at: datetime | None = None
     rejected_at: datetime | None = None
     approver_comment: str = ""
+    tenant_id: int | None = None
 
 
 @dataclass

@@ -293,6 +293,29 @@ class TestWorkflowEmployeesJson:
 
 
 class TestOutputsRoute:
+    @pytest.fixture(autouse=True)
+    def _session(self, logged_in_session):
+        self.user = logged_in_session
+
+    def test_anonymous_request_is_rejected(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.infrastructure.auth.dependencies.resolve_session_user", lambda _request: None
+        )
+        resp = TestClient(_create_app()).get("/outputs/report.pdf")
+        assert resp.status_code == 401
+
+    def test_other_tenant_file_is_not_served(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            other = os.path.join(tmpdir, "tenants", "2", "shipment_outputs")
+            os.makedirs(other)
+            with open(os.path.join(other, "report.pdf"), "wb") as f:
+                f.write(b"tenant 2")
+            self.user.tenant_id = 1
+            client = TestClient(_create_app())
+            with patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=tmpdir):
+                assert client.get("/outputs/report.pdf").status_code == 404
+                assert client.get("/outputs/../../2/shipment_outputs/report.pdf").status_code == 404
+
     def test_missing_outputs_dir_returns_404(self):
         app = _create_app()
         client = TestClient(app)

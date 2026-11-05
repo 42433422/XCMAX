@@ -21,6 +21,18 @@ from resources.config.approval_config import (
 logger = logging.getLogger(__name__)
 
 
+def _tenant_from_context(runtime_context: dict[str, Any] | None) -> int | None:
+    raw = (runtime_context or {}).get("tenant_id")
+    if raw in (None, ""):
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        raw = current_tenant_id()
+    try:
+        return int(raw) if raw not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
 class ApprovalService:
     _AI_WORKFLOW_FLOW_KEY = "ai-workflow-interactive"
 
@@ -127,6 +139,7 @@ class ApprovalService:
             params=node.params.copy() if node.params else {},
             status=ApprovalStatus.PENDING,
             created_at=datetime.now(),
+            tenant_id=_tenant_from_context(runtime_context),
         )
         self._pending_requests[request_id] = request
         if plan is not None:

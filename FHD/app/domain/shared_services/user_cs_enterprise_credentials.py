@@ -22,7 +22,7 @@ def _base_payload(doc: dict[str, Any], *, username: str = "") -> dict[str, Any]:
     ).strip()
     return {
         "username": login_user,
-        "password": str(doc.get("enterprise_login_password") or ""),
+        "password": "",
         "issued_at": str(doc.get("enterprise_credentials_issued_at") or ""),
         "email": str(doc.get("enterprise_login_email") or ""),
         "password_recorded": bool(doc.get("enterprise_login_password")),

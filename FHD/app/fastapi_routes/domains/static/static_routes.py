@@ -7,9 +7,10 @@ import logging
 import os
 import shutil
 
-from fastapi import APIRouter, Body, File, Form, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
+from app.infrastructure.auth.dependencies import require_permission
 from app.traditional_mode_fs import (
     ROOT_DIR,
     copy_response,
@@ -166,22 +167,16 @@ def gap_batch2_favicon():
 
 
 @router.get("/outputs/{filename:path}")
-def gap_batch2_outputs(filename: str):
+def gap_batch2_outputs(filename: str, user=Depends(require_permission("shipment.view"))):
     try:
-        from app.utils.path_io.path_utils import get_app_data_dir, get_resource_path
+        from app.infrastructure.tenant_scope import tenant_scope
+        from app.utils.path_io.path_utils import get_shipment_output_dir
 
-        shipment_outputs_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
-        if os.path.isdir(shipment_outputs_dir):
-            outputs_dir = shipment_outputs_dir
-        else:
-            outputs_dir = get_resource_path("ai_assistant", "outputs")
-            if not os.path.isdir(outputs_dir):
-                outputs_dir = os.path.join(get_base_dir(), "AI助手", "outputs")
-        if not os.path.isdir(outputs_dir):
-            return JSONResponse(
-                {"success": False, "message": f"输出目录不存在: {outputs_dir}"}, status_code=404
-            )
-        file_path = resolve_path_under_root(outputs_dir, filename)
+        with tenant_scope(user.tenant_id):
+            outputs_dir = get_shipment_output_dir()
+        file_path = (
+            resolve_path_under_root(outputs_dir, filename) if os.path.isdir(outputs_dir) else None
+        )
         if not file_path or not os.path.isfile(file_path):  # lgtm[py/path-injection]
             return JSONResponse(
                 {"success": False, "message": f"文件不存在：{filename}"}, status_code=404

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from .customer_service_ports import (
     Employee,
@@ -17,6 +18,14 @@ from .models import (
     EnterpriseCredentialsIssueBody,
     PipelineBody,
 )
+
+
+def _public_pipeline(doc: Any) -> Any:
+    if not isinstance(doc, dict) or "enterprise_login_password" not in doc:
+        return doc
+    public = dict(doc)
+    public["enterprise_login_password"] = ""
+    return public
 
 
 @dataclass(frozen=True, eq=False)
@@ -111,7 +120,7 @@ class PipelineHandlers:
         return {
             "success": True,
             "data": {
-                "pipeline": doc,
+                "pipeline": _public_pipeline(doc),
                 "stages": PIPELINE_STAGES,
                 "advanced": advanced,
                 "crm": get_crm_bundle_for_market_user(uid),
@@ -151,7 +160,7 @@ class PipelineHandlers:
         if body.intake_sent:
             doc["intake_sent"] = True
             doc = save_pipeline(doc)
-        return {"success": True, "data": {"pipeline": doc}}
+        return {"success": True, "data": {"pipeline": _public_pipeline(doc)}}
 
     async def user_cs_put_pipeline(self, body: PipelineBody) -> Payload:
         return self._apply_pipeline_body(body)
@@ -187,7 +196,7 @@ class PipelineHandlers:
         return {
             "success": True,
             "data": {
-                "pipeline": doc,
+                "pipeline": _public_pipeline(doc),
                 "stages": PIPELINE_STAGES,
                 "message_count": 0,
                 "connected_welcome": connected_welcome,

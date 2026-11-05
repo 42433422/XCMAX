@@ -311,7 +311,7 @@ def test_ai_message_save_bot_role_normalized(
 
 
 @pytest.fixture
-def shipment_client() -> TestClient:
+def shipment_client(logged_in_session) -> TestClient:
     from app.fastapi_routes.domains.shipment import routes as shipment_routes
 
     app = FastAPI()
@@ -331,7 +331,7 @@ def test_ai_config_approval_get(shipment_client: TestClient) -> None:
     assert "enabled" in r.json()
 
 
-def test_approval_router_mounts_tool_rules_used_by_rules_page() -> None:
+def test_approval_router_mounts_tool_rules_used_by_rules_page(logged_in_session) -> None:
     from app.fastapi_routes.approval import router as approval_router
 
     app = FastAPI()
@@ -364,6 +364,37 @@ def test_ai_approval_approve_missing(shipment_client: TestClient) -> None:
 def test_ai_approval_reject_missing(shipment_client: TestClient) -> None:
     r = shipment_client.post("/api/ai/approval/reject", json={})
     assert r.status_code == 400
+
+
+def test_ai_approval_is_tenant_scoped(shipment_client: TestClient, logged_in_session) -> None:
+    logged_in_session.tenant_id = 1
+    created = shipment_client.post(
+        "/api/ai/approval/request",
+        json={"plan_id": "tenant-plan", "node_id": "n1", "tool_id": "t1", "action": "run"},
+    )
+    request_id = created.json()["data"]["request_id"]
+
+    logged_in_session.tenant_id = 2
+    pending = shipment_client.get("/api/ai/approval/pending").json()["data"]["pending_approvals"]
+    assert request_id not in {item["request_id"] for item in pending}
+    for route in ("/api/ai/approval/approve", "/api/ai/approval/reject"):
+        assert shipment_client.post(route, json={"request_id": request_id}).status_code == 404
+        assert shipment_client.post(route, json={"plan_id": "tenant-plan"}).status_code == 404
+
+    logged_in_session.tenant_id = 1
+    approved = shipment_client.post("/api/ai/approval/reject", json={"request_id": request_id})
+    assert approved.status_code == 200
+
+
+def test_ai_approval_requires_session(shipment_client: TestClient, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user", lambda _request: None
+    )
+    assert shipment_client.get("/api/ai/approval/pending").status_code == 401
+    assert (
+        shipment_client.post("/api/ai/approval/approve", json={"request_id": "x"}).status_code
+        == 401
+    )
 
 
 # ---------------------------------------------------------------------------
