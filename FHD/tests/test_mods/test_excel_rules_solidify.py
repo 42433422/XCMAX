@@ -374,9 +374,15 @@ def test_solidify_convert_action_end_to_end(tmp_path: Path) -> None:
     assert report["rules_ref"]["sha256"]
 
     # 固化产物可直接复跑（零 LLM）：加载脚本重算 records
-    namespace: dict = {}
-    exec(compile(script, "<t>", "exec"), namespace)
-    records = namespace["produce_records"](_source_workbook(), rules)
+    import importlib.util
+    from types import ModuleType
+    solidified = ModuleType("solidified_script")
+    script_path = tmp_path / "_solidified_script.py"
+    script_path.write_text(script, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(solidified.__name__, script_path)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(solidified)
+    records = solidified.produce_records(_source_workbook(), rules)
     assert len(records) == 3
 
     # 无 LLM 时 solidify 明确报错
@@ -438,10 +444,14 @@ def test_solidified_example_passes_golden_gate(tmp_path: Path) -> None:
 
     code = SOLIDIFIED_EXAMPLE.read_text(encoding="utf-8")
     assert "taiyangniao" not in code.replace("taiyangniao 依赖", "")
-    namespace: dict = {}
-    exec(compile(code, str(SOLIDIFIED_EXAMPLE), "exec"), namespace)
+    import importlib.util
+    from types import ModuleType
+    solidified = ModuleType("sunbird_solidified_example")
+    spec = importlib.util.spec_from_file_location(solidified.__name__, SOLIDIFIED_EXAMPLE)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(solidified)
     source_wb = _read_json(reader, SUNBIRD_SOURCE, tmp_path / "src_wb.json")
-    records = namespace["produce_records"](source_wb, rules)
+    records = solidified.produce_records(source_wb, rules)
 
     diff = golden_mod.diff_records(records, expected)
     assert diff["ok"], (diff["stats"], diff.get("samples"))
