@@ -29,6 +29,7 @@ from app.fastapi_routes import shipment_orders as shipment_routes
 from app.fastapi_routes.domains.customer import routes as customer_compat
 from app.fastapi_routes.domains.customer import routes as customer_routes
 from app.fastapi_routes.domains.misc import routes as compat_misc
+from app.fastapi_routes.domains.shipment import shipment_order_support
 from app.fastapi_routes.domains.system import routes as legacy_system_routes
 from app.fastapi_routes.tools_execute import router as tools_execute_router
 
@@ -61,9 +62,7 @@ def mock_shipment_svc() -> MagicMock:
 def shipment_client(
     mock_shipment_svc: MagicMock, monkeypatch: pytest.MonkeyPatch, trusted_actor
 ) -> TestClient:
-    monkeypatch.setattr(
-        shipment_routes, "get_shipment_application_service_core", lambda: mock_shipment_svc
-    )
+    monkeypatch.setattr(shipment_order_support, "svc", lambda: mock_shipment_svc)
     app = FastAPI()
     app.include_router(shipment_routes.router)
     return TestClient(
