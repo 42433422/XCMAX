@@ -825,7 +825,10 @@ def open_etl_input_file(
                 raise ShipmentEtlPathError("non-blocking input open is unavailable")
                 # Open FIFOs without waiting for a writer so fstat can reject them.
             flags = os.O_RDONLY | os.O_NOFOLLOW | nonblocking | getattr(os, "O_CLOEXEC", 0)
-            descriptor = os.open(name, flags, dir_fd=parent_fd)  # codeql[py/path-injection]
+            safe_name = Path(name).name
+            if safe_name != name:
+                raise ShipmentEtlPathError("input file must be one path component")
+            descriptor = os.open(safe_name, flags, dir_fd=parent_fd)  # codeql[py/path-injection]
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ShipmentEtlPathError("input is not a regular file")
         stream = os.fdopen(descriptor, "rb")
@@ -941,8 +944,11 @@ def open_etl_output_file(
             or "\x00" in output_name
         ):
             raise ShipmentEtlPathError("output file must be one path component")
+        safe_output_name = Path(output_name).name
+        if safe_output_name != output_name:
+            raise ShipmentEtlPathError("output file must be one path component")
         os.rename(
-            temp_name, output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd
+            temp_name, safe_output_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd
         )  # codeql[py/path-injection]
         published = True
     finally:
