@@ -27,8 +27,8 @@ def test_architecture_size_is_only_an_800_line_warning(
     monkeypatch.setattr(arch_fitness, "APP_DIR", app)
     monkeypatch.setattr(arch_fitness, "MODSTORE_SERVER_DIR", modstore)
     monkeypatch.setattr(arch_fitness, "BASELINE_FILE", fhd / "baseline.txt")
-    monkeypatch.setattr(arch_fitness, "VIOLATIONS", [])
-    monkeypatch.setattr(arch_fitness, "WARNINGS", [], raising=False)
+    monkeypatch.setattr(arch_fitness, "METRICS_BASELINE_FILE", fhd / "metrics.json")
+    monkeypatch.setattr(arch_fitness, "LINE_EXCEPTIONS_FILE", fhd / "exceptions.json")
     target = app if stack == "app" else modstore
     (target / "large.py").write_text("# fixture\n" * lines)
     assert arch_fitness.main([]) == 0
@@ -36,10 +36,59 @@ def test_architecture_size_is_only_an_800_line_warning(
     assert ("[giant-file]" in output) == (lines > 800)
     assert arch_fitness.main(["--update-baseline"]) == 0
     assert "[giant-file]" not in (fhd / "baseline.txt").read_text()
+    capsys.readouterr()
+    rel = (target / "large.py").relative_to(fhd if stack == "app" else tmp_path).as_posix()
+    (fhd / "exceptions.json").write_text(
+        json.dumps({"exceptions": {rel: {"reason": "data", "expires": "2999-01-01"}}})
+    )
+    assert arch_fitness.main([]) == 0
+    assert "[giant-file]" not in capsys.readouterr().out
+    (app / "infrastructure").mkdir()
+    (app / "infrastructure/forbidden.py").write_text("")
     (app / "domain").mkdir()
     (app / "domain/bad.py").write_text("from app.infrastructure import forbidden\n")
     assert arch_fitness.main([]) == 1
-    assert "[domain->infrastructure]" in capsys.readouterr().out
+    assert "[cross-layer] app/domain/bad.py -> app/infrastructure/forbidden.py" in (
+        capsys.readouterr().out
+    )
+
+
+def test_architecture_gate_blocks_coupling_not_length(tmp_path, monkeypatch, capsys):
+    fhd = tmp_path / "FHD"
+    app = fhd / "app"
+    app.mkdir(parents=True)
+    monkeypatch.setattr(arch_fitness, "REPO_ROOT", fhd)
+    monkeypatch.setattr(arch_fitness, "APP_DIR", app)
+    monkeypatch.setattr(arch_fitness, "MODSTORE_SERVER_DIR", tmp_path / "missing")
+    monkeypatch.setattr(arch_fitness, "BASELINE_FILE", fhd / "baseline.txt")
+    monkeypatch.setattr(arch_fitness, "METRICS_BASELINE_FILE", fhd / "metrics.json")
+    monkeypatch.setattr(arch_fitness, "LINE_EXCEPTIONS_FILE", fhd / "exceptions.json")
+    (app / "__init__.py").write_text("")
+    (app / "a.py").write_text("from app import b\n")
+    (app / "b.py").write_text(
+        "import importlib\n\n\ndef _facade():\n    return importlib.import_module('app.a')\n"
+    )
+    (app / "orders_part01.py").write_text("")
+    (app / "mixins.py").write_text(
+        "class Left:\n    def save(self):\n        return 1\n\n\n"
+        "class Right:\n    def save(self):\n        return 2\n\n\n"
+        "class Both(Left, Right):\n    pass\n"
+    )
+    assert arch_fitness.main([]) == 1
+    output = capsys.readouterr().out
+    assert "[facade-late-binding] app/b.py" in output
+    assert "[fragment-name] app/orders_part01.py" in output
+    assert "[mixin-collision] app/mixins.py::Both.save" in output
+    assert arch_fitness.main(["--update-baseline"]) == 0
+    capsys.readouterr()
+    (app / "b.py").write_text("from app import a\n")
+    assert arch_fitness.main([]) == 1
+    assert "[import-cycle] app/a.py -> app/b.py" in capsys.readouterr().out
+    (app / "c.py").write_text("from app import a\n")
+    (app / "a.py").write_text("from app import b\nfrom app import c\n")
+    assert arch_fitness.main(["--update-baseline"]) == 2
+    assert arch_fitness.main(["--update-baseline", "--reason", "fixture"]) == 0
+    assert json.loads((fhd / "metrics.json").read_text())["raised"][0]["reason"] == "fixture"
 
 
 def test_all_production_stacks_have_the_same_soft_cap():

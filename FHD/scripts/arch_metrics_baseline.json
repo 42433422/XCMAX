@@ -1,0 +1,60 @@
+{
+  "_note": "Ratchet: values may only fall. Raising one requires --update-baseline --reason and is recorded in 'raised'.",
+  "packages": {
+    "app": {
+      "deferred_cycle_modules": 974,
+      "largest_deferred_cycle": 943,
+      "mypy_file_disables": 16,
+      "mypy_ignored_modules": 3,
+      "fan_out_over_cap": {
+        "app/application/agent_orchestrator/catalog_product_edit.py": 26,
+        "app/application/ai_chat_app_service.py": 32,
+        "app/application/approval_workspace_app_service.py": 29,
+        "app/application/normal_chat_dispatch.py": 29,
+        "app/application/planner_compat_service.py": 27,
+        "app/db/models/__init__.py": 39,
+        "app/di/registry.py": 33,
+        "app/domain/shared_services/conversation/manager.py": 33,
+        "app/fastapi_app/factory.py": 26,
+        "app/fastapi_app/lifespan.py": 36,
+        "app/fastapi_routes/domains/auth/auth_routes.py": 42,
+        "app/fastapi_routes/im_routes.py": 27,
+        "app/fastapi_routes/mobile_api_extensions.py": 40,
+        "app/fastapi_routes/mobile_extensions/backends.py": 28,
+        "app/fastapi_routes/mounts/business.py": 39,
+        "app/fastapi_routes/reviewed_excel_template.py": 32,
+        "app/fastapi_routes/xcmax_admin.py": 28,
+        "app/services/__init__.py": 32
+      },
+      "public_api_over_cap": {
+        "app/application/mobile_extensions/protocols.py": 121,
+        "app/db/models/__init__.py": 84,
+        "app/fastapi_routes/mobile_api_extensions.py": 193,
+        "app/fastapi_routes/xcmax_admin.py": 90,
+        "app/mod_sdk/employee_specialized_tools.py": 68,
+        "app/services/__init__.py": 63
+      }
+    },
+    "modstore_server": {
+      "deferred_cycle_modules": 314,
+      "largest_deferred_cycle": 256,
+      "mypy_file_disables": 275,
+      "mypy_ignored_modules": 44,
+      "fan_out_over_cap": {
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api.py": 31,
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/app_factory.py": 41,
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/craft_steps.py": 27,
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest.py": 29,
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline.py": 28,
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor.py": 42,
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner.py": 31,
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_api.py": 43,
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler.py": 51
+      },
+      "public_api_over_cap": {
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes.py": 77
+      }
+    }
+  },
+  "raised": []
+}

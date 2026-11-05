@@ -1,0 +1,15 @@
+{
+  "_policy": "File length is a soft signal, never a reason to split. A file over the arch_fitness soft cap warns until it is split along a domain boundary or listed here with a reason, an approver and an expiry date (YYYY-MM-DD). Expired entries warn again. Paths are relative to FHD/ for app and to the XCMAX root for modstore_server.",
+  "exceptions": {
+    "app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
+      "reason": "Pure tool input JSON-schema data; no behaviour to separate.",
+      "approved_by": "big_files_ratchet_baseline.json allowlist",
+      "expires": "2027-05-31"
+    },
+    "app/application/agent_orchestrator/tool_spec_data/output_schemas.py": {
+      "reason": "Pure tool output JSON-schema data; no behaviour to separate.",
+      "approved_by": "big_files_ratchet_baseline.json allowlist",
+      "expires": "2027-05-31"
+    }
+  }
+}

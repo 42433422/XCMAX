@@ -1,70 +1,594 @@
-# Architecture debt snapshot. New keys fail the gate; remove keys as files are split.
-[domain->infrastructure] app/domain/product/product_compat_ports.py:149
-[domain->infrastructure] app/domain/shared_services/ai_product_parser.py:296
-[domain->infrastructure] app/domain/shared_services/ai_product_parser.py:377
-[domain->infrastructure] app/domain/shared_services/catalog_client.py:3
-[domain->infrastructure] app/domain/shared_services/catalog_visibility.py:3
-[domain->infrastructure] app/domain/shared_services/contract_lifecycle.py:98
-[domain->infrastructure] app/domain/shared_services/conversation/api.py:50
-[domain->infrastructure] app/domain/shared_services/conversation/api.py:6
-[domain->infrastructure] app/domain/shared_services/conversation/api_llm.py:50
-[domain->infrastructure] app/domain/shared_services/conversation/api_llm.py:82
-[domain->infrastructure] app/domain/shared_services/conversation/context.py:159
-[domain->infrastructure] app/domain/shared_services/conversation/context.py:6
-[domain->infrastructure] app/domain/shared_services/conversation/llm_adapter.py:432
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:139
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:421
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:446
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:447
-[domain->infrastructure] app/domain/shared_services/conversation/manager.py:77
-[domain->infrastructure] app/domain/shared_services/conversation/modstore_adapter.py:46
-[domain->infrastructure] app/domain/shared_services/conversation/modstore_adapter.py:47
-[domain->infrastructure] app/domain/shared_services/conversation/modstore_adapter.py:48
-[domain->infrastructure] app/domain/shared_services/deepseek_hybrid_intent.py:365
-[domain->infrastructure] app/domain/shared_services/deepseek_hybrid_intent.py:378
-[domain->infrastructure] app/domain/shared_services/deepseek_hybrid_intent.py:396
-[domain->infrastructure] app/domain/shared_services/deepseek_intent_service.py:191
-[domain->infrastructure] app/domain/shared_services/distillation_data_collector.py:124
-[domain->infrastructure] app/domain/shared_services/document_templates/analyzer.py:177
-[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:144
-[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:145
-[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:239
-[domain->infrastructure] app/domain/shared_services/document_templates/crud.py:38
-[domain->infrastructure] app/domain/shared_services/fhd_payment_reconciliation.py:36
-[domain->infrastructure] app/domain/shared_services/intent_confirmation_service.py:392
-[domain->infrastructure] app/domain/shared_services/intent_recognition_pipeline.py:213
-[domain->infrastructure] app/domain/shared_services/kellai_customer_copilot.py:144
-[domain->infrastructure] app/domain/shared_services/kitten_ai_document/generate.py:12
-[domain->infrastructure] app/domain/shared_services/materials_service.py:19
-[domain->infrastructure] app/domain/shared_services/mobile_relay_desktop_client.py:123
-[domain->infrastructure] app/domain/shared_services/mobile_relay_desktop_client.py:124
-[domain->infrastructure] app/domain/shared_services/mobile_relay_service.py:23
-[domain->infrastructure] app/domain/shared_services/modstore_library_sync.py:80
-[domain->infrastructure] app/domain/shared_services/ocr_service.py:20
-[domain->infrastructure] app/domain/shared_services/persona/embedding_inferencer.py:12
-[domain->infrastructure] app/domain/shared_services/printer_service.py:198
-[domain->infrastructure] app/domain/shared_services/printer_service.py:230
-[domain->infrastructure] app/domain/shared_services/printer_service.py:295
-[domain->infrastructure] app/domain/shared_services/product_import_service.py:228
-[domain->infrastructure] app/domain/shared_services/products_service.py:101
-[domain->infrastructure] app/domain/shared_services/products_service.py:31
-[domain->infrastructure] app/domain/shared_services/session_service.py:43
-[domain->infrastructure] app/domain/shared_services/tools_payload_customers.py:132
-[domain->infrastructure] app/domain/shared_services/tools_payload_operations.py:178
-[domain->infrastructure] app/domain/shared_services/tools_payload_operations.py:263
-[domain->infrastructure] app/domain/shared_services/tools_workflow_business_db.py:219
-[domain->infrastructure] app/domain/shared_services/tools_workflow_business_db.py:42
-[domain->infrastructure] app/domain/shared_services/tools_workflow_business_db.py:97
-[domain->infrastructure] app/domain/shared_services/tools_workflow_common.py:118
-[domain->infrastructure] app/domain/shared_services/tools_workflow_erp_master.py:46
-[domain->infrastructure] app/domain/shared_services/tools_workflow_excel_ocr.py:35
-[domain->infrastructure] app/domain/shared_services/tools_workflow_excel_ocr.py:38
-[domain->infrastructure] app/domain/shared_services/tools_workflow_shipments_docs_ops.py:20
-[domain->infrastructure] app/domain/shared_services/tools_workflow_shipments_docs_ops.py:45
-[domain->infrastructure] app/domain/shared_services/tools_workflow_shipments_docs_ops.py:71
-[domain->infrastructure] app/domain/shared_services/tools_workflow_workspace.py:164
-[domain->infrastructure] app/domain/shared_services/tools_workflow_workspace.py:165
-[domain->infrastructure] app/domain/shared_services/user_cs_employee_runner.py:21
-[domain->infrastructure] app/domain/shared_services/user_memory_service.py:39
-[domain->infrastructure] app/domain/shared_services/user_memory_service.py:40
+# Architecture debt snapshot. New keys fail the gate; remove keys as debt is paid.
+[cross-layer] app/application/agent_orchestrator/business_action_ledger.py -> app/infrastructure/auth/agent_mod_scope.py
+[cross-layer] app/application/agent_orchestrator/catalog_authority_retention.py -> app/infrastructure/auth/agent_mod_scope.py
+[cross-layer] app/application/agent_orchestrator/catalog_product_edit.py -> app/fastapi_routes/domains/agent/route_support.py
+[cross-layer] app/application/agent_orchestrator/catalog_product_edit.py -> app/infrastructure/auth/agent_mod_scope.py
+[cross-layer] app/application/agent_orchestrator/catalog_product_edit.py -> app/infrastructure/auth/agent_principal.py
+[cross-layer] app/application/agent_orchestrator/catalog_product_edit.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/agent_orchestrator/context_window_manager.py -> app/infrastructure/billing/model_usage.py
+[cross-layer] app/application/agent_orchestrator/context_window_manager.py -> app/infrastructure/llm/providers/registry.py
+[cross-layer] app/application/agent_orchestrator/context_window_manager.py -> app/infrastructure/llm/token_estimator.py
+[cross-layer] app/application/agent_orchestrator/repair_advisor.py -> app/infrastructure/billing/model_usage.py
+[cross-layer] app/application/agent_orchestrator/repair_advisor.py -> app/infrastructure/llm/invoke.py
+[cross-layer] app/application/agent_orchestrator/repair_advisor.py -> app/infrastructure/llm/providers/credentials.py
+[cross-layer] app/application/agent_orchestrator/run_usage.py -> app/infrastructure/billing/model_usage.py
+[cross-layer] app/application/agent_orchestrator/tool_executor.py -> app/infrastructure/auth/agent_mod_scope.py
+[cross-layer] app/application/agent_orchestrator/tool_executor.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/application/agent_orchestrator/tool_executor.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/agent_orchestrator/tool_process.py -> app/infrastructure/llm/client.py
+[cross-layer] app/application/agent_orchestrator/trace_model_usage.py -> app/infrastructure/billing/model_usage.py
+[cross-layer] app/application/agent_runtime/pipeline.py -> app/infrastructure/billing/model_usage.py
+[cross-layer] app/application/agent_task_context.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/ai_chat/conversation_history.py -> app/infrastructure/auth/agent_mod_scope.py
+[cross-layer] app/application/ai_chat/conversation_history.py -> app/infrastructure/modstore_transport.py
+[cross-layer] app/application/ai_chat/excel_import_pipeline_columns_infer.py -> app/infrastructure/llm/providers/credentials.py
+[cross-layer] app/application/ai_chat/excel_import_pipeline_resolve.py -> app/infrastructure/workspace.py
+[cross-layer] app/application/ai_chat/instant_tools.py -> app/infrastructure/lookups/purchase_unit_resolver.py
+[cross-layer] app/application/ai_chat_app_service.py -> app/infrastructure/auth/agent_mod_scope.py
+[cross-layer] app/application/ai_chat_rag_integration.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/application/aibiz_surface_images.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/application/aibiz_web_terminal_service.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/application/aiopen/service.py -> app/infrastructure/aiopen/cursor_hub.py
+[cross-layer] app/application/aiopen/service.py -> app/infrastructure/mods/manifest.py
+[cross-layer] app/application/approval_workspace_app_service.py -> app/fastapi_routes/domains/misc/helpers.py
+[cross-layer] app/application/approval_workspace_app_service.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/application/auth_app_service.py -> app/infrastructure/session/__init__.py
+[cross-layer] app/application/autonomy/strategic_plan_app_service.py -> app/infrastructure/llm/providers/registry.py
+[cross-layer] app/application/business_db_write_verification.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/chat_business_safety.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/application/client_product_issue_intake.py -> app/fastapi_routes/private_mod_delivery_context.py
+[cross-layer] app/application/customer_crud_mixin.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/customer_relationship_mixin.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/dataset_rag/document_lifecycle.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/application/dataset_rag/document_parser.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/application/dataset_rag/document_parser.py -> app/infrastructure/rag/semantic_chunker.py
+[cross-layer] app/application/dataset_rag/knowledge_graph.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/application/dataset_rag/models.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/application/dataset_rag/models.py -> app/infrastructure/rag/citation_tracker.py
+[cross-layer] app/application/dataset_rag/retrieval.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/application/dataset_rag/retrieval_policy.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/application/dataset_rag/vector_index.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/application/dataset_rag/vector_index.py -> app/infrastructure/rag/dataset_vector_index.py
+[cross-layer] app/application/dataset_rag_app_service.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/application/dataset_rag_app_service.py -> app/infrastructure/rag/citation_tracker.py
+[cross-layer] app/application/dataset_rag_app_service.py -> app/infrastructure/rag/dataset_vector_index.py
+[cross-layer] app/application/delivery_entitlements.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/application/desktop_admin_gate.py -> app/infrastructure/session/__init__.py
+[cross-layer] app/application/desktop_delivery_receipt.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/application/desktop_relay/execution.py -> app/infrastructure/relay/gitops.py
+[cross-layer] app/application/desktop_relay/messages.py -> app/infrastructure/relay/gitops.py
+[cross-layer] app/application/elt/archive_store.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/auto_ingest_service.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/llm_assist.py -> app/infrastructure/llm/providers/registry.py
+[cross-layer] app/application/elt/llm_assist.py -> app/infrastructure/llm/structured_output.py
+[cross-layer] app/application/elt/llm_session_provider.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/application/elt/llm_session_provider.py -> app/infrastructure/modstore_transport.py
+[cross-layer] app/application/elt/operation_owner.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/service_draft.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/service_execution.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/service_preview.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/service_replay.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/service_shipment_templates.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/service_source.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/service_targets.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/service_templates.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/service_uploads.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/shipment_preview_fallback.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/sources.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/targets/customer_product_support.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/targets/customer_products.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/targets/customers.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/targets/knowledge.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/targets/orders.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/targets/products.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt/targets/rollback_compare_swap.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/elt_login_authorization.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/application/elt_login_authorization.py -> app/fastapi_routes/market_bridge/settings.py
+[cross-layer] app/application/elt_login_authorization.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/application/employee_runtime/agent_loop.py -> app/infrastructure/llm/client.py
+[cross-layer] app/application/employee_runtime/agent_runner.py -> app/infrastructure/llm/providers/registry.py
+[cross-layer] app/application/employee_runtime/loader.py -> app/infrastructure/mods/employee_registry.py
+[cross-layer] app/application/employee_runtime/loader.py -> app/infrastructure/mods/package.py
+[cross-layer] app/application/employee_runtime/perception.py -> app/infrastructure/rag/hybrid_retriever.py
+[cross-layer] app/application/employee_runtime/perception.py -> app/infrastructure/rag/semantic_chunker.py
+[cross-layer] app/application/employee_runtime/scheduler.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/application/enterprise_cs_automation.py -> app/infrastructure/llm/invoke.py
+[cross-layer] app/application/enterprise_login_finalize.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/application/enterprise_login_flow.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/application/excel_template_http_app_service.py -> app/infrastructure/templates/tenant_scope.py
+[cross-layer] app/application/excel_vector_app_service.py -> app/infrastructure/llm/__init__.py
+[cross-layer] app/application/excel_vector_app_service.py -> app/infrastructure/persistence/pg_vector_store.py
+[cross-layer] app/application/excel_vector_app_service.py -> app/infrastructure/persistence/sqlite_vector_store.py
+[cross-layer] app/application/extract_log_app_service.py -> app/infrastructure/persistence/extract_log_store_impl.py
+[cross-layer] app/application/file_analysis_app_service.py -> app/infrastructure/db/sql_identifiers.py
+[cross-layer] app/application/group_chat/employee_registry.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/application/impersonation_bridge.py -> app/infrastructure/session/session_manager.py
+[cross-layer] app/application/inventory_default_warehouse.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/invoicing_service.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/kitten_planner_context.py -> app/infrastructure/web_search/__init__.py
+[cross-layer] app/application/label_job_service.py -> app/infrastructure/printing/label_dispatch_guard.py
+[cross-layer] app/application/label_job_service.py -> app/infrastructure/printing/template_label_renderer.py
+[cross-layer] app/application/llm_intent_gate.py -> app/infrastructure/llm/client.py
+[cross-layer] app/application/llm_intent_gate.py -> app/infrastructure/llm/structured_output.py
+[cross-layer] app/application/local_duty_graph_health.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/application/market_llm/authentication.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/application/market_llm/completions.py -> app/infrastructure/modstore_transport.py
+[cross-layer] app/application/market_llm/responses.py -> app/infrastructure/modstore_transport.py
+[cross-layer] app/application/market_llm/routing.py -> app/infrastructure/llm/modstore_chat_failover.py
+[cross-layer] app/application/market_llm/routing.py -> app/infrastructure/modstore_transport.py
+[cross-layer] app/application/market_llm/streaming.py -> app/infrastructure/chat_stream_lifetime.py
+[cross-layer] app/application/material_app_service.py -> app/infrastructure/repositories/material_repository_impl.py
+[cross-layer] app/application/mobile_extensions/protocols.py -> app/fastapi_routes/mod_store/schemas.py
+[cross-layer] app/application/mobile_extensions/protocols.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/application/mobile_relay_configuration.py -> app/infrastructure/topology.py
+[cross-layer] app/application/mod_delivery_receipt_outbox.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/application/mod_delivery_receipt_outbox.py -> app/infrastructure/mods/install_receipts.py
+[cross-layer] app/application/mod_delivery_receipt_outbox.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/application/mod_delivery_receipt_outbox.py -> app/infrastructure/mods/state_lock.py
+[cross-layer] app/application/mod_store/protocols.py -> app/fastapi_routes/mod_store/schemas.py
+[cross-layer] app/application/mod_store/protocols.py -> app/infrastructure/mods/manifest.py
+[cross-layer] app/application/mod_store_catalog_app.py -> app/infrastructure/mods/catalog_client.py
+[cross-layer] app/application/mod_store_catalog_app.py -> app/infrastructure/mods/catalog_visibility.py
+[cross-layer] app/application/mod_uninstall.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/application/mod_uninstall.py -> app/infrastructure/mods/install_receipts.py
+[cross-layer] app/application/mod_uninstall.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/application/mod_uninstall.py -> app/infrastructure/mods/state_lock.py
+[cross-layer] app/application/normal_chat/dispatch.py -> app/infrastructure/auth/tenant_context.py
+[cross-layer] app/application/normal_chat/dispatch.py -> app/infrastructure/request_context/__init__.py
+[cross-layer] app/application/normal_chat/dispatch.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/normal_chat_dispatch.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/office_parse_app_service.py -> app/infrastructure/mods/registry.py
+[cross-layer] app/application/office_parse_app_service.py -> app/infrastructure/workspace.py
+[cross-layer] app/application/office_template_media_bridge.py -> app/infrastructure/llm/vlm_route.py
+[cross-layer] app/application/ops_closure_status.py -> app/infrastructure/mods/employee_registry.py
+[cross-layer] app/application/ops_closure_status.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/application/payment_service.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/persona_butler_bridge.py -> app/infrastructure/persona/persona_repository_impl.py
+[cross-layer] app/application/persona_style_inject.py -> app/infrastructure/persona/persona_repository_impl.py
+[cross-layer] app/application/planner_compat/application.py -> app/fastapi_routes/xcagi_compat_chat_models.py
+[cross-layer] app/application/planner_compat/persona.py -> app/fastapi_routes/xcagi_compat_chat_models.py
+[cross-layer] app/application/planner_compat/protocols.py -> app/fastapi_routes/xcagi_compat_chat_models.py
+[cross-layer] app/application/planner_compat/streaming.py -> app/fastapi_routes/xcagi_compat_chat_models.py
+[cross-layer] app/application/planner_compat_execute.py -> app/fastapi_routes/xcagi_compat_chat_models.py
+[cross-layer] app/application/planner_compat_service.py -> app/fastapi_routes/domains/misc/helpers.py
+[cross-layer] app/application/planner_compat_service.py -> app/fastapi_routes/xcagi_compat_chat_helpers.py
+[cross-layer] app/application/planner_compat_service.py -> app/fastapi_routes/xcagi_compat_chat_stream.py
+[cross-layer] app/application/planner_compat_service.py -> app/infrastructure/llm/client.py
+[cross-layer] app/application/private_delivery_sync.py -> app/fastapi_routes/private_mod_delivery_context.py
+[cross-layer] app/application/private_delivery_sync.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/application/private_delivery_sync.py -> app/infrastructure/mods/install_receipts.py
+[cross-layer] app/application/private_delivery_sync.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/application/private_delivery_sync.py -> app/infrastructure/mods/state_lock.py
+[cross-layer] app/application/private_mod_delivery_artifacts.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/application/private_mod_delivery_artifacts.py -> app/infrastructure/mods/artifact_constants.py
+[cross-layer] app/application/private_mod_delivery_artifacts.py -> app/infrastructure/mods/artifact_package.py
+[cross-layer] app/application/private_mod_delivery_artifacts.py -> app/infrastructure/mods/catalog_client.py
+[cross-layer] app/application/private_mod_delivery_artifacts.py -> app/infrastructure/mods/employee_registry.py
+[cross-layer] app/application/private_mod_delivery_artifacts.py -> app/infrastructure/mods/install_receipts.py
+[cross-layer] app/application/private_mod_delivery_artifacts.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/application/private_mod_delivery_artifacts.py -> app/infrastructure/mods/package.py
+[cross-layer] app/application/private_mod_delivery_artifacts.py -> app/infrastructure/mods/package_signing.py
+[cross-layer] app/application/reviewed_excel_template.py -> app/infrastructure/llm/structured_output.py
+[cross-layer] app/application/reviewed_excel_template.py -> app/infrastructure/modstore_transport.py
+[cross-layer] app/application/sales/idempotency.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/sales_app_service.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/sales_quote_references.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/session_account_meta.py -> app/fastapi_routes/domains/misc/helpers.py
+[cross-layer] app/application/shared_issue_runtime.py -> app/fastapi_routes/private_mod_delivery_context.py
+[cross-layer] app/application/shared_issue_runtime.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/application/shipment_app_service.py -> app/infrastructure/database/shipment_order_numbers.py
+[cross-layer] app/application/shipment_app_service.py -> app/infrastructure/mods/hooks.py
+[cross-layer] app/application/shipment_audit_app_service.py -> app/infrastructure/persistence/shipment_audit_repository.py
+[cross-layer] app/application/shipment_business_record.py -> app/infrastructure/persistence/compat_db/writes.py
+[cross-layer] app/application/shipment_business_record.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/shipment_excel_etl_llm.py -> app/infrastructure/llm/providers/credentials.py
+[cross-layer] app/application/shipment_excel_etl_llm.py -> app/infrastructure/llm/structured_output.py
+[cross-layer] app/application/shipment_excel_etl_security.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/shipment_template_resolve.py -> app/infrastructure/templates/template_store_impl.py
+[cross-layer] app/application/six_line_event_app_service.py -> app/infrastructure/six_line/event_route_loader.py
+[cross-layer] app/application/tenant_subscription_app_service.py -> app/infrastructure/billing/saas_plans.py
+[cross-layer] app/application/tenant_workspace_prefs.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/application/tools/exports.py -> app/infrastructure/documents/price_list_export.py
+[cross-layer] app/application/tools/workflow.py -> app/infrastructure/auth/db_token.py
+[cross-layer] app/application/tools/workflow.py -> app/infrastructure/excel/schema_service.py
+[cross-layer] app/application/tools/workflow.py -> app/infrastructure/excel/text_to_pandas.py
+[cross-layer] app/application/tools/workflow_tools/dispatch.py -> app/infrastructure/auth/agent_mod_scope.py
+[cross-layer] app/application/tools/workflow_tools/dispatch.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/application/tools/workflow_tools/dispatch.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/tts_translate_app_service.py -> app/infrastructure/llm/invoke.py
+[cross-layer] app/application/tutorial_v2/business_verifiers.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/tutorial_v2/master_task_verifiers.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/tutorial_v2/workspace.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/unit_products_import_app_service.py -> app/infrastructure/db/sql_identifiers.py
+[cross-layer] app/application/user_memory_vector_app_service.py -> app/infrastructure/persistence/user_memory_vector_store.py
+[cross-layer] app/application/workflow/approval_persistence.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/application/workflow/engine_decisions.py -> app/infrastructure/llm/providers/credentials.py
+[cross-layer] app/application/workflow/planner_document_tools.py -> app/infrastructure/documents/shipment_document_generator_impl.py
+[cross-layer] app/application/workflow/planner_llm_gateway.py -> app/infrastructure/llm/providers/registry.py
+[cross-layer] app/domain/app_pure/ai_chat_helpers.py -> app/application/__init__.py
+[cross-layer] app/domain/app_pure/ai_chat_helpers.py -> app/application/facades/tools_facade.py
+[cross-layer] app/domain/app_pure/ai_chat_helpers.py -> app/application/normal_chat_dispatch.py
+[cross-layer] app/domain/app_pure/auth_permission_resolver.py -> app/application/desktop_admin_gate.py
+[cross-layer] app/domain/app_pure/chat_business_safety_core.py -> app/application/chat_business_safety.py
+[cross-layer] app/domain/app_pure/chat_business_safety_core.py -> app/application/client_product_issue_intake.py
+[cross-layer] app/domain/app_pure/chat_business_safety_core.py -> app/application/tenant_workspace_prefs.py
+[cross-layer] app/domain/app_pure/chat_business_safety_output.py -> app/application/chat_business_safety.py
+[cross-layer] app/domain/app_pure/customer_issue_intake_app.py -> app/application/private_mod_delivery_app.py
+[cross-layer] app/domain/app_pure/dataset_rag_queue.py -> app/application/dataset_rag_app_service.py
+[cross-layer] app/domain/app_pure/employee_circle_sync.py -> app/application/ai_circle_service.py
+[cross-layer] app/domain/app_pure/employee_circle_sync.py -> app/application/modstore_local_client.py
+[cross-layer] app/domain/app_pure/inventory_export.py -> app/application/elt/transforms.py
+[cross-layer] app/domain/auth/ports.py -> app/application/session_account_meta.py
+[cross-layer] app/domain/product/product_compat_ports.py -> app/application/agent_orchestrator/__init__.py
+[cross-layer] app/domain/product/product_compat_ports.py -> app/application/workflow/workflow_types.py
+[cross-layer] app/domain/product/product_compat_ports.py -> app/application/workflow_registry_app.py
+[cross-layer] app/domain/product/product_compat_ports.py -> app/infrastructure/documents/price_list_export.py
+[cross-layer] app/domain/shared_services/ai_product_parser.py -> app/infrastructure/cache/intent_cache.py
+[cross-layer] app/domain/shared_services/ai_product_parser.py -> app/infrastructure/llm/invoke.py
+[cross-layer] app/domain/shared_services/auth_service.py -> app/application/tenant_rbac_policy.py
+[cross-layer] app/domain/shared_services/catalog_client.py -> app/infrastructure/mods/catalog_client.py
+[cross-layer] app/domain/shared_services/catalog_visibility.py -> app/infrastructure/mods/catalog_visibility.py
+[cross-layer] app/domain/shared_services/contract_lifecycle.py -> app/infrastructure/persistence/contract_expiry_notification_repository.py
+[cross-layer] app/domain/shared_services/conversation/api.py -> app/application/agent_orchestrator/context_window_manager.py
+[cross-layer] app/domain/shared_services/conversation/api.py -> app/infrastructure/billing/model_usage.py
+[cross-layer] app/domain/shared_services/conversation/api.py -> app/infrastructure/llm/client.py
+[cross-layer] app/domain/shared_services/conversation/api_llm.py -> app/application/agent_orchestrator/context_window_manager.py
+[cross-layer] app/domain/shared_services/conversation/api_llm.py -> app/infrastructure/billing/model_usage.py
+[cross-layer] app/domain/shared_services/conversation/api_llm.py -> app/infrastructure/llm/providers/registry.py
+[cross-layer] app/domain/shared_services/conversation/context.py -> app/infrastructure/llm/token_estimator.py
+[cross-layer] app/domain/shared_services/conversation/context.py -> app/infrastructure/web_search/__init__.py
+[cross-layer] app/domain/shared_services/conversation/intent.py -> app/application/facades/tools_facade.py
+[cross-layer] app/domain/shared_services/conversation/llm_adapter.py -> app/infrastructure/llm/platform_billing_pass.py
+[cross-layer] app/domain/shared_services/conversation/manager.py -> app/application/agent_orchestrator/context_window_manager.py
+[cross-layer] app/domain/shared_services/conversation/manager.py -> app/application/agent_task_context.py
+[cross-layer] app/domain/shared_services/conversation/manager.py -> app/infrastructure/llm/providers/credentials.py
+[cross-layer] app/domain/shared_services/conversation/manager.py -> app/infrastructure/persona/embedding_client.py
+[cross-layer] app/domain/shared_services/conversation/manager.py -> app/infrastructure/persona/llm_client_adapter.py
+[cross-layer] app/domain/shared_services/conversation/manager.py -> app/infrastructure/persona/persona_repository_impl.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/application/market_llm/account_queries.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/application/market_llm/authentication.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/application/market_llm/catalog.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/application/market_llm/completions.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/application/market_llm/multimodal.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/application/market_llm/protocols.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/application/market_llm/responses.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/application/market_llm/routing.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/application/market_llm/streaming.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/infrastructure/llm/modstore_chat_failover.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/infrastructure/llm/modstore_response_normalize.py
+[cross-layer] app/domain/shared_services/conversation/modstore_adapter.py -> app/infrastructure/modstore_transport.py
+[cross-layer] app/domain/shared_services/deepseek_hybrid_intent.py -> app/infrastructure/lookups/purchase_unit_resolver.py
+[cross-layer] app/domain/shared_services/deepseek_intent_service.py -> app/infrastructure/llm/structured_output.py
+[cross-layer] app/domain/shared_services/distillation_data_collector.py -> app/infrastructure/llm/invoke.py
+[cross-layer] app/domain/shared_services/document_templates/analyzer.py -> app/application/office_template_analyze_handlers.py
+[cross-layer] app/domain/shared_services/document_templates/analyzer.py -> app/infrastructure/skills/excel_analyzer/excel_template_analyzer.py
+[cross-layer] app/domain/shared_services/document_templates/crud.py -> app/infrastructure/templates/tenant_scope.py
+[cross-layer] app/domain/shared_services/document_templates/crud.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/domain/shared_services/fhd_payment_reconciliation.py -> app/infrastructure/payment/order_store.py
+[cross-layer] app/domain/shared_services/intent_confirmation_service.py -> app/infrastructure/lookups/purchase_unit_resolver.py
+[cross-layer] app/domain/shared_services/intent_recognition_pipeline.py -> app/infrastructure/lookups/purchase_unit_resolver.py
+[cross-layer] app/domain/shared_services/inventory_movements.py -> app/application/agent_orchestrator/business_write_guard.py
+[cross-layer] app/domain/shared_services/kellai_customer_copilot.py -> app/infrastructure/llm/invoke.py
+[cross-layer] app/domain/shared_services/kitten_ai_document/generate.py -> app/infrastructure/llm/client.py
+[cross-layer] app/domain/shared_services/kitten_business_snapshot.py -> app/application/__init__.py
+[cross-layer] app/domain/shared_services/materials_service.py -> app/infrastructure/repositories/material_repository_impl.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/claude_super_employee_service.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/codex_super_employee_service.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/cursor_super_employee_service.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/desktop_relay/cleanup.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/desktop_relay/configuration.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/desktop_relay/execution.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/desktop_relay/lifecycle.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/desktop_relay/messages.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/desktop_relay/polling.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/desktop_relay/protocols.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/desktop_relay/registration.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/application/trae_super_employee_service.py
+[cross-layer] app/domain/shared_services/mobile_relay_desktop_client.py -> app/infrastructure/relay/gitops.py
+[cross-layer] app/domain/shared_services/mobile_relay_pairing.py -> app/application/mobile_relay_ports.py
+[cross-layer] app/domain/shared_services/mobile_relay_service.py -> app/application/mobile_relay_configuration.py
+[cross-layer] app/domain/shared_services/mobile_relay_service.py -> app/application/mobile_relay_ports.py
+[cross-layer] app/domain/shared_services/mobile_relay_service.py -> app/infrastructure/mobile_relay/repository.py
+[cross-layer] app/domain/shared_services/mobile_relay_tasks.py -> app/application/mobile_relay_ports.py
+[cross-layer] app/domain/shared_services/modstore_library_sync.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/domain/shared_services/ocr_service.py -> app/infrastructure/ocr_analysis.py
+[cross-layer] app/domain/shared_services/persona/embedding_inferencer.py -> app/infrastructure/persona/embedding_client.py
+[cross-layer] app/domain/shared_services/printer_service.py -> app/infrastructure/documents/shipment_document_generator_impl.py
+[cross-layer] app/domain/shared_services/printer_service.py -> app/infrastructure/printing/label_pdf_printer.py
+[cross-layer] app/domain/shared_services/product_import_service.py -> app/infrastructure/mods/hooks.py
+[cross-layer] app/domain/shared_services/products_service.py -> app/infrastructure/repositories/product_repository_impl.py
+[cross-layer] app/domain/shared_services/products_service.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/domain/shared_services/session_service.py -> app/infrastructure/session/session_manager.py
+[cross-layer] app/domain/shared_services/tools_payload_basic.py -> app/application/__init__.py
+[cross-layer] app/domain/shared_services/tools_payload_customers.py -> app/application/__init__.py
+[cross-layer] app/domain/shared_services/tools_payload_customers.py -> app/infrastructure/lookups/purchase_unit_resolver.py
+[cross-layer] app/domain/shared_services/tools_payload_operations.py -> app/application/__init__.py
+[cross-layer] app/domain/shared_services/tools_payload_operations.py -> app/infrastructure/skills/excel_analyzer/excel_template_analyzer.py
+[cross-layer] app/domain/shared_services/tools_payload_operations.py -> app/infrastructure/skills/excel_toolkit/excel_toolkit.py
+[cross-layer] app/domain/shared_services/tools_workflow_business_db.py -> app/application/business_db_write_verification.py
+[cross-layer] app/domain/shared_services/tools_workflow_business_db.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/domain/shared_services/tools_workflow_common.py -> app/application/agent_task_context.py
+[cross-layer] app/domain/shared_services/tools_workflow_common.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/domain/shared_services/tools_workflow_dispatch.py -> app/application/tools/workflow_tools/dispatch.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/application/__init__.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/application/agent_orchestrator/artifact_files.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/application/facades/inventory_facade.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/application/finance_app_service.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/application/inventory_app_service.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/application/material_app_service.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/application/normal_chat_dispatch.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/application/sales_app_service.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/application/sales_order_creation.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/fastapi_routes/domains/customer/__init__.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/fastapi_routes/finance.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/fastapi_routes/inventory.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp.py -> app/fastapi_routes/purchase.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp_master.py -> app/application/__init__.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp_master.py -> app/application/normal_chat_dispatch.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp_master.py -> app/fastapi_routes/domains/product/__init__.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp_master.py -> app/fastapi_routes/materials.py
+[cross-layer] app/domain/shared_services/tools_workflow_erp_master.py -> app/infrastructure/repositories/product_query_helpers.py
+[cross-layer] app/domain/shared_services/tools_workflow_excel_ocr.py -> app/application/tools/workflow.py
+[cross-layer] app/domain/shared_services/tools_workflow_excel_ocr.py -> app/fastapi_routes/excel_vector.py
+[cross-layer] app/domain/shared_services/tools_workflow_excel_ocr_ops.py -> app/application/__init__.py
+[cross-layer] app/domain/shared_services/tools_workflow_excel_ocr_ops.py -> app/application/shipment_excel_etl_app_service.py
+[cross-layer] app/domain/shared_services/tools_workflow_excel_ocr_ops.py -> app/fastapi_routes/ocr.py
+[cross-layer] app/domain/shared_services/tools_workflow_memory_rag.py -> app/application/dataset_rag_app_service.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs.py -> app/application/agent_orchestrator/artifact_files.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs.py -> app/application/facades/inventory_facade.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs.py -> app/application/facades/session_facade.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs.py -> app/application/shipment_business_record.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs.py -> app/application/shipment_inputs.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs.py -> app/fastapi_routes/domains/shipment/shipment_order_support.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs_ops.py -> app/application/office_template_ingest_app_service.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs_ops.py -> app/infrastructure/skills/excel_analyzer/excel_template_analyzer.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs_ops.py -> app/infrastructure/skills/excel_toolkit/excel_toolkit.py
+[cross-layer] app/domain/shared_services/tools_workflow_shipments_docs_ops.py -> app/infrastructure/skills/label_template_generator/__init__.py
+[cross-layer] app/domain/shared_services/tools_workflow_workspace.py -> app/application/__init__.py
+[cross-layer] app/domain/shared_services/tools_workflow_workspace.py -> app/application/employee_runtime/executor.py
+[cross-layer] app/domain/shared_services/tools_workflow_workspace.py -> app/application/print_app_service.py
+[cross-layer] app/domain/shared_services/tools_workflow_workspace.py -> app/fastapi_routes/print_routes.py
+[cross-layer] app/domain/shared_services/tools_workflow_workspace.py -> app/infrastructure/templates/tenant_scope.py
+[cross-layer] app/domain/shared_services/tools_workflow_workspace.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/domain/shared_services/user_cs_employee_runner.py -> app/infrastructure/mods/__init__.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/application/user_memory/candidates.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/application/user_memory/feedback.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/application/user_memory/models.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/application/user_memory/patterns.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/application/user_memory/policy.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/application/user_memory/preferences.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/application/user_memory/protocols.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/application/user_memory/queries.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/infrastructure/user_memory/json_storage.py
+[cross-layer] app/domain/shared_services/user_memory_service.py -> app/infrastructure/user_memory/persistence.py
+[cross-layer] app/domain/shared_services/xcmax_sync_service.py -> app/application/private_mod_delivery_sync.py
+[cross-layer] app/fastapi_routes/admin_control/backends.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/admin_control/catalog.py -> app/infrastructure/mods/employee_registry.py
+[cross-layer] app/fastapi_routes/admin_control/catalog.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/fastapi_routes/admin_control/customer_tickets.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/admin_control/employee_backend.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/admin_control/entitlements.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/admin_control/usage_sources.py -> app/infrastructure/billing/model_usage.py
+[cross-layer] app/fastapi_routes/admin_control/usage_summary.py -> app/infrastructure/billing/platform_made_tokens.py
+[cross-layer] app/fastapi_routes/ai_assistant.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/fastapi_routes/ai_open.py -> app/infrastructure/aiopen/cursor_hub.py
+[cross-layer] app/fastapi_routes/ai_open.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/ai_qclaw.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/aiopen_access_dependency.py -> app/infrastructure/aiopen/principal_context.py
+[cross-layer] app/fastapi_routes/aiopen_access_dependency.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/contract_lifecycle_api.py -> app/infrastructure/esign/esign_adapter.py
+[cross-layer] app/fastapi_routes/contract_lifecycle_api.py -> app/infrastructure/esign/fadada_fasc_client.py
+[cross-layer] app/fastapi_routes/contract_lifecycle_api.py -> app/infrastructure/esign/stub_esign_store.py
+[cross-layer] app/fastapi_routes/dataset_access.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/dataset_access.py -> app/infrastructure/auth/tenant_context.py
+[cross-layer] app/fastapi_routes/desktop_automation.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/desktop_runtime.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/document_templates.py -> app/infrastructure/documents/template_registry.py
+[cross-layer] app/fastapi_routes/domains/admin_audit/admin_audit_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/domains/agent/agent_routes.py -> app/infrastructure/auth/agent_principal.py
+[cross-layer] app/fastapi_routes/domains/agent/artifact_routes.py -> app/infrastructure/auth/agent_principal.py
+[cross-layer] app/fastapi_routes/domains/agent/event_routes.py -> app/infrastructure/auth/agent_principal.py
+[cross-layer] app/fastapi_routes/domains/agent/event_routes.py -> app/infrastructure/auth/agent_stream.py
+[cross-layer] app/fastapi_routes/domains/agent/route_support.py -> app/infrastructure/auth/agent_principal.py
+[cross-layer] app/fastapi_routes/domains/agent/task_routes.py -> app/infrastructure/auth/agent_principal.py
+[cross-layer] app/fastapi_routes/domains/agent/task_routes.py -> app/infrastructure/auth/agent_stream.py
+[cross-layer] app/fastapi_routes/domains/auth/auth_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/domains/auth/auth_routes.py -> app/infrastructure/auth/oidc_provider.py
+[cross-layer] app/fastapi_routes/domains/conversation/conversation_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/domains/conversation/helpers.py -> app/infrastructure/auth/db_token.py
+[cross-layer] app/fastapi_routes/domains/conversation/helpers.py -> app/infrastructure/llm/client.py
+[cross-layer] app/fastapi_routes/domains/conversation/helpers.py -> app/infrastructure/modstore_transport.py
+[cross-layer] app/fastapi_routes/domains/conversation/helpers.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/domains/customer/customer_routes.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/fastapi_routes/domains/customer/customer_routes.py -> app/infrastructure/auth/db_token.py
+[cross-layer] app/fastapi_routes/domains/customer/customer_routes.py -> app/infrastructure/persistence/compat_db/compat_db_base.py
+[cross-layer] app/fastapi_routes/domains/customer/customer_routes.py -> app/infrastructure/persistence/compat_db/queries.py
+[cross-layer] app/fastapi_routes/domains/customer/customer_routes.py -> app/infrastructure/persistence/compat_db/writes.py
+[cross-layer] app/fastapi_routes/domains/customer/customer_routes.py -> app/infrastructure/products/customer_matching.py
+[cross-layer] app/fastapi_routes/domains/db/db_base.py -> app/infrastructure/persistence/compat_db/db_base.py
+[cross-layer] app/fastapi_routes/domains/db/product_queries.py -> app/infrastructure/persistence/compat_db/product_queries.py
+[cross-layer] app/fastapi_routes/domains/db/queries.py -> app/infrastructure/persistence/compat_db/queries.py
+[cross-layer] app/fastapi_routes/domains/db/writes.py -> app/infrastructure/persistence/compat_db/writes.py
+[cross-layer] app/fastapi_routes/domains/excel/excel_extract.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/fastapi_routes/domains/excel/excel_extract_shipment.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/domains/excel/excel_extract_shipment.py -> app/infrastructure/auth/shipment_etl_access_gate.py
+[cross-layer] app/fastapi_routes/domains/genai_traces/genai_traces_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/domains/genai_traces/genai_traces_routes.py -> app/infrastructure/llm/trace_store.py
+[cross-layer] app/fastapi_routes/domains/misc/helpers.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/domains/misc/misc_routes.py -> app/infrastructure/auth/db_token.py
+[cross-layer] app/fastapi_routes/domains/misc/misc_routes.py -> app/infrastructure/db/sync_engine.py
+[cross-layer] app/fastapi_routes/domains/product/product_routes.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/fastapi_routes/domains/product/product_routes.py -> app/infrastructure/auth/db_token.py
+[cross-layer] app/fastapi_routes/domains/product/product_routes.py -> app/infrastructure/documents/template_registry.py
+[cross-layer] app/fastapi_routes/domains/shipment/shipment_agent_runtime.py -> app/infrastructure/auth/agent_principal.py
+[cross-layer] app/fastapi_routes/domains/shipment/shipment_agent_runtime.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/domains/shipment/shipment_api_order_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/domains/shipment/shipment_order_support.py -> app/infrastructure/workspace.py
+[cross-layer] app/fastapi_routes/domains/shipment/shipment_orders.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/fastapi_routes/domains/system/admin_llm_handlers.py -> app/infrastructure/llm/providers/registry.py
+[cross-layer] app/fastapi_routes/domains/system/agent_handlers.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/domains/system/system_routes.py -> app/infrastructure/skills/__init__.py
+[cross-layer] app/fastapi_routes/elt.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/elt_auto_ingest.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/elt_auto_ingest.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/fhd_meta.py -> app/infrastructure/auth/db_token.py
+[cross-layer] app/fastapi_routes/gdpr.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/im_ai_group_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/im_cs_admin_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/im_cs_client_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/im_cs_client_routes.py -> app/infrastructure/topology.py
+[cross-layer] app/fastapi_routes/im_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/im_routes.py -> app/infrastructure/im/employee_reply_relay.py
+[cross-layer] app/fastapi_routes/im_routes.py -> app/infrastructure/im/message_fanout.py
+[cross-layer] app/fastapi_routes/im_routes.py -> app/infrastructure/im/ws_hub.py
+[cross-layer] app/fastapi_routes/im_super_employee_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/internal_im.py -> app/infrastructure/im/employee_reply_relay.py
+[cross-layer] app/fastapi_routes/internal_im.py -> app/infrastructure/im/message_fanout.py
+[cross-layer] app/fastapi_routes/internal_im.py -> app/infrastructure/im/ws_hub.py
+[cross-layer] app/fastapi_routes/inventory.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/issue_runtime_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/kellai_binding.py -> app/infrastructure/auth/client_shell_session.py
+[cross-layer] app/fastapi_routes/kellai_binding.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/knowledge/access.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/knowledge_v1.py -> app/infrastructure/rag/__init__.py
+[cross-layer] app/fastapi_routes/label_jobs.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/market_bridge/bindings.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/market_browser_handoff.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/materials.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/fastapi_routes/mobile_api.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/mobile_api.py -> app/infrastructure/auth/mobile_session.py
+[cross-layer] app/fastapi_routes/mobile_api.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/fastapi_routes/mobile_extensions/admin_helpers.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/mobile_extensions/admin_helpers.py -> app/infrastructure/auth/mobile_session.py
+[cross-layer] app/fastapi_routes/mobile_extensions/admin_helpers.py -> app/infrastructure/mods/catalog_client.py
+[cross-layer] app/fastapi_routes/mobile_extensions/backends.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/mobile_extensions/backends.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/fastapi_routes/mobile_extensions/routes_auth.py -> app/infrastructure/auth/oidc_provider.py
+[cross-layer] app/fastapi_routes/mobile_extensions/routes_worklists.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/mod_store/commands.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/mod_store/commands.py -> app/infrastructure/mods/manifest.py
+[cross-layer] app/fastapi_routes/mod_store/foundation.py -> app/infrastructure/mods/employee_registry.py
+[cross-layer] app/fastapi_routes/mod_store/packages.py -> app/infrastructure/mods/artifact_constants.py
+[cross-layer] app/fastapi_routes/mod_store/updates.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/mod_store/updates.py -> app/infrastructure/mods/install_receipts.py
+[cross-layer] app/fastapi_routes/mod_store_routes.py -> app/infrastructure/mods/artifact_package.py
+[cross-layer] app/fastapi_routes/mod_store_routes.py -> app/infrastructure/mods/employee_registry.py
+[cross-layer] app/fastapi_routes/mod_store_routes.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/fastapi_routes/model_payment.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/model_payment.py -> app/infrastructure/billing/model_usage.py
+[cross-layer] app/fastapi_routes/model_payment.py -> app/infrastructure/billing/saas_plans.py
+[cross-layer] app/fastapi_routes/model_payment.py -> app/infrastructure/payment/alipay.py
+[cross-layer] app/fastapi_routes/model_payment.py -> app/infrastructure/payment/modstore_payment_proxy.py
+[cross-layer] app/fastapi_routes/model_payment.py -> app/infrastructure/payment/order_store.py
+[cross-layer] app/fastapi_routes/model_payment.py -> app/infrastructure/payment/payment_sot.py
+[cross-layer] app/fastapi_routes/model_payment_authorization.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/model_payment_authorization.py -> app/infrastructure/payment/order_store.py
+[cross-layer] app/fastapi_routes/model_payment_authorization.py -> app/infrastructure/payment/payment_sot.py
+[cross-layer] app/fastapi_routes/mods_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/mods_routes.py -> app/infrastructure/mods/comms.py
+[cross-layer] app/fastapi_routes/mods_routes.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/fastapi_routes/mounts/business.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/fastapi_routes/mounts/health.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/platform_shell_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/platform_shell_routes.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/fastapi_routes/print_routes.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/fastapi_routes/print_routes.py -> app/infrastructure/workspace.py
+[cross-layer] app/fastapi_routes/private_mod_delivery_context.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/private_mod_delivery_context.py -> app/infrastructure/mods/mod_manager.py
+[cross-layer] app/fastapi_routes/private_mod_delivery_progress_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/private_mod_delivery_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/rbac.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/reviewed_excel/archive.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/reviewed_excel_template.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/reviewed_excel_template.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/sales_contract_api.py -> app/infrastructure/documents/price_list_export.py
+[cross-layer] app/fastapi_routes/sales_contract_api.py -> app/infrastructure/documents/template_registry.py
+[cross-layer] app/fastapi_routes/system_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/template_api.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/template_api.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/template_create.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/template_create.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/tools_execute.py -> app/infrastructure/auth/agent_principal.py
+[cross-layer] app/fastapi_routes/tutorial_v2.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/upload.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/workflow_definitions.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/workflow_definitions.py -> app/infrastructure/auth/tenant_context.py
+[cross-layer] app/fastapi_routes/workspace_prefs_routes.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/xcagi_compat_chat_helpers.py -> app/infrastructure/auth/db_token.py
+[cross-layer] app/fastapi_routes/xcagi_compat_chat_helpers.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/fastapi_routes/xcagi_compat_chat_helpers.py -> app/infrastructure/chat_stream_lifetime.py
+[cross-layer] app/fastapi_routes/xcagi_compat_chat_helpers.py -> app/infrastructure/llm/client.py
+[cross-layer] app/fastapi_routes/xcagi_compat_chat_helpers.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/xcagi_compat_chat_models.py -> app/infrastructure/modstore_transport.py
+[cross-layer] app/fastapi_routes/xcagi_compat_chat_stream.py -> app/infrastructure/chat_stream_lifetime.py
+[cross-layer] app/fastapi_routes/xcagi_compat_chat_stream.py -> app/infrastructure/llm/client.py
+[cross-layer] app/fastapi_routes/xcagi_compat_chat_stream.py -> app/infrastructure/tenant_scope.py
+[cross-layer] app/fastapi_routes/xcagi_compat_product.py -> app/infrastructure/auth/business_scope_gate.py
+[cross-layer] app/fastapi_routes/xcagi_compat_product.py -> app/infrastructure/auth/db_token.py
+[cross-layer] app/fastapi_routes/xcagi_compat_product.py -> app/infrastructure/documents/price_list_export.py
+[cross-layer] app/fastapi_routes/xcagi_compat_product.py -> app/infrastructure/persistence/compat_db/compat_db_base.py
+[cross-layer] app/fastapi_routes/xcagi_compat_product.py -> app/infrastructure/persistence/compat_db/product_queries.py
+[cross-layer] app/fastapi_routes/xcagi_compat_product.py -> app/infrastructure/persistence/compat_db/queries.py
+[cross-layer] app/fastapi_routes/xcagi_compat_product.py -> app/infrastructure/persistence/compat_db/writes.py
+[cross-layer] app/fastapi_routes/xcagi_compat_product_actions.py -> app/infrastructure/documents/price_list_export.py
+[cross-layer] app/fastapi_routes/xcmax_admin_auth.py -> app/infrastructure/auth/dependencies.py
+[cross-layer] app/infrastructure/billing/model_usage.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/infrastructure/llm/client.py -> app/fastapi_routes/market_account.py
+[cross-layer] app/infrastructure/mods/hooks.py -> app/fastapi_routes/state.py
+[cross-layer] app/infrastructure/mods/management/activation.py -> app/fastapi_routes/spa_fallback.py
+[cross-layer] app/infrastructure/mods/management/http_routes.py -> app/fastapi_routes/spa_fallback.py
+[cross-layer] app/infrastructure/payment/modstore_payment_proxy.py -> app/fastapi_routes/market_account.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/admin_events.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/db.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/app_factory.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/http_clients.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/authoring.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/library_paths.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/catalog.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/library_paths.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/config.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/library_paths.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/debug.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/library_paths.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/deps.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/db.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/notification.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/db.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/notification.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/notification_repository.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/payment_checkout_routes.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/http_clients.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/api/sync.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/library_paths.py
+[cross-layer] 成都修茈科技有限公司/MODstore_deploy/modstore_server/application/catalog.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/infrastructure/catalog_repository.py
+[facade-late-binding] app/domain/shared_services/tools_workflow_business_db.py
+[facade-late-binding] app/fastapi_routes/im_ai_group_routes.py
+[facade-late-binding] app/fastapi_routes/im_super_employee_routes.py
+[facade-late-binding] app/fastapi_routes/im_websocket_route.py
+[facade-late-binding] app/fastapi_routes/xcagi_compat_chat_stream.py
+[facade-late-binding] app/legacy/chat/legacy_chat_runtime.py
+[import-cycle] app/domain/shared_services/deepseek_hybrid_intent.py -> app/domain/shared_services/deepseek_intent_service.py
+[import-cycle] app/domain/shared_services/deepseek_intent_service.py -> app/domain/shared_services/deepseek_hybrid_intent.py
+[import-cycle] app/fastapi_routes/domains/excel/excel_extract.py -> app/fastapi_routes/domains/excel/excel_extract_shipment.py
+[import-cycle] app/fastapi_routes/domains/excel/excel_extract_shipment.py -> app/fastapi_routes/domains/excel/excel_extract.py
+[import-cycle] app/fastapi_routes/mod_store_routes.py -> app/fastapi_routes/private_mod_delivery_progress_routes.py
+[import-cycle] app/fastapi_routes/mod_store_routes.py -> app/fastapi_routes/private_mod_delivery_routes.py
+[import-cycle] app/fastapi_routes/private_mod_delivery_progress_routes.py -> app/fastapi_routes/mod_store_routes.py
+[import-cycle] app/fastapi_routes/private_mod_delivery_routes.py -> app/fastapi_routes/mod_store_routes.py
+[import-cycle] app/infrastructure/workflow/langgraph_construction.py -> app/infrastructure/workflow/langgraph_runtime.py
+[import-cycle] app/infrastructure/workflow/langgraph_execution.py -> app/infrastructure/workflow/langgraph_runtime.py
+[import-cycle] app/infrastructure/workflow/langgraph_runtime.py -> app/infrastructure/workflow/langgraph_construction.py
+[import-cycle] app/infrastructure/workflow/langgraph_runtime.py -> app/infrastructure/workflow/langgraph_execution.py
+[import-cycle] app/neuro_bus/circuit_breaker.py -> app/neuro_bus/circuit_breaker_manager.py
+[import-cycle] app/neuro_bus/circuit_breaker_manager.py -> app/neuro_bus/circuit_breaker.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_create_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_crm_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_payment_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_create_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_create_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_crm_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_crm_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_payment_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_payment_api.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_delivery_api.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_line_execution.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_line_executor.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_line_executor.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_line_execution.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_bus.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_dispatch.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_dispatch.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_bus.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_team_dispatch.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_team_orchestrator.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_team_orchestrator.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_team_dispatch.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_deploy_receipts.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_gh_gateway.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_deploy_receipts.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_receipt_recording.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_gh_gateway.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_deploy_receipts.py
+[import-cycle] 成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_receipt_recording.py -> 成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_deploy_receipts.py
 [legacy-boundary] app/infrastructure/persistence/compat_db/compat_db_base.py
