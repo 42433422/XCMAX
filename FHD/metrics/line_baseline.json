@@ -1,5 +1,5 @@
 {
-  "lines": 2413275,
+  "lines": 2413280,
   "updated": "2026-11-05",
-  "note": "P1 nav reliability: add shared intent helpers; truncate retort absorption log history (git retains full log)"
+  "note": "P1 nav reliability CI unblock (+shared intent helpers; retort absorption log truncated, git retains history)"
 }
