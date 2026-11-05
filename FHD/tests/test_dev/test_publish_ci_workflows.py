@@ -96,6 +96,7 @@ def test_nightly_dispatch_supplies_required_inputs_and_propagates_failure(
     source = REPO_ROOT / "FHD/.github/workflows/nightly-full.yml"
     rendered = publisher._render_fhd(source)
     assert rendered is not None
+    assert (REPO_ROOT / ".github/workflows" / rendered[0]).read_text() == rendered[1]
     workflow = yaml.load(rendered[1], Loader=yaml.BaseLoader)
     fanout = workflow["jobs"]["dispatch-nightly"]["steps"][-1]
     assert fanout["env"]["RELEASE_SHA"] == "${{ steps.target.outputs.sha }}"
@@ -116,7 +117,7 @@ def test_nightly_dispatch_supplies_required_inputs_and_propagates_failure(
     sha = "fd143dae58e26f01b9a9d86716abe7045fa1d507"
     result = subprocess.run(
         ["bash", "-c", fanout["run"]],
-        cwd=REPO_ROOT,
+        cwd=REPO_ROOT / workflow["defaults"]["run"]["working-directory"],
         env={
             **os.environ,
             "PATH": f"{tmp_path}:{os.environ['PATH']}",
