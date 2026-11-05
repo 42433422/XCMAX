@@ -243,9 +243,10 @@ describe('appNavigation + real Vue Router', () => {
     await Promise.resolve()
     releaseMod()
     const [appliedOld, appliedNew] = await Promise.all([first, second])
-    // Drain returns the last applied boolean for the shared drain promise —
-    // both awaiters share the same drain result (last applied).
-    expect(appliedOld).toBe(appliedNew)
+    // Each coalesced call settles on its own promise: superseded waiter gets
+    // false; the latest drain reports whether its push applied.
+    expect(appliedOld).toBe(false)
+    expect(appliedNew).toBe(true)
     expect(router.currentRoute.value.name).toBe('settings')
     expect(getQueuedSidebarViewKey()).toBeNull()
     expect(isSidebarNavigationPending()).toBe(false)
