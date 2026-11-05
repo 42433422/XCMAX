@@ -82,14 +82,16 @@ def business_completion_from_run(
     progress_factory,
 ) -> tuple[str, dict[str, Any]]:
     """Map ETL completed runs with 0 written rows to completed_empty (not applied)."""
-    summary = run.get("summary") if isinstance(run.get("summary"), dict) else {}
+    summary_raw = run.get("summary")
+    summary: dict[str, Any] = summary_raw if isinstance(summary_raw, dict) else {}
     executed = int(summary.get("executed") or run.get("executed_rows") or 0)
     written = (
         executed
         + int(summary.get("new") or run.get("new_rows") or 0)
         + int(summary.get("update") or run.get("update_rows") or 0)
     )
-    receipt = run.get("receipt") if isinstance(run.get("receipt"), dict) else {}
+    receipt_raw = run.get("receipt")
+    receipt: dict[str, Any] = receipt_raw if isinstance(receipt_raw, dict) else {}
     if written <= 0 and not receipt.get("rows_written"):
         return (
             "completed_empty",

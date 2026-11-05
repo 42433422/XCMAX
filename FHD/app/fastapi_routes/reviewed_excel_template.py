@@ -1938,7 +1938,8 @@ async def reviewed_excel_save(
                 auto_ingest = get_auto_ingest_service().start_background(
                     owner_user_id=owner,
                     tenant_id=tenant,
-                    source_path=str(path),
+                    # Staged original workbook — never the cleaned template file.
+                    source_path=str(prepared_path),
                     file_name=name.strip(),
                     template_id=str(template_id),
                     review_id=review_id,
