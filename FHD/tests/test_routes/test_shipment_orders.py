@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes import shipment_orders
+from app.fastapi_routes.domains.shipment import shipment_order_support
 from app.utils.path_io.path_utils import get_shipment_output_dir
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
@@ -29,7 +30,7 @@ def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     Path(get_shipment_output_dir()).mkdir(parents=True, exist_ok=True)
     mock = MagicMock()
-    with patch.object(shipment_orders, "_svc", return_value=mock):
+    with patch.object(shipment_order_support, "svc", return_value=mock):
         yield mock
 
 

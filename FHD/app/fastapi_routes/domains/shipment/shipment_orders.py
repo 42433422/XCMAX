@@ -13,10 +13,8 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 import os
-import re
 from pathlib import Path
 from typing import Any
 
@@ -24,8 +22,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.bootstrap import get_shipment_application_service_core
 from app.fastapi_routes.domains.shipment import shipment_agent_runtime as _shipment_agent_runtime
+from app.fastapi_routes.domains.shipment import shipment_order_support as _support
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
@@ -45,10 +43,6 @@ router = APIRouter(
 )
 
 
-def _svc():
-    return get_shipment_application_service_core()
-
-
 def _resolve_shipment_output_path(file_arg: object) -> Path | None:
     from app.utils.path_io.path_utils import get_shipment_output_dir
 
@@ -60,27 +54,9 @@ def _resolve_shipment_output_path(file_arg: object) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
-    from pathlib import Path
-
-    from app.infrastructure.workspace import resolve_existing_file_under_root
-    from app.utils.path_io.path_utils import get_data_dir
-
-    filename = os.path.basename(str(result.get("filename") or ""))
-    if not re.fullmatch(r"shipment_records_[^/\\]{1,160}_\d{8}_\d{6}\.xlsx", filename):
-        return None
-    try:
-        candidate = resolve_existing_file_under_root(
-            Path(get_data_dir()).resolve() / "exports", filename
-        )
-    except (OSError, ValueError):
-        return None
-    return str(candidate)
-
-
 def _next_order_number_payload(suffix: str = "A") -> dict[str, Any]:
     try:
-        return {"success": True, "data": _svc().reserve_order_number(suffix)}
+        return {"success": True, "data": _support.svc().reserve_order_number(suffix)}
     except RECOVERABLE_ERRORS as exc:
         logger.exception("订单取号失败")
         raise HTTPException(status_code=503, detail="订单取号失败，请稍后重试") from exc
@@ -206,7 +182,7 @@ def shipment_download(filename: str):
 
 @router.get("/api/shipment/orders/purchase-units")
 def shipment_orders_purchase_units():
-    units = _svc().get_purchase_units()
+    units = _support.svc().get_purchase_units()
     return {"success": True, "data": units, "count": len(units)}
 
 
@@ -228,7 +204,7 @@ def shipment_orders_clear_shipment(
 
 @router.get("/api/shipment/orders")
 def shipment_orders_list(limit: int = Query(default=100, ge=1, le=5000)):
-    orders_list = _svc().get_orders(limit=limit) or []
+    orders_list = _support.svc().get_orders(limit=limit) or []
     inner = {"success": True, "data": orders_list, "count": len(orders_list)}
     return {"success": True, "data": inner, "count": len(inner)}
 
@@ -238,13 +214,13 @@ def shipment_orders_search(q: str = Query(default="")):
     qs = (q or "").strip()
     if not qs:
         return {"success": True, "data": [], "count": 0}
-    rows = _svc().search_orders(qs)
+    rows = _support.svc().search_orders(qs)
     return {"success": True, "data": rows, "count": len(rows)}
 
 
 @router.get("/api/shipment/orders/latest")
 def shipment_orders_latest():
-    orders = _svc().get_orders(limit=10) or []
+    orders = _support.svc().get_orders(limit=10) or []
     return {"success": True, "data": orders}
 
 
@@ -286,29 +262,17 @@ def shipment_orders_clear_all(request: Request):
 
 @router.get("/api/shipment/orders/{order_number}")
 def shipment_orders_get(order_number: str):
-    order = _svc().get_order(str(order_number))
+    order = _support.svc().get_order(str(order_number))
     if order:
         return {"success": True, "data": order}
     raise HTTPException(status_code=404, detail="订单不存在")
 
 
-_api_order_routes = importlib.import_module(
-    "app.fastapi_routes.domains.shipment.shipment_api_order_routes"
+from app.fastapi_routes.domains.shipment import (
+    shipment_api_order_routes as _api_order_routes,  # noqa: E402
 )
-api_orders_list = _api_order_routes.api_orders_list
-api_orders_create = _api_order_routes.api_orders_create
-api_orders_delete_root = _api_order_routes.api_orders_delete_root
-api_orders_latest = _api_order_routes.api_orders_latest
-api_orders_search = _api_order_routes.api_orders_search
-api_orders_set_sequence = _api_order_routes.api_orders_set_sequence
-api_orders_reset_sequence = _api_order_routes.api_orders_reset_sequence
-api_orders_purchase_units = _api_order_routes.api_orders_purchase_units
-api_orders_clear_shipment = _api_order_routes.api_orders_clear_shipment
-api_orders_export = _api_order_routes.api_orders_export
-api_orders_clear_all = _api_order_routes.api_orders_clear_all
-api_orders_update = _api_order_routes.api_orders_update
-api_orders_get = _api_order_routes.api_orders_get
-shipment_orders_delete = _api_order_routes.shipment_orders_delete
+
+router.include_router(_api_order_routes.router)
 
 
 # ----- /api/shipment/shipment-records -----
@@ -324,7 +288,7 @@ def shipment_records_dashboard_alias(
     """企业客服等页面使用的短路径；与 shipment-records/records 同源，支持 per_page。"""
     _ = sort  # 预留与前端 sort=created_at_desc 对齐；列表默认按 created_at 倒序
     u = (unit or unit_name or "").strip() or None
-    records = _svc().get_shipment_records(u, limit=per_page)
+    records = _support.svc().get_shipment_records(u, limit=per_page)
     return {"success": True, "data": records}
 
 
@@ -348,7 +312,7 @@ def shipment_records_list(
     except RECOVERABLE_ERRORS:
         logger.debug("erp domain shipment.records_list dispatch skipped", exc_info=True)
     u = (unit or unit_name or "").strip() or None
-    records = _svc().get_shipment_records(u)
+    records = _support.svc().get_shipment_records(u)
     return {"success": True, "data": records}
 
 
@@ -419,12 +383,12 @@ def shipment_records_export(
     status: str | None = Query(default=None),
 ):
     u = (unit or unit_name or "").strip() or None
-    result = _svc().export_shipment_records(
+    result = _support.svc().export_shipment_records(
         unit_name=u,
         template_id=template_id,
         status_filter=status,
     )
-    fp = _safe_shipment_export_path(result)
+    fp = _support.safe_shipment_export_path(result)
     if result.get("success") and fp:
         return FileResponse(
             fp,

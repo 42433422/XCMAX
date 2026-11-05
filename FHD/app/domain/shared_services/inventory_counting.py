@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from app.db.models import InventoryLedger, InventoryTransaction, Product
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.domain.shared_services.inventory_service")
-
-
-def _facade():
-    return importlib.import_module("app.domain.shared_services.inventory_service")
 
 
 class InventoryCountingMixin:
@@ -38,14 +34,14 @@ class InventoryCountingMixin:
         - confirmed=False：仅返回差异供对话层反问确认，不实际改动库存。
         - confirmed=True：按实际数量调整台账并写入一条 transaction_type="count" 流水。
         """
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             try:
                 ledger = (
-                    db.query(_facade().InventoryLedger)
+                    db.query(InventoryLedger)
                     .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == warehouse_id,
-                        _facade().InventoryLedger.batch_no == batch_no,
+                        InventoryLedger.product_id == product_id,
+                        InventoryLedger.warehouse_id == warehouse_id,
+                        InventoryLedger.batch_no == batch_no,
                     )
                     .first()
                 )
@@ -76,7 +72,7 @@ class InventoryCountingMixin:
                     ledger.location_id = location_id
                 ledger.updated_at = now
                 db.flush()
-                transaction = _facade().InventoryTransaction(
+                transaction = InventoryTransaction(
                     ledger_id=ledger.id,
                     transaction_type="count",
                     product_id=product_id,
@@ -110,7 +106,7 @@ class InventoryCountingMixin:
                 }
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("盘点失败: %s", e)
+                logger.error("盘点失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def get_inventory_transactions(
@@ -123,23 +119,21 @@ class InventoryCountingMixin:
         page: int = 1,
         per_page: int = 50,
     ) -> dict[str, Any]:
-        with _facade().get_db() as db:
-            query = db.query(_facade().InventoryTransaction)
+        with self._db_session() as db:
+            query = db.query(InventoryTransaction)
             if product_id:
-                query = query.filter(_facade().InventoryTransaction.product_id == product_id)
+                query = query.filter(InventoryTransaction.product_id == product_id)
             if warehouse_id:
-                query = query.filter(_facade().InventoryTransaction.warehouse_id == warehouse_id)
+                query = query.filter(InventoryTransaction.warehouse_id == warehouse_id)
             if transaction_type:
-                query = query.filter(
-                    _facade().InventoryTransaction.transaction_type == transaction_type
-                )
+                query = query.filter(InventoryTransaction.transaction_type == transaction_type)
             if start_date:
-                query = query.filter(_facade().InventoryTransaction.transaction_date >= start_date)
+                query = query.filter(InventoryTransaction.transaction_date >= start_date)
             if end_date:
-                query = query.filter(_facade().InventoryTransaction.transaction_date <= end_date)
+                query = query.filter(InventoryTransaction.transaction_date <= end_date)
             total = query.count()
             items = (
-                query.order_by(_facade().InventoryTransaction.transaction_date.desc())
+                query.order_by(InventoryTransaction.transaction_date.desc())
                 .offset((page - 1) * per_page)
                 .limit(per_page)
                 .all()
@@ -164,11 +158,11 @@ class InventoryCountingMixin:
         return self.get_inventory_transactions(**kwargs)
 
     def get_inventory_alert(self) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             query = (
-                db.query(_facade().InventoryLedger)
-                .join(_facade().Product)
-                .filter(_facade().InventoryLedger.available_quantity <= 0)
+                db.query(InventoryLedger)
+                .join(Product)
+                .filter(InventoryLedger.available_quantity <= 0)
             )
             items = query.all()
             result = []

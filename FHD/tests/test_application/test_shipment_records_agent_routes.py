@@ -16,6 +16,7 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.shipment_app_service import ShipmentApplicationService
 from app.db.db_base import Base
 from app.fastapi_routes import shipment_orders
+from app.fastapi_routes.domains.shipment import shipment_order_support
 from app.infrastructure.auth import business_scope_gate as gate
 from app.infrastructure.persistence.shipment_record_command_impl import (
     SQLAlchemyShipmentRecordCommand,
@@ -43,7 +44,7 @@ def test_shipment_record_mutation_routes_execute_through_agent_orchestrator(
         record_command=SQLAlchemyShipmentRecordCommand(),
     )
     user = [SimpleNamespace(id=11, is_active=True, role="user", tier="enterprise", tenant_id=7)]
-    monkeypatch.setattr(shipment_orders, "_svc", lambda: service)
+    monkeypatch.setattr(shipment_order_support, "svc", lambda: service)
     monkeypatch.setattr(gate, "resolve_product_sku", lambda: "enterprise")
     allowed = [True]
     monkeypatch.setattr(

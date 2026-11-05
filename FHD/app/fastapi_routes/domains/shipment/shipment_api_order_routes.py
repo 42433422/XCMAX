@@ -1,23 +1,23 @@
-"""Historical ``/api/orders`` routes mounted on the shipment router."""
+"""Historical ``/api/orders`` routes, included by the shipment orders router."""
 
 from __future__ import annotations
 
-import sys
+import os
 from typing import Any
 
-from fastapi import Body, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import FileResponse, JSONResponse
 
+from app.fastapi_routes.domains.shipment import shipment_agent_runtime as _shipment_agent_runtime
+from app.fastapi_routes.domains.shipment import shipment_order_support as _support
 
-def _facade() -> Any:
-    return sys.modules["app.fastapi_routes.domains.shipment.shipment_orders"]
-
-
-router = _facade().router
+router = APIRouter()
 
 
 @router.get("/api/orders")
 def api_orders_list(limit: int = Query(default=100, ge=1, le=5000)):
-    orders = _facade()._svc().get_orders(limit=limit) or []
+    orders = _support.svc().get_orders(limit=limit) or []
     return {"success": True, "data": orders, "count": len(orders)}
 
 
@@ -32,10 +32,10 @@ def api_orders_create(request: Request, payload: dict[str, Any] = Body(default_f
     ).strip()
     products = payload.get("products") or payload.get("items") or []
     if not purchase_unit:
-        raise _facade().HTTPException(status_code=400, detail="缺少购买单位")
+        raise HTTPException(status_code=400, detail="缺少购买单位")
     if not isinstance(products, list) or not products:
-        raise _facade().HTTPException(status_code=400, detail="产品列表不能为空")
-    result = _facade()._run_shipment_records_agent(
+        raise HTTPException(status_code=400, detail="产品列表不能为空")
+    result = _shipment_agent_runtime.run_shipment_records_agent(
         request=request,
         action="create",
         params={
@@ -46,53 +46,53 @@ def api_orders_create(request: Request, payload: dict[str, Any] = Body(default_f
         },
         route_path="/api/orders",
     )
-    return _facade().JSONResponse(result, status_code=201 if result.get("success") else 400)
+    return JSONResponse(result, status_code=201 if result.get("success") else 400)
 
 
 @router.delete("/api/orders")
 @router.delete("/api/orders/", include_in_schema=False)
 def api_orders_delete_root(request: Request):
-    result = _facade()._run_shipment_orders_agent(
+    result = _shipment_agent_runtime.run_shipment_orders_agent(
         request=request, action="clear_all", params={}, route_path="/api/orders"
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.get("/api/orders/latest")
 def api_orders_latest():
-    orders = _facade()._svc().get_orders(limit=10) or []
+    orders = _support.svc().get_orders(limit=10) or []
     return {"success": True, "data": orders, "count": len(orders)}
 
 
 @router.get("/api/orders/search")
 def api_orders_search(q: str = Query(default="")):
     qs = (q or "").strip()
-    rows = _facade()._svc().search_orders(qs) if qs else []
+    rows = _support.svc().search_orders(qs) if qs else []
     return {"success": True, "data": rows, "count": len(rows)}
 
 
 @router.post("/api/orders/set-sequence")
 def api_orders_set_sequence(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    result = _facade()._run_shipment_orders_agent(
+    result = _shipment_agent_runtime.run_shipment_orders_agent(
         request=request,
         action="set_sequence",
         params={"sequence": int(payload.get("sequence", 1))},
         route_path="/api/orders/set-sequence",
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.post("/api/orders/reset-sequence")
 def api_orders_reset_sequence(request: Request):
-    result = _facade()._run_shipment_orders_agent(
+    result = _shipment_agent_runtime.run_shipment_orders_agent(
         request=request, action="reset_sequence", params={}, route_path="/api/orders/reset-sequence"
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.get("/api/orders/purchase-units")
 def api_orders_purchase_units():
-    units = _facade()._svc().get_purchase_units()
+    units = _support.svc().get_purchase_units()
     return {"success": True, "data": units, "count": len(units)}
 
 
@@ -102,14 +102,14 @@ def api_orders_clear_shipment(
 ):
     purchase_unit = str(payload.get("purchase_unit") or "").strip()
     if not purchase_unit:
-        raise _facade().HTTPException(status_code=400, detail="缺少购买单位参数")
-    result = _facade()._run_shipment_orders_agent(
+        raise HTTPException(status_code=400, detail="缺少购买单位参数")
+    result = _shipment_agent_runtime.run_shipment_orders_agent(
         request=request,
         action="clear_shipment",
         params={"purchase_unit": purchase_unit},
         route_path="/api/orders/clear-shipment",
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.get("/api/orders/export")
@@ -120,29 +120,25 @@ def api_orders_export(
     status: str | None = Query(default=None),
 ):
     selected_unit = (unit or purchase_unit or "").strip() or None
-    result = (
-        _facade()
-        ._svc()
-        .export_shipment_records(
-            unit_name=selected_unit, template_id=template_id, status_filter=status
-        )
+    result = _support.svc().export_shipment_records(
+        unit_name=selected_unit, template_id=template_id, status_filter=status
     )
-    file_path = _facade()._safe_shipment_export_path(result)
+    file_path = _support.safe_shipment_export_path(result)
     if result.get("success") and file_path:
-        return _facade().FileResponse(
+        return FileResponse(
             file_path,
-            filename=_facade().os.path.basename(file_path),
+            filename=os.path.basename(file_path),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-    return _facade().JSONResponse(result, status_code=400 if not result.get("success") else 500)
+    return JSONResponse(result, status_code=400 if not result.get("success") else 500)
 
 
 @router.delete("/api/orders/clear-all")
 def api_orders_clear_all(request: Request):
-    result = _facade()._run_shipment_orders_agent(
+    result = _shipment_agent_runtime.run_shipment_orders_agent(
         request=request, action="clear_all", params={}, route_path="/api/orders/clear-all"
     )
-    return _facade().JSONResponse(result, status_code=200 if result.get("success") else 500)
+    return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.patch("/api/orders/{order_number}")
@@ -152,7 +148,7 @@ def api_orders_update(
     try:
         record_id = int(order_number)
     except ValueError:
-        raise _facade().HTTPException(status_code=404, detail="订单不存在")
+        raise HTTPException(status_code=404, detail="订单不存在")
     requested_status = payload.get("status")
     if requested_status is not None and str(requested_status) not in {
         "pending",
@@ -160,7 +156,7 @@ def api_orders_update(
         "completed",
         "cancelled",
     }:
-        raise _facade().HTTPException(status_code=400, detail="无效的订单状态")
+        raise HTTPException(status_code=400, detail="无效的订单状态")
     update_params = {
         "id": record_id,
         "unit_name": payload.get("purchase_unit") or payload.get("unit_name"),
@@ -173,16 +169,16 @@ def api_orders_update(
         "amount": payload.get("amount"),
         "status": requested_status,
     }
-    result = _facade()._run_shipment_records_agent(
+    result = _shipment_agent_runtime.run_shipment_records_agent(
         request=request,
         action="update",
         params={key: value for (key, value) in update_params.items() if value is not None},
         route_path="/api/orders/{order_number}",
     )
     if not result.get("success"):
-        return _facade().JSONResponse(result, status_code=404)
-    result["data"] = _facade()._svc().get_order(str(record_id))
-    return _facade().JSONResponse(_facade().jsonable_encoder(result), status_code=200)
+        return JSONResponse(result, status_code=404)
+    result["data"] = _support.svc().get_order(str(record_id))
+    return JSONResponse(jsonable_encoder(result), status_code=200)
 
 
 @router.get("/api/orders/webhooks")
@@ -192,9 +188,7 @@ def api_orders_webhooks(request: Request):
     user = get_logged_in_user(request)
     tenant_id = getattr(user, "tenant_id", None)
     if not isinstance(tenant_id, int):
-        raise _facade().HTTPException(
-            status_code=403, detail="该旧业务接口尚未提供安全的租户数据隔离"
-        )
+        raise HTTPException(status_code=403, detail="该旧业务接口尚未提供安全的租户数据隔离")
     from app.application.order_webhook_registry import list_webhooks
 
     return {"success": True, "data": list_webhooks(tenant_id), "tenant_id": tenant_id}
@@ -205,10 +199,10 @@ def api_orders_get(order_number: str):
     try:
         int(order_number)
     except ValueError:
-        raise _facade().HTTPException(status_code=404, detail="订单不存在")
-    order = _facade()._svc().get_order(str(order_number))
+        raise HTTPException(status_code=404, detail="订单不存在")
+    order = _support.svc().get_order(str(order_number))
     if not order:
-        raise _facade().HTTPException(status_code=404, detail="订单不存在")
+        raise HTTPException(status_code=404, detail="订单不存在")
     return {"success": True, "data": order}
 
 
@@ -217,14 +211,14 @@ def shipment_orders_delete(request: Request, order_number: str):
     try:
         shipment_id = int(order_number)
     except ValueError:
-        raise _facade().HTTPException(status_code=400, detail=f"无效的订单编号格式：{order_number}")
-    result = _facade()._run_shipment_orders_agent(
+        raise HTTPException(status_code=400, detail=f"无效的订单编号格式：{order_number}")
+    result = _shipment_agent_runtime.run_shipment_orders_agent(
         request=request,
         action="delete",
         params={"id": shipment_id, "order_number": order_number},
         route_path="/api/shipment/orders/{order_number}",
     )
     if not result.get("success"):
-        raise _facade().HTTPException(status_code=400, detail=result.get("message", "删除失败"))
+        raise HTTPException(status_code=400, detail=result.get("message", "删除失败"))
     result["message"] = f"订单 {order_number} 已删除"
     return result

@@ -102,9 +102,9 @@ def _registered_router_shipment_records(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
     if str(runtime_context.get("service_source") or "") == "fastapi_shipment_records_route":
-        from app.fastapi_routes import shipment_orders
+        from app.fastapi_routes.domains.shipment import shipment_order_support
 
-        svc = shipment_orders._svc()
+        svc = shipment_order_support.svc()
     else:
         from app.bootstrap import get_shipment_app_service
 
@@ -151,9 +151,9 @@ def _registered_router_shipment_orders(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
     if str(runtime_context.get("service_source") or "") == "fastapi_shipment_orders_route":
-        from app.fastapi_routes import shipment_orders
+        from app.fastapi_routes.domains.shipment import shipment_order_support
 
-        svc = shipment_orders._svc()
+        svc = shipment_order_support.svc()
     else:
         from app.bootstrap import get_shipment_app_service
 

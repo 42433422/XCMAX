@@ -4,28 +4,11 @@
 提供仓库、库位、库存台账、库存流水等业务逻辑。
 """
 
-import logging
+from contextlib import AbstractContextManager
 
-from app.db.models import (
-    InventoryLedger as InventoryLedger,
-)
-from app.db.models import (
-    InventoryTransaction as InventoryTransaction,
-)
-from app.db.models import (
-    Product as Product,
-)
-from app.db.models import (
-    StorageLocation as StorageLocation,
-)
-from app.db.models import (
-    Warehouse as Warehouse,
-)
-from app.db.session import get_db as get_db
+from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
-
-
+from app.db.session import get_db
 from app.domain.shared_services.inventory_counting import InventoryCountingMixin
 from app.domain.shared_services.inventory_lookup import InventoryLookupMixin
 from app.domain.shared_services.inventory_movements import InventoryMovementsMixin
@@ -41,6 +24,10 @@ class InventoryService(
     InventoryOrdersMixin,
 ):
     """库存管理服务类，由仓库、流水、盘点和订单库存职责组合。"""
+
+    def _db_session(self) -> AbstractContextManager[Session]:
+        """Single session seam for every inventory mixin; patch ``inventory_service.get_db``."""
+        return get_db()
 
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation

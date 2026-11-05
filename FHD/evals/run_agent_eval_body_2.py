@@ -1268,6 +1268,7 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes import shipment_orders
+    from app.fastapi_routes.domains.shipment import shipment_order_support
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower()
@@ -1310,7 +1311,7 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
                     return_value=repo,
                 )
             )
-            stack.enter_context(patch.object(shipment_orders, "_svc", lambda: service))
+            stack.enter_context(patch.object(shipment_order_support, "svc", lambda: service))
             headers = {"X-User-Id": user_id}
             if method == "DELETE":
                 response = client.request("DELETE", path, json=body, headers=headers)
@@ -1341,6 +1342,7 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes import shipment_orders
+    from app.fastapi_routes.domains.shipment import shipment_order_support
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "generate").strip().lower()
@@ -1424,7 +1426,7 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
                     return_value=repo,
                 )
             )
-            stack.enter_context(patch.object(shipment_orders, "_svc", lambda: service))
+            stack.enter_context(patch.object(shipment_order_support, "svc", lambda: service))
             headers = {"X-User-Id": user_id}
             response = client.request(method, path, json=body, headers=headers)
 
@@ -2258,12 +2260,11 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
     from starlette.requests import Request
 
     from app.application.agent_task_context import scoped_conversation_user_id
+    from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
 
@@ -2308,13 +2309,18 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
             return_value="full",
         ),
         patch(
-            "app.domain.shared_services.user_memory_service.get_user_memory_service", return_value=memory_service
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
+            return_value=memory_service,
         ),
     ):
-        request = Request({
-            "type": "http", "method": "POST", "path": "/api/agent/plan",
-            "headers": [(b"x-session-id", client.headers["X-Session-ID"].encode())],
-        })
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/agent/plan",
+                "headers": [(b"x-session-id", client.headers["X-Session-ID"].encode())],
+            }
+        )
         principal = require_agent_principal(request, x_user_id=None)
         context = authenticated_runtime_context(
             {"conversation_id": str(task.get("user_id") or "eval-memory-user")}, principal
@@ -2373,5 +2379,3 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
             },
         },
     )
-
-

@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
+from app.db.models import InventoryLedger, InventoryTransaction
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.domain.shared_services.inventory_service")
-
-
-def _facade():
-    return importlib.import_module("app.domain.shared_services.inventory_service")
 
 
 class InventoryOrdersMixin:
@@ -43,11 +39,11 @@ class InventoryOrdersMixin:
 
         def _run(db):
             ledger = (
-                db.query(_facade().InventoryLedger)
+                db.query(InventoryLedger)
                 .filter(
-                    _facade().InventoryLedger.product_id == product_id,
-                    _facade().InventoryLedger.warehouse_id == warehouse_id,
-                    _facade().InventoryLedger.batch_no == batch_no,
+                    InventoryLedger.product_id == product_id,
+                    InventoryLedger.warehouse_id == warehouse_id,
+                    InventoryLedger.batch_no == batch_no,
                 )
                 .first()
             )
@@ -61,7 +57,7 @@ class InventoryOrdersMixin:
             ledger.available_quantity = available - qty
             ledger.updated_at = now
             db.flush()
-            txn = _facade().InventoryTransaction(
+            txn = InventoryTransaction(
                 ledger_id=ledger.id,
                 transaction_type="reserve",
                 product_id=product_id,
@@ -92,7 +88,7 @@ class InventoryOrdersMixin:
 
         if db is not None:
             return cast("dict[str, Any]", _run(db))
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             try:
                 result = _run(db)
                 if result["success"]:
@@ -100,7 +96,7 @@ class InventoryOrdersMixin:
                 return cast("dict[str, Any]", result)
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("按单预留失败: %s", e)
+                logger.error("按单预留失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def deduct_for_order(
@@ -124,11 +120,11 @@ class InventoryOrdersMixin:
 
         def _run(db):
             ledger = (
-                db.query(_facade().InventoryLedger)
+                db.query(InventoryLedger)
                 .filter(
-                    _facade().InventoryLedger.product_id == product_id,
-                    _facade().InventoryLedger.warehouse_id == warehouse_id,
-                    _facade().InventoryLedger.batch_no == batch_no,
+                    InventoryLedger.product_id == product_id,
+                    InventoryLedger.warehouse_id == warehouse_id,
+                    InventoryLedger.batch_no == batch_no,
                 )
                 .first()
             )
@@ -147,7 +143,7 @@ class InventoryOrdersMixin:
             )
             ledger.updated_at = now
             db.flush()
-            txn = _facade().InventoryTransaction(
+            txn = InventoryTransaction(
                 ledger_id=ledger.id,
                 transaction_type="out",
                 product_id=product_id,
@@ -178,7 +174,7 @@ class InventoryOrdersMixin:
 
         if db is not None:
             return cast("dict[str, Any]", _run(db))
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             try:
                 result = _run(db)
                 if result["success"]:
@@ -186,7 +182,7 @@ class InventoryOrdersMixin:
                 return cast("dict[str, Any]", result)
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("按单扣减失败: %s", e)
+                logger.error("按单扣减失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def restock_for_order(
@@ -210,17 +206,17 @@ class InventoryOrdersMixin:
 
         def _run(db):
             ledger = (
-                db.query(_facade().InventoryLedger)
+                db.query(InventoryLedger)
                 .filter(
-                    _facade().InventoryLedger.product_id == product_id,
-                    _facade().InventoryLedger.warehouse_id == warehouse_id,
-                    _facade().InventoryLedger.batch_no == batch_no,
+                    InventoryLedger.product_id == product_id,
+                    InventoryLedger.warehouse_id == warehouse_id,
+                    InventoryLedger.batch_no == batch_no,
                 )
                 .first()
             )
             now = datetime.now()
             if not ledger:
-                ledger = _facade().InventoryLedger(
+                ledger = InventoryLedger(
                     product_id=product_id,
                     warehouse_id=warehouse_id,
                     location_id=location_id,
@@ -242,7 +238,7 @@ class InventoryOrdersMixin:
                 ledger.available_quantity = Decimal(str(ledger.available_quantity or 0)) + qty
                 ledger.updated_at = now
                 db.flush()
-            txn = _facade().InventoryTransaction(
+            txn = InventoryTransaction(
                 ledger_id=ledger.id,
                 transaction_type="return",
                 product_id=product_id,
@@ -273,7 +269,7 @@ class InventoryOrdersMixin:
 
         if db is not None:
             return cast("dict[str, Any]", _run(db))
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             try:
                 result = _run(db)
                 if result["success"]:
@@ -281,5 +277,5 @@ class InventoryOrdersMixin:
                 return cast("dict[str, Any]", result)
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("按单回补失败: %s", e)
+                logger.error("按单回补失败: %s", e)
                 return {"success": False, "message": str(e)}

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -104,3 +105,8 @@ def resolve_mod_private_sqlite_path(filename: str) -> Path:
 
 
 __all__ = ["resolve_mod_private_sqlite_path"]
+
+
+def connect_mod_private_sqlite(filename: str) -> sqlite3.Connection:
+    """Open ``mod_dbs/<filename>``; the caller commits and closes."""
+    return sqlite3.connect(str(resolve_mod_private_sqlite_path(filename)))

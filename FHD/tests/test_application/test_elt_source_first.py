@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from app.application.elt import service_draft, service_preview, service_preview_worker
+from app.application.elt import service_draft, service_preview
 from app.application.elt.errors import EltError
 from app.application.elt.parser_types import ParsedDataset, ParsedRow
 from app.application.elt.service_support import dump_json, load_json
@@ -272,7 +272,7 @@ def test_preview_ready_and_owner_release_are_published_in_one_transaction(
 ):
     store = preview_store
     monkeypatch.setenv("FHD_ETL_LLM", "off")
-    finish = service_preview_worker.finish_operation
+    finish = service_preview.finish_operation
     observed = []
 
     def inspect_before_release(db, owner):
@@ -285,7 +285,7 @@ def test_preview_ready_and_owner_release_are_published_in_one_transaction(
             observed.append(persisted.status)
         return finish(db, owner)
 
-    monkeypatch.setattr(service_preview_worker, "finish_operation", inspect_before_release)
+    monkeypatch.setattr(service_preview, "finish_operation", inspect_before_release)
     run_id = create_preview(store)
     wait_for_job(store)
     result = snapshot(store, run_id)

@@ -89,11 +89,12 @@ def test_legacy_shipment_fixture_does_not_admit_enterprise_tenant(monkeypatch) -
     from fastapi.testclient import TestClient
 
     from app.fastapi_routes import shipment_orders
+    from app.fastapi_routes.domains.shipment import shipment_order_support
 
     app = FastAPI()
     app.include_router(shipment_orders.router)
     service = Mock()
-    monkeypatch.setattr(shipment_orders, "_svc", lambda: service)
+    monkeypatch.setattr(shipment_order_support, "svc", lambda: service)
     with TestClient(app) as client, eval_module._authenticated_route_fixture(client, tenant_id=7):
         response = client.delete("/api/orders/clear-all")
     assert response.status_code == 403

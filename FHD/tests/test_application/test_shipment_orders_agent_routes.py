@@ -9,11 +9,12 @@ from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import shipment_orders
+from app.fastapi_routes.domains.shipment import shipment_order_support
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch, actor) -> TestClient:
-    monkeypatch.setattr(shipment_orders, "_svc", lambda: fake_service)
+    monkeypatch.setattr(shipment_order_support, "svc", lambda: fake_service)
     app = FastAPI()
     app.include_router(shipment_orders.router)
     return TestClient(app, raise_server_exceptions=False, headers=actor.headers)

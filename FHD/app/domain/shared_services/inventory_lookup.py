@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
+from app.db.models import InventoryLedger, Product
+
 logger = logging.getLogger("app.domain.shared_services.inventory_service")
 INVENTORY_EXPORT_ROW_LIMIT = 50_000
-
-
-def _facade():
-    return importlib.import_module("app.domain.shared_services.inventory_service")
 
 
 class InventoryLookupMixin:
@@ -25,19 +22,19 @@ class InventoryLookupMixin:
     @staticmethod
     def _inventory_query(db, *, warehouse_id=None, product_id=None, batch_no=None, keyword=None):
         """Share filters and the existing tenant-scoped session for list and export."""
-        query = db.query(_facade().InventoryLedger).join(_facade().Product)
+        query = db.query(InventoryLedger).join(Product)
         if warehouse_id:
-            query = query.filter(_facade().InventoryLedger.warehouse_id == warehouse_id)
+            query = query.filter(InventoryLedger.warehouse_id == warehouse_id)
         if product_id:
-            query = query.filter(_facade().InventoryLedger.product_id == product_id)
+            query = query.filter(InventoryLedger.product_id == product_id)
         if batch_no:
-            query = query.filter(_facade().InventoryLedger.batch_no == batch_no)
+            query = query.filter(InventoryLedger.batch_no == batch_no)
         search = str(keyword or "").strip()
         if search:
             query = query.filter(
                 or_(
-                    _facade().Product.name.icontains(search, autoescape=True),
-                    _facade().Product.model_number.icontains(search, autoescape=True),
+                    Product.name.icontains(search, autoescape=True),
+                    Product.model_number.icontains(search, autoescape=True),
                 )
             )
         return query
@@ -51,7 +48,7 @@ class InventoryLookupMixin:
         per_page: int = 50,
         keyword: str | None = None,
     ) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             query = self._inventory_query(
                 db,
                 warehouse_id=warehouse_id,
@@ -61,9 +58,7 @@ class InventoryLookupMixin:
             )
             total = query.count()
             items = (
-                query.order_by(
-                    _facade().InventoryLedger.created_at.desc(), _facade().InventoryLedger.id.desc()
-                )
+                query.order_by(InventoryLedger.created_at.desc(), InventoryLedger.id.desc())
                 .offset((page - 1) * per_page)
                 .limit(per_page)
                 .all()
@@ -86,8 +81,8 @@ class InventoryLookupMixin:
 
     def get_inventory_export(self, **filters: Any) -> dict[str, Any]:
         """Read one bounded SQL snapshot, without count/page or lazy-load races."""
-        with _facade().get_db() as db:
-            ledger = _facade().InventoryLedger
+        with self._db_session() as db:
+            ledger = InventoryLedger
             items = (
                 self._inventory_query(db, **filters)
                 .options(joinedload(ledger.product), joinedload(ledger.warehouse))
@@ -126,20 +121,20 @@ class InventoryLookupMixin:
             }
 
     def get_inventory_summary(self, warehouse_id: int | None = None) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             query = db.query(
-                _facade().InventoryLedger.product_id,
-                _facade().Product.name.label("product_name"),
-                _facade().Product.model_number,
-                func.sum(_facade().InventoryLedger.quantity).label("total_quantity"),
-                func.sum(_facade().InventoryLedger.available_quantity).label("total_available"),
-            ).join(_facade().Product)
+                InventoryLedger.product_id,
+                Product.name.label("product_name"),
+                Product.model_number,
+                func.sum(InventoryLedger.quantity).label("total_quantity"),
+                func.sum(InventoryLedger.available_quantity).label("total_available"),
+            ).join(Product)
             if warehouse_id:
-                query = query.filter(_facade().InventoryLedger.warehouse_id == warehouse_id)
+                query = query.filter(InventoryLedger.warehouse_id == warehouse_id)
             query = query.group_by(
-                _facade().InventoryLedger.product_id,
-                _facade().Product.name,
-                _facade().Product.model_number,
+                InventoryLedger.product_id,
+                Product.name,
+                Product.model_number,
             )
             items = query.all()
             return {

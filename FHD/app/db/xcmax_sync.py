@@ -199,6 +199,13 @@ class SyncDb:
             )
             conn.commit()
 
+    @staticmethod
+    def delete_meta(key: str) -> None:
+        with _lock, _get_conn() as conn:
+            _ensure_schema(conn)
+            conn.execute("DELETE FROM sync_meta WHERE key=?", (key,))
+            conn.commit()
+
     def get_pending_inbox(self, limit: int = 200) -> list[dict[str, Any]]:
         with _get_conn() as conn:
             rows = conn.execute(

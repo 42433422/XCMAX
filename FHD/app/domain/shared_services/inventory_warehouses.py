@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from app.db.models import StorageLocation, Warehouse
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.domain.shared_services.inventory_service")
-
-
-def _facade():
-    return importlib.import_module("app.domain.shared_services.inventory_service")
 
 
 class InventoryWarehouseMixin:
@@ -39,11 +35,11 @@ class InventoryWarehouseMixin:
         return result
 
     def get_warehouses(self, status: str | None = None) -> dict[str, Any]:
-        with _facade().get_db() as db:
-            query = db.query(_facade().Warehouse)
+        with self._db_session() as db:
+            query = db.query(Warehouse)
             if status:
-                query = query.filter(_facade().Warehouse.status == status)
-            warehouses = query.order_by(_facade().Warehouse.code).all()
+                query = query.filter(Warehouse.status == status)
+            warehouses = query.order_by(Warehouse.code).all()
             return {
                 "success": True,
                 "data": [self._model_to_dict(w) for w in warehouses],
@@ -51,18 +47,16 @@ class InventoryWarehouseMixin:
             }
 
     def get_warehouse(self, warehouse_id: int) -> dict[str, Any]:
-        with _facade().get_db() as db:
-            warehouse = (
-                db.query(_facade().Warehouse).filter(_facade().Warehouse.id == warehouse_id).first()
-            )
+        with self._db_session() as db:
+            warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
             if not warehouse:
                 return {"success": False, "message": "仓库不存在"}
             return {"success": True, "data": self._model_to_dict(warehouse)}
 
     def create_warehouse(self, data: dict[str, Any]) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             try:
-                warehouse = _facade().Warehouse(
+                warehouse = Warehouse(
                     code=data.get("code"),
                     name=data.get("name"),
                     type=data.get("type"),
@@ -77,17 +71,13 @@ class InventoryWarehouseMixin:
                 return {"success": True, "data": self._model_to_dict(warehouse)}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("创建仓库失败: %s", e)
+                logger.error("创建仓库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def update_warehouse(self, warehouse_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             try:
-                warehouse = (
-                    db.query(_facade().Warehouse)
-                    .filter(_facade().Warehouse.id == warehouse_id)
-                    .first()
-                )
+                warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
                 if not warehouse:
                     return {"success": False, "message": "仓库不存在"}
                 for key, value in data.items():
@@ -99,17 +89,13 @@ class InventoryWarehouseMixin:
                 return {"success": True, "data": self._model_to_dict(warehouse)}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("更新仓库失败: %s", e)
+                logger.error("更新仓库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def delete_warehouse(self, warehouse_id: int) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             try:
-                warehouse = (
-                    db.query(_facade().Warehouse)
-                    .filter(_facade().Warehouse.id == warehouse_id)
-                    .first()
-                )
+                warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
                 if not warehouse:
                     return {"success": False, "message": "仓库不存在"}
                 warehouse.status = "deleted"
@@ -117,17 +103,15 @@ class InventoryWarehouseMixin:
                 return {"success": True, "message": "仓库已删除"}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("删除仓库失败: %s", e)
+                logger.error("删除仓库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def get_storage_locations(self, warehouse_id: int, status: str | None = None) -> dict[str, Any]:
-        with _facade().get_db() as db:
-            query = db.query(_facade().StorageLocation).filter(
-                _facade().StorageLocation.warehouse_id == warehouse_id
-            )
+        with self._db_session() as db:
+            query = db.query(StorageLocation).filter(StorageLocation.warehouse_id == warehouse_id)
             if status:
-                query = query.filter(_facade().StorageLocation.status == status)
-            locations = query.order_by(_facade().StorageLocation.code).all()
+                query = query.filter(StorageLocation.status == status)
+            locations = query.order_by(StorageLocation.code).all()
             return {
                 "success": True,
                 "data": [self._model_to_dict(loc) for loc in locations],
@@ -135,9 +119,9 @@ class InventoryWarehouseMixin:
             }
 
     def create_storage_location(self, data: dict[str, Any]) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             try:
-                location = _facade().StorageLocation(
+                location = StorageLocation(
                     warehouse_id=data.get("warehouse_id"),
                     code=data.get("code"),
                     name=data.get("name"),
@@ -152,16 +136,14 @@ class InventoryWarehouseMixin:
                 return {"success": True, "data": self._model_to_dict(location)}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("创建库位失败: %s", e)
+                logger.error("创建库位失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def update_storage_location(self, location_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with self._db_session() as db:
             try:
                 location = (
-                    db.query(_facade().StorageLocation)
-                    .filter(_facade().StorageLocation.id == location_id)
-                    .first()
+                    db.query(StorageLocation).filter(StorageLocation.id == location_id).first()
                 )
                 if not location:
                     return {"success": False, "message": "库位不存在"}
@@ -177,5 +159,5 @@ class InventoryWarehouseMixin:
                 return {"success": True, "data": self._model_to_dict(location)}
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("更新库位失败: %s", e)
+                logger.error("更新库位失败: %s", e)
                 return {"success": False, "message": str(e)}

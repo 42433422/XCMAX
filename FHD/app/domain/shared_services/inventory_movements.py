@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 import math
 from contextlib import nullcontext
@@ -12,13 +11,10 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.business_write_guard import worker_write_guard
+from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.domain.shared_services.inventory_service")
-
-
-def _facade():
-    return importlib.import_module("app.domain.shared_services.inventory_service")
 
 
 def _positive_movement_quantity(value: Any) -> float:
@@ -49,9 +45,9 @@ def _stock_out_warehouse_id(db: Any, warehouse_id: Any) -> tuple[int | None, str
     if numeric is not None:
         return numeric, "", ""
     text = str(warehouse_id or "").strip()
-    query = db.query(_facade().Warehouse).filter(_facade().Warehouse.status == "active")
+    query = db.query(Warehouse).filter(Warehouse.status == "active")
     if text.casefold() not in _DEFAULT_WAREHOUSE_ALIASES:
-        query = query.filter(_facade().Warehouse.name == text)
+        query = query.filter(Warehouse.name == text)
     rows = query.limit(2).all() if text else []
     if len(rows) == 1:
         return int(rows[0].id), "", ""
@@ -90,14 +86,14 @@ class InventoryMovementsMixin:
         except ValueError:
             return {"success": False, "message": "入库数量必须是有效正数"}
         with (
-            nullcontext(session) if session is not None else _facade().get_db() as db,
+            nullcontext(session) if session is not None else self._db_session() as db,
             worker_write_guard(db),
         ):
             try:
                 if product_id is None and model_number:
                     products = (
-                        db.query(_facade().Product)
-                        .filter(_facade().Product.model_number == model_number)
+                        db.query(Product)
+                        .filter(Product.model_number == model_number)
                         .limit(2)
                         .all()
                     )
@@ -108,21 +104,14 @@ class InventoryMovementsMixin:
                         }
                     product = products[0]
                 else:
-                    product = (
-                        db.query(_facade().Product)
-                        .filter(_facade().Product.id == product_id)
-                        .first()
-                    )
+                    product = db.query(Product).filter(Product.id == product_id).first()
                 if not product:
                     return {"success": False, "message": "产品不存在"}
                 if model_number and product.model_number != model_number:
                     return {"success": False, "message": "产品编号与型号不符"}
                 if warehouse_id is None and warehouse_name:
                     warehouses = (
-                        db.query(_facade().Warehouse)
-                        .filter(_facade().Warehouse.name == warehouse_name)
-                        .limit(2)
-                        .all()
+                        db.query(Warehouse).filter(Warehouse.name == warehouse_name).limit(2).all()
                     )
                     if len(warehouses) != 1:
                         return {
@@ -131,22 +120,18 @@ class InventoryMovementsMixin:
                         }
                     warehouse = warehouses[0]
                 else:
-                    warehouse = (
-                        db.query(_facade().Warehouse)
-                        .filter(_facade().Warehouse.id == warehouse_id)
-                        .first()
-                    )
+                    warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
                 if warehouse is None or warehouse.status != "active":
                     return {"success": False, "message": "仓库不存在或未启用"}
                 if warehouse_name and warehouse.name != warehouse_name:
                     return {"success": False, "message": "仓库编号与名称不符"}
                 product_id, warehouse_id = product.id, warehouse.id
                 ledger = (
-                    db.query(_facade().InventoryLedger)
+                    db.query(InventoryLedger)
                     .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == warehouse_id,
-                        _facade().InventoryLedger.batch_no == batch_no,
+                        InventoryLedger.product_id == product_id,
+                        InventoryLedger.warehouse_id == warehouse_id,
+                        InventoryLedger.batch_no == batch_no,
                     )
                     .first()
                 )
@@ -156,7 +141,7 @@ class InventoryMovementsMixin:
                     ledger.available_quantity = float(ledger.available_quantity or 0) + quantity
                     ledger.updated_at = now
                 else:
-                    ledger = _facade().InventoryLedger(
+                    ledger = InventoryLedger(
                         product_id=product_id,
                         warehouse_id=warehouse_id,
                         location_id=location_id,
@@ -171,7 +156,7 @@ class InventoryMovementsMixin:
                     )
                     db.add(ledger)
                 db.flush()
-                transaction = _facade().InventoryTransaction(
+                transaction = InventoryTransaction(
                     ledger_id=ledger.id,
                     transaction_type="in",
                     product_id=product_id,
@@ -205,7 +190,7 @@ class InventoryMovementsMixin:
             except RECOVERABLE_ERRORS as e:
                 if session is None:
                     db.rollback()
-                _facade().logger.error("入库失败: %s", e)
+                logger.error("入库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def inventory_out(
@@ -231,7 +216,7 @@ class InventoryMovementsMixin:
                 "error_code": "invalid_product_reference",
                 "message": "出库产品编号无效：请先查询并确认要出库的具体产品",
             }
-        with _facade().get_db() as db, worker_write_guard(db):
+        with self._db_session() as db, worker_write_guard(db):
             try:
                 resolved_warehouse_id, problem, error_code = _stock_out_warehouse_id(
                     db, warehouse_id
@@ -242,15 +227,15 @@ class InventoryMovementsMixin:
                         "error_code": error_code,
                         "message": problem,
                     }
-                query = db.query(_facade().InventoryLedger).filter(
-                    _facade().InventoryLedger.product_id == resolved_product_id,
-                    _facade().InventoryLedger.warehouse_id == resolved_warehouse_id,
-                    _facade().InventoryLedger.available_quantity >= quantity,
+                query = db.query(InventoryLedger).filter(
+                    InventoryLedger.product_id == resolved_product_id,
+                    InventoryLedger.warehouse_id == resolved_warehouse_id,
+                    InventoryLedger.available_quantity >= quantity,
                 )
                 if batch_no:
-                    query = query.filter(_facade().InventoryLedger.batch_no == batch_no)
+                    query = query.filter(InventoryLedger.batch_no == batch_no)
                 if location_id:
-                    query = query.filter(_facade().InventoryLedger.location_id == location_id)
+                    query = query.filter(InventoryLedger.location_id == location_id)
                 ledger = query.first()
                 if not ledger:
                     return {
@@ -262,7 +247,7 @@ class InventoryMovementsMixin:
                 ledger.quantity = float(ledger.quantity) - quantity
                 ledger.available_quantity = float(ledger.available_quantity) - quantity
                 ledger.updated_at = now
-                transaction = _facade().InventoryTransaction(
+                transaction = InventoryTransaction(
                     ledger_id=ledger.id,
                     transaction_type="out",
                     product_id=resolved_product_id,
@@ -292,7 +277,7 @@ class InventoryMovementsMixin:
                 }
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("出库失败: %s", e)
+                logger.error("出库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def inventory_transfer(
@@ -311,14 +296,14 @@ class InventoryMovementsMixin:
             quantity = _positive_movement_quantity(quantity)
         except ValueError:
             return {"success": False, "message": "调拨数量必须是有效正数"}
-        with _facade().get_db() as db, worker_write_guard(db):
+        with self._db_session() as db, worker_write_guard(db):
             try:
                 from_ledger = (
-                    db.query(_facade().InventoryLedger)
+                    db.query(InventoryLedger)
                     .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == from_warehouse_id,
-                        _facade().InventoryLedger.available_quantity >= quantity,
+                        InventoryLedger.product_id == product_id,
+                        InventoryLedger.warehouse_id == from_warehouse_id,
+                        InventoryLedger.available_quantity >= quantity,
                     )
                     .first()
                 )
@@ -328,7 +313,7 @@ class InventoryMovementsMixin:
                 from_ledger.quantity = float(from_ledger.quantity) - quantity
                 from_ledger.available_quantity = float(from_ledger.available_quantity) - quantity
                 from_ledger.updated_at = now
-                out_transaction = _facade().InventoryTransaction(
+                out_transaction = InventoryTransaction(
                     ledger_id=from_ledger.id,
                     transaction_type="transfer_out",
                     product_id=product_id,
@@ -346,12 +331,11 @@ class InventoryMovementsMixin:
                 )
                 db.add(out_transaction)
                 to_ledger = (
-                    db.query(_facade().InventoryLedger)
+                    db.query(InventoryLedger)
                     .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == to_warehouse_id,
-                        (_facade().InventoryLedger.batch_no == batch_no)
-                        | _facade().InventoryLedger.batch_no.is_(None),
+                        InventoryLedger.product_id == product_id,
+                        InventoryLedger.warehouse_id == to_warehouse_id,
+                        (InventoryLedger.batch_no == batch_no) | InventoryLedger.batch_no.is_(None),
                     )
                     .first()
                 )
@@ -360,7 +344,7 @@ class InventoryMovementsMixin:
                     to_ledger.available_quantity = float(to_ledger.available_quantity) + quantity
                     to_ledger.updated_at = now
                 else:
-                    to_ledger = _facade().InventoryLedger(
+                    to_ledger = InventoryLedger(
                         product_id=product_id,
                         warehouse_id=to_warehouse_id,
                         location_id=to_location_id,
@@ -375,7 +359,7 @@ class InventoryMovementsMixin:
                     )
                     db.add(to_ledger)
                 db.flush()
-                in_transaction = _facade().InventoryTransaction(
+                in_transaction = InventoryTransaction(
                     ledger_id=to_ledger.id,
                     transaction_type="transfer_in",
                     product_id=product_id,
@@ -404,5 +388,5 @@ class InventoryMovementsMixin:
                 }
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("调拨失败: %s", e)
+                logger.error("调拨失败: %s", e)
                 return {"success": False, "message": str(e)}

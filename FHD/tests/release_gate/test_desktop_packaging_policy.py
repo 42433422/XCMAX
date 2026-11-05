@@ -455,15 +455,14 @@ def test_windows_package_probes_real_elt_runtime_without_development_dependencie
     )
 
 
-def test_desktop_package_includes_and_probes_dynamic_xcmax_sync_appliers() -> None:
-    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
+def test_desktop_package_probes_statically_registered_xcmax_sync_appliers() -> None:
+    service = (
+        REPO_ROOT / "app" / "domain" / "shared_services" / "xcmax_sync_service.py"
+    ).read_text(encoding="utf-8")
     entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
 
-    for module_name in (
-        "app.domain.shared_services.xcmax_sync_basic_appliers",
-        "app.domain.shared_services.xcmax_sync_extended_appliers",
-    ):
-        assert f'"{module_name}"' in spec
+    # PyInstaller only sees static imports; appliers must not be loaded by string.
+    assert "import_module" not in service
     assert (
         "from app.domain.shared_services.xcmax_sync_service import _ENTITY_APPLIERS" in entrypoint
     )

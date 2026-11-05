@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import importlib
+import logging
+import os
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -15,10 +16,9 @@ from app.application.workflow.multimodal_user_content import (
     UnsupportedMultimodalModelError,
 )
 from app.infrastructure.modstore_transport import MarketModelError
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-
-def _facade():
-    return importlib.import_module("app.fastapi_routes.xcagi_compat_chat_helpers")
+logger = logging.getLogger("app.fastapi_routes.xcagi_compat_chat_helpers")
 
 
 class XcagiCompatChatBody(BaseModel):
@@ -78,11 +78,7 @@ class XcagiCompatChatBatchBody(BaseModel):
 
 
 def _market_connection_label() -> str:
-    raw = (
-        _facade().os.environ.get("XCAGI_MARKET_BASE_URL")
-        or _facade().os.environ.get("MODSTORE_PLATFORM_URL")
-        or ""
-    )
+    raw = os.environ.get("XCAGI_MARKET_BASE_URL") or os.environ.get("MODSTORE_PLATFORM_URL") or ""
     try:
         return urlsplit(raw).hostname or "修茈市场"
     except ValueError:
@@ -107,7 +103,7 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
         if isinstance(exc, httpx.ConnectError):
             return HTTPException(
                 status_code=503,
-                detail=f"无法连接修茈平台 LLM（{_facade()._market_connection_label()}）",
+                detail=f"无法连接修茈平台 LLM（{_market_connection_label()}）",
             )
         if isinstance(exc, httpx.HTTPError):
             return HTTPException(status_code=502, detail="修茈平台 LLM 请求失败")
@@ -135,7 +131,7 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
             )
         if "平台错误" in msg:
             return HTTPException(status_code=502, detail=msg)
-    _facade().logger.exception("xcagi ai chat compat unexpected error")
+    logger.exception("xcagi ai chat compat unexpected error")
     return HTTPException(status_code=500, detail=f"对话处理失败: {exc}")
 
 
@@ -194,8 +190,8 @@ def _xcagi_compat_reply_payload(
                 tool_data["errors_preview"] = joined[:2000]
                 if len(errs) > 5:
                     tool_data["errors_truncated"] = True
-    except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.debug("compat: last tool result unavailable", exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.debug("compat: last tool result unavailable", exc_info=True)
     err_code = str(last_result.get("error") or "").strip()
     err_msg = str(last_result.get("message") or "").strip()
     tool_key = str(last_result.get("tool_key") or "").strip()

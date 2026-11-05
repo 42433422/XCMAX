@@ -231,7 +231,7 @@ def _verify_frozen_critical_runtime() -> None:
     _verify_frozen_elt_runtime()
     print("[frozen-runtime-probe] ELT derivation complete", file=sys.stderr, flush=True)
 
-    # Validate string-loaded sync appliers that static PyInstaller analysis cannot discover.
+    # Validate that every XCMAX sync applier is registered in the frozen bundle.
     print("[frozen-runtime-probe] sync applier import begin", file=sys.stderr, flush=True)
     from app.domain.shared_services.xcmax_sync_service import _ENTITY_APPLIERS
 
