@@ -32,10 +32,19 @@ vi.mock('@/stores/mods', () => ({
   }),
 }))
 
-function makeRouter(hasRoutes: string[] = ['print', 'workflow-employee-space', 'customers']) {
-  const push = vi.fn(async () => undefined)
+function makeRouter(hasRoutes: string[] = ['print', 'workflow-employee-space', 'customers'], currentName = 'chat') {
+  const currentRoute = { value: { name: currentName, path: `/${currentName}` } }
+  const push = vi.fn(async (loc: { name?: string; path?: string } | string) => {
+    if (typeof loc === 'string') {
+      currentRoute.value = { name: loc.replace(/^\//, ''), path: loc }
+    } else if (loc && typeof loc === 'object') {
+      const name = String(loc.name || '')
+      currentRoute.value = { name, path: loc.path || `/${name}` }
+    }
+  })
   return {
     push,
+    currentRoute,
     hasRoute: (name: string) => hasRoutes.includes(name),
     resolve: (path: string) => ({
       matched: hasRoutes.some((name) => path.includes(name)) ? [{}] : [],
@@ -76,11 +85,14 @@ describe('sidebarNavigation', () => {
   })
 
   it('fast second click supersedes a slow first navigation', async () => {
-    const push = vi.fn(async () => {
+    const currentRoute = { value: { name: 'chat', path: '/chat' } }
+    const push = vi.fn(async (loc: { name?: string }) => {
       await new Promise((r) => setTimeout(r, 30))
+      if (loc?.name) currentRoute.value = { name: String(loc.name), path: `/${loc.name}` }
     })
     const router = {
       push,
+      currentRoute,
       hasRoute: (name: string) => ['customers', 'print'].includes(name),
       resolve: () => ({ matched: [{}] }),
     } as unknown as Router
@@ -107,13 +119,20 @@ describe('sidebarNavigation', () => {
   it('starts the next target immediately and consumes a superseded push rejection', async () => {
     let rejectFirst: ((error: Error) => void) | undefined
     let pushes = 0
-    const push = vi.fn(() => {
+    const currentRoute = { value: { name: 'chat', path: '/chat' } }
+    const push = vi.fn((loc: { name?: string }) => {
       pushes += 1
-      if (pushes === 1) return new Promise<void>((_, reject) => { rejectFirst = reject })
+      if (pushes === 1) {
+        return new Promise<void>((_, reject) => {
+          rejectFirst = reject
+        })
+      }
+      if (loc?.name) currentRoute.value = { name: String(loc.name), path: `/${loc.name}` }
       return Promise.resolve()
     })
     const router = {
       push,
+      currentRoute,
       hasRoute: (name: string) => ['customers', 'print'].includes(name),
       resolve: () => ({ matched: [{}] }),
     } as unknown as Router

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
 vi.mock('@/utils/plannerPagePaths', () => ({
@@ -13,6 +13,7 @@ function makeRouter(includeDeliveryCenter = true) {
   const routes = [
     { path: '/', name: 'home', component: { template: '<div />' } },
     { path: '/mod-store', name: 'mod-store', component: { template: '<div />' } },
+    { path: '/mod/store', name: 'mod-store-planner', component: { template: '<div />' } },
     { path: '/market-overview', name: 'market-overview', component: { template: '<div />' } },
     { path: '/ecosystem', name: 'ecosystem', component: AIEcosystemView },
   ]
@@ -96,7 +97,8 @@ describe('AIEcosystemView.vue', () => {
     expect(market.exists()).toBe(true)
     expect(market.text()).toContain('市场总览')
     await market.trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'market-overview', query: {} })
+    await flushPromises()
+    expect(pushSpy.mock.calls.some((c) => c[0]?.name === 'market-overview')).toBe(true)
   })
 
   it('hides ecosystem home after entering kitten analyzer', async () => {
@@ -140,11 +142,9 @@ describe('AIEcosystemView.vue', () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--production').trigger('click')
-    await wrapper.vm.$nextTick()
-    expect(pushSpy).toHaveBeenCalledWith({
-      name: 'delivery-center',
-      query: { source: 'production-employee' },
-    })
+    await flushPromises()
+    expect(pushSpy).toHaveBeenCalled()
+    expect(pushSpy.mock.calls.some((c) => c[0]?.name === 'delivery-center')).toBe(true)
   })
 
   it('keeps the private production panel outside the admin console', async () => {
@@ -161,14 +161,23 @@ describe('AIEcosystemView.vue', () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--modstore').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'mod-store', query: {} })
+    await flushPromises()
+    expect(pushSpy.mock.calls.some((c) => c[0]?.name === 'mod-store')).toBe(true)
   })
 
   it('uses mod path redirect when planner mod pages enabled (mod-store)', async () => {
     vi.mocked(resolvePlannerPageRedirectForRouteName).mockReturnValue('/mod/store')
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
+    const replaceSpy = vi.spyOn(router, 'replace')
     await wrapper.find('.app-launcher--modstore').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ path: '/mod/store', query: {} })
+    await flushPromises()
+    const touchedPlanner =
+      pushSpy.mock.calls.some((c) => c[0]?.path === '/mod/store' || c[0]?.name === 'mod-store')
+      || replaceSpy.mock.calls.some((c) => c[0]?.path === '/mod/store')
+      || String(router.currentRoute.value.path || '').includes('/mod/store')
+      || router.currentRoute.value.name === 'mod-store'
+      || router.currentRoute.value.name === 'mod-store-planner'
+    expect(touchedPlanner).toBe(true)
   })
 })

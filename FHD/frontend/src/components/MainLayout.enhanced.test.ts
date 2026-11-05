@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
+import { flushPromises } from '@vue/test-utils'
 
 // ── 外部依赖 mock ─────────────────────────────────────────
 
@@ -368,6 +369,7 @@ describe('MainLayout.vue – openSettings', () => {
     const { wrapper, router } = await mountMainLayout()
     const pushSpy = vi.spyOn(router, 'push')
     wrapper.vm.openSettings()
+    await flushPromises()
     expect(pushSpy).toHaveBeenCalledWith({ name: 'settings' })
     pushSpy.mockRestore()
     wrapper.unmount()
@@ -379,16 +381,21 @@ describe('MainLayout.vue – navigateToView', () => {
     const { wrapper, router } = await mountMainLayout()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.vm.navigateToView('settings')
+    await flushPromises()
     expect(pushSpy).toHaveBeenCalled()
+    expect(router.currentRoute.value.name).toBe('settings')
     pushSpy.mockRestore()
     wrapper.unmount()
   })
 
   it('navigates to chat by name', async () => {
     const { wrapper, router } = await mountMainLayout()
+    // Already on chat: duplicate navigation is success without a new push.
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.vm.navigateToView('chat')
-    expect(pushSpy).toHaveBeenCalled()
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('chat')
+    expect(pushSpy).not.toHaveBeenCalled()
     pushSpy.mockRestore()
     wrapper.unmount()
   })

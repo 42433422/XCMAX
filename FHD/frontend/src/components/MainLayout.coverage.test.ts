@@ -20,6 +20,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -819,9 +820,11 @@ describe('MainLayout.vue - coverage ramp', () => {
       const { wrapper, router } = await mountMainLayout()
       const pushSpy = vi.spyOn(router, 'push')
 
-      // 'chat' 在 routeNameMap 中对应 '/'
+      // Already on chat: shared nav treats this as duplicate success (no push).
       await wrapper.vm.navigateToView('chat')
-      expect(pushSpy).toHaveBeenCalled()
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('chat')
+      expect(pushSpy).not.toHaveBeenCalled()
       wrapper.unmount()
     })
 
@@ -1222,6 +1225,7 @@ describe('MainLayout.vue - coverage ramp', () => {
       const { wrapper, router } = await mountMainLayout()
       const pushSpy = vi.spyOn(router, 'push')
       wrapper.vm.openSettings()
+      await flushPromises()
       expect(pushSpy).toHaveBeenCalledWith({ name: 'settings' })
       wrapper.unmount()
     })
