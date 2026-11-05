@@ -14,8 +14,11 @@ crontab -l 2>/dev/null | grep -v 'sync-runtime-to-source\.sh' | grep -v "$MARKER
 {
   cat "$TMP"
   echo "$MARKER"
-  echo "${INTERVAL} /bin/bash \"$SYNC_SCRIPT\" --commit >>\"$LOG_FILE\" 2>&1"
+  # --commit is not the default. Public commit/push stays off unless the sync
+  # script is invoked with XCMAX_ALLOW_PUBLIC_RUNTIME_COMMIT=1.
+  # echo "${INTERVAL} /bin/bash \"$SYNC_SCRIPT\" --commit >>\"$LOG_FILE\" 2>&1"
+  echo "${INTERVAL} /bin/bash \"$SYNC_SCRIPT\" >>\"$LOG_FILE\" 2>&1"
 } | crontab -
 rm -f "$TMP"
-echo "[ok] cron installed: ${INTERVAL} $SYNC_SCRIPT --commit"
+echo "[ok] cron installed without --commit: ${INTERVAL} $SYNC_SCRIPT"
 crontab -l | grep -E 'sync-runtime-to-source|xcmax-sync-runtime' || true

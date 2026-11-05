@@ -27,6 +27,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Hard guard: do not commit or push runtime logs into the public tree by default.
+if [[ "$DO_COMMIT" == 1 || "$DO_PUSH" == 1 ]]; then
+  if [[ "${XCMAX_ALLOW_PUBLIC_RUNTIME_COMMIT:-}" != 1 ]]; then
+    echo "[sync] refuse commit/push of runtime logs into the public tree" >&2
+    exit 3
+  fi
+fi
+
 SOURCE_DATA="$SOURCE_ROOT/成都修茈科技有限公司/MODstore_deploy/modstore_server/data"
 SOURCE_AUDIT="$SOURCE_ROOT/成都修茈科技有限公司/MODstore_deploy/modstore_server/data/runtime_sync"
 mkdir -p "$SOURCE_DATA" "$SOURCE_AUDIT"
