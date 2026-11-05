@@ -173,23 +173,25 @@ function documentLayout(index: number) {
   return index < 0 ? activeDocument.value?.review?.layout?.[0] : activeDocumentProposal.value?.result_previews?.[index]?.layout?.[0]
 }
 const a4ScaleObservers = new Map<number, ResizeObserver>()
-function bindA4Scale(el: Element | null, index: number) {
+function bindA4Scale(el: Element | { $el?: unknown } | null, index: number) {
   const prev = a4ScaleObservers.get(index)
   if (prev) { prev.disconnect(); a4ScaleObservers.delete(index) }
-  if (!(el instanceof HTMLElement)) return
-  const scaleLayer = el.querySelector('.reviewed-template__a4-scale') as HTMLElement | null
-  const table = el.querySelector('table') as HTMLElement | null
+  const node = el && typeof el === 'object' && !(el instanceof Element) ? el.$el : el
+  if (!(node instanceof HTMLElement)) return
+  const scaleLayer = node.querySelector('.reviewed-template__a4-scale') as HTMLElement | null
+  const table = node.querySelector('table') as HTMLElement | null
   if (!scaleLayer || !table) return
   const apply = () => {
     const natural = table.scrollWidth || table.offsetWidth || 1
-    const available = el.clientWidth || 1
+    const available = node.clientWidth || 1
     const scale = Math.min(1, available / natural)
     scaleLayer.style.transform = `scale(${scale})`
     scaleLayer.style.width = `${100 / scale}%`
   }
   apply()
+  if (typeof ResizeObserver === 'undefined') return
   const observer = new ResizeObserver(apply)
-  observer.observe(el)
+  observer.observe(node)
   a4ScaleObservers.set(index, observer)
 }
 async function saveActiveDocument() {

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-
 from app.application.elt import auto_ingest_service as ais
-from app.application.elt.auto_ingest_service import AutoIngestService, _knowledge_index_meta
+from app.application.elt.auto_ingest_service import AutoIngestService
+from app.application.elt.knowledge_index_meta import _knowledge_index_meta
 
 
 def test_executed_zero_is_not_replaced_by_eligible_count():

@@ -22,6 +22,10 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
+from app.application.elt.knowledge_index_meta import (
+    business_completion_from_run,
+    enrich_knowledge_progress,
+)
 from app.application.elt.target_detection import detect_etl_target
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
@@ -136,42 +140,6 @@ def _resolve_auto_ingest_source(source_path: str | Path) -> Path:
             "ETL_AUTO_INGEST_PATH_INVALID",
             f"自动入库路径无效：{exc}",
         ) from exc
-
-
-
-def _knowledge_index_meta(tenant_id: int | str) -> dict[str, Any]:
-    """Document write ≠ vector index. Never treat embedding_count=0 as missing docs."""
-    rag_enabled = False
-    embedding_count = 0
-    try:
-        from app.infrastructure.rag import is_rag_enabled
-
-        rag_enabled = bool(is_rag_enabled())
-    except RECOVERABLE_ERRORS:
-        rag_enabled = False
-    try:
-        from app.application.dataset_rag_app_service import (
-            DATASET_READ_PERMISSION,
-            DatasetAccessContext,
-            get_dataset_rag_app_service,
-        )
-
-        status = get_dataset_rag_app_service().status(
-            dataset_id="office-docking",
-            tenant_id=str(tenant_id),
-            access_context=DatasetAccessContext(
-                actor_id="",
-                tenant_id=str(tenant_id),
-                permissions=frozenset({DATASET_READ_PERMISSION}),
-            ),
-            include_documents=False,
-        )
-        index = status.get("index") if isinstance(status, dict) else {}
-        if isinstance(index, dict):
-            embedding_count = int(index.get("embedding_count") or 0)
-    except RECOVERABLE_ERRORS:
-        embedding_count = 0
-    return {"rag_enabled": rag_enabled, "embedding_count": embedding_count}
 
 
 class AutoIngestService:
@@ -391,32 +359,9 @@ class AutoIngestService:
                 tenant_id=tenant_id,
                 expected_plan=prepared_plan.get("knowledge") if prepared_plan else None,
             )
-            rag_meta = _knowledge_index_meta(tenant_id)
-            kb_receipt = {
-                **kb_receipt,
-                "document_written": kb_receipt.get("action") in {"new", "update"},
-                "rag_enabled": rag_meta["rag_enabled"],
-                "embedding_count": rag_meta["embedding_count"],
-            }
-            if kb_receipt.get("action") == "skip":
-                kb_message = str(kb_receipt.get("reason") or "知识库跳过写入")
-            elif kb_receipt.get("document_written"):
-                if rag_meta["rag_enabled"] and rag_meta["embedding_count"] > 0:
-                    kb_message = "文档已写入；向量索引已建立"
-                elif rag_meta["rag_enabled"]:
-                    kb_message = "文档已写入；向量索引尚未建立（不等于文档未写入）"
-                else:
-                    kb_message = "文档已写入；语义检索未启用（不等于文档未写入）"
-            else:
-                kb_message = str(kb_receipt.get("reason") or "知识库未写入文档")
-            kb_done = _progress(
-                "done" if kb_receipt.get("action") != "skip" else "skipped",
-                100,
-                message=kb_message,
+            kb_receipt, kb_done, _rag_meta = enrich_knowledge_progress(
+                kb_receipt, tenant_id, _progress
             )
-            kb_done["document_written"] = bool(kb_receipt.get("document_written"))
-            kb_done["rag_enabled"] = bool(rag_meta["rag_enabled"])
-            kb_done["embedding_count"] = int(rag_meta["embedding_count"])
             _patch_batch(
                 tenant_id,
                 batch_id,
@@ -598,28 +543,7 @@ class AutoIngestService:
                 )
             status = str(run.get("status") or "")
             if status == "completed":
-                summary = run.get("summary") if isinstance(run.get("summary"), dict) else {}
-                executed = int(summary.get("executed") or run.get("executed_rows") or 0)
-                written = (
-                    executed
-                    + int(summary.get("new") or run.get("new_rows") or 0)
-                    + int(summary.get("update") or run.get("update_rows") or 0)
-                )
-                receipt = run.get("receipt") if isinstance(run.get("receipt"), dict) else {}
-                if written <= 0 and not receipt.get("rows_written"):
-                    batch_status, progress = (
-                        "completed_empty",
-                        _progress(
-                            "done",
-                            100,
-                            message="执行结束但未写入任何业务行（无报错≠已入库）",
-                        ),
-                    )
-                else:
-                    batch_status, progress = (
-                        "applied",
-                        _progress("done", 100, message="业务写入已完成"),
-                    )
+                batch_status, progress = business_completion_from_run(run, _progress)
             elif status in {"failed", "interrupted", "outcome_unknown"}:
                 batch_status, progress = (
                     "failed",
