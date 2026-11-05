@@ -36,41 +36,75 @@ class RelayConfigStore:
         self.logger = logger
         self._lock = threading.RLock()
 
+    def _load(self, path: Path) -> JsonObject | None:
+        """读取单个配置；空文件、半截 JSON 和符号链接都返回 None。"""
+        try:
+            if not path.is_file() or path.is_symlink():
+                return None
+            os.chmod(path, 0o600)
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else None
+        except (OSError, json.JSONDecodeError):
+            return None
+
     def read(self) -> JsonObject:
         with self._lock:
             path = self.ports.path()
-            try:
-                if not path.is_file() or path.is_symlink():
-                    return {}
-                os.chmod(path, 0o600)
-                data = json.loads(path.read_text(encoding="utf-8"))
-                return data if isinstance(data, dict) else {}
-            except (OSError, json.JSONDecodeError):
-                self.logger.warning(
-                    "mobile relay desktop config is unreadable: %s", path, exc_info=True
-                )
-                return {}
+            data = self._load(path)
+            if data is not None:
+                return data
+            # 旧版非原子写入可能把主文件截成 0 字节。用最近一次完整备份自愈，
+            # 避免一次异常退出就永久丢失配对身份。
+            backup = path.with_name(path.name + ".bak")
+            recovered = self._load(backup)
+            if recovered is not None:
+                self.logger.warning("mobile relay desktop config recovered from backup: %s", backup)
+                try:
+                    self.write(recovered)
+                except OSError:
+                    self.logger.warning("mobile relay desktop config restore failed", exc_info=True)
+                return recovered
+            if path.is_file() or path.is_symlink():
+                self.logger.warning("mobile relay desktop config is unreadable: %s", path)
+            return {}
+
+    def _write_atomic(self, path: Path, text: str) -> None:
+        """同目录临时文件 + fsync + os.replace，读者看不到被截断的文件。"""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=path.parent,
+                prefix=".mobile_relay_",
+                delete=False,
+            ) as stream:
+                temp_path = Path(stream.name)
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temp_path, 0o600)
+            os.replace(temp_path, path)
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
 
     def write(self, data: JsonObject) -> None:
         with self._lock:
             path = self.ports.path()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temp_path: Path | None = None
+            payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            # 只备份可解析的完整 JSON；损坏文件不能覆盖掉上一次的好备份。
+            backup = path.with_name(path.name + ".bak")
             try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    encoding="utf-8",
-                    dir=path.parent,
-                    prefix=".mobile_relay_",
-                    delete=False,
-                ) as stream:
-                    temp_path = Path(stream.name)
-                    stream.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
-                os.chmod(temp_path, 0o600)
-                os.replace(temp_path, path)
-            finally:
-                if temp_path is not None:
-                    temp_path.unlink(missing_ok=True)
+                if path.is_file() and not path.is_symlink():
+                    raw = path.read_text(encoding="utf-8")
+                    if raw.strip():
+                        json.loads(raw)
+                        self._write_atomic(backup, raw)
+            except (OSError, ValueError):
+                pass
+            self._write_atomic(path, payload)
 
     def update_if_current(self, expected: RelayBinding, changes: JsonObject) -> JsonObject | None:
         """Apply a response only while its full binding still owns this file."""

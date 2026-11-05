@@ -302,6 +302,31 @@ def _public_fhd_base_url() -> str:
     )
 
 
+_TRANSIENT_UPSTREAM_STATUS = {502, 503, 504}
+
+
+async def _get_upstream(
+    client: httpx.AsyncClient,
+    url: str,
+    headers: dict[str, str],
+    *,
+    attempts: int = 2,
+) -> httpx.Response:
+    """GET 上游；仅对网关瞬时 502/503/504 做一次短退避重试。
+
+    传输超时不重试：POST 之前的预检一旦超时，继续重试只会挤占 20s 总预算，
+    而且无法证明上游没有开始处理。
+    """
+    response: httpx.Response | None = None
+    for attempt in range(attempts):
+        response = await client.get(url, headers=headers)
+        if response.status_code not in _TRANSIENT_UPSTREAM_STATUS or attempt + 1 >= attempts:
+            return response
+        await asyncio.sleep(0.4 * (attempt + 1))
+    assert response is not None
+    return response
+
+
 async def _proxy_to_production(
     method: str,
     token: str,
@@ -317,7 +342,7 @@ async def _proxy_to_production(
             asyncio.timeout(20.0),
             httpx.AsyncClient(timeout=20.0, trust_env=False) as client,
         ):
-            response = await client.get(url, headers=headers)
+            response = await _get_upstream(client, url, headers)
             if response.status_code == 401 and session_id:
                 from app.fastapi_routes import market_account
 
@@ -327,7 +352,7 @@ async def _proxy_to_production(
                 refreshed = refreshed or market_account.session_market_token(session_id)
                 if refreshed and refreshed != token:
                     headers["Authorization"] = f"Bearer {refreshed}"
-                    response = await client.get(url, headers=headers)
+                    response = await _get_upstream(client, url, headers)
             if method.upper() == "POST" and response.status_code < 400:
                 csrf = str(client.cookies.get("csrf_token") or "").strip()
                 post_headers = {**headers, "Content-Type": "application/json"}
@@ -340,6 +365,12 @@ async def _proxy_to_production(
         return JSONResponse(
             _SEND_UNCONFIRMED if post_started else {"success": False, "message": _IM_UNAVAILABLE},
             status_code=502,
+        )
+    if not post_started and response.status_code >= 500:
+        # 不把上游 HTML 502 页面透传给前端；GET 失败是可以安全重试的明确错误。
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE, "retryable": True},
+            status_code=response.status_code,
         )
     try:
         payload = response.json()

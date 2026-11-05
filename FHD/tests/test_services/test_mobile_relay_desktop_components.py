@@ -557,6 +557,52 @@ def test_config_component_atomic_failure_preserves_private_binding(monkeypatch, 
     assert list(tmp_path.glob(".mobile_relay_*")) == []
 
 
+def _private_config_store(tmp_path):
+    from app.application.desktop_relay.configuration import ConfigurationPorts, RelayConfigStore
+
+    path = tmp_path / "private.json"
+    store: RelayConfigStore
+    store = RelayConfigStore(
+        ConfigurationPorts(
+            path=lambda: path,
+            legacy_path=lambda: tmp_path / "legacy.json",
+            migration_done=lambda: False,
+            mark_migrated=lambda: None,
+            read_config=lambda: store.read(),
+            write_config=lambda data: store.write(data),
+            base_url=lambda: "https://relay.invalid/",
+        ),
+        logging.getLogger("relay-test-config"),
+    )
+    return path, store
+
+
+def test_config_component_recovers_from_backup_when_primary_is_empty(tmp_path):
+    path, store = _private_config_store(tmp_path)
+    original = {"relay_id": "r", "desktop_token": "private"}
+    store.write(original)
+    store.write({**original, "pairing_code": "123456"})
+    path.write_text("", encoding="utf-8")
+
+    assert store.read() == original
+    assert json.loads(path.read_text(encoding="utf-8")) == original
+    backup = path.with_name(path.name + ".bak")
+    assert json.loads(backup.read_text(encoding="utf-8")) == original
+
+
+def test_config_component_corrupt_primary_keeps_last_good_backup(tmp_path):
+    path, store = _private_config_store(tmp_path)
+    original = {"relay_id": "r", "desktop_token": "private"}
+    store.write(original)
+    store.write({**original, "pairing_code": "654321"})
+    path.write_text("", encoding="utf-8")
+
+    store.write({"relay_id": "new", "desktop_token": "new-private"})
+
+    backup = path.with_name(path.name + ".bak")
+    assert json.loads(backup.read_text(encoding="utf-8")) == original
+
+
 def test_independent_executor_waits_for_correlated_result_with_fake_clock():
     from app.application.desktop_relay import messages
     from app.application.desktop_relay.execution import ExecutionPorts, RelayTaskExecutor

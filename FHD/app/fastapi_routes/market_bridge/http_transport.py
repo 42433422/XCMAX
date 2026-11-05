@@ -135,9 +135,9 @@ class MarketHTTP:
             if key and value:
                 headers[str(key)] = str(value)
         timeout = self.timeout() if timeout is None else float(timeout)
-        # This public legacy argument is the complete attempt budget. In
-        # particular, preserve the existing budget for mutating requests.
-        attempts = self.attempts() if retries is None else max(0, int(retries))
+        # This public legacy argument is the complete attempt budget. A zero
+        # budget must not silently skip the request and fabricate a 502.
+        attempts = max(1, self.attempts() if retries is None else int(retries))
         mutating = str(method).upper() in {"POST", "PUT", "PATCH", "DELETE"}
         for attempt in range(attempts):
             try:
