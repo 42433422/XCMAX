@@ -8,7 +8,7 @@ Exit code: 0 = all checks pass, 1 = violations found
 
 File length is advisory only: files above the soft cap need an approved, expiring entry in
 ``arch_line_exceptions.json`` to silence the warning, and never fail the gate. Coupling is what
-blocks: import-time cycles, cross-layer edges, ``_facade()`` late-binding back into a facade,
+blocks: import-time cycles, cross-layer edges, facade-hook late binding back into a facade,
 numbered fragment modules, sibling-mixin method shadowing, and ratcheted fan-out / public API /
 deferred-cycle metrics (``arch_metrics_baseline.json``).
 """
@@ -260,7 +260,7 @@ def check_module_shape() -> None:
             rel = _rel(package, name)
             if arch_graph.defines_facade_hook(mod):
                 VIOLATIONS.append(
-                    f"[facade-late-binding] {rel} — _facade() resolves names from another module "
+                    f"[facade-late-binding] {rel} — a facade hook resolves names from another module "
                     "at runtime; import them statically or keep them in this module"
                 )
             if arch_graph.is_fragment_name(mod.path):
