@@ -107,8 +107,8 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
       severity: 'P1',
       title: 'runtime 副本双向同步缺失',
       status: 'ok',
-      impact: '已落地 sync-runtime-to-source.sh + install-sync-runtime-to-source-cron.sh，与 install-local-autonomy-runtime 形成双向同步',
-      nextStep: '开发机执行一次 install-sync-runtime-to-source-cron.sh 后保持每小时回写',
+      impact: '公开树不再接收运行日志回写；运行记录留在本机运行目录。',
+      nextStep: '不要把运行日志提交进公开仓库。',
       ownerSurface: 'modstore',
     },
     {
