@@ -436,8 +436,6 @@ class TestEdgeUpstreamFailure:
             "_run_edge_sync",
             lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
         )
-        monkeypatch.setattr(tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake()))
-            tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake())
         first = ai_assistant_tts.compat_tts({"text": "first"})
         clock[0] += 20.0
         second = ai_assistant_tts.compat_tts({"text": "second"})
@@ -448,7 +446,6 @@ class TestEdgeUpstreamFailure:
     @pytest.mark.parametrize(
         "cooldown, expected",
         [("30", "30"), ("60", "60"), ("30.5", "31"), ("invalid", "300")],
-        "cooldown, expected", [("30", "30"), ("60", "60"), ("30.5", "31"), ("invalid", "300")]
     )
     def test_tts_route_retry_after_matches_configured_cooldown(
         self, monkeypatch, cooldown, expected
@@ -467,8 +464,6 @@ class TestEdgeUpstreamFailure:
             "_run_edge_sync",
             lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
         )
-        monkeypatch.setattr(tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake()))
-            tts, "_run_edge_sync", lambda req: (_ for _ in ()).throw(ForbiddenHandshake())
         monkeypatch.setattr(ai_assistant_tts, "_trace", lambda payload, **kwargs: payload)
 
         response = ai_assistant_tts.compat_tts({"text": "hello"})
