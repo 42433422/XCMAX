@@ -1946,6 +1946,8 @@ async def reviewed_excel_save(
                     classification_id=str(summary_for_ingest.get("classification_id") or ""),
                     composer_note=composer_note.strip(),
                     prepared_plan=confirmed_plan,
+                    # Pin etl/uploads/<tenant>/<owner> jail (ownership already checked).
+                    owned_upload_user_id=owner,
                 )
             except BOUNDARY_ERRORS as exc:
                 context = _reviewed_excel_context(request)
