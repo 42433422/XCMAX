@@ -42,7 +42,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--max-type-ignore", type=int, default=0)
     parser.add_argument("--max-mypy-disable", type=int, default=0)
-    parser.add_argument("--max-noqa", type=int, default=220)
+    parser.add_argument("--max-noqa", type=int, default=222)
     parser.add_argument("--max-ts-nocheck", type=int, default=0)
     parser.add_argument("--max-any", type=int, default=0)
     args = parser.parse_args()

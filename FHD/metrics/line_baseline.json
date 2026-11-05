@@ -1,5 +1,5 @@
 {
   "lines": 2414684,
   "updated": "2026-11-06",
-  "note": "SSOT Drift Gate net-deletion: tree ahead of stale rememeasure baseline; raise to current tracked code+docs lines"
+  "note": "PR #3018: align SSOT type-debt max-noqa with workflow ratchet 222"
 }

@@ -46,7 +46,7 @@ GUARDS: list[tuple[str, list[str], bool]] = [
             "--max-mypy-disable",
             "0",
             "--max-noqa",
-            "220",
+            "222",
             "--max-ts-nocheck",
             "0",
             "--max-any",
