@@ -84,6 +84,40 @@ describe('sidebarNavigation', () => {
     expect(router.push).toHaveBeenCalledWith({ name: 'workflow-employee-space' })
   })
 
+  it('settles each coalesced call according to its own navigation', async () => {
+    const router = makeRouter()
+    const first = navigateFromSidebarKey(router, 'customers')
+    const second = navigateFromSidebarKey(router, 'print')
+
+    await expect(first).resolves.toBe(false)
+    await expect(second).resolves.toBe(true)
+    expect(isSidebarNavigationPending()).toBe(false)
+  })
+
+  it('uses the router belonging to the latest coalesced call', async () => {
+    const firstRouter = makeRouter()
+    const secondRouter = makeRouter()
+    const first = navigateFromSidebarKey(firstRouter, 'customers')
+    const second = navigateFromSidebarKey(secondRouter, 'print')
+
+    await expect(first).resolves.toBe(false)
+    await expect(second).resolves.toBe(true)
+    expect(firstRouter.push).not.toHaveBeenCalled()
+    expect(secondRouter.push).toHaveBeenCalledWith({ name: 'print' })
+  })
+
+  it('does not let a superseded call inherit the latest push error', async () => {
+    const router = makeRouter()
+    const error = new Error('latest failed')
+    vi.mocked(router.push).mockRejectedValueOnce(error)
+    const first = navigateFromSidebarKey(router, 'customers')
+    const second = navigateFromSidebarKey(router, 'print')
+    const results = await Promise.allSettled([first, second])
+
+    expect(results).toEqual([{ status: 'fulfilled', value: false }, { status: 'rejected', reason: error }])
+    expect(isSidebarNavigationPending()).toBe(false)
+  })
+
   it('fast second click supersedes a slow first navigation', async () => {
     const currentRoute = { value: { name: 'chat', path: '/chat' } }
     const push = vi.fn(async (loc: { name?: string }) => {

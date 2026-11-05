@@ -232,7 +232,7 @@ const currentRouteName = computed(() => {
 const pendingSidebarView = ref('')
 const failedSidebarView = ref('')
 let routeNavGeneration = 0
-const displayedActiveView = computed(() => pendingSidebarView.value || currentRouteName.value)
+const displayedActiveView = computed(() => currentRouteName.value)
 
 function syncPendingSidebarWithRoute() {
   if (!pendingSidebarView.value) return
@@ -252,8 +252,15 @@ function syncAppNavIntentWithRoute() {
   }
 }
 
-watch([currentRouteName, routeChunkErrorPath], () => {
+// Real route settlement: bump generation so in-flight sidebar UI cannot overwrite the landed page.
+watch([() => route.fullPath, routeChunkErrorPath], () => {
+  routeNavGeneration++
+  pendingSidebarView.value = ''
   failedSidebarView.value = ''
+  syncAppNavIntentWithRoute()
+}, { flush: 'sync' })
+
+watch(currentRouteName, () => {
   syncPendingSidebarWithRoute()
   syncAppNavIntentWithRoute()
 })
@@ -338,8 +345,8 @@ async function navigateToView(viewKey, source = 'shell') {
   } catch (error) {
     if (generation === routeNavGeneration && !routeChunkErrorPath.value) {
       failedSidebarView.value = normalized
+      console.warn('[MainLayout] 页面切换失败', error)
     }
-    console.warn('[MainLayout] 页面切换失败', error)
   } finally {
     // Never let an older request clear a newer pending highlight.
     if (generation === routeNavGeneration) {

@@ -285,6 +285,7 @@ vi.mock('../views/ModLandingView.vue', () => ({ default: { template: '<div />' }
 vi.mock('../views/KittenFinanceView.vue', () => ({ default: { template: '<div />' } }))
 
 import router from './index'
+import { navigateFromSidebarKey, resetSidebarNavigationForTests } from '@/utils/sidebarNavigation'
 
 // ── 辅助：恢复 mock 默认值 ──────────────────────────────
 function resetMockDefaults() {
@@ -1044,7 +1045,6 @@ describe('router/index 覆盖率补齐', () => {
     })
 
     it('supersedes a pending sidebar guard without applying its late redirect', async () => {
-      const { navigateFromSidebarKey, resetSidebarNavigationForTests } = await import('@/utils/sidebarNavigation')
       resetSidebarNavigationForTests()
       await router.push('/login')
       mockIsEnterpriseEdition.mockReturnValue(true)
