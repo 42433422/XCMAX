@@ -31,9 +31,8 @@ def _owned_request_id(
         req = approval_service.get_pending_request(request_id)
     else:
         req = approval_service.get_pending_request_by_plan(plan_id)
-    if req is None or not _visible_to(req, user):
-        return None
-    return req.request_id
+    found = None if req is None or not _visible_to(req, user) else getattr(req, "request_id", None)
+    return None if found is None else str(found)
 
 
 def _trace_approval_route(
