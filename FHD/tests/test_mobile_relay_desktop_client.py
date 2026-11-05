@@ -462,6 +462,27 @@ def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_pa
     assert stat.S_IMODE(stable.stat().st_mode) == 0o600
 
 
+def test_unlink_after_migration_does_not_restore_legacy_on_restart(monkeypatch, tmp_path):
+    from app.services import mobile_relay_desktop_client as relay
+
+    stable = tmp_path / "stable" / "mobile_relay_desktop.json"
+    legacy = tmp_path / "legacy" / "mobile_relay_desktop.json"
+    legacy.parent.mkdir(parents=True)
+    _seed_config(legacy, "paired-877")
+    monkeypatch.setattr(relay, "_CONFIG_FILE", stable)
+    monkeypatch.setattr(relay, "_LEGACY_CONFIG_FILE", legacy)
+    monkeypatch.setattr(relay, "_LEGACY_MIGRATION_DONE", False)
+
+    relay._migrate_legacy_config_once()
+    assert relay._read_config()["relay_id"] == "paired-877"
+    stable.unlink()
+    monkeypatch.setattr(relay, "_LEGACY_MIGRATION_DONE", False)
+    relay._migrate_legacy_config_once()
+
+    assert relay._read_config() == {}
+    assert not stable.exists()
+
+
 class _CaptureCodexService:
     """记录 invoke 收到的 context，用于断言中继的路由意图。"""
 

@@ -33,6 +33,11 @@ const server = http.createServer((req, res) => {
     res.end('pong')
     return
   }
+  if (url.pathname === '/api/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ status: 'healthy', degradedReasons: [] }))
+    return
+  }
   if (url.pathname === '/api/desktop/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({

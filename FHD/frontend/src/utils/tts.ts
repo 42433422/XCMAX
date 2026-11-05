@@ -183,14 +183,16 @@ function loadVoicesOnce(): Promise<SpeechSynthesisVoice[]> {
     try { window.speechSynthesis.addEventListener('voiceschanged', onChanged) } catch { /* ignore */ }
 
     setTimeout(() => {
+      try { window.speechSynthesis.removeEventListener('voiceschanged', onChanged) } catch { /* ignore */ }
       if (!voicesReady) {
         const v = window.speechSynthesis.getVoices() || []
         voicesCache = v
-        voicesReady = true
+        voicesReady = v.length > 0
         exposeDebugHelpers()
         emitChange()
         resolve(v)
-      }
+      } else resolve(voicesCache)
+      if (!voicesReady) voicesReadyPromise = null
     }, 2000)
   })
 
@@ -370,9 +372,13 @@ async function ensureTtsCsrfCookie(signal: AbortSignal): Promise<void> {
 }
 
 async function playOnlineTts(text: string, controller: AbortController): Promise<void> {
-  const { signal } = controller
+  const onlineController = new AbortController()
+  const onStop = () => onlineController.abort(controller.signal.reason)
+  controller.signal.addEventListener('abort', onStop, { once: true })
+  const { signal } = onlineController
+  try {
   // Include CSRF and response-body reads in the synthesis budget (MiMo 8s + Edge 15s).
-  const synthesisTimer = setTimeout(() => controller.abort(new DOMException('TTS synthesis timeout', 'TimeoutError')), 30_000)
+  const synthesisTimer = setTimeout(() => onlineController.abort(new DOMException('TTS synthesis timeout', 'TimeoutError')), 30_000)
   let uri: string
   try {
     uri = await fetchOnlineTtsDataUri(text, signal)
@@ -384,7 +390,7 @@ async function playOnlineTts(text: string, controller: AbortController): Promise
     const a = new Audio(uri)
     onlineAudioEl = a
     // Limit loading only; a long, playing message must be allowed to finish.
-    const loadTimer = setTimeout(() => controller.abort(new DOMException('TTS audio load timeout', 'TimeoutError')), 15_000)
+    const loadTimer = setTimeout(() => onlineController.abort(new DOMException('TTS audio load timeout', 'TimeoutError')), 15_000)
     let settled = false
     const finish = (error?: unknown) => {
       if (settled) return
@@ -406,22 +412,53 @@ async function playOnlineTts(text: string, controller: AbortController): Promise
     a.onerror = () => finish(new Error('音频播放失败'))
     void a.play().catch(finish)
   })
+  } finally {
+    controller.signal.removeEventListener('abort', onStop)
+  }
 }
 
-async function speakWithSystemVoice(text: string): Promise<boolean> {
+function waitForSpeech<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
+}
+
+async function speakWithSystemVoice(text: string, controller: AbortController): Promise<boolean> {
   if (!hasSpeechSynthesis()) return false
   let voices = voicesCache
-  if (!voices.length) voices = await loadVoicesOnce()
-  if (!pickBestChineseVoice(voices)) return false
+  if (!voices.length) voices = await waitForSpeech(loadVoicesOnce(), controller.signal).catch(() => [])
+  if (speechController !== controller || !pickBestChineseVoice(voices)) return false
   return new Promise<boolean>((resolve) => {
     let settled = false
+    const u = createChineseUtterance(text)
+    let timer: ReturnType<typeof setTimeout>
+    let started = false
     const finish = (ok: boolean) => {
       if (settled) return
       settled = true
+      clearTimeout(timer)
+      controller.signal.removeEventListener('abort', onAbort)
+      u.onstart = u.onend = u.onerror = null
       resolve(ok)
     }
+    const onAbort = () => finish(false)
+    const onTimeout = () => {
+      if (started && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+        timer = setTimeout(onTimeout, 60_000)
+        return
+      }
+      finish(false)
+      try { window.speechSynthesis.cancel() } catch { return }
+    }
+    timer = setTimeout(onTimeout, 60_000)
     try {
-      const u = createChineseUtterance(text)
+      if (!controller.signal.aborted) controller.signal.addEventListener('abort', onAbort, { once: true })
+      u.onstart = () => {
+        started = true
+      }
       u.onend = () => finish(true)
       u.onerror = () => finish(false)
       window.speechSynthesis.speak(u)
@@ -431,17 +468,19 @@ async function speakWithSystemVoice(text: string): Promise<boolean> {
   })
 }
 
-async function speakWithFallback(text: string): Promise<boolean> {
+async function speakWithFallback(text: string, controller: AbortController): Promise<boolean> {
   if (isOfflineReady()) {
     try {
-      const { audio, samplingRate } = await synthesizeOffline(text)
-      await playOfflinePcm(audio, samplingRate)
+      const { audio, samplingRate } = await waitForSpeech(synthesizeOffline(text, controller.signal), controller.signal)
+      if (speechController !== controller) return false
+      await waitForSpeech(playOfflinePcm(audio, samplingRate, controller.signal), controller.signal)
       return true
     } catch {
       /* fall through to system voice */
     }
   }
-  return speakWithSystemVoice(text)
+  if (speechController !== controller) return false
+  return speakWithSystemVoice(text, controller)
 }
 
 /** 朗读完成、失败或主动停止后结束；失败统一提示，取消静默。 */
@@ -453,9 +492,9 @@ export async function speakText(text: string, options?: { onEnd?: () => void; on
   speechController = controller
   try {
     if (getEngineMode() === 'offline') {
-      const { audio, samplingRate } = await synthesizeOffline(plain)
+      const { audio, samplingRate } = await waitForSpeech(synthesizeOffline(plain, controller.signal), controller.signal)
       controller.signal.throwIfAborted()
-      await playOfflinePcm(audio, samplingRate)
+      await waitForSpeech(playOfflinePcm(audio, samplingRate, controller.signal), controller.signal)
     } else {
       await playOnlineTts(plain, controller)
     }
@@ -468,9 +507,9 @@ export async function speakText(text: string, options?: { onEnd?: () => void; on
       || message.includes('音频播放失败')
       || message.includes('play rejected')
     const offlineMode = getEngineMode() === 'offline'
-    const fallbackOk = offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(plain)
+    const fallbackOk = offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(plain, controller)
     if (!fallbackOk) {
-      if (!controller.signal.aborted || error?.name === 'TimeoutError') {
+      if (speechController === controller && (!controller.signal.aborted || error?.name === 'TimeoutError')) {
         showAppToast(error?.name === 'NotAllowedError'
           ? '语音播放被浏览器阻止，请点击朗读按钮重试。'
           : error?.name === 'TimeoutError' ? '语音服务响应超时，请稍后重试。' : '语音播放失败，请稍后重试。')

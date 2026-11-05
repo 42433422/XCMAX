@@ -75,7 +75,7 @@ let lastError: unknown = null
 let progress = 0 // 0..1
 
 let audioCtx: AudioContext | null = null
-let currentSource: AudioBufferSourceNode | null = null
+let currentPlayback: (() => void) | null = null
 
 interface TransformersModule {
   env?: {
@@ -236,7 +236,8 @@ function splitForSynthesis(text: string, maxLen = 80): string[] {
 }
 
 /** 合成一整段文本（内部会按标点分段，然后拼成一条 Float32Array）。 */
-export async function synthesizeOffline(text: string): Promise<{ audio: Float32Array; samplingRate: number }> {
+export async function synthesizeOffline(text: string, signal?: AbortSignal): Promise<{ audio: Float32Array; samplingRate: number }> {
+  signal?.throwIfAborted()
   if (!pipelineSingleton) throw new Error('离线 TTS 尚未加载，请先调用 ensureOfflineReady()')
   const segments = splitForSynthesis(text)
   if (!segments.length) return { audio: new Float32Array(0), samplingRate: 16000 }
@@ -244,7 +245,21 @@ export async function synthesizeOffline(text: string): Promise<{ audio: Float32A
   const chunks: Float32Array[] = []
   let samplingRate = 16000
   for (const seg of segments) {
-    const out = await pipelineSingleton(seg)
+    signal?.throwIfAborted()
+    const pending = pipelineSingleton(seg)
+    const out = signal ? await new Promise<Awaited<typeof pending>>((resolve, reject) => {
+      const onAbort = () => {
+        signal.removeEventListener('abort', onAbort)
+        reject(signal.reason)
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      pending.then(
+        (value) => { signal.removeEventListener('abort', onAbort); resolve(value) },
+        (error) => { signal.removeEventListener('abort', onAbort); reject(error) },
+      )
+      if (signal.aborted) onAbort()
+    }) : await pending
+    signal?.throwIfAborted()
     if (out?.audio?.length) {
       chunks.push(out.audio)
       if (out.sampling_rate) samplingRate = out.sampling_rate
@@ -261,12 +276,35 @@ export async function synthesizeOffline(text: string): Promise<{ audio: Float32A
 }
 
 /** 用 Web Audio 播放 PCM；返回 Promise 在 ended 时 resolve。 */
-export function playOfflinePcm(pcm: Float32Array, samplingRate: number): Promise<void> {
-  return new Promise((resolve) => {
+export function playOfflinePcm(pcm: Float32Array, samplingRate: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason)
+      return
+    }
     if (!pcm || !pcm.length) {
       resolve()
       return
     }
+    let src: AudioBufferSourceNode | null = null
+    let settled = false
+    const finish = (aborted = false, stop = false) => {
+      if (settled) return
+      settled = true
+      signal?.removeEventListener('abort', onAbort)
+      if (currentPlayback === cancel) currentPlayback = null
+      if (src) {
+        src.onended = null
+        if (stop) {
+          try { src.stop() } catch (error) { void error }
+        }
+        try { src.disconnect() } catch (error) { void error }
+      }
+      if (aborted) reject(signal?.reason)
+      else resolve()
+    }
+    const onAbort = () => finish(true, true)
+    const cancel = () => finish(false, true)
     try {
       const ctx = getAudioContext()
       const buffer = ctx.createBuffer(1, pcm.length, samplingRate)
@@ -274,29 +312,23 @@ export function playOfflinePcm(pcm: Float32Array, samplingRate: number): Promise
       const safePcm = new Float32Array(pcm.length)
       safePcm.set(pcm)
       buffer.copyToChannel(safePcm, 0)
-      const src = ctx.createBufferSource()
+      src = ctx.createBufferSource()
       src.buffer = buffer
       src.connect(ctx.destination)
-      src.onended = () => {
-        if (currentSource === src) currentSource = null
-        resolve()
+      src.onended = () => finish()
+      currentPlayback = cancel
+      signal?.addEventListener('abort', onAbort, { once: true })
+      if (signal?.aborted) {
+        onAbort()
+        return
       }
-      currentSource = src
       src.start()
     } catch {
-      resolve()
+      finish()
     }
   })
 }
 
 export function stopOffline(): void {
-  try {
-    if (currentSource) {
-      currentSource.stop()
-      currentSource.disconnect()
-    }
-  } catch {
-    /* ignore */
-  }
-  currentSource = null
+  currentPlayback?.()
 }

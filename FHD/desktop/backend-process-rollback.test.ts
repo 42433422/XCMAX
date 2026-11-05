@@ -104,6 +104,19 @@ describe('backend stop and rollback writer exclusion', () => {
     expect(ports.restore).toHaveBeenCalledOnce()
   })
 
+  it('fails the post-update stability window when a renderer crash was recorded', async () => {
+    const { desktopRuntime } = await import('./runtime-state.js')
+    await backend.startBackend()
+    desktopRuntime.mainWindow = { isDestroyed: () => false } as never
+    desktopRuntime.rendererFailedDuringStartup = true
+    try {
+      await expect(backend.waitForPostUpdateStartupStability(1_000)).rejects.toThrow('renderer 进程崩溃')
+    } finally {
+      desktopRuntime.rendererFailedDuringStartup = false
+      desktopRuntime.mainWindow = null
+    }
+  })
+
   it('does not spawn after an outstanding port probe resumes during handoff', async () => {
     const available = deferred<boolean>()
     const handoff = deferred<void>()

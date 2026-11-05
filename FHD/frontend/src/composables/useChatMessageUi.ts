@@ -61,7 +61,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     const finish = () => {
       if (speechGeneration === generation) playingMsgIdx.value = -1
     }
-    void speakText(text, { onEnd: finish }).catch(finish)
+    void speakText(text, { onEnd: finish }).then(finish, finish)
   }
 
   const latestAiMessageIndex = computed(() => {

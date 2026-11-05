@@ -419,6 +419,60 @@ class TestNestedLoopFallback:
 
 
 class TestEdgeUpstreamFailure:
+    def test_tts_retry_after_tracks_remaining_cooldown(self, monkeypatch):
+        from app.application.facades import tts_facade
+        from app.fastapi_routes import ai_assistant_tts
+
+        clock = [1000.0]
+        monkeypatch.setattr(tts.time, "monotonic", lambda: clock[0])
+        monkeypatch.setenv("XCAGI_TTS_EDGE_COOLDOWN_S", "30.5")
+        monkeypatch.setattr(tts_facade, "trigger_common_tts_warmup", lambda: None)
+        monkeypatch.setattr(ai_assistant_tts, "_trace", lambda payload, **kwargs: payload)
+
+        class ForbiddenHandshake(Exception):
+            status = 403
+
+        monkeypatch.setattr(
+            tts,
+            "_run_edge_sync",
+            lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
+        )
+        first = ai_assistant_tts.compat_tts({"text": "first"})
+        clock[0] += 20.0
+        second = ai_assistant_tts.compat_tts({"text": "second"})
+
+        assert first.headers["retry-after"] == "31"
+        assert second.headers["retry-after"] == "11"
+
+    @pytest.mark.parametrize(
+        "cooldown, expected",
+        [("30", "30"), ("60", "60"), ("30.5", "31"), ("invalid", "300")],
+    )
+    def test_tts_route_retry_after_matches_configured_cooldown(
+        self, monkeypatch, cooldown, expected
+    ):
+        from app.application.facades import tts_facade
+        from app.fastapi_routes import ai_assistant_tts
+
+        class ForbiddenHandshake(Exception):
+            status = 403
+
+        monkeypatch.setenv("XCAGI_TTS_EDGE_COOLDOWN_S", cooldown)
+        monkeypatch.setattr(tts.time, "monotonic", lambda: 1000.0)
+        monkeypatch.setattr(tts_facade, "trigger_common_tts_warmup", lambda: None)
+        monkeypatch.setattr(
+            tts,
+            "_run_edge_sync",
+            lambda req: (_ for _ in ()).throw(ForbiddenHandshake()),
+        )
+        monkeypatch.setattr(ai_assistant_tts, "_trace", lambda payload, **kwargs: payload)
+
+        response = ai_assistant_tts.compat_tts({"text": "hello"})
+
+        assert response.status_code == 503
+        assert response.headers["retry-after"] == expected
+        assert response.headers["cache-control"] == "no-store"
+
     def test_403_trips_circuit_breaker(self, monkeypatch) -> None:
         class ForbiddenHandshake(Exception):
             status = 403

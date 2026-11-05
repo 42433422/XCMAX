@@ -43,6 +43,10 @@ vi.mock('./desktop-navigation', () => ({
 import { clampWindowBounds } from './window-state'
 import { createWindow, showMainWindow, toggleMainWindow } from './window-manager'
 import { desktopRuntime } from './runtime-state'
+import { checkPendingRollback } from './rollback'
+import { reportRendererError } from './desktop-resilience'
+import { writeBackendLog } from './backend-process'
+vi.mock('./desktop-resilience', () => ({ reportRendererError: vi.fn() }))
 function makeWindow(overrides: Partial<{
   isVisible: boolean
   isMinimized: boolean
@@ -171,6 +175,74 @@ it('keeps the activated startup window and its in-flight readiness task', async 
   expect(desktopRuntime.mainWindow).toBe(win)
   expect(desktopRuntime.mainApplicationReady).toBe(ready)
   expect(BrowserWindow).not.toHaveBeenCalled()
+})
+
+it.each([false, true])('ignores a clean renderer exit when quitting is %s', async (quitting) => {
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  let onGone: ((event: unknown, details: { reason: string; exitCode: number }) => void) | undefined
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(), once: vi.fn(), reload: vi.fn(),
+    setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(), loadURL: vi.fn(async () => undefined),
+    webContents: {
+      on: vi.fn((event: string, listener: typeof onGone) => { if (event === 'render-process-gone') onGone = listener }),
+      getURL: vi.fn(() => 'http://127.0.0.1:17500/'), setWindowOpenHandler: vi.fn(),
+      session: { on: vi.fn() }, executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+  await createWindow()
+  await desktopRuntime.mainApplicationReady
+  vi.mocked(checkPendingRollback).mockClear()
+  vi.mocked(reportRendererError).mockClear()
+  vi.mocked(writeBackendLog).mockClear()
+  app.isQuitting = quitting
+  try {
+    expect(onGone).toBeTypeOf('function')
+    onGone?.({}, { reason: 'clean-exit', exitCode: 0 })
+    expect(checkPendingRollback).not.toHaveBeenCalled()
+    expect(reportRendererError).not.toHaveBeenCalled()
+    expect(writeBackendLog).not.toHaveBeenCalled()
+    expect(desktopRuntime.rendererFailedDuringStartup).toBe(false)
+    expect(win.reload).not.toHaveBeenCalled()
+  } finally {
+    app.isQuitting = false
+  }
+})
+
+it('still records a real renderer crash during rollback observation', async () => {
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  let onGone: ((event: unknown, details: { reason: string; exitCode: number }) => void) | undefined
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(), once: vi.fn(), reload: vi.fn(),
+    setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(), loadURL: vi.fn(async () => undefined),
+    webContents: {
+      on: vi.fn((event: string, listener: typeof onGone) => { if (event === 'render-process-gone') onGone = listener }),
+      getURL: vi.fn(() => 'http://127.0.0.1:17500/'), setWindowOpenHandler: vi.fn(),
+      session: { on: vi.fn() }, executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+  await createWindow()
+  await desktopRuntime.mainApplicationReady
+  vi.mocked(checkPendingRollback).mockClear()
+  vi.mocked(reportRendererError).mockClear()
+  vi.mocked(writeBackendLog).mockClear()
+  vi.mocked(checkPendingRollback).mockReturnValueOnce({} as never)
+  app.isQuitting = false
+  try {
+    expect(onGone).toBeTypeOf('function')
+    onGone?.({}, { reason: 'crashed', exitCode: 1 })
+    expect(reportRendererError).toHaveBeenCalled()
+    expect(writeBackendLog).toHaveBeenCalledWith(expect.stringContaining('reason=crashed'))
+    expect(desktopRuntime.rendererFailedDuringStartup).toBe(true)
+    expect(win.reload).not.toHaveBeenCalled()
+  } finally {
+    desktopRuntime.rendererFailedDuringStartup = false
+  }
 })
 
 it.each([true, false])('records selected splash before loading (file exists: %s)', async (exists) => {

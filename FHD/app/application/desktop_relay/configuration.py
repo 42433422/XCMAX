@@ -53,6 +53,8 @@ class RelayConfigStore:
             data = self._load(path)
             if data is not None:
                 return data
+            if not path.exists() and not path.is_symlink():
+                return {}
             # 旧版非原子写入可能把主文件截成 0 字节。用最近一次完整备份自愈，
             # 避免一次异常退出就永久丢失配对身份。
             backup = path.with_name(path.name + ".bak")
@@ -99,8 +101,7 @@ class RelayConfigStore:
             try:
                 if path.is_file() and not path.is_symlink():
                     raw = path.read_text(encoding="utf-8")
-                    if raw.strip():
-                        json.loads(raw)
+                    if raw.strip() and isinstance(json.loads(raw), dict):
                         self._write_atomic(backup, raw)
             except (OSError, ValueError):
                 pass
@@ -131,12 +132,18 @@ class RelayConfigStore:
                 return
             self.ports.mark_migrated()
             path, legacy_path = self.ports.path(), self.ports.legacy_path()
+            marker = path.with_name(path.name + ".migrated")
             try:
-                if path.is_file() or not legacy_path.is_file():
+                if marker.exists() or marker.is_symlink():
                     return
                 if legacy_path.is_symlink():
                     raise OSError("legacy relay config symlink rejected")
                 if path.resolve() == legacy_path.resolve():
+                    return
+                if path.is_file():
+                    self._write_atomic(marker, "1\n")
+                    return
+                if not legacy_path.is_file():
                     return
                 path.parent.mkdir(parents=True, exist_ok=True)
                 os.chmod(legacy_path, 0o600)
@@ -144,6 +151,7 @@ class RelayConfigStore:
                 if not isinstance(legacy, dict):
                     raise ValueError("legacy relay config must be an object")
                 self.ports.write_config(legacy)
+                self._write_atomic(marker, "1\n")
                 self.logger.info("迁移历史云中继配对凭证 %s -> %s", legacy_path, path)
             except (OSError, ValueError):
                 self.logger.warning("云中继配对凭证迁移失败", exc_info=True)

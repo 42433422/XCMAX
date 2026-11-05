@@ -136,7 +136,7 @@ test.beforeAll(async () => {
   )
 
   electronApp = await electron.launch({
-    args: ['.'],
+    args: ['-r', path.join(__dirname, 'patch-backend.cjs'), '.'],
     cwd: path.resolve(__dirname, '..'),
     env: {
       ...process.env,

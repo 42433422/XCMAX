@@ -49,7 +49,7 @@ test.beforeAll(async () => {
   backendPort = await findFreePort()
   userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-e2e-userdata-'))
   electronApp = await electron.launch({
-    args: ['.'],
+    args: ['-r', path.join(__dirname, 'patch-backend.cjs'), '.'],
     cwd: path.resolve(__dirname, '..'),
     env: {
       ...process.env,

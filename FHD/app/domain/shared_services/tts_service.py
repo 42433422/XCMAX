@@ -187,6 +187,11 @@ def _edge_cooldown_seconds() -> float:
         return _EDGE_COOLDOWN_S
 
 
+def edge_cooldown_remaining_seconds() -> float:
+    with _EDGE_BLOCK_LOCK:
+        return max(0.0, _EDGE_BLOCKED_UNTIL - time.monotonic())
+
+
 def _is_edge_forbidden(exc: BaseException) -> bool:
     """识别 edge-tts / aiohttp 的 403 握手拒绝，而不是把它当成普通 500。"""
     status = getattr(exc, "status", None)
@@ -200,8 +205,7 @@ def _is_edge_forbidden(exc: BaseException) -> bool:
 
 
 def _raise_if_edge_blocked() -> None:
-    with _EDGE_BLOCK_LOCK:
-        remaining = _EDGE_BLOCKED_UNTIL - time.monotonic()
+    remaining = edge_cooldown_remaining_seconds()
     if remaining > 0:
         raise TtsUpstreamBlockedError(
             "Edge 语音上游此前拒绝了握手（HTTP 403），已暂停重试约 "

@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from typing import Any
 
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
-from app.domain.shared_services.tts_service import TtsUpstreamBlockedError
+from app.domain.shared_services.tts_service import (
+    TtsUpstreamBlockedError,
+    edge_cooldown_remaining_seconds,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -135,7 +139,10 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
         return JSONResponse(
             traced,
             status_code=503,
-            headers={"Retry-After": "300", "Cache-Control": "no-store"},
+            headers={
+                "Retry-After": str(math.ceil(edge_cooldown_remaining_seconds())),
+                "Cache-Control": "no-store",
+            },
         )
     except RECOVERABLE_ERRORS as error:
         logger.warning("TTS 不可用（MiMo/Edge）: %s (type=%s)", error, type(error).__name__)
