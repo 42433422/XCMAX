@@ -100,9 +100,7 @@ def _process_fallback() -> str:
 
 def resolve_jwt_signing_key() -> str:
     """返回用于移动端/网页端 JWT 的稳定签名密钥。"""
-    env_secret = (
-        os.environ.get("SECRET_KEY") or os.environ.get("XCAGI_SECRET_KEY") or ""
-    ).strip()
+    env_secret = (os.environ.get("SECRET_KEY") or os.environ.get("XCAGI_SECRET_KEY") or "").strip()
     if env_secret:
         return env_secret
 

@@ -24,10 +24,7 @@ def _reset_signing_key(monkeypatch):
 
 def test_env_secret_takes_precedence(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "stable-test-secret-at-least-32-bytes")
-    assert (
-        signing_key.resolve_jwt_signing_key()
-        == "stable-test-secret-at-least-32-bytes"
-    )
+    assert signing_key.resolve_jwt_signing_key() == "stable-test-secret-at-least-32-bytes"
 
 
 def test_persisted_secret_survives_restart(tmp_path, monkeypatch):
