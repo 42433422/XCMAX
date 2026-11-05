@@ -130,9 +130,7 @@ async def stream_audio(text: str, voice: str, rs: str) -> AsyncIterator[bytes]:
     buf = bytearray()
     acquired = False
     try:
-        await asyncio.wait_for(
-            _sem.acquire(), max(0, deadline - asyncio.get_running_loop().time())
-        )
+        await asyncio.wait_for(_sem.acquire(), max(0, deadline - asyncio.get_running_loop().time()))
         acquired = True
         try:
             comm = _EDGE_TTS.Communicate(t, voice=voice, rate=rs)

@@ -48,7 +48,9 @@ async def test_edge_warmup_caches_complete_audio(monkeypatch):
     monkeypatch.setattr(edge_tts_service, "_warmed_keys", set())
     monkeypatch.setattr(edge_tts_service, "_cache", edge_tts_service.OrderedDict())
     await edge_tts_service.warm_voice("voice", "+0%")
-    assert edge_tts_service.get_cached(edge_tts_service.WARMUP_TEXT, "voice", "+0%") == b"firstsecond"
+    assert (
+        edge_tts_service.get_cached(edge_tts_service.WARMUP_TEXT, "voice", "+0%") == b"firstsecond"
+    )
 
 
 async def test_edge_warmup_failure_does_not_cache_partial_audio(monkeypatch):
@@ -187,7 +189,9 @@ def test_long_unified_request_falls_back_to_edge(monkeypatch):
         yield b"complete"
 
     monkeypatch.setattr(speech_api, "_edge_tts_stream_chunks", edge)
-    response = TestClient(app, raise_server_exceptions=False).post("/tts", json={"text": "长" * 4001})
+    response = TestClient(app, raise_server_exceptions=False).post(
+        "/tts", json={"text": "长" * 4001}
+    )
     assert response.status_code == 200
     assert response.content == b"complete"
     assert seen == ["长" * 4001]
