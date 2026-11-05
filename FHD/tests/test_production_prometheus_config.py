@@ -46,7 +46,8 @@ def test_production_alert_rules_select_only_real_targets() -> None:
         if entry["labels"]["environment"] == "production"
     }
     rules = [
-        rule for group in _load("monitoring/production-alerts.yml")["groups"]
+        rule
+        for group in _load("monitoring/production-alerts.yml")["groups"]
         for rule in group["rules"]
     ]
     assert rules

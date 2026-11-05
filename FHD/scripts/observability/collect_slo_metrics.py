@@ -366,9 +366,7 @@ def collect(
         if credentials_available:
             try:
                 successful_scrapes = _numeric(
-                    prom_query(
-                        prom_url, expr, bearer_token=prom_token, query_at=current, ssh=ssh
-                    )
+                    prom_query(prom_url, expr, bearer_token=prom_token, query_at=current, ssh=ssh)
                 )
             except (OSError, ValueError, TypeError, RuntimeError) as exc:
                 source_error = f"{job}:scrape_source_unavailable:{type(exc).__name__}"

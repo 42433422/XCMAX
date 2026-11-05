@@ -20,8 +20,8 @@ def stub(path, body):
     path.chmod(0o700)
 
 
-def run(script, env):
-    return subprocess.run(["bash", "-c", script], env=env, capture_output=True, timeout=15)
+def run(script, env, cwd=None):
+    return subprocess.run(["bash", "-c", script], env=env, capture_output=True, timeout=15, cwd=cwd)
 
 
 def health(runtime=True, recovery=(), error_code="execution_failed"):
@@ -150,35 +150,27 @@ def test_watchdog_never_closes_without_independent_health(
         assert "last_success_at=2026-11-02T00:00:00+00:00" in receipt
 
 
-@pytest.mark.parametrize("failure", ["readiness", "query", "query_payload"])
-def test_slo_closes_opened_tunnel_when_probe_retries_fail(tmp_path, failure):
+@pytest.mark.parametrize("prometheus_ok", [True, False])
+def test_slo_ssh_channel_runs_host_ensure_and_always_closes(tmp_path, prometheus_ok):
     workflow_steps = steps("FHD/.github/workflows/slo-metrics-collect.yml", "collect")
-    opening = next(s for s in workflow_steps if s.get("id") == "prometheus_tunnel")
-    closing = next(
-        s for s in workflow_steps if s.get("name") == "Close production Prometheus SSH tunnel"
-    )
+    opening = next(s for s in workflow_steps if s.get("id") == "prometheus_channel")
+    closing = next(s for s in workflow_steps if s.get("name") == "Close production SSH channel")
     assert closing["if"] == "always()"
+    assert " -L " not in opening["run"]
     stub(
         tmp_path / "ssh",
         """
     if [[ " $* " == *" -O exit "* ]]; then
       echo closed >> "$RUNNER_TEMP/trace"
+    elif [[ " $* " == *" bash -s"* ]]; then
+      grep -q "never recreates the container" || exit 9
+      echo ensure >> "$RUNNER_TEMP/trace"
+      if [ "$PROMETHEUS_OK" = true ]; then echo '{"ok":true}'; else echo '{"ok":false}'; exit 1; fi
     else
       echo opened >> "$RUNNER_TEMP/trace"
     fi
     """,
     )
-    stub(
-        tmp_path / "curl",
-        """
-    echo probe >> "$RUNNER_TEMP/probes"
-    [ "$FAILURE" != readiness ] || exit 56
-    [[ " $* " == *"/-/ready"* ]] && exit 0
-    [ "$FAILURE" != query ] || exit 56
-    echo '{"status":"error"}'
-    """,
-    )
-    stub(tmp_path / "sleep", "exit 0\n")
     env = {
         **os.environ,
         "PATH": f"{tmp_path}:{os.environ['PATH']}",
@@ -186,17 +178,14 @@ def test_slo_closes_opened_tunnel_when_probe_retries_fail(tmp_path, failure):
         "GITHUB_ENV": str(tmp_path / "env"),
         "FHD_PUSH_HOST": "example.invalid",
         "FHD_PUSH_SSH_KEY_RAW": "test key",
-        "PRODUCTION_PROMETHEUS_URL": "http://127.0.0.1:19091",
-        "PRODUCTION_PROMETHEUS_TOKEN": "test token",
-        "FAILURE": failure,
+        "PROMETHEUS_OK": "true" if prometheus_ok else "false",
     }
-    result = run(opening["run"], env)
-    assert result.returncode == 1, result.stderr
-    assert b"Prometheus tunnel query probe failed after retries" in result.stdout
-    assert len((tmp_path / "probes").read_text().splitlines()) == (
-        5 if failure == "readiness" else 10
-    )
+    result = run(opening["run"], env, cwd=ROOT / "FHD")
+    assert result.returncode == (0 if prometheus_ok else 1), result.stderr
+    health = (tmp_path / "prometheus-health.json").read_text()
+    assert ('"ok":true' in health) is prometheus_ok
     env.update(line.split("=", 1) for line in (tmp_path / "env").read_text().splitlines())
+    assert env["PRODUCTION_PROMETHEUS_SSH_TARGET"] == "root@example.invalid"
     assert run(closing["run"], env).returncode == 0
-    assert (tmp_path / "trace").read_text().splitlines() == ["opened", "closed"]
+    assert (tmp_path / "trace").read_text().splitlines() == ["opened", "ensure", "closed"]
     assert not (tmp_path / "fhd_prometheus_metrics_key").exists()
