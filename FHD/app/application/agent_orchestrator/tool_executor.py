@@ -212,6 +212,37 @@ class AgentToolExecutor:
         from app.application.facades.tools_facade import execute_registered_workflow_tool
 
         params = dict(step.params or {})
+        deadline = (runtime_context or {}).get("deadline_monotonic")
+        if isinstance(deadline, (int, float)) and time.monotonic() > float(deadline):
+            return {
+                "success": False,
+                "error_code": "tool_timeout_unknown",
+                "outcome": "unknown",
+                "retryable": False,
+                "execution_status": "timeout",
+                "message": "工具超时，业务结果未知；必须核对原调用，不可自动重试",
+            }
+        if (runtime_context or {}).get("cancel_requested") is True:
+            return {
+                "success": False,
+                "error_code": "tool_cancelled",
+                "retryable": False,
+                "execution_status": "cancelled",
+                "message": "工具调用已取消",
+            }
+        for control_key in (
+            "skip_approval",
+            "auto_approve",
+            "approved",
+            "permission",
+            "permissions",
+            "system_prompt",
+            "employee_tool_allowlist",
+            "_actor_authorization",
+            "tenant_id",
+            "user_id",
+        ):
+            params.pop(control_key, None)
         validation = validate_tool_call(step.tool_id, step.action, params)
         if not validation.ok:
             return {
@@ -254,7 +285,15 @@ class AgentToolExecutor:
         action = validation.action or step.action
         runtime_tenant_raw = params["_runtime_context"].get("tenant_id")
         runtime_tenant_id: int | None = query_tenant
-        if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
+        if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS:
+            if runtime_tenant_raw in (None, ""):
+                return {
+                    "success": False,
+                    "error_code": "invalid_tenant_context",
+                    "message": "任务租户上下文无效，已拒绝执行工具",
+                    "tool_id": validation.tool_id,
+                    "action": action,
+                }
             try:
                 if isinstance(runtime_tenant_raw, bool) or not str(runtime_tenant_raw).isdigit():
                     raise ValueError
@@ -274,9 +313,10 @@ class AgentToolExecutor:
             AgentModAuthorizationError,
             agent_mod_execution_scope,
         )
-        from app.infrastructure.tenant_scope import owned_tenant_scope, tenant_scope
+        from app.infrastructure.tenant_scope import owned_tenant_scope
 
         result: Any = None
+        idem_key = ""
         try:
             # Durable/background Agent runs execute outside the originating HTTP
             # request. Restore the authenticated integer tenant recorded in
@@ -285,11 +325,7 @@ class AgentToolExecutor:
             # string tenant keys and must not be coerced here.
             with (
                 agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")),
-                (
-                    owned_tenant_scope(runtime_tenant_id)
-                    if (validation.tool_id, action) == ("products", "exists")
-                    else tenant_scope(runtime_tenant_id)
-                )
+                owned_tenant_scope(runtime_tenant_id)
                 if runtime_tenant_id is not None
                 else nullcontext(),
             ):
@@ -298,11 +334,13 @@ class AgentToolExecutor:
                     finish_idempotent_replay,
                 )
 
+                context_key = str(params["_runtime_context"].get("idempotency_key") or "")
+                client_key = str(params.get("idempotency_key") or "")
                 idem_key, replay = (
                     begin_idempotent_replay(
                         params["_runtime_context"], validation.tool_id, action, params
                     )
-                    if validation.spec is not None and validation.spec.idempotent
+                    if client_key or context_key or (validation.spec is not None and validation.spec.idempotent)
                     else ("", None)
                 )
                 if replay is not None:
@@ -313,11 +351,17 @@ class AgentToolExecutor:
                         if reviewed_query
                         else execute_registered_workflow_tool(step.tool_id, action, params)
                     )
+                except RECOVERABLE_ERRORS as exc:
+                    result = {
+                        "success": False,
+                        "error_code": "tool_exception",
+                        "retryable": False,
+                        "message": "工具执行失败",
+                        "exception_type": type(exc).__name__,
+                    }
                 finally:
-                    if idem_key:
-                        finish_idempotent_replay(
-                            idem_key, result if isinstance(result, dict) else {"success": False}
-                        )
+                    if idem_key and not isinstance(result, dict):
+                        finish_idempotent_replay(idem_key, {"success": False})
         except AgentModAuthorizationError as exc:
             return {
                 "success": False,
@@ -335,10 +379,26 @@ class AgentToolExecutor:
                 "action": action,
                 "raw_result_type": type(result).__name__,
             }
+        from app.application.agent_orchestrator.tool_permission import (
+            classify_http_status,
+            finish_idempotent_replay,
+            reject_empty_business_result,
+        )
+
+        status_code = result.get("status_code", result.get("http_status"))
+        try:
+            status_value = int(status_code) if status_code not in (None, "") else 0
+        except (TypeError, ValueError):
+            status_value = 0
+        if status_value >= 400:
+            result = {**result, **classify_http_status(status_value)}
+        empty = reject_empty_business_result(result, action=action)
+        if empty is not None:
+            result = empty
 
         output_validation = validate_tool_result(validation.tool_id, action, result)
         if not output_validation.ok:
-            return {
+            result = {
                 "success": False,
                 "error_code": output_validation.error_code,
                 "message": output_validation.message,
@@ -349,6 +409,8 @@ class AgentToolExecutor:
                 "raw_error_code": result.get("error_code"),
                 "output_keys": sorted(str(key) for key in result.keys()),
             }
+        if idem_key:
+            finish_idempotent_replay(idem_key, result)
         return result
 
 

@@ -72,27 +72,30 @@ class StepExecution:
         )
         run.tool_calls.append(tool_call)
         self.usage.refresh_run_cost_metadata(run)
+        trace = self._trace(
+            run,
+            step,
+            runtime_context,
+            execution_id=tool_call.call_id,
+            execution_status="running",
+            error_code="",
+            retry_count=max(0, attempt_count - 1),
+            started_at=step.started_at or "",
+            finished_at="",
+            spec=spec,
+        )
         run.add_event(
             "tool.started",
             f"开始执行 {step.tool_id}.{step.action}",
             {
+                **trace,
                 "step_id": step.step_id,
                 "node_id": step.node_id,
                 "call_id": tool_call.call_id,
-                "trace_id": run.run_id,
-                "execution_id": tool_call.call_id,
-                "task_id": str((runtime_context or {}).get("task_id") or run.run_id),
-                "tenant_id": str((runtime_context or {}).get("tenant_id") or ""),
-                "user_id": run.user_id,
-                "employee_id": str((runtime_context or {}).get("employee_id") or ""),
-                "tool_id": step.tool_id,
-                "tool_name": step.tool_id,
-                "tool_version": str(getattr(spec, "version", "") or ""),
                 "cost_units": tool_call.cost_units,
                 "permission": tool_call.permission,
                 "attempt_count": attempt_count,
-                "retry_count": max(0, attempt_count - 1),
-                "execution_status": "running",
+                "params": self._redacted_params(step.params),
             },
         )
         self.repository.save(run)
@@ -145,7 +148,21 @@ class StepExecution:
                     "error_code": "tool_exception",
                     "message": "工具执行失败",
                 }
+            except Exception:
+                logger.exception("agent tool execution failed")
+                output = {
+                    "success": False,
+                    "error_code": "tool_exception",
+                    "message": "工具执行失败",
+                }
         step.output = dict(output or {})
+        if step.output.get("success") is not True:
+            step.output["success"] = False
+        from app.application.agent_orchestrator.tool_permission import absorb_tool_output
+
+        run.metadata["runtime_context"] = absorb_tool_output(
+            dict(run.metadata.get("runtime_context") or {}), step.output
+        )
         if step.output.get("retryable") is False:
             run.metadata["non_retryable"] = True
         if step.output.get("outcome") == "unknown" or step.output.get("reconciliation_required"):
@@ -161,8 +178,18 @@ class StepExecution:
         tool_call.output = copy.deepcopy(step.output)
         tool_call.finished_at = step.finished_at
         tool_call.duration_ms = step.duration_ms
-        success = bool(step.output.get("success", False))
+        success = step.output.get("success") is True
+        error_code = str(step.output.get("error_code") or "")
+        if success:
+            execution_status = "succeeded"
+        elif error_code == "tool_timeout_unknown":
+            execution_status = "timeout"
+        elif error_code == "tool_cancelled":
+            execution_status = "cancelled"
+        else:
+            execution_status = "failed"
         step.status = tool_call.status = "completed" if success else "failed"
+        tool_call.metadata["execution_status"] = execution_status
         if not success:
             step.error = str(
                 step.output.get("message") or step.output.get("error") or "tool failed"
@@ -180,10 +207,26 @@ class StepExecution:
         if success:
             self.usage.refresh_run_cost_metadata(run)
             node_outputs[step.node_id] = step.output
+            receipt = run.metadata.get("approval_receipt")
+            if isinstance(receipt, dict) and receipt.get("step_id") == step.step_id:
+                receipt["tool_call_id"] = tool_call.call_id
+                receipt["task_id"] = str((runtime_context or {}).get("task_id") or run.run_id)
             run.add_event(
                 "tool.completed",
                 f"完成 {step.tool_id}.{step.action}",
                 {
+                    **self._trace(
+                        run,
+                        step,
+                        runtime_context,
+                        execution_id=tool_call.call_id,
+                        execution_status="succeeded",
+                        error_code="",
+                        retry_count=max(0, attempt_count - 1),
+                        started_at=step.started_at or "",
+                        finished_at=step.finished_at or "",
+                        spec=spec,
+                    ),
                     "step_id": step.step_id,
                     "node_id": step.node_id,
                     "call_id": tool_call.call_id,
@@ -206,16 +249,23 @@ class StepExecution:
             "tool.failed",
             f"{step.tool_id}.{step.action} 执行失败",
             {
+                **self._trace(
+                    run,
+                    step,
+                    ctx,
+                    execution_id=tool_call.call_id,
+                    execution_status=execution_status,
+                    error_code=error_code,
+                    retry_count=max(0, attempt_count - 1),
+                    started_at=step.started_at or "",
+                    finished_at=step.finished_at or "",
+                    spec=spec,
+                ),
                 "step_id": step.step_id,
                 "node_id": step.node_id,
                 "call_id": tool_call.call_id,
                 "error": step.error,
-                "error_code": str(step.output.get("error_code") or ""),
                 "reason": step.error,
-                "user_id": run.user_id,
-                "tool_id": step.tool_id,
-                "task_id": str(ctx.get("task_id") or run.run_id),
-                "execution_status": "failed",
                 "duration_ms": step.duration_ms,
                 "cost_units": tool_call.cost_units,
                 "attempt_count": attempt_count,
@@ -223,3 +273,43 @@ class StepExecution:
             },
         )
         self.repository.save(run)
+
+    @staticmethod
+    def _redacted_params(params: dict[str, Any] | None) -> dict[str, Any]:
+        from app.application.agent_orchestrator.tool_permission import redact
+
+        return redact(dict(params or {}))
+
+    @staticmethod
+    def _trace(
+        run: AgentRun,
+        step: AgentStep,
+        runtime_context: dict[str, Any] | None,
+        *,
+        execution_id: str,
+        execution_status: str,
+        error_code: str,
+        retry_count: int,
+        started_at: str,
+        finished_at: str,
+        spec: Any,
+    ) -> dict[str, Any]:
+        from app.application.agent_orchestrator.tool_permission import execution_trace
+
+        context = runtime_context or {}
+        return execution_trace(
+            trace_id=run.run_id,
+            task_id=str(context.get("task_id") or run.run_id),
+            parent_task_id=str(context.get("parent_task_id") or ""),
+            tenant_id=str(context.get("tenant_id") or ""),
+            user_id=run.user_id,
+            employee_id=str(context.get("employee_id") or ""),
+            tool_id=step.tool_id,
+            tool_version=str(getattr(spec, "version", "") or ""),
+            execution_id=execution_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            execution_status=execution_status,
+            error_code=error_code,
+            retry_count=retry_count,
+        )

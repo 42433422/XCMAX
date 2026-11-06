@@ -51,6 +51,9 @@ def page_budget(args: Payload) -> tuple[int, int]:
 def read_excel_dataframe(
     p: Path, *, sheet_name: Any, header_row_1based: int | None
 ) -> pd.DataFrame:
+    if p.suffix.lower() == ".csv":
+        header = 0 if header_row_1based is None else header_row_1based - 1
+        return pd.read_csv(p, header=header)
     options: Payload = {}
     if p.suffix.lower() in (".xlsx", ".xlsm"):
         options["engine"] = "openpyxl"
@@ -168,6 +171,8 @@ class ExcelAnalysis:
         if not file_path:
             return {"success": False, "error": "file_path is required"}
         root = workspace_root or str(Path.cwd())
+        if action == "export":
+            return self.export_table(args, root)
         try:
             path = self.io.resolve(root, file_path)
         except RECOVERABLE_ERRORS:
@@ -214,12 +219,15 @@ class ExcelAnalysis:
                 "sheet_name": sheet,
                 **table_result(df, offset=offset, max_rows=max_rows),
             }
-            try:
-                hint = str(self.customer_hint(str(path), str(sheet).strip() or None) or "").strip()
-                if hint:
-                    out["customer_hint"] = hint
-            except RECOVERABLE_ERRORS:
-                self.logger.debug("suppressed exception", exc_info=True)
+            if path.suffix.lower() in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
+                try:
+                    hint = str(
+                        self.customer_hint(str(path), str(sheet).strip() or None) or ""
+                    ).strip()
+                    if hint:
+                        out["customer_hint"] = hint
+                except RECOVERABLE_ERRORS:
+                    self.logger.debug("suppressed exception", exc_info=True)
             if header is not None:
                 out["header_row"] = header
             return out
@@ -257,3 +265,43 @@ class ExcelAnalysis:
                 "numeric_summary": numeric_summary,
             }
         return {"success": False, "error": f"unsupported_action:{action}"}
+
+    def export_table(self, args: Payload, workspace_root: str) -> Payload:
+        """Write a small csv or xlsx under the task workspace and return its on-disk path."""
+        rows = args.get("rows")
+        if not isinstance(rows, list) or not rows or not all(isinstance(row, dict) for row in rows):
+            return {
+                "success": False,
+                "error_code": "empty_business_result",
+                "message": "没有可写入的行",
+            }
+        relative = str(args.get("file_path") or "").strip()
+        if not relative or Path(relative).is_absolute():
+            return {"success": False, "error": "invalid_excel_path", "message": "文件路径无效"}
+        root = Path(workspace_root).resolve()
+        path = (root / relative).resolve()
+        if root != path and root not in path.parents:
+            return {"success": False, "error": "invalid_excel_path", "message": "文件路径无效"}
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            frame = pd.DataFrame(rows)
+            if path.suffix.lower() == ".csv":
+                frame.to_csv(path, index=False)
+            else:
+                frame.to_excel(path, index=False)
+        except RECOVERABLE_ERRORS as exc:
+            self.logger.exception("excel export failed")
+            return {
+                "success": False,
+                "error_code": "file_write_failed",
+                "message": "文件写入失败",
+                "exception_type": type(exc).__name__,
+            }
+        return {
+            "success": True,
+            "data": {
+                "file_path": str(path),
+                "row_count": int(len(frame)),
+                "columns": [str(column) for column in frame.columns],
+            },
+        }

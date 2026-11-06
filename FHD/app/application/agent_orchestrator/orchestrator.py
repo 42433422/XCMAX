@@ -21,7 +21,13 @@ from app.application.agent_orchestrator.repair_advisor import (
     llm_repair_attempt_limit,
     request_llm_repair,
 )
-from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, RunEvent, ToolCall
+from app.application.agent_orchestrator.run_models import (
+    AgentRun,
+    AgentStep,
+    RunEvent,
+    ToolCall,
+    utc_now_iso,
+)
 from app.application.agent_orchestrator.run_planning import RunPlanning
 from app.application.agent_orchestrator.run_repair import RunRepair
 from app.application.agent_orchestrator.run_repository import (
@@ -299,8 +305,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         runtime_context: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
-        if run is None:
-            return None
+        if run is None or run.status == "cancelled":
+            return run
         waiting_step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if waiting_step is None and str(approved_step_id or "").strip():
             wanted = str(approved_step_id).strip()
@@ -319,13 +325,21 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 {"approved_by": approved_by, "approved_step_id": approved_step_id},
             )
             return cast("AgentRun | None", self._repo.save(run))
-        context = dict(run.metadata.get("runtime_context") or {})
-        context.update(dict(runtime_context or {}))
+        from app.application.agent_orchestrator.tool_permission import overlay_resume_context
+
+        context = overlay_resume_context(run.metadata.get("runtime_context") or {}, runtime_context)
         run.metadata["runtime_context"] = context
         apply_ai_budget_metadata(run, context)
         waiting_step.status = "pending"
         run.status = "running"
         run.error = ""
+        run.metadata["approval_receipt"] = {
+            "task_id": str((context or {}).get("task_id") or run.run_id),
+            "step_id": waiting_step.step_id,
+            "tool_id": waiting_step.tool_id,
+            "action": waiting_step.action,
+            "approved_by": str(approved_by or ""),
+        }
         run.add_event(
             "step.approved",
             f"步骤 {waiting_step.node_id} 已确认继续",
@@ -335,12 +349,95 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 "tool_id": waiting_step.tool_id,
                 "action": waiting_step.action,
                 "approved_by": approved_by,
+                "task_id": run.metadata["approval_receipt"]["task_id"],
             },
         )
         self._execute_with_durable_lease(
             run, runtime_context=context, approved_step_id=waiting_step.step_id
         )
         return cast("AgentRun | None", self._repo.save(run))
+
+    def reject_waiting_step(
+        self, run_id: str, *, rejector: str, reason: str
+    ) -> AgentRun | None:
+        """Stop a waiting sensitive step. Rejection records who, when, and why, and does not execute."""
+        run = self._repo.get(run_id)
+        if run is None or run.status != "waiting_user":
+            return run
+        step = self._find_waiting_step(run)
+        if step is None:
+            return run
+        step.status = "failed"
+        step.error = reason or "approval_rejected"
+        run.status = "failed"
+        run.error = step.error
+        run.metadata["approval_decision"] = {
+            "decision": "rejected",
+            "rejector": str(rejector or ""),
+            "reason": str(reason or ""),
+            "rejected_at": utc_now_iso(),
+            "task_id": run.run_id,
+            "step_id": step.step_id,
+            "tool_id": step.tool_id,
+        }
+        run.add_event(
+            "approval.rejected",
+            "审批已拒绝，未执行工具",
+            dict(run.metadata["approval_decision"]),
+        )
+        return cast("AgentRun | None", self._repo.save(run))
+
+    def note_approval_timeout(self, run_id: str) -> AgentRun | None:
+        """An expired approval window does not approve or execute the step."""
+        run = self._repo.get(run_id)
+        if run is None or run.status != "waiting_user":
+            return run
+        run.metadata["approval_timeout"] = {
+            "auto_approved": False,
+            "at": utc_now_iso(),
+            "task_id": run.run_id,
+        }
+        run.add_event(
+            "approval.timed_out",
+            "审批超时，未自动执行",
+            dict(run.metadata["approval_timeout"]),
+        )
+        return cast("AgentRun | None", self._repo.save(run))
+
+    def start_employee_handoff(
+        self,
+        parent: AgentRun,
+        *,
+        employee_id: str,
+        allowlist: list[str],
+        message: str,
+        plan: PlanGraph,
+    ) -> AgentRun:
+        """Start a child run that keeps the parent tenant and task, with the child's own tools."""
+        from app.application.agent_orchestrator.tool_permission import (
+            attach_child_result,
+            handoff_runtime_context,
+        )
+
+        stored = dict(parent.metadata.get("runtime_context") or {})
+        task = parent.metadata.get("task_context") if isinstance(parent.metadata.get("task_context"), dict) else {}
+        parent_task_id = str(task.get("task_id") or stored.get("task_id") or parent.run_id)
+        context = handoff_runtime_context(
+            stored,
+            employee_id=employee_id,
+            allowlist=allowlist,
+            parent_task_id=parent_task_id,
+            parent_run_id=parent.run_id,
+        )
+        child = self.start_run_from_plan(
+            user_id=parent.user_id,
+            message=message,
+            plan=plan,
+            runtime_context=context,
+        )
+        attach_child_result(parent, child)
+        self._repo.save(parent)
+        return child
 
     def list_runs(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]:
         return cast("list[AgentRun]", self._repo.list_recent(user_id=user_id, limit=limit))
@@ -401,6 +498,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             run.status = "blocked"
             run.error = run.error or "planner returned no executable steps"
             return
+        from app.application.agent_orchestrator.tool_permission import seal_server_context
+
+        runtime_context = seal_server_context(runtime_context)
         approved = str(approved_step_id or "").strip()
         completed_node_ids: set[str] = {
             step.node_id for step in run.steps if step.status == "completed"
@@ -438,17 +538,32 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 step.error = str(denial.get("message") or "tool_permission_denied")
                 run.status = "failed"
                 run.error = step.error
+                from app.application.agent_orchestrator.tool_permission import execution_trace
+
+                spec = get_tool_action_spec(step.tool_id, step.action)
                 run.add_event(
                     "tool.permission_denied",
                     step.error,
                     {
+                        **execution_trace(
+                            trace_id=run.run_id,
+                            task_id=str((runtime_context or {}).get("task_id") or run.run_id),
+                            parent_task_id=str((runtime_context or {}).get("parent_task_id") or ""),
+                            tenant_id=str((runtime_context or {}).get("tenant_id") or ""),
+                            user_id=run.user_id,
+                            employee_id=str((runtime_context or {}).get("employee_id") or ""),
+                            tool_id=step.tool_id,
+                            tool_version=str(getattr(spec, "version", "") or ""),
+                            execution_id=step.step_id,
+                            started_at="",
+                            finished_at="",
+                            execution_status="denied",
+                            error_code=str(denial.get("error_code") or ""),
+                            retry_count=0,
+                        ),
                         "step_id": step.step_id,
-                        "tool_id": step.tool_id,
                         "action": step.action,
-                        "user_id": run.user_id,
-                        "task_id": str((runtime_context or {}).get("task_id") or run.run_id),
                         "reason": str(denial.get("reason") or denial.get("error_code") or ""),
-                        "error_code": str(denial.get("error_code") or ""),
                     },
                 )
                 self._repo.save(run)

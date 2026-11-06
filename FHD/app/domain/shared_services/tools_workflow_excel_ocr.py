@@ -47,6 +47,16 @@ def _registered_router_excel_analysis(
         return {"success": False, "message": str(result)}
     if not result.get("success") and "error" in result and "message" not in result:
         result["message"] = result["error"]
+    if result.get("success") is True and not isinstance(result.get("data"), dict):
+        result = {
+            **result,
+            "data": {
+                "records": result.get("records") or [],
+                "columns": result.get("columns") or [],
+                "row_count": result.get("row_count"),
+                "file_path": result.get("file_path"),
+            },
+        }
     return result
 
 
