@@ -1,4 +1,5 @@
 import { computed, getCurrentInstance, onActivated, onDeactivated, ref, type Ref } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import type { ChatMessage } from './useChatMessages'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
@@ -196,15 +197,18 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   }
 
   let pausedProgressKeys: string[] = []
+  function pauseWaitProgress(): void {
+    if (waitProgressTickers.size === 0) return
+    pausedProgressKeys = [...waitProgressTickers.keys()]
+    for (const key of pausedProgressKeys) {
+      const ticker = waitProgressTickers.get(key)
+      if (ticker) window.clearInterval(ticker)
+      waitProgressTickers.delete(key)
+    }
+  }
   if (getCurrentInstance()) {
-    onDeactivated(() => {
-      pausedProgressKeys = [...waitProgressTickers.keys()]
-      for (const key of pausedProgressKeys) {
-        const ticker = waitProgressTickers.get(key)
-        if (ticker) window.clearInterval(ticker)
-        waitProgressTickers.delete(key)
-      }
-    })
+    onDeactivated(pauseWaitProgress)
+    onBeforeRouteLeave(() => { pauseWaitProgress() })
     onActivated(() => {
       const keys = pausedProgressKeys
       pausedProgressKeys = []

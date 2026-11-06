@@ -333,9 +333,14 @@ describe('useAgentTaskWorkspace', () => {
     class FakeEventSource {
       static instances: FakeEventSource[] = []
       closed = false
+      onerror: (() => void) | null = null
       constructor(readonly url: string) { FakeEventSource.instances.push(this) }
       addEventListener(): void {}
-      close(): void { this.closed = true }
+      close(): void {
+        if (this.closed) return
+        this.closed = true
+        this.onerror?.()
+      }
     }
     globalThis.EventSource = FakeEventSource as unknown as typeof EventSource
     vi.useFakeTimers()
@@ -349,6 +354,7 @@ describe('useAgentTaskWorkspace', () => {
           sortTaskList: () => undefined,
         })
         onMounted(() => workspace.start())
+        ;(globalThis as { __sectionDWorkspace?: { start: () => void } }).__sectionDWorkspace = workspace
         return () => h('div')
       },
     })
@@ -371,13 +377,66 @@ describe('useAgentTaskWorkspace', () => {
     await wrapper.vm.$nextTick()
     expect(stream?.closed).toBe(true)
     const whileHidden = apiMock.listTasks.mock.calls.length
+    const streamsWhileHidden = FakeEventSource.instances.length
+    const hiddenWorkspace = (globalThis as { __sectionDWorkspace?: { start: () => void } }).__sectionDWorkspace
+    expect(hiddenWorkspace).toBeTruthy()
+    hiddenWorkspace?.start()
     await vi.advanceTimersByTimeAsync(45_000)
     expect(apiMock.listTasks.mock.calls.length).toBe(whileHidden)
+    expect(FakeEventSource.instances.length).toBe(streamsWhileHidden)
 
     visible.value = true
     await wrapper.vm.$nextTick()
     await vi.advanceTimersByTimeAsync(15_000)
     expect(apiMock.listTasks.mock.calls.length).toBeGreaterThan(whileHidden)
+    wrapper.unmount()
+  })
+
+  it('stops an orphaned chat workspace poll when the visible chat page leaves', async () => {
+    class FakeEventSource {
+      static instances: FakeEventSource[] = []
+      closed = false
+      onerror: (() => void) | null = null
+      constructor(readonly url: string) { FakeEventSource.instances.push(this) }
+      addEventListener(): void {}
+      close(): void {
+        if (this.closed) return
+        this.closed = true
+        this.onerror?.()
+      }
+    }
+    globalThis.EventSource = FakeEventSource as unknown as typeof EventSource
+    vi.useFakeTimers()
+    const visible = ref(true)
+    const Child = defineComponent({
+      setup() {
+        const workspace = useAgentTaskWorkspace({
+          taskList: ref<TaskItem[]>([]),
+          activeTaskId: ref(''),
+          expandedTaskIds: ref<string[]>([]),
+          sortTaskList: () => undefined,
+        })
+        onMounted(() => workspace.start())
+        return () => h('div')
+      },
+    })
+    const Root = defineComponent({
+      setup() { return { visible } },
+      components: { Child },
+      template: '<div><keep-alive><Child v-if="visible" /></keep-alive><Child /></div>',
+    })
+    const wrapper = mount(Root)
+    await vi.advanceTimersByTimeAsync(0)
+    await Promise.resolve()
+    expect(FakeEventSource.instances).toHaveLength(2)
+    visible.value = false
+    await wrapper.vm.$nextTick()
+    expect(FakeEventSource.instances.every((stream) => stream.closed)).toBe(true)
+    const whileHidden = apiMock.listTasks.mock.calls.length
+    const streamsWhileHidden = FakeEventSource.instances.length
+    await vi.advanceTimersByTimeAsync(45_000)
+    expect(apiMock.listTasks.mock.calls.length).toBe(whileHidden)
+    expect(FakeEventSource.instances.length).toBe(streamsWhileHidden)
     wrapper.unmount()
   })
 

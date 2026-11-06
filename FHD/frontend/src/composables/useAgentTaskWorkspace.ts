@@ -1,5 +1,6 @@
 import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
-import { getCurrentInstance, onActivated, onDeactivated, ref, type Ref } from 'vue'
+import { getCurrentInstance, onActivated, onBeforeUnmount, onDeactivated, ref, type Ref } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import agentRunsApi from '@/api/agentRuns'
 import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import type { AgentTaskSummary } from '@/api/agentRuns'
@@ -7,6 +8,8 @@ import { buildFullApiUrl } from '@/api/core'
 import type { TaskItem } from './useChatPersistence'
 import { activeRunIdOfTask, conversationIdOfTask, groupAgentRunsIntoTasks, taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 import { completeFirstAiTaskFromRun } from '@/constants/productFlow'
+
+const chatWorkspaceHiders = new Set<() => void>()
 
 export type TaskControlAction = 'pause' | 'resume' | 'cancel' | 'retry' | 'approve'
 export type TaskControlState = { pending?: TaskControlAction; error?: string; message?: string; needsVerification?: boolean }
@@ -103,8 +106,11 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     taskSyncState.value.error = '无法核实当前任务状态，正在显示上次结果；任务可能仍在执行，请勿重复提交。'
   }
 
+  let pageHidden = false
+  let hiddenByLeave = false
+
   function scheduleReconnect(): void {
-    if (reconnectTimer !== null || typeof window === 'undefined') return
+    if (pageHidden || reconnectTimer !== null || typeof window === 'undefined') return
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = null
       connectTaskStream()
@@ -144,6 +150,8 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   function start(): void {
+    if (hiddenByLeave) return
+    pageHidden = false
     void refreshTasks()
     connectTaskStream()
     if (refreshTimer !== null) return
@@ -159,25 +167,37 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   function releaseHiddenPageTimers(): void {
+    pageHidden = true
+    const stream = taskStream
+    taskStream = null
     if (refreshTimer !== null) window.clearInterval(refreshTimer)
     if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
-    taskStream?.close()
-    taskStream = null
     refreshTimer = null
+    reconnectTimer = null
+    stream?.close()
+    if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
     reconnectTimer = null
   }
 
   let resumeAfterPageShow = false
+  function hideCachedPage(): void {
+    const active = refreshTimer !== null || reconnectTimer !== null || taskStream !== null
+    if (!active) return
+    hiddenByLeave = true
+    resumeAfterPageShow = true
+    releaseHiddenPageTimers()
+  }
   if (getCurrentInstance()) {
-    onDeactivated(() => {
-      resumeAfterPageShow = refreshTimer !== null || reconnectTimer !== null || taskStream !== null
-      if (resumeAfterPageShow) releaseHiddenPageTimers()
-    })
+    chatWorkspaceHiders.add(hideCachedPage)
+    onDeactivated(() => { for (const hide of chatWorkspaceHiders) hide() })
+    onBeforeRouteLeave(() => { for (const hide of chatWorkspaceHiders) hide() })
     onActivated(() => {
       if (!resumeAfterPageShow) return
       resumeAfterPageShow = false
+      hiddenByLeave = false
       start()
     })
+    onBeforeUnmount(() => { chatWorkspaceHiders.delete(hideCachedPage) })
   }
 
   async function selectTask(task: TaskItem): Promise<void> {

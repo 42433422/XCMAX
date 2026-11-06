@@ -114,4 +114,44 @@ describe('phone agent polling and recovery', () => {
     expect(poll.isPollActive()).toBe(true)
     wrapper.unmount()
   })
+
+  it('stops an orphaned phone poll when the visible chat page leaves', async () => {
+    const visible = ref(true)
+    const polls: Array<ReturnType<typeof usePhoneAgentPolling>> = []
+    const Child = defineComponent({
+      setup() {
+        const deps = {
+          getModsForUi: () => [{ id: 'phone-mod', workflow_employees: [{ id: 'enabled', label: 'enabled', phone_agent_base_path: 'enabled' }] }] as ReturnType<PhoneAgentPollingDeps['getModsForUi']>,
+          readWorkflowEmployeeEnabledMap: () => ({ enabled: true }),
+          resolveWorkflowEmployeePanelMeta: () => ({ title: 'enabled', summary: 'enabled' }),
+          onStatusUpdate: vi.fn(),
+          resolvePhoneChannelByEmployee: () => 'adb' as const,
+          getPhoneAgentApiBase: () => '/api/mod/phone/',
+        }
+        const poll = usePhoneAgentPolling(deps)
+        poll.startPhoneAgentStatusPoll()
+        polls.push(poll)
+        return () => h('div')
+      },
+    })
+    const Root = defineComponent({
+      components: { Child },
+      setup() { return { visible } },
+      template: '<div><keep-alive><Child v-if="visible" /></keep-alive><Child /></div>',
+    })
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ success: true, data: { running: true } }), { status: 200 })))
+    const wrapper = mount(Root)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(polls).toHaveLength(2)
+    expect(polls.every((poll) => poll.isPollActive())).toBe(true)
+    const calls = fetchMock.mock.calls.length
+    visible.value = false
+    await wrapper.vm.$nextTick()
+    expect(polls.every((poll) => poll.isPollActive())).toBe(false)
+    polls.forEach((poll) => poll.startPhoneAgentStatusPoll())
+    expect(polls.every((poll) => poll.isPollActive())).toBe(false)
+    await vi.advanceTimersByTimeAsync(8000)
+    expect(fetchMock.mock.calls.length).toBe(calls)
+    wrapper.unmount()
+  })
 })
