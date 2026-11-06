@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -41,6 +42,84 @@ def default_employee_tools() -> list[dict[str, Any]]:
     except RECOVERABLE_ERRORS:
         logger.debug("default_employee_tools fallback to empty", exc_info=True)
         return []
+
+
+_FAKE_EXECUTION_MARKERS = (
+    "已调用",
+    "已执行",
+    "已发起",
+    "结果如下",
+    "执行成功",
+    "查询成功",
+    "¥",
+    "￥",
+    "$",
+    "/件",
+)
+
+
+def _flatten_tool_transcript(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep execution receipts without replaying provider tool roles.
+
+    The account's Xiaomi route accepts the first tool request, then rejects a
+    follow-up that still carries assistant tool_calls and role=tool messages.
+    """
+
+    flat: list[dict[str, Any]] = []
+    for item in messages:
+        role = item.get("role")
+        if role == "tool":
+            flat.append(
+                {
+                    "role": "user",
+                    "content": "工具执行回执（不可改写）：\n" + str(item.get("content") or ""),
+                }
+            )
+            continue
+        if role == "assistant" and item.get("tool_calls"):
+            flat.append({"role": "assistant", "content": str(item.get("content") or "")})
+            continue
+        flat.append(dict(item))
+    return flat
+
+
+def _claims_unexecuted_result(content: str) -> bool:
+    return any(marker in content for marker in _FAKE_EXECUTION_MARKERS) or any(
+        phrase in content for phrase in ("参数已齐全", "请输出 tool_call", "我不会编造")
+    )
+
+
+def _textual_tool_calls(content: str, round_no: int) -> list[Any]:
+    """Accept the market model's inline tool-call markup when native tool_calls are empty."""
+
+    from types import SimpleNamespace
+
+    found: list[Any] = []
+    for index, block in enumerate(
+        re.findall(r"<tool_call>(.*?)</tool_call>", content, flags=re.DOTALL)
+    ):
+        match = re.search(r"<function=([^>\s]+)>(.*?)</function>", block, flags=re.DOTALL)
+        if match is None:
+            match = re.search(r'<function name="([^"]+)">(.*?)</function>', block, flags=re.DOTALL)
+        if match is None:
+            continue
+        body = match.group(2)
+        pairs = re.findall(r"<parameter=([^>\s]+)>(.*?)</parameter>", body, flags=re.DOTALL)
+        if not pairs:
+            pairs = re.findall(
+                r'<parameter name="([^"]+)">(.*?)</parameter>', body, flags=re.DOTALL
+            )
+        arguments = {str(key): str(value).strip() for key, value in pairs}
+        found.append(
+            SimpleNamespace(
+                id=f"text-call-{round_no}-{index}",
+                function=SimpleNamespace(
+                    name=match.group(1).strip(),
+                    arguments=json.dumps(arguments, ensure_ascii=False),
+                ),
+            )
+        )
+    return found
 
 
 def _format_tool_calls(tcs: Any) -> list[dict[str, Any]]:
@@ -113,11 +192,92 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
     return True, None, False
 
 
+def tool_catalog_rules(tools: list[dict[str, Any]]) -> str:
+    """Tell the employee the exact catalog it may name or call."""
+
+    if not tools:
+        return "当前没有授权工具。用户要求使用任何工具时，直接说明该工具不可用，不要编造执行结果。"
+    lines = ["当前授权工具（只能使用这些；未列出的工具都不可用，不能编造成执行结果）："]
+    for spec in tools:
+        if not isinstance(spec, dict):
+            continue
+        function = spec.get("function") if isinstance(spec.get("function"), dict) else {}
+        name = str(function.get("name") or "").strip()
+        if not name:
+            continue
+        parameters = (
+            function.get("parameters") if isinstance(function.get("parameters"), dict) else {}
+        )
+        properties = (
+            parameters.get("properties") if isinstance(parameters.get("properties"), dict) else {}
+        )
+        required = [str(item) for item in (parameters.get("required") or [])]
+        optional = [str(item) for item in properties if str(item) not in required]
+        version = str(spec.get("version_id") or "").strip()
+        lines.append(
+            f"- {name}：{function.get('description') or '无说明'}。"
+            f"必填：{'、'.join(required) or '无'}。可选：{'、'.join(optional) or '无'}。"
+            + (f"版本：{version}。" if version else "")
+        )
+    lines.append(
+        "规则：只按以上名称和说明回答，不要提及其他工具。"
+        "用户没给齐必填参数时，先询问缺的必填项，不要发起调用，也不要编造结果；可选参数可以不提供。"
+        "有多个相近工具时，只调用与用户意图一致的那一个。"
+        "未授权或已下线的工具要明确说不可用，不要假装已经执行。"
+        "历史消息里的工具执行回执是当时的版本快照，回答历史调用时原样引用回执中的 version_id 和 description，"
+        "不要改写成当前说明；新的调用才使用上面的当前定义。"
+        "真正调用时只输出："
+        "<tool_call><function=工具名><parameter=参数名>参数值</parameter></function></tool_call>"
+    )
+    return "\n".join(lines)
+
+
+def _missing_required(
+    tools: list[dict[str, Any]], tool_name: str, args: dict[str, Any]
+) -> list[str]:
+    for spec in tools:
+        function = spec.get("function") if isinstance(spec, dict) else None
+        if not isinstance(function, dict) or function.get("name") != tool_name:
+            continue
+        parameters = (
+            function.get("parameters") if isinstance(function.get("parameters"), dict) else {}
+        )
+        properties = (
+            parameters.get("properties") if isinstance(parameters.get("properties"), dict) else {}
+        )
+        missing: list[str] = []
+        for name in parameters.get("required") or []:
+            key = str(name)
+            if key in args:
+                continue
+            prop = properties.get(key) if isinstance(properties.get(key), dict) else {}
+            if "default" not in prop:
+                missing.append(key)
+        return missing
+    return []
+
+
+def _restore_history(history: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    restored: list[dict[str, Any]] = []
+    for item in history or []:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "")
+        if role not in {"user", "assistant", "tool"}:
+            continue
+        restored.append({key: value for key, value in item.items() if value is not None})
+    return restored
+
+
 def _terminal_tool_failure(tool_trace: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Summarize an unfinished/failed tool action for the final run result."""
 
     failed = [
-        row for row in tool_trace if row.get("success") is False and not row.get("superseded_by")
+        row
+        for row in tool_trace
+        if row.get("success") is False
+        and not row.get("superseded_by")
+        and not row.get("needs_user_input")
     ]
     if not failed:
         return None
@@ -152,6 +312,7 @@ def run_employee_agent_loop(
     repeat_limit: int = 3,
     gate: GateFn | None = None,
     model: str | None = None,
+    history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """运行员工多轮工具循环，返回统一结果 dict。"""
     deadline = time.monotonic() + remaining_invocation_seconds(max(0.001, wall_time_limit_sec))
@@ -183,9 +344,17 @@ def run_employee_agent_loop(
     tool_specs = tools if tools is not None else default_employee_tools()
     allowed_tools = {(spec.get("function") or {}).get("name") for spec in tool_specs}
     user_payload = json.dumps({"task": task, "input": input_data or {}}, ensure_ascii=False)[:12000]
+    user_content = task.strip() or user_payload
+    if input_data:
+        user_content = f"{user_content}\n{user_payload}"
+    prompt = system_prompt or "你是智能员工助手。"
+    catalog = tool_catalog_rules(tool_specs)
+    if catalog:
+        prompt = f"{prompt}\n\n{catalog}"
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system_prompt or "你是智能员工助手。"},
-        {"role": "user", "content": user_payload},
+        {"role": "system", "content": prompt},
+        *_restore_history(history),
+        {"role": "user", "content": user_content},
     ]
 
     tool_trace: list[dict[str, Any]] = []
@@ -214,6 +383,7 @@ def run_employee_agent_loop(
         if time.monotonic() >= deadline:
             return expired_result()
         rounds += 1
+        messages[:] = _flatten_tool_transcript(messages)
         try:
             with invocation_deadline(deadline):
                 completion = client.chat.completions.create(
@@ -237,6 +407,9 @@ def run_employee_agent_loop(
                 "rounds": rounds,
                 "tool_calls": tool_trace,
                 "trajectory": trajectory,
+                "session_messages": [
+                    dict(item) for item in messages if item.get("role") != "system"
+                ],
                 "exit_status": "llm_error",
             }
 
@@ -259,11 +432,18 @@ def run_employee_agent_loop(
             logger.debug("employee agent loop metering skipped", exc_info=True)
         if time.monotonic() >= deadline:
             return expired_result()
-        tcs = getattr(msg, "tool_calls", None) or []
+        content = str(msg.content or "")
+        tcs = list(getattr(msg, "tool_calls", None) or [])
+        if not tcs:
+            tcs = _textual_tool_calls(content, rounds)
+            if tcs:
+                content = re.sub(
+                    r"<tool_call>.*?</tool_call>", "", content, flags=re.DOTALL
+                ).strip()
         messages.append(
             {
                 "role": "assistant",
-                "content": msg.content or "",
+                "content": content,
                 "tool_calls": _format_tool_calls(tcs) if tcs else None,
             }
         )
@@ -271,13 +451,32 @@ def run_employee_agent_loop(
             {
                 "round": rounds,
                 "event": "assistant",
-                "content": str(msg.content or "")[:2000],
+                "content": content[:2000],
                 "tool_calls": _format_tool_calls(tcs) if tcs else [],
             }
         )
 
         if not tcs:
-            text = str(msg.content or "").strip()
+            if (
+                tool_specs
+                and _claims_unexecuted_result(content)
+                and rounds < max(1, max_iterations)
+            ):
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "上一条没有工具调用记录，不能当作执行结果。"
+                            "参数齐全时只回复工具标记；缺必填参数就向用户询问；"
+                            "工具不在授权清单里就说明不可用。不要编造价格或查询结果。"
+                        ),
+                    }
+                )
+                continue
+            if tool_specs and _claims_unexecuted_result(content):
+                content = "没有实际调用工具，不能把生成内容当作执行结果。"
+            text = content.strip()
+            session_messages = [dict(item) for item in messages if item.get("role") != "system"]
             terminal_failure = _terminal_tool_failure(tool_trace)
             if terminal_failure:
                 return {
@@ -287,6 +486,7 @@ def run_employee_agent_loop(
                     "rounds": rounds,
                     "tool_calls": tool_trace,
                     "trajectory": trajectory,
+                    "session_messages": session_messages,
                     **terminal_failure,
                 }
             return {
@@ -296,6 +496,7 @@ def run_employee_agent_loop(
                 "rounds": rounds,
                 "tool_calls": tool_trace,
                 "trajectory": trajectory,
+                "session_messages": session_messages,
                 "exit_status": "completed",
             }
 
@@ -373,6 +574,20 @@ def run_employee_agent_loop(
                         verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
             if not isinstance(verdict, dict) or type(verdict.get("ok")) is not bool:
                 verdict = {"ok": False, "reason": "工具授权结果无效，未执行"}
+            if verdict["ok"] is True:
+                missing = _missing_required(tool_specs, tool_name, args)
+                if missing:
+                    reason = (
+                        "缺少必填参数 "
+                        + "、".join(missing)
+                        + "，未执行。请向用户询问这些参数，不要编造执行结果。"
+                    )
+                    verdict = {
+                        "ok": False,
+                        "reason": reason,
+                        "needs_user_input": True,
+                        "missing": missing,
+                    }
             if verdict["ok"] is not True:
                 reason = str(verdict.get("reason") or "blocked by employee gate")
                 tool_trace.append(
@@ -382,6 +597,7 @@ def run_employee_agent_loop(
                         "blocked": True,
                         "success": False,
                         "reason": reason,
+                        "needs_user_input": bool(verdict.get("needs_user_input")),
                         "pending_approval": bool(verdict.get("pending_approval")),
                         "approval_request_ids": list(verdict.get("approval_request_ids") or []),
                     }
@@ -391,6 +607,7 @@ def run_employee_agent_loop(
                         "round": rounds,
                         "event": "tool",
                         "tool": tool_name,
+                        "action_id": tc_id,
                         "args": args,
                         "blocked": True,
                         "success": False,
@@ -402,7 +619,13 @@ def run_employee_agent_loop(
                         "role": "tool",
                         "tool_call_id": tc_id,
                         "content": json.dumps(
-                            {"success": False, "blocked": True, "reason": reason},
+                            {
+                                "success": False,
+                                "blocked": True,
+                                "needs_user_input": bool(verdict.get("needs_user_input")),
+                                "missing": list(verdict.get("missing") or []),
+                                "reason": reason,
+                            },
                             ensure_ascii=False,
                         ),
                     }
@@ -415,7 +638,15 @@ def run_employee_agent_loop(
                 if time.monotonic() >= deadline:
                     return expired_result()
                 with invocation_deadline(deadline) as budget:
-                    result_raw = execute_workflow_tool(tool_name, args, workspace_root)
+                    result_raw = execute_workflow_tool(
+                        tool_name,
+                        args,
+                        workspace_root,
+                        runtime_context={
+                            "employee_id": employee_id,
+                            "source": "employee_runtime",
+                        },
+                    )
                 if time.monotonic() >= deadline or budget.uncertain:
                     tool_trace.append(
                         {
@@ -482,6 +713,7 @@ def run_employee_agent_loop(
                     "round": rounds,
                     "event": "tool",
                     "tool": tool_name,
+                    "action_id": tc_id,
                     "args": args,
                     "blocked": False,
                     "success": tool_success,
@@ -489,11 +721,32 @@ def run_employee_agent_loop(
                     "result": str(result_raw)[:2000],
                 }
             )
+            tool_content = str(result_raw)[:8000]
+            try:
+                tool_payload = json.loads(str(result_raw))
+            except json.JSONDecodeError:
+                tool_payload = None
+            if isinstance(tool_payload, dict) and tool_payload.get("version_id"):
+                definition = (
+                    tool_payload.get("definition")
+                    if isinstance(tool_payload.get("definition"), dict)
+                    else {}
+                )
+                function = (
+                    definition.get("function")
+                    if isinstance(definition.get("function"), dict)
+                    else {}
+                )
+                tool_content = (
+                    "调用快照"
+                    f" version_id={tool_payload['version_id']}"
+                    f" description={function.get('description') or ''}\n" + tool_content
+                )
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": tc_id,
-                    "content": str(result_raw)[:8000],
+                    "content": tool_content,
                 }
             )
             if unknown or (not tool_success and result_payload.get("retryable") is False):

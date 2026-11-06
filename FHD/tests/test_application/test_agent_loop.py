@@ -266,7 +266,7 @@ class TestRunEmployeeAgentLoop:
         # Verify the system prompt was set to default
         call_args = mock_client_instance.chat.completions.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
-        assert messages[0]["content"] == "你是智能员工助手。"
+        assert messages[0]["content"].startswith("你是智能员工助手。")
 
 
 @pytest.mark.parametrize(
@@ -371,3 +371,78 @@ def test_unknown_or_nonretryable_action_cannot_replay(outcome):
     result, count = _run_action_sequence(["{}", "{}"], [outcome, '{"success":true}'])
     assert count == 1 and result["ok"] is False
     assert result["retryable"] is False
+
+
+def test_inline_tool_call_markup_is_executed_as_the_named_tool():
+    message = MagicMock(
+        content="<tool_call><function=quote_lookup><parameter=sku>SKU-100</parameter></function></tool_call>",
+        tool_calls=None,
+    )
+    done = MagicMock(content="已查询。", tool_calls=[])
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch(
+            "app.application.tools.workflow.execute_workflow_tool",
+            return_value='{"success": true}',
+        ) as execute,
+    ):
+        client.return_value.chat.completions.create.side_effect = [
+            MagicMock(choices=[MagicMock(message=message)]),
+            MagicMock(choices=[MagicMock(message=done)]),
+        ]
+        result = run_employee_agent_loop(
+            employee_id="employee",
+            system_prompt="员工",
+            task="查报价",
+            model="test",
+            tools=[{"function": {"name": "quote_lookup"}}],
+        )
+    assert execute.call_args.args[0] == "quote_lookup"
+    assert execute.call_args.args[1] == {"sku": "SKU-100"}
+    assert result["ok"] is True
+    assert result["tool_calls"][0]["tool"] == "quote_lookup"
+
+
+def test_missing_required_argument_asks_and_does_not_execute():
+    call = MagicMock(id="need-sku")
+    call.function.name = "quote_lookup"
+    call.function.arguments = "{}"
+    asked = MagicMock(content="请提供物料编码 sku。", tool_calls=[])
+    first = MagicMock(content="", tool_calls=[call])
+    with (
+        patch("app.infrastructure.llm.client.require_api_key"),
+        patch("app.infrastructure.llm.client.get_openai_compatible_client") as client,
+        patch("app.application.tools.workflow.execute_workflow_tool") as execute,
+    ):
+        client.return_value.chat.completions.create.side_effect = [
+            MagicMock(choices=[MagicMock(message=first)]),
+            MagicMock(choices=[MagicMock(message=asked)]),
+        ]
+        result = run_employee_agent_loop(
+            employee_id="employee",
+            system_prompt="员工",
+            task="查报价",
+            model="test",
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "quote_lookup",
+                        "description": "查询报价",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "sku": {"type": "string"},
+                                "note": {"type": "string"},
+                            },
+                            "required": ["sku"],
+                        },
+                    },
+                }
+            ],
+        )
+    execute.assert_not_called()
+    assert result["ok"] is True
+    assert result["tool_calls"][0]["needs_user_input"] is True
+    assert "sku" in result["output"]
