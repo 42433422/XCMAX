@@ -415,6 +415,17 @@ def decide_product_issue(
     if body.decision == "resolved":
         if closed:
             raise HTTPException(409, "工单已关闭；如问题仍存在，请重新打开")
+        ready = (
+            str(resolution.get("state") or "")
+            in {
+                "awaiting_customer_verification",
+                "awaiting_delivery",
+                "repair_verified",
+            }
+            or resolution.get("repair_verified") is True
+        )
+        if not ready:
+            raise HTTPException(409, "问题尚未核验完成，不能关闭工单")
         ticket.status, ticket.decision_status, ticket.closed_at = (
             "resolved",
             "approved",
@@ -473,6 +484,9 @@ def decide_product_issue(
             None,
         )
     evidence["resolution"] = resolution
+    from modstore_server.customer_ticket_loop import note_customer_decision
+
+    note_customer_decision(evidence, body.decision)
     evidence["customer_decisions"] = [
         *decisions,
         {

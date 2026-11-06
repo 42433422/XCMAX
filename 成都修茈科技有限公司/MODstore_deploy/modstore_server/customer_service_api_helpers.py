@@ -53,7 +53,14 @@ def reply_to_ticket(db: Session, user: User, ticket_id: int, body: TicketReplyBo
         if json_loads(existing.request_json, {}) != {"note": note}:
             raise HTTPException(409, "同一答复标识不能用于不同内容")
         return {"ticket": ticket_payload(ticket), "replayed": True}
-    if ticket.status != "processing" or ticket.closed_at:
+    replyable = {
+        "processing",
+        "pending_assignment",
+        "waiting_approval",
+        "failed",
+        "waiting_user",
+    }
+    if ticket.status not in replyable or ticket.closed_at:
         raise HTTPException(409, "仅可答复未关闭的原工单")
     session = db.get(CustomerServiceSession, ticket.session_id)
     if session is None or session.user_id != ticket.user_id:
@@ -208,6 +215,16 @@ def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request:
     evidence = json_loads(ticket.evidence_json, {})
     from modstore_server.customer_issue_delivery_contract import issue_resolution
 
+    loop = evidence.get("loop") if isinstance(evidence.get("loop"), dict) else {}
+    if loop.get("state") in {
+        "failed",
+        "dispatch_failed",
+        "waiting_approval",
+        "needs_human",
+        "processing",
+        "reopened",
+    }:
+        raise HTTPException(409, "工单闭环未完成，不能直接关闭")
     if not expired and (
         ticket.intent == "product_issue"
         or issue_resolution(ticket, evidence).get("route") == "private_mod"

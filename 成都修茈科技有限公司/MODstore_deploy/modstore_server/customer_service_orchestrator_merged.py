@@ -99,10 +99,73 @@ def is_greeting(text: str) -> bool:
 # resolve_triage_lane moved to a pure policy module (re-exported above).
 
 
+_TECHNICAL_DEFECT_MARKS = (
+    "无法显示",
+    "不能显示",
+    "不显示",
+    "显示不出",
+    "显示不了",
+    "显示失败",
+    "显示异常",
+    "员工图谱",
+    "无法调用",
+    "不能调用",
+    "调用失败",
+    "工具无法",
+    "工具调用",
+    "导入异常",
+    "导入失败",
+    "导入出错",
+    "软件异常",
+    "页面加载",
+    "加载失败",
+    "加载不出来",
+    "加载不出",
+    "员工故障",
+    "打不开",
+    "白屏",
+    "黑屏",
+    "闪退",
+    "卡死",
+    "报错",
+    "没反应",
+    "功能问题",
+    "产品问题",
+    "缺陷",
+)
+_ENTITLEMENT_MARKS = (
+    "会员",
+    "权益",
+    "额度",
+    "余额",
+    "钱包",
+    "充值",
+    "到账",
+    "扣费",
+    "账单",
+    "消费记录",
+)
+_COMMERCE_BLOCK_MARKS = ("退款", "refund", "投诉", "审核", "侵权")
+
+
+def _has_technical_defect(text: str) -> bool:
+    """软件、页面、工具、导入等故障。登录/账号只是上下文，不构成故障。"""
+    sample = (text or "").lower()
+    return any(mark.lower() in sample for mark in _TECHNICAL_DEFECT_MARKS)
+
+
+def _has_entitlement_request(text: str) -> bool:
+    return any(mark in (text or "") for mark in _ENTITLEMENT_MARKS)
+
+
+def _classification_conflict(text: str) -> bool:
+    """技术故障和账号权益同时出现时不得强行归入其中一类。"""
+    return _has_technical_defect(text) and _has_entitlement_request(text)
+
+
 def _account_word_is_product_defect(text: str) -> bool:
     """「账号」弱信号：同句已描述产品缺陷时归 product_issue，避免硬吞建单。"""
-    defect_words = ("产品问题", "功能问题", "缺陷")
-    return _facade()._looks_like_product_issue(text) or any((w in text for w in defect_words))
+    return _has_technical_defect(text)
 
 
 def wants_ticket_escalation(text: str) -> bool:
@@ -138,10 +201,12 @@ def infer_intent(
 ) -> str:
     """规则意图识别（明确关键词优先；订单号单独出现不再默认退款）。"""
     ctx = context or {}
-    # A stale commerce deep link must not relabel a newly described defect.
-    if _facade().re.search(
-        r"报错|卡死|断连|打不开|白屏|黑屏|闪退|没反应|加载失败", text
-    ) and not any(word in text.lower() for word in ("退款", "refund", "投诉", "审核", "侵权")):
+    # 内容优先于入口默认分类。混合技术故障与权益诉求保持 general，交给待核实。
+    if _classification_conflict(text):
+        return "general"
+    if _has_technical_defect(text) and not any(
+        word in text.lower() for word in _COMMERCE_BLOCK_MARKS
+    ):
         return "product_issue"
     scene = str(ctx.get("scene") or "").strip().lower()
     scene_map = {
@@ -232,6 +297,16 @@ def classify_customer_intent(
     """明确业务关键词走规则；模糊语义优先 LLM；LLM 失败再缺陷兜底。"""
     rule_intent = _facade().infer_intent(text, extracted, context=context)
     escalate = _facade().wants_ticket_escalation(text)
+    if _classification_conflict(text):
+        return {
+            "intent": "general",
+            "triage_lane": resolve_triage_lane("general"),
+            "need_ticket": escalate,
+            "confidence": 0.35,
+            "source": "rules",
+            "reason": "pending_verification",
+            "classification_status": "pending_verification",
+        }
     if rule_intent not in {"general"}:
         return {
             "intent": rule_intent,
@@ -660,12 +735,14 @@ def handle_customer_message(
         extracted["user_followup"] = (text or "").strip()[:200]
     classified["issue_domain"] = domain_info["domain"]
     classified["issue_domain_label"] = domain_info["label"]
+    if classified.get("classification_status") == "pending_verification":
+        extracted["classification_status"] = "pending_verification"
     session.intent = intent
     standard = _facade().choose_standard(db, intent)
     open_ticket = (
         db.query(_facade().CustomerServiceTicket)
         .filter(_facade().CustomerServiceTicket.session_id == session.id)
-        .filter(_facade().CustomerServiceTicket.status.in_(["open", "waiting_user", "processing"]))
+        .filter(_facade().CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
         .order_by(_facade().CustomerServiceTicket.id.desc())
         .first()
     )
@@ -835,6 +912,24 @@ def handle_customer_message(
                 ev["followups"] = followups[-20:]
                 ev["user_confirmed_domain"] = extracted.get("user_confirmed_domain")
             ticket.evidence_json = _facade().json_dumps(ev)
+    from modstore_server.customer_ticket_loop import (
+        apply_loop_status,
+        record_supplement,
+    )
+
+    facade = _facade()
+    if (
+        open_ticket
+        and ticket.id == open_ticket.id
+        and not facade._is_escalate_only(text)
+        and facade._looks_like_concrete_issue(text)
+    ):
+        record_supplement(db, ticket, user, text)
+    apply_loop_status(ticket)
+    loaded = facade.json_loads(ticket.evidence_json, {})
+    public = loaded.get("loop_public") if isinstance(loaded, dict) else None
+    if isinstance(public, dict) and public.get("conclusion"):
+        reply = f"{reply} {public['conclusion']}"
     assistant_msg = _facade().CustomerServiceMessage(
         session_id=session.id,
         ticket_id=ticket.id,
@@ -968,12 +1063,23 @@ def ensure_ticket(
     existing = (
         db.query(_facade().CustomerServiceTicket)
         .filter(_facade().CustomerServiceTicket.session_id == session.id)
-        .filter(_facade().CustomerServiceTicket.status.in_(["open", "waiting_user", "processing"]))
+        .filter(_facade().CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
         .order_by(_facade().CustomerServiceTicket.id.desc())
         .first()
     )
     if existing and existing.intent == intent:
-        existing.evidence_json = _facade().json_dumps(extracted)
+        prior = _facade().json_loads(existing.evidence_json, {})
+        if not isinstance(prior, dict):
+            prior = {}
+        merged = {**prior, **extracted}
+        for key in ("attachments", "tool_calls", "has_image", "resolution"):
+            if key in prior and key not in extracted:
+                merged[key] = prior[key]
+        existing.evidence_json = _facade().json_dumps(merged)
+        if extracted.get("reason") and not _facade()._is_escalate_only(
+            str(extracted.get("reason"))
+        ):
+            existing.summary = str(extracted.get("reason") or existing.summary or "")[:2000]
         existing.updated_at = _facade().datetime.now(_facade().timezone.utc)
         return existing
     # Keep the unique constraint; only a verified number collision gets one retry.
@@ -1034,7 +1140,14 @@ def decide(
 ) -> _facade().CustomerServiceDecision:
     missing = _facade().missing_fields(ticket.intent, extracted)
     risk_level = standard.risk_level if standard else "low"
-    if missing:
+    if str(extracted.get("classification_status") or "") == "pending_verification":
+        decision = "needs_more_info"
+        rationale = (
+            "描述不足以确定分类，或同时包含技术故障和账号权益。"
+            "请补充主要问题；补充前不会按账号权益结案。"
+        )
+        confidence = 0.35
+    elif missing:
         decision = "needs_more_info"
         prefix = "已收到图片。" if extracted.get("has_image") else ""
         rationale = f"{prefix}还需要补充：{'、'.join(_facade().humanize_field_names(missing))}。"
@@ -1117,6 +1230,16 @@ def _attach_image_to_ticket(ticket: _facade().CustomerServiceTicket, *, message_
     ticket.updated_at = _facade().datetime.now(_facade().timezone.utc)
 
 
+_ACTIVE_TICKET_STATUSES = (
+    "open",
+    "waiting_user",
+    "processing",
+    "pending_assignment",
+    "waiting_approval",
+    "failed",
+)
+
+
 def plan_actions(
     db: _facade().Session,
     *,
@@ -1126,8 +1249,13 @@ def plan_actions(
     extracted: _facade().Dict[str, _facade().Any],
 ) -> list[_facade().Any]:
     actions: list[_facade().Any] = []
-    if decision.decision == "accepted" and ticket.intent == "product_issue":
-        return []
+    if decision.decision == "accepted" and ticket.intent in {
+        "product_issue",
+        "account_support",
+    }:
+        from modstore_server.customer_ticket_loop import run_ticket_loop
+
+        return run_ticket_loop(db, ticket, user, decision_id=decision.id)
     if decision.decision != "approved":
         return []
     if ticket.intent == "refund":
@@ -1416,6 +1544,13 @@ def _looks_like_product_issue(user_text: str) -> bool:
         "点了没用",
         "按钮无效",
         "显示异常",
+        "无法显示",
+        "无法调用",
+        "调用失败",
+        "导入异常",
+        "导入失败",
+        "员工图谱",
+        "工具调用",
         "文字看不见",
         "界面",
         "崩了",
@@ -1696,6 +1831,8 @@ def title_for_intent(intent: str, extracted: _facade().Dict[str, _facade().Any])
     if intent == "llm_extension":
         suffix = f"{extracted.get('provider') or ''}/{extracted.get('model') or ''}".strip("/")
     if intent in {"general", "greeting"}:
+        if extracted.get("classification_status") == "pending_verification":
+            return "待核实问题"
         issue = str(extracted.get("reason") or extracted.get("_issue_summary") or "")
         if _facade()._looks_like_product_issue(issue) or _facade()._looks_like_concrete_issue(
             issue

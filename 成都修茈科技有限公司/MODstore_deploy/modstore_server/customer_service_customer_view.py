@@ -24,7 +24,14 @@ TICKET_KEYS = (
     "decision_status", "created_at", "updated_at", "closed_at", "expected_completion_at", "lifecycle_stage",
     "lifecycle_label", "lifecycle_steps",
 )  # fmt: skip
-EVIDENCE_KEYS = ("source_ref", "issue_domain", "issue_domain_label", "reason")
+EVIDENCE_KEYS = (
+    "source_ref",
+    "issue_domain",
+    "issue_domain_label",
+    "reason",
+    "classification_status",
+    "loop_public",
+)
 INTENT_KEYS = (
     "intent",
     "need_ticket",
@@ -32,6 +39,7 @@ INTENT_KEYS = (
     "issue_domain",
     "issue_domain_label",
     "triage_lane",
+    "classification_status",
 )
 DECISION_KEYS = ("id", "ticket_id", "intent", "decision", "rationale", "created_at")
 CARD_KEYS = (
@@ -45,6 +53,15 @@ BUSINESS_ACTIONS = frozenset(
         "catalog.complaint.create",
         "catalog.compliance.review",
         "llm.model_capability.propose",
+        "ticket.diagnose",
+        "ticket.report_diagnosis",
+        "ticket.read",
+        "ticket.observe_status",
+        "ticket.verify",
+        "ticket.assign",
+        "ticket.apply_change",
+        "account.lookup",
+        "tool.registry",
     }
 )
 
