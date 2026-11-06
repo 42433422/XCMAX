@@ -41,7 +41,15 @@ def make_ticket(client, monkeypatch, *, private=False, schedule=False):
         },
     )
     assert response.status_code == 200, response.text
-    return user, response.json()["ticket_id"]
+    ticket_id = response.json()["ticket_id"]
+    # Intake itself stays open until a person accepts. These fixtures start after that accept.
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        ticket.status = "processing"
+        db.commit()
+    return user, ticket_id
 
 
 def seed_repair(db, ticket):
@@ -913,6 +921,12 @@ def test_owner_decision_closes_or_reopens_without_rebinding_rejected_fix(client,
         assert db.get(CustomerServiceTicket, tid).status == "processing"
     assert not pending_ready()
 
+    too_soon = decide("resolved", "现在可以正常计算了", "resolve-too-soon")
+    assert too_soon.status_code == 409
+    with get_session_factory()() as db:
+        held = db.get(CustomerServiceTicket, tid)
+        held.status = "awaiting_customer"
+        db.commit()
     resolved = decide("resolved", "现在可以正常计算了", "resolve-1")
     assert resolved.status_code == 200, resolved.text
     assert resolved.json()["issue"]["status"] == "resolved"

@@ -43,7 +43,14 @@ def record_dispatch_failure(payload: dict[str, Any], error: str) -> None:
         )
         evidence["resolution"] = resolution
         ticket.evidence_json = json_dumps(evidence)
-        ticket.status = "processing"
+        # 未指派或尚未受理的工单保持原状态，失败记录不能把它推进到处理中。
+        if ticket.assigned_admin_id and str(ticket.status or "") not in {
+            "open",
+            "pending",
+            "queued",
+            "awaiting_customer",
+        }:
+            ticket.status = "processing"
         ticket.closed_at = None
         db.commit()
 

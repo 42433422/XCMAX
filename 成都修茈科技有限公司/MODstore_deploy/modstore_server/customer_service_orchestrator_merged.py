@@ -1966,6 +1966,8 @@ def ticket_lifecycle_stage(status: str | None = None, decision_status: str | Non
         return 5
     if s == "waiting_user" or d == "needs_more_info":
         return 4
+    if s == "awaiting_customer":
+        return 3
     if s in {"open", "pending", "queued"}:
         return 1
     if s == "processing":
@@ -2244,6 +2246,20 @@ def ticket_lifecycle_payload(
             "lifecycle_label": "已过期不再处理",
             "lifecycle_steps": [],
         }
+    if status == "awaiting_customer":
+        stage = 3
+        return {
+            "lifecycle_stage": stage,
+            "lifecycle_label": "待客户确认",
+            "lifecycle_steps": [
+                {
+                    "stage": num,
+                    "label": name,
+                    "state": "done" if num < stage else "current" if num == stage else "todo",
+                }
+                for (num, name) in _facade().TICKET_LIFECYCLE_STEPS
+            ],
+        }
     stage = _facade().ticket_lifecycle_stage(status, decision_status)
     label = next(
         (name for (num, name) in _facade().TICKET_LIFECYCLE_STEPS if num == stage),
@@ -2372,6 +2388,6 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
         "last_error": str(resolution.get("last_error") or ""),
         "closed_at": row.closed_at.isoformat() if row.closed_at else "",
         "reopen_count": len(evidence.get("reopen_history") or []),
-        "can_resolve": not closed,
+        "can_resolve": row.status == "awaiting_customer" and not closed,
         "can_reopen": closed or state not in {"received", "reopened"},
     }

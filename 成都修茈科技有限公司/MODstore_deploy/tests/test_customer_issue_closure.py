@@ -418,8 +418,12 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(
     )
     wo_id = candidate.json()["wo_id"]
     with zipfile.ZipFile(archive, "w") as bundle:
-        bundle.writestr("manifest.json", '{"redacted":true,"retry":true}')
+        bundle.writestr(
+            "manifest.json",
+            '{"redacted":true,"retry":true,"customerLogs":["customer-logs/notes.log"]}',
+        )
         bundle.writestr("logs/backend.log", "X" * 45000)
+        bundle.writestr("customer-logs/notes.log", "symptom line")
     raw = archive.getvalue()
     sha = hashlib.sha256(raw).hexdigest()
     body = {
@@ -449,6 +453,7 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(
         ticket = db.get(CustomerServiceTicket, first.json()["ticket_id"])
         evidence = json.loads(ticket.evidence_json)
         assert evidence["work_order_id"] == wo_id
+        assert evidence["customerLogs"] == ["customer-logs/notes.log"]
         assert evidence["support_bundle_sha256"] == sha
         assert base64.b64decode(evidence["support_bundle_base64"]) == raw
         events = (

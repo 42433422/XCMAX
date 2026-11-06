@@ -102,6 +102,45 @@ class CustomerTickets:
             json_body=body,
         )
 
+    async def admin_customer_ticket_staff(self, request: Request):
+        return await self._customer_ticket_proxy(request, "/api/customer-service/staff")
+
+    async def admin_assign_customer_ticket(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(request, ticket_id, "assign")
+
+    async def admin_accept_customer_ticket(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(request, ticket_id, "accept")
+
+    async def admin_diagnose_customer_ticket(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(request, ticket_id, "diagnose")
+
+    async def admin_result_customer_ticket(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(request, ticket_id, "result")
+
+    async def admin_sensitive_customer_ticket(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(request, ticket_id, "sensitive-action")
+
+    async def admin_sensitive_decision_customer_ticket(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(
+            request, ticket_id, "sensitive-action/decision"
+        )
+
+    async def admin_customer_ticket_command(
+        self, request: Request, ticket_id: int, command: str
+    ):
+        try:
+            body = await request.json()
+        except self._errors.recoverable():
+            body = None
+        if not isinstance(body, dict):
+            return JSONResponse({"success": False, "message": "请求内容无效"}, status_code=422)
+        return await self._customer_ticket_proxy(
+            request,
+            f"/api/customer-service/tickets/{ticket_id}/{command}",
+            method="POST",
+            json_body=body,
+        )
+
     async def admin_update_customer_ticket_expected_completion(
         self, request: Request, ticket_id: int
     ):

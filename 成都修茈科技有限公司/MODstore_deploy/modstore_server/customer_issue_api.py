@@ -76,6 +76,22 @@ def _route_work_order(
         raise HTTPException(409, "客户工单与产品问题 Work Order 不匹配")
 
 
+def _bundle_customer_logs(bundle: bytes) -> list[str]:
+    """Read customer-attached log names from the support zip manifest."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
+            raw = archive.read("manifest.json")
+        manifest = json.loads(raw.decode("utf-8"))
+    except (KeyError, zipfile.BadZipFile, json.JSONDecodeError, UnicodeError, ValueError):
+        return []
+    if not isinstance(manifest, dict):
+        return []
+    names = manifest.get("customerLogs") or []
+    if not isinstance(names, list):
+        return []
+    return [str(name)[:200] for name in names[:20] if str(name).strip()]
+
+
 class CustomerIssueIntakeBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source: Literal["private_mod_rework", "enterprise_portal", "customer_feedback"]
@@ -127,6 +143,9 @@ async def intake_customer_issue(
             raise HTTPException(400, "support bundle is not a valid ZIP") from None
         if len(bundle) > 256_000 or hashlib.sha256(bundle).hexdigest() != bundle_sha:
             raise HTTPException(400, "support bundle size or SHA256 is invalid")
+        names = _bundle_customer_logs(bundle)
+        if names:
+            values["customerLogs"] = names
     stable_values = {
         key: value
         for key, value in values.items()
@@ -211,8 +230,8 @@ async def intake_customer_issue(
         intent=intent,
         subject_type="mod" if body.target_mod_id else "host",
         subject_id=body.target_mod_id,
-        status="processing",
-        decision_status="accepted",
+        status="open",
+        decision_status="pending",
         summary=body.description,
         evidence_json=json_dumps({**values, "intake_request_sha256": request_digest}),
     )
@@ -413,6 +432,8 @@ def decide_product_issue(
     now = datetime.now(UTC)
     event_id = ""
     if body.decision == "resolved":
+        if evidence.get("fault_remains") is True or ticket.status != "awaiting_customer":
+            raise HTTPException(409, "问题尚未核验完成，不能关闭工单")
         if closed:
             raise HTTPException(409, "工单已关闭；如问题仍存在，请重新打开")
         ready = (
