@@ -549,6 +549,20 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         )
         assert r2.status_code == 200, r2.text
         ticket_id = int(r2.json()["ticket"]["id"])
+        assert r2.json()["ticket"]["status"] == "open"
+
+    admin = _make_user("cs_emp_progress_admin", admin=True)
+    with _as_user(admin):
+        assigned = client.post(
+            f"/api/customer-service/tickets/{ticket_id}/assign",
+            json={"assignee_id": admin.id, "reason": "先由人工受理"},
+        )
+        assert assigned.status_code == 200, assigned.text
+        accepted = client.post(
+            f"/api/customer-service/tickets/{ticket_id}/accept",
+            json={"reason": "开始处理后再接收员工进展"},
+        )
+        assert accepted.status_code == 200, accepted.text
 
     sf = get_session_factory()
     with sf() as db:
@@ -619,6 +633,34 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         recorded = resolution["processing"][0]["outputs"][0]
         assert recorded["task_id"] == "p1"
         assert recorded["output_summary"] == "未产生修复 token=[redacted]"
+
+
+def test_unassigned_conversation_ticket_stays_open(client, monkeypatch):
+    """客服对话登记没有处理人时保持待受理，不能直接写成处理中。"""
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    monkeypatch.setattr(
+        customer_service_api,
+        "_schedule_customer_ticket_incident",
+        lambda payload: None,
+    )
+    user = _make_user("cs_unassigned_open")
+    with _as_user(user):
+        opened = client.post(
+            "/api/customer-service/chat",
+            json={"message": "浅色模式文字看不见", "context": {}},
+        )
+        assert opened.status_code == 200, opened.text
+        filed = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "提交工单",
+                "session_id": opened.json()["session"]["id"],
+                "context": {"reason": "浅色模式文字看不见"},
+            },
+        )
+    assert filed.status_code == 200, filed.text
+    ticket = filed.json()["ticket"]
+    assert ticket["status"] == "open"
 
 
 def test_custom_delivery_requires_quality_acceptance_and_install_receipt(

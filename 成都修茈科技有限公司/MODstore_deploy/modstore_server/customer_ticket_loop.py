@@ -116,6 +116,12 @@ def apply_loop_status(ticket: CustomerServiceTicket) -> None:
         "reopened": "processing",
     }.get(state)
     if mapped:
+        if (
+            mapped == "processing"
+            and not ticket.assigned_admin_id
+            and str(ticket.status or "") in {"", "open", "pending", "queued"}
+        ):
+            return
         ticket.status = mapped
 
 

@@ -54,6 +54,7 @@ def reply_to_ticket(db: Session, user: User, ticket_id: int, body: TicketReplyBo
             raise HTTPException(409, "同一答复标识不能用于不同内容")
         return {"ticket": ticket_payload(ticket), "replayed": True}
     replyable = {
+        "open",
         "processing",
         "pending_assignment",
         "waiting_approval",

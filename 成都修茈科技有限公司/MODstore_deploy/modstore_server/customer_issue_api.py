@@ -467,7 +467,10 @@ def decide_product_issue(
             ),
         )
     else:
-        if not closed and resolution.get("state") in {"received", "reopened"}:
+        if not closed and (
+            resolution.get("state") in {"received", "reopened", "processing"}
+            or evidence.get("fault_remains") is True
+        ):
             raise HTTPException(409, "工单仍在处理中，请等处理结果出来后再决定")
         history = [r for r in evidence.get("reopen_history") or [] if isinstance(r, dict)]
         evidence["reopen_history"] = [

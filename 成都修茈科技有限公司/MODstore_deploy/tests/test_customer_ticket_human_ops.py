@@ -111,6 +111,18 @@ def test_human_loop_blocks_false_close_and_keeps_history(client):
     )
     assert blocked.json()["ticket"]["status"] == "processing"
     _as(customer)
+    visible = next(row for row in http.get("/api/customer-service/issues/mine").json()["items"] if row["id"] == ticket_id)
+    assert visible["latest_result"]["source"] == "human"
+    assert visible["latest_result"]["fault_remains"] is True
+    assert "原故障仍在" in visible["latest_result"]["progress"]
+    assert visible["can_resolve"] is False
+    assert visible["can_reopen"] is False
+    still_open = http.post(
+        f"/api/customer-service/issues/{ticket_id}/decision",
+        json={"decision": "reopen", "note": "故障还在但不能重开", "idempotency_key": "reopen-while-open"},
+    )
+    assert still_open.status_code == 409
+    _as(customer)
     close = http.post(
         f"/api/customer-service/issues/{ticket_id}/decision",
         json={"decision": "resolved", "note": "我确认已经好了", "idempotency_key": "close-too-soon-1"},

@@ -81,7 +81,7 @@ def _open_product(client, user, message):
     assert opened["intent"]["intent"] == "product_issue"
     submitted = _chat(client, user, "提交工单", session_id=opened["session"]["id"], context={})
     assert submitted["ticket"]["intent"] == "product_issue"
-    assert submitted["ticket"]["status"] == "processing"
+    assert submitted["ticket"]["status"] == "open"
     return submitted
 
 
@@ -192,7 +192,7 @@ def test_b43_b53_b64_product_ticket_is_not_closed_by_diagnosis(client):
     user = _user("loop_diag")
     try:
         opened = _open_product(client, user, "员工图谱无法正常显示")
-        assert opened["ticket"]["status"] == "processing"
+        assert opened["ticket"]["status"] == "open"
         assert opened["ticket"].get("closed_at") in (None, "")
         kinds = {row["action_type"] for row in opened["actions"]}
         assert "ticket.diagnose" in kinds
@@ -454,8 +454,30 @@ def test_customer_confirms_only_after_verification_and_reopen_keeps_history(clie
     try:
         opened = _open_product(client, owner, "员工图谱无法正常显示")
         ticket_id = opened["ticket"]["id"]
+        reviewer = _user("loop_confirm_reviewer", admin=True)
         _as(admin)
         assert _admin_close(client, ticket_id).status_code == 409
+        _as(owner)
+        assert _decide(client, ticket_id, "resolved", "loop-confirm-early").status_code == 409
+        _as(admin)
+        assert client.post(
+            f"{BASE}/tickets/{ticket_id}/assign",
+            json={"assignee_id": admin.id, "reason": "指派给诊断人"},
+        ).status_code == 200
+        assert client.post(
+            f"{BASE}/tickets/{ticket_id}/accept",
+            json={"reason": "开始核查"},
+        ).status_code == 200
+        assert client.post(
+            f"{BASE}/tickets/{ticket_id}/diagnose",
+            json={"reason": "画面仍需另一位管理员复测"},
+        ).status_code == 200
+        _as(reviewer)
+        ready = client.post(
+            f"{BASE}/tickets/{ticket_id}/result",
+            json={"text": "复测通过，待客户确认", "fault_remains": False},
+        )
+        assert ready.status_code == 200, ready.text
         _as(owner)
         assert _decide(client, ticket_id, "resolved", "loop-confirm").status_code == 200
         assert client.get(f"{BASE}/tickets/{ticket_id}").json()["ticket"]["status"] == "resolved"
@@ -564,7 +586,7 @@ def test_restart_timeout_and_repeat_do_not_double_write(client):
         opened = _chat(client, owner, "页面加载失败")
         filed = _chat(client, owner, "提交工单", session_id=opened["session"]["id"])
         ticket_id = filed["ticket"]["id"]
-        assert filed["ticket"]["status"] == "processing"
+        assert filed["ticket"]["status"] == "open"
         with get_session_factory()() as session:
             paused = session.query(CustomerServiceAction).filter_by(ticket_id=ticket_id).count()
         HOOKS["pause_after"] = ""
