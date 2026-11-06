@@ -1,5 +1,5 @@
 {
-  "lines": 2416968,
+  "lines": 2417064,
   "updated": "2026-11-06",
-  "note": "rebuild capability pages for #2988 after #3019 rebase"
+  "note": "桌面默认开启知识检索，并让知识库直接打开已入库的业务文档"
 }

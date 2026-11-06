@@ -159,6 +159,8 @@
 
 .drop-zone {
   display: flex;
+  font: inherit;
+  text-align: center;
   width: 100%;
   min-height: 190px;
   flex-direction: column;

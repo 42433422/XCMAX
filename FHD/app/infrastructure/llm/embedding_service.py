@@ -1,14 +1,14 @@
 """真实 embedding 服务：支持本地 sentence-transformers 与远端 OpenAI 兼容 API。
 
 设计要点：
-- 默认 ``disabled``，向后兼容（``is_available`` 返回 False，``embed`` 返回空列表）。
+- 未配置时用本地 hash 向量；显式 ``disabled`` 时 ``is_available`` 为 False。
 - 单例 + lazy load：模型在首次 ``embed`` 调用时才加载，避免启动慢。
 - 通过环境变量 ``FHD_EMBEDDING_MODE`` 切换 ``local`` / ``remote`` / ``disabled``。
 - 同时实现 ``EmbedderPort`` 协议（``embed_texts`` / ``embed_query``），可作为 Excel/
   UserMemory 等向量服务的 embedder 直接注入。
 
 环境变量：
-  FHD_EMBEDDING_MODE             local | remote | disabled（默认 disabled）
+  FHD_EMBEDDING_MODE             local | remote | hash | disabled（未配置时为 hash）
   FHD_EMBEDDING_LOCAL_MODEL      本地模型名（默认 sentence-transformers/all-MiniLM-L6-v2，
                                   中文可用 BAAI/bge-small-zh-v1.5）
   FHD_EMBEDDING_REMOTE_URL       远端 /v1/embeddings 端点
@@ -35,7 +35,7 @@ _HASH_EMBED_DIM = 64
 
 
 def _resolve_mode() -> EmbeddingMode:
-    """从环境变量解析 embedding 模式；未配置或非法值统一回退到 disabled。"""
+    """从环境变量解析 embedding 模式；未配置时用 hash，显式 disabled 才关闭。"""
     raw = (os.environ.get("FHD_EMBEDDING_MODE", "") or "").strip().lower()
     if raw in ("local", "sentence-transformers", "st"):
         return "local"
@@ -45,19 +45,10 @@ def _resolve_mode() -> EmbeddingMode:
         return "hash"
     if raw in ("disabled", "off", "none"):
         return "disabled"
-    # Unset: hash fallback for web omniscient; desktop stays disabled unless RAG on.
+    # Unset mode: honor an explicit RAG off, otherwise hash on desktop and web.
     rag = (os.environ.get("XCAGI_RAG_ENABLED", "") or "").strip().lower()
     if rag in {"0", "false", "no", "off"}:
         return "disabled"
-    if rag in {"1", "true", "yes", "on", "auto"}:
-        return "hash"
-    try:
-        from app.utils.deployment import is_desktop_mode
-
-        if is_desktop_mode():
-            return "disabled"
-    except RECOVERABLE_ERRORS:
-        pass
     return "hash"
 
 
