@@ -50,7 +50,7 @@ def is_dialogue_fact_message(text: str) -> bool:
     if is_explicit_enterprise_customer_query(raw) or is_client_version_question(raw):
         return False
     if re.search(
-        r"(假设|暂时不要|不要修改|只做风险|撤销|恢复基线|恢复最初|恢复原来|恢复原始|"
+        r"(假设|暂时不要|不要修改|只做风险|撤销|恢复基线|恢复到?最初|恢复原来|恢复原始|"
         r"更正|改正|纠正|已确认|会话标记|合同总额|客户总数|[AB]类)",
         raw,
     ):

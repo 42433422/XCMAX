@@ -398,6 +398,12 @@ class AIChatApplicationService(
         # An empty customer database must not replace numbers said in chat.
         if is_dialogue_fact_message(message) or is_client_version_question(message):
             workflow_result = None
+            if is_dialogue_fact_message(message):
+                from app.application.ai_chat.confirmed_facts import try_confirmed_fact_reply
+
+                fact_reply = try_confirmed_fact_reply(message, ctx)
+                if fact_reply is not None:
+                    return _finalize(fact_reply)
         else:
             workflow_result = self._try_handle_dynamic_workflow(
                 user_id=user_id,
