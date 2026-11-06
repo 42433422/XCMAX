@@ -70,7 +70,7 @@ class EltService(
             "targets": target_capabilities(),
             "compatibility_presets": compatibility_presets,
             "execution_policy": {
-                "pipeline": "extract_load_transform",
+                "pipeline": "slice_clean_persist",
                 "source_snapshot_retention_days": 90,
                 "source_snapshot_replay": True,
                 "original_required_targets": ["knowledge", "attendance"],

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from contextvars import copy_context
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import or_
@@ -107,7 +108,9 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 )
             if run.target_type == "attendance":
                 AttendanceAdapter.require_complete_selection(
-                    run.new_rows + run.update_rows, run.total_rows
+                    run.new_rows + run.update_rows,
+                    run.total_rows,
+                    skip_rows=int(run.skip_rows or 0),
                 )
             assert preview_revision is not None
             record_confirmation(run, preview_revision, valid_rows_only=valid_rows_only)
@@ -213,8 +216,13 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             )
             eligible_count = db.query(EltRunRow).filter(*eligible_filters).count()
             if run.target_type == "attendance":
-                AttendanceAdapter.require_complete_selection(eligible_count, run.total_rows)
+                AttendanceAdapter.require_complete_selection(
+                    eligible_count, run.total_rows, skip_rows=int(run.skip_rows or 0)
+                )
+                run.stage = "persisting"
+                db.commit()
             context = self._row_context(run, upload, 0)
+            context["skip_rows"] = int(run.skip_rows or 0)
             context["_execution_cache"] = {}
             context["row_count"] = eligible_count
             context["total_rows"] = run.total_rows
@@ -263,7 +271,17 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                             break
                         for row in page:
                             last_id = row.id
-                            yield load_json(row.normalized_json, {})
+                            payload = load_json(row.normalized_json, {})
+                            if run.target_type == "attendance" and isinstance(payload, dict):
+                                provenance = load_json(row.provenance_json, {})
+                                payload = {
+                                    **payload,
+                                    "source_row": row.source_row,
+                                    "source_sheet": row.source_sheet,
+                                    "slice_id": (provenance.get("slice") or {}).get("slice_id"),
+                                    "validation_result": load_json(row.validation_json, []),
+                                }
+                            yield payload
 
                 external_started = True
                 result = adapter.execute_batch(normalized_rows(), context)
@@ -296,9 +314,26 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             rows_written = (
                 int(run.executed_rows or 0) + int(run.new_rows or 0) + int(run.update_rows or 0)
             )
-            # No exception is not the same as rows written — keep completed but flag empty.
-            run.status = "completed"
-            run.stage = "completed"
+            if run.target_type == "attendance":
+                receipt_now = load_json(run.receipt_json, {})
+                output_path = Path(str(receipt_now.get("output_path") or ""))
+                if not output_path.is_file():
+                    raise EltError("ELT_OUTPUT_MISSING", "考勤结果文件未生成")
+                import hashlib
+
+                actual = hashlib.sha256(output_path.read_bytes()).hexdigest()
+                if receipt_now.get("sha256") and receipt_now.get("sha256") != actual:
+                    raise EltError("ELT_OUTPUT_HASH_MISMATCH", "考勤结果文件与回执哈希不一致")
+            attendance_errors = run.target_type == "attendance" and int(run.error_rows or 0)
+            if attendance_errors and int(run.executed_rows or 0):
+                run.status = "partial"
+                run.stage = "partial"
+            elif attendance_errors and not int(run.executed_rows or 0):
+                run.status = "failed"
+                run.stage = "failed"
+            else:
+                run.status = "completed"
+                run.stage = "completed"
             run.progress = 100
             run.executed_at = utcnow()
             receipt = load_json(run.receipt_json, {})

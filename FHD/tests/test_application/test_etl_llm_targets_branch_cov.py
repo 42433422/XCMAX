@@ -1960,16 +1960,27 @@ def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
     assert d.action == "error" and d.reason == "unsupported_attendance_file"
 
     ctx2 = {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f"}
-    d2 = a.preview(MagicMock(), [], allowed_update_fields=set(), context=ctx2)
-    assert d2.action == "new" and d2.reason == "new_attendance_source"
+    d2 = a.preview(
+        MagicMock(),
+        {"employee_name": "甲", "business_id": "bid-1"},
+        allowed_update_fields=set(),
+        context=ctx2,
+    )
+    assert d2.action == "new" and d2.reason == "new_attendance_row"
 
-    # existing batch via cache
-    ctx3 = {
-        "upload_path": str(tmp_path / "a.xlsx"),
-        "file_sha256": "f",
-        "_preview_cache": {"attendance_batch:f:a.xlsx": {"batch_id": 1}},
-    }
-    d3 = a.preview(MagicMock(), [], allowed_update_fields=set(), context=ctx3)
+    ctx3 = {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": {}}
+    a.preview(
+        MagicMock(),
+        {"employee_name": "甲", "business_id": "bid-1"},
+        allowed_update_fields=set(),
+        context=ctx3,
+    )
+    d3 = a.preview(
+        MagicMock(),
+        {"employee_name": "甲", "business_id": "bid-1"},
+        allowed_update_fields=set(),
+        context=ctx3,
+    )
     assert d3.action == "skip" and d3.reason == "duplicate_attendance_source"
 
 
@@ -2027,30 +2038,43 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
         a.execute_batch([], {"upload_path": str(tmp_path / "a.csv")})
     assert ex.value.code == "ELT_ATTENDANCE_FILE_INVALID"
 
-    # existing batch -> ETL_MATCH_CHANGED
+    # empty selection is not a successful replay
     ctx = {
         "upload_path": str(tmp_path / "a.xlsx"),
         "file_sha256": "f",
+        "run_id": "empty",
         "_preview_cache": {"attendance_batch:f:a.xlsx": {"batch_id": 1}},
     }
     with pytest.raises(EltError) as ex2:
         a.execute_batch([], ctx)
-    assert ex2.value.code == "ELT_MATCH_CHANGED"
+    assert ex2.value.code == "ELT_ATTENDANCE_EMPTY_SELECTION"
 
-    # success
+    rows = [
+        {
+            "employee_name": f"甲{index}",
+            "employee_no": f"E{index}",
+            "work_date": "2026-03-02",
+            "business_id": f"bid-{index}",
+            "source_row": index + 2,
+            "clock_in": "08:00",
+            "clock_out": "17:30",
+        }
+        for index in range(3)
+    ]
     ctx2 = {
         "upload_path": str(tmp_path / "a.xlsx"),
         "file_sha256": "f",
+        "file_name": "a.xlsx",
+        "run_id": "run-attendance",
         "row_count": 3,
         "total_rows": 3,
-        "progress_callback": lambda *a: None,
+        "progress_callback": lambda *_args: None,
     }
-    with patch(
-        "app.application.attendance_import_app_service.import_attendance_workbook",
-        return_value={"ok": True},
-    ):
-        r = a.execute_batch([{}, {}, {}], ctx2)
-    assert r["executed"] == 3
+    result = a.execute_batch(rows, ctx2)
+    assert result["executed"] == 3
+    assert result["receipt"]["product_rows"] == 0
+    replay = a.execute_batch(rows, {**ctx2, "run_id": "run-attendance-2"})
+    assert replay["executed"] == 0 and replay["receipt"]["skipped"] == 3
 
     # rollback data missing
     with patch.object(AttendanceAdapter, "_db_path", return_value=tmp_path / "missing.db"):
