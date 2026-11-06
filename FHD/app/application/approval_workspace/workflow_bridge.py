@@ -71,6 +71,25 @@ class WorkflowApprovalBridge:
                     return self.failure(
                         request_id, WORKFLOW_SNAPSHOT_UNAVAILABLE_CODE, approved_in_memory=approved
                     )
+            context = workflow.get("runtime_context") if isinstance(workflow, dict) else None
+            if isinstance(context, dict) and context.get("cross_module_http") is True:
+                # The sensitive write reads the durable snapshot. An in-memory copy is not enough.
+                durable = self.backends.execution_snapshot(request_id)
+                if not isinstance(durable, dict):
+                    return self.failure(
+                        request_id,
+                        WORKFLOW_SNAPSHOT_UNAVAILABLE_CODE,
+                        approved_in_memory=approved,
+                    )
+                from app.application.agent_orchestrator.cross_module_chain import (
+                    resume_cross_module_http,
+                )
+
+                result = resume_cross_module_http(
+                    durable, request_id=request_id, loaded_from_storage=True
+                )
+                approvals.remove_pending_workflow(request_id)
+                return result
             if str(workflow.get("agent_run_id") or "").strip():
                 return self._continue_agent(request_id, workflow, approved_by, approved, approvals)
             if not workflow.get("plan"):

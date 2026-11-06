@@ -1,4 +1,5 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, getCurrentInstance, onActivated, onDeactivated, ref, type Ref } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import type { ChatMessage } from './useChatMessages'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
@@ -51,9 +52,9 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     body: Record<string, unknown>
   } {
     const user_id = resolveChatUserId(scope)
-    const compactHistory = (scope?.messages || messages.value || []).slice(-6).map((m) => ({
+    const compactHistory = (scope?.messages || messages.value || []).slice(-40).map((m) => ({
       role: m.role,
-      content: plainTextFromChatHtml(m.content).slice(0, 500),
+      content: plainTextFromChatHtml(m.content).slice(0, 4000),
     }))
     const scopedSessionId = String(scope?.sessionId || sessionId?.value || '').trim()
     const turnId = String(scope?.turnId || '').trim() || createBusinessHarnessId('turn')
@@ -121,9 +122,9 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     scope?: ChatRequestScope,
   ): Promise<ChatPlannerPayload> {
     const user_id = resolveChatUserId(scope)
-    const compactHistory = (scope?.messages || messages.value || []).slice(-6).map((m) => ({
+    const compactHistory = (scope?.messages || messages.value || []).slice(-40).map((m) => ({
       role: m.role,
-      content: plainTextFromChatHtml(m.content).slice(0, 500),
+      content: plainTextFromChatHtml(m.content).slice(0, 4000),
     }))
     const scopedSessionId = String(scope?.sessionId || sessionId?.value || '').trim()
     const turnId = String(scope?.turnId || '').trim() || createBusinessHarnessId('turn')
@@ -193,6 +194,26 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     if (ticker) window.clearInterval(ticker)
     waitProgressTickers.delete(key)
     setLoadingProgress('处理中...', key)
+  }
+
+  let pausedProgressKeys: string[] = []
+  function pauseWaitProgress(): void {
+    if (waitProgressTickers.size === 0) return
+    pausedProgressKeys = [...waitProgressTickers.keys()]
+    for (const key of pausedProgressKeys) {
+      const ticker = waitProgressTickers.get(key)
+      if (ticker) window.clearInterval(ticker)
+      waitProgressTickers.delete(key)
+    }
+  }
+  if (getCurrentInstance()) {
+    onDeactivated(pauseWaitProgress)
+    onBeforeRouteLeave(() => { pauseWaitProgress() })
+    onActivated(() => {
+      const keys = pausedProgressKeys
+      pausedProgressKeys = []
+      for (const key of keys) startWaitProgressTimer(key)
+    })
   }
 
   async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {

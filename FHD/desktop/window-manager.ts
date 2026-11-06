@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, screen, shell } from 'electron'
+import { BrowserWindow, app, dialog, screen, session, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
@@ -19,7 +19,7 @@ import {
   waitForBackendStatus,
   writeBackendLog,
 } from './backend-process'
-import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
+import { DESKTOP_MIN_HEIGHT, DESKTOP_MIN_WIDTH, clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { checkPendingRollback } from './rollback'
 import { configureUpdater } from './updater'
 import { configureDesktopDownloads } from './desktop-downloads'
@@ -27,6 +27,7 @@ import {
   handleDesktopWindowOpen,
   handleDesktopWillNavigate,
   isBenignDesktopLoadAbort,
+  isTrustedDesktopOrigin,
 } from './desktop-navigation'
 import { reportRendererError } from './desktop-resilience'
 
@@ -72,6 +73,153 @@ export function resolveDesktopSplashUrl(): string {
   }
   const fallback = `<!doctype html><html><body style="margin:0;background:#f4f7fb;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,sans-serif;color:#1a2b4a"><div style="text-align:center;min-width:280px"><div style="font-size:1.25rem;font-weight:600">XCAGI</div><div id="status" style="margin-top:12px;color:#5a6d8c">启动中…</div><div style="margin-top:16px;height:8px;background:#dce5f4;border-radius:99px;overflow:hidden"><div id="bar" style="height:100%;width:8%;background:#3b6fd9;border-radius:99px"></div></div><div id="pct" style="margin-top:8px;font-size:12px;color:#3b6fd9">8%</div></div><script>window.xcagiSetSplashStatus=function(t){var e=document.getElementById('status');if(e&&t)e.textContent=t};window.xcagiSetSplashProgress=function(p,t){var n=Math.max(0,Math.min(100,Math.round(Number(p)||0)));var b=document.getElementById('bar');var c=document.getElementById('pct');if(b)b.style.width=n+'%';if(c)c.textContent=n+'%';if(t)window.xcagiSetSplashStatus(t)};</script></body></html>`
   return `data:text/html;charset=utf-8,${encodeURIComponent(fallback)}`
+}
+
+/** 含主窗口在内的同时可见窗口上限。第二进程仍由 single-instance lock 拒绝。 */
+export const MAX_DESKTOP_WINDOWS = 5
+
+let auxiliaryPartitionSerial = 0
+
+/** 每个附加窗口一个内存分区，localStorage / IndexedDB / Cache 不与主窗口或其他窗口互通。 */
+export function nextAuxiliaryPartition(): string {
+  auxiliaryPartitionSerial += 1
+  return `xcagi-aux-${auxiliaryPartitionSerial}`
+}
+
+export function resetAuxiliaryPartitionSerialForTests(): void {
+  auxiliaryPartitionSerial = 0
+}
+
+/**
+ * 只复制本机业务源的 cookie，让附加窗口能沿用同一次登录。
+ * 不复制 localStorage。弹窗、草稿和任务界面状态留在各自的存储分区里。
+ */
+export async function copyDesktopLoginCookies(target: Electron.Session): Promise<void> {
+  const url = `http://127.0.0.1:${DEFAULT_PORT}/`
+  let cookies: Electron.Cookie[] = []
+  try {
+    cookies = await session.defaultSession.cookies.get({ url })
+  } catch {
+    return
+  }
+  for (const cookie of cookies) {
+    if (!cookie.name || cookie.value == null) continue
+    const sameSite = cookie.sameSite === 'no_restriction'
+      || cookie.sameSite === 'lax'
+      || cookie.sameSite === 'strict'
+      || cookie.sameSite === 'unspecified'
+      ? cookie.sameSite
+      : 'lax'
+    try {
+      await target.cookies.set({
+        url,
+        name: cookie.name,
+        value: cookie.value,
+        path: cookie.path || '/',
+        secure: Boolean(cookie.secure),
+        httpOnly: Boolean(cookie.httpOnly),
+        expirationDate: cookie.expirationDate,
+        sameSite,
+      })
+    } catch {
+      /* 单条 cookie 失败不阻止开窗 */
+    }
+  }
+}
+
+function liveAuxiliaryWindows(): Electron.BrowserWindow[] {
+  return [...desktopRuntime.auxiliaryWindows].filter(win => !win.isDestroyed())
+}
+
+export function desktopWindowCount(): number {
+  const main = desktopRuntime.mainWindow && !desktopRuntime.mainWindow.isDestroyed() ? 1 : 0
+  return main + liveAuxiliaryWindows().length
+}
+
+function attachAuxiliaryGuards(win: Electron.BrowserWindow): void {
+  configureDesktopDownloads(win.webContents.session, () => app.getPath('downloads'), writeBackendLog)
+  win.webContents.on('will-navigate', (event, url) => {
+    handleDesktopWillNavigate(url, DEFAULT_PORT, () => event.preventDefault(), console.warn)
+  })
+  win.webContents.setWindowOpenHandler(({ url }) => openTrustedAuxiliaryFromHandler(url, win))
+  win.on('closed', () => {
+    desktopRuntime.auxiliaryWindows.delete(win)
+  })
+}
+
+function openTrustedAuxiliaryFromHandler(
+  url: string,
+  owner: Electron.BrowserWindow,
+): { action: 'deny' } {
+  const decision = handleDesktopWindowOpen(
+    url,
+    DEFAULT_PORT,
+    target => shell.openExternal(target),
+    message => console.warn(message),
+    target => owner.webContents.downloadURL(target),
+  )
+  if (decision === 'allow') openAuxiliaryWindow(url)
+  return { action: 'deny' }
+}
+
+/**
+ * 在当前进程再开一个业务窗口。后端仍是原来的 17500，登录 cookie 单独复制。
+ * 存储分区不共享，关窗即销毁，不隐藏到托盘，也不再起一个后端。
+ */
+export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | null {
+  if (!isTrustedDesktopOrigin(rawUrl, DEFAULT_PORT)) {
+    writeBackendLog('[window] refused untrusted auxiliary url\n')
+    return null
+  }
+  if (desktopWindowCount() >= MAX_DESKTOP_WINDOWS) {
+    writeBackendLog(`[window] refused auxiliary window; cap=${MAX_DESKTOP_WINDOWS}\n`)
+    return null
+  }
+  const main = desktopRuntime.mainWindow
+  const origin = main && !main.isDestroyed()
+    ? main.getBounds()
+    : { x: 40, y: 40, width: 1180, height: 760 }
+  const index = liveAuxiliaryWindows().length + 1
+  const icon = shellIconPath()
+  const partition = nextAuxiliaryPartition()
+  const isolated = session.fromPartition(partition)
+  const win = new BrowserWindow({
+    ...(fs.existsSync(icon) ? { icon } : {}),
+    x: origin.x + 28 * index,
+    y: origin.y + 28 * index,
+    width: origin.width,
+    height: origin.height,
+    minWidth: 960,
+    minHeight: 640,
+    title: APP_NAME,
+    autoHideMenuBar: process.platform !== 'darwin',
+    show: true,
+    backgroundColor: '#f4f7fb',
+    webPreferences: {
+      partition,
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  desktopRuntime.auxiliaryWindows.add(win)
+  attachAuxiliaryGuards(win)
+  win.on('closed', () => {
+    void isolated.clearStorageData().catch(() => undefined)
+    void isolated.clearCache().catch(() => undefined)
+  })
+  void (async () => {
+    try {
+      await copyDesktopLoginCookies(isolated)
+      if (win.isDestroyed()) return
+      await win.loadURL(rawUrl)
+    } catch (error) {
+      writeBackendLog(`[window] auxiliary load failed: ${error instanceof Error ? error.message : String(error)}\n`)
+    }
+  })()
+  win.webContents.on('did-finish-load', () => tagDesktopWebContents(win))
+  return win
 }
 
 export function broadcastToRenderer(channel: string, payload?: unknown): void {
@@ -142,8 +290,8 @@ function ensureMacWindowInWorkArea(win: BrowserWindow): void {
   if (process.platform !== 'darwin') return
   const bounds = win.getBounds()
   const work = screen.getDisplayMatching(bounds).workArea
-  const minW = 1180
-  const minH = 760
+  const minW = DESKTOP_MIN_WIDTH
+  const minH = DESKTOP_MIN_HEIGHT
   let { x, y, width, height } = bounds
   if (width < minW) width = Math.min(minW, work.width)
   if (height < minH) height = Math.min(minH, work.height)
@@ -207,8 +355,8 @@ export async function createWindow(): Promise<void> {
   const initialBounds = clampWindowBounds(savedBounds, display.workArea)
   const winOpts: Electron.BrowserWindowConstructorOptions = {
     ...initialBounds,
-    minWidth: 1180,
-    minHeight: 760,
+    minWidth: DESKTOP_MIN_WIDTH,
+    minHeight: DESKTOP_MIN_HEIGHT,
     title: APP_NAME,
     autoHideMenuBar: process.platform !== 'darwin',
     // Avoid exposing an empty native surface before the local splash has painted.
@@ -297,9 +445,7 @@ export async function createWindow(): Promise<void> {
   // 未注册 will-download 时 Chromium 只把文件留在下载目录的 <guid>.tmp，
   // 客户看不到「文件名: xxx.xlsx」对应的文件。显式落盘到下载目录并保留业务文件名。
   configureDesktopDownloads(mainWindow.webContents.session, () => app.getPath('downloads'), writeBackendLog)
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message), target => mainWindow.webContents.downloadURL(target)) }
-  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => openTrustedAuxiliaryFromHandler(url, mainWindow))
   const reportMainRenderer = (type: string, error: string, source?: string) => {
     reportRendererError({ port: DEFAULT_PORT, writeLog: writeBackendLog }, { type, error, source })
   }

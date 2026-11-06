@@ -550,7 +550,9 @@ class TestRunSingleToolBranches:
 
     def test_retries_exhausted_returns_failure_result(self):
         """Line 521 (post-loop): all retries exhausted → NodeExecutionResult with success=False."""
-        engine = _make_engine({"success": False, "message": "always fails"})
+        engine = _make_engine(
+            {"success": False, "message": "always fails", "error_code": "timeout"}
+        )
         result = engine._run_single_tool(
             tool_id="inventory",
             action="check",
@@ -571,7 +573,7 @@ class TestRunSingleToolBranches:
             nonlocal call_count
             call_count += 1
             if call_count < 2:
-                return {"success": False, "message": "temp"}
+                return {"success": False, "message": "temp", "error_code": "timeout"}
             return {"success": True}
 
         engine = WorkflowEngine(tool_dispatcher=flaky)

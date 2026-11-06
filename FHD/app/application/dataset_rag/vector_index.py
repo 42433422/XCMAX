@@ -26,6 +26,26 @@ def _embedding_metadata(embedder: Callable[[str], list[float]] | None, text: str
         return {}
 
 
+def backfill_missing_embeddings(
+    embedder: Callable[[str], list[float]] | None, state: _DatasetState
+) -> bool:
+    """Fill chunks that were stored before an embedder existed. Returns whether any changed."""
+    if embedder is None:
+        return False
+    changed = False
+    for chunk in state.chunks:
+        meta = chunk.metadata if isinstance(chunk.metadata, dict) else {}
+        existing = meta.get("_embedding")
+        if isinstance(existing, list) and existing:
+            continue
+        extra = _embedding_metadata(embedder, chunk.text)
+        if not extra:
+            continue
+        chunk.metadata = {**meta, **extra}
+        changed = True
+    return changed
+
+
 def _semantic_embedding_available(embedding_count: int = 0) -> bool:
     """UI contract: true when a live embedder exists or chunks already carry vectors."""
     if int(embedding_count or 0) > 0:

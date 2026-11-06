@@ -339,10 +339,15 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                 item.filename.startswith(("xl/embeddings/", "xl/vbaProject")) for item in entries
             ):
                 raise ReviewedExcelError("含嵌入附件或宏，未读取或执行")
+            # Decorative package parts are recorded and skipped. Cell data stays
+            # classifiable. Macros, embeddings, and external links still fail closed.
+            decorative_prefixes = ("xl/media/", "customXml/", "xl/printerSettings/")
+            fidelity_skipped = sorted(
+                {item.filename for item in entries if item.filename.startswith(decorative_prefixes)}
+            )
             unsupported = (
                 *(("xl/drawings/",) if not allow_drawings else ()),
                 "xl/charts/",
-                "xl/media/",
                 "xl/embeddings/",
                 "xl/activeX/",
                 "xl/vbaProject",
@@ -350,7 +355,6 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                 "xl/externalLinks/",
                 "xl/slicers/",
                 "xl/threadedComments/",
-                "customXml/",
             )
             if any(item.filename.startswith(unsupported) for item in entries):
                 raise ReviewedExcelError("工作簿含暂不支持保真的对象或扩展")
@@ -358,6 +362,8 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
             if allow_drawings and any(item.filename.startswith("xl/drawings/") for item in entries):
                 from app.application.reviewed_excel_drawing import extract_drawing_evidence
 
+                # Invalid relationships or unknown XML must not become an empty
+                # drawing list: downstream slicing would silently discard them.
                 drawing_evidence = extract_drawing_evidence(archive)
         with warnings.catch_warnings(record=True) as found:
             warnings.simplefilter("always")
@@ -373,6 +379,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
         raise ReviewedExcelError("无法读取 XLSX 工作簿") from exc
     cells: list[dict[str, Any]] = []
     layout: list[dict[str, Any]] = []
+    structural_sheets: list[str] = []
     try:
         if len(wb.worksheets) > 100:
             raise ReviewedExcelError("工作表超过 100 张，暂不能安全预览")
@@ -381,17 +388,34 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
             if len(sheet.merged_cells.ranges) > 5000:
                 raise ReviewedExcelError("合并区域超过 5000 个，暂不能安全预览")
             extent = _sheet_cell_extent(sheet)
-            if extent > 100_000:
-                raise ReviewedExcelError("工作表范围过大，暂不能安全预览")
-            grid_budget += extent
-            if grid_budget > 250_000:
-                raise ReviewedExcelError("工作簿总单元格范围过大，暂不能安全预览")
-            for row in sheet.iter_rows():
+            # Large used-ranges are real customer tables, not a reason to refuse
+            # classification. Sample the header band and keep the true dimensions.
+            structural = extent > 100_000
+            if structural:
+                structural_sheets.append(sheet.title)
+            else:
+                grid_budget += extent
+                if grid_budget > 250_000:
+                    raise ReviewedExcelError("工作簿总单元格范围过大，暂不能安全预览")
+            sampled = 0
+            sample_full = False
+            row_iter = sheet.iter_rows(
+                max_row=12 if structural else None,
+                max_col=40 if structural else None,
+            )
+            for row in row_iter:
+                if sample_full:
+                    break
                 for cell in row:
                     if isinstance(cell, MergedCell) or cell.value is None:
                         continue
-                    if len(cells) >= MAX_CELLS:
+                    if structural and sampled >= 800:
+                        sample_full = True
+                        break
+                    if not structural and len(cells) >= MAX_CELLS:
                         raise ReviewedExcelError("非空单元格超过 20000 个，暂不能完整预览")
+                    if structural:
+                        sampled += 1
                     formula = cell.data_type == "f"
                     cells.append(
                         {
@@ -496,11 +520,20 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                     else drawing_row_boundaries(sheet, objects)
                 )
                 if drawing_columns[sheet.title] * _sheet_axis(sheet.max_row) > 100_000:
-                    raise ReviewedExcelError("绘图工作表范围过大，暂不能安全预览")
+                    fidelity_skipped.append(f"drawing-extent:{sheet.title}")
+                    drawing_columns[sheet.title] = sheet.max_column
+                    drawing_boundaries[sheet.title] = []
+        restrictions = []
+        if "ELTUsageRestriction" in cast(Any, wb).custom_doc_props.names:
+            restrictions.append("仅供数据/模板测试；打印版式未验证，不得发布到企业模板库")
+        if fidelity_skipped:
+            restrictions.append("已跳过图片、打印设置或 customXml，单元格数据仍可分类")
+        if structural_sheets:
+            restrictions.append("超大工作表按表头抽样分类，维度仍保留原件行列")
         return {
-            "usage_restrictions": ["仅供数据/模板测试；打印版式未验证，不得发布到企业模板库"]
-            if "ELTUsageRestriction" in cast(Any, wb).custom_doc_props.names
-            else [],
+            "usage_restrictions": restrictions,
+            "fidelity_skipped": fidelity_skipped,
+            "structural_sample_sheets": structural_sheets,
             "drawing_evidence": drawing_evidence,
             "sha256": hashlib.sha256(body).hexdigest(),
             "read_only_print_areas": read_only_print_areas,
@@ -516,6 +549,8 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                     "merged_regions": [str(item) for item in s.merged_cells.ranges],
                     "print_area": s.print_area,
                     "sheet_state": s.sheet_state,
+                    "blank": not any(cell["sheet"] == s.title for cell in cells),
+                    "structural_sample": s.title in structural_sheets,
                     "hidden_rows": [
                         int(key) for key, dim in s.row_dimensions.items() if dim.hidden
                     ],
@@ -636,6 +671,8 @@ def derive_document_workbook(
     import re
 
     info = inspect_workbook(body)
+    if info.get("fidelity_skipped"):
+        raise ReviewedExcelError("工作簿含尚未核验的保真部件，仅可分类，不能派生文件")
     if print_area_mode not in {"source", "selected"}:
         raise ReviewedExcelError("打印区域选择无效")
     if (
@@ -877,6 +914,8 @@ def derive_document_workbook(
 
 def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) -> bytes:
     inspection = inspect_workbook(body)
+    if inspection.get("fidelity_skipped"):
+        raise ReviewedExcelError("工作簿含尚未核验的保真部件，仅可分类，不能清理文件")
     from app.application.reviewed_excel_range_objects import require_cleanable_range_metadata
 
     if inspection["sha256"] != expected_sha256:

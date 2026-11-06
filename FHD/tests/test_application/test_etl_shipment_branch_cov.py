@@ -315,12 +315,13 @@ class TestTargetDetection:
     def test_csv_classify_branches(self, tmp_path):
         cases = [
             ("送货单 产品名称 数量", "shipment_records"),
-            ("考勤 上班时间 打卡", "attendance"),
+            ("考勤 上班时间 打卡", "abnormal"),
+            ("姓名 工号 日期 上班打卡时间", "attendance"),
             ("采购订单 供应商 产品名称", "purchase_orders"),
             ("客户名称 产品名称", "customer_products"),
             ("客户 购货单位", "customers"),
             ("商品名称 品名", "products"),
-            ("随便 的数据", "customer_products"),
+            ("随便 的数据", "abnormal"),
         ]
         for content, expected in cases:
             path = tmp_path / "f.csv"
@@ -352,7 +353,7 @@ class TestTargetDetection:
         path = tmp_path / "other.pdf"
         path.write_text("x")
         out = target_detection.detect_etl_target(path)
-        assert out["target_type"] == "customer_products"
+        assert out["target_type"] == "abnormal"
         assert out["reason"] == "manual_review_required"
 
 

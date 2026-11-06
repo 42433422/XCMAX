@@ -9,6 +9,12 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes import market_account as market
+from app.fastapi_routes.market_bridge import token_lifecycle
+
+
+@pytest.fixture(autouse=True)
+def isolated_validation_cache(monkeypatch):
+    monkeypatch.setattr(token_lifecycle, "_fast_ok_until", {})
 
 
 def _request(session_id: str = "") -> Request:
@@ -117,6 +123,40 @@ def test_explicit_bearer_without_local_session_does_not_read_shared_tokens(monke
         == "Bearer synthetic-explicit"
     )
     latest.assert_not_called()
+
+
+@pytest.mark.parametrize("change", ["owner", "origin", "token", "expired", "cleared", "saved"])
+@pytest.mark.asyncio
+async def test_fast_validation_cache_is_scoped_expires_and_invalidates(monkeypatch, change):
+    state = {"owner": 71, "token": "synthetic-access", "now": 100.0}
+    monkeypatch.setattr(market, "_user_id_from_session", lambda sid: state["owner"])
+    monkeypatch.setattr(market, "session_market_token", lambda sid: state["token"])
+    monkeypatch.setattr(token_lifecycle.time, "monotonic", lambda: state["now"])
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://market.invalid")
+    remote = AsyncMock(return_value={"user": {"id": 71}})
+    monkeypatch.setattr(market, "_proxy_json", remote)
+    monkeypatch.setattr(
+        market, "_session_tokens", lambda: SimpleNamespace(clear=Mock(), save=Mock())
+    )
+
+    await market.resolve_valid_market_access_token_fast("verified-session")
+    await market.resolve_valid_market_access_token_fast("verified-session")
+    assert remote.await_count == 1
+    assert all(value[0] != state["token"] for value in token_lifecycle._fast_ok_until.values())
+    if change == "owner":
+        state["owner"] = 72
+    elif change == "origin":
+        monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://other-market.invalid")
+    elif change == "token":
+        state["token"] = "synthetic-replaced-access"
+    elif change == "expired":
+        state["now"] += token_lifecycle._FAST_OK_TTL_S
+    elif change == "cleared":
+        market.clear_session_market_token("verified-session")
+    else:
+        market.save_session_market_token("verified-session", state["token"])
+    await market.resolve_valid_market_access_token_fast("verified-session")
+    assert remote.await_count == 2
 
 
 @pytest.mark.parametrize("outcome", ["valid", "expired", "unavailable"])

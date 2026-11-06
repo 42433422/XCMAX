@@ -79,6 +79,9 @@ def create_observed_tool_trace_run(
     source: str = "desktop_fast_path",
 ) -> AgentRun:
     """Record one already-completed tool call; this function never executes a tool."""
+    from app.application.network_stability import emit_current_lane
+
+    emit_current_lane("tool")
     safe_params = _safe_value(params)
     safe_output = _safe_value(output)
     assert isinstance(safe_params, dict)

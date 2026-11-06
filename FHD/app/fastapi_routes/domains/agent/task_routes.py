@@ -238,18 +238,34 @@ def create_agent_task(
                 },
                 status_code=400,
             )
+        message = str(data.get("message") or data.get("title") or "")
         with run_operation_lock(f"task:{principal.user_id}:{task_id}"):
             result = create_unified_task(
                 orchestrator=AgentOrchestrator(),
                 user_id=principal.user_id,
                 task_id=task_id,
                 title=str(data.get("title") or ""),
-                message=str(data.get("message") or data.get("title") or ""),
+                message=message,
                 tool_id=str(data.get("tool_id") or ""),
                 action=str(data.get("action") or ""),
                 params=params,
                 runtime_context=runtime_context,
             )
+            from app.application.agent_orchestrator.cross_module_chain import (
+                begin_cross_module_http,
+                is_cross_module_client_task,
+            )
+
+            if not result.deduplicated and is_cross_module_client_task(message, params):
+                begin_cross_module_http(
+                    AgentOrchestrator(),
+                    result.run,
+                    params=params,
+                    runtime_context=runtime_context,
+                )
+                refreshed = AgentOrchestrator().get_run(result.run.run_id)
+                if refreshed is not None:
+                    result = type(result)(run=refreshed, deduplicated=False)
         response = run_response(result.run, principal=principal)
         response["deduplicated"] = result.deduplicated
         return JSONResponse(
@@ -261,6 +277,10 @@ def create_agent_task(
         return JSONResponse(
             {"success": False, "message": str(exc) or "任务参数无效"}, status_code=400
         )
+    except RuntimeError:
+        error_response = internal_error_response("create agent task")
+        error_response.status_code = 503
+        return error_response
     except RECOVERABLE_ERRORS:
         return internal_error_response("create agent task")
 

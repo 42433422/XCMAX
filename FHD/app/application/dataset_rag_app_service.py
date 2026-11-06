@@ -259,10 +259,15 @@ class DatasetRagApplicationService:
             self._schedule_rebuild_jobs()
 
     def _prepare_loaded_state(self, state: _DatasetState) -> None:
+        from app.application.dataset_rag.vector_index import backfill_missing_embeddings
+
         _recover_rebuild_jobs_locked(state)
+        dirty = backfill_missing_embeddings(self._vector.embedder, state)
         self._renumber_chunks(state)
         self._vector._sync_vector_index_locked(state)
         self._vector._refresh_index_metadata(state)
+        if dirty:
+            state.index["_persist_after_load"] = True
 
     def ingest_document(
         self,

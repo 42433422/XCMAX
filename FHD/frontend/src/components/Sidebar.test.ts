@@ -27,7 +27,7 @@ beforeEach(() => {
   account.marketUserId = 29
   account.tenantId = 1
   account.localUserId = 2
-  useIndustryStore().isLoaded = true
+  vi.spyOn(useIndustryStore(), 'initialize').mockResolvedValue(undefined)
   useModsStore().isLoaded = true
   api.getCurrentEntitlementsSyncStatus.mockReset().mockResolvedValue({ data: { has_snapshot: true, snapshot: { username: 'SUNBIRD' } } })
   api.pullSync.mockReset()

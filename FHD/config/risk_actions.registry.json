@@ -1592,6 +1592,7 @@
       "availability": "shared",
       "actions": {
         "read": {
+          "read_only": true,
           "risk": "low",
           "idempotent": true,
           "required_params": [
@@ -1786,6 +1787,15 @@
           "idempotent": true,
           "required_params": [
             "file_path"
+          ],
+          "availability": "shared"
+        },
+        "export": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [
+            "file_path",
+            "rows"
           ],
           "availability": "shared"
         }

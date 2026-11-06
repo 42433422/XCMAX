@@ -68,7 +68,7 @@ describe('api core account switch guard', () => {
     controller.abort()
     await vi.advanceTimersByTimeAsync(250)
     await settled
-    expect(captured).toMatchObject({ status: 0, message: 'Failed to fetch' })
+    expect(captured).toMatchObject({ status: 0, message: '服务暂时不可用。请稍后重试，无需重新登录。' })
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 

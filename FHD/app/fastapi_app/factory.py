@@ -231,6 +231,11 @@ def _create_fastapi_app(
     # Previously ``get_fastapi_app()`` created a second, invisible FastAPI app.
     # Last registered is outermost: reject stale/unready admission before Mod,
     # industry or authentication middleware can read or refresh session state.
+    # Request id sits just inside admission so every accepted request is traceable
+    # and CatalogAdmissionMiddleware remains user_middleware[0].
+    from app.middleware.request_id import RequestIdMiddleware
+
+    app.add_middleware(RequestIdMiddleware)
     app.add_middleware(CatalogAdmissionMiddleware, admission=admission)
     _app_singleton = app
     return app

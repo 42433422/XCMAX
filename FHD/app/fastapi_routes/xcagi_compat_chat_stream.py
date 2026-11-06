@@ -298,6 +298,12 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     if vector_error:
         yield sse_event_line({"type": "error", "message": vector_error})
         return
+    from app.application.ai_chat.dialogue_memory import prepare_chat_turn
+
+    prepared = prepare_chat_turn(body.message, runtime_context)
+    if prepared is not None:
+        yield sse_event_line({"type": "done", "result": prepared})
+        return
     workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []

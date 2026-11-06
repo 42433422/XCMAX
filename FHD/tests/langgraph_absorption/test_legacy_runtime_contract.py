@@ -581,7 +581,7 @@ class TestRetry:
         def dispatch(tool_id, action, params):
             calls["n"] += 1
             if calls["n"] <= 1:
-                return {"success": False, "message": "temp"}
+                return {"success": False, "error_code": "timeout", "message": "temp"}
             return {"success": True}
 
         result = _make_engine(dispatch)._run_node(_sequential_plan(1).nodes[0], {}, max_retries=2)
@@ -590,7 +590,7 @@ class TestRetry:
 
     def test_retries_exhausted_marks_node_failed(self):
         def dispatch(tool_id, action, params):
-            return {"success": False, "message": "permanent"}
+            return {"success": False, "error_code": "timeout", "message": "permanent"}
 
         result = _make_engine(dispatch)._run_node(_sequential_plan(1).nodes[0], {}, max_retries=1)
         assert result.success is False

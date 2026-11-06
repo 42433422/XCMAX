@@ -1,6 +1,7 @@
 """Commit approval consumption, run state and dispatch as one durable operation."""
 
 import json
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -44,6 +45,40 @@ def approve_and_enqueue(
             )
             if record is None:
                 raise ApprovalGrantError("审批任务不存在")
+            from app.db.models.agent import AgentTaskExecutionRecord
+
+            execution = db.get(AgentTaskExecutionRecord, run_id)
+            if execution is not None and execution.state in {
+                "rejected",
+                "completed",
+                "succeeded",
+                "cancelled",
+                "failed",
+                "timed_out",
+            }:
+                raise ApprovalGrantError("任务已结束，不能审批通过后执行")
+            from app.domain.task_lifecycle.control import SessionBook, approval_actor_allowed
+
+            book = SessionBook(db)
+            tenant = str(execution.tenant_id or "") if execution is not None else ""
+            body = book.get("agent", tenant, run_id)
+            if execution is not None and execution.state in {
+                "waiting_approval",
+                "paused",
+                "blocked",
+            }:
+                started = str(body.get("approval_requested_at") or execution.updated_at or "")
+                if started:
+                    moment = datetime.fromisoformat(utc_now_iso().replace("Z", "+00:00"))
+                    age = (
+                        moment - datetime.fromisoformat(started.replace("Z", "+00:00"))
+                    ).total_seconds()
+                    if age >= float(getattr(queue, "_approval_timeout_seconds", 86400.0)):
+                        execution.state = "rejected"
+                        execution.last_error_code = "approval_timeout"
+                        raise ApprovalGrantError("审批已超时")
+            if not approval_actor_allowed(body, principal_id):
+                raise ApprovalGrantError("无权审批该任务")
             old_payload = record.payload_json
             run = agent_run_from_dict(json.loads(old_payload))
             claims = validate_approval_grant(token, run=run, principal_id=principal_id)

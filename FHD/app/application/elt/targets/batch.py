@@ -26,13 +26,25 @@ class AttendanceAdapter(TargetAdapter):
     type = "attendance"
     label = "考勤"
     reversible = True
-    fields = (TargetField("document_path", "考勤文件", aliases=("document_path",)),)
-    default_match_keys = ("source_file", "source_row")
+    fields = (
+        TargetField("employee_name", "员工姓名", required=True, aliases=("姓名", "员工姓名")),
+        TargetField("employee_no", "员工编号", aliases=("工号", "员工工号", "员工编号")),
+        TargetField("user_id", "用户ID", aliases=("UserId", "用户ID")),
+        TargetField("work_date", "日期", type="date", aliases=("日期", "考勤日期", "workDate")),
+        TargetField("clock_in", "上班打卡", aliases=("上班1打卡时间", "上班打卡时间", "上班时间")),
+        TargetField("clock_out", "下班打卡", aliases=("下班1打卡时间", "下班打卡时间", "下班时间")),
+        TargetField("department", "部门", aliases=("部门",)),
+        TargetField("attendance_group", "考勤组", aliases=("考勤组",)),
+        TargetField("business_id", "业务主键", aliases=("business_id",)),
+        TargetField("document_path", "考勤文件", aliases=("document_path",)),
+    )
+    default_match_keys = ("business_id",)
 
     @staticmethod
     def _source_file_key(context: dict[str, Any]) -> str:
         source_path = Path(str(context["upload_path"]))
-        return f"{context['file_sha256']}:{source_path.name}"
+        name = str(context.get("file_name") or source_path.name)
+        return f"{context['file_sha256']}:{name}"
 
     @staticmethod
     def _db_path() -> Path:
@@ -91,70 +103,107 @@ class AttendanceAdapter(TargetAdapter):
                     }
                 ],
             )
-        existing = self._existing_batch(context)
-        if existing:
+        payload = data if isinstance(data, dict) else {}
+        name = str(payload.get("employee_name") or "").strip()
+        if not name and not payload.get("business_id"):
+            return PreviewDecision(
+                "error",
+                reason="attendance_row_invalid",
+                issues=[
+                    {
+                        "code": "ELT_REQUIRED_FIELD_MISSING",
+                        "field": "employee_name",
+                        "severity": "error",
+                        "message": "员工姓名不能为空",
+                    }
+                ],
+            )
+        business_id = str(payload.get("business_id") or "")
+        cache = context.setdefault("_preview_cache", {})
+        seen = cache.setdefault("attendance_business_ids", set())
+        if business_id and (business_id in seen or self._business_written(business_id)):
             return PreviewDecision(
                 "skip",
-                match_ref=str(existing["batch_id"]),
-                before=existing,
-                after=existing,
+                match_ref=business_id,
+                before={"business_id": business_id},
+                after=payload,
                 reason="duplicate_attendance_source",
             )
-        return PreviewDecision(
-            "new",
-            after={
-                "source_file": self._source_file_key(context),
-                "document_path": source_path.name,
-            },
-            reason="new_attendance_source",
-        )
+        if business_id:
+            seen.add(business_id)
+        return PreviewDecision("new", after=payload, reason="new_attendance_row")
+
+    def _business_written(self, business_id: str) -> bool:
+        import sqlite3
+
+        db_path = self._db_path()
+        if not db_path.is_file():
+            return False
+        try:
+            with sqlite3.connect(str(db_path)) as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM attendance_daily_records WHERE business_id = ?",
+                    (business_id,),
+                ).fetchone()
+        except sqlite3.OperationalError:
+            return False
+        return row is not None
 
     @staticmethod
-    def require_complete_selection(selected_rows: int, total_rows: int) -> None:
-        # The attendance writer reads the workbook itself, not a filtered row set.
-        if selected_rows <= 0:
+    def require_complete_selection(
+        selected_rows: int, total_rows: int, *, skip_rows: int = 0
+    ) -> None:
+        del total_rows
+        if selected_rows <= 0 and skip_rows <= 0:
             raise EltError(
                 "ELT_ATTENDANCE_EMPTY_SELECTION",
                 "没有可执行的考勤行；请修正文件并重新预演",
-                status_code=409,
-            )
-        if selected_rows != total_rows:
-            raise EltError(
-                "ELT_ATTENDANCE_PARTIAL_SELECTION_UNSUPPORTED",
-                "考勤按完整工作簿导入，暂不支持跳过行或仅写入正确行；"
-                "请修正文件并重新预演，确认全部行后再执行",
                 status_code=409,
             )
 
     def execute_batch(
         self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
     ) -> dict[str, Any]:
-        from app.application.attendance_import_app_service import import_attendance_workbook
+        from app.application.elt.attendance_pipeline import persist_attendance_rows
 
         source_path = Path(str(context["upload_path"]))
         if source_path.suffix.lower() not in {".xlsx", ".xlsm"}:
             raise EltError("ELT_ATTENDANCE_FILE_INVALID", "考勤仅支持 Excel 工作簿")
-        if self._existing_batch(context):
-            raise EltError(
-                "ELT_MATCH_CHANGED",
-                "考勤文件在预演后已导入，请重新预演",
-                status_code=409,
-            )
-        total_rows = int(context.get("total_rows") or 0)
-        self.require_complete_selection(int(context.get("row_count") or 0), total_rows)
-        row_count = sum(1 for _ in rows)
-        self.require_complete_selection(row_count, total_rows)
-        db_path = self._db_path()
-        result = import_attendance_workbook(
-            source_path,
-            db_path,
-            source_file_key=self._source_file_key(context),
-            sync_ui_tables=True,
+        materialized = [row for row in rows if isinstance(row, dict)]
+        self.require_complete_selection(
+            len(materialized),
+            int(context.get("total_rows") or 0),
+            skip_rows=int(context.get("skip_rows") or 0),
+        )
+        if not materialized:
+            from app.application.elt.attendance_pipeline import _write_output
+
+            output = _write_output(source_path, str(context["run_id"]), [])
+            digest = __import__("hashlib").sha256(output.read_bytes()).hexdigest()
+            return {
+                "receipt": {
+                    "source_file": self._source_file_key(context),
+                    "file_name": output.name,
+                    "output_path": str(output),
+                    "sha256": digest,
+                    "executed": 0,
+                    "idempotent_replay": True,
+                    "product_rows": 0,
+                    "customer_rows": 0,
+                },
+                "executed": 0,
+            }
+        result = persist_attendance_rows(
+            materialized,
+            db_path=self._db_path(),
+            source_file=self._source_file_key(context),
+            upload_path=source_path,
+            run_id=str(context["run_id"]),
         )
         callback = context.get("progress_callback")
         if callable(callback):
-            callback(row_count, row_count)
-        return {"receipt": result, "executed": row_count}
+            callback(int(result["executed"]), max(1, len(materialized)))
+        return {"receipt": result, "executed": int(result["executed"])}
 
     def rollback_batch(self, context: dict[str, Any], receipt: dict[str, Any]) -> int:
         import sqlite3
@@ -189,6 +238,37 @@ class AttendanceAdapter(TargetAdapter):
             raise
         finally:
             conn.close()
+
+
+class AbnormalAdapter(TargetAdapter):
+    """Unconfirmed templates stay abnormal and are not written to a business table."""
+
+    type = "abnormal"
+    label = "未确认模板"
+    reversible = False
+    fields = ()
+    default_match_keys = ()
+
+    def preview(self, db, data, *, allowed_update_fields, context):
+        del db, data, allowed_update_fields, context
+        return PreviewDecision(
+            "error",
+            reason="unconfirmed_template",
+            issues=[
+                {
+                    "code": "ELT_TEMPLATE_UNCONFIRMED",
+                    "field": "template",
+                    "severity": "error",
+                    "message": "模板未确认，不能强制匹配到业务表",
+                }
+            ],
+        )
+
+    def execute_batch(
+        self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
+    ) -> dict[str, Any]:
+        del rows, context
+        raise EltError("ELT_TEMPLATE_UNCONFIRMED", "模板未确认，不能写入")
 
 
 class ExportAdapter(TargetAdapter):

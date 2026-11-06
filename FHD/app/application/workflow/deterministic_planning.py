@@ -131,7 +131,13 @@ class DeterministicPlanner:
     def __init__(self, dependencies: DeterministicDependencies) -> None:
         self.dependencies = dependencies
 
-    def plan(self, plan_id: str, message: str, tool_registry: dict[str, Any]) -> PlanGraph:
+    def plan(
+        self,
+        plan_id: str,
+        message: str,
+        tool_registry: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> PlanGraph:
         from app.application.normal_chat_dispatch import route_normal_mode_message
         from app.application.workflow.sql_execution_policy import (
             database_maintenance_plan,
@@ -485,6 +491,12 @@ class DeterministicPlanner:
             if read_node is not None:
                 nodes.append(read_node)
                 intent = f"{read_node.tool_id}_query"
+        if not nodes:
+            from app.application.workflow.business_turn_plan import plan_business_turn
+
+            turned = plan_business_turn(plan_id, message, tool_registry, context)
+            if turned is not None:
+                return turned
         if not nodes:
             # 两级兜底（审计根因 2）：先走共享规则意图服务按 tool_key 路由到正确业务域；
             # 未命中/异常一律 clarify.ask，绝不静默 products.query。

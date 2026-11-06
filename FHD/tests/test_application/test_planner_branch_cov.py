@@ -1395,8 +1395,8 @@ class TestPlanWithReactMultiagent:
                 assert result is not None
                 assert mock_exec.call_count >= 1
 
-    def test_probe_value_error_skipped(self) -> None:
-        """probe 执行 ValueError 时跳过。"""
+    def test_probe_value_error_keeps_valid_candidate(self) -> None:
+        """probe 执行 ValueError 时不注入探测结果，二次规划失败仍保留已验证候选。"""
         planner = _make_planner()
         candidate = PlanGraph(
             plan_id="pid",
@@ -1424,10 +1424,10 @@ class TestPlanWithReactMultiagent:
                     tool_registry=_sample_registry(),
                     context={},
                 )
-                assert result is None
+                assert result is candidate
 
-    def test_probe_runtime_error_skipped(self) -> None:
-        """probe 执行 RuntimeError 时跳过。"""
+    def test_probe_runtime_error_keeps_valid_candidate(self) -> None:
+        """probe 执行 RuntimeError 时不注入探测结果，二次规划失败仍保留已验证候选。"""
         planner = _make_planner()
         candidate = PlanGraph(
             plan_id="pid",
@@ -1455,7 +1455,7 @@ class TestPlanWithReactMultiagent:
                     tool_registry=_sample_registry(),
                     context={},
                 )
-                assert result is None
+                assert result is candidate
 
     def test_probe_limits_to_three(self) -> None:
         """probe 最多 3 个。"""

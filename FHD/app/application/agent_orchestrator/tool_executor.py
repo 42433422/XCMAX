@@ -5,7 +5,7 @@ import os
 import time
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from app.application.agent_orchestrator.param_references import (
     UNRESOLVED_CODE,
@@ -14,10 +14,17 @@ from app.application.agent_orchestrator.param_references import (
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import (
     ToolActionSpecV2,
+    get_tool_action_spec,
     validate_tool_call,
     validate_tool_result,
 )
-from app.application.tool_execution_deadline import invocation_deadline
+from app.application.employee_runtime.result_verifier import (
+    execution_result_requires_reconciliation,
+)
+from app.application.tool_execution_deadline import (
+    invocation_deadline,
+    invocation_requires_reconciliation,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
@@ -211,7 +218,58 @@ class AgentToolExecutor:
     ) -> dict[str, Any]:
         from app.application.facades.tools_facade import execute_registered_workflow_tool
 
-        params = dict(step.params or {})
+        raw_params = dict(step.params or {})
+        client_identity = bool(_QUERY_IDENTITY_FIELDS.intersection(raw_params))
+        params = dict(raw_params)
+        deadline = (runtime_context or {}).get("deadline_monotonic")
+        if isinstance(deadline, (int, float)) and time.monotonic() > float(deadline):
+            return {
+                "success": False,
+                "error_code": "tool_timeout_unknown",
+                "outcome": "unknown",
+                "retryable": False,
+                "execution_status": "timeout",
+                "message": "工具超时，业务结果未知；必须核对原调用，不可自动重试",
+            }
+        if (runtime_context or {}).get("cancel_requested") is True:
+            return {
+                "success": False,
+                "error_code": "tool_cancelled",
+                "retryable": False,
+                "execution_status": "cancelled",
+                "message": "工具调用已取消",
+            }
+        spec = get_tool_action_spec(step.tool_id, step.action)
+        schema_properties: set[str] = set()
+        if spec is not None and isinstance(spec.input_schema, dict):
+            raw_properties = spec.input_schema.get("properties")
+            if isinstance(raw_properties, dict):
+                schema_properties = {str(key) for key in raw_properties}
+        for control_key in (
+            "skip_approval",
+            "auto_approve",
+            "approved",
+            "permission",
+            "permissions",
+            "system_prompt",
+            "employee_tool_allowlist",
+            "_actor_authorization",
+            "tenant_id",
+            "user_id",
+        ):
+            # Dataset tools declare tenant_id as a scoped business field.
+            # Identity fields that are not in the tool schema stay stripped.
+            if control_key in {"tenant_id", "user_id"} and control_key in schema_properties:
+                continue
+            params.pop(control_key, None)
+        context = dict(runtime_context or {})
+        required = (
+            set((spec.input_schema or {}).get("required") or []) if spec is not None else set()
+        )
+        if "user_id" in required and context.get("user_id") not in (None, ""):
+            params["user_id"] = str(context["user_id"])
+        if "tenant_id" in required and context.get("tenant_id") not in (None, ""):
+            params["tenant_id"] = context["tenant_id"]
         validation = validate_tool_call(step.tool_id, step.action, params)
         if not validation.ok:
             return {
@@ -230,9 +288,18 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": validation.action or step.action,
             }
+        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+        denied = actor_tool_denial(
+            validation.tool_id, validation.action or step.action, dict(runtime_context or {})
+        )
+        if denied is not None:
+            return denied
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
         reviewed_query = (validation.tool_id, validation.action) in _REVIEWED_QUERY_ACTIONS
+        if reviewed_query and client_identity:
+            return _query_failure("tool_identity_override")
         query_tenant = None
         if reviewed_query:
             query_tenant, denied = _reviewed_query_tenant(
@@ -263,33 +330,79 @@ class AgentToolExecutor:
                     "action": action,
                 }
 
+        from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
         from app.infrastructure.auth.agent_mod_scope import (
             AgentModAuthorizationError,
             agent_mod_execution_scope,
         )
         from app.infrastructure.tenant_scope import owned_tenant_scope, tenant_scope
 
+        result: Any = None
+        idem_key = ""
         try:
             # Durable/background Agent runs execute outside the originating HTTP
             # request. Restore the authenticated integer tenant recorded in
             # runtime_context so repository/raw-SQL boundaries keep their fail-closed
             # isolation. Dataset/document tools deliberately keep their own opaque
             # string tenant keys and must not be coerced here.
+            scope = (
+                owned_tenant_scope(runtime_tenant_id)
+                if (validation.tool_id, action) == ("products", "exists")
+                and isinstance(runtime_tenant_id, int)
+                else tenant_scope(runtime_tenant_id)
+            )
             with (
                 agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")),
-                (
-                    owned_tenant_scope(runtime_tenant_id)
-                    if (validation.tool_id, action) == ("products", "exists")
-                    else tenant_scope(runtime_tenant_id)
-                )
-                if runtime_tenant_id is not None
-                else nullcontext(),
+                scope if runtime_tenant_id is not None else nullcontext(),
             ):
-                result = (
-                    _dispatch_reviewed_query(step.tool_id, action, params)
-                    if reviewed_query
-                    else execute_registered_workflow_tool(step.tool_id, action, params)
+                from app.application.agent_orchestrator.tool_permission import (
+                    begin_idempotent_replay,
+                    finish_idempotent_replay,
                 )
+
+                context_key = str(params["_runtime_context"].get("idempotency_key") or "")
+                client_key = str(params.get("idempotency_key") or "")
+                idem_key, replay = (
+                    begin_idempotent_replay(
+                        params["_runtime_context"], validation.tool_id, action, params
+                    )
+                    if client_key
+                    or context_key
+                    or (validation.spec is not None and validation.spec.idempotent)
+                    else ("", None)
+                )
+                if replay is not None:
+                    return replay
+                try:
+                    result = (
+                        _dispatch_reviewed_query(step.tool_id, action, params)
+                        if reviewed_query
+                        else execute_registered_workflow_tool(step.tool_id, action, params)
+                    )
+                except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
+                    raise
+                except RECOVERABLE_ERRORS as exc:
+                    result = {
+                        "success": False,
+                        "error_code": "tool_exception",
+                        "message": "工具执行失败",
+                        "exception_type": type(exc).__name__,
+                        "outcome": "unknown",
+                        "retryable": False,
+                        "reconciliation_required": True,
+                    }
+                finally:
+                    if idem_key and not isinstance(result, dict):
+                        finish_idempotent_replay(
+                            idem_key,
+                            {
+                                "success": False,
+                                "error_code": "tool_execution_interrupted",
+                                "outcome": "unknown",
+                                "retryable": False,
+                                "reconciliation_required": True,
+                            },
+                        )
         except AgentModAuthorizationError as exc:
             return {
                 "success": False,
@@ -306,11 +419,42 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": action,
                 "raw_result_type": type(result).__name__,
+                "outcome": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
             }
+        from app.application.agent_orchestrator.tool_permission import (
+            classify_http_status,
+            finish_idempotent_replay,
+            reject_empty_business_result,
+        )
+
+        status_code = result.get("status_code", result.get("http_status"))
+        try:
+            status_value = int(status_code) if status_code not in (None, "") else 0
+        except (TypeError, ValueError):
+            status_value = 0
+        if status_value >= 400:
+            result = {**result, **classify_http_status(status_value)}
+        empty = reject_empty_business_result(result, action=action)
+        if empty is not None:
+            result = {**empty, "outcome": "unknown", "reconciliation_required": True}
 
         output_validation = validate_tool_result(validation.tool_id, action, result)
         if not output_validation.ok:
-            return {
+            # A completed read with an invalid response is a contract failure.
+            # Mutations and any pre-existing uncertainty must retain their claim.
+            requires_reconciliation = (
+                validation.spec is None
+                or not validation.spec.read_only
+                or invocation_requires_reconciliation()
+                or execution_result_requires_reconciliation(result)
+                or result.get("outcome_unknown") is True
+                or str(result.get("execution_status") or "").lower()
+                in {"unknown", "timeout", "timed_out", "interrupted"}
+                or "unknown" in str(result.get("error_code") or "").lower()
+            )
+            result = {
                 "success": False,
                 "error_code": output_validation.error_code,
                 "message": output_validation.message,
@@ -321,7 +465,11 @@ class AgentToolExecutor:
                 "raw_error_code": result.get("error_code"),
                 "output_keys": sorted(str(key) for key in result.keys()),
             }
-        return result
+            if requires_reconciliation:
+                result.update(outcome="unknown", retryable=False, reconciliation_required=True)
+        if idem_key:
+            finish_idempotent_replay(idem_key, result)
+        return cast("dict[str, Any]", result)
 
 
 def execute_with_tool_deadline(

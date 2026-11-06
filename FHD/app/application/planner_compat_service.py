@@ -320,6 +320,24 @@ def _prepare_compat_chat_body(request: Request, body: XcagiCompatChatBody) -> Xc
     return body.model_copy(update={"context": context})
 
 
+def _settle_dialogue_turn(body: XcagiCompatChatBody, payload: dict[str, Any], status: str) -> None:
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        data = {}
+    if data.get("replay") or data.get("status") == "processing":
+        return
+    from app.application.ai_chat.dialogue_memory import settle_chat_turn
+
+    message = str(getattr(body, "message", "") or "")
+    context = getattr(body, "context", None)
+    if not message or not isinstance(context, dict):
+        return
+    try:
+        settle_chat_turn(message, context, payload, status)
+    except RECOVERABLE_ERRORS:
+        logger.warning("dialogue turn settle failed", exc_info=True)
+
+
 def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]) -> None:
     from app.application import get_ai_chat_app_service
     from app.application.task_conversation_store import durable_user_id
@@ -345,17 +363,19 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Pa
             payload = await _execute_compat_chat_impl(request, body)
     except HTTPException as exc:
         metadata = request_route_metadata(request)
+        message = (
+            exc.detail
+            if isinstance(exc.detail, str)
+            else str(exc.detail.get("message") or "对话执行失败")
+            if isinstance(exc.detail, dict)
+            else "对话执行失败"
+        )
+        failure = {"success": False, "response": message}
         if metadata:
-            message = (
-                exc.detail
-                if isinstance(exc.detail, str)
-                else str(exc.detail.get("message") or "对话执行失败")
-                if isinstance(exc.detail, dict)
-                else "对话执行失败"
-            )
-            _persist_compat_chat_turn(
-                body, {"success": False, "response": message, "route_metadata": metadata}
-            )
+            failure["route_metadata"] = metadata
+        _settle_dialogue_turn(body, failure, "failed")
+        if metadata:
+            _persist_compat_chat_turn(body, failure)
             raise HTTPException(
                 status_code=exc.status_code,
                 detail={"message": message, "route_metadata": metadata},
@@ -366,6 +386,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Pa
     if metadata:
         payload["route_metadata"] = metadata
     _persist_compat_chat_turn(body, payload)
+    _settle_dialogue_turn(body, payload, "completed" if payload.get("success") else "failed")
     return payload
 
 
@@ -397,45 +418,67 @@ async def compat_chat_stream_async(
     )
     pending = b""
     last_metadata: dict[str, Any] = {}
-    with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
-        async with aclosing(stream.run(request, body, ai_tier=ai_tier)) as chunks:
-            async for chunk in chunks:
-                if not pending and not chunk.startswith((b"data", b"event:")):
-                    yield chunk
-                    continue
-                pending += chunk
-                while b"\n\n" in pending:
-                    event, pending = pending.split(b"\n\n", 1)
-                    encoded = event + b"\n\n"
-                    for line in event.splitlines():
-                        if not line.startswith(b"data: "):
-                            continue
-                        try:
-                            item = json.loads(line[6:])
-                        except (ValueError, UnicodeError):
-                            continue
-                        if not isinstance(item, dict):
-                            continue
-                        metadata = request_route_metadata(request)
-                        if metadata and metadata != last_metadata:
-                            yield _sse_event({"type": "route_metadata", "route_metadata": metadata})
-                            last_metadata = metadata
-                        if item.get("type") == "done" and isinstance(item.get("result"), dict):
-                            if metadata:
-                                item["result"]["route_metadata"] = metadata
-                            _persist_compat_chat_turn(body, item["result"])
-                        elif item.get("type") == "error":
-                            if metadata:
-                                item["route_metadata"] = metadata
-                            _persist_compat_chat_turn(
-                                body,
-                                {
+    settled = False
+    try:
+        with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+            async with aclosing(stream.run(request, body, ai_tier=ai_tier)) as chunks:
+                async for chunk in chunks:
+                    if not pending and not chunk.startswith((b"data", b"event:")):
+                        yield chunk
+                        continue
+                    pending += chunk
+                    while b"\n\n" in pending:
+                        event, pending = pending.split(b"\n\n", 1)
+                        encoded = event + b"\n\n"
+                        for line in event.splitlines():
+                            if not line.startswith(b"data: "):
+                                continue
+                            try:
+                                item = json.loads(line[6:])
+                            except (ValueError, UnicodeError):
+                                continue
+                            if not isinstance(item, dict):
+                                continue
+                            metadata = request_route_metadata(request)
+                            if metadata and metadata != last_metadata:
+                                yield _sse_event(
+                                    {"type": "route_metadata", "route_metadata": metadata}
+                                )
+                                last_metadata = metadata
+                            if item.get("type") == "done" and isinstance(item.get("result"), dict):
+                                if metadata:
+                                    item["result"]["route_metadata"] = metadata
+                                _persist_compat_chat_turn(body, item["result"])
+                                outcome = (
+                                    "completed" if item["result"].get("success", True) else "failed"
+                                )
+                                _settle_dialogue_turn(body, item["result"], outcome)
+                                settled = True
+                            elif item.get("type") == "error":
+                                if metadata:
+                                    item["route_metadata"] = metadata
+                                failure = {
                                     "success": False,
                                     "response": str(item.get("message") or "对话执行失败"),
+                                    "data": {"status": item.get("status") or "failed"},
                                     **({"route_metadata": metadata} if metadata else {}),
-                                },
-                            )
-                        encoded = _sse_event(item)
-                    yield encoded
-    if pending:
-        yield pending
+                                }
+                                _persist_compat_chat_turn(body, failure)
+                                error_status = (
+                                    "interrupted"
+                                    if item.get("status") == "interrupted"
+                                    else "failed"
+                                )
+                                _settle_dialogue_turn(body, failure, error_status)
+                                settled = True
+                            encoded = _sse_event(item)
+                        yield encoded
+        if pending:
+            yield pending
+    finally:
+        if not settled:
+            _settle_dialogue_turn(
+                body,
+                {"success": False, "data": {"status": "interrupted"}},
+                "interrupted",
+            )

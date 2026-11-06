@@ -44,7 +44,9 @@ class WorkflowRunStatus(str, Enum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    TIMED_OUT = "timed_out"
     CANCELLED = "cancelled"
+    REJECTED = "rejected"
     AWAITING_APPROVAL = "awaiting_approval"
 
 

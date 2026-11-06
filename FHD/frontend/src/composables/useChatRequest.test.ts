@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref } from 'vue'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { defineComponent, h, ref } from 'vue'
+import { mount } from '@vue/test-utils'
 import { useChatRequest } from './useChatRequest'
 
 vi.mock('@/api/chat', () => ({
@@ -116,9 +117,9 @@ describe('useChatRequest', () => {
     expect(history[0].content).not.toContain('<b>')
   })
 
-  it('buildPlannerChatRequestPayload limits history to 6 messages', () => {
+  it('buildPlannerChatRequestPayload keeps forty messages and does not stop at six', () => {
     const deps = makeDeps()
-    deps.messages.value = Array.from({ length: 10 }, (_, i) => ({
+    deps.messages.value = Array.from({ length: 50 }, (_, i) => ({
       role: 'user' as const,
       content: `msg ${i}`,
       time: '10:00',
@@ -126,8 +127,10 @@ describe('useChatRequest', () => {
     const req = useChatRequest(deps)
     const { body } = req.buildPlannerChatRequestPayload('hello')
     const ctx = body.context as Record<string, unknown>
-    const history = ctx.recent_messages as unknown[]
-    expect(history.length).toBeLessThanOrEqual(6)
+    const history = ctx.recent_messages as Array<{ content: string }>
+    expect(history).toHaveLength(40)
+    expect(history[0].content).toBe('msg 10')
+    expect(history.at(-1)?.content).toBe('msg 49')
   })
 
   it('buildPlannerChatRequestPayload with fromWriteUnlock option', () => {
@@ -315,3 +318,47 @@ describe('useChatRequest', () => {
   expect(vi.getTimerCount()).toBe(0)
   vi.useRealTimers()
  })
+
+describe('useChatRequest page cache', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  it('stops the wait ticker while the chat page is cached and resumes it on return', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-06T04:00:00Z'))
+    const visible = ref(true)
+    let request!: ReturnType<typeof useChatRequest>
+    const Child = defineComponent({
+      setup() {
+        request = useChatRequest({
+          messages: ref([]),
+          sessionId: ref('session-1'),
+          lastRequestContextSummary: ref(''),
+          plannerWriteUnlockResumeDraft: ref(''),
+          resolveChatDbTokensForPayload: () => ({}),
+          injectExcelContextPayload: () => false,
+          consumeMultimodalIntoPlannerContext: () => undefined,
+        })
+        request.startWaitProgressTimer()
+        return () => h('div')
+      },
+    })
+    const Root = defineComponent({
+      components: { Child },
+      setup() { return { visible } },
+      template: '<keep-alive><Child v-if="visible" /></keep-alive>',
+    })
+    const wrapper = mount(Root)
+    await vi.advanceTimersByTimeAsync(1000)
+    const whileVisible = request.loadingProgressText.value
+    expect(whileVisible).toContain('1s')
+    visible.value = false
+    await wrapper.vm.$nextTick()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(request.loadingProgressText.value).toBe(whileVisible)
+    visible.value = true
+    await wrapper.vm.$nextTick()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(request.loadingProgressText.value).toContain('2s')
+    wrapper.unmount()
+  })
+})

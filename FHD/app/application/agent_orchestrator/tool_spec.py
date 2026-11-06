@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
@@ -351,6 +352,48 @@ def _type_matches(value: Any, expected: str) -> bool:
     return True
 
 
+def _numeric_bound_error(key: str, value: Any, prop: dict[str, Any]) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return ""
+    if "minimum" in prop and value < prop["minimum"]:
+        return f"字段 {key} 低于最小值 {prop['minimum']}"
+    if "maximum" in prop and value > prop["maximum"]:
+        return f"字段 {key} 超过最大值 {prop['maximum']}"
+    if "exclusiveMinimum" in prop and value <= prop["exclusiveMinimum"]:
+        return f"字段 {key} 必须大于 {prop['exclusiveMinimum']}"
+    if "exclusiveMaximum" in prop and value >= prop["exclusiveMaximum"]:
+        return f"字段 {key} 必须小于 {prop['exclusiveMaximum']}"
+    return ""
+
+
+def _string_constraint_error(key: str, value: Any, prop: dict[str, Any]) -> str:
+    if not isinstance(value, str):
+        return ""
+    if "minLength" in prop and len(value) < int(prop["minLength"]):
+        return f"字段 {key} 短于最小长度"
+    if "maxLength" in prop and len(value) > int(prop["maxLength"]):
+        return f"字段 {key} 超过最大长度 {prop['maxLength']}"
+    pattern = prop.get("pattern")
+    if isinstance(pattern, str) and pattern and re.fullmatch(pattern, value) is None:
+        return f"字段 {key} 格式不符合要求"
+    expected = str(prop.get("format") or "")
+    if expected == "date" and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+        return f"字段 {key} 不是日期"
+    if expected == "email":
+        local, separator, domain = value.partition("@")
+        if (
+            not local
+            or not separator
+            or "@" in domain
+            or "." not in domain[1:-1]
+            or any(char.isspace() for char in value)
+        ):
+            return f"字段 {key} 不是邮箱"
+    if expected == "phone" and re.fullmatch(r"1\d{10}", value) is None:
+        return f"字段 {key} 不是手机号"
+    return ""
+
+
 def _validate_schema_payload(
     schema: dict[str, Any],
     payload: dict[str, Any],
@@ -369,19 +412,77 @@ def _validate_schema_payload(
         ):
             return False, f"{subject} 缺少字段：{key}"
 
-    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    raw_properties = schema.get("properties")
+    properties = raw_properties if isinstance(raw_properties, dict) else {}
+    if schema.get("additionalProperties") is False:
+        unknown = [key for key in payload if key not in properties]
+        if unknown:
+            return False, f"{subject} 存在未定义字段：{unknown[0]}"
+    dependencies = schema.get("dependentRequired")
+    if isinstance(dependencies, dict):
+        for key, needed in dependencies.items():
+            if _is_empty(payload.get(str(key))) or not isinstance(needed, list):
+                continue
+            for item in needed:
+                if _is_empty(payload.get(str(item))):
+                    return False, f"{subject} 字段 {key} 需要同时提供 {item}"
     for key, prop in (properties or {}).items():
         if key not in payload or payload.get(key) is None:
             continue
         if not isinstance(prop, dict):
             continue
+        value = payload.get(key)
         expected_type = str(prop.get("type") or "").strip()
-        if expected_type and not _type_matches(payload.get(key), expected_type):
+        if expected_type and not _type_matches(value, expected_type):
             return False, f"{subject} 字段 {key} 类型错误，应为 {expected_type}"
         enum_values = prop.get("enum")
-        if isinstance(enum_values, list) and enum_values and payload.get(key) not in enum_values:
+        if isinstance(enum_values, list) and enum_values and value not in enum_values:
             return False, f"{subject} 字段 {key} 不在允许范围内"
+        bound = _numeric_bound_error(key, value, prop) or _string_constraint_error(key, value, prop)
+        if bound:
+            return False, f"{subject} {bound}"
+        if expected_type == "object" and isinstance(value, dict) and prop.get("properties"):
+            nested_ok, nested_message = _validate_schema_payload(
+                prop, value, subject=f"{subject}.{key}"
+            )
+            if not nested_ok:
+                return False, nested_message
+        if expected_type == "array" and isinstance(value, list):
+            if "minItems" in prop and len(value) < int(prop["minItems"]):
+                return False, f"{subject} 字段 {key} 数量不足"
+            if "maxItems" in prop and len(value) > int(prop["maxItems"]):
+                return False, f"{subject} 字段 {key} 数量超限"
+            raw_items = prop.get("items")
+            item_schema = raw_items if isinstance(raw_items, dict) else {}
+            item_type = str(item_schema.get("type") or "")
+            for index, item in enumerate(value):
+                if item_type and not _type_matches(item, item_type):
+                    return False, f"{subject} 字段 {key}[{index}] 类型错误，应为 {item_type}"
+                if item_type == "object" and isinstance(item, dict):
+                    nested_ok, nested_message = _validate_schema_payload(
+                        item_schema, item, subject=f"{subject}.{key}[{index}]"
+                    )
+                    if not nested_ok:
+                        return False, nested_message
+    options = schema.get("anyOf")
+    if isinstance(options, list) and options:
+        last = ""
+        matched = False
+        for option in options:
+            if not isinstance(option, dict):
+                continue
+            ok, last = _validate_schema_payload(option, payload, subject=subject)
+            if ok:
+                matched = True
+                break
+        if not matched:
+            return False, last or f"{subject} 未满足任一必填组合"
     return True, ""
+
+
+def validate_schema_object(schema: dict[str, Any], payload: dict[str, Any]) -> tuple[bool, str]:
+    """Validate one object against the subset of JSON Schema used by tool calls."""
+    return _validate_schema_payload(schema or {}, payload, subject="参数")
 
 
 def _validate_input_schema(spec: ToolActionSpecV2, params: dict[str, Any]) -> tuple[bool, str]:

@@ -30,11 +30,11 @@ describe('initial frontend bootstrap dependencies', () => {
     await expect(mounted).resolves.toEqual({ locale: 'zh-CN' })
   })
 
-  it('does not proceed when initial route authorization fails', async () => {
+  it('still returns i18n when the first navigation fails so the shell can show the error', async () => {
     const result = waitForInitialBootstrapDependencies(
       async () => ({ locale: 'zh-CN' }),
       async () => { throw new Error('initial route failed') },
     )
-    await expect(result).rejects.toThrow('initial route failed')
+    await expect(result).resolves.toEqual({ locale: 'zh-CN' })
   })
 })

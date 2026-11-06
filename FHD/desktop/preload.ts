@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
     ipcRenderer.invoke('xcagi:report-error', payload),
   consumeReleaseNotes: () => ipcRenderer.invoke('xcagi:consume-release-notes'),
   captureScreenshot: () => ipcRenderer.invoke('xcagi:capture-screenshot'),
+  openWindow: (url?: string) => ipcRenderer.invoke('xcagi:open-window', { url }),
   onDeepLink: (callback: (url: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url)
     ipcRenderer.on('xcagi:deep-link', listener)

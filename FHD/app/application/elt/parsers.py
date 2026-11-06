@@ -389,6 +389,10 @@ def parse_file(
                 "兼容预设仅适用于 XLSX/XLSM 文件；CSV 请使用自动识别",
             )
         return _parse_csv(source, max_rows, target_type)
+    if suffix in STRUCTURED_SUFFIXES and target_type == "attendance":
+        from app.application.elt.attendance_pipeline import parse_attendance_dataset
+
+        return parse_attendance_dataset(source, max_rows=max_rows)
     if suffix in STRUCTURED_SUFFIXES:
         if compatibility_preset_id and target_type not in {
             "customer_products",

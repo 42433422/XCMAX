@@ -104,6 +104,11 @@ class CompatChatApplication:
                     turn.channel,
                 ),
             )
+        from app.application.ai_chat.dialogue_memory import prepare_chat_turn
+
+        prepared = prepare_chat_turn(body.message, context)
+        if prepared is not None:
+            return self._attach(prepared, turn)
         return await self.execution.execute(request, turn, timeout=self.timeout_seconds())
 
     async def batch(self, request: Request, body: XcagiCompatChatBatchBody) -> Payload:

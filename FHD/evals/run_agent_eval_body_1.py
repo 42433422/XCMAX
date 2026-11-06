@@ -120,9 +120,10 @@ def _authenticated_route_fixture(client, *, tenant_id=7):
         sid = uuid4().hex
         with factory.begin() as db:
             role = Role(name="user")
+            # Route contracts call OCR through the live permission check.
             role.permissions = [
                 Permission(code=p["code"], name=p["name"]) for p in DEFAULT_PERMISSIONS
-            ]
+            ] + [Permission(code="tool.ocr.request", name="请求 OCR")]
             db.add(role)
             user = User(
                 username="fixture-" + sid,
@@ -2594,5 +2595,3 @@ def _run_business_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "publish_call_count": ocr_domain.emit_ocr_requested.call_count,
         },
     )
-
-

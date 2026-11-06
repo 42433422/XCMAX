@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   updateMemory: vi.fn(),
   deleteMemory: vi.fn(),
   omniscient: vi.fn(),
+  listDatasets: vi.fn(),
   status: vi.fn(),
   graph: vi.fn(),
   memories: vi.fn(),
@@ -127,6 +128,13 @@ describe('Persy knowledge composables', () => {
   })
 
   it('applies a dataset and rebuilds its active index', async () => {
+    mocks.listDatasets.mockResolvedValue({
+      success: true,
+      datasets: {
+        'persy-knowledge': { document_count: 0, chunk_count: 0 },
+        'office-docking': { document_count: 2, chunk_count: 2 },
+      },
+    })
     mocks.omniscient.mockResolvedValue({
       success: true,
       document_count: 1,
@@ -165,5 +173,41 @@ describe('Persy knowledge composables', () => {
 
     expect(mocks.rebuildIndex).toHaveBeenCalledWith('tenant-space')
     expect(data.rebuildingIndex.value).toBe(false)
+  })
+
+  it('opens the dataset that already holds uploaded documents', async () => {
+    mocks.listDatasets.mockResolvedValue({
+      success: true,
+      datasets: {
+        'persy-knowledge': { document_count: 0, chunk_count: 0 },
+        'office-docking': { document_count: 2, chunk_count: 2 },
+      },
+    })
+    mocks.omniscient.mockResolvedValue({ success: true, datasets: {} })
+    mocks.status.mockResolvedValue({
+      success: true,
+      dataset_id: 'office-docking',
+      document_count: 2,
+      chunk_count: 2,
+      documents: [],
+      index: { semantic_embedding_available: true, embedding_count: 2 },
+    })
+    mocks.graph.mockResolvedValue({
+      success: true,
+      dataset_id: 'office-docking',
+      nodes: [
+        { id: 'root', label: 'root', type: 'core' },
+        { id: 'source', label: '送货单', type: 'source' },
+      ],
+      edges: [],
+    })
+    mocks.memories.mockResolvedValue({ success: true, memories: [] })
+
+    const data = usePersyKnowledgeData({ viewMode: ref('graph') })
+    await data.refreshAll()
+
+    expect(data.activeDatasetId.value).toBe('office-docking')
+    expect(mocks.graph).toHaveBeenCalledWith('office-docking')
+    expect(data.retrievalModeText.value).toBe('语义召回')
   })
 })

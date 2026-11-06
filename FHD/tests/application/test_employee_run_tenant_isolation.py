@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.application.employee_runtime import run_ledger
 from app.db.models.employee_run_log import EmployeeRunLog
+from app.db.models.task_lifecycle import TaskLifecycleIdempotency, TaskLifecycleRecord
 
 
 @pytest.fixture
@@ -19,7 +20,8 @@ def ledger(monkeypatch):
     engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
-    EmployeeRunLog.__table__.create(engine)
+    for model in (EmployeeRunLog, TaskLifecycleRecord, TaskLifecycleIdempotency):
+        model.__table__.create(engine)
 
     @contextmanager
     def database():
@@ -165,3 +167,32 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
     assert payload["user_id"] == 7 and payload["session_id"] == "trusted-session"
     assert payload["tenant_id"] == 1 and "_runtime_context" not in payload
     assert payload["run_id"] == response.json()["run_id"]
+
+
+def test_employee_decision_does_not_expose_internal_errors(monkeypatch):
+    from app.application import session_account_meta
+    from app.domain.app_pure import auth_permission_resolver
+    from app.fastapi_routes.domains.misc import helpers
+    from app.fastapi_routes.xcmax_admin import local_employee_decision
+    from app.infrastructure.auth import dependencies
+
+    def fail(*args, **kwargs):
+        raise ValueError("database path=/private/ledger; credential=private-value")
+
+    monkeypatch.setattr(helpers, "_session_id_from_request", lambda request: "session-1")
+    monkeypatch.setattr(
+        dependencies, "resolve_session_user", lambda request: SimpleNamespace(id=7, tier="admin")
+    )
+    monkeypatch.setattr(
+        session_account_meta, "enrich_session_meta_with_tenant", lambda sid, user: {"tenant_id": 1}
+    )
+    monkeypatch.setattr(auth_permission_resolver, "require_allowed", lambda **kwargs: None)
+    monkeypatch.setattr(run_ledger, "decide_employee_run_log", fail)
+    app = FastAPI()
+    app.add_api_route(
+        "/decisions/{employee_id}/{run_id}", local_employee_decision, methods=["POST"]
+    )
+    with TestClient(app) as client:
+        response = client.post("/decisions/employee-1/1", json={"decision": "approve"})
+    assert response.status_code == 409
+    assert response.json() == {"success": False, "message": "审批决定无效或任务状态已变化"}

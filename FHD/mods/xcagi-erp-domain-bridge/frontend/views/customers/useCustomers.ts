@@ -73,6 +73,10 @@ export function useCustomers() {
   const purchaseUnitOptions = ref<UnitOption[]>([]);
   const selectedPurchaseUnit = ref('');
   const loading = ref(false);
+  const loadError = ref('');
+  let customersLoaded = false;
+  let templatesAttempted = false;
+  const CUSTOMER_LOAD_TIMEOUT_MS = 8000;
   const selectedIds = ref<(number | string)[]>([]);
   const page = ref(1);
   const perPage = 20;
@@ -153,17 +157,37 @@ export function useCustomers() {
     return merged;
   };
 
-  const loadCustomers = async ({ reset = true }: { reset?: boolean } = {}) => {
+  function customerLoadErrorMessage(error: unknown): string {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return '网络连接异常，请重试';
+    const message = error instanceof Error ? error.message : '';
+    if (/failed to fetch|network|连接|offline|ERR_INTERNET_DISCONNECTED|ERR_CONNECTION/i.test(message)) return '网络连接异常，请重试';
+    if (/timeout|超时|AbortError|ERR_TIMED_OUT/i.test(message)) return '加载超时，请重试';
+    const status = Number((error as { status?: number } | null)?.status || 0);
+    if (status >= 500) return '客户列表加载失败，请重试';
+    return message || '客户列表加载失败，请重试';
+  }
+
+  const loadCustomers = async ({ reset = true, background = false }: { reset?: boolean; background?: boolean } = {}) => {
     if (loading.value) return;
-    loading.value = true;
+    const quiet = background && customersLoaded;
+    if (!quiet) {
+      loading.value = true;
+      loadError.value = '';
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const nextPage = reset ? 1 : page.value;
       const pu = String(selectedPurchaseUnit.value || '').trim();
-      const data: CustomersListResponse = await customersApi.getCustomers({
-        page: nextPage,
-        per_page: perPage,
-        ...(pu ? { purchase_unit: pu } : {})
-      });
+      const data: CustomersListResponse = await Promise.race([
+        customersApi.getCustomers({
+          page: nextPage,
+          per_page: perPage,
+          ...(pu ? { purchase_unit: pu } : {})
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('加载超时，请重试')), CUSTOMER_LOAD_TIMEOUT_MS);
+        }),
+      ]);
       if (data.success) {
         const incoming = data.data ?? data.customers ?? [];
         const total = Number(data.total ?? incoming.length);
@@ -177,13 +201,21 @@ export function useCustomers() {
 
         page.value = nextPage + 1;
         hasMore.value = customers.value.length < totalCustomers.value;
+        customersLoaded = true;
+        loadError.value = '';
+      } else {
+        loadError.value = data.message || '客户列表加载失败，请重试';
       }
     } catch (e) {
       console.error('加载客户失败:', e);
+      loadError.value = customerLoadErrorMessage(e);
     } finally {
+      if (timer) clearTimeout(timer);
       loading.value = false;
     }
   };
+
+  const retryLoadCustomers = () => loadCustomers({ reset: true });
 
   const loadMoreCustomers = async () => {
     if (!hasMore.value || loading.value) return;
@@ -308,10 +340,15 @@ export function useCustomers() {
     }
   };
 
-  const loadTemplateOptions = async () => {
-    loadingTemplateOptions.value = true;
+  const loadTemplateOptions = async ({ background = false }: { background?: boolean } = {}) => {
+    if (!(background && templatesAttempted)) loadingTemplateOptions.value = true;
     try {
-      const res = (await templatePreviewApi.listTemplates()) as ExportTemplatesResponse;
+      const res = await Promise.race([
+        templatePreviewApi.listTemplates() as Promise<ExportTemplatesResponse>,
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('加载超时，请重试')), CUSTOMER_LOAD_TIMEOUT_MS);
+        }),
+      ]);
       if (!res?.success) return;
       const templates = Array.isArray(res.templates) ? res.templates : [];
       templateOptions.value = templates.filter((tpl) => {
@@ -326,6 +363,7 @@ export function useCustomers() {
     } catch (e) {
       console.error('加载客户导出模板失败:', e);
     } finally {
+      templatesAttempted = true;
       loadingTemplateOptions.value = false;
     }
   };
@@ -358,13 +396,13 @@ export function useCustomers() {
     loadCustomers({ reset: true });
   });
 
-  const refreshCustomersView = () => {
+  const refreshCustomersView = (background = false) => {
     loadPurchaseUnitOptions();
-    loadCustomers({ reset: true });
-    loadTemplateOptions();
+    loadCustomers({ reset: true, background });
+    loadTemplateOptions({ background });
   };
-  onMounted(refreshCustomersView);
-  onActivated(refreshCustomersView);
+  onMounted(() => refreshCustomersView(false));
+  onActivated(() => refreshCustomersView(customersLoaded));
 
   return {
     pageNavTitle, entityName,
@@ -374,6 +412,8 @@ export function useCustomers() {
     purchaseUnitOptions,
     selectedPurchaseUnit,
     loading,
+    loadError,
+    retryLoadCustomers,
     selectedIds,
     totalCustomers,
     hasMore,

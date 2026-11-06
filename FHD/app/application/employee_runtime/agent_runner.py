@@ -85,6 +85,7 @@ def run_agent_handler(
     except (TypeError, ValueError):
         repeat_limit = 3
 
+    history = agent_cfg.get("history") if isinstance(agent_cfg.get("history"), list) else None
     return run_employee_agent_loop(
         employee_id=employee_id,
         system_prompt=system_prompt,
@@ -96,6 +97,7 @@ def run_agent_handler(
         max_iterations=max_iters or 6,
         wall_time_limit_sec=max(1.0, wall_time_limit_sec),
         repeat_limit=max(2, repeat_limit),
+        history=history,
     )
 
 

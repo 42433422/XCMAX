@@ -72,7 +72,7 @@ from .market_bridge.settings import _market_http_retries as _market_http_retries
 from .market_bridge.settings import _market_http_timeout as _market_http_timeout
 from .market_bridge.settings import _market_internal_api_key as _market_internal_api_key
 from .market_bridge.settings import _market_validate_fast_timeout as _market_validate_fast_timeout
-from .market_bridge.token_lifecycle import TokenLifecycle
+from .market_bridge.token_lifecycle import TokenLifecycle, invalidate_fast_token_validation
 from .market_browser_handoff import router as browser_handoff_router
 
 router = APIRouter(prefix="/api/market", tags=["market-account"])
@@ -143,6 +143,7 @@ def _token_lifecycle() -> TokenLifecycle:
         is_demo=bindings.is_demo_token,
         proxy_status=_proxy_error_http_status,
         fast_timeout=_market_validate_fast_timeout,
+        validation_origin=_market_api_base_url,
         logger=logger,
     )
 
@@ -271,10 +272,12 @@ def bind_market_auth_to_session(request: Request, market_result: dict[str, Any])
 def save_session_market_token(
     session_id: str, token: str, refresh_token: str | None = None
 ) -> None:
+    invalidate_fast_token_validation(session_id)
     return _session_tokens().save(session_id, token, refresh_token)
 
 
 def clear_session_market_token(session_id: str) -> None:
+    invalidate_fast_token_validation(session_id)
     return _session_tokens().clear(session_id)
 
 

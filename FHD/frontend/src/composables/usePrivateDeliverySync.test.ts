@@ -42,6 +42,21 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.useRealTimers(); vi.restoreAllMocks() })
 
 describe('automatic private delivery lifecycle', () => {
+  it('waits for shell readiness and coalesces repeated requests during startup', async () => {
+    const root = document.createElement('div')
+    root.id = 'app'; root.dataset.startupReady = 'false'
+    document.body.appendChild(root)
+    try {
+      start(); await flushPromises()
+      await sync.sync(); await vi.advanceTimersByTimeAsync(60_000)
+      expect(mocks.api).not.toHaveBeenCalled()
+      root.dataset.startupReady = 'true'
+      window.dispatchEvent(new Event('xcagi:startup-ready')); await flushPromises()
+      expect(mocks.api).toHaveBeenCalledTimes(1)
+      expect(sync.result.value).toEqual(empty)
+    } finally { root.remove() }
+  })
+
   it.each(['anonymous', 'hydrating', 'noWorkspace'])('%s does not call installation', async (kind) => {
     if (kind === 'anonymous') account.marketUserId = 0
     if (kind === 'hydrating') account.loaded = false
@@ -177,11 +192,43 @@ describe('automatic private delivery lifecycle', () => {
     expect(mocks.api.mock.calls.filter(([path]) => path === '/api/mod-store/private-delivery/sync')).toHaveLength(2)
   })
 
+  it.each([false, true])('keeps failed sync state unpublished and refreshes after recovery (HTTP ok=%s)', async (ok) => {
+    mocks.api.mockResolvedValueOnce({ ok, json: async () => ({ success: false }) })
+    start(); await flushPromises()
+    expect(sync.result.value).toBeNull()
+    expect(sync.pending.value).toBe(false)
+    expect(mocks.register).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(sync.result.value).toEqual(empty)
+    expect(mocks.register).toHaveBeenCalledOnce()
+  })
+
+  it('preserves the current menu when delivered routes are malformed and retries later', async () => {
+    mods.mods = [{ id: 'current' }]
+    mocks.api.mockResolvedValueOnce(response({ ...empty, installed: ['new'] }))
+      .mockResolvedValueOnce(response([{ id: 'new' }]))
+      .mockResolvedValueOnce(response({ malformed: true }))
+    start(); await flushPromises()
+    expect(mods.mods).toEqual([{ id: 'current' }])
+    expect(mocks.register).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mocks.register).toHaveBeenCalledOnce()
+  })
+
   it('notifies about restart once until the pending update or account changes', async () => {
     mocks.api.mockResolvedValue(response({ ...empty, restart_required: ['private-new'] }))
     start(); await flushPromises(); await vi.advanceTimersByTimeAsync(120_000)
     expect(mocks.notify).toHaveBeenCalledExactlyOnceWith('私有扩展更新已就绪', '下次重启后生效')
     account.marketUserId = 202; await flushPromises()
+    expect(mocks.notify).toHaveBeenCalledTimes(2)
+  })
+
+  it('notifies again for a new pending update after the previous restart requirement clears', async () => {
+    mocks.api.mockResolvedValueOnce(response({ ...empty, restart_required: ['private-new'] }))
+      .mockResolvedValueOnce(response())
+      .mockResolvedValueOnce(response({ ...empty, restart_required: ['private-new'] }))
+    start(); await flushPromises()
+    await vi.advanceTimersByTimeAsync(120_000)
     expect(mocks.notify).toHaveBeenCalledTimes(2)
   })
 

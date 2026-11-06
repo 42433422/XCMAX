@@ -37,6 +37,12 @@ def check_invocation_deadline() -> None:
         raise TimeoutError("invocation deadline expired before dispatch")
 
 
+def invocation_requires_reconciliation() -> bool:
+    """Read trusted I/O uncertainty before an executor settles its durable claim."""
+    budget = _DEADLINE.get()
+    return bool(budget and (budget.uncertain or time.monotonic() > budget.deadline))
+
+
 @contextmanager
 def invocation_deadline(deadline: float) -> Iterator[InvocationBudget]:
     parent = _DEADLINE.get()

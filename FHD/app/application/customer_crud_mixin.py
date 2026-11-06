@@ -1,10 +1,21 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
-from app.infrastructure.tenant_scope import apply_tenant_filter, owned_tenant_id
+from app.infrastructure.tenant_scope import (
+    apply_tenant_filter,
+    current_tenant_id,
+    owned_tenant_id,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _scoped_units(query: Any, model: Any) -> Any:
+    """Tenant-scoped when a server tenant is active; legacy callers stay unchanged."""
+    if current_tenant_id() is None and owned_tenant_id() is None:
+        return query
+    return apply_tenant_filter(query, model)
 
 
 class CustomerCrudMixin:
@@ -21,7 +32,10 @@ class CustomerCrudMixin:
             try:
                 from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
 
-                query = session.query(PurchaseUnitModel).filter(PurchaseUnitModel.is_active == True)
+                query = _scoped_units(
+                    session.query(PurchaseUnitModel).filter(PurchaseUnitModel.is_active == True),
+                    PurchaseUnitModel,
+                )
 
                 if keyword:
                     pattern = f"%{keyword}%"
@@ -107,7 +121,7 @@ class CustomerCrudMixin:
                     return {"success": False, "message": "客户名称不能为空"}
 
                 existing = (
-                    apply_tenant_filter(session.query(PurchaseUnitModel), PurchaseUnitModel)
+                    _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
                     .filter(PurchaseUnitModel.unit_name == customer_name)
                     .first()
                 )
@@ -115,12 +129,16 @@ class CustomerCrudMixin:
                 if existing:
                     return {"success": False, "message": "客户名称已存在"}
 
+                stamped = owned_tenant_id()
+                if stamped is None:
+                    stamped = current_tenant_id()
                 unit = PurchaseUnitModel(
                     unit_name=customer_name,
                     contact_person=data.get("contact_person", ""),
                     contact_phone=data.get("contact_phone", ""),
                     address=data.get("contact_address", ""),
-                    tenant_id=owned_tenant_id(),
+                    tenant_id=stamped,
+                    is_active=True,
                 )
 
                 session.add(unit)
@@ -166,7 +184,7 @@ class CustomerCrudMixin:
                 from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
 
                 unit = (
-                    session.query(PurchaseUnitModel)
+                    _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
                     .filter(PurchaseUnitModel.id == customer_id)
                     .first()
                 )
@@ -176,7 +194,7 @@ class CustomerCrudMixin:
 
                 if "customer_name" in data:
                     existing = (
-                        session.query(PurchaseUnitModel)
+                        _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
                         .filter(
                             PurchaseUnitModel.unit_name == data["customer_name"],
                             PurchaseUnitModel.id != customer_id,
@@ -298,7 +316,7 @@ class CustomerCrudMixin:
                 from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
 
                 unit = (
-                    session.query(PurchaseUnitModel)
+                    _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
                     .filter(PurchaseUnitModel.id == customer_id)
                     .first()
                 )
@@ -365,7 +383,11 @@ class CustomerCrudMixin:
             try:
                 from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
 
-                units = session.query(PurchaseUnitModel).filter(PurchaseUnitModel.id.in_(ids)).all()
+                units = (
+                    _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
+                    .filter(PurchaseUnitModel.id.in_(ids))
+                    .all()
+                )
 
                 if not units:
                     return {"success": False, "message": "未找到要删除的客户", "deleted_count": 0}

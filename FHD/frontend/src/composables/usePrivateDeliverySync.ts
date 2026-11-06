@@ -25,6 +25,7 @@ export function usePrivateDeliverySync() {
   let timer: ReturnType<typeof setInterval> | undefined
   let controller: AbortController | undefined
   let refreshNeeded = false
+  let waitingForShell = false
   const restartNotified = new Set<string>()
 
   function active() {
@@ -33,7 +34,24 @@ export function usePrivateDeliverySync() {
       && (Number(account.localUserId) > 0 || Number(account.tenantId) > 0)
   }
 
-  async function sync() {
+  function shellStillStarting() {
+    const root = document.getElementById('app')
+    if (!root) return false
+    return root.dataset.startupReady !== 'true'
+  }
+
+  function syncWhenShellReady(): void {
+    if (!shellStillStarting()) { void sync(); return }
+    if (waitingForShell || typeof window === 'undefined') return
+    waitingForShell = true
+    window.addEventListener('xcagi:startup-ready', () => {
+      waitingForShell = false
+      void sync()
+    }, { once: true })
+  }
+
+  async function sync(): Promise<void> {
+    if (shellStillStarting()) return syncWhenShellReady()
     if (!active() || controller || navigator.onLine === false) return
     const current = generation
     const request = new AbortController()
@@ -98,7 +116,7 @@ export function usePrivateDeliverySync() {
     if (active()) {
       const current = generation
       // A profile hydration may update several identity fields in one tick.
-      queueMicrotask(() => { if (current === generation) void sync() })
+      queueMicrotask(() => { if (current === generation) void syncWhenShellReady() })
       timer = setInterval(() => { void sync() }, 60_000)
     }
   }

@@ -162,7 +162,7 @@ class TestWorkflowEngineRunNode:
             nonlocal call_count
             call_count += 1
             if call_count <= 1:
-                return {"success": False, "message": "temp error"}
+                return {"success": False, "message": "temp error", "error_code": "timeout"}
             return {"success": True}
 
         engine = WorkflowEngine(tool_dispatcher=flaky_dispatch)

@@ -242,13 +242,17 @@ def conversations_sessions_list(
             limit=int(limit) + 1,
             offset=offset,
         )
-        return {
-            "success": True,
-            "mod_id": scope[1],
-            "sessions": page[: int(limit)],
-            "has_more": len(page) > int(limit),
-            "next_offset": offset + min(len(page), int(limit)),
-        }
+        from app.application.ai_chat.conversation_history import apply_history_fault
+
+        return apply_history_fault(
+            {
+                "success": True,
+                "mod_id": scope[1],
+                "sessions": page[: int(limit)],
+                "has_more": len(page) > int(limit),
+                "next_offset": offset + min(len(page), int(limit)),
+            }
+        )
     with _conversation_lock:
         user_bucket = dict(_xcagi_user_sessions.get(scope) or {})
     rows: list[tuple[float, dict[str, Any]]] = []
@@ -337,10 +341,14 @@ def conversations_get(
     scope = _xcagi_resolve_session_scope(resolved_user_id, mod_id)
     numeric_user_id = durable_user_id(scope[0])
     if numeric_user_id is not None:
-        return task_conversation_store.get_history(
-            session_id=cid,
-            user_id=numeric_user_id,
-            mod_id=scope[1],
+        from app.application.ai_chat.conversation_history import apply_history_fault
+
+        return apply_history_fault(
+            task_conversation_store.get_history(
+                session_id=cid,
+                user_id=numeric_user_id,
+                mod_id=scope[1],
+            )
         )
     with _conversation_lock:
         rec = (_xcagi_user_sessions.get(scope) or {}).get(cid)
@@ -353,14 +361,18 @@ def conversations_get(
                     break
         msgs = [dict(m) for m in list((rec or {}).get("messages") or [])]
         title = _xcagi_title_from_messages(msgs) if rec else None
-    return {
-        "success": True,
-        "id": cid,
-        "title": title,
-        "mod_id": scope[1],
-        "messages": msgs,
-        "metadata": {},
-    }
+    from app.application.ai_chat.conversation_history import apply_history_fault
+
+    return apply_history_fault(
+        {
+            "success": True,
+            "id": cid,
+            "title": title,
+            "mod_id": scope[1],
+            "messages": msgs,
+            "metadata": {},
+        }
+    )
 
 
 @router.delete("/conversations/{conversation_id}")

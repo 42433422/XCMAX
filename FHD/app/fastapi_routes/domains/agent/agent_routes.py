@@ -379,6 +379,19 @@ def continue_agent_run(
                 )
             runs = get_agent_run_repository()
             queue = get_task_execution_repository()
+            execution = queue.get(run_id)
+            if execution is not None and execution.state in {
+                "rejected",
+                "completed",
+                "succeeded",
+                "cancelled",
+                "failed",
+                "timed_out",
+            }:
+                return JSONResponse(
+                    {"success": False, "message": "任务已结束，不能审批通过后执行"},
+                    status_code=409,
+                )
             if isinstance(runs, SQLAlchemyAgentRunRepository):
                 durable = True
                 if not isinstance(queue, SQLAlchemyTaskExecutionRepository):

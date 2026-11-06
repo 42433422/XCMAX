@@ -199,6 +199,7 @@ _employee_execution = EmployeeExecution(
 )
 local_employee_execute = _employee_execution.local_employee_execute
 local_employee_runs = _employee_execution.local_employee_runs
+local_employee_decision = _employee_execution.local_employee_decision
 
 _employees = LocalEmployees(
     errors=_errors,

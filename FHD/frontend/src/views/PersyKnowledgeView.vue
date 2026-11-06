@@ -29,7 +29,7 @@
       </div>
 
       <div class="toolbar-actions">
-        <label v-if="adminOmniscient && datasetOptions.length" class="dataset-switch" title="知识空间">
+        <label v-if="datasetOptions.length > 1" class="dataset-switch" title="知识空间">
           <span>空间</span>
           <select v-model="datasetIdInput" @change="applyDataset">
             <option v-for="item in datasetOptions" :key="item.id" :value="item.id">
@@ -104,7 +104,7 @@
     </section>
 
     <div class="brain-workspace">
-      <main class="brain-stage">
+      <main class="brain-stage" @dragover.prevent @drop.prevent="dropKnowledgeFile">
         <template v-if="viewMode === 'graph'">
           <PersyKnowledgeGraph
             ref="graphComponent"
@@ -115,6 +115,11 @@
             @select-node="selectNode"
             @onboarding-action="handleOnboardingAction"
           />
+
+          <div v-if="knowledgeEmpty" class="graph-empty-actions">
+            <button type="button" class="import-button" @click="openImport('file')">导入资料</button>
+            <button type="button" class="secondary-button" @click="openImport('text')">粘贴文本</button>
+          </div>
 
           <div class="graph-hud graph-hud--stats" aria-label="图谱状态">
             <div>
@@ -407,6 +412,11 @@ const recall = usePersyRecallQuery({
 const { queryText, querying, queryMessage, queryError, answerText, lastQuery, resultChunks, recallState, queryKnowledge } = recall
 
 // selectNode / selectMemory 与 usePersyMemoryGovernance 互为初始化依赖，保留在此（与拆分前同为提升函数声明）
+function dropKnowledgeFile(event: DragEvent): void {
+  const file = event.dataTransfer?.files?.[0]
+  if (file) importDrawer.value?.openWithFile(file)
+}
+
 function selectNode(node: KnowledgeGraphNode): void {
   selectedNode.value = node
   memoryEditing.value = false

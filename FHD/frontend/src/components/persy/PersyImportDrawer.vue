@@ -47,30 +47,28 @@
           />
 
           <template v-if="importMode === 'file'">
-            <input
-              ref="fileInput"
-              class="visually-hidden"
-              type="file"
-              accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,.json,.log"
-              @change="selectFile"
-            />
-            <button
-              type="button"
+            <label
               class="drop-zone"
               :class="{ 'has-file': selectedFile, dragging: draggingFile }"
-              @click="openFilePicker"
               @dragenter.prevent="draggingFile = true"
               @dragover.prevent="draggingFile = true"
               @dragleave.prevent="draggingFile = false"
               @drop.prevent="dropFile"
             >
+              <input
+                ref="fileInput"
+                class="visually-hidden"
+                type="file"
+                accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,.json,.log"
+                @change="selectFile"
+              />
               <span class="drop-zone__icon">
                 <i :class="selectedFile ? 'fa fa-check' : 'fa fa-cloud-upload'" aria-hidden="true"></i>
               </span>
               <strong>{{ selectedFile?.name || '选择或拖入资料' }}</strong>
               <span v-if="selectedFile">{{ fileSizeText(selectedFile.size) }}</span>
               <span v-else>PDF、Word、Excel、Markdown、CSV、JSON，最大 25 MB</span>
-            </button>
+            </label>
             <button v-if="selectedFile" type="button" class="clear-file-button" @click="clearSelectedFile">移除文件</button>
           </template>
 
@@ -157,6 +155,18 @@ function open(mode: ImportMode): void {
   importOpen.value = true
 }
 
+function openWithFile(file: File): void {
+  open('file')
+  const error = validateKnowledgeFile(file)
+  if (error) {
+    ingestError.value = error
+    clearSelectedFile()
+    return
+  }
+  ingestError.value = ''
+  setSelectedFile(file)
+}
+
 function closeImport(): void {
   if (ingesting.value) return
   importOpen.value = false
@@ -204,10 +214,6 @@ async function ingestDocument(): Promise<void> {
   } finally {
     ingesting.value = false
   }
-}
-
-function openFilePicker(): void {
-  fileInput.value?.click()
 }
 
 function setSelectedFile(file: File | null): void {
@@ -261,7 +267,7 @@ function clearSelectedFile(): void {
   if (fileInput.value) fileInput.value.value = ''
 }
 
-defineExpose({ open })
+defineExpose({ open, openWithFile })
 </script>
 
 <style scoped src="./PersyImportDrawer.css"></style>

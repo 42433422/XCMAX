@@ -37,8 +37,8 @@ BASELINE = {
     # package (reviewed_excel/) + top-level reviewed_excel_template.py adapters.
     # Raised 2026-10-31 Asia/Shanghai for #2858: etl_auto_ingest.py
     # (progress API + route split so etl.py stays ≤20 @router).
-    "routes_total": 303,
-    "routes_top_level": 118,
+    "routes_total": 304,
+    "routes_top_level": 119,
     "legacy_prod_ref_files": 27,
     "application_ports_py": 1,
     "workflow_ports_py": 1,

@@ -134,6 +134,8 @@ class DatasetRepository:
                 self._prepare_loaded_state(state)
                 loaded[str(dataset_id)] = state
             self.datasets = loaded
+            if any(state.index.pop("_persist_after_load", None) for state in loaded.values()):
+                self._persist_locked()
         except RECOVERABLE_ERRORS:
             self.datasets = {}
 

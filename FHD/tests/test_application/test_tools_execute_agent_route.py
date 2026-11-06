@@ -34,7 +34,9 @@ def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
         ),
         patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain", return_value=ocr_domain),
     ):
-        response = _client(trusted_actor(user_id=17)).post(
+        response = _client(
+            trusted_actor(user_id=17, role="ocr-operator", permissions=["tool.ocr.request"])
+        ).post(
             "/api/tools/execute",
             json={
                 "tool_id": "ocr",
@@ -83,7 +85,9 @@ def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
         ),
         patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain", return_value=ocr_domain),
     ):
-        response = _client(trusted_actor(user_id=17)).post(
+        response = _client(
+            trusted_actor(user_id=17, role="ocr-operator", permissions=["tool.ocr.request"])
+        ).post(
             "/api/skills/execute",
             json={
                 "skill_id": "ocr",
@@ -125,7 +129,9 @@ def test_tools_execute_route_puts_medium_risk_tool_behind_confirmation(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
         return_value=repo,
     ):
-        response = _client(trusted_actor(user_id=17)).post(
+        response = _client(
+            trusted_actor(user_id=17, role="db-writer", permissions=["business_db.write"])
+        ).post(
             "/api/tools/execute",
             json={
                 "tool_id": "business_db",
@@ -141,7 +147,8 @@ def test_tools_execute_route_puts_medium_risk_tool_behind_confirmation(
 
     assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
+    assert payload["error_code"] == "approval_required"
     assert payload["agent_status"] == "waiting_user"
     assert payload["agent_run_id"] == payload["run_id"]
 

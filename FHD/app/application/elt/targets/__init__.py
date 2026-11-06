@@ -8,6 +8,7 @@ from app.application.elt.targets.targets_base import (
     json_safe,
 )
 from app.application.elt.targets.batch import (
+    AbnormalAdapter,
     AttendanceAdapter,
     ExportCsvAdapter,
     ExportXlsxAdapter,
@@ -26,6 +27,7 @@ _ADAPTERS: dict[str, TargetAdapter] = {
     adapter.type: adapter
     for adapter in (
         KnowledgeAdapter(),
+        AbnormalAdapter(),
         CustomerProductsAdapter(),
         CustomerAdapter(),
         ProductAdapter(),

@@ -181,17 +181,45 @@ def is_read_only(manifest: dict[str, Any], config: dict[str, Any]) -> bool:
     return bool(wp.get("read_only"))
 
 
+def _merge_lifecycle_tools(
+    employee_id: str,
+    manifest: dict[str, Any],
+    config: dict[str, Any],
+    specs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Append published lifecycle tools the employee runtime is allowed to call."""
+    try:
+        from app.application.agent_tool_lifecycle import discovery_for_runtime
+
+        extra = discovery_for_runtime(employee_id)
+    except RECOVERABLE_ERRORS:
+        return specs
+    allow = _explicit_allowlist(config, manifest)
+    merged = list(specs)
+    seen = {str((item.get("function") or {}).get("name") or "") for item in merged}
+    for spec in extra:
+        if not isinstance(spec, dict):
+            continue
+        name = str((spec.get("function") or {}).get("name") or "")
+        if not name or name in seen:
+            continue
+        if allow is not None and name not in allow:
+            continue
+        merged.append(spec)
+        seen.add(name)
+    return merged
+
+
 def resolve_employee_tools(
     employee_id: str, manifest: dict[str, Any], config: dict[str, Any]
 ) -> list[dict[str, Any]]:
     base = _base_tool_specs()
-    if not base:
-        return []
-
     allow = _explicit_allowlist(config, manifest)
+    if not base:
+        return _merge_lifecycle_tools(employee_id, manifest, config, [])
     if allow is not None:
-        allowlisted = [name for name in allow if name in base]
-        return [base[name] for name in allowlisted]
+        allowlisted = [base[name] for name in allow if name in base]
+        return _merge_lifecycle_tools(employee_id, manifest, config, allowlisted)
 
     text = _capability_text(manifest, config)
     read_only = is_read_only(manifest, config)
@@ -228,7 +256,7 @@ def resolve_employee_tools(
         blocked = set(list_write_tools())
         selected = [n for n in selected if n not in blocked]
 
-    return [base[n] for n in selected]
+    return _merge_lifecycle_tools(employee_id, manifest, config, [base[n] for n in selected])
 
 
 def employee_tool_names(

@@ -410,9 +410,15 @@ def _auto_slices(db, classification_id, version, tenant, owner):
     run = _classification_run(db, classification_id, tenant, owner)
     versions = load_json(run.draft_json, {}).get("versions", [])
     latest = versions[-1] if versions else {}
-    if latest.get("version") != version or latest.get("model_status") != "returned":
+    if latest.get("version") != version:
         raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
     body = _source(db, run, tenant, owner)
+    if latest.get("model_status") == "not_called":
+        from app.application.reviewed_excel_auto_slice import derive_rule_slices
+
+        return derive_rule_slices(body, latest), latest.get("coverage") or []
+    if latest.get("model_status") != "returned":
+        raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
     coverage = latest.get("coverage")
     sheets = latest.get("sheets", [])
     source_names = (

@@ -236,7 +236,7 @@ class LLMWorkflowPlanner:
 
         _route = route_normal_mode_message(str(message or ""))
         if _route.get("intent") in {"desktop", "label_print"}:
-            return self._fallback_plan(plan_id, message, registry_for_plan)
+            return self._fallback_plan(plan_id, message, registry_for_plan, context)
         if (
             "sales" in registry_for_plan
             and str(_route.get("intent") or "") == "sales_write"
@@ -250,7 +250,7 @@ class LLMWorkflowPlanner:
                 "PlanGraph",
                 finalize_planned_graph(
                     self._decorate_plan(
-                        self._fallback_plan(plan_id, message, registry_for_plan),
+                        self._fallback_plan(plan_id, message, registry_for_plan, context),
                         message,
                         registry_for_plan,
                     ),
@@ -258,7 +258,7 @@ class LLMWorkflowPlanner:
                     context=context,
                     validate=validate_plan_graph,
                     fallback_factory=lambda: self._fallback_plan(
-                        plan_id, message, registry_for_plan
+                        plan_id, message, registry_for_plan, context
                     ),
                     warn=logger.warning,
                 ),
@@ -304,16 +304,16 @@ class LLMWorkflowPlanner:
         from app.application.workflow.sales_quote_plan import sales_quote_node
 
         if sales_quote_node(message, registry_for_plan, single_request=True) is not None:
-            planned = self._fallback_plan(plan_id, message, registry_for_plan)
+            planned = self._fallback_plan(plan_id, message, registry_for_plan, context)
         elif _onboarding_first_order_slots(message) and "business_db" in registry_for_plan:
-            deterministic = self._fallback_plan(plan_id, message, registry_for_plan)
+            deterministic = self._fallback_plan(plan_id, message, registry_for_plan, context)
             if deterministic.intent == "onboarding_first_order" and len(deterministic.nodes) == 3:
                 planned = deterministic
         elif (
             _looks_like_business_db_write(message, message.lower())
             and "business_db" in registry_for_plan
         ):
-            deterministic = self._fallback_plan(plan_id, message, registry_for_plan)
+            deterministic = self._fallback_plan(plan_id, message, registry_for_plan, context)
             if deterministic.intent == "business_db_write" and deterministic.nodes:
                 planned = deterministic
         if planned is None:
@@ -339,7 +339,9 @@ class LLMWorkflowPlanner:
                 plan_id=plan_id,
                 context=context,
                 validate=validate_plan_graph,
-                fallback_factory=lambda: self._fallback_plan(plan_id, message, registry_for_plan),
+                fallback_factory=lambda: self._fallback_plan(
+                    plan_id, message, registry_for_plan, context
+                ),
                 warn=logger.warning,
             ),
         )
@@ -374,7 +376,11 @@ class LLMWorkflowPlanner:
         )
 
     def _fallback_plan(
-        self, plan_id: str, message: str, tool_registry: dict[str, Any]
+        self,
+        plan_id: str,
+        message: str,
+        tool_registry: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> PlanGraph:
         rules = DeterministicDependencies(
             looks_like_write=lambda text, lower: _looks_like_business_db_write(text, lower),
@@ -384,7 +390,7 @@ class LLMWorkflowPlanner:
             conditional_edges=self._apply_conditional_edge_rules,
             clarification=self._apply_clarify_rules,
         )
-        return DeterministicPlanner(rules).plan(plan_id, message, tool_registry)
+        return DeterministicPlanner(rules).plan(plan_id, message, tool_registry, context)
 
     def _plan_with_llm(
         self,

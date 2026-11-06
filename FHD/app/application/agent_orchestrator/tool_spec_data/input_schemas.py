@@ -728,6 +728,14 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "required": [],
         "properties": {},
     },
+    ("excel_analysis", "export"): {
+        "type": "object",
+        "required": ["file_path", "rows"],
+        "properties": {
+            "file_path": {"type": "string"},
+            "rows": {"type": "array", "minItems": 1},
+        },
+    },
     ("excel_analysis", "read"): {
         "type": "object",
         "required": ["file_path"],

@@ -20,7 +20,7 @@ import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
-import { initializeLocalCrashReporting } from './desktop-resilience'
+import { initializeLocalCrashReporting, recordDesktopCleanExit, recordDesktopProcessStart } from './desktop-resilience'
 import { findDeepLinkArg } from './desktop-navigation'
 import { warmPersistedDesktopSessionCookieStore } from './session-cookie-warmup'
 import {
@@ -116,8 +116,23 @@ function bootstrap(): void {
       }
     })
 
+    const noteShutdown = (reason: string) => {
+      try {
+        recordDesktopCleanExit(app.getPath('userData'), reason, writeBackendLog)
+      } catch (error) {
+        writeBackendLog(`[shutdown] marker failed: ${error instanceof Error ? error.message : error}\n`)
+      }
+    }
+    for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+      process.once(signal, () => {
+        noteShutdown(signal)
+        app.quit()
+      })
+    }
+
     app.on('before-quit', () => {
       app.isQuitting = true
+      noteShutdown('before-quit')
     })
 
     // will-quit runs after BrowserWindows have closed, so renderer keep-alive
@@ -137,6 +152,7 @@ function bootstrap(): void {
     })
 
     app.whenReady().then(async () => {
+      recordDesktopProcessStart(app.getPath('userData'), writeBackendLog)
       await applyOtaProxyBypass()
       desktopRuntime.desktopBootstrapSessionHintAvailable = await warmPersistedDesktopSessionCookieStore(DEFAULT_PORT)
       if (desktopRuntime.desktopBootstrapSessionHintAvailable) {

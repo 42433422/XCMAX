@@ -22,10 +22,14 @@ _NON_IDEMPOTENT_RECOVERY_BLOCKED = "non_idempotent_recovery_blocked"
 def task_execution_context(run: AgentRun, step: Any) -> dict[str, Any]:
     task_context = run.metadata.get("task_context")
     task_context = task_context if isinstance(task_context, dict) else {}
+    runtime = run.metadata.get("runtime_context")
+    runtime = runtime if isinstance(runtime, dict) else {}
+    tenant = str(runtime.get("tenant_id") or task_context.get("tenant_id") or "")
+    tenant_part = f":{tenant}" if tenant else ""
     return {
         "task_id": str(task_context.get("task_id") or ""),
         "task_attempt": int(task_context.get("attempt") or 1),
-        "idempotency_key": f"agent:{run.run_id}:{step.step_id}",
+        "idempotency_key": f"agent:{run.run_id}{tenant_part}:{step.step_id}",
         **(
             {"business_action_id": f"agent:{run.run_id}:{step.step_id}"}
             if step.tool_id == "catalog_products_v1"

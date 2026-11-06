@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import perf_counter
 from unittest.mock import patch
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import (
+    _string_constraint_error,
     build_tool_specs_v2,
     get_tool_action_spec,
     validate_tool_call,
@@ -62,6 +64,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     read_spec = specs[("business_db", "read")]
     assert read_spec.risk == "low"
+    assert read_spec.read_only is True
     assert read_spec.idempotent is True
     assert read_spec.required_params == ["entity"]
     assert read_spec.input_schema["required"] == ["entity"]
@@ -69,6 +72,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     write_spec = specs[("business_db", "write")]
     assert write_spec.risk == "medium"
+    assert write_spec.read_only is False
     assert write_spec.idempotent is False
     assert write_spec.input_schema["properties"]["payload"]["type"] == "object"
 
@@ -621,3 +625,98 @@ def test_agent_tool_executor_rejects_non_object_tool_result() -> None:
     assert result["error_code"] == "tool_result_not_object"
     assert result["tool_id"] == "business_db"
     assert result["action"] == "read"
+
+
+@pytest.mark.parametrize(
+    "mutation, uncertainty, unknown_io",
+    [
+        (False, {}, False),
+        (False, {"outcome": "unknown"}, False),
+        (False, {"requires_reconciliation": True}, False),
+        (False, {"execution_status": "timeout"}, False),
+        (False, {"outcome_unknown": True}, False),
+        (False, {"error_code": "upstream_outcome_unknown"}, False),
+        (False, {"result": {"status": "accepted"}}, False),
+        (False, {}, True),
+        (True, {}, False),
+    ],
+)
+def test_schema_failure_only_releases_a_certain_read_claim(
+    monkeypatch, tmp_path, mutation, uncertainty, unknown_io
+):
+    import time
+    from types import SimpleNamespace
+
+    from app.application.agent_orchestrator import tool_permission
+    from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "claims.sqlite"))
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    step = AgentStep(
+        node_id="schema-contract",
+        tool_id="generate_office_document" if mutation else "business_db",
+        action="execute" if mutation else "read",
+        params={"user_request": "Create a contract", "output_format": "docx"}
+        if mutation
+        else {"entity": "products"},
+    )
+    context = {"task_id": "schema-contract", "idempotency_key": "original-call"}
+    executor = SimpleNamespace(execute=AgentToolExecutor().execute)
+    unknown = mutation or bool(uncertainty) or unknown_io
+    raw_output = {"success": True, **uncertainty}
+
+    def output(*_args):
+        if unknown_io:
+            with invocation_deadline(time.monotonic() + 60) as budget:
+                budget.uncertain.append({"kind": "http_timeout", "method": "GET"})
+        return raw_output
+
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        side_effect=output,
+    ) as dispatch:
+        result = execute_with_tool_deadline(
+            executor, step, runtime_context=context, timeout_seconds=60
+        )
+        evidence = result["reconciliation_evidence"] if unknown else result
+        assert evidence["error_code"] == "output_schema_validation_failed"
+        assert result["success"] is False
+        if unknown:
+            assert result["outcome"] == "unknown" and result["retryable"] is False
+            assert result["reconciliation_required"] is True
+            tool_permission.drop_process_idempotency_memory()
+            replay = execute_with_tool_deadline(
+                executor, step, runtime_context=context, timeout_seconds=60
+            )
+            assert replay["outcome"] == "unknown" and replay["retryable"] is False
+            assert replay["reconciliation_required"] is True
+        else:
+            assert result["message"] == "工具输出 缺少字段：data"
+            assert not result.get("reconciliation_required") and result.get("outcome") != "unknown"
+        dispatch.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "value, valid",
+    [
+        ("a@b.c", True),
+        ("first+tag@example.co.uk", True),
+        ("a@b..c", True),
+        ("@b.c", False),
+        ("a@.c", False),
+        ("a@b.", False),
+        ("a@b", False),
+        ("a@@b.c", False),
+        ("a b@c.d", False),
+        ("a@b.c\n", False),
+    ],
+)
+def test_email_contract_keeps_validation_semantics(value, valid):
+    assert (_string_constraint_error("email", value, {"format": "email"}) == "") is valid
+
+
+def test_email_contract_rejects_long_invalid_input_without_backtracking():
+    started = perf_counter()
+    assert _string_constraint_error("email", "x@" + "!" * 50_000, {"format": "email"})
+    assert perf_counter() - started < 1

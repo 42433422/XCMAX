@@ -10,12 +10,17 @@ from app.application.agent_orchestrator.run_models import AgentRun
 
 ExecutionState = Literal[
     "queued",
+    "running",
+    "waiting_approval",
+    "succeeded",
+    "failed",
+    "timed_out",
+    "cancelled",
+    "rejected",
     "claimed",
     "paused",
     "blocked",
     "completed",
-    "failed",
-    "cancelled",
 ]
 
 
@@ -94,6 +99,7 @@ class TaskExecutionRepository(Protocol):
         *,
         lease_seconds: float,
         now: str | None = None,
+        run_id: str | None = None,
     ) -> AgentTaskExecution | None: ...
 
     def heartbeat(

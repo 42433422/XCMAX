@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from app.application.product_query_context import inject_product_query_fallback
+from app.domain.task_lifecycle.control import RETRYABLE_CODES, jittered_delay
+from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .workflow_types import NodeExecutionResult, WorkflowNode
@@ -48,7 +51,8 @@ class NodeExecutor:
             retryable=retryable,
             started_at=datetime.now(UTC).isoformat(),
         )
-        effective_max_retries = max_retries if retryable else 0
+        # Total attempts, including the first, never exceed the shared cap.
+        effective_max_retries = min(max_retries if retryable else 0, DEFAULT_MAX_ATTEMPTS - 1)
         while retries <= effective_max_retries:
             attempt_started = time.perf_counter()
             try:
@@ -70,6 +74,18 @@ class NodeExecutor:
                 last_error = str(output.get("message") or output.get("error") or "unknown error")
             except RECOVERABLE_ERRORS as err:
                 last_error = str(err)
+                if isinstance(err, TimeoutError):
+                    result.output = {
+                        "success": False,
+                        "error_code": "timeout",
+                        "message": last_error,
+                    }
+                elif isinstance(err, ConnectionError):
+                    result.output = {
+                        "success": False,
+                        "error_code": "upstream_unavailable",
+                        "message": last_error,
+                    }
                 logger.warning(
                     "执行节点失败 node=%s tool=%s.%s err=%s",
                     node_id,
@@ -79,9 +95,15 @@ class NodeExecutor:
                     exc_info=True,
                 )
             result.attempts.append(attempt_summary(retries + 1, False, last_error, attempt_started))
+            code = _retry_code(result.output, last_error)
+            if code not in RETRYABLE_CODES:
+                result.retryable = False
+            elif isinstance(result.output, dict):
+                result.output.setdefault("error_code", code)
             retries += 1
-            if not result.retryable:
+            if not result.retryable or retries > effective_max_retries:
                 break
+            time.sleep(jittered_delay(retries, jitter_ratio=0.2, rng=random.Random()))
         result.params = dict(params or {})
         result.retries = retries if result.success else max(0, retries - 1)
         result.finished_at = datetime.now(UTC).isoformat()
@@ -96,6 +118,15 @@ class NodeExecutor:
                 retryable=result.retryable,
             )
         return result
+
+
+def _retry_code(output: dict[str, Any] | None, error: str) -> str:
+    del error
+    if isinstance(output, dict):
+        code = str(output.get("error_code") or "")
+        if code in RETRYABLE_CODES:
+            return code
+    return ""
 
 
 def node_allows_auto_retry(node: WorkflowNode) -> bool:

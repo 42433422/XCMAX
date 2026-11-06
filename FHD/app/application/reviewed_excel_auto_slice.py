@@ -83,6 +83,67 @@ def _model_region_for_fragment(known: dict[tuple[str, str], dict], fragment: dic
     raise ReviewedExcelError("切后复核产生了模型区域之外的片段，不能保证保真提取")
 
 
+def derive_rule_slices(body: bytes, latest: dict) -> list[dict]:
+    """Identify sheet regions before any model call. Slices carry no business id."""
+    from app.application.reviewed_excel_template import derive_document_workbook
+
+    source = inspect_workbook(body)
+    results: list[dict] = []
+    used_names: set[str] = set()
+    sheets = latest.get("sheets")
+    if not isinstance(sheets, list):
+        return results
+    for sheet in sheets:
+        if not isinstance(sheet, dict):
+            continue
+        for region in sheet.get("regions") or []:
+            if not isinstance(region, dict) or region.get("data_region") is False:
+                continue
+            if sheet.get("processable") is False or sheet.get("blank"):
+                continue
+            fragment = {"sheet": sheet.get("sheet"), "range": region.get("range")}
+            record = {
+                "fragments": [fragment],
+                "basis": "rule_region",
+                "confirmed": False,
+                "source_sha256": source["sha256"],
+                "slice_id": f"{source['sha256'][:12]}:{fragment['sheet']}:{fragment['range']}",
+                "template_type": (sheet.get("labels") or ["unknown"])[0],
+                "table_region": fragment["range"],
+                "original_row_range": fragment["range"],
+                "status": "identified",
+                "error": None,
+            }
+            try:
+                output = derive_document_workbook(body, [fragment], print_area_mode="source")
+                record["workbook"] = output
+                record["filename"] = _slice_filename(
+                    [fragment], source["cells"], used_names, reason=str(fragment["range"])
+                )
+            except ReviewedExcelError as exc:
+                from io import BytesIO
+
+                from openpyxl import Workbook
+
+                record["status"] = "error"
+                record["error"] = str(exc)
+                failed = Workbook()
+                failed_sheet = failed.worksheets[0]
+                failed_sheet["A1"] = "切片未提取"
+                failed_sheet["A2"] = str(exc)[:180]
+                buffer = BytesIO()
+                failed.save(buffer)
+                failed.close()
+                record["workbook"] = buffer.getvalue()
+                record["filename"] = _slice_filename(
+                    [fragment], source["cells"], used_names, reason="切片"
+                )
+            if "business_id" in record:
+                raise ReviewedExcelError("切片阶段不能生成业务主键")
+            results.append(record)
+    return results
+
+
 def derive_classified_documents(body: bytes, classification: dict) -> list[dict]:
     """Export only documents with explicit model grouping, without inferring missing groups.
 

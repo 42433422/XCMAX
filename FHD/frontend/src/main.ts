@@ -1,3 +1,4 @@
+import { installStabilityClient } from '@/api/sessionRefresh'
 import { installDesktopRendererErrorReporting, reportDesktopRendererFault } from '@/utils/desktopRendererErrors'
 import { createApp } from 'vue'
 
@@ -66,9 +67,26 @@ function browserFullPath(): string {
   return `${pathname}${window.location.search || ''}${window.location.hash || ''}`
 }
 
+function installSaturatedHistoryFallback(): void {
+  // Chromium caps session history around 50 entries. Further pushState calls
+  // can leave the address bar on the previous URL while the router has moved.
+  const historyApi = window.history
+  const original = historyApi.pushState.bind(historyApi)
+  historyApi.pushState = (state, title, url) => {
+    if (historyApi.length >= 50) {
+      historyApi.replaceState(state, title, url)
+      return
+    }
+    original(state, title, url)
+  }
+}
+
 function scheduleRouterAddressSync(reason: string): void {
   if (typeof window === 'undefined') return
   const syncOnce = async () => {
+    const { hasUserSidebarNavigation } = await import('@/utils/sidebarNavigation')
+    // The user already chose a page. Do not pull the router back to a stale URL.
+    if (hasUserSidebarNavigation()) return
     const target = browserFullPath()
     if (!target || target === router.currentRoute.value.fullPath) return
     const resolved = router.resolve(target)
@@ -116,6 +134,7 @@ function prefetchStaticRouteChunks(): void {
  * 深链直达 Mod 页时若此请求晚于首跳，仍可由 modsStore.initialize 内 registerModRoutes 补齐。
  */
 async function bootstrap() {
+  installStabilityClient()
   bootstrapEditionDefaults()
   void bootstrapHostConfig()
   applySidebarThemeFromStorage()
@@ -168,6 +187,7 @@ async function bootstrap() {
   }
 
   app.use(router)
+  installSaturatedHistoryFallback()
 
   for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
     app.component(key, component)
