@@ -26,6 +26,7 @@ import { desktopOfflineDbPath } from './data-bridge'
 import { queryOfflineForSession } from './data-bridge-session'
 import { deleteSecret, getSecret, listSecrets, setSecret } from './secure-store'
 import { reportRendererError } from './desktop-resilience'
+import { warmPersistedDesktopSessionCookieStore } from './session-cookie-warmup'
 
 function getLanIPv4(): string {
   const nets = networkInterfaces()
@@ -93,7 +94,13 @@ export function registerDesktopIpcHandlers(): void {
   })
 
   handleTrusted('xcagi:get-data-dir', () => app.getPath('userData'))
-  handleTrusted('xcagi:consume-bootstrap-session-hint', () => {
+  handleTrusted('xcagi:consume-bootstrap-session-hint', async (event) => {
+    const aux = [...desktopRuntime.auxiliaryWindows].some(
+      win => !win.isDestroyed() && win.webContents.id === event.sender.id,
+    )
+    // 附加窗口的存储分区是空的，不能靠主窗口已经消费过的一次性标记。
+    // 只看该窗口自己的会话 cookie，不把主窗口的 localStorage 拷过去。
+    if (aux) return warmPersistedDesktopSessionCookieStore(DEFAULT_PORT, event.sender.session?.cookies)
     const available = desktopRuntime.desktopBootstrapSessionHintAvailable
     desktopRuntime.desktopBootstrapSessionHintAvailable = false
     return available

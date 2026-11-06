@@ -40,6 +40,7 @@ beforeEach(() => {
   mocks.handlers.clear()
   mocks.secret.mockClear()
   mocks.query.mockReset()
+  desktopRuntime.auxiliaryWindows.clear()
   desktopRuntime.splashUrl = 'file:///trusted/splash.html'
   registerDesktopIpcHandlers()
 })
@@ -73,6 +74,29 @@ it('offline result is rejected if the main frame navigates while awaiting data',
   expect(await result).toEqual({ ok: false, reason: 'untrusted_sender' })
 })
 
+
+it('附加窗口用自己的会话 cookie 恢复登录，不消费主窗口的一次性标记', async () => {
+  desktopRuntime.desktopBootstrapSessionHintAvailable = true
+  desktopRuntime.auxiliaryWindows.clear()
+  const frame = { url: 'http://127.0.0.1:18500/chat' }
+  desktopRuntime.mainWindow = {
+    isDestroyed: () => false,
+    webContents: { id: 17, mainFrame: frame },
+  } as unknown as NonNullable<typeof desktopRuntime.mainWindow>
+  desktopRuntime.auxiliaryWindows.add({
+    isDestroyed: () => false,
+    webContents: { id: 44, mainFrame: frame },
+  } as unknown as NonNullable<typeof desktopRuntime.mainWindow>)
+  const get = vi.fn(async () => [{ name: 'session_id', value: 'aux-session' }])
+  const event = { sender: { id: 44, session: { cookies: { get } } }, senderFrame: frame }
+  const result = await mocks.handlers.get('xcagi:consume-bootstrap-session-hint')!(event as unknown as IpcMainInvokeEvent)
+  expect(result).toBe(true)
+  expect(get).toHaveBeenCalledWith({ url: 'http://127.0.0.1:18500/' })
+  expect(desktopRuntime.desktopBootstrapSessionHintAvailable).toBe(true)
+  get.mockResolvedValueOnce([])
+  expect(await mocks.handlers.get('xcagi:consume-bootstrap-session-hint')!(event as unknown as IpcMainInvokeEvent)).toBe(false)
+  desktopRuntime.auxiliaryWindows.clear()
+})
 
 it('trusted runtime can still show a native notification', async () => {
   const result = await mocks.handlers.get('xcagi:show-notification')!(

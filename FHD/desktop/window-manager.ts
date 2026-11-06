@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, screen, shell } from 'electron'
+import { BrowserWindow, app, dialog, screen, session, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
@@ -78,6 +78,55 @@ export function resolveDesktopSplashUrl(): string {
 /** 含主窗口在内的同时可见窗口上限。第二进程仍由 single-instance lock 拒绝。 */
 export const MAX_DESKTOP_WINDOWS = 5
 
+let auxiliaryPartitionSerial = 0
+
+/** 每个附加窗口一个内存分区，localStorage / IndexedDB / Cache 不与主窗口或其他窗口互通。 */
+export function nextAuxiliaryPartition(): string {
+  auxiliaryPartitionSerial += 1
+  return `xcagi-aux-${auxiliaryPartitionSerial}`
+}
+
+export function resetAuxiliaryPartitionSerialForTests(): void {
+  auxiliaryPartitionSerial = 0
+}
+
+/**
+ * 只复制本机业务源的 cookie，让附加窗口能沿用同一次登录。
+ * 不复制 localStorage。弹窗、草稿和任务界面状态留在各自的存储分区里。
+ */
+export async function copyDesktopLoginCookies(target: Electron.Session): Promise<void> {
+  const url = `http://127.0.0.1:${DEFAULT_PORT}/`
+  let cookies: Electron.Cookie[] = []
+  try {
+    cookies = await session.defaultSession.cookies.get({ url })
+  } catch {
+    return
+  }
+  for (const cookie of cookies) {
+    if (!cookie.name || cookie.value == null) continue
+    const sameSite = cookie.sameSite === 'no_restriction'
+      || cookie.sameSite === 'lax'
+      || cookie.sameSite === 'strict'
+      || cookie.sameSite === 'unspecified'
+      ? cookie.sameSite
+      : 'lax'
+    try {
+      await target.cookies.set({
+        url,
+        name: cookie.name,
+        value: cookie.value,
+        path: cookie.path || '/',
+        secure: Boolean(cookie.secure),
+        httpOnly: Boolean(cookie.httpOnly),
+        expirationDate: cookie.expirationDate,
+        sameSite,
+      })
+    } catch {
+      /* 单条 cookie 失败不阻止开窗 */
+    }
+  }
+}
+
 function liveAuxiliaryWindows(): Electron.BrowserWindow[] {
   return [...desktopRuntime.auxiliaryWindows].filter(win => !win.isDestroyed())
 }
@@ -114,8 +163,8 @@ function openTrustedAuxiliaryFromHandler(
 }
 
 /**
- * 在当前进程再开一个业务窗口，共用本地后端与登录会话。
- * 关窗即销毁，不隐藏到托盘，也不占用 17500 上的第二个后端。
+ * 在当前进程再开一个业务窗口。后端仍是原来的 17500，登录 cookie 单独复制。
+ * 存储分区不共享，关窗即销毁，不隐藏到托盘，也不再起一个后端。
  */
 export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | null {
   if (!isTrustedDesktopOrigin(rawUrl, DEFAULT_PORT)) {
@@ -132,6 +181,8 @@ export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | nu
     : { x: 40, y: 40, width: 1180, height: 760 }
   const index = liveAuxiliaryWindows().length + 1
   const icon = shellIconPath()
+  const partition = nextAuxiliaryPartition()
+  const isolated = session.fromPartition(partition)
   const winOpts: Electron.BrowserWindowConstructorOptions = {
     x: origin.x + 28 * index,
     y: origin.y + 28 * index,
@@ -144,6 +195,7 @@ export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | nu
     show: true,
     backgroundColor: '#f4f7fb',
     webPreferences: {
+      partition,
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
@@ -154,9 +206,19 @@ export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | nu
   const win = new BrowserWindow(winOpts)
   desktopRuntime.auxiliaryWindows.add(win)
   attachAuxiliaryGuards(win)
-  void win.loadURL(rawUrl).catch(error => {
-    writeBackendLog(`[window] auxiliary load failed: ${error instanceof Error ? error.message : String(error)}\n`)
+  win.on('closed', () => {
+    void isolated.clearStorageData().catch(() => undefined)
+    void isolated.clearCache().catch(() => undefined)
   })
+  void (async () => {
+    try {
+      await copyDesktopLoginCookies(isolated)
+      if (win.isDestroyed()) return
+      await win.loadURL(rawUrl)
+    } catch (error) {
+      writeBackendLog(`[window] auxiliary load failed: ${error instanceof Error ? error.message : String(error)}\n`)
+    }
+  })()
   win.webContents.on('did-finish-load', () => tagDesktopWebContents(win))
   return win
 }
