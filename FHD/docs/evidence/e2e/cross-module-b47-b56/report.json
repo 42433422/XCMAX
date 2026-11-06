@@ -8,14 +8,14 @@
   },
   "failed": [],
   "ids": {
-    "trace_id": "5840db5edfa9472390874c41d7e154c0",
-    "task_id": "task-4540c9c3974e4da9aed345563775ff85",
-    "run_id": "run_50d51c6467cd4e2d9974db45407daea2",
-    "plan_id": "plan-s01-64ca35c8c9bb4d8abbc93b5d4b15e5d7",
-    "original_sha256": "cad678940b8f20db1cd5c2aea1b690b61ea1b6dad23bbb8ee5f4b6077aacf535",
-    "result_sha256": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d",
+    "trace_id": "1136559a6ed445ddb1c3e06377722b6b",
+    "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
+    "run_id": "run_9a16e7aa90944ccfb5a01bca07adefba",
+    "plan_id": "plan-s01-f9863f26eb884eb6aa226e6edbc6429d",
+    "original_sha256": "32756d06aa97a07681d941364514339c9f7d943243a12a0bf2860215dc49cfe2",
+    "result_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
     "approval_request_ids": [
-      "07f315f6d3ac4ea394b04b9f1bf59d82"
+      "29da5c33247149eb90f150ea17b6e1dd"
     ]
   },
   "verification": {
@@ -25,7 +25,7 @@
     "qualifying_count": 2,
     "anomaly_count": 2,
     "stored_count": 2,
-    "file_sha256": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d",
+    "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
     "anomalies_reported": true
   },
   "s02": {
@@ -227,7 +227,7 @@
     },
     "B47-01": {
       "status": "PASS",
-      "detail": "task-4540c9c3974e4da9aed345563775ff85"
+      "detail": "task-33b5d3d51fbd4e0eb16a4101ca259e0a"
     },
     "B47-02": {
       "status": "PASS",
@@ -243,12 +243,12 @@
     },
     "B47-05": {
       "status": "PASS",
-      "detail": "cad678940b8f20db1cd5c2aea1b690b61ea1b6dad23bbb8ee5f4b6077aacf535"
+      "detail": "32756d06aa97a07681d941364514339c9f7d943243a12a0bf2860215dc49cfe2"
     },
     "B47-06": {
       "status": "PASS",
       "detail": {
-        "task_id": "task-4540c9c3974e4da9aed345563775ff85",
+        "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
         "status": "queued",
         "message": "任务已接收，排队处理",
         "file_name": "upload-shipment.xlsx"
@@ -256,16 +256,16 @@
     },
     "B47-07": {
       "status": "PASS",
-      "detail": "task-4540c9c3974e4da9aed345563775ff85"
+      "detail": "task-33b5d3d51fbd4e0eb16a4101ca259e0a"
     },
     "B47-08": {
       "status": "PASS",
-      "detail": "idem-59d128a6c456475980524bd1fae89634"
+      "detail": "idem-e2a4f4d63e82476f8ad00a4bbd515ef4"
     },
     "B47-09": {
       "status": "PASS",
       "detail": {
-        "task_id": "task-4540c9c3974e4da9aed345563775ff85",
+        "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
         "status": "queued",
         "message": "任务已接收，排队处理",
         "file_name": "upload-shipment.xlsx"
@@ -273,7 +273,7 @@
     },
     "B47-10": {
       "status": "PASS",
-      "detail": "5840db5edfa9472390874c41d7e154c0"
+      "detail": "1136559a6ed445ddb1c3e06377722b6b"
     },
     "B49-01": {
       "status": "PASS",
@@ -301,9 +301,9 @@
       "status": "PASS",
       "detail": {
         "success": true,
-        "result_path": "/tmp/pytest-of-ubuntu/pytest-3/test_cross_module_business_cha0/workspace/result.xlsx",
-        "anomaly_csv": "/tmp/pytest-of-ubuntu/pytest-3/test_cross_module_business_cha0/workspace/result-anomalies.csv",
-        "sha256": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d",
+        "result_path": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result.xlsx",
+        "anomaly_csv": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result-anomalies.csv",
+        "sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
         "qualifying_count": 2,
         "anomaly_count": 2
       }
@@ -367,7 +367,7 @@
     },
     "B50-06": {
       "status": "PASS",
-      "detail": "run_fbf05af1cefb4d229116d1087492206c"
+      "detail": "run_6f356e8d1be8426c865d74d9ac3280fe"
     },
     "B50-08": {
       "status": "PASS",
@@ -461,7 +461,7 @@
     },
     "B51-06": {
       "status": "PASS",
-      "detail": "/tmp/pytest-of-ubuntu/pytest-3/test_cross_module_business_cha0/workspace/result-anomalies.csv"
+      "detail": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result-anomalies.csv"
     },
     "B51-07": {
       "status": "PASS",
@@ -480,12 +480,12 @@
             "ok": false,
             "output": {
               "ok": false,
-              "summary": "文件不存在：/tmp/pytest-of-ubuntu/pytest-3/test_cross_module_business_cha0/workspace/missing.xlsx",
+              "summary": "文件不存在：/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/missing.xlsx",
               "items": [],
               "warnings": [
                 "请检查输入文件、模板文件和题目规则是否匹配。"
               ],
-              "error": "文件不存在：/tmp/pytest-of-ubuntu/pytest-3/test_cross_module_business_cha0/workspace/missing.xlsx",
+              "error": "文件不存在：/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/missing.xlsx",
               "meta": {
                 "handler": "direct_python",
                 "action": "convert",
@@ -503,7 +503,7 @@
     },
     "B51-10": {
       "status": "PASS",
-      "detail": "/tmp/pytest-of-ubuntu/pytest-3/test_cross_module_business_cha0/workspace/result.xlsx"
+      "detail": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result.xlsx"
     },
     "B51-11": {
       "status": "PASS",
@@ -580,7 +580,7 @@
     },
     "B52-18": {
       "status": "PASS",
-      "detail": "cad678940b8f20db1cd5c2aea1b690b61ea1b6dad23bbb8ee5f4b6077aacf535"
+      "detail": "32756d06aa97a07681d941364514339c9f7d943243a12a0bf2860215dc49cfe2"
     },
     "B54-01": {
       "status": "PASS",
@@ -591,7 +591,7 @@
         "qualifying_count": 2,
         "anomaly_count": 2,
         "stored_count": 2,
-        "file_sha256": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d",
+        "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
         "anomalies_reported": true
       }
     },
@@ -604,13 +604,13 @@
         "qualifying_count": 2,
         "anomaly_count": 2,
         "stored_count": 2,
-        "file_sha256": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d",
+        "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
         "anomalies_reported": true
       }
     },
     "B54-03": {
       "status": "PASS",
-      "detail": "/tmp/pytest-of-ubuntu/pytest-3/test_cross_module_business_cha0/workspace/result.xlsx"
+      "detail": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result.xlsx"
     },
     "B54-04": {
       "status": "PASS",
@@ -621,7 +621,7 @@
         "qualifying_count": 2,
         "anomaly_count": 2,
         "stored_count": 2,
-        "file_sha256": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d",
+        "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
         "anomalies_reported": true
       }
     },
@@ -644,7 +644,7 @@
         "qualifying_count": 2,
         "anomaly_count": 2,
         "stored_count": 11,
-        "file_sha256": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d",
+        "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
         "anomalies_reported": true
       }
     },
@@ -661,10 +661,10 @@
           "success": false,
           "summary": "导入 2 条，异常 2 条",
           "file_name": "result.xlsx",
-          "sha256": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d",
-          "trace_id": "5840db5edfa9472390874c41d7e154c0",
-          "task_id": "task-4540c9c3974e4da9aed345563775ff85",
-          "run_id": "run_50d51c6467cd4e2d9974db45407daea2"
+          "sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
+          "trace_id": "1136559a6ed445ddb1c3e06377722b6b",
+          "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
+          "run_id": "run_9a16e7aa90944ccfb5a01bca07adefba"
         }
       }
     },
@@ -678,11 +678,11 @@
     },
     "B55-04": {
       "status": "PASS",
-      "detail": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d"
+      "detail": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab"
     },
     "B55-05": {
       "status": "PASS",
-      "detail": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d"
+      "detail": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab"
     },
     "B55-06": {
       "status": "PASS",
@@ -698,7 +698,7 @@
     },
     "B53-01": {
       "status": "PASS",
-      "detail": "task-4540c9c3974e4da9aed345563775ff85"
+      "detail": "task-33b5d3d51fbd4e0eb16a4101ca259e0a"
     },
     "B53-02": {
       "status": "PASS",
@@ -713,7 +713,7 @@
     },
     "B53-04": {
       "status": "PASS",
-      "detail": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d"
+      "detail": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab"
     },
     "B53-05": {
       "status": "PASS",
@@ -747,7 +747,7 @@
     },
     "B56-02": {
       "status": "PASS",
-      "detail": "5840db5edfa9472390874c41d7e154c0"
+      "detail": "1136559a6ed445ddb1c3e06377722b6b"
     },
     "B56-18": {
       "status": "PASS",
@@ -756,13 +756,13 @@
     "B56-17": {
       "status": "PASS",
       "detail": [
-        "2026-11-06T06:07:14.492542+00:00",
-        "2026-11-06T06:07:15.228246+00:00",
-        "2026-11-06T06:07:15.228463+00:00",
-        "2026-11-06T06:07:15.228548+00:00",
-        "2026-11-06T06:07:15.228619+00:00",
-        "2026-11-06T06:07:15.228686+00:00",
-        "2026-11-06T06:07:15.228755+00:00"
+        "2026-11-06T06:09:35.883986+00:00",
+        "2026-11-06T06:09:36.579306+00:00",
+        "2026-11-06T06:09:36.579513+00:00",
+        "2026-11-06T06:09:36.579596+00:00",
+        "2026-11-06T06:09:36.579666+00:00",
+        "2026-11-06T06:09:36.579731+00:00",
+        "2026-11-06T06:09:36.579802+00:00"
       ]
     },
     "B56-16": {
@@ -919,12 +919,12 @@
     }
   },
   "evidence": {
-    "trace_id": "5840db5edfa9472390874c41d7e154c0",
+    "trace_id": "1136559a6ed445ddb1c3e06377722b6b",
     "task": {
-      "task_id": "task-4540c9c3974e4da9aed345563775ff85",
-      "run_id": "run_50d51c6467cd4e2d9974db45407daea2",
+      "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
+      "run_id": "run_9a16e7aa90944ccfb5a01bca07adefba",
       "feedback": {
-        "task_id": "task-4540c9c3974e4da9aed345563775ff85",
+        "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
         "status": "queued",
         "message": "任务已接收，排队处理",
         "file_name": "upload-shipment.xlsx"
@@ -994,9 +994,9 @@
       ],
       "files": {
         "success": true,
-        "result_path": "/tmp/pytest-of-ubuntu/pytest-3/test_cross_module_business_cha0/workspace/result.xlsx",
-        "anomaly_csv": "/tmp/pytest-of-ubuntu/pytest-3/test_cross_module_business_cha0/workspace/result-anomalies.csv",
-        "sha256": "0ffc8d59304df01aa0a9d363619186a0b9466c275c3dc4dfee6c294c88a5356d",
+        "result_path": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result.xlsx",
+        "anomaly_csv": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result-anomalies.csv",
+        "sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
         "qualifying_count": 2,
         "anomaly_count": 2
       },
