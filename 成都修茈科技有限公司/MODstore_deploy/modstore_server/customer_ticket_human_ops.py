@@ -244,10 +244,21 @@ def decide_sensitive_action(
     from modstore_server.models_cs import CustomerServiceAction
 
     begin_immediate_write(db)
-    db.refresh(ticket)
+    locked = (
+        db.query(CustomerServiceTicket)
+        .filter(CustomerServiceTicket.id == int(ticket.id))
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if locked is None:
+        raise HTTPException(404, "没有这张工单")
+    ticket = locked
     action = (
         db.query(CustomerServiceAction)
         .filter_by(id=int(action_id), ticket_id=ticket.id, action_type="ticket.apply_change")
+        .populate_existing()
+        .with_for_update()
         .first()
     )
     if action is None:
