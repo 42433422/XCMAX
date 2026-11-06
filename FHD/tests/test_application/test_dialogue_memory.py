@@ -69,6 +69,10 @@ async def test_reply_comes_from_the_complete_callback(model_calls: list[list[dic
     assert answered["response"] == "模型完成:刚才的客户是多少？"
     assert answered["data"]["action"] == "dialogue_memory"
     assert len(model_calls) == 2
+    instruction = model_calls[1][0]["content"]
+    assert "无法计算" in instruction
+    assert "已确认数字" in instruction
+    assert "旧总数" in instruction
     sent = "\n".join(item["content"] for item in model_calls[1] if item["role"] == "user")
     assert "客户 120 家" in sent
     assert "刚才的客户是多少" in sent
@@ -98,6 +102,19 @@ def test_abandoned_turn_is_not_a_successful_analysis(memory_dir: Path) -> None:
     memory._INFLIGHT.clear()
     prepare_chat_turn("后来新增10家客户。", {"conversation_id": "half", "turn_id": "next"})
     assert turn_status("half", "open") == "interrupted"
+
+
+async def test_what_if_prompt_still_uses_the_complete_callback(model_calls: list[list[dict[str, str]]]) -> None:
+    context = {"conversation_id": "whatif", "turn_id": "q"}
+    text = "如果再增加，结果是多少？"
+    assert prepare_chat_turn(text, context) is None
+    answered = await dialogue_reply(text, context)
+    assert answered is not None
+    assert len(model_calls) == 2
+    assert answered["response"] == "模型完成:" + model_calls[-1][-1]["content"]
+    assert text in "\n".join(item["content"] for item in model_calls[-1] if item["role"] == "user")
+    assert "已确认未改" in model_calls[0][0]["content"]
+    assert "无法计算" in model_calls[-1][-1]["content"]
 
 
 async def test_sessions_do_not_share_transcripts(model_calls: list[list[dict[str, str]]]) -> None:

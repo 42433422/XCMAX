@@ -21,9 +21,16 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 Complete = Callable[[Sequence[Mapping[str, str]]], str | Awaitable[str]]
 _complete_override: Complete | None = None
 _SYSTEM = (
-    "你在回答同一个会话里的连续对话。只用中文直接回答最后一句，不要输出思考过程。"
-    "只根据本会话按时间排列的用户原话。后一次明确纠正覆盖旧数字。"
-    "如果、假设、模拟，以及要求暂时不要修改或只做风险分析的内容，只用于回答这一问，不改变已经确认的数字。"
+    "你在回答同一个会话里的连续对话。只用中文回答，不要输出思考过程。需要两句时不要并成一句。"
+    "只根据本会话按时间排列的全部用户原话。连续重复的同一句只计一次。"
+    "后一次明确纠正覆盖它点名的旧数字。已经被纠正替换掉的旧数字和旧总数不能再当成当前值，也不能再拿来相加。"
+    "每一句增加都要加到该对象当时的人数或数量上，后面继续用加完的数。"
+    "后一句只否定其中一次增加、并给出实际增加数时，只替换那一次，其他已经加上的增加仍然保留。"
+    "保持不变表示不要再改这个对象，不是把它退回最初数字。"
+    "数字、合计、假设或纠正才写算式，算式只用这一问真正用到的原话数字。不要另算没有被问到的乘积。"
+    "如果、假设、模拟，以及要求暂时不要修改或只做风险分析的句子，不改变已经确认的数字。"
+    "这种句子的同一条回复分成两句：第一句只写按这句算出的结果；第二句只写这次没有改动的已确认数字，并写明这些确认数字没有被这句假设替换。"
+    "不要写在已确认数字上叠加。某个合计需要的数字用户没有给过，就写无法计算，不要把缺少的项当成 0，也不要用另一个旧总数把这问答完。"
     "用户没有给出的数字、角色、流程和结论不要编造。不知道就说明本会话没有这条信息。"
     "不要使用其他会话的数据。一句观察不要写成工单。"
 )
@@ -37,6 +44,17 @@ _HARD_ERP = re.compile(
 )
 _NARRATIVE_STOCK = re.compile(r"(已经入库|入库后|本次入库|入库总|入库商品|每种入库)")
 _HYPOTHETICAL = re.compile(r"(如果|假设|模拟|不要修改|只是模拟|暂时不要)")
+_WHAT_IF = re.compile(r"(如果|假设|只是模拟|暂时不要修改|不要修改实际)")
+_UNDO = re.compile(r"(撤销|恢复到|恢复原来|恢复原始)")
+_REVISE_WHAT_IF = (
+    "请只重写你刚写的回复，仍然只根据本会话的用户原话，不要新增用户没说过的数字。"
+    "第一句先写加法，等号两边必须相等。第二句以「已确认未改：」开头，写出同一对象的总数和分类数，并重复算式里的基数。"
+    "缺了必要数字就第一句只写无法计算，不要把其余数字补成这个合计。"
+)
+_REVISE_UNDO = (
+    "请只重写你刚写的回复。这是撤销或恢复。"
+    "只写恢复之后的已确认数字。不要把被撤销的演算结果写成当前值，也不要写「已确认未改」。"
+)
 _ERP_COMMAND = re.compile(r"(查一下|查询|帮我查|帮我删除|删除)")
 _TICKET = re.compile(r"(提交|上报|反馈|建|创|登记).{0,12}(工单|缺陷)")
 _CONFIRM = re.compile(r"^(确认|取消|好的|可以|同意|拒绝)[。.!！]?$")
@@ -166,6 +184,18 @@ async def dialogue_reply(message: str, context: Mapping[str, Any] | None) -> dic
     messages = _model_messages(loaded, str((context or {}).get("turn_id") or ""))
     try:
         reply = await _invoke_complete(messages)
+        revise = _REVISE_UNDO if _UNDO.search(text) else _REVISE_WHAT_IF if _WHAT_IF.search(text) else ""
+        if revise:
+            try:
+                reply = await _invoke_complete(
+                    [
+                        *messages,
+                        {"role": "assistant", "content": str(reply or "")},
+                        {"role": "user", "content": revise},
+                    ]
+                )
+            except RECOVERABLE_ERRORS:
+                pass
     except RECOVERABLE_ERRORS as exc:
         return _payload(f"模型没有完成回复：{exc}", "failed", context)
     return _payload(str(reply or "").strip(), "completed", context)
@@ -180,8 +210,25 @@ def _model_messages(data: Mapping[str, Any], turn_id: str) -> list[dict[str, str
     system = _SYSTEM
     if interrupted:
         system += "本会话有一轮生成中断，那一轮没有完成回复，不能把它当成已完成的分析。"
+    user_turns = [
+        item for item in data.get("turns") or [] if isinstance(item, dict) and item.get("role") == "user"
+    ]
+    last_user = str(user_turns[-1].get("content") or "") if user_turns else ""
+    if _WHAT_IF.search(last_user):
+        system += (
+            "最后一句是假设或要求暂时不要修改。回复固定两句。"
+            "第一句先写加法，等号两边必须相等，基数必须来自用户原话或其逐步相加的结果，不要另起一个没出现过的基数。"
+            "第二句以「已确认未改：」开头，写出同一对象上的总数和分类数，"
+            "并且把第一句算式里的基数再写一遍。只写第一句算没答完。"
+            "如果缺了必要数字，第一句只写无法计算，第二句不要把其余数字补成这个合计。"
+        )
+    if _UNDO.search(last_user):
+        system += (
+            "最后一句是在撤销或恢复。当前值改回这次撤销之前最后一次确认的数字。"
+            "不要把刚被撤销的演算结果写成当前值。"
+        )
     messages = [{"role": "system", "content": system}]
-    for item in data.get("turns") or []:
+    for item in user_turns:
         if not isinstance(item, dict) or item.get("role") != "user":
             continue
         content = str(item.get("content") or "")
@@ -216,7 +263,7 @@ async def _desktop_complete(messages: Sequence[Mapping[str, str]]) -> str:
             result = client.chat.completions.create(
                 messages=list(messages),
                 model=model,
-                temperature=0.2,
+                temperature=0,
                 max_tokens=1500,
             )
             return str(result.choices[0].message.content or "")
@@ -224,7 +271,7 @@ async def _desktop_complete(messages: Sequence[Mapping[str, str]]) -> str:
         return await asyncio.to_thread(call)
     from app.mod_sdk.mod_employee_llm import mod_employee_complete
 
-    parsed = await mod_employee_complete(list(messages), max_tokens=1500, temperature=0.2)
+    parsed = await mod_employee_complete(list(messages), max_tokens=1500, temperature=0)
     if not parsed.get("success"):
         raise RuntimeError(str(parsed.get("error") or "模型没有返回"))
     return str(parsed.get("content") or "")
