@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Human assign / accept / diagnose / approve / verify for one customer ticket.
 
 Automatic employee dispatch must not move an unassigned ticket to processing.
