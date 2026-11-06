@@ -239,6 +239,11 @@ def enrich_model_messages(
         history = history[:-1]
     if not history:
         return messages
+    from app.application.ai_chat.confirmed_facts import fact_context_line
+
+    fact_line = fact_context_line(context)
+    if fact_line:
+        messages = [messages[0], {"role": "system", "content": fact_line}, *messages[1:]]
     return [
         *messages[:-1],
         {"role": "system", "content": memory[0]["content"]},
