@@ -239,6 +239,7 @@ def decide_sensitive_action(
     from modstore_server.models_cs import CustomerServiceAction
 
     begin_immediate_write(db)
+    db.refresh(ticket)
     action = (
         db.query(CustomerServiceAction)
         .filter_by(id=int(action_id), ticket_id=ticket.id, action_type="ticket.apply_change")

@@ -236,6 +236,40 @@ def test_duplicate_decision_and_stale_ticket_status_fail(client):
     assert json_loads(action.result_json, {})["verified"] is False
 
 
+def test_decision_reloads_ticket_status_before_approving(client):
+    del client
+    owner = _user(admin=False)
+    assignee = _user(admin=True)
+    approver = _user(admin=True)
+    ticket_id = _processing_ticket(owner, assignee)
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        actor = db.get(User, assignee.id)
+        requested = request_sensitive_action(db, ticket, actor, "调整客户可见配置", "需要改显示配置")
+    action_id = int(requested["action_id"])
+    db = get_session_factory()()
+    db.expire_on_commit = False
+    try:
+        stale = db.get(CustomerServiceTicket, ticket_id)
+        actor = db.get(User, approver.id)
+        assert stale is not None and actor is not None
+        assert stale.status == "processing"
+        db.commit()
+        with get_session_factory()() as other:
+            current = other.get(CustomerServiceTicket, ticket_id)
+            assert current is not None
+            current.status = "open"
+            other.commit()
+        with pytest.raises(HTTPException) as denied:
+            decide_sensitive_action(
+                db, stale, actor, action_id, decision="approved", reason="对象里的状态已经过期"
+            )
+        assert denied.value.status_code == 409
+    finally:
+        db.close()
+    assert _action(action_id).status == "waiting_approval"
+
+
 def test_verified_executor_runs_once_and_unverified_does_not_complete(client):
     del client
     owner = _user(admin=False)
