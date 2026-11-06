@@ -252,6 +252,12 @@ def _json_tool(
     return execute
 
 
+def _execute_registered_handoff(call: ToolCall) -> Payload:
+    from app.application.employee_runtime.handoff_commit import commit_registered_handoff
+
+    return commit_registered_handoff(call.args, call.workspace_root)
+
+
 def execute_workflow_tool(
     name: str,
     args: Payload | str,
@@ -316,6 +322,7 @@ def execute_workflow_tool(
             ),
             failure={"success": False, "error": "office_document_generation_failed"},
         ),
+        "handoff_commit": _json_tool(_execute_registered_handoff),
     }
     dispatcher = WorkflowToolDispatcher(
         ERP_CAPABILITY_TOOL_NAME,

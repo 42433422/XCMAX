@@ -378,10 +378,11 @@ class TaskContinuityRuntime:
             ),
             effect=dict(payload.get("effect") or {"action": "execute"}),
             policy=str(payload.get("policy") or "retry"),
+            target_tenant_id=str(payload.get("target_tenant_id") or ""),
         )
         self._event("handoff_recorded", task)
         self._write()
-        return self._envelope(task, extra={"handoff": record})
+        return self._envelope(task, extra={"handoff": _presented_handoff(record)})
 
     def _retry_handoff(
         self, actor: str, text: str, payload: dict[str, Any], **scope: str
@@ -833,6 +834,7 @@ class TaskContinuityRuntime:
         policy: str,
         retry_of: str = "",
         inherited: dict[str, Any] | None = None,
+        target_tenant_id: str = "",
     ) -> dict[str, Any]:
         if new_conditions:
             task["conditions"] = _merge_conditions(task["conditions"], new_conditions)
@@ -891,6 +893,12 @@ class TaskContinuityRuntime:
                     "source": source,
                     "target": target,
                     "idempotency_key": idempotency_key,
+                    "task_id": task["task_id"],
+                    "tenant_id": task["tenant_id"],
+                    "user_id": task["user_id"],
+                    "permissions": list(permissions),
+                    "parent_grant": list(task["grants"].get(source) or []),
+                    "target_tenant_id": target_tenant_id,
                 },
                 task["task_id"],
             )
@@ -927,6 +935,7 @@ class TaskContinuityRuntime:
                 }
                 record["status"] = _TERMINAL_OK
                 record["result_payload"] = result
+                self._remember_handoff_child(task, target, result)
                 task["prior_results"].append(
                     {
                         "employee": target,
@@ -948,6 +957,43 @@ class TaskContinuityRuntime:
         task["handoff_ids"].append(record["handoff_id"])
         self._touch(task)
         return record
+
+    def _remember_handoff_child(
+        self, task: dict[str, Any], target: str, result: dict[str, Any]
+    ) -> None:
+        child_id = str(result.get("child_task_id") or "")
+        if not child_id or child_id == task["task_id"] or child_id in self.state["tasks"]:
+            return
+        child = _clone(task)
+        child["task_id"] = child_id
+        child["parent_task_id"] = task["task_id"]
+        child["root_task_id"] = task.get("root_task_id") or task["task_id"]
+        child["child_task_ids"] = []
+        child["conversation_id"] = f"{task['conversation_id']}:{child_id}"
+        child["owner_employee"] = target
+        child["holder_employee"] = target
+        child["authorized_employees"] = [target, task["owner_employee"]]
+        child["grants"] = {target: list(result.get("delegated_tools") or [])}
+        child["steps"] = []
+        child["status"] = _TERMINAL_OK
+        child["error_code"] = ""
+        child["error_message"] = ""
+        child["handoff_ids"] = []
+        child["prior_results"] = []
+        child["messages"] = []
+        child["business_data"] = {}
+        child["result_payload"] = {
+            "parent_task_id": task["task_id"],
+            "child_task_id": child_id,
+            "parent_run_id": result.get("parent_run_id"),
+            "child_run_id": result.get("child_run_id"),
+            "execution_status": result.get("execution_status"),
+            "result": result.get("result"),
+        }
+        self._touch(child)
+        self.state["tasks"][child_id] = child
+        if child_id not in task["child_task_ids"]:
+            task["child_task_ids"].append(child_id)
 
     def _execute_pending(
         self, task: dict[str, Any], actor: str, *, limit: int | None, only: set[str] | None = None
@@ -1481,6 +1527,18 @@ def _summary(task: dict[str, Any]) -> list[dict[str, str]]:
         }
         for step in task["steps"]
     ]
+
+
+def _presented_handoff(record: dict[str, Any]) -> dict[str, Any]:
+    """Show the shared employee status. The ledger keeps its own completed word."""
+    shown = _clone(record)
+    from app.domain.task_lifecycle.adapters import LegacyTransitionError, canonicalize
+
+    try:
+        shown["status"] = canonicalize("employee", str(record.get("status") or ""))
+    except LegacyTransitionError:
+        return shown
+    return shown
 
 
 def _public_task(task: dict[str, Any]) -> dict[str, Any]:
