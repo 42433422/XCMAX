@@ -152,18 +152,142 @@ def classify_review_workbook(review: dict) -> list[dict]:
                     "dependency_status": "跨区图例和依赖未分析，边界需确认",
                 }
             )
+        hidden = dimensions.get("sheet_state", "visible") != "visible"
+        blank = bool(dimensions.get("blank")) or not cells
+        nonempty_cells = sum(len(items) for items in rows_of_cells.values())
+        title_only = not blank and nonempty_cells == 1
+        tables, notes = _split_table_blocks(rows_of_cells)
+        if len(tables) >= 2:
+            regions = _regions_for_blocks(
+                sheet_cells=cells,
+                rows_of_cells=rows_of_cells,
+                tables=tables,
+                notes=notes,
+                max_col=max_col,
+                merges=merges,
+                header_pattern=header_pattern,
+                possible_shared=possible_shared,
+            )
+        elif title_only and regions:
+            regions = [
+                {
+                    **regions[0],
+                    "data_region": False,
+                    "anomaly": "title_only",
+                    "anomaly_reason": "只有标题，没有数据行",
+                }
+            ]
+        processable = (not hidden) and (not blank) and (not title_only) and any(
+            region.get("data_region", True) for region in regions
+        )
+        if hidden:
+            message = "隐藏工作表无法作为独立模板处理；请选择可见工作表。"
+        elif blank:
+            message = "空白工作表"
+        elif title_only:
+            message = "只有标题，不是数据区域"
+        else:
+            message = ""
         results.append(
             {
                 "sheet": sheet,
                 "sheet_state": dimensions.get("sheet_state", "visible"),
-                "processable": dimensions.get("sheet_state", "visible") == "visible",
-                "processing_message": ""
-                if dimensions.get("sheet_state", "visible") == "visible"
-                else "隐藏工作表无法作为独立模板处理；请选择可见工作表。",
+                "blank": blank,
+                "processable": processable,
+                "processing_message": message,
                 "labels": [item["label"] for item in evidence] or ["unknown"],
                 "evidence": evidence,
                 "checked_cells": len(cells),
-                "regions": regions,
+                "regions": [] if blank else regions,
             }
         )
     return results
+
+
+def _split_table_blocks(rows_of_cells: dict[int, list[dict]]) -> tuple[list[list[int]], list[list[int]]]:
+    content_rows = sorted(rows_of_cells)
+    blocks: list[list[int]] = []
+    current: list[int] = []
+    previous: int | None = None
+    for row in content_rows:
+        if previous is not None and row - previous > 1 and current:
+            blocks.append(current)
+            current = []
+        current.append(row)
+        previous = row
+    if current:
+        blocks.append(current)
+    tables: list[list[int]] = []
+    notes: list[list[int]] = []
+    for block in blocks:
+        while (
+            len(block) >= 2
+            and len(rows_of_cells[block[0]]) < 2
+            and len(rows_of_cells[block[1]]) >= 2
+        ):
+            notes.append([block[0]])
+            block = block[1:]
+        header = rows_of_cells[block[0]]
+        if len(block) >= 2 and len(header) >= 2:
+            tables.append(block)
+        else:
+            notes.append(block)
+    return tables, notes
+
+
+def _regions_for_blocks(
+    *,
+    sheet_cells: list[dict],
+    rows_of_cells: dict[int, list[dict]],
+    tables: list[list[int]],
+    notes: list[list[int]],
+    max_col: int,
+    merges: list,
+    header_pattern,
+    possible_shared: list[dict],
+) -> list[dict]:
+    from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+
+    def span(rows: list[int]) -> tuple[int, int, int, int]:
+        cols = [
+            column_index_from_string(coordinate_from_string(cell["cell"])[0])
+            for row in rows
+            for cell in rows_of_cells[row]
+        ]
+        return min(cols), rows[0], max(cols), rows[-1]
+
+    regions = []
+    for rows, data_region, anomaly in (
+        *[(item, False, "title_or_note") for item in notes],
+        *[(item, True, "") for item in tables],
+    ):
+        c1, r1, c2, r2 = span(rows)
+        region_cells = [
+            cell
+            for cell in sheet_cells
+            if r1 <= coordinate_from_string(cell["cell"])[1] <= r2
+        ]
+        regions.append(
+            {
+                "range": f"{get_column_letter(c1)}{r1}:{get_column_letter(min(c2, max_col))}{r2}",
+                "labels": ["unknown"],
+                "label_source": "rule",
+                "range_source": "rule",
+                "evidence": [],
+                "parent_heading": "",
+                "header_cells": [
+                    {"cell": cell["cell"], "value": cell["value"]}
+                    for cell in region_cells
+                    if header_pattern.fullmatch(str(cell["value"]).strip())
+                ],
+                "merged_ranges": [],
+                "possible_shared_context": possible_shared,
+                "checked_cells": len(region_cells),
+                "needs_confirmation": True,
+                "dependency_status": "跨区图例和依赖未分析，边界需确认",
+                "data_region": data_region,
+                "anomaly": anomaly,
+                "anomaly_reason": "标题或说明，不是数据表" if anomaly else "",
+            }
+        )
+    return regions

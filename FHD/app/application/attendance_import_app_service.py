@@ -89,10 +89,55 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             employee_no TEXT NOT NULL,
             position TEXT NOT NULL,
             user_id TEXT NOT NULL,
-            UNIQUE(source_file, employee_name, department)
+            UNIQUE(source_file, employee_name, employee_no, user_id)
         )
         """
     )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(attendance_daily_records)")}
+    if "business_id" not in columns:
+        conn.execute("ALTER TABLE attendance_daily_records ADD COLUMN business_id TEXT")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_attendance_business_id
+        ON attendance_daily_records (business_id)
+        WHERE business_id IS NOT NULL AND business_id != ''
+        """
+    )
+    existing_employees = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'attendance_employees'"
+    ).fetchone()
+    if existing_employees and "UNIQUE(source_file, employee_name, department)" in " ".join(
+        (existing_employees[0] or "").split()
+    ):
+        conn.execute("ALTER TABLE attendance_employees RENAME TO _attendance_employees_old")
+        conn.execute(
+            """
+            CREATE TABLE attendance_employees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_file TEXT NOT NULL,
+                employee_name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                main_department TEXT NOT NULL,
+                attendance_group TEXT NOT NULL,
+                employee_no TEXT NOT NULL,
+                position TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                UNIQUE(source_file, employee_name, employee_no, user_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO attendance_employees (
+                id, source_file, employee_name, department, main_department,
+                attendance_group, employee_no, position, user_id
+            )
+            SELECT id, source_file, employee_name, department, main_department,
+                   attendance_group, employee_no, position, user_id
+            FROM _attendance_employees_old
+            """
+        )
+        conn.execute("DROP TABLE _attendance_employees_old")
     conn.execute(
         """
         CREATE INDEX IF NOT EXISTS ix_employees_name

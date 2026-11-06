@@ -18,7 +18,6 @@ from tests.test_application.test_etl_preview_task_boundaries import (
 )
 from tests.test_application.test_etl_preview_task_boundaries import snapshot
 
-PARTIAL = "ELT_ATTENDANCE_PARTIAL_SELECTION_UNSUPPORTED"
 EMPTY = "ELT_ATTENDANCE_EMPTY_SELECTION"
 
 
@@ -44,6 +43,9 @@ def attendance_store(preview_store, tmp_path, monkeypatch):
     with sqlite3.connect(store.attendance_db) as db:
         _ensure_schema(db)
     monkeypatch.setattr(AttendanceAdapter, "_db_path", staticmethod(lambda: store.attendance_db))
+    monkeypatch.setattr(
+        "app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path)
+    )
     with store.factory() as db, store.workbook.open("rb") as stream:
         upload = store.service.save_upload(
             db,
@@ -80,19 +82,17 @@ def approve(store, revision, *, valid_rows_only=False):
 
 
 @pytest.mark.parametrize("boundary", ["approval", "worker"])
-@pytest.mark.parametrize("selection,code", [("skip", PARTIAL), ("error", PARTIAL), ("none", EMPTY)])
+@pytest.mark.parametrize("selection", ["skip", "error", "none"])
 def test_excluded_attendance_rows_never_reach_workbook_writer(
-    attendance_store, boundary, selection, code
+    attendance_store, boundary, selection
 ):
     store = attendance_store
-    before = attendance_contents(store)
     with store.factory() as db:
         rows = db.query(EltRunRow).filter_by(run_id=store.run_id).order_by(EltRunRow.id).all()
         patch = (
             {
-                "field_mappings": [{"source": "姓名", "target": "document_path"}],
                 "validation_rules": [
-                    {"field": "document_path", "op": "enum", "value": ["SYNTHETIC-KEEP"]}
+                    {"field": "employee_name", "op": "enum", "value": ["SYNTHETIC-KEEP"]}
                 ],
             }
             if selection == "error"
@@ -109,26 +109,28 @@ def test_excluded_attendance_rows_never_reach_workbook_writer(
     assert reviewed["summary"]["error"] == (1 if selection == "error" else 0)
     only_valid = selection == "error"
     if boundary == "approval":
-        with pytest.raises(EltError) as error:
-            approve(store, reviewed["preview_revision"], valid_rows_only=only_valid)
-        assert error.value.code == code and error.value.status_code == 409
-        current = snapshot(store, store.run_id)
-        assert current["status"] == "preview_ready"
-        assert current["preview_revision"] == reviewed["preview_revision"]
+        approve(store, reviewed["preview_revision"], valid_rows_only=only_valid)
+        store.executor.futures[-1].result(timeout=10)
     else:
-        # A legacy/internal dispatcher cannot bypass the worker's own scope check.
         with store.factory() as db:
             run = db.get(EltRun, store.run_id)
             record_confirmation(run, reviewed["preview_revision"], valid_rows_only=only_valid)
             run.status = "executing"
             db.commit()
         store.service._execute_worker(store.run_id, 7, only_valid)
-        current = snapshot(store, store.run_id)
-        assert current["status"] == "failed" and current["error_code"] == code
-    assert current["lease"] == (None, None, None)
-    assert current["summary"]["executed"] == 0
-    assert all(row["execution_status"] != "success" for row in current["persisted_rows"])
-    assert attendance_contents(store) == before
+    current = snapshot(store, store.run_id)
+    with sqlite3.connect(store.attendance_db) as db:
+        names = {
+            row[0]
+            for row in db.execute("SELECT employee_name FROM attendance_employees").fetchall()
+        }
+    if selection == "none":
+        assert current["summary"]["executed"] == 0 and names == set()
+    elif selection == "error":
+        assert current["status"] == "partial" and names == {"SYNTHETIC-KEEP"}
+    else:
+        assert "SYNTHETIC-EXCLUDE" not in names
+        assert names == {"SYNTHETIC-KEEP"}
 
 
 def test_complete_attendance_approval_writes_real_workbook(attendance_store):
@@ -148,22 +150,28 @@ def test_complete_attendance_approval_writes_real_workbook(attendance_store):
         assert db.execute("SELECT COUNT(*) FROM attendance_import_batches").fetchone()[0] == 1
 
 
-@pytest.mark.parametrize(
-    "declared,total,actual,code",
-    [(1, 2, 1, PARTIAL), (2, 2, 1, PARTIAL), (0, 2, 0, EMPTY), (2, None, 2, PARTIAL)],
-)
-def test_attendance_adapter_also_rejects_incomplete_scope(
-    attendance_store, declared, total, actual, code
-):
+def test_attendance_adapter_writes_only_the_rows_it_is_given(attendance_store):
     store = attendance_store
     before = attendance_contents(store)
     context = {
         "upload_path": str(store.workbook),
         "file_sha256": hashlib.sha256(store.workbook.read_bytes()).hexdigest(),
-        "row_count": declared,
-        "total_rows": total,
+        "run_id": "scope-check",
+        "row_count": 0,
+        "total_rows": 2,
     }
     with pytest.raises(EltError) as error:
-        AttendanceAdapter().execute_batch(({} for _ in range(actual)), context)
-    assert error.value.code == code
+        AttendanceAdapter().execute_batch((), context)
+    assert error.value.code == EMPTY
     assert attendance_contents(store) == before
+    context["row_count"] = 1
+    AttendanceAdapter().execute_batch(
+        ({"employee_name": "SYNTHETIC-KEEP", "business_id": "keep-only"},),
+        context,
+    )
+    with sqlite3.connect(store.attendance_db) as db:
+        assert db.execute("SELECT employee_name FROM attendance_employees").fetchall() == [
+            ("SYNTHETIC-KEEP",)
+        ]
+        assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0
+        assert db.execute("SELECT COUNT(*) FROM customers").fetchone()[0] == 0

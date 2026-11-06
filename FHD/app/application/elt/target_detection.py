@@ -32,12 +32,28 @@ def _classify(lines: list[str], *, suffix: str) -> dict[str, Any]:
             "confidence": 0.98,
             "reason": "delivery_title_and_product_table",
         }
-    if _ATTENDANCE_RE.search(text):
+    confirmed_sheets = any(name in text for name in ("每日统计", "打卡时间", "原始记录"))
+    attendance_fields = (
+        re.search(r"姓名", text)
+        and re.search(r"日期|workDate", text, re.I)
+        and re.search(r"工号|userid|考勤组", text, re.I)
+        and re.search(r"上班|下班|打卡", text)
+    )
+    if confirmed_sheets or attendance_fields:
         return {
             "target_type": "attendance",
             "document_type": "attendance_table",
-            "confidence": 0.9,
-            "reason": "attendance_headers",
+            "confidence": 0.95 if confirmed_sheets else 0.9,
+            "reason": "attendance_sheet_names" if confirmed_sheets else "attendance_headers",
+            "confirmed": True,
+        }
+    if _ATTENDANCE_RE.search(text):
+        return {
+            "target_type": "abnormal",
+            "document_type": "unconfirmed_template",
+            "confidence": 0.4,
+            "reason": "unconfirmed_attendance_headers",
+            "confirmed": False,
         }
     if _PURCHASE_RE.search(text) and _PRODUCT_RE.search(text):
         return {
@@ -68,10 +84,11 @@ def _classify(lines: list[str], *, suffix: str) -> dict[str, Any]:
             "reason": "product_headers",
         }
     return {
-        "target_type": "customer_products",
-        "document_type": "generic_structured_table",
-        "confidence": 0.35,
-        "reason": f"safe_structured_fallback:{suffix}",
+        "target_type": "abnormal",
+        "document_type": "unconfirmed_template",
+        "confidence": 0.0,
+        "reason": f"unconfirmed_template:{suffix}",
+        "confirmed": False,
     }
 
 
@@ -123,10 +140,11 @@ def detect_etl_target(
             "reason": "delivery_filename",
         }
     return {
-        "target_type": "customer_products",
-        "document_type": "unknown_business_document",
-        "confidence": 0.25,
+        "target_type": "abnormal",
+        "document_type": "unconfirmed_template",
+        "confidence": 0.0,
         "reason": "manual_review_required",
+        "confirmed": False,
     }
 
 
