@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from app.application.ai_chat.dialogue_arbitration import (
+    explicit_read_with_write_guard,
     is_client_version_question,
     is_dialogue_fact_message,
 )
@@ -185,10 +186,15 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     )
     if is_client_version_question(text):
         return {"intent": "unknown", "slots": {}}
-    if not is_dialogue_fact_message(text) and (
-        ports.is_negated_action(text)
-        or re.search(
-            r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text
+    # 「不要修改数据」约束的是写入。明确的客户库读取仍要走到客户查询。
+    if (
+        not is_dialogue_fact_message(text)
+        and not explicit_read_with_write_guard(text)
+        and (
+            ports.is_negated_action(text)
+            or re.search(
+                r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text
+            )
         )
     ):
         return {"intent": "unknown", "slots": {}}

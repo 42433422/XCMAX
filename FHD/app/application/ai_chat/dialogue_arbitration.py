@@ -33,6 +33,14 @@ def is_explicit_enterprise_customer_query(text: str) -> bool:
     return False
 
 
+def explicit_read_with_write_guard(text: str) -> bool:
+    """A real lookup that also refuses writes, such as 「查询客户库，不要修改」."""
+    raw = str(text or "")
+    if not is_explicit_enterprise_customer_query(raw):
+        return False
+    return bool(re.search(r"(查询|查一下|查下|看看|查看|列出|读取|只读查询)", raw))
+
+
 def is_client_version_question(text: str) -> bool:
     raw = str(text or "")
     if any(word in raw for word in ("产品", "商品", "货品")):

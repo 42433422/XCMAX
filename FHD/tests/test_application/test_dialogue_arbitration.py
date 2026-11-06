@@ -32,10 +32,18 @@ def test_fact_questions_and_hypotheses_stay_on_the_dialogue_path() -> None:
 
 
 def test_explicit_customer_database_reads_still_route_to_customers() -> None:
-    for text in ("查询甲公司的客户", "客户有哪些", "查一下客户", "请查询企业客户库"):
+    for text in (
+        "查询甲公司的客户",
+        "客户有哪些",
+        "查一下客户",
+        "请查询企业客户库",
+        "请只读查询企业客户库，不要修改数据。",
+    ):
         assert is_explicit_enterprise_customer_query(text) is True
         assert is_dialogue_fact_message(text) is False
         assert route_normal_mode_message(text)["intent"] == "customers_query"
+    assert route_normal_mode_message("不修改客户资料")["intent"] == "unknown"
+    assert route_normal_mode_message("不允许修改客户资料")["intent"] == "unknown"
 
 
 def test_desktop_version_question_is_not_a_product_lookup() -> None:
