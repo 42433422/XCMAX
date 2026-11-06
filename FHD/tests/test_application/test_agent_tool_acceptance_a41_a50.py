@@ -22,7 +22,10 @@ from app.application.agent_orchestrator.tool_executor import (
     AgentToolExecutor,
     execute_with_tool_deadline,
 )
-from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
+from app.application.agent_orchestrator.tool_permission import (
+    clear_idempotent_replay_for_tests,
+    clear_tenant_tools_for_tests,
+)
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -43,8 +46,10 @@ def _wallet(monkeypatch, tmp_path):
 @pytest.fixture(autouse=True)
 def _clear_replay():
     clear_idempotent_replay_for_tests()
+    clear_tenant_tools_for_tests()
     yield
     clear_idempotent_replay_for_tests()
+    clear_tenant_tools_for_tests()
 
 
 def test_unauthorized_direct_call_is_denied_and_audited(

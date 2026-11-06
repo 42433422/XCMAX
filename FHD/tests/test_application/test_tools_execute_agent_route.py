@@ -143,7 +143,8 @@ def test_tools_execute_route_puts_medium_risk_tool_behind_confirmation(
 
     assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is True
+    assert payload["success"] is False
+    assert payload["error_code"] == "approval_required"
     assert payload["agent_status"] == "waiting_user"
     assert payload["agent_run_id"] == payload["run_id"]
 
