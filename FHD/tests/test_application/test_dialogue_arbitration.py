@@ -64,6 +64,11 @@ def test_read_only_customer_database_query_is_not_a_mutation_workflow() -> None:
     assert route_normal_mode_message(text)["intent"] == "customers_query"
 
 
+def test_acceptance_marker_is_not_a_spoken_customer_fact() -> None:
+    text = "请打开 macOS 文本编辑应用 TextEdit。验收标记 C4-DESKTOP-001"
+    assert is_dialogue_fact_message(text) is False
+
+
 def test_operational_customer_lookup_still_skips_dialogue_memory() -> None:
     assert (
         should_answer_as_dialogue("查一下客户", {"local_user_id": 1, "conversation_id": "c"})

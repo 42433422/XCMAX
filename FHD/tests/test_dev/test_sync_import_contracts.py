@@ -23,6 +23,8 @@ def test_sync_contracts_allow_dal_but_reject_bypasses(tmp_path, violation):
         "app/domain/shared_services",
         "app/application",
         "app/services",
+        "app/fastapi_routes",
+        "app/fastapi_app",
     ):
         directory = tmp_path / package
         directory.mkdir(parents=True, exist_ok=True)

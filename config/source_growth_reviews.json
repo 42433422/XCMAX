@@ -108,6 +108,18 @@
       "validation": "Reviewed-excel and ETL regression tests cover unknown templates, two physical tables, formulas, hidden sheets, corrupt input, and preserved source identity.",
       "follow_up": "Keep deterministic and model-based slice policies in their application modules; move the selector behind the existing application boundary if the route gains another selection policy.",
       "review_owner": "@42433422"
+    },
+    "FHD/app/application/ai_chat_app_service.py": {
+      "base_file": "FHD/app/application/ai_chat_app_service.py",
+      "base_blob": "ccacd04a1ba95b9efdec73cbfc0c2300c8810e95",
+      "head_blob": "bf11f59db84607ec93b130ec4164acffc4007095",
+      "before_lines": 819,
+      "after_lines": 835,
+      "reason": "Spoken customer facts and desktop version questions are answered from the conversation before the model or customer database is called.",
+      "boundary": "Only the chat turn branch in ai_chat_app_service. Fact storage, routing predicates, and customer queries stay in their existing modules.",
+      "validation": "Dialogue arbitration tests, confirmed-fact tests, and the desktop TextEdit approval route still reach a real workflow plan.",
+      "follow_up": "Move the fact-turn branch out of ai_chat_app_service once the conversation ledger no longer needs a special case in the chat entrypoint.",
+      "review_owner": "@42433422"
     }
   }
 }

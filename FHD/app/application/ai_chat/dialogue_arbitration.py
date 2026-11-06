@@ -53,7 +53,9 @@ def is_dialogue_fact_message(text: str) -> bool:
     raw = str(text or "").strip()
     if not raw or _OPERATIONAL.search(raw):
         return False
-    if re.search(r"(卖给|销售给|出售给|单价|开票|收款|人工审批|手动审批|出货|发货|送货|客户名称)", raw):
+    if re.search(
+        r"(卖给|销售给|出售给|单价|开票|收款|人工审批|手动审批|出货|发货|送货|客户名称)", raw
+    ):
         return False
     if is_explicit_enterprise_customer_query(raw) or is_client_version_question(raw):
         return False
@@ -65,7 +67,7 @@ def is_dialogue_fact_message(text: str) -> bool:
         return True
     if re.search(r"如果", raw) and re.search(r"(客户|合同|标记|增加|减少)", raw):
         return True
-    if re.search(r"\d", raw) and re.search(r"(客户|合同|万元|标记)", raw):
+    if re.search(r"\d", raw) and re.search(r"(客户|合同|万元|(?<!验收)标记)", raw):
         return True
     return bool(
         re.search(
