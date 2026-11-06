@@ -26,7 +26,6 @@ def _derived_from_classification(client, classification_id: str) -> bytes:
     return source.content
 
 
-
 def _minimal_docx(*, party: str = "样例往来单位", rows: list[list[str]] | None = None) -> bytes:
     """Build a synthetic OOXML package with one table. No customer data."""
     if rows is None:
