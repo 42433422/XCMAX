@@ -29,9 +29,15 @@ _FIELDS = {
 }
 
 
-def try_confirmed_fact_reply(message: str, context: Mapping[str, Any] | None) -> dict[str, Any] | None:
+def try_confirmed_fact_reply(
+    message: str, context: Mapping[str, Any] | None
+) -> dict[str, Any] | None:
     text = _normalize(message)
-    if not text or is_explicit_enterprise_customer_query(text) or not is_dialogue_fact_message(text):
+    if (
+        not text
+        or is_explicit_enterprise_customer_query(text)
+        or not is_dialogue_fact_message(text)
+    ):
         return None
     key = conversation_key(context)
     if not key:
@@ -43,7 +49,9 @@ def try_confirmed_fact_reply(message: str, context: Mapping[str, Any] | None) ->
     operation = _operation(text)
     if operation is None:
         return None
-    reply = _apply(state, operation, text, turn_id, str((context or {}).get("conversation_id") or ""))
+    reply = _apply(
+        state, operation, text, turn_id, str((context or {}).get("conversation_id") or "")
+    )
     if turn_id:
         state["applied"][turn_id] = reply
     _write(key, state)
@@ -102,7 +110,9 @@ def _operation(text: str) -> str | None:
     return None
 
 
-def _apply(state: dict[str, Any], operation: str, text: str, turn_id: str, conversation_id: str) -> str:
+def _apply(
+    state: dict[str, Any], operation: str, text: str, turn_id: str, conversation_id: str
+) -> str:
     if operation == "undo":
         return _undo(state, conversation_id, turn_id, None)
     if operation == "undo_contract":
@@ -206,7 +216,14 @@ def _undo(state: dict[str, Any], conversation_id: str, turn_id: str, only: str |
     for fact_id, value in (revision.get("before") or {}).items():
         if only and fact_id != only:
             continue
-        _put(state, fact_id, value, conversation_id, turn_id, undo_link=str(revision.get("revision_id") or ""))
+        _put(
+            state,
+            fact_id,
+            value,
+            conversation_id,
+            turn_id,
+            undo_link=str(revision.get("revision_id") or ""),
+        )
     return _render(state, "已撤销")
 
 
@@ -236,7 +253,12 @@ def _put(
 
 
 def _push(
-    state: dict[str, Any], kind: str, obj: str, before: dict[str, Any], turn_id: str, delta: dict[str, int]
+    state: dict[str, Any],
+    kind: str,
+    obj: str,
+    before: dict[str, Any],
+    turn_id: str,
+    delta: dict[str, int],
 ) -> None:
     after = _current_map(state)
     state["revisions"].append(

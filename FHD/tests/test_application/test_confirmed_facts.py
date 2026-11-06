@@ -35,7 +35,11 @@ def _say(conversation_id: str, turn: str, text: str) -> str:
 
 def test_acceptance_sequence_keeps_confirmed_numbers(memory_dir: Path) -> None:
     cid = "c13"
-    assert "120" in _say(cid, "01", "请确认记下这些事实：客户总数120，A类70，B类50，合同总额360万元，会话标记蓝鲸-731。")
+    assert "120" in _say(
+        cid,
+        "01",
+        "请确认记下这些事实：客户总数120，A类70，B类50，合同总额360万元，会话标记蓝鲸-731。",
+    )
     assert "70" in _say(cid, "02", "已确认的客户总数和分类是多少？")
     assert "128" in _say(cid, "03", "确认增加8个客户，其中A类5个、B类3个。")
     assert "75" in _say(cid, "04", "再问一次已确认的客户总数和分类。")

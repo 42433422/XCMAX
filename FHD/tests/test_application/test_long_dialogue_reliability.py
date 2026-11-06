@@ -86,9 +86,7 @@ def test_fact_line_is_kept_when_history_is_compressed(memory_dir: Path) -> None:
         if item.get("role") == "system" and "已确认事实" in str(item.get("content"))
     ]
     assert fact_lines and "11" in fact_lines[0]
-    filler = [
-        {"role": "user", "content": f"无关闲聊第{index}句" * 40} for index in range(12)
-    ]
+    filler = [{"role": "user", "content": f"无关闲聊第{index}句" * 40} for index in range(12)]
     compressed = asyncio.run(
         ContextWindowManager(token_budget=500, recent_keep=1, summarize_threshold=2).compress(
             [*enriched[:-1], *filler, current]
@@ -118,4 +116,6 @@ def test_active_route_is_registered_before_the_session_path() -> None:
     paths = [getattr(route, "path", "") for route in router.routes]
     assert paths.index("/api/conversations/active") < paths.index("/api/conversations/{session_id}")
     live_paths = [getattr(route, "path", "") for route in live_router.routes]
-    assert live_paths.index("/conversations/active") < live_paths.index("/conversations/{conversation_id}")
+    assert live_paths.index("/conversations/active") < live_paths.index(
+        "/conversations/{conversation_id}"
+    )
