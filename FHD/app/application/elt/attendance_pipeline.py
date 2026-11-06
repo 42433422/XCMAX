@@ -124,10 +124,7 @@ def parse_attendance_dataset(path: Path, *, max_rows: int) -> ParsedDataset:
                         provenance={
                             "sheet": sheet.title,
                             "row": row_number,
-                            "columns": {
-                                key: columns[key] + 1
-                                for key in columns
-                            },
+                            "columns": {key: columns[key] + 1 for key in columns},
                             "slice": slice_record,
                             "clean": {
                                 "record_id": slice_record["slice_id"],
@@ -402,10 +399,11 @@ def _round_half_hour_with_25_minute_grace(value: float) -> float:
     return round(whole / 2, 2)
 
 
-def _clean(raw: dict[str, str], columns: dict[str, int], values: tuple) -> tuple[dict[str, Any], list[dict]]:
+def _clean(
+    raw: dict[str, str], columns: dict[str, int], values: tuple
+) -> tuple[dict[str, Any], list[dict]]:
     cleaned = {
-        key: _text(values[index]) if index < len(values) else ""
-        for key, index in columns.items()
+        key: _text(values[index]) if index < len(values) else "" for key, index in columns.items()
     }
     cleaned["employee_name"] = cleaned.get("employee_name", "")
     cleaned["work_date"] = _iso_date(cleaned.get("work_date", ""))
@@ -414,17 +412,21 @@ def _clean(raw: dict[str, str], columns: dict[str, int], values: tuple) -> tuple
     issues = []
     if not cleaned["employee_name"]:
         issues.append(
-            {"field": "employee_name", "code": "ELT_REQUIRED_FIELD_MISSING", "message": "员工姓名不能为空"}
+            {
+                "field": "employee_name",
+                "code": "ELT_REQUIRED_FIELD_MISSING",
+                "message": "员工姓名不能为空",
+            }
         )
     if "work_date" in columns and not cleaned["work_date"]:
-        issues.append(
-            {"field": "work_date", "code": "ELT_DATE_INVALID", "message": "日期无法识别"}
-        )
+        issues.append({"field": "work_date", "code": "ELT_DATE_INVALID", "message": "日期无法识别"})
     return cleaned, issues
 
 
 def _business_id(cleaned: dict[str, Any]) -> str:
-    employee_key = cleaned.get("employee_no") or cleaned.get("user_id") or cleaned.get("employee_name")
+    employee_key = (
+        cleaned.get("employee_no") or cleaned.get("user_id") or cleaned.get("employee_name")
+    )
     material = f"{employee_key}|{cleaned.get('work_date') or ''}"
     return hashlib.sha256(material.encode()).hexdigest()[:32]
 
@@ -535,7 +537,9 @@ def _business_exists(conn: sqlite3.Connection, business_id: str) -> bool:
     return row is not None
 
 
-def _insert_daily(conn: sqlite3.Connection, row: dict[str, Any], source_file: str, business_id: str) -> None:
+def _insert_daily(
+    conn: sqlite3.Connection, row: dict[str, Any], source_file: str, business_id: str
+) -> None:
     conn.execute(
         """
         INSERT INTO attendance_daily_records (

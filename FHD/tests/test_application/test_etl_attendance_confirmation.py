@@ -43,9 +43,7 @@ def attendance_store(preview_store, tmp_path, monkeypatch):
     with sqlite3.connect(store.attendance_db) as db:
         _ensure_schema(db)
     monkeypatch.setattr(AttendanceAdapter, "_db_path", staticmethod(lambda: store.attendance_db))
-    monkeypatch.setattr(
-        "app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path)
-    )
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     with store.factory() as db, store.workbook.open("rb") as stream:
         upload = store.service.save_upload(
             db,

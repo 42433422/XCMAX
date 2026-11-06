@@ -30,9 +30,13 @@ def test_outage_keeps_completed_work_and_does_not_mark_open_work_successful():
     for cycle in range(10):
         done = ledger.begin(f"done-{cycle}", kind="chat")
         ledger.complete(done["id"], {"text": f"reply-{cycle}"})
-        tool = ledger.begin(f"tool-{cycle}", side_effect=True, idempotency_key=f"tool-key-{cycle}", kind="tool")
+        tool = ledger.begin(
+            f"tool-{cycle}", side_effect=True, idempotency_key=f"tool-key-{cycle}", kind="tool"
+        )
         ledger.complete(tool["id"], {"applied": True})
-        open_task = ledger.begin(f"open-{cycle}", side_effect=True, idempotency_key=f"open-key-{cycle}", kind="erp")
+        open_task = ledger.begin(
+            f"open-{cycle}", side_effect=True, idempotency_key=f"open-key-{cycle}", kind="erp"
+        )
         interrupted = ledger.interrupt_open("backend_restart")
         assert interrupted == [open_task["id"]]
         assert ledger.tasks[done["id"]]["success"] is True
@@ -40,8 +44,15 @@ def test_outage_keeps_completed_work_and_does_not_mark_open_work_successful():
         assert ledger.tasks[open_task["id"]]["success"] is False
         assert ledger.tasks[open_task["id"]]["state"] == "interrupted"
         with pytest.raises(DuplicateSideEffect):
-            ledger.begin(f"replay-{cycle}", side_effect=True, idempotency_key=f"open-key-{cycle}", kind="erp")
-        replay = ledger.begin(f"replay-tool-{cycle}", side_effect=True, idempotency_key=f"tool-key-{cycle}", kind="tool")
+            ledger.begin(
+                f"replay-{cycle}", side_effect=True, idempotency_key=f"open-key-{cycle}", kind="erp"
+            )
+        replay = ledger.begin(
+            f"replay-tool-{cycle}",
+            side_effect=True,
+            idempotency_key=f"tool-key-{cycle}",
+            kind="tool",
+        )
         assert replay["id"] == tool["id"]
         assert replay["success"] is True
 
@@ -59,7 +70,10 @@ def test_failure_notices_are_distinct_and_never_successful():
     assert failure_payload("token_expired")["message"] != failure_payload("offline")["message"]
     assert "管理员" in failure_payload("permission")["message"]
     assert "超时" in failure_payload("timeout")["message"]
-    assert "成功" not in failure_payload("timeout")["message"] or "未成功" in failure_payload("timeout")["message"]
+    assert (
+        "成功" not in failure_payload("timeout")["message"]
+        or "未成功" in failure_payload("timeout")["message"]
+    )
 
 
 def test_refresh_is_single_flight_and_failure_is_not_a_network_error():
@@ -121,17 +135,20 @@ def test_accelerated_sse_soak_bounds_reconnects_and_releases_connections():
     assert hub.live_count() == 0
 
 
-@pytest.mark.parametrize("operation,elapsed,hung,ok", [
-    ("health", 3, False, True),
-    ("health", 3.1, False, False),
-    ("erp_read", 10, False, True),
-    ("erp_read", 10.1, False, False),
-    ("chat", 30, False, True),
-    ("chat", 30.1, False, False),
-    ("tool", 1, True, False),
-    ("upload", 1, True, False),
-    ("download", 1, True, False),
-])
+@pytest.mark.parametrize(
+    "operation,elapsed,hung,ok",
+    [
+        ("health", 3, False, True),
+        ("health", 3.1, False, False),
+        ("erp_read", 10, False, True),
+        ("erp_read", 10.1, False, False),
+        ("chat", 30, False, True),
+        ("chat", 30.1, False, False),
+        ("tool", 1, True, False),
+        ("upload", 1, True, False),
+        ("download", 1, True, False),
+    ],
+)
 def test_timeout_budgets_are_not_success(operation, elapsed, hung, ok):
     outcome = timeout_outcome(operation, elapsed, hung=hung)
     assert outcome["success"] is ok

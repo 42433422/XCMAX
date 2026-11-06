@@ -437,7 +437,9 @@ async def compat_chat_stream_async(
                             if metadata:
                                 item["result"]["route_metadata"] = metadata
                             _persist_compat_chat_turn(body, item["result"])
-                            outcome = "completed" if item["result"].get("success", True) else "failed"
+                            outcome = (
+                                "completed" if item["result"].get("success", True) else "failed"
+                            )
                             _settle_dialogue_turn(body, item["result"], outcome)
                         elif item.get("type") == "error":
                             if metadata:

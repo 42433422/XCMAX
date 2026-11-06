@@ -865,10 +865,14 @@ class TestServiceTargets:
         with pytest.raises(EltNotFound):
             svc.download_path(etl_db, run_id=run.id, owner_user_id=1)
 
-    def test_attendance_download_matches_bytes_and_denies_other_owner(self, etl_db, svc, app_data, fake_adapter):
+    def test_attendance_download_matches_bytes_and_denies_other_owner(
+        self, etl_db, svc, app_data, fake_adapter
+    ):
         payload = b"attendance-xlsx-bytes"
         run = _make_run(etl_db, target_type="attendance", status="completed")
-        run.receipt_json = dump_json({"file_name": "etl-attendance.xlsx", "sha256": hashlib.sha256(payload).hexdigest()})
+        run.receipt_json = dump_json(
+            {"file_name": "etl-attendance.xlsx", "sha256": hashlib.sha256(payload).hexdigest()}
+        )
         etl_db.commit()
         folder = app_data / "etl" / "exports"
         folder.mkdir(parents=True)

@@ -104,9 +104,7 @@ def reconcile_stale_running_runs(
 
         filters = [AgentRunRecord.status.in_(IN_FLIGHT_RUN_STATUSES)]
         if not desktop:
-            filters.append(
-                AgentRunRecord.updated_at <= _stale_cutoff(current, stale_after_seconds)
-            )
+            filters.append(AgentRunRecord.updated_at <= _stale_cutoff(current, stale_after_seconds))
         records = db.query(AgentRunRecord).filter(*filters).all()
         for record in records:
             execution = db.get(AgentTaskExecutionRecord, record.run_id)

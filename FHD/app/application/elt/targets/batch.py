@@ -264,7 +264,9 @@ class AbnormalAdapter(TargetAdapter):
             ],
         )
 
-    def execute_batch(self, rows: Iterable[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any]:
+    def execute_batch(
+        self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
+    ) -> dict[str, Any]:
         del rows, context
         raise EltError("ELT_TEMPLATE_UNCONFIRMED", "模板未确认，不能写入")
 

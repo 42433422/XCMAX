@@ -101,7 +101,9 @@ def _consume_refresh(payload: dict[str, Any]) -> bool:
 
     conn = sqlite3.connect(effect_db_path(), timeout=5)
     try:
-        conn.execute("create table if not exists refresh_uses (jti text primary key, expires_at integer)")
+        conn.execute(
+            "create table if not exists refresh_uses (jti text primary key, expires_at integer)"
+        )
         conn.execute(
             "insert into refresh_uses(jti, expires_at) values (?, ?)",
             (payload["jti"], int(payload["exp"])),
@@ -184,7 +186,9 @@ async def delay(request: Request, profile: str = "health", sleep_ms: int = 0, ha
     body = {**outcome, "elapsed_s": round(elapsed, 3), "success": outcome["success"]}
     if not outcome["success"]:
         body.update(failure_payload("timeout"))
-    return JSONResponse(body, status_code=status, headers={"X-Error-Code": "" if outcome["success"] else "timeout"})
+    return JSONResponse(
+        body, status_code=status, headers={"X-Error-Code": "" if outcome["success"] else "timeout"}
+    )
 
 
 @router.get("/api/stability/lane")
@@ -214,15 +218,19 @@ async def lane(request: Request, lane_name: str = "chat", sleep_ms: int = 0, que
             _lane_queued[lane_name] = max(0, _lane_queued[lane_name] - 1)
         raise
     return JSONResponse(
-        {"success": True, "lane": lane_name, "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)},
+        {
+            "success": True,
+            "lane": lane_name,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+        },
         headers={"X-Stability-Lane": lane_name},
     )
 
 
 def _write_erp(tenant_id: int, key: str) -> dict[str, Any]:
     from app.application.sales_app_service import SalesAppService
-    from app.db.session import get_db
     from app.db.models.customer import Customer
+    from app.db.session import get_db
     from app.infrastructure.tenant_scope import tenant_scope
 
     name = f"稳定性客户{tenant_id}"
@@ -247,13 +255,17 @@ def _write_erp(tenant_id: int, key: str) -> dict[str, Any]:
 
 
 def _write_chat(user_id: int, key: str, text: str) -> str:
-    from app.db.session import get_db
     from app.db.models.ai import AIConversation, AIConversationSession
+    from app.db.session import get_db
     from app.utils.time import utc_now_naive
 
     session_key = f"stab-{key[:24]}"
     with get_db() as db:
-        row = db.query(AIConversationSession).filter(AIConversationSession.session_id == session_key).first()
+        row = (
+            db.query(AIConversationSession)
+            .filter(AIConversationSession.session_id == session_key)
+            .first()
+        )
         if row is None:
             row = AIConversationSession(
                 session_id=session_key,
@@ -287,7 +299,11 @@ async def operations(request: Request, body: dict[str, Any] = Body(default_facto
         return _deny()
     user = _session_user(request)
     if user is None or not str(getattr(user, "username", "")).startswith("stability-"):
-        return JSONResponse(failure_payload("token_expired"), status_code=401, headers={"X-Error-Code": "token_expired"})
+        return JSONResponse(
+            failure_payload("token_expired"),
+            status_code=401,
+            headers={"X-Error-Code": "token_expired"},
+        )
     from app.db.models.user import User
     from app.db.session import get_host_db
 
@@ -308,7 +324,13 @@ async def operations(request: Request, body: dict[str, Any] = Body(default_facto
     if not claim["execute"]:
         if claim["state"] == "succeeded":
             return JSONResponse(
-                {"success": True, "idempotent": True, "state": "succeeded", "ref": claim["ref"], "lane": lane_name},
+                {
+                    "success": True,
+                    "idempotent": True,
+                    "state": "succeeded",
+                    "ref": claim["ref"],
+                    "lane": lane_name,
+                },
                 headers=headers,
             )
         kind = "interrupted" if claim["state"] == "unknown" else "interrupted"
@@ -326,7 +348,11 @@ async def operations(request: Request, body: dict[str, Any] = Body(default_facto
                 effect_finish(claim["key"], "failed", "")
                 emit_current_lane("erp", status=400, error_code="bad_tool_args")
                 return JSONResponse(
-                    {**failure_payload("bad_tool_args"), "message": "销售订单未创建。", "detail": str(quoted.get("message") or "")[:120]},
+                    {
+                        **failure_payload("bad_tool_args"),
+                        "message": "销售订单未创建。",
+                        "detail": str(quoted.get("message") or "")[:120],
+                    },
                     status_code=400,
                     headers={**headers, "X-Error-Code": "bad_tool_args"},
                 )
@@ -336,8 +362,10 @@ async def operations(request: Request, body: dict[str, Any] = Body(default_facto
 
             text = str(body.get("text") or "稳定性探针")[:200]
             try:
-                create_chat_trace_run({"response": text, "success": True}, message=text, user_id=str(user.id))
-            except Exception:
+                create_chat_trace_run(
+                    {"response": text, "success": True}, message=text, user_id=str(user.id)
+                )
+            except Exception:  # noqa: BLE001 — 探针追踪失败时回落到普通 lane 埋点。
                 emit_current_lane("chat", status=200)
             ref = await asyncio.to_thread(_write_chat, int(user.id), claim["key"], text)
         else:
@@ -345,11 +373,15 @@ async def operations(request: Request, body: dict[str, Any] = Body(default_facto
             ref = f"tool-{claim['key']}"
         await asyncio.sleep(max(0, int(body.get("hold_after_ms") or 0)) / 1000)
         effect_finish(claim["key"], "succeeded", ref)
-        return JSONResponse({"success": True, "state": "succeeded", "ref": ref, "lane": lane_name}, headers=headers)
+        return JSONResponse(
+            {"success": True, "state": "succeeded", "ref": ref, "lane": lane_name}, headers=headers
+        )
     except Exception:
         import logging
 
-        logging.getLogger("app.stability").exception("stability operation failed lane=%s", lane_name)
+        logging.getLogger("app.stability").exception(
+            "stability operation failed lane=%s", lane_name
+        )
         effect_finish(claim["key"], "unknown", "")
         emit_current_lane(lane_name, status=500, error_code="interrupted")
         return JSONResponse(
@@ -385,8 +417,8 @@ async def history(request: Request):
     user = _session_user(request)
     if user is None:
         return JSONResponse(failure_payload("token_expired"), status_code=401)
-    from app.db.session import get_db
     from app.db.models.ai import AIConversation
+    from app.db.session import get_db
 
     with get_db() as db:
         count = db.query(AIConversation).filter(AIConversation.user_id == str(user.id)).count()
@@ -433,7 +465,15 @@ async def lab_session(request: Request, body: dict[str, Any] = Body(default_fact
     issued = _lab_user(slot)
     if ttl != 3600:
         issued["refresh_token"] = _issue_refresh(issued["user_id"], ttl_s=ttl)
-    response = JSONResponse({"success": True, "user_id": issued["user_id"], "tenant_id": issued["tenant_id"], "session_id": issued["session_id"], "refresh_token": issued["refresh_token"]})
+    response = JSONResponse(
+        {
+            "success": True,
+            "user_id": issued["user_id"],
+            "tenant_id": issued["tenant_id"],
+            "session_id": issued["session_id"],
+            "refresh_token": issued["refresh_token"],
+        }
+    )
     response.set_cookie("session_id", issued["session_id"], httponly=True, samesite="lax", path="/")
     return response
 
@@ -464,7 +504,11 @@ async def lab_refresh(request: Request, body: dict[str, Any] = Body(default_fact
     token = str(body.get("refresh_token") or "")
     payload = _read_refresh(token)
     if payload is None:
-        return JSONResponse(failure_payload("token_expired"), status_code=401, headers={"X-Error-Code": "token_expired"})
+        return JSONResponse(
+            failure_payload("token_expired"),
+            status_code=401,
+            headers={"X-Error-Code": "token_expired"},
+        )
 
     def rotate() -> bool:
         global _refresh_rotations
@@ -488,11 +532,24 @@ async def lab_refresh(request: Request, body: dict[str, Any] = Body(default_fact
 
     ok = await asyncio.to_thread(_refresh_gate.run, rotate)
     if not ok:
-        return JSONResponse(failure_payload("token_expired"), status_code=401, headers={"X-Error-Code": "token_expired"})
+        return JSONResponse(
+            failure_payload("token_expired"),
+            status_code=401,
+            headers={"X-Error-Code": "token_expired"},
+        )
     issued = dict(_refresh_box)
-    response = JSONResponse({"success": True, "user_id": issued.get("user_id"), "session_id": issued.get("session_id"), "refresh_token": issued.get("refresh_token")})
+    response = JSONResponse(
+        {
+            "success": True,
+            "user_id": issued.get("user_id"),
+            "session_id": issued.get("session_id"),
+            "refresh_token": issued.get("refresh_token"),
+        }
+    )
     if issued.get("session_id"):
-        response.set_cookie("session_id", issued["session_id"], httponly=True, samesite="lax", path="/")
+        response.set_cookie(
+            "session_id", issued["session_id"], httponly=True, samesite="lax", path="/"
+        )
     return response
 
 

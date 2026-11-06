@@ -37,7 +37,11 @@ def test_real_customer_workbooks_classify_without_size_or_fidelity_rejection():
     assert len(daily) >= 4500
     assert len(daily) == len(invalid) + len(daily) - len(invalid)
     assert all("business_id" not in row.provenance["slice"] for row in daily)
-    assert all(row.provenance["clean"]["business_id"] for row in daily if not row.provenance["clean"]["validation_result"])
+    assert all(
+        row.provenance["clean"]["business_id"]
+        for row in daily
+        if not row.provenance["clean"]["validation_result"]
+    )
     parsed.close()
 
 
@@ -53,18 +57,25 @@ def test_unknown_and_similar_templates_are_not_forced(tmp_path, monkeypatch):
     ranges = [region["range"] for region in review["regions"]]
     assert "A1:H10" not in ranges
     assert sum(region.get("data_region", True) for region in review["regions"]) >= 2
-    title = classify_review_workbook(inspect_workbook((SYNTHETIC / "title-only.xlsx").read_bytes()))[0]
+    title = classify_review_workbook(
+        inspect_workbook((SYNTHETIC / "title-only.xlsx").read_bytes())
+    )[0]
     assert title["processable"] is False and title["regions"][0]["data_region"] is False
     from app.application.reviewed_excel_auto_slice import derive_rule_slices
 
     slices = derive_rule_slices(
-        similar.read_bytes(), {"sheets": classify_review_workbook(inspect_workbook(similar.read_bytes()))}
+        similar.read_bytes(),
+        {"sheets": classify_review_workbook(inspect_workbook(similar.read_bytes()))},
     )
     assert slices and all("business_id" not in item for item in slices)
-    formula = next(cell for cell in inspect_workbook(similar.read_bytes())["cells"] if cell["cell"] == "F5")
+    formula = next(
+        cell for cell in inspect_workbook(similar.read_bytes())["cells"] if cell["cell"] == "F5"
+    )
     assert formula["kind"] == "formula" and formula["value"].startswith("=")
     assert all(item["basis"] == "rule_region" for item in slices)
-    hidden = classify_review_workbook(inspect_workbook((SYNTHETIC / "hidden-blank.xlsx").read_bytes()))
+    hidden = classify_review_workbook(
+        inspect_workbook((SYNTHETIC / "hidden-blank.xlsx").read_bytes())
+    )
     blank = next(item for item in hidden if item["sheet"] == "空白")
     concealed = next(item for item in hidden if item["sheet"] == "隐藏")
     assert blank["blank"] is True and blank["processable"] is False
@@ -90,11 +101,21 @@ def test_slice_has_no_business_id_and_clean_is_stable_and_idempotent(tmp_path, m
     dataset2 = parse_attendance_dataset(path, max_rows=100)
     assert hashlib.sha256(path.read_bytes()).hexdigest() == original
     assert all("business_id" not in row.provenance["slice"] for row in dataset.rows)
-    ids = [row.provenance["clean"]["business_id"] for row in dataset.rows if row.values["employee_name"]]
-    assert ids == [row.provenance["clean"]["business_id"] for row in dataset2.rows if row.values["employee_name"]]
+    ids = [
+        row.provenance["clean"]["business_id"]
+        for row in dataset.rows
+        if row.values["employee_name"]
+    ]
+    assert ids == [
+        row.provenance["clean"]["business_id"]
+        for row in dataset2.rows
+        if row.values["employee_name"]
+    ]
     assert len(ids) == len(set(ids)) + 1
     errors = [row for row in dataset.rows if row.provenance["clean"]["validation_result"]]
-    assert errors and errors[0].provenance["clean"]["validation_result"][0]["field"] == "employee_name"
+    assert (
+        errors and errors[0].provenance["clean"]["validation_result"][0]["field"] == "employee_name"
+    )
     from app.application.elt.attendance_pipeline import persist_attendance_rows
 
     db = tmp_path / "attendance.sqlite"
@@ -140,7 +161,11 @@ def test_slice_has_no_business_id_and_clean_is_stable_and_idempotent(tmp_path, m
 
 def test_weekday_windows_match_the_documented_oracle():
     monday = _hours("2026-03-02", "08:00", "17:30")
-    assert monday == {"regular_hours": 8.0, "sunday_overtime_hours": 0.0, "night_overtime_hours": 0.0}
+    assert monday == {
+        "regular_hours": 8.0,
+        "sunday_overtime_hours": 0.0,
+        "night_overtime_hours": 0.0,
+    }
     evening = _hours("2026-03-02", "08:00", "18:40")
     assert evening["regular_hours"] == 8.0
     assert evening["night_overtime_hours"] == 0.5
@@ -152,14 +177,18 @@ def test_weekday_windows_match_the_documented_oracle():
 def test_enterprise_desktop_demo_can_convert(monkeypatch):
     from app.mod_sdk import customer_features
 
-    monkeypatch.setattr(customer_features, "get_logged_in_user", lambda _: type("U", (), {"username": "xcagi-enterprise-demo"})())
-    monkeypatch.setattr(customer_features, "load_session_private_delivery_binding", lambda _: {})
     monkeypatch.setattr(
-        "app.mod_sdk.product_plane.is_enterprise_client_plane", lambda: True
+        customer_features,
+        "get_logged_in_user",
+        lambda _: type("U", (), {"username": "xcagi-enterprise-demo"})(),
     )
+    monkeypatch.setattr(customer_features, "load_session_private_delivery_binding", lambda _: {})
+    monkeypatch.setattr("app.mod_sdk.product_plane.is_enterprise_client_plane", lambda: True)
     from starlette.requests import Request
 
-    features = customer_features.attendance_custom_features(Request({"type": "http", "headers": []}))
+    features = customer_features.attendance_custom_features(
+        Request({"type": "http", "headers": []})
+    )
     assert "attendance-convert" in features["custom_features"]
     monkeypatch.setattr("app.mod_sdk.product_plane.is_enterprise_client_plane", lambda: False)
     denied = customer_features.attendance_custom_features(Request({"type": "http", "headers": []}))
@@ -173,14 +202,28 @@ def test_fault_retry_does_not_duplicate_written_rows(tmp_path, monkeypatch):
     from app.application.elt.errors import EltError
 
     rows = [
-        {"employee_name": "甲", "employee_no": "E1", "work_date": "2026-03-02", "business_id": "a" * 32, "source_row": 2},
-        {"employee_name": "乙", "employee_no": "E2", "work_date": "2026-03-03", "business_id": "b" * 32, "source_row": 3},
+        {
+            "employee_name": "甲",
+            "employee_no": "E1",
+            "work_date": "2026-03-02",
+            "business_id": "a" * 32,
+            "source_row": 2,
+        },
+        {
+            "employee_name": "乙",
+            "employee_no": "E2",
+            "work_date": "2026-03-03",
+            "business_id": "b" * 32,
+            "source_row": 3,
+        },
     ]
     db = tmp_path / "fault.sqlite"
     path = tmp_path / "source.xlsx"
     path.write_bytes(b"source")
     try:
-        persist_attendance_rows(rows, db_path=db, source_file="fault", upload_path=path, run_id="fault")
+        persist_attendance_rows(
+            rows, db_path=db, source_file="fault", upload_path=path, run_id="fault"
+        )
         raise AssertionError("fault must fail the ingest")
     except EltError as exc:
         assert exc.code == "ELT_ATTENDANCE_FAULT"

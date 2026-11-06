@@ -386,6 +386,9 @@ def test_newer_schema_refuses_blind_downgrade_and_keeps_rows(tmp_path, monkeypat
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
             "2099_01_01_future_irreversible"
         )
-        assert conn.execute("SELECT customer FROM orders ORDER BY id").fetchall() == [("alice",), ("bob",)]
+        assert conn.execute("SELECT customer FROM orders ORDER BY id").fetchall() == [
+            ("alice",),
+            ("bob",),
+        ]
     assert mod_file.read_text(encoding="utf-8").startswith("{")
     assert config_file.read_text(encoding="utf-8").startswith("{")

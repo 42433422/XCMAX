@@ -114,7 +114,9 @@ def register_extra_middleware(app: FastAPI) -> None:
             tenant = request.headers.get("x-xcagi-tenant") or ""
             if not tenant.replace("-", "").isalnum():
                 tenant = ""
-            if not noisy and (verbose or response.status_code >= 400 or logger.isEnabledFor(logging.DEBUG)):
+            if not noisy and (
+                verbose or response.status_code >= 400 or logger.isEnabledFor(logging.DEBUG)
+            ):
                 line = format_http_trace_line(
                     request_id=request_id,
                     method=request.method,
@@ -126,7 +128,9 @@ def register_extra_middleware(app: FastAPI) -> None:
                     task=(request.headers.get("x-xcagi-task-id") or "")[:64],
                     session_ref=session_ref,
                 )
-                logger.log(logging.INFO if verbose or response.status_code >= 400 else logging.DEBUG, line)
+                logger.log(
+                    logging.INFO if verbose or response.status_code >= 400 else logging.DEBUG, line
+                )
             lane = response.headers.get("x-stability-lane") or lane_for_path(path)
             if lane and not noisy:
                 logging.getLogger("app.stability").info(

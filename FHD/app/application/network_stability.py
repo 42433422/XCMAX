@@ -21,10 +21,16 @@ FAILURE_NOTICES: dict[str, tuple[str, str]] = {
     "server_down": ("服务暂时不可用。请稍后重试，无需重新登录。", "retry"),
     "token_expired": ("登录已过期，请重新登录。这不是网络故障。", "relogin"),
     "permission": ("当前账号没有权限。请联系管理员，不要当作网络错误重试。", "admin"),
-    "timeout": ("请求超时，操作未成功。请重试；已提交的写入请先核对结果，勿重复提交。", "check_result"),
+    "timeout": (
+        "请求超时，操作未成功。请重试；已提交的写入请先核对结果，勿重复提交。",
+        "check_result",
+    ),
     "model_provider": ("模型服务暂时失败，本轮未成功。请稍后重试。", "retry"),
     "insufficient_balance": ("余额不足，操作未成功。请联系管理员充值后再试。", "admin"),
-    "tool_failure": ("工具执行失败，未标记为成功。请查看任务状态后再决定是否重试。", "check_result"),
+    "tool_failure": (
+        "工具执行失败，未标记为成功。请查看任务状态后再决定是否重试。",
+        "check_result",
+    ),
     "bad_tool_args": ("工具参数不正确，操作未执行。请修改后再试。", "retry"),
     "db_down": ("数据库暂时不可用，操作未成功。请联系管理员。", "admin"),
     "upload_failed": ("上传失败，文件未完成。请重试。", "retry"),
@@ -165,7 +171,9 @@ class TraceLog:
         self.rows.append(record)
         return record
 
-    def finish(self, record: dict[str, Any], *, status: int, error_code: str = "") -> dict[str, Any]:
+    def finish(
+        self, record: dict[str, Any], *, status: int, error_code: str = ""
+    ) -> dict[str, Any]:
         record["status"] = status
         record["error_code"] = error_code
         record["duration_ms"] = round((time.perf_counter() - record["started"]) * 1000, 3)
@@ -345,7 +353,7 @@ def emit_current_lane(lane: str, *, status: int = 0, error_code: str = "") -> No
                 lane=lane,
             )
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — 埋点写日志失败不能影响业务响应。
         return
 
 
@@ -381,7 +389,13 @@ def effect_claim(key: str, lane: str, tenant: str, *, path: Path | None = None) 
         try:
             row = conn.execute("select state, ref from effects where key=?", (safe,)).fetchone()
             if safe in _EFFECT_LIVE:
-                return {"key": safe, "state": "running", "execute": False, "duplicate": True, "ref": ""}
+                return {
+                    "key": safe,
+                    "state": "running",
+                    "execute": False,
+                    "duplicate": True,
+                    "ref": "",
+                }
             if row is None:
                 conn.execute(
                     "insert into effects(key, lane, tenant, state, ref, updated_at) values (?,?,?,?,?,?)",
@@ -389,19 +403,43 @@ def effect_claim(key: str, lane: str, tenant: str, *, path: Path | None = None) 
                 )
                 conn.commit()
                 _EFFECT_LIVE.add(safe)
-                return {"key": safe, "state": "running", "execute": True, "duplicate": False, "ref": ""}
+                return {
+                    "key": safe,
+                    "state": "running",
+                    "execute": True,
+                    "duplicate": False,
+                    "ref": "",
+                }
             state, ref = row
             if state == "succeeded":
-                return {"key": safe, "state": "succeeded", "execute": False, "duplicate": False, "ref": ref}
+                return {
+                    "key": safe,
+                    "state": "succeeded",
+                    "execute": False,
+                    "duplicate": False,
+                    "ref": ref,
+                }
             if state == "running":
                 conn.execute(
                     "update effects set state='unknown', updated_at=? where key=?",
                     (now, safe),
                 )
                 conn.commit()
-                return {"key": safe, "state": "unknown", "execute": False, "duplicate": False, "ref": ref or ""}
+                return {
+                    "key": safe,
+                    "state": "unknown",
+                    "execute": False,
+                    "duplicate": False,
+                    "ref": ref or "",
+                }
             if state == "unknown":
-                return {"key": safe, "state": "unknown", "execute": False, "duplicate": False, "ref": ref or ""}
+                return {
+                    "key": safe,
+                    "state": "unknown",
+                    "execute": False,
+                    "duplicate": False,
+                    "ref": ref or "",
+                }
             conn.execute(
                 "update effects set state='running', lane=?, tenant=?, updated_at=? where key=?",
                 (lane, tenant, now, safe),

@@ -343,11 +343,7 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
             # classifiable. Macros, embeddings, and external links still fail closed.
             decorative_prefixes = ("xl/media/", "customXml/", "xl/printerSettings/")
             fidelity_skipped = sorted(
-                {
-                    item.filename
-                    for item in entries
-                    if item.filename.startswith(decorative_prefixes)
-                }
+                {item.filename for item in entries if item.filename.startswith(decorative_prefixes)}
             )
             unsupported = (
                 *(("xl/drawings/",) if not allow_drawings else ()),

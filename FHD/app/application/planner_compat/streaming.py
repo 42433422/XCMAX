@@ -88,7 +88,11 @@ class CompatStream:
                                 "success": False,
                                 "response": partial,
                                 "message": "中断",
-                                "data": {"status": "interrupted", "text": partial, "action": "dialogue_memory"},
+                                "data": {
+                                    "status": "interrupted",
+                                    "text": partial,
+                                    "action": "dialogue_memory",
+                                },
                             },
                             "interrupted",
                         )
@@ -114,7 +118,11 @@ class CompatStream:
                                 "success": False,
                                 "response": partial,
                                 "message": "中断",
-                                "data": {"status": "interrupted", "text": partial, "action": "dialogue_memory"},
+                                "data": {
+                                    "status": "interrupted",
+                                    "text": partial,
+                                    "action": "dialogue_memory",
+                                },
                             },
                             "interrupted",
                         )
@@ -130,12 +138,18 @@ class CompatStream:
                 settle_chat_turn(
                     body.message,
                     context,
-                    {"success": False, "response": "".join(sent), "data": {"status": "interrupted"}},
+                    {
+                        "success": False,
+                        "response": "".join(sent),
+                        "data": {"status": "interrupted"},
+                    },
                     "interrupted",
                 )
                 raise
             except Exception:
-                settle_chat_turn(body.message, context, {"success": False, "response": ""}, "failed")
+                settle_chat_turn(
+                    body.message, context, {"success": False, "response": ""}, "failed"
+                )
                 raise
             traced = self.trace(
                 dialogue,

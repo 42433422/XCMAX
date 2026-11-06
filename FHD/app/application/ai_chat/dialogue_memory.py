@@ -115,7 +115,9 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
                 stored = assistant.get("payload")
                 if isinstance(stored, dict) and stored.get("response"):
                     return stored
-                return _payload(str(assistant.get("content") or ""), str(assistant.get("status") or "failed"))
+                return _payload(
+                    str(assistant.get("content") or ""), str(assistant.get("status") or "failed")
+                )
         if should_answer_as_dialogue(text, context):
             _append_user(data, text, turn_id, context)
         elif turn_id:
@@ -184,7 +186,9 @@ async def dialogue_reply(message: str, context: Mapping[str, Any] | None) -> dic
     messages = _model_messages(loaded, str((context or {}).get("turn_id") or ""))
     try:
         reply = await _invoke_complete(messages)
-        revise = _REVISE_UNDO if _UNDO.search(text) else _REVISE_WHAT_IF if _WHAT_IF.search(text) else ""
+        revise = (
+            _REVISE_UNDO if _UNDO.search(text) else _REVISE_WHAT_IF if _WHAT_IF.search(text) else ""
+        )
         if revise:
             try:
                 reply = await _invoke_complete(
@@ -203,7 +207,9 @@ async def dialogue_reply(message: str, context: Mapping[str, Any] | None) -> dic
 
 def _model_messages(data: Mapping[str, Any], turn_id: str) -> list[dict[str, str]]:
     interrupted = any(
-        item.get("role") == "assistant" and item.get("status") == "interrupted" and item.get("turn_id") != turn_id
+        item.get("role") == "assistant"
+        and item.get("status") == "interrupted"
+        and item.get("turn_id") != turn_id
         for item in data.get("turns") or []
         if isinstance(item, dict)
     )
@@ -211,7 +217,9 @@ def _model_messages(data: Mapping[str, Any], turn_id: str) -> list[dict[str, str
     if interrupted:
         system += "本会话有一轮生成中断，那一轮没有完成回复，不能把它当成已完成的分析。"
     user_turns = [
-        item for item in data.get("turns") or [] if isinstance(item, dict) and item.get("role") == "user"
+        item
+        for item in data.get("turns") or []
+        if isinstance(item, dict) and item.get("role") == "user"
     ]
     last_user = str(user_turns[-1].get("content") or "") if user_turns else ""
     if _WHAT_IF.search(last_user):
@@ -359,7 +367,11 @@ def _close_abandoned(key: str, data: dict[str, Any]) -> None:
     index = 0
     while index < len(turns):
         item = turns[index]
-        if item.get("role") == "user" and item.get("turn_id") and (key, item["turn_id"]) not in _INFLIGHT:
+        if (
+            item.get("role") == "user"
+            and item.get("turn_id")
+            and (key, item["turn_id"]) not in _INFLIGHT
+        ):
             if _assistant_for(data, str(item["turn_id"])) is None:
                 turns.insert(
                     index + 1,
@@ -401,7 +413,11 @@ def _assistant_for(data: dict[str, Any], turn_id: str) -> dict[str, Any] | None:
         if item.get("role") == "assistant" and item.get("turn_id") == turn_id:
             return item
     receipt = (data.get("receipts") or {}).get(turn_id)
-    if isinstance(receipt, dict) and receipt.get("status") in {"completed", "failed", "interrupted"}:
+    if isinstance(receipt, dict) and receipt.get("status") in {
+        "completed",
+        "failed",
+        "interrupted",
+    }:
         return receipt
     return None
 

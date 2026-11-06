@@ -26,7 +26,9 @@ def _embedding_metadata(embedder: Callable[[str], list[float]] | None, text: str
         return {}
 
 
-def backfill_missing_embeddings(embedder: Callable[[str], list[float]] | None, state: _DatasetState) -> bool:
+def backfill_missing_embeddings(
+    embedder: Callable[[str], list[float]] | None, state: _DatasetState
+) -> bool:
     """Fill chunks that were stored before an embedder existed. Returns whether any changed."""
     if embedder is None:
         return False

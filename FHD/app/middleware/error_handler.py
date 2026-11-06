@@ -181,7 +181,9 @@ def register_exception_handlers(app: FastAPI) -> None:
             message = redacted
         return JSONResponse(
             status_code=exc.status_code,
-            headers={"X-Request-ID": context["request_id"] if context else ensure_request_id(request)},
+            headers={
+                "X-Request-ID": context["request_id"] if context else ensure_request_id(request)
+            },
             content={
                 "success": False,
                 "error_code": f"http_{exc.status_code}",

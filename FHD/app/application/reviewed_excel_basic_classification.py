@@ -177,8 +177,11 @@ def classify_review_workbook(review: dict) -> list[dict]:
                     "anomaly_reason": "只有标题，没有数据行",
                 }
             ]
-        processable = (not hidden) and (not blank) and (not title_only) and any(
-            region.get("data_region", True) for region in regions
+        processable = (
+            (not hidden)
+            and (not blank)
+            and (not title_only)
+            and any(region.get("data_region", True) for region in regions)
         )
         if hidden:
             message = "隐藏工作表无法作为独立模板处理；请选择可见工作表。"
@@ -204,7 +207,9 @@ def classify_review_workbook(review: dict) -> list[dict]:
     return results
 
 
-def _split_table_blocks(rows_of_cells: dict[int, list[dict]]) -> tuple[list[list[int]], list[list[int]]]:
+def _split_table_blocks(
+    rows_of_cells: dict[int, list[dict]],
+) -> tuple[list[list[int]], list[list[int]]]:
     content_rows = sorted(rows_of_cells)
     blocks: list[list[int]] = []
     current: list[int] = []
@@ -263,9 +268,7 @@ def _regions_for_blocks(
     ):
         c1, r1, c2, r2 = span(rows)
         region_cells = [
-            cell
-            for cell in sheet_cells
-            if r1 <= coordinate_from_string(cell["cell"])[1] <= r2
+            cell for cell in sheet_cells if r1 <= coordinate_from_string(cell["cell"])[1] <= r2
         ]
         regions.append(
             {

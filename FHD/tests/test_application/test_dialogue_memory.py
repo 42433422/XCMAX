@@ -37,7 +37,9 @@ def model_calls(memory_dir: Path) -> list[list[dict[str, str]]]:
 
 
 def test_operational_commands_stay_on_the_business_path(memory_dir: Path) -> None:
-    assert should_answer_as_dialogue("发货单 太阳鸟 5桶 20L规格", {"conversation_id": "c11"}) is False
+    assert (
+        should_answer_as_dialogue("发货单 太阳鸟 5桶 20L规格", {"conversation_id": "c11"}) is False
+    )
     assert should_answer_as_dialogue("查一下客户", {"conversation_id": "c11"}) is False
     assert should_answer_as_dialogue("请提交一个缺陷工单", {"conversation_id": "c11"}) is False
     assert (
@@ -56,7 +58,9 @@ def test_operational_commands_stay_on_the_business_path(memory_dir: Path) -> Non
     )
 
 
-async def test_reply_comes_from_the_complete_callback(model_calls: list[list[dict[str, str]]]) -> None:
+async def test_reply_comes_from_the_complete_callback(
+    model_calls: list[list[dict[str, str]]],
+) -> None:
     first = {"conversation_id": "memo", "turn_id": "1"}
     assert prepare_chat_turn("先记下客户 120 家。", first) is None
     opened = await dialogue_reply("先记下客户 120 家。", first)
@@ -78,7 +82,9 @@ async def test_reply_comes_from_the_complete_callback(model_calls: list[list[dic
     assert "刚才的客户是多少" in sent
 
 
-async def test_same_turn_does_not_call_the_model_again(model_calls: list[list[dict[str, str]]]) -> None:
+async def test_same_turn_does_not_call_the_model_again(
+    model_calls: list[list[dict[str, str]]],
+) -> None:
     context = {"conversation_id": "retry", "turn_id": "same"}
     text = "星河科技目前有120家客户。"
     assert prepare_chat_turn(text, context) is None
@@ -104,7 +110,9 @@ def test_abandoned_turn_is_not_a_successful_analysis(memory_dir: Path) -> None:
     assert turn_status("half", "open") == "interrupted"
 
 
-async def test_what_if_prompt_still_uses_the_complete_callback(model_calls: list[list[dict[str, str]]]) -> None:
+async def test_what_if_prompt_still_uses_the_complete_callback(
+    model_calls: list[list[dict[str, str]]],
+) -> None:
     context = {"conversation_id": "whatif", "turn_id": "q"}
     text = "如果再增加，结果是多少？"
     assert prepare_chat_turn(text, context) is None

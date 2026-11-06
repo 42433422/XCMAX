@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 
 import pytest
-
-import importlib
 
 life = importlib.import_module("app.fastapi_app.lifespan")
 
