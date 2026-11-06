@@ -1,5 +1,5 @@
 {
-  "lines": 2417658,
+  "lines": 2418520,
   "updated": "2026-11-06",
-  "note": "A41-A50 server-side tool permission, tenant-scoped idempotent replay, and acceptance tests"
+  "note": "A42-A50 acceptance: tenant-scoped business data and tools, approval-gated writes, durable idempotency, traceable tool records, and real customer/file effects"
 }
