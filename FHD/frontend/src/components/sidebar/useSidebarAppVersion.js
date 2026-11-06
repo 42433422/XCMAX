@@ -26,6 +26,7 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
   let requestTimeout = null
   let failureCount = 0
   let nextRetryAt = 0
+  let retryTimer = null
   let lastApiReachableAt = null
   let lastSuccessAt = null
   const HEALTH_GRACE_MS = 90_000
@@ -64,6 +65,18 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
         const res = await fetch(buildFullApiUrl('/api/health?lite=1'), {
           credentials: 'include', cache: 'no-store', signal: requestController.signal,
         })
+        if (stopped || epoch !== lifecycle) return
+        if (requestController.signal.aborted) throw new Error('Health request timed out')
+        if (res.status === 502 || res.status === 504) {
+          healthData.value = { status: 'unhealthy', runtime: { blockers: [`http_${res.status}`] } }
+          connection.value = 'ready'
+          healthAppVersion.value = ''
+          failureCount = Math.min(failureCount + 1, 4)
+          nextRetryAt = Date.now() + 8_000
+          lastCheckedAt.value = Date.now()
+          scheduleHealthRetry()
+          return
+        }
         if (!res.ok && res.status !== 503) throw new Error('Health request failed')
         const data = await res.json()
         if (stopped || epoch !== lifecycle) return
@@ -82,6 +95,7 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
           if (recentlyHealthy && failureCount === 0) {
             failureCount = 1
             nextRetryAt = Date.now() + 8_000
+            scheduleHealthRetry()
           } else {
             connection.value = lastApiReachableAt !== null && Date.now() - lastApiReachableAt < 30_000 ? 'reachable' : 'offline'
             lastCheckedAt.value = Date.now()
@@ -99,6 +113,16 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
       }
     })
     return pendingRequest
+  }
+
+  function scheduleHealthRetry() {
+    if (retryTimer !== null) clearTimeout(retryTimer)
+    if (stopped) return
+    const delay = Math.max(0, nextRetryAt - Date.now())
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      void refreshHealthAppVersion({ respectBackoff: true })
+    }, delay)
   }
 
   function refreshWhenVisible() {
@@ -141,6 +165,8 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
     lifecycle += 1
     if (pollTimer !== null) clearInterval(pollTimer)
     pollTimer = null
+    if (retryTimer !== null) clearTimeout(retryTimer)
+    retryTimer = null
     controller?.abort()
     controller = null
     pendingRequest = null

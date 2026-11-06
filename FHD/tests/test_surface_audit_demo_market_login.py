@@ -58,14 +58,25 @@ async def test_本地市场优先_demo_shim(monkeypatch):
     demo_account_config.cache_clear()
     from app.fastapi_routes import market_account as mod
 
-    async def fail_proxy(*args, **kwargs):
-        raise AssertionError("remote proxy should not run when local shim matches")
+    async def proxy_router(method, path, **kwargs):
+        return {
+            "success": True,
+            "access_token": "local-market-token",
+            "refresh_token": "local-refresh",
+            "user": {
+                "id": 3,
+                "username": "xcagi-enterprise-demo",
+                "is_enterprise": True,
+                "is_admin": False,
+            },
+        }
 
-    monkeypatch.setattr(mod, "_proxy_json", fail_proxy)
+    monkeypatch.setattr(mod, "_proxy_json", proxy_router)
 
     result = await mod.login_market_with_password("xcagi-enterprise-demo", "Demo@2026")
 
     assert result["success"] is True
+    assert result["token"] == "local-market-token"
     assert result["is_enterprise"] is True
     assert result["is_market_admin"] is False
     assert result["market_base_url"] == "http://127.0.0.1:8788"

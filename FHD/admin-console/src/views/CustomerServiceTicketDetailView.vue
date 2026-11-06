@@ -49,6 +49,30 @@
       <section class="cs-card">
         <h3 class="cs-card-title">客户问题原文</h3>
         <p class="cs-quote">{{ ticket.summary || '原单未记录正文' }}</p>
+        <p v-if="bundleNames.length" class="cs-hint">附件：{{ bundleNames.join('、') }}</p>
+        <button v-if="hasBundle" type="button" class="cs-btn" @click="downloadBundle">下载支持包</button>
+      </section>
+
+      <section class="cs-card" aria-label="人工处理">
+        <h3 class="cs-card-title">人工处理</h3>
+        <p v-if="handleError" role="alert" class="cs-error-text">{{ handleError }}</p>
+        <form class="cs-eta-editor" @submit.prevent="assignHandler">
+          <label>指派给技术管理员 <input v-model="assigneeId" inputmode="numeric" required /></label>
+          <label>原因 <input v-model="handleReason" required minlength="4" /></label>
+          <button class="cs-btn cs-btn-primary" type="submit" :disabled="saving">指派</button>
+          <button class="cs-btn" type="button" :disabled="saving" @click="acceptHandler">受理</button>
+          <button class="cs-btn" type="button" :disabled="saving" @click="diagnoseHandler">记录诊断</button>
+        </form>
+        <form class="cs-eta-editor" @submit.prevent="requestSensitive">
+          <label>敏感操作 <input v-model="sensitiveChange" placeholder="例如 调整客户可见配置" required /></label>
+          <button class="cs-btn" type="submit" :disabled="saving">申请审批</button>
+          <button class="cs-btn" type="button" :disabled="saving || !sensitiveActionId" @click="decideSensitive('approved')">批准并执行</button>
+          <button class="cs-btn" type="button" :disabled="saving || !sensitiveActionId" @click="decideSensitive('rejected')">拒绝</button>
+        </form>
+        <form class="cs-eta-editor" @submit.prevent="submitResult(false)">
+          <button class="cs-btn" type="button" :disabled="saving" @click="submitResult(true)">故障仍在，不能结案</button>
+          <button class="cs-btn cs-btn-primary" type="submit" :disabled="saving">复测通过，待客户确认</button>
+        </form>
       </section>
 
       <section class="cs-card" aria-label="执行总览">
@@ -184,6 +208,8 @@ const detail = ref<Detail | null>(null), loading = ref(false), error = ref(''), 
 const savingEta = ref(false), etaMessage = ref(''), etaError = ref('')
 const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref(''), closeDisposition = ref('resolved')
 const replyNote = ref(''), replyRequestId = ref('')
+const assigneeId = ref(''), handleReason = ref('按客户描述核查员工图谱'), handleError = ref('')
+const sensitiveChange = ref('调整客户可见配置'), sensitiveActionId = ref(0)
 watch(replyNote, () => { replyRequestId.value = '' })
 let generation = 0
 
@@ -207,9 +233,62 @@ const resolutionState = computed(() => resolutionStateBadge(resolution.value?.st
 const repairVerified = computed(() => yesNoBadge(resolution.value?.repair_verified, '修复已验证', '修复未验证'))
 const team = computed(() => teamMembers(resolution.value?.team))
 const timeline = computed(() => detail.value ? buildTimeline(detail.value.decisions, detail.value.actions, evidence.value) : [])
+const hasBundle = computed(() => Boolean((ticket.value.evidence as Row | undefined)?.support_bundle_base64))
+const bundleNames = computed(() => {
+  const names = (ticket.value.evidence as Row | undefined)?.customerLogs
+  return Array.isArray(names) ? names.map(String) : []
+})
+
+function downloadBundle() {
+  const raw = String((ticket.value.evidence as Row | undefined)?.support_bundle_base64 || '')
+  if (!raw) { handleError.value = '这张工单没有可下载的支持包'; return }
+  const bytes = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0))
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${ticket.value.ticket_no || ticketId.value}-support.zip`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function postHandle(command: string, body: Row) {
+  if (!validId.value || saving.value) return
+  saving.value = true
+  handleError.value = ''
+  try {
+    await api.post(`/api/xcmax/admin/customer-service/tickets/${ticketId.value}/${command}`, body)
+    await load()
+    const pending = [...(detail.value?.actions || [])].reverse().find((row) => row.action_type === 'ticket.apply_change' && row.status === 'waiting_approval')
+    if (pending) sensitiveActionId.value = Number(pending.id || 0)
+  } catch (err) {
+    handleError.value = apiError(err)
+  } finally {
+    saving.value = false
+  }
+}
+
+function assignHandler() {
+  return postHandle('assign', { assignee_id: Number(assigneeId.value), reason: handleReason.value })
+}
+function acceptHandler() { return postHandle('accept', { reason: handleReason.value }) }
+function diagnoseHandler() { return postHandle('diagnose', { reason: handleReason.value }) }
+function requestSensitive() {
+  return postHandle('sensitive-action', { change: sensitiveChange.value, reason: handleReason.value })
+}
+function decideSensitive(decision: 'approved' | 'rejected') {
+  return postHandle('sensitive-action/decision', { action_id: sensitiveActionId.value, decision, reason: handleReason.value })
+}
+function submitResult(faultRemains: boolean) {
+  return postHandle('result', { text: handleReason.value, fault_remains: faultRemains })
+}
 const audits = computed(() => auditItems(detail.value?.audit_logs || []))
 const rawOrEmpty = (rows: unknown[]) => rows.length ? prettyJson(rows) : '暂无记录'
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause)
+function apiError(cause: unknown) {
+  const detail = (cause as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  return message(cause)
+}
 
 function backToList() { void router.push({ name: 'customer-service-tickets' }) }
 
@@ -304,6 +383,8 @@ async function load() {
     if (request !== generation) return
     if (Number(result.ticket?.id) !== id || !Array.isArray(result.decisions) || !Array.isArray(result.actions) || !Array.isArray(result.audit_logs)) throw new Error('客服详情响应不完整')
     detail.value = result as Detail
+    const pending = [...(result.actions || [])].reverse().find((row) => row.action_type === 'ticket.apply_change' && row.status === 'waiting_approval')
+    sensitiveActionId.value = pending ? Number(pending.id || 0) : 0
     expectedCompletionInput.value = toBeijingInput(result.ticket?.expected_completion_at)
   } catch (cause) { if (request === generation) error.value = message(cause) }
   finally { if (request === generation) loading.value = false }

@@ -7,7 +7,7 @@ import { useModsStore } from '@/stores/mods'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useIndustryStore } from '@/stores/industry'
 import { getIndustryWelcomeMarkdown } from '@/constants/industryPresets'
-import { buildChatMessagesKey, buildChatSessionMetaKey, resolveChatIdentity } from '@/utils/chatStorageKeys'
+import { buildChatMessagesKey, buildChatSessionMetaKey, resolveChatIdentity, resolveChatStorageScope } from '@/utils/chatStorageKeys'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
@@ -524,8 +524,18 @@ export function useChatMessages(sessionId: Ref<string>) {
   // 切换当前扩展（Mod）时：同一会话 ID 下不同 Mod 的消息缓存相互隔离，
   // 切换后应重新读取当前 Mod 对应的本地消息（若无缓存则展示欢迎语）。
   watch(
-    () => [String(activeModId.value || ''), productReadAccountEpoch.value],
-    () => {
+    () => [String(activeModId.value || ''), productReadAccountEpoch.value, resolveChatStorageScope()] as const,
+    (next, prev) => {
+      // Identity can arrive after the first paint. Do not copy the provisional
+      // welcome buffer onto the authenticated conversation key.
+      if (prev && next[2] !== prev[2]) {
+        clearTimeout(cacheTimer)
+        cacheTimer = undefined
+        pendingCacheWrite = undefined
+        messages.value = readCachedMessages()
+        restoreModelRoute()
+        return
+      }
       flushMessagesCache()
       cacheError.value = ''
       messages.value = readCachedMessages()

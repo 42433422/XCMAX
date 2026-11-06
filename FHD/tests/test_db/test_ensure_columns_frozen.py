@@ -146,6 +146,7 @@ FROZEN_ADD_COLUMN_FUNCS = frozenset(
         "ensure_sessions_market_refresh_token_column",
         "ensure_user_profile_columns",
         "ensure_users_tenant_id_column",
+        "create_desktop_business_tables",
         "init_approval_tables",
         "init_template_tables",
     }
@@ -200,6 +201,7 @@ FROZEN_EMITTED_COLUMNS = frozenset(
         "tenant_id",
         "tier",
         "updated_at",
+        "version",
         "zone_config",
     }
 )

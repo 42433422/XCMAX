@@ -8,6 +8,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from html.parser import HTMLParser
 from typing import Any
 
 from app.db.models import AIConversation, AIConversationSession
@@ -17,6 +18,27 @@ from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+class _MessageTitleParser(HTMLParser):
+    """Extract title text from a bounded prefix without a backtracking tag regex."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def _message_title(content: str) -> str:
+    parser = _MessageTitleParser()
+    # A title needs only 48 visible characters; arbitrary message bodies must
+    # not make title extraction parse an unbounded malformed HTML fragment.
+    parser.feed((content or "")[:4096])
+    parser.close()
+    plain = " ".join("".join(parser.parts).split())
+    return f"{plain[:48]}…" if len(plain) > 48 else plain
 
 
 class ConversationService(NeuroEventPublisherMixin):
@@ -114,6 +136,10 @@ class ConversationService(NeuroEventPublisherMixin):
                         raise PermissionError("conversation session belongs to another user")
                     session.message_count += 1
                     session.last_message_at = datetime.now()
+                    if role == "user" and not session.title:
+                        title = _message_title(content)
+                        if title:
+                            session.title = title
                 else:
                     session = AIConversationSession(
                         session_id=session_id,

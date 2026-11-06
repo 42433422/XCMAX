@@ -92,7 +92,10 @@ def should_answer_as_dialogue(message: str, context: Mapping[str, Any] | None) -
         if not _NARRATIVE_STOCK.search(text):
             return False
     if _ERP_COMMAND.search(text) and not _HYPOTHETICAL.search(text):
-        return False
+        from app.application.ai_chat.dialogue_arbitration import is_dialogue_fact_message
+
+        if not is_dialogue_fact_message(text):
+            return False
     return True
 
 
@@ -234,6 +237,11 @@ def enrich_model_messages(
     history = memory[1:]
     if history and history[-1].get("content") == message.strip():
         history = history[:-1]
+    from app.application.ai_chat.confirmed_facts import fact_context_line
+
+    fact_line = fact_context_line(context)
+    if fact_line:
+        messages = [messages[0], {"role": "system", "content": fact_line}, *messages[1:]]
     if not history:
         return messages
     return [

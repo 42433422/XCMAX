@@ -3,6 +3,15 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { defineComponent, h, nextTick, ref } from 'vue'
+import { writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+
+const { getActiveConversation } = vi.hoisted(() => ({
+  getActiveConversation: vi.fn(async () => {
+    throw new Error('offline')
+  }),
+}))
 
 // ===== Mock pinia 的 storeToRefs，使其直接返回 store 对象 =====
 vi.mock('pinia', async () => {
@@ -73,6 +82,7 @@ const mockChatViewApi = {
   cancelTaskById: vi.fn(),
   jumpToTaskMessage: vi.fn(),
   refreshHistorySessions: vi.fn(),
+  restoreLatestOwnedSession: vi.fn(),
   showHistoryPanel: vi.fn(),
   loadSession: vi.fn(),
   clearHistorySessions: vi.fn(),
@@ -81,7 +91,7 @@ const mockChatViewApi = {
   startPrintFromTaskCard: vi.fn(),
   copyAssistantPushContent: vi.fn(),
   openAssistantFloatFromTaskPanel: vi.fn(),
-  syncSessionMessages: vi.fn(),
+  syncSessionMessages: vi.fn(async () => undefined),
   handleAutoAction: vi.fn(),
   ttsEnabled: { value: false },
   setTtsEnabled: vi.fn(),
@@ -91,6 +101,12 @@ const mockChatViewApi = {
 
 vi.mock('@/composables/useChatView', () => ({
   useChatView: () => mockChatViewApi,
+}))
+
+vi.mock('@/api/chat', () => ({
+  default: {
+    getActiveConversation,
+  },
 }))
 
 vi.mock('@/composables/useChatVoiceInput', () => ({
@@ -212,7 +228,7 @@ vi.mock('@/components/chat/ChatHistoryModal.vue', () => ({
 
 // ===== 测试辅助 =====
 
-async function mountChatView() {
+async function mountChatView(props: { workspaceConversationId?: string } = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -225,6 +241,7 @@ async function mountChatView() {
 
   const ChatView = (await import('./ChatView.vue')).default
   const wrapper = mount(ChatView, {
+    props,
     global: {
       plugins: [router],
     },
@@ -241,9 +258,38 @@ describe('ChatView functions – generateSessionId', () => {
     vi.clearAllMocks()
     localStorage.clear()
     resetMockRefs()
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
   })
   afterEach(() => {
+    setRuntimeTenantStorageScopeInput(null)
     localStorage.clear()
+  })
+
+  it('空白首页会拉回本账号最近一条会话', async () => {
+    const { wrapper } = await mountChatView()
+    expect(mockChatViewApi.restoreLatestOwnedSession).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('只有欢迎语时仍拉回最近会话', async () => {
+    messagesRef.value = [{ role: 'ai', content: '你好，我是业务助手。', time: '14:56' }]
+    const { wrapper } = await mountChatView()
+    expect(mockChatViewApi.restoreLatestOwnedSession).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('does not mistake invisible or malformed HTML for an existing reply', async () => {
+    messagesRef.value = [{ role: 'ai', content: '<script>alert(1)</script><script', time: '14:56' }]
+    const { wrapper } = await mountChatView()
+    expect(mockChatViewApi.restoreLatestOwnedSession).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it('已有用户消息时不覆盖当前会话', async () => {
+    messagesRef.value = [{ role: 'user', content: '员工图谱无法显示', time: '14:56' }]
+    const { wrapper } = await mountChatView()
+    expect(mockChatViewApi.restoreLatestOwnedSession).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('生成非空字符串 session ID', async () => {
@@ -557,8 +603,12 @@ describe('ChatView functions – currentSessionId', () => {
     vi.clearAllMocks()
     localStorage.clear()
     resetMockRefs()
+    getActiveConversation.mockReset()
+    getActiveConversation.mockRejectedValue(new Error('offline'))
   })
   afterEach(() => {
+    setRuntimeTenantStorageScopeInput(null)
+    invalidateTenantStorageScopeCache()
     localStorage.clear()
   })
 
@@ -567,6 +617,81 @@ describe('ChatView functions – currentSessionId', () => {
     const vm = wrapper.vm as any
     expect(typeof vm.currentSessionId).toBe('string')
     expect(vm.currentSessionId.length).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+
+  it('waits for an owned scope, then adopts the server conversation before trying latest history', async () => {
+    getActiveConversation.mockResolvedValueOnce({ conversation_id: 'server-last' })
+    const { wrapper } = await mountChatView()
+    const vm = wrapper.vm as any
+    expect(getActiveConversation).not.toHaveBeenCalled()
+    expect(mockChatViewApi.restoreLatestOwnedSession).not.toHaveBeenCalled()
+
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, marketUserId: '2' })
+    await nextTick()
+    await flushPromises()
+    expect(vm.currentSessionId).toBe('server-last')
+    expect(writeAiSessionIdToStorage).toHaveBeenCalledWith('server-last')
+    expect(mockChatViewApi.syncSessionMessages).toHaveBeenCalled()
+    expect(mockChatViewApi.restoreLatestOwnedSession).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('discards an old active pointer when the owner changes while it is pending', async () => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    let finish!: (value: any) => void
+    getActiveConversation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const { wrapper } = await mountChatView()
+    getActiveConversation.mockResolvedValueOnce({ conversation_id: 'owner-b' })
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 2 })
+    await flushPromises()
+    expect((wrapper.vm as any).currentSessionId).toBe('owner-b')
+    finish({ conversation_id: 'owner-a-secret' })
+    await flushPromises()
+    expect((wrapper.vm as any).currentSessionId).toBe('owner-b')
+    expect(writeAiSessionIdToStorage).not.toHaveBeenCalledWith('owner-a-secret')
+    wrapper.unmount()
+  })
+
+  it.each(['send', 'background send', 'new conversation', 'unmount'])('retires active-pointer restoration after %s', async action => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    let finish!: (value: any) => void
+    getActiveConversation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const { wrapper } = await mountChatView()
+    if (action === 'send') { (wrapper.vm as any).messageInput = 'local command'; await (wrapper.vm as any).sendMessage() }
+    else if (action === 'background send') { isLoadingRef.value = true; isLoadingRef.value = false }
+    else if (action === 'new conversation') (wrapper.vm as any).currentSessionId = 'new-conversation'
+    else wrapper.unmount()
+    finish({ conversation_id: 'stale-active' })
+    await flushPromises()
+    expect(writeAiSessionIdToStorage).not.toHaveBeenCalledWith('stale-active')
+    expect(mockChatViewApi.restoreLatestOwnedSession).not.toHaveBeenCalled()
+    if (action !== 'unmount') wrapper.unmount()
+  })
+
+  it('preserves an explicit workspace conversation across scope arrival', async () => {
+    const { wrapper } = await mountChatView({ workspaceConversationId: 'task-conversation' })
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    await flushPromises()
+    expect((wrapper.vm as any).currentSessionId).toBe('task-conversation')
+    expect(getActiveConversation).not.toHaveBeenCalled()
+    expect(mockChatViewApi.restoreLatestOwnedSession).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('only starts the latest-history fallback after the active lookup finishes', async () => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    let finish!: (value: any) => void
+    getActiveConversation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const { wrapper } = await mountChatView()
+    expect(mockChatViewApi.restoreLatestOwnedSession).not.toHaveBeenCalled()
+    finish({ conversation_id: '' })
+    await flushPromises()
+    expect(mockChatViewApi.restoreLatestOwnedSession).toHaveBeenCalledOnce()
+    const canApply = mockChatViewApi.restoreLatestOwnedSession.mock.calls[0][0] as unknown as () => boolean
+    expect(canApply()).toBe(true)
+    isLoadingRef.value = true
+    expect(canApply()).toBe(false)
     wrapper.unmount()
   })
 })

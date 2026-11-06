@@ -222,9 +222,13 @@ class CustomerTransferMixin:
 
             session = self._get_session()
             try:
+                from app.application.customer_crud_mixin import _scoped_units
                 from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
 
-                query = session.query(PurchaseUnitModel).filter(PurchaseUnitModel.is_active == True)
+                query = _scoped_units(
+                    session.query(PurchaseUnitModel).filter(PurchaseUnitModel.is_active == True),
+                    PurchaseUnitModel,
+                )
 
                 if keyword:
                     pattern = f"%{keyword}%"
@@ -244,7 +248,9 @@ class CustomerTransferMixin:
                 ]
 
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"customers_{timestamp}.xlsx"
+                from uuid import uuid4
+
+                filename = f"customers_{timestamp}_{uuid4().hex}.xlsx"
 
                 export_dir = os.path.join(get_data_dir(), "exports")
                 os.makedirs(export_dir, exist_ok=True)

@@ -1,4 +1,4 @@
-import { validateEnterpriseSessionCached } from '@/utils/authSessionCache'
+import { captureAuthSession, validateEnterpriseSessionCached } from '@/utils/authSessionCache'
 
 export type DesktopProfileHydrator = {
   loaded: boolean
@@ -11,6 +11,7 @@ type DesktopSessionRouter = {
 }
 
 let desktopSessionRefreshInFlight: Promise<void> | null = null
+let refreshOwnerCurrent = () => false
 
 /**
  * A prior official validation is enough to render the local shell while a
@@ -18,9 +19,12 @@ let desktopSessionRefreshInFlight: Promise<void> | null = null
  * server-side; an invalid result immediately returns to the login page.
  */
 export function refreshDesktopSessionInBackground(router: DesktopSessionRouter, profile: DesktopProfileHydrator, redirect: string): void {
-  if (desktopSessionRefreshInFlight) return
-  desktopSessionRefreshInFlight = validateEnterpriseSessionCached(true)
+  if (desktopSessionRefreshInFlight && refreshOwnerCurrent()) return
+  const isCurrent = captureAuthSession()
+  refreshOwnerCurrent = isCurrent
+  const pending = validateEnterpriseSessionCached(true)
     .then(async (valid) => {
+      if (!isCurrent()) return
       if (!valid) {
         await router.replace({ name: 'login', query: { redirect } })
         return
@@ -33,6 +37,7 @@ export function refreshDesktopSessionInBackground(router: DesktopSessionRouter, 
       // The next foreground request or navigation revalidates the account.
     })
     .finally(() => {
-      desktopSessionRefreshInFlight = null
+      if (desktopSessionRefreshInFlight === pending) desktopSessionRefreshInFlight = null
     })
+  desktopSessionRefreshInFlight = pending
 }

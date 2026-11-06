@@ -199,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
@@ -221,6 +221,7 @@ import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { useChatViewHost } from '@/composables/useChatViewHost'
 import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
@@ -307,6 +308,7 @@ const {
   cancelTaskById,
   jumpToTaskMessage,
   showHistoryPanel,
+  restoreLatestOwnedSession,
   loadSession,
   clearHistorySessions,
   newConversation,
@@ -321,6 +323,22 @@ const {
   addAndSaveMessage,
   stageExcelAnalysisContext,
 } = chatViewApi
+
+function restoreOwnedHistoryIfEmpty() {
+  const hasRealTurn = messages.value.some((msg) => {
+    const text = plainTextFromChatHtml(msg.content).replace(/\s+/g, ' ').trim()
+    if (!text) return false
+    if (msg.role === 'user' || msg.role === 'task') return true
+    return !/^(你好，我是|您好！我是)/.test(text)
+  })
+  if (hasRealTurn || typeof restoreLatestOwnedSession !== 'function') return
+  void restoreLatestOwnedSession()
+}
+watch(productReadAccountEpoch, restoreOwnedHistoryIfEmpty, { immediate: true })
+watch(() => String(modsStore.activeModId || ''), (modId, previous) => {
+  if (previous || !modId) return
+  restoreOwnedHistoryIfEmpty()
+})
 
 const messageInput = ref('')
 function fillComposer(text: string) {

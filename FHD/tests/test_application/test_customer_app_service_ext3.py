@@ -100,6 +100,7 @@ class TestGetAllAdditional:
     def _make_unit(self, **kwargs):
         unit = Mock()
         unit.id = kwargs.get("id", 1)
+        unit.version = kwargs.get("version", 1)
         unit.unit_name = kwargs.get("unit_name", "TestCo")
         unit.contact_person = kwargs.get("contact_person", "Zhang")
         unit.contact_phone = kwargs.get("contact_phone", "13800000000")
@@ -213,6 +214,7 @@ class TestGetByIdAdditional:
         unit.id = 1
         unit.unit_name = "TestCo"
         unit.contact_person = None
+        unit.version = 1
         unit.contact_phone = None
         unit.address = None
         unit.created_at = None
@@ -237,6 +239,7 @@ class TestGetByIdAdditional:
         unit.id = 1
         unit.unit_name = "TestCo"
         unit.contact_person = "Zhang"
+        unit.version = 2
         unit.contact_phone = "138"
         unit.address = "Addr"
         unit.created_at = datetime(2026, 1, 1)
@@ -248,6 +251,7 @@ class TestGetByIdAdditional:
         assert result["success"] is True
         assert result["data"]["customer_name"] == "TestCo"
         assert result["data"]["contact_person"] == "Zhang"
+        assert result["data"]["version"] == 2
         assert "2026-01-01" in result["data"]["created_at"]
 
 

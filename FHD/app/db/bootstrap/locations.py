@@ -34,9 +34,15 @@ def create_desktop_business_tables(
                 contact_phone TEXT, address TEXT, is_active BOOLEAN DEFAULT 1,
                 tenant_id INTEGER, unit_code TEXT NOT NULL DEFAULT '',
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                version INTEGER NOT NULL DEFAULT 1
             )
         """)
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(purchase_units)")}
+        if "version" not in columns:
+            connection.execute(
+                "ALTER TABLE purchase_units ADD COLUMN version INTEGER NOT NULL DEFAULT 1"
+            )
         connection.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

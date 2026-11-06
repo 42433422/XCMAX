@@ -102,7 +102,11 @@ async def list_issues(request: Request) -> dict[str, Any]:
         saved = local.get(str(row.get("id"))) if isinstance(local, dict) else None
         remote_status = str((saved or {}).get("status") or row.get("status") or "")
         items.append(
-            {**row, "ready": row.get("id") in ready, "state": _ticket_state(remote_status)}
+            {
+                **row,
+                "ready": row.get("id") in ready,
+                "state": _customer_visible_state(row, remote_status),
+            }
         )
     return {
         "items": items,
@@ -128,6 +132,19 @@ async def decide_issue(
         payload={"decision": decision, "note": note.strip(), "idempotency_key": idempotency_key},
     )
     return _ticket_commit(owner, ticket_id, decision, idempotency_key, note.strip(), result)
+
+
+def _customer_visible_state(row: dict, remote_status: str) -> str:
+    """客户结果句用市场工单自己的状态。统一任务状态机没有待客户确认，不能把原句覆盖掉。"""
+    status = str(row.get("status") or "").strip().lower()
+    if status in {"awaiting_customer", "waiting_customer"}:
+        return "awaiting_customer"
+    if status in {"resolved", "closed"}:
+        return status
+    market_state = str(row.get("state") or "").strip()
+    if market_state:
+        return market_state
+    return _ticket_state(remote_status)
 
 
 def _ticket_state(status: str) -> str:

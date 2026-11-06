@@ -306,13 +306,22 @@ async function requestOnce<T = unknown>(
         }
       }
 
+      assertSameAccount()
       const verb = String(config.method || 'GET').toUpperCase()
       notifyDbReadTokenRequiredAfter403(response.status, fullUrl, verb)
       notifyDbWriteTokenRequiredAfter403(response.status, fullUrl, verb)
       maybeNotifyLanGate(response.status, errorData)
       const recovery = await authRecovery(url, response.status, errorData, options)
+      assertSameAccount()
       if (recovery === 'retry') {
         return requestOnce<T>(url, { ...options, authRetried: true }, accountEpoch)
+      }
+      // Production has no experimental refresher; its definite session 401s
+      // must still retire the shell, without treating license gates as logout.
+      if (response.status === 401 && !AUTH_REFRESH_EXEMPT.test(url)
+        && !LAN_GATE_ERROR_CODES.has(String((errorData as { error?: unknown } | null)?.error || ''))
+        && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
       }
       if (recovery === 'stop') {
         const expired = classifyTransportFailure({ status: 401, errorCode: 'token_expired' })

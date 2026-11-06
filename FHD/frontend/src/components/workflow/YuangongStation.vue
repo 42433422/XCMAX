@@ -14,7 +14,6 @@ import {
 
 const props = withDefaults(
   defineProps<{
-    /** 副窗「一键托管」是否启用该员工：未启用仅显示工位层 */
     enabled: boolean
     /** 已启用且快照为忙时，使用 staff-busy */
     busy: boolean
@@ -171,7 +170,7 @@ function onStaffError() {
 
 @media (prefers-reduced-motion: no-preference) {
   .yuangong-composed-figure--bob {
-    animation: yuangong-bob-composed 1.1s ease-in-out infinite;
+    animation: yuangong-bob-composed 1.1s ease-in-out 1;
   }
 }
 
@@ -199,7 +198,7 @@ function onStaffError() {
 
 @media (prefers-reduced-motion: no-preference) {
   .yuangong-staff--bob {
-    animation: yuangong-bob 1.1s ease-in-out infinite;
+    animation: yuangong-bob 1.1s ease-in-out 1;
   }
 }
 

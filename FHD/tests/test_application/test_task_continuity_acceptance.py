@@ -605,50 +605,32 @@ def scenario_a35(tmp_path: Path) -> dict:
 
 
 def scenario_a36(tmp_path: Path) -> dict:
-    workspace = tmp_path
-    _install(workspace, "handoff_commit")
-    started = _run(
-        workspace,
-        "A",
-        continuity_action="start",
-        tenant_id="t1",
-        user_id="ua",
-        goal="原始目标保持不变",
-        business_data={"isolation_marker": "a36"},
-        requirements=["沿链传递"],
-    )
-    task_id = started["task_id"]
-    chained = _run(
-        workspace,
-        "A",
-        continuity_action="chain",
-        tenant_id="t1",
-        user_id="ua",
-        task_id=task_id,
-        employees=["A", "B", "C", "D"],
-        permissions=["continue"],
-    )
+    from tests.fixtures.employee_business_chain import EMPLOYEES, run_business_chain
+
+    workspace = tmp_path / "business-chain"
+    proof = run_business_chain(workspace)
+    assert proof["complete"], proof
+    task_id = proof["task_id"]
     stored = _stored(workspace, task_id)
-    assert chained["task_id"] == task_id
-    assert chained["business_success"] is True
-    assert len(stored["handoff_ids"]) == 3
+    assert len(stored["handoff_ids"]) == 4
     handoffs = [_ledger(workspace)["handoffs"][item] for item in stored["handoff_ids"]]
-    assert [(item["source_employee"], item["target_employee"]) for item in handoffs] == [
-        ("A", "B"),
-        ("B", "C"),
-        ("C", "D"),
-    ]
+    assert [item["target_employee"] for item in handoffs] == EMPLOYEES
     assert {item["task_id"] for item in handoffs} == {task_id}
-    assert len(_effects(workspace, "handoff_commit")) == 4
     viewed = _run(
-        workspace, "D", continuity_action="read", tenant_id="t1", user_id="ua", task_id=task_id
+        workspace,
+        EMPLOYEES[-1],
+        continuity_action="read",
+        tenant_id="11",
+        user_id="11",
+        task_id=task_id,
     )
     snapshot = _stored(workspace, task_id)["context_snapshot"]
-    assert snapshot["goal"] == "原始目标保持不变"
+    assert snapshot["goal"] == stored["goal"]
     employees = [item["employee"] for item in snapshot["prior_results"]]
-    assert employees == ["A", "B", "C", "D"]
-    assert viewed["task"]["result_payload"]["employee"] == "D"
+    assert employees == EMPLOYEES
+    assert viewed["task"]["result_payload"]["employee"] == EMPLOYEES[-1]
     assert all(item["result"]["ok"] is True for item in snapshot["prior_results"])
+    assert proof["artifacts"] and proof["summary"]["total_amount"] == 200
     return audit_employee_task_ledger(workspace)
 
 

@@ -8,6 +8,8 @@ import RouteErrorBoundary from '@/components/shell/RouteErrorBoundary.vue'
 import RouteLoadingFeedback from '@/components/shell/RouteLoadingFeedback.vue'
 import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
 import { isDesktopShell } from '@/utils/desktopShell'
+import { probeEnterpriseSession } from '@/utils/authSessionCache'
+import { repairBlankMarketAccessToken } from '@/api/marketAccount'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -66,7 +68,16 @@ function restoreRouteScroll(fullPath) {
     if (el) el.scrollTop = item.top
   }
 }
+let sessionProbeTimer = 0
 onMounted(() => {
+  if (isDesktopShell()) {
+    const probe = () => {
+      void probeEnterpriseSession()
+      void repairBlankMarketAccessToken()
+    }
+    probe()
+    sessionProbeTimer = window.setInterval(probe, 5_000)
+  }
   removeScrollGuards.push(
     router.beforeEach((to, from) => {
       if (!scrollActive) return
@@ -90,6 +101,7 @@ onMounted(() => {
   )
 })
 onBeforeUnmount(() => {
+  if (sessionProbeTimer) window.clearInterval(sessionProbeTimer)
   scrollActive = false
   cancelScrollRestore()
   for (const remove of removeScrollGuards) remove()

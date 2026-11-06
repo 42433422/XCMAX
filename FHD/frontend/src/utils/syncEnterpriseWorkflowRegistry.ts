@@ -1,4 +1,5 @@
 import type { EnterpriseModStack } from '@/constants/enterpriseModStack'
+import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
 import { filterModsForEnterpriseWorkflowRegistry } from '@/utils/workflowEmployeeScope'
@@ -10,7 +11,8 @@ export async function syncEnterpriseWorkflowRegistry(
   options?: { forceStack?: boolean },
 ): Promise<EnterpriseModStack> {
   const stack = await resolveEnterpriseModStack(Boolean(options?.forceStack))
-  const scopedMods = filterModsForEnterpriseWorkflowRegistry(mods, stack)
+  const entitled = useModsStore().entitledModIds
+  const scopedMods = filterModsForEnterpriseWorkflowRegistry(mods, stack, entitled)
   const wfStore = useWorkflowAiEmployeesStore()
   wfStore.hydrateFromMods(scopedMods)
   wfStore.pruneOrphanWorkflowEmployeeToggles(scopedMods)

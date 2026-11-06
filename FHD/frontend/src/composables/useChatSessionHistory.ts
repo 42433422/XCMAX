@@ -12,7 +12,8 @@ import { chatMessageExtrasFromServerRow, type ChatMessage } from './useChatMessa
 import { samePersistedMessage } from './useChatMessagePersistence'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
-import { resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { captureAuthSession } from '@/utils/authSessionCache'
 
 export interface UseChatSessionHistoryDeps {
   sessionId: Ref<string>
@@ -78,15 +79,17 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
   let serverHistory: unknown[] = []
   let nextHistoryOffset = 0
   let requestEpoch = 0
-  if (getCurrentScope()) onScopeDispose(() => { requestEpoch += 1 })
+  let disposed = false
+  if (getCurrentScope()) onScopeDispose(() => { disposed = true; requestEpoch += 1 })
 
   function captureRequest() {
     const epoch = ++requestEpoch
     const modId = String(modsStore.activeModId || '')
     const tenant = resolveChatStorageScope()
+    const isOwnerCurrent = captureAuthSession()
     return {
       epoch,
-      isCurrent: () => epoch === requestEpoch && modId === String(modsStore.activeModId || '')
+      isCurrent: () => !disposed && isOwnerCurrent() && epoch === requestEpoch && modId === String(modsStore.activeModId || '')
         && tenant === resolveChatStorageScope(),
     }
   }
@@ -159,9 +162,9 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     await refreshHistorySessions()
   }
 
-  async function loadSession(targetSessionId: string) {
+  async function loadSession(targetSessionId: string, canApply = () => true) {
     const sid = String(targetSessionId || '').trim()
-    if (!sid || historyLoading.value) return
+    if (!sid || historyLoading.value || !canApply()) return
     const request = captureRequest()
 
     const previousSessionId = String(sessionId.value || '').trim()
@@ -174,9 +177,9 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
 
     try {
       const data = await chatApi.getConversation(sid)
-      if (!request.isCurrent() || sessionId.value !== sid) return
+      if (!request.isCurrent() || sessionId.value !== sid || !canApply()) return
       const dataRow = asRecord(data)
-      const serverMessages = asArray(dataRow.messages)
+      const serverMessages = asArray(dataRow.messages ?? asRecord(dataRow.data).messages)
       const localMessages = normalizeLocalMessages(readLocalMessagesBySession(sid))
       if (data.success && serverMessages.length > 0) {
         const merged = [...localMessages]
@@ -215,7 +218,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       }
       showHistory.value = false
     } catch (e) {
-      if (!request.isCurrent() || sessionId.value !== sid) return
+      if (!request.isCurrent() || sessionId.value !== sid || !canApply()) return
       const localMessages = readLocalMessagesBySession(sid)
       if (localMessages.length > 0) {
         loadMessages(
@@ -314,11 +317,11 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     }
   }
 
-  function resetConversationView() {
+  function resetConversationView(nextSessionId = generateSessionId()) {
     lastExcelAnalysisContext.value = null
     linkedExcelSheet.value = null
     linkedExcelAllSheets.value = false
-    sessionId.value = generateSessionId()
+    sessionId.value = nextSessionId
     writeAiSessionIdToStorage(sessionId.value)
     taskList.value = []
     activeTaskId.value = ''
@@ -326,6 +329,18 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     taskFilter.value = 'all'
     currentTask.value = null
     clearMessages()
+  }
+
+  async function restoreLatestOwnedSession(canApply = () => true) {
+    if (disposed || historyLoading.value || !canApply()) return
+    const originalSession = sessionId.value
+    const isOwnerCurrent = captureAuthSession()
+    const pending = refreshHistorySessions()
+    const epoch = requestEpoch
+    await pending
+    if (disposed || !isOwnerCurrent() || !canApply() || requestEpoch !== epoch || sessionId.value !== originalSession) return
+    const latest = historySessions.value.find((row) => String(row.session_id || '').trim() && Number(row.message_count || 0) > 0)
+    if (latest) await loadSession(latest.session_id, canApply)
   }
 
   function newConversation() {
@@ -351,7 +366,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
         serverHistory = []
         nextHistoryOffset = 0
         historyError.value = ''
-        resetConversationView()
+        resetConversationView(readAiSessionIdFromStorage() || generateSessionId())
         historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
         if (showHistory.value) {
           void showHistoryPanelFn()
@@ -370,6 +385,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     historyLoadingMore,
     loadMoreHistorySessions,
     refreshHistorySessions,
+    restoreLatestOwnedSession,
     showHistoryPanel,
     loadSession,
     clearHistorySessions,

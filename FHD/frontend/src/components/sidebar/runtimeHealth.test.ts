@@ -82,6 +82,20 @@ describe('live sidebar health', () => {
     sidebar.stopHealthPolling()
   })
 
+  it('does not keep 系统正常 after an explicit HTTP 502', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ status: 'healthy', version: '1.0.0.7' }) })
+      .mockResolvedValueOnce({ ok: false, status: 502, json: async () => { throw new Error('not json') } })
+    vi.stubGlobal('fetch', fetchMock)
+    const sidebar = useSidebarAppVersion({ shouldShowAdminDeployStatus: ref(false) })
+    await sidebar.refreshHealthAppVersion()
+    expect(sidebar.runtimeHealth.value.text).toBe('系统正常')
+    await sidebar.refreshHealthAppVersion()
+    expect(sidebar.runtimeHealth.value.text).not.toBe('系统正常')
+    expect(sidebar.runtimeHealth.value.tone).toBe('offline')
+    sidebar.stopHealthPolling()
+  })
+
   it('shows the health body of a degraded HTTP 503 response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false, status: 503,
@@ -196,7 +210,7 @@ describe('health timestamps and bounded retries', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('ignores an old response after stop/start and preserves the new pending request', async () => {
+  it.each([200, 502, 504])('ignores an old HTTP %s response after stop/start and preserves the new pending request', async (status) => {
     const resolves: Array<(value: unknown) => void> = []
     const fetchMock = vi.fn(() => new Promise((resolve) => resolves.push(resolve)))
     const sidebar = setup(fetchMock)
@@ -205,7 +219,7 @@ describe('health timestamps and bounded retries', () => {
     sidebar.stopHealthPolling()
     sidebar.startHealthPolling()
     await vi.advanceTimersByTimeAsync(0)
-    resolves[0](healthy())
+    resolves[0]({ ...healthy(), status })
     await vi.advanceTimersByTimeAsync(0)
     expect(sidebar.runtimeHealthCheck.value.iso).toBe('')
     const pending = sidebar.refreshHealthAppVersion()

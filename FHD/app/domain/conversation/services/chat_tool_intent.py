@@ -205,6 +205,16 @@ def looks_like_explicit_workflow_tool_intent(text: str) -> bool:
     if employee_mentioned and employee_action:
         return True
 
+    # A read of the customer database that also refuses writes is not a mutation
+    # workflow. Keep this predicate in the domain module so it does not import
+    # the application layer.
+    if (
+        any(marker in value for marker in ("客户库", "企业数据库", "业务数据库", "业务库"))
+        and re.search(r"(查询|查一下|查下|看看|查看|列出|读取|只读查询)", value)
+        and re.search(r"(?:不要|不用|别|禁止|不准|不允许).{0,8}(?:修改|更新|写入|删除)", value)
+    ):
+        return False
+
     db_object = any(k in value for k in ("客户", "单位", "产品", "物料", "原材料", "发货", "出货"))
     mutation_action = any(
         k in value

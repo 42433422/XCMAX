@@ -162,8 +162,12 @@ def customers_update(request: Request, customer_id: int, body: dict[str, Any]) -
     mapped = _map_body(body)
     if not mapped.get("customer_name"):
         raise HTTPException(status_code=400, detail="客户名称不能为空")
+    if "expected_version" in body:
+        mapped["expected_version"] = body.get("expected_version")
     result = _service().update(customer_id, mapped)
     if not result.get("success"):
+        if result.get("error_code") == "version_conflict":
+            raise HTTPException(status_code=409, detail="version_conflict")
         status = 404 if "不存在" in str(result.get("message") or "") else 400
         raise HTTPException(status_code=status, detail=result.get("message") or "更新失败")
     return _stamp({"success": True, "data": result.get("data")})

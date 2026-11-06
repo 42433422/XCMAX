@@ -5,12 +5,13 @@ import { apiFetch } from '@/utils/apiBase'
 
 interface Repair {
   id: number; ticket_no: string; summary: string; ready: boolean; state?: string; last_error?: string
-  can_resolve?: boolean; can_reopen?: boolean; latest_result?: { team_ok?: boolean; progress?: string } | null
+  can_resolve?: boolean; can_reopen?: boolean; latest_result?: { team_ok?: boolean; progress?: string; source?: string; fault_remains?: boolean } | null
 }
 type Decision = 'resolved' | 'reopen'
 interface RequestAttempt { id: number; url: string; payload: Record<string, unknown>; message?: string }
 const STATE_TEXT: Record<string, string> = {
   received: '已收到，等待 AI 处理。', reopened: '已重新打开，AI 正在重新处理。',
+  awaiting_customer: '处理结果已提交，等待您确认。确认前工单不会关闭。',
   dispatch_failed: '派发处理失败，系统会自动重试。', awaiting_delivery: 'AI 已提交处理结果，等待正式发布。',
   repair_failed: 'AI 未能完成修复，可以说明情况后重新打开。', awaiting_customer_verification: '修复已发布，等待您验证。',
 }
@@ -31,6 +32,13 @@ let pending: AbortController | undefined
 function decisionKey(id: number, decision: Decision) {
   const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
   return `${id}-${decision}-${random}`
+}
+
+function humanResult(repair: Repair) {
+  const latest = repair.latest_result
+  if (!latest?.progress) return ''
+  if (latest.source === 'human' || typeof latest.fault_remains === 'boolean') return latest.progress
+  return ''
 }
 
 function stateText(repair: Repair) {
@@ -136,7 +144,8 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
       <strong>{{ repair.ticket_no }}</strong>
       <details class="repair-description"><summary>{{ repair.summary.slice(0, 64) }}{{ repair.summary.length > 64 ? '…' : '' }}</summary><p>{{ repair.summary }}</p></details>
       <p>{{ stateText(repair) }}</p>
-      <p v-if="repair.latest_result?.progress">AI 处理结果：{{ repair.latest_result.progress }}</p>
+      <p v-if="humanResult(repair)">处理结果：{{ humanResult(repair) }}</p>
+      <p v-else-if="repair.latest_result?.progress">AI 处理结果：{{ repair.latest_result.progress }}</p>
       <p v-if="repair.last_error">失败原因：{{ repair.last_error }}</p>
       <template v-if="repair.ready || repair.can_resolve || repair.can_reopen">
         <label :for="`repair-result-${repair.id}`">使用结果</label>

@@ -178,6 +178,25 @@ def list_agent_tasks(
         return internal_error_response("list agent tasks")
 
 
+def _stored_task_replay(run: Any) -> tuple[dict[str, Any], int] | None:
+    context = getattr(run, "metadata", {}) or {}
+    runtime = context.get("runtime_context") if isinstance(context, dict) else {}
+    checkpoint = runtime.get("cross_module_checkpoint") if isinstance(runtime, dict) else {}
+    if not isinstance(checkpoint, dict):
+        return None
+    from app.application.agent_orchestrator.cross_module_chain import (
+        load_cross_module_http_result,
+    )
+
+    stored = load_cross_module_http_result(
+        str(checkpoint.get("tenant_id") or ""),
+        str(checkpoint.get("idempotency_key") or ""),
+    )
+    if stored is None:
+        return None
+    return dict(stored["body"]), int(stored.get("http_status") or 200)
+
+
 @router.get("/api/agent/task-runtime", response_model=None)
 def get_agent_task_runtime(
     principal: AgentPrincipal = Depends(require_agent_principal),
@@ -266,11 +285,23 @@ def create_agent_task(
                 refreshed = AgentOrchestrator().get_run(result.run.run_id)
                 if refreshed is not None:
                     result = type(result)(run=refreshed, deduplicated=False)
+            else:
+                from app.application.agent_orchestrator.cross_module_chain import (
+                    project_rejected_approval,
+                )
+
+                projected = project_rejected_approval(result.run)
+                replay = _stored_task_replay(projected)
+                if result.deduplicated and replay is not None:
+                    body, status_code = replay
+                    body["deduplicated"] = True
+                    body["idempotent_replay"] = True
+                    return JSONResponse(body, status_code=status_code)
+                result = type(result)(run=projected, deduplicated=result.deduplicated)
         response = run_response(result.run, principal=principal)
         response["deduplicated"] = result.deduplicated
-        return JSONResponse(
-            response, status_code=202 if result.run.status == "waiting_user" else 200
-        )
+        accepted = {"queued", "waiting_user", "waiting_approval"}
+        return JSONResponse(response, status_code=202 if result.run.status in accepted else 200)
     except UnifiedTaskConflictError:
         return JSONResponse({"success": False, "message": "任务状态冲突"}, status_code=409)
     except UnifiedTaskError as exc:
@@ -341,6 +372,21 @@ def get_agent_task(
         )
         if task is None or not task_scope_matches(orchestrator, task, principal):
             return JSONResponse({"success": False, "message": "任务不存在"}, status_code=404)
+        active = orchestrator.get_run(str(task.active_run_id or ""))
+        if active is not None:
+            from app.application.agent_orchestrator.cross_module_chain import (
+                project_rejected_approval,
+            )
+
+            project_rejected_approval(active)
+            task = (
+                orchestrator.get_task(
+                    user_id=principal.user_id,
+                    task_id=task_id,
+                    tenant_id=principal.tenant_id,
+                )
+                or task
+            )
         return success(_task_envelope(orchestrator, task))
     except RECOVERABLE_ERRORS:
         return internal_error_response("get agent task")

@@ -1,6 +1,7 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
+from app.application.customer_creation_receipt import record_customer_creation
 from app.infrastructure.tenant_scope import (
     apply_tenant_filter,
     current_tenant_id,
@@ -16,6 +17,57 @@ def _scoped_units(query: Any, model: Any) -> Any:
     if current_tenant_id() is None and owned_tenant_id() is None:
         return query
     return apply_tenant_filter(query, model)
+
+
+def _explicit_version(data: dict[str, Any]) -> tuple[int | None, bool]:
+    """Return (version, invalid). Missing key means the caller did not opt in."""
+    if "expected_version" not in data:
+        return None, False
+    raw = data.get("expected_version")
+    if isinstance(raw, bool):
+        return None, True
+    if isinstance(raw, int):
+        return raw, False
+    if isinstance(raw, str) and raw.strip().lstrip("-").isdigit():
+        return int(raw.strip()), False
+    return None, True
+
+
+def _versioned_update(
+    session: Any, model: Any, customer_id: int, data: dict[str, Any], expected: int
+) -> int:
+    """Atomic compare-and-set. Returns the number of rows the database changed."""
+    from sqlalchemy import text
+    from sqlalchemy import update as sql_update
+
+    values: dict[str, Any] = {"version": model.version + 1}
+    if "customer_name" in data:
+        values["unit_name"] = data["customer_name"]
+    if "contact_person" in data:
+        values["contact_person"] = data["contact_person"]
+    if "contact_phone" in data:
+        values["contact_phone"] = data["contact_phone"]
+    if "contact_address" in data:
+        values["address"] = data["contact_address"]
+    conditions = [model.id == customer_id, model.version == expected]
+    tenant_id = current_tenant_id()
+    if tenant_id is not None:
+        conditions.append(model.tenant_id == tenant_id)
+    statement = (
+        sql_update(model)
+        .where(*conditions)
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    result = session.execute(statement)
+    matched = result.rowcount
+    if matched is None or matched < 0:
+        bind = session.get_bind()
+        if bind is not None and bind.dialect.name == "sqlite":
+            matched = int(session.execute(text("SELECT changes()")).scalar_one())
+        else:
+            matched = 0
+    return int(matched)
 
 
 class CustomerCrudMixin:
@@ -51,18 +103,7 @@ class CustomerCrudMixin:
 
                 return {
                     "success": True,
-                    "data": [
-                        {
-                            "id": unit.id,
-                            "customer_name": unit.unit_name,
-                            "contact_person": unit.contact_person or "",
-                            "contact_phone": unit.contact_phone or "",
-                            "contact_address": unit.address or "",
-                            "created_at": unit.created_at.isoformat() if unit.created_at else None,
-                            "updated_at": unit.updated_at.isoformat() if unit.updated_at else None,
-                        }
-                        for unit in units
-                    ],
+                    "data": [PurchaseUnitModel.to_dict(unit) for unit in units],
                     "total": total,
                     "page": page,
                     "per_page": per_page,
@@ -92,15 +133,7 @@ class CustomerCrudMixin:
 
                 return {
                     "success": True,
-                    "data": {
-                        "id": unit.id,
-                        "customer_name": unit.unit_name,
-                        "contact_person": unit.contact_person or "",
-                        "contact_phone": unit.contact_phone or "",
-                        "contact_address": unit.address or "",
-                        "created_at": unit.created_at.isoformat() if unit.created_at else None,
-                        "updated_at": unit.updated_at.isoformat() if unit.updated_at else None,
-                    },
+                    "data": PurchaseUnitModel.to_dict(unit),
                 }
             finally:
                 session.close()
@@ -111,6 +144,8 @@ class CustomerCrudMixin:
 
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
         """创建购买单位"""
+        commit_attempted = False
+        payload: dict[str, Any] = {}
         try:
             session = self._get_session()
             try:
@@ -142,8 +177,11 @@ class CustomerCrudMixin:
                 )
 
                 session.add(unit)
+                session.flush()
+                record_customer_creation(session, unit)
+                payload = PurchaseUnitModel.to_dict(unit)
+                commit_attempted = True
                 session.commit()
-                session.refresh(unit)
 
                 try:
                     from app.neuro_bus.application_neuro_bridge import (
@@ -151,7 +189,7 @@ class CustomerCrudMixin:
                     )
 
                     neuro_notify_customer_changed(
-                        "created", customer_id=unit.id, customer_name=unit.unit_name
+                        "created", customer_id=payload["id"], customer_name=payload["customer_name"]
                     )
                 except RECOVERABLE_ERRORS:
                     logger.debug("neuro_notify_customer_changed skipped", exc_info=True)
@@ -159,21 +197,23 @@ class CustomerCrudMixin:
                 return {
                     "success": True,
                     "message": "客户创建成功",
-                    "data": {
-                        "id": unit.id,
-                        "customer_name": unit.unit_name,
-                        "contact_person": unit.contact_person or "",
-                        "contact_phone": unit.contact_phone or "",
-                        "contact_address": unit.address or "",
-                        "created_at": unit.created_at.isoformat() if unit.created_at else None,
-                        "updated_at": unit.updated_at.isoformat() if unit.updated_at else None,
-                    },
+                    "data": payload,
                 }
             finally:
                 session.close()
 
         except RECOVERABLE_ERRORS:
             logger.exception("创建客户失败")
+            if commit_attempted:
+                return {
+                    "success": False,
+                    "outcome": "unknown",
+                    "retryable": False,
+                    "reconciliation_required": True,
+                    "error_code": "customer_commit_unknown",
+                    "message": "客户创建结果待核验，请勿重复提交",
+                    "data": payload,
+                }
             return {"success": False, "message": "创建客户失败"}
 
     def update(self, customer_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -192,6 +232,14 @@ class CustomerCrudMixin:
                 if not unit:
                     return {"success": False, "message": "客户不存在"}
 
+                expected_version, version_invalid = _explicit_version(data)
+                if version_invalid:
+                    return {
+                        "success": False,
+                        "error_code": "version_conflict",
+                        "message": "客户版本不正确，本次修改没有写入",
+                    }
+
                 if "customer_name" in data:
                     existing = (
                         _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
@@ -203,17 +251,39 @@ class CustomerCrudMixin:
                     )
                     if existing:
                         return {"success": False, "message": "客户名称已存在"}
-                    unit.unit_name = data["customer_name"]
 
-                if "contact_person" in data:
-                    unit.contact_person = data["contact_person"]
-                if "contact_phone" in data:
-                    unit.contact_phone = data["contact_phone"]
-                if "contact_address" in data:
-                    unit.address = data["contact_address"]
-
-                session.commit()
-                session.refresh(unit)
+                if expected_version is not None:
+                    session.expunge(unit)
+                    matched = _versioned_update(
+                        session, PurchaseUnitModel, customer_id, data, expected_version
+                    )
+                    if matched != 1:
+                        session.rollback()
+                        return {
+                            "success": False,
+                            "error_code": "version_conflict",
+                            "message": "客户版本已变化，本次修改没有写入",
+                        }
+                    session.commit()
+                    unit = (
+                        _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
+                        .filter(PurchaseUnitModel.id == customer_id)
+                        .first()
+                    )
+                else:
+                    if "customer_name" in data:
+                        unit.unit_name = data["customer_name"]
+                    if "contact_person" in data:
+                        unit.contact_person = data["contact_person"]
+                    if "contact_phone" in data:
+                        unit.contact_phone = data["contact_phone"]
+                    if "contact_address" in data:
+                        unit.address = data["contact_address"]
+                    current_version = getattr(unit, "version", None)
+                    if isinstance(current_version, int) and not isinstance(current_version, bool):
+                        unit.version = current_version + 1
+                    session.commit()
+                    session.refresh(unit)
 
                 try:
                     from app.neuro_bus.application_neuro_bridge import (
@@ -226,19 +296,19 @@ class CustomerCrudMixin:
                 except RECOVERABLE_ERRORS:
                     logger.debug("neuro_notify_customer_changed skipped", exc_info=True)
 
-                return {
-                    "success": True,
-                    "message": "客户更新成功",
-                    "data": {
-                        "id": unit.id,
-                        "customer_name": unit.unit_name,
-                        "contact_person": unit.contact_person or "",
-                        "contact_phone": unit.contact_phone or "",
-                        "contact_address": unit.address or "",
-                        "created_at": unit.created_at.isoformat() if unit.created_at else None,
-                        "updated_at": unit.updated_at.isoformat() if unit.updated_at else None,
-                    },
+                saved = {
+                    "id": unit.id,
+                    "customer_name": unit.unit_name,
+                    "contact_person": unit.contact_person or "",
+                    "contact_phone": unit.contact_phone or "",
+                    "contact_address": unit.address or "",
+                    "created_at": unit.created_at.isoformat() if unit.created_at else None,
+                    "updated_at": unit.updated_at.isoformat() if unit.updated_at else None,
                 }
+                saved_version = getattr(unit, "version", None)
+                if isinstance(saved_version, int) and not isinstance(saved_version, bool):
+                    saved["version"] = saved_version
+                return {"success": True, "message": "客户更新成功", "data": saved}
             finally:
                 session.close()
 

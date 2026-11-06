@@ -65,7 +65,15 @@ class SalesQuotes:
     ) -> dict[str, Any]:
         """按状态、客户、日期、收款、金额和地址查询销售订单。"""
         with self._sessions() as db:
+            from app.infrastructure.tenant_scope import (
+                apply_tenant_filter,
+                current_tenant_id,
+                owned_tenant_id,
+            )
+
             q = db.query(SalesOrder)
+            if current_tenant_id() is not None or owned_tenant_id() is not None:
+                q = apply_tenant_filter(q, SalesOrder)
             if status:
                 q = q.filter(SalesOrder.status == status)
             if customer_id:

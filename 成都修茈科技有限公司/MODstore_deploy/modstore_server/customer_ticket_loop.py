@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """工单闭环：派单、工具链、审批、二次核对和关单条件。
 
 核验只证明第二次读取和前序工具结果一致。画面有没有恢复、余额有没有到账，
@@ -116,6 +117,12 @@ def apply_loop_status(ticket: CustomerServiceTicket) -> None:
         "reopened": "processing",
     }.get(state)
     if mapped:
+        if (
+            mapped == "processing"
+            and not ticket.assigned_admin_id
+            and str(ticket.status or "") in {"", "open", "pending", "queued"}
+        ):
+            return
         ticket.status = mapped
 
 
@@ -237,9 +244,10 @@ def approve_ticket_loop(
     request["approval"] = {"id": approval_id, "decision": "approved"}
     action.request_json = json_dumps(request)
     execute_action(db, action, user)
-    if action.status != "completed":
+    if action.status == "completed":
+        run_ticket_loop(db, ticket, user, after_approval=True)
+    elif action.status != "pending_execution":
         return {"changed": False, "status": action.status, "result": action.result_json}
-    run_ticket_loop(db, ticket, user, after_approval=True)
     db.flush()
     return {"changed": True, "result": action.result_json, "previous": before}
 

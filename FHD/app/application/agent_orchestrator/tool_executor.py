@@ -28,8 +28,18 @@ from app.application.tool_execution_deadline import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
-    {"business_db", "inventory", "shipment_records", "shipment_orders", "document_template", "purchase"}
-)  # fmt: skip
+    {
+        "business_db",
+        "customers",
+        "sales",
+        "reports",
+        "inventory",
+        "shipment_records",
+        "shipment_orders",
+        "document_template",
+        "purchase",
+    }
+)
 
 
 _REVIEWED_QUERY_ACTIONS = frozenset({("finance", "ledger_query"), ("products", "exists")})
@@ -288,13 +298,21 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": validation.action or step.action,
             }
-        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+        from app.application.agent_orchestrator.tool_permission import (
+            actor_tool_denial,
+            approval_execution_denial,
+        )
 
         denied = actor_tool_denial(
             validation.tool_id, validation.action or step.action, dict(runtime_context or {})
         )
         if denied is not None:
             return denied
+        approval_denied = approval_execution_denial(
+            validation.tool_id, validation.action or step.action, dict(runtime_context or {})
+        )
+        if approval_denied is not None:
+            return approval_denied
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
         reviewed_query = (validation.tool_id, validation.action) in _REVIEWED_QUERY_ACTIONS
@@ -356,6 +374,7 @@ class AgentToolExecutor:
                 scope if runtime_tenant_id is not None else nullcontext(),
             ):
                 from app.application.agent_orchestrator.tool_permission import (
+                    _fingerprint,
                     begin_idempotent_replay,
                     finish_idempotent_replay,
                 )
@@ -373,12 +392,22 @@ class AgentToolExecutor:
                 )
                 if replay is not None:
                     return replay
-                try:
-                    result = (
-                        _dispatch_reviewed_query(step.tool_id, action, params)
-                        if reviewed_query
-                        else execute_registered_workflow_tool(step.tool_id, action, params)
+                from app.application.customer_creation_receipt import customer_creation_claim
+
+                receipt_scope = (
+                    customer_creation_claim(
+                        idem_key, _fingerprint(params), str(runtime_tenant_id or "")
                     )
+                    if idem_key and (validation.tool_id, action) == ("customers", "create")
+                    else nullcontext()
+                )
+                try:
+                    with receipt_scope:
+                        result = (
+                            _dispatch_reviewed_query(step.tool_id, action, params)
+                            if reviewed_query
+                            else execute_registered_workflow_tool(step.tool_id, action, params)
+                        )
                 except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
                     raise
                 except RECOVERABLE_ERRORS as exc:

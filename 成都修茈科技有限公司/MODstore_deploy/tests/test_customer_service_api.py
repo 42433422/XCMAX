@@ -146,7 +146,7 @@ def test_customer_service_refund_chat_reports_real_submission(
         valid = order_owner == "self"
         assert data["actions"][0]["status"] == ("completed" if valid else "failed")
         if not valid:
-            assert data["ticket"]["status"] == "processing"
+            assert data["ticket"]["status"] == "open"
             assert "未确认提交成功" in data["message"]["content"]
             assert "不能视为已退款" in data["message"]["content"]
 
@@ -324,14 +324,14 @@ def test_customer_service_escalate_phrase_creates_ticket(client, monkeypatch):
         assert data["ticket"] is not None
         assert data["ticket"]["intent"] == "general"
         assert data["intent"]["need_ticket"] is True
-        # 功能/咨询类无自动动作：应登记跟进，不能秒结案
-        assert data["ticket"]["status"] == "processing"
+        # 功能/咨询类无自动动作：应保持待受理，不能冒充已开始处理
+        assert data["ticket"]["status"] == "open"
         assert data["ticket"]["status"] != "resolved"
         assert (data.get("decision") or {}).get("decision") == "accepted"
         assert "已处理完成" not in str(data.get("message", {}).get("content") or "")
 
 
-def test_customer_service_ui_bug_escalate_stays_processing(client, monkeypatch):
+def test_customer_service_ui_bug_escalate_waits_for_acceptance(client, monkeypatch):
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_ui_bug")
     with _as_user(user):
@@ -352,12 +352,12 @@ def test_customer_service_ui_bug_escalate_stays_processing(client, monkeypatch):
         data = r2.json()
         assert data["ticket"] is not None
         assert data["ticket"]["intent"] == "product_issue"
-        assert data["ticket"]["status"] == "processing"
+        assert data["ticket"]["status"] == "open"
         assert data["ticket"]["title"] == "平台功能问题"
         assert data["ticket"].get("issue_domain") == "platform"
         assert data["ticket"].get("issue_domain_label") == "平台"
         assert (data.get("decision") or {}).get("decision") == "accepted"
-        assert data["ticket"].get("lifecycle_stage") == 2
+        assert data["ticket"].get("lifecycle_stage") == 1
         body = str(data.get("message", {}).get("content") or "")
         assert "已处理完成" not in body
         assert "功能问题" in body or "浅色" in body or "看不见" in body
@@ -447,7 +447,7 @@ def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
             },
         )
         assert r2.status_code == 200, r2.text
-        assert r2.json()["ticket"]["status"] == "processing"
+        assert r2.json()["ticket"]["status"] == "open"
         published.clear()
 
         r3 = client.post(
@@ -458,7 +458,7 @@ def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
         data = r3.json()
         assert data["ticket"] is not None
         assert data["ticket"]["intent"] == "product_issue"
-        assert data["ticket"]["status"] == "processing"
+        assert data["ticket"]["status"] == "open"
         assert data["ticket"]["issue_domain"] == "platform"
         assert data["ticket"]["title"] == "平台功能问题"
         body = str(data.get("message", {}).get("content") or "")
@@ -549,6 +549,20 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         )
         assert r2.status_code == 200, r2.text
         ticket_id = int(r2.json()["ticket"]["id"])
+        assert r2.json()["ticket"]["status"] == "open"
+
+    admin = _make_user("cs_emp_progress_admin", admin=True)
+    with _as_user(admin):
+        assigned = client.post(
+            f"/api/customer-service/tickets/{ticket_id}/assign",
+            json={"assignee_id": admin.id, "reason": "先由人工受理"},
+        )
+        assert assigned.status_code == 200, assigned.text
+        accepted = client.post(
+            f"/api/customer-service/tickets/{ticket_id}/accept",
+            json={"reason": "开始处理后再接收员工进展"},
+        )
+        assert accepted.status_code == 200, accepted.text
 
     sf = get_session_factory()
     with sf() as db:
@@ -619,6 +633,34 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         recorded = resolution["processing"][0]["outputs"][0]
         assert recorded["task_id"] == "p1"
         assert recorded["output_summary"] == "未产生修复 token=[redacted]"
+
+
+def test_unassigned_conversation_ticket_stays_open(client, monkeypatch):
+    """客服对话登记没有处理人时保持待受理，不能直接写成处理中。"""
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    monkeypatch.setattr(
+        customer_service_api,
+        "_schedule_customer_ticket_incident",
+        lambda payload: None,
+    )
+    user = _make_user("cs_unassigned_open")
+    with _as_user(user):
+        opened = client.post(
+            "/api/customer-service/chat",
+            json={"message": "浅色模式文字看不见", "context": {}},
+        )
+        assert opened.status_code == 200, opened.text
+        filed = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "提交工单",
+                "session_id": opened.json()["session"]["id"],
+                "context": {"reason": "浅色模式文字看不见"},
+            },
+        )
+    assert filed.status_code == 200, filed.text
+    ticket = filed.json()["ticket"]
+    assert ticket["status"] == "open"
 
 
 def test_custom_delivery_requires_quality_acceptance_and_install_receipt(

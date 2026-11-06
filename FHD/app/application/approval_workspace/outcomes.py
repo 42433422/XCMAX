@@ -28,6 +28,12 @@ def safe_node_count(value: Any) -> int:
         return 0
 
 
+def execution_handed_off(execution: JsonObject | None) -> bool:
+    """The person approved and a worker owns the run. The import is not finished."""
+    receipt = execution or {}
+    return bool(receipt.get("execution_accepted")) and not bool(receipt.get("success"))
+
+
 def execution_outcome(execution: JsonObject | None) -> WorkflowOutcome:
     receipt = execution or {}
     executed = bool(receipt.get("workflow_executed"))

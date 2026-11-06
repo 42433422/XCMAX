@@ -455,7 +455,7 @@ def test_customer_decision_is_owner_bound_and_moves_only_inside_window(monkeypat
             ticket_no=f"CI-{uuid.uuid4().hex}",
             title="synthetic decision replay",
             intent="product_issue",
-            status="processing",
+            status="awaiting_customer",
             decision_status="accepted",
             summary="synthetic fixture only",
             evidence_json=json_dumps(

@@ -1,4 +1,4 @@
-import { defaultOnboardingIndustryId, LS_PRODUCT_FLOW_COMPLETED } from '@/constants/productFlow'
+import { defaultOnboardingIndustryId, LS_PRODUCT_FLOW_COMPLETED, LS_PRODUCT_FLOW_HOST_ACK } from '@/constants/productFlow'
 import type { IndustryBaselinePlan } from '@/constants/platformShell'
 import { authApi } from '@/api/auth'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
@@ -168,6 +168,30 @@ function refreshHostPackInBackground(): void {
   })
 }
 
+function persistedCompletion(ownerId: string, prefs: { product_flow_completed?: boolean; host_pack_acknowledged?: boolean } = {}): boolean {
+  if (prefs.product_flow_completed === true || prefs.host_pack_acknowledged === true) return true
+  if (prefs.product_flow_completed === false) return false
+  if (!ownerId) return false
+  return readTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, ownerId) === '1'
+    || (prefs.host_pack_acknowledged !== false && readTenantScopedStorageItem(LS_PRODUCT_FLOW_HOST_ACK, ownerId) === '1')
+}
+
+/** A workspace that already has conversations is not a first-run setup. */
+export async function workspaceHasPriorUse(ownerId = ''): Promise<boolean> {
+  const owner = String(ownerId || '').trim()
+  if (owner && persistedCompletion(owner)) return true
+  try {
+    const chatApi = (await import('@/api/chat')).default
+    const data = await chatApi.getConversations({ limit: 1 })
+    const row = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+    if (row.success === false) return false
+    const page = row.sessions ?? row.data ?? row.conversations
+    return Array.isArray(page) && page.length > 0
+  } catch {
+    return false
+  }
+}
+
 export async function needsHostPackCompletion(force = false): Promise<boolean> {
   if (isHostPackSkippedThisSession()) return false
 
@@ -220,14 +244,17 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
         if (response.success !== true || response.owner_id !== ownerId) return false
         const prefs = response.data || {}
         industryId = String(prefs.selected_industry_id || '').trim()
-        const completed = prefs.product_flow_completed === true || (
-          prefs.product_flow_completed !== false && readTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, ownerId) === '1'
-        )
-        if (!industryId && !completed) return saveResult(true, 'welcome')
+        const completed = persistedCompletion(ownerId, prefs)
+        if (completed) return saveResult(false)
+        if (!industryId && await workspaceHasPriorUse(ownerId)) return saveResult(false)
+        if (!industryId) return saveResult(true, 'welcome')
       }
+      const knownOwner = String(catalog?.owner_id || '').trim()
+      if (knownOwner && persistedCompletion(knownOwner)) return saveResult(false)
       // An offline placeholder is not evidence that a confirmed package was removed.
       const plan = await fetchIndustryBaseline(industryId || defaultOnboardingIndustryId(), force, { requireAvailable: true })
       const needs = !isOnboardingEntryReady(plan)
+      if (needs && await workspaceHasPriorUse(knownOwner)) return saveResult(false)
       return saveResult(needs, needs ? 'host-pack' : null)
     } catch {
       return false

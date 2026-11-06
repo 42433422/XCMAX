@@ -62,6 +62,11 @@ def _registered_router_customers(
         return execute_customer_create_like(
             action, params, svc=svc, resolve_targets=_resolve_target_candidates()
         )
+    if action == "export":
+        keyword = str(params.get("keyword") or unit_name or "").strip() or None
+        return dict(
+            svc.export_to_excel(keyword=keyword, template_id=params.get("template_id")) or {}
+        )
     if action == "query":
         keyword = str(params.get("keyword") or unit_name or "").strip()
         result = svc.get_all(keyword=keyword, page=1, per_page=20)
@@ -81,10 +86,15 @@ def _registered_router_customers(
             "contact_address": params.get("contact_address", params.get("address", "")),
         }
         payload = {k: v for k, v in payload.items() if v not in (None, "")}
+        if "expected_version" in params:
+            payload["expected_version"] = params.get("expected_version")
         update_result = svc.update(customer_id, payload)
         if update_result.get("success"):
             return {"success": True, "data": update_result.get("data", {})}
-        return {"success": False, "message": update_result.get("message") or "更新失败"}
+        rejected = {"success": False, "message": update_result.get("message") or "更新失败"}
+        if update_result.get("error_code"):
+            rejected["error_code"] = update_result.get("error_code")
+        return rejected
     if action == "delete":
         customer_id = int(params.get("id") or params.get("customer_id") or 0)
         if customer_id <= 0:

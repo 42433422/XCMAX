@@ -49,7 +49,10 @@ def test_pending_batch_fetches_each_proof_once_and_binds_each_case(client, monke
     monkeypatch.setattr(shared, "_pulls_for_commit", pulls)
     with get_session_factory()() as db:
         for tid in (first, second):
-            seed_repair(db, db.get(CustomerServiceTicket, tid))
+            ticket = db.get(CustomerServiceTicket, tid)
+            # Both fixtures start after human acceptance, including the second intake.
+            ticket.status = "processing"
+            seed_repair(db, ticket)
     pending = client.get(
         "/api/customer-service/issues/pending-runtime", params={"host_sha": "c" * 40}
     )

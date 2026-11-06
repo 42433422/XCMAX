@@ -5,6 +5,7 @@ import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 let cachedValid: boolean | null = null
 let cachedAt = 0
 const cacheEpoch = ref(0)
+let cachedAccountEpoch = productReadAccountEpoch.value
 let validationInFlight: Promise<boolean> | null = null
 let desktopBootstrapSessionHint: boolean | null = null
 
@@ -74,11 +75,14 @@ export async function consumeDesktopSessionBootstrapHint(): Promise<boolean> {
   if (desktopBootstrapSessionHint !== null) return desktopBootstrapSessionHint
   const consume = window.xcagiDesktop?.consumeBootstrapSessionHint
   if (typeof consume !== 'function') return false
+  const isCurrent = captureAuthSession()
   try {
-    desktopBootstrapSessionHint = Boolean(await consume())
+    const hint = Boolean(await consume())
+    if (!isCurrent()) return false
+    desktopBootstrapSessionHint = hint
     return desktopBootstrapSessionHint
   } catch {
-    desktopBootstrapSessionHint = false
+    if (isCurrent()) desktopBootstrapSessionHint = false
     return false
   }
 }
@@ -89,9 +93,27 @@ export async function canResumeRecentDesktopSession(
   isEnterprise: boolean,
   query: Record<string, unknown>,
 ): Promise<boolean> {
-  const error = query.error
-  if (!isDesktop || !isEnterprise || query.oidc || query.oidc_error || (typeof error === 'string' && error.trim())) return false
+  if (!isDesktop || !isEnterprise || query.oidc || query.oidc_error) return false
+  // A stale ?error= on the login URL is not a new credential failure.
   return hasRecentEnterpriseSessionHint() || (await consumeDesktopSessionBootstrapHint())
+}
+
+export type EnterpriseSessionProbe = 'valid' | 'invalid' | 'unknown'
+
+/** Force a server check. Network loss stays unknown and does not look like logout. */
+export async function probeEnterpriseSession(): Promise<EnterpriseSessionProbe> {
+  const isCurrent = captureAuthSession()
+  try {
+    const valid = await validateEnterpriseSessionCached(true)
+    if (!isCurrent()) return 'unknown'
+    if (valid) return 'valid'
+  } catch {
+    return 'unknown'
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
+  }
+  return 'invalid'
 }
 
 function clearDesktopSessionBootstrapHint(): void {
@@ -111,20 +133,27 @@ export function readValid(res: unknown): boolean {
 }
 
 export async function validateEnterpriseSessionCached(force = false): Promise<boolean> {
+  if (cachedAccountEpoch !== productReadAccountEpoch.value) {
+    cachedAccountEpoch = productReadAccountEpoch.value
+    cachedValid = null
+    cachedAt = 0
+    validationInFlight = null
+  }
   const now = Date.now()
   if (!force && cachedValid === true && now - cachedAt < SESSION_TTL_MS) return true
   if (!force && cachedValid !== null && cachedValid !== true && now - cachedAt < SESSION_TTL_MS) return cachedValid
   if (!force && cachedValid === true && now - cachedAt < SESSION_NAV_STALE_MS) {
     if (!validationInFlight) {
+      const isCurrent = captureAuthSession()
       void validateEnterpriseSessionCached(true).then((valid) => {
-        if (valid || typeof window === 'undefined') return
+        if (!isCurrent() || valid || typeof window === 'undefined') return
         window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
       }).catch(() => undefined)
     }
     return true
   }
   if (validationInFlight) return validationInFlight
-  const requestEpoch = cacheEpoch.value
+  const isCurrent = captureAuthSession()
   const pending = (async () => {
     let valid: boolean
     try { valid = readValid(await authApi.validateSession()) }
@@ -133,8 +162,8 @@ export async function validateEnterpriseSessionCached(force = false): Promise<bo
       if (status !== 401 && status !== 403) throw error
       valid = false
     }
-    if (requestEpoch !== cacheEpoch.value) {
-      return cachedValid === true
+    if (!isCurrent()) {
+      return cachedAccountEpoch === productReadAccountEpoch.value && cachedValid === true
     }
     cachedValid = valid
     cachedAt = Date.now()
@@ -152,6 +181,7 @@ export async function validateEnterpriseSessionCached(force = false): Promise<bo
 
 export function invalidateEnterpriseSessionCache(): void {
   cacheEpoch.value += 1
+  cachedAccountEpoch = productReadAccountEpoch.value
   validationInFlight = null
   cachedValid = null
   cachedAt = 0
@@ -162,6 +192,7 @@ export function invalidateEnterpriseSessionCache(): void {
 /** Login just established the cookie; avoid an immediate blocking validate round-trip. */
 export function markEnterpriseSessionValid(): void {
   cacheEpoch.value += 1
+  cachedAccountEpoch = productReadAccountEpoch.value
   validationInFlight = null
   cachedValid = true
   cachedAt = Date.now()
