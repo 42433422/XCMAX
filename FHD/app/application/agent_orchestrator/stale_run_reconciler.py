@@ -105,7 +105,7 @@ def reconcile_stale_running_runs(
             execution = db.get(AgentTaskExecutionRecord, record.run_id)
             if (
                 execution is not None
-                and execution.state == "claimed"
+                and execution.state in {"running", "claimed"}
                 and str(execution.lease_expires_at or "") > current
             ):
                 # 租约仍有效：交由既有重认领机制处理，启动对账不越权改写。

@@ -659,7 +659,7 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
         )
         execution = get_task_execution_repository().get(run_id)
         assert execution is not None
-        assert execution.state == "completed"
+        assert execution.state == "succeeded"
         assert execution.execution_count == 2
         execute.assert_called_once()
 

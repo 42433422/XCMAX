@@ -53,6 +53,7 @@ def finish_employee_run_log(
     attempts: int = 1,
     verified: bool = False,
     error_code: str = "",
+    approver: str = "",
     jitter_ratio: float = 0.2,
 ) -> None:
     tenant_id = _require_tenant(tenant_id)
@@ -71,6 +72,10 @@ def finish_employee_run_log(
         target = str(status or "failed")
         book = SessionBook(db)
         body = book.get("employee", str(tenant_id), str(run_id))
+        if target == "failed" and error_code == "timeout" and not failure_retries(
+            int(attempts), error_code or ""
+        ):
+            target = "timed_out"
         scheduled = target == "failed" and failure_retries(int(attempts), error_code or "")
         try:
             assert_legacy_transition("employee", current, "failed" if scheduled else target)
@@ -82,6 +87,9 @@ def finish_employee_run_log(
             and current != "running"
         ):
             return
+        if target == "awaiting_approval":
+            body["approver"] = str(approver or body.get("approver") or "")
+            body["approval_requested_at"] = datetime.now(UTC).isoformat()
         if scheduled:
             import random
             from datetime import timedelta

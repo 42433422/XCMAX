@@ -383,8 +383,10 @@ def continue_agent_run(
             if execution is not None and execution.state in {
                 "rejected",
                 "completed",
+                "succeeded",
                 "cancelled",
                 "failed",
+                "timed_out",
             }:
                 return JSONResponse(
                     {"success": False, "message": "任务已结束，不能审批通过后执行"},

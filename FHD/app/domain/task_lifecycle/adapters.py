@@ -21,7 +21,7 @@ _LEGACY: dict[str, dict[str, str]] = {
         "timed_out": "timed_out",
         "cancelled": "cancelled",
         "rejected": "rejected",
-        "blocked": "failed",
+        "blocked": "waiting_approval",
     },
     "workflow": {
         "pending": "queued",
@@ -94,6 +94,16 @@ def legacy_transition_allowed(
     if current_state == target_state:
         return True
     return transition_allowed(current_state, target_state, retryable=retryable)
+
+
+LEASED_STATES = frozenset({"running", "claimed"})
+WAITING_STATES = frozenset({"waiting_approval", "paused", "blocked"})
+SUCCEEDED_STATES = frozenset({"succeeded", "completed"})
+
+
+def canonical_execution_state(state: str) -> str:
+    """Map a scheduler word onto the nine-state machine."""
+    return _EXECUTION.get(str(state or "").strip().lower(), str(state or "").strip().lower())
 
 
 _EXECUTION = {

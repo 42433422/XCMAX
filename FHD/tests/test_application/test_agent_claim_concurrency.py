@@ -73,7 +73,7 @@ def test_concurrent_claim_admits_exactly_one_worker(workers: int, tmp_path) -> N
         winners = [r for r in results if r is not None]
         assert len(winners) == 1, f"期望仅一个 worker 认领成功，实际 {len(winners)}"
         assert winners[0].execution_count == 1
-        assert winners[0].state == "claimed"
+        assert winners[0].state == "running"
         # 其余 worker 全部拿不到任务，不会重复执行。
         assert all(r is None for r in results if r is not winners[0])
     finally:

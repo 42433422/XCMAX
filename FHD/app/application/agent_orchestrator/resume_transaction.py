@@ -38,7 +38,7 @@ def resume_and_enqueue(
             .with_for_update()
             .one_or_none()
         )
-        if execution is not None and execution.state == "claimed":
+        if execution is not None and execution.state in {"running", "claimed"}:
             raise ApprovalGrantError("任务执行器仍持有执行权，请等待结果核对")
         if execution is not None:
             # SQLite ignores FOR UPDATE. A conditional write both rechecks the
@@ -145,8 +145,8 @@ def resume_and_enqueue(
         elif execution is not None:
             from app.domain.task_lifecycle.adapters import execution_transition_allowed
 
-            if not execution_transition_allowed(str(execution.state), "paused"):
+            if not execution_transition_allowed(str(execution.state), "waiting_approval"):
                 raise ApprovalGrantError("任务队列已结束，不能改回暂停")
-            execution.state = "paused"
+            execution.state = "waiting_approval"
             execution.updated_at = now
     return run

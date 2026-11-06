@@ -114,7 +114,11 @@ def test_retry_parameter_preparation_preserves_execution_mode(agentic):
     def dispatch(tool_id, action, params):
         observed.append(dict(params))
         params["dispatch_marker"] = "retained"
-        return {"success": len(observed) == 2, "message": "retry"}
+        return {
+            "success": len(observed) == 2,
+            "message": "retry",
+            "error_code": "timeout",
+        }
 
     engine = WorkflowEngine(dispatch)
     context = {"message": "steel"}
@@ -188,7 +192,12 @@ def test_failed_write_receipt_stops_retry_even_for_low_risk_node(tmp_path, mode,
 
 @pytest.mark.parametrize("agentic", [False, True])
 def test_retry_keeps_last_output_and_propagates_programming_errors(agentic):
-    failure = {"success": False, "requires_token": True, "token_name": "RETRY_TOKEN"}
+    failure = {
+        "success": False,
+        "requires_token": True,
+        "token_name": "RETRY_TOKEN",
+        "error_code": "timeout",
+    }
     engine = WorkflowEngine(lambda **kwargs: failure)
 
     def execute():

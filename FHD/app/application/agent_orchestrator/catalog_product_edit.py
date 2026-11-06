@@ -744,7 +744,20 @@ def prepare_preclaim_finalization(principal, claim, revision, *, payload=None):
             or queue.user_id != run.user_id
             or queue.tenant_id != claim["binding"]["tenant_id"]
             or queue.task_id != _task_id_of(run)
-            or queue.state not in {"queued", "claimed", "failed", "cancelled", "blocked"}
+            or queue.state
+            not in {
+                "queued",
+                "running",
+                "claimed",
+                "waiting_approval",
+                "paused",
+                "blocked",
+                "failed",
+                "timed_out",
+                "cancelled",
+                "succeeded",
+                "completed",
+            }
         ):
             raise ValueError("original dispatch authority unavailable")
         from app.domain.task_lifecycle.adapters import execution_transition_allowed

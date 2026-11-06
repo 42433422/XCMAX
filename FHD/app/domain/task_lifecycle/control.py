@@ -55,6 +55,28 @@ def failure_retries(
     return error_code in RETRYABLE_CODES and int(attempts) < int(max_attempts)
 
 
+def settle_target(
+    state: str, error_code: str, attempts: int, *, open_effects: bool
+) -> tuple[str, str]:
+    """Apply retry, open-effect and timeout rules to one failure write.
+
+    Only ``timeout``, ``upstream_unavailable`` and ``rate_limited`` requeue.
+    An open effect is never replayed. A timeout that will not be retried is
+    stored as ``timed_out``.
+    """
+    from app.domain.task_lifecycle.adapters import canonical_execution_state
+
+    target = canonical_execution_state(state)
+    code = str(error_code or "")
+    if target == "failed" and open_effects:
+        return "failed", "needs_verification"
+    if target == "failed" and failure_retries(attempts, code):
+        return "queued", code
+    if target == "failed" and code == "timeout":
+        return "timed_out", code
+    return target, code
+
+
 def empty_body() -> dict[str, Any]:
     return {
         "effects": [],

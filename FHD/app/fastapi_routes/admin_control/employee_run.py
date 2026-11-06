@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.application.admin_control.protocols import JsonObject
-from app.domain.task_lifecycle.control import failure_retries, jittered_delay
+from app.domain.task_lifecycle.control import RETRYABLE_CODES, failure_retries, jittered_delay
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,7 @@ class EmployeeBackend(Protocol):
         verified: bool,
         attempts: int = 1,
         error_code: str = "",
+        approver: str = "",
     ) -> None: ...
 
 
@@ -77,11 +78,17 @@ class EmployeeRunner:
                 if self._backend.awaits_approval(result)
                 else "failed"
             )
-            error_code = _retryable_code(error) if status == "failed" else ""
+            error_code = (
+                str(result.get("error_code") or "")
+                if status == "failed" and str(result.get("error_code") or "") in RETRYABLE_CODES
+                else ""
+            )
             if failure_retries(attempts, error_code):
                 time.sleep(jittered_delay(attempts, jitter_ratio=0.2, rng=_rng()))
                 attempts += 1
                 continue
+            if status == "failed" and error_code == "timeout":
+                status = "timed_out"
             break
         self._backend.finish(
             run_id,
@@ -92,6 +99,7 @@ class EmployeeRunner:
             verified=success,
             attempts=attempts,
             error_code=error_code,
+            approver=str(work.user_id) if status == "awaiting_approval" else "",
         )
         response: JsonObject = {
             "success": success,
@@ -103,17 +111,6 @@ class EmployeeRunner:
         if not success:
             response["message"] = error
         return response
-
-
-def _retryable_code(error: str) -> str:
-    lowered = error.lower()
-    if "timeout" in lowered or "超时" in error:
-        return "timeout"
-    if "rate" in lowered:
-        return "rate_limited"
-    if "unavailable" in lowered or "不可用" in error:
-        return "upstream_unavailable"
-    return ""
 
 
 def _rng():

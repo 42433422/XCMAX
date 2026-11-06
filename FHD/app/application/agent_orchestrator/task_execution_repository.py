@@ -25,6 +25,7 @@ from app.application.agent_orchestrator.task_execution_models import (
 from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
+from app.domain.task_lifecycle.adapters import LEASED_STATES, WAITING_STATES
 
 
 class InMemoryTaskExecutionRepository:
@@ -76,9 +77,9 @@ class InMemoryTaskExecutionRepository:
                 )
             from app.domain.task_lifecycle.adapters import execution_requeue_allowed
 
-            if row.state != "claimed" and not execution_requeue_allowed(row.state):
+            if row.state not in LEASED_STATES and not execution_requeue_allowed(row.state):
                 return copy.deepcopy(row)
-            if row.state != "claimed":
+            if row.state not in LEASED_STATES:
                 row.state = "queued"
                 row.lease_owner = ""
                 row.lease_expires_at = ""
@@ -123,7 +124,7 @@ class InMemoryTaskExecutionRepository:
                 and (
                     row.state == "queued"
                     or (
-                        row.state == "claimed"
+                        row.state in LEASED_STATES
                         and bool(row.lease_expires_at)
                         and row.lease_expires_at <= current
                     )
@@ -135,7 +136,7 @@ class InMemoryTaskExecutionRepository:
                 key=lambda row: (row.priority, row.available_at, row.created_at, row.run_id)
             )
             for row in eligible:
-                recovered = row.state == "claimed"
+                recovered = row.state in LEASED_STATES
                 body = self._book.get("agent", row.tenant_id, row.run_id)
                 if recovered and body.get("effects"):
                     self._stop_locked(row, current, "failed", "needs_verification")
@@ -149,7 +150,7 @@ class InMemoryTaskExecutionRepository:
                     row.updated_at = current
                     self._rows[row.run_id] = copy.deepcopy(row)
                     continue
-                row.state = "claimed"
+                row.state = "running"
                 row.lease_owner = str(owner_id or "")
                 row.lease_expires_at = _deadline(current, lease_seconds)
                 row.heartbeat_at = current
@@ -173,7 +174,7 @@ class InMemoryTaskExecutionRepository:
             row = self._rows.get(str(run_id or ""))
             if (
                 row is None
-                or row.state != "claimed"
+                or row.state not in LEASED_STATES
                 or row.lease_owner != owner_id
                 or not row.lease_expires_at
                 or row.lease_expires_at <= current
@@ -196,7 +197,7 @@ class InMemoryTaskExecutionRepository:
             row = self._rows.get(str(run_id or ""))
             if (
                 row is None
-                or row.state != "claimed"
+                or row.state not in LEASED_STATES
                 or row.lease_owner != owner_id
                 or not row.lease_expires_at
                 or row.lease_expires_at <= utc_now_iso()
@@ -224,15 +225,25 @@ class InMemoryTaskExecutionRepository:
         *,
         error_code: str,
     ) -> AgentTaskExecution | None:
-        from app.domain.task_lifecycle.adapters import execution_transition_allowed
-
-        if not execution_transition_allowed(row.state, str(state)):
-            return None
-        now = utc_now_iso()
-        from app.domain.task_lifecycle.control import failure_retries, jittered_delay, remember
+        from app.domain.task_lifecycle.adapters import (
+            WAITING_STATES,
+            canonical_execution_state,
+            execution_transition_allowed,
+        )
+        from app.domain.task_lifecycle.control import jittered_delay, remember, settle_target
 
         body = self._book.get("agent", row.tenant_id, row.run_id)
-        if str(state) == "failed" and failure_retries(row.execution_count, str(error_code or "")):
+        requested = canonical_execution_state(state)
+        if not execution_transition_allowed(row.state, requested):
+            return None
+        visible, error_code = settle_target(
+            state,
+            error_code,
+            row.execution_count,
+            open_effects=bool(body.get("effects")),
+        )
+        now = utc_now_iso()
+        if visible == "queued" and canonical_execution_state(state) == "failed":
             delay = jittered_delay(
                 row.execution_count, jitter_ratio=self._jitter_ratio, rng=self._rng
             )
@@ -259,23 +270,24 @@ class InMemoryTaskExecutionRepository:
             self._rows[row.run_id] = copy.deepcopy(row)
             return copy.deepcopy(row)
         previous = row.state
-        row.state = cast(ExecutionState, str(state))
+        row.state = cast(ExecutionState, visible)
         row.lease_owner = ""
         row.lease_expires_at = ""
         row.heartbeat_at = ""
         row.last_error_code = str(error_code or "")[:64]
         row.updated_at = now
-        if state in {"completed", "failed", "cancelled", "blocked", "rejected"}:
+        if visible in {"succeeded", "failed", "timed_out", "cancelled", "rejected"}:
             row.finished_at = now
-        body["effects"] = []
-        if str(state) in {"paused", "blocked"}:
-            body["approver"] = body.get("approver") or ""
+        if error_code != "needs_verification":
+            body["effects"] = []
+        if visible in WAITING_STATES or visible == "waiting_approval":
+            body["approver"] = body.get("approver") or row.user_id
             body["approval_requested_at"] = now
         remember(
             body,
             at=now,
             source=previous,
-            target=str(state),
+            target=visible,
             code=str(error_code or ""),
             actor="",
         )
@@ -286,7 +298,7 @@ class InMemoryTaskExecutionRepository:
     def mark_open_effect(self, run_id: str, effect_id: str = "dispatch") -> None:
         with self._lock:
             row = self._rows.get(str(run_id or ""))
-            if row is None or row.state != "claimed":
+            if row is None or row.state not in LEASED_STATES:
                 return
             body = self._book.get("agent", row.tenant_id, row.run_id)
             effects = set(body.get("effects") or [])
@@ -367,7 +379,7 @@ class InMemoryTaskExecutionRepository:
 
         moment = datetime.fromisoformat(current.replace("Z", "+00:00"))
         for row in list(self._rows.values()):
-            if row.state not in {"paused", "blocked"}:
+            if row.state not in WAITING_STATES:
                 continue
             body = self._book.get("agent", row.tenant_id, row.run_id)
             started = str(body.get("approval_requested_at") or row.updated_at or "")

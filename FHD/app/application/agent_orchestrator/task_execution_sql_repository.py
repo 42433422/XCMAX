@@ -20,6 +20,11 @@ from app.application.agent_orchestrator.task_execution_models import (
     _task_id_of,
 )
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
+from app.domain.task_lifecycle.adapters import (
+    LEASED_STATES,
+    WAITING_STATES,
+    canonical_execution_state,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -92,9 +97,9 @@ class SQLAlchemyTaskExecutionRepository:
         else:
             from app.domain.task_lifecycle.adapters import execution_requeue_allowed
 
-            if record.state != "claimed" and not execution_requeue_allowed(str(record.state)):
+            if record.state not in LEASED_STATES and not execution_requeue_allowed(str(record.state)):
                 return
-            if record.state != "claimed":
+            if record.state not in LEASED_STATES:
                 record.state = "queued"
                 record.lease_owner = None
                 record.lease_expires_at = None
@@ -145,7 +150,7 @@ class SQLAlchemyTaskExecutionRepository:
             eligible = or_(
                 AgentTaskExecutionRecord.state == "queued",
                 and_(
-                    AgentTaskExecutionRecord.state == "claimed",
+                    AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
                     AgentTaskExecutionRecord.lease_expires_at.is_not(None),
                     AgentTaskExecutionRecord.lease_expires_at <= current,
                 ),
@@ -167,7 +172,7 @@ class SQLAlchemyTaskExecutionRepository:
             book = SessionBook(db)
             self._expire_approvals(db, book, current)
             for candidate in candidates:
-                recovered = candidate.state == "claimed"
+                recovered = candidate.state in LEASED_STATES
                 from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 
                 if recovered and book.get(
@@ -175,7 +180,7 @@ class SQLAlchemyTaskExecutionRepository:
                 ).get("effects"):
                     db.query(AgentTaskExecutionRecord).filter(
                         AgentTaskExecutionRecord.run_id == candidate.run_id,
-                        AgentTaskExecutionRecord.state == "claimed",
+                        AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
                     ).update(
                         {
                             AgentTaskExecutionRecord.state: "failed",
@@ -191,7 +196,7 @@ class SQLAlchemyTaskExecutionRepository:
                 if recovered and int(candidate.execution_count or 0) + 1 > DEFAULT_MAX_ATTEMPTS:
                     db.query(AgentTaskExecutionRecord).filter(
                         AgentTaskExecutionRecord.run_id == candidate.run_id,
-                        AgentTaskExecutionRecord.state == "claimed",
+                        AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
                     ).update(
                         {
                             AgentTaskExecutionRecord.state: "failed",
@@ -213,7 +218,7 @@ class SQLAlchemyTaskExecutionRepository:
                     )
                     .update(
                         {
-                            AgentTaskExecutionRecord.state: "claimed",
+                            AgentTaskExecutionRecord.state: "running",
                             AgentTaskExecutionRecord.lease_owner: str(owner_id or ""),
                             AgentTaskExecutionRecord.lease_expires_at: expires,
                             AgentTaskExecutionRecord.heartbeat_at: current,
@@ -254,7 +259,7 @@ class SQLAlchemyTaskExecutionRepository:
                 db.query(AgentTaskExecutionRecord)
                 .filter(
                     AgentTaskExecutionRecord.run_id == str(run_id or ""),
-                    AgentTaskExecutionRecord.state == "claimed",
+                    AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
                     AgentTaskExecutionRecord.lease_owner == str(owner_id or ""),
                     AgentTaskExecutionRecord.lease_expires_at > current,
                 )
@@ -316,25 +321,29 @@ class SQLAlchemyTaskExecutionRepository:
                 .filter(AgentTaskExecutionRecord.run_id == str(run_id or ""))
                 .one_or_none()
             )
-            if existing is None or not execution_transition_allowed(
-                str(existing.state), str(state)
-            ):
-                return None
+            from app.domain.task_lifecycle.adapters import WAITING_STATES
             from app.domain.task_lifecycle.control import (
                 SessionBook,
-                failure_retries,
                 jittered_delay,
                 remember,
+                settle_target,
             )
 
+            if existing is None:
+                return None
             book = SessionBook(db)
             body = book.get("agent", str(existing.tenant_id or ""), str(existing.run_id))
-            visible = str(state)
+            requested = canonical_execution_state(state)
+            if not execution_transition_allowed(str(existing.state), requested):
+                return None
+            visible, error_code = settle_target(
+                state,
+                error_code,
+                int(existing.execution_count or 0),
+                open_effects=bool(body.get("effects")),
+            )
             available_at = None
-            if visible == "failed" and failure_retries(
-                int(existing.execution_count or 0), str(error_code or "")
-            ):
-                visible = "queued"
+            if visible == "queued" and str(state) in {"failed", "timed_out"}:
                 available_at = _deadline(
                     now,
                     jittered_delay(
@@ -352,8 +361,10 @@ class SQLAlchemyTaskExecutionRepository:
                 code=str(error_code or ""),
                 actor="",
             )
-            body["effects"] = []
-            if visible in {"paused", "blocked"}:
+            if error_code != "needs_verification":
+                body["effects"] = []
+            if visible == "waiting_approval" or visible in WAITING_STATES:
+                body["approver"] = body.get("approver") or str(existing.user_id or "")
                 body["approval_requested_at"] = now
             if available_at:
                 body["available_at"] = available_at
@@ -364,7 +375,7 @@ class SQLAlchemyTaskExecutionRepository:
             )
             if require_claim:
                 query = query.filter(
-                    AgentTaskExecutionRecord.state == "claimed",
+                    AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
                     AgentTaskExecutionRecord.lease_owner == str(owner_id or ""),
                     AgentTaskExecutionRecord.lease_expires_at > now,
                 )
@@ -379,7 +390,7 @@ class SQLAlchemyTaskExecutionRepository:
             if available_at:
                 values[AgentTaskExecutionRecord.available_at] = available_at
                 values[AgentTaskExecutionRecord.finished_at] = None
-            elif visible in {"completed", "failed", "cancelled", "blocked", "rejected"}:
+            elif visible in {"succeeded", "failed", "timed_out", "cancelled", "rejected"}:
                 values[AgentTaskExecutionRecord.finished_at] = now
             # Ownership must be checked by the UPDATE itself. Reading the owner
             # then flushing an ORM object permits an expired worker to overwrite
@@ -395,7 +406,7 @@ class SQLAlchemyTaskExecutionRepository:
             from app.domain.task_lifecycle.control import SessionBook
 
             record = db.get(AgentTaskExecutionRecord, str(run_id or ""))
-            if record is None or record.state != "claimed":
+            if record is None or record.state not in LEASED_STATES:
                 return
             book = SessionBook(db)
             body = book.get("agent", str(record.tenant_id or ""), str(record.run_id))
@@ -457,7 +468,7 @@ class SQLAlchemyTaskExecutionRepository:
         moment = datetime.fromisoformat(current.replace("Z", "+00:00"))
         rows = (
             db.query(AgentTaskExecutionRecord)
-            .filter(AgentTaskExecutionRecord.state.in_(("paused", "blocked")))
+            .filter(AgentTaskExecutionRecord.state.in_(tuple(WAITING_STATES)))
             .all()
         )
         for record in rows:
@@ -555,7 +566,7 @@ class SQLAlchemyTaskExecutionRepository:
             task_id=str(record.task_id),
             user_id=str(record.user_id),
             tenant_id=str(record.tenant_id or ""),
-            state=cast(ExecutionState, str(record.state)),
+            state=cast(ExecutionState, canonical_execution_state(str(record.state))),
             priority=int(record.priority or 100),
             available_at=str(record.available_at or ""),
             lease_owner=str(record.lease_owner or ""),

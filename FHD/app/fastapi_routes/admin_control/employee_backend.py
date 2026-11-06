@@ -117,6 +117,7 @@ class CanonicalEmployeeBackend:
         verified: bool,
         attempts: int = 1,
         error_code: str = "",
+        approver: str = "",
     ) -> None:
         from app.application.employee_runtime.run_ledger import finish_employee_run_log
 
@@ -130,5 +131,6 @@ class CanonicalEmployeeBackend:
             attempts=attempts,
             verified=verified,
             error_code=error_code,
+            approver=approver,
             **failure,
         )

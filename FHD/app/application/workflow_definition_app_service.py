@@ -447,17 +447,21 @@ class WorkflowDefinitionAppService:
         return self._move_run(run_id, target, code=decision, actor=actor)
 
     def fail_run(self, run_id: int, *, error_code: str, attempts: int = 1) -> dict[str, Any]:
-        from app.domain.task_lifecycle.control import failure_retries
+        from app.domain.task_lifecycle.control import settle_target
 
-        if failure_retries(attempts, error_code):
-            return self._move_run(
-                run_id,
-                WorkflowRunStatus.PENDING.value,
-                code=error_code,
-                retryable=True,
-                attempts=attempts,
-            )
-        return self._move_run(run_id, WorkflowRunStatus.FAILED.value, code=error_code)
+        target, code = settle_target(WorkflowRunStatus.FAILED.value, error_code, attempts, open_effects=False)
+        status = {
+            "queued": WorkflowRunStatus.PENDING.value,
+            "timed_out": WorkflowRunStatus.TIMED_OUT.value,
+            "rejected": WorkflowRunStatus.REJECTED.value,
+        }.get(target, WorkflowRunStatus.FAILED.value)
+        return self._move_run(
+            run_id,
+            status,
+            code=code,
+            retryable=status == WorkflowRunStatus.PENDING.value,
+            attempts=attempts,
+        )
 
     def expire_approvals(self, *, timeout_seconds: float) -> int:
         session = self._get_session()

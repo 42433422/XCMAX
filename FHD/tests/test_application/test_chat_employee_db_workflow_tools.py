@@ -1004,7 +1004,7 @@ def test_workflow_engine_retries_idempotent_write_once_then_succeeds():
     def dispatch(tool_id, action, params):
         calls["count"] += 1
         if calls["count"] == 1:
-            return {"success": False, "message": "temporary lock"}
+            return {"success": False, "message": "temporary lock", "error_code": "timeout"}
         return {"success": True, "message": "customer upserted"}
 
     engine = WorkflowEngine(tool_dispatcher=dispatch)

@@ -324,7 +324,7 @@ class SQLAlchemyAgentRunRepository:
                 db.query(AgentTaskExecutionRecord)
                 .filter(
                     AgentTaskExecutionRecord.run_id == run.run_id,
-                    AgentTaskExecutionRecord.state == "claimed",
+                    AgentTaskExecutionRecord.state.in_(("running", "claimed")),
                     AgentTaskExecutionRecord.lease_owner == owner_id,
                     AgentTaskExecutionRecord.execution_count == execution_count,
                     AgentTaskExecutionRecord.lease_expires_at > utc_now_iso(),

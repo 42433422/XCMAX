@@ -87,8 +87,14 @@ async def list_issues(request: Request) -> dict[str, Any]:
     )
     pending = await pending_issues(request)
     ready = {row.get("id") for row in pending.get("items", []) if row.get("ready")}
+    local = _ticket_load(_owner(request))["tickets"]
+    items = []
+    for row in mine.get("items", []):
+        saved = local.get(str(row.get("id"))) if isinstance(local, dict) else None
+        remote_status = str((saved or {}).get("status") or row.get("status") or "")
+        items.append({**row, "ready": row.get("id") in ready, "state": _ticket_state(remote_status)})
     return {
-        "items": [{**row, "ready": row.get("id") in ready} for row in mine.get("items", [])],
+        "items": items,
         "runtime_unverified": bool(pending.get("runtime_unverified")),
     }
 
@@ -111,7 +117,17 @@ async def decide_issue(
         payload={"decision": decision, "note": note.strip(), "idempotency_key": idempotency_key},
     )
     _ticket_commit(owner, ticket_id, decision, idempotency_key, note.strip(), result)
-    return result
+    stored = _ticket_load(owner)["tickets"].get(str(ticket_id)) or {}
+    return {**result, "state": _ticket_state(str(stored.get("status") or ""))}
+
+
+def _ticket_state(status: str) -> str:
+    from app.domain.task_lifecycle.adapters import LegacyTransitionError, canonicalize
+
+    try:
+        return canonicalize("ticket", status or "open")
+    except LegacyTransitionError:
+        return status or "queued"
 
 
 def _ticket_path(owner: str):

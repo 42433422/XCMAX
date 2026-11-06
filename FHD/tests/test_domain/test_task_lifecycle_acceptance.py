@@ -44,7 +44,7 @@ def test_completed_execution_cannot_be_reopened_or_rewritten() -> None:
     assert repo.transition(run.run_id, "failed") is None
     assert repo.finish(run.run_id, "worker", "failed") is None
     again = repo.enqueue(run, requested_by="late")
-    assert again.state == "completed"
+    assert again.state == "succeeded"
     assert again.last_error_code == ""
     assert repo.claim("other", lease_seconds=30) is None
 
@@ -94,7 +94,7 @@ def test_sql_queue_keeps_the_same_terminal_guard(tmp_path) -> None:
     assert repo.finish(run.run_id, "worker", "completed") is not None
     assert repo.transition(run.run_id, "queued") is None
     reopened = repo.enqueue(run)
-    assert reopened.state == "completed"
+    assert reopened.state == "succeeded"
     assert repo.claim("other", lease_seconds=30) is None
     engine.dispose()
 
@@ -220,8 +220,8 @@ def test_queue_retries_with_backoff_then_stops() -> None:
     third = repo.claim("worker", lease_seconds=30, now=(start + timedelta(seconds=10)).isoformat())
     assert third is not None and third.execution_count == 3
     stopped = repo.finish(run.run_id, "worker", "failed", error_code="timeout")
-    assert stopped is not None and stopped.state == "failed"
-    assert [event["to"] for event in repo.lifecycle(run.run_id)["history"]][-1] == "failed"
+    assert stopped is not None and stopped.state == "timed_out"
+    assert [event["to"] for event in repo.lifecycle(run.run_id)["history"]][-1] == "timed_out"
 
 
 def test_open_effect_is_verified_instead_of_replayed() -> None:
@@ -246,7 +246,7 @@ def test_approval_resumes_the_same_task_and_timeout_rejects() -> None:
     claimed = repo.claim("worker", lease_seconds=30)
     assert claimed is not None
     paused = repo.request_approval(run.run_id, "boss")
-    assert paused is not None and paused.state == "paused" and paused.run_id == run.run_id
+    assert paused is not None and paused.state == "waiting_approval" and paused.run_id == run.run_id
     with pytest.raises(Exception):
         repo.resolve_approval(run.run_id, "approve", "stranger")
     resumed = repo.resolve_approval(run.run_id, "approve", "boss")
@@ -301,7 +301,7 @@ def test_employee_retry_approval_and_rejection(monkeypatch) -> None:
         run_id, tenant_id=1, status="failed", error_code="timeout", attempts=3, jitter_ratio=0
     )
     with Session(engine) as db:
-        assert db.get(EmployeeRunLog, run_id).status == "failed"
+        assert db.get(EmployeeRunLog, run_id).status == "timed_out"
     waiting = run_ledger.create_employee_run_log(employee_id="worker", tenant_id=1)
     run_ledger.request_employee_approval(waiting, tenant_id=1, approver="boss")
     with pytest.raises(ValueError):
@@ -352,7 +352,7 @@ def test_workflow_retry_approval_and_history() -> None:
     scheduled = service.fail_run(run["id"], error_code="timeout", attempts=1)
     assert scheduled["status"] == "pending" and scheduled["id"] == run["id"]
     service._move_run(run["id"], "running", code="dispatch")
-    assert service.fail_run(run["id"], error_code="timeout", attempts=3)["status"] == "failed"
+    assert service.fail_run(run["id"], error_code="timeout", attempts=3)["status"] == "timed_out"
     waiting = service.start_run(created["id"])
     service._move_run(waiting["id"], "running", code="dispatch")
     assert service.request_approval(waiting["id"], "boss")["status"] == "awaiting_approval"
@@ -379,7 +379,7 @@ def test_workflow_engine_retry_stops_at_three_attempts() -> None:
 
     def dispatch(tool_id, action, params):
         calls.append(tool_id)
-        return {"success": False, "message": "timeout"}
+        return {"success": False, "message": "timeout", "error_code": "timeout"}
 
     node = WorkflowNode("n1", "products", "query", risk="low", idempotent=True)
     result = WorkflowEngine(dispatch)._run_node(node, {}, max_retries=9)
@@ -402,7 +402,7 @@ def test_employee_runner_retries_the_same_run() -> None:
         def execute(self, work: EmployeeWork, run_id: int) -> dict[str, object]:
             self.calls += 1
             if self.calls < 3:
-                return {"success": False, "error": "upstream timeout"}
+                return {"success": False, "error": "upstream timeout", "error_code": "timeout"}
             return {"success": True, "summary": "done"}
 
         def verify(self, employee_id: str, result: dict[str, object]) -> tuple[bool, str]:

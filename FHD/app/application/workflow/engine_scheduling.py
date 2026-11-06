@@ -101,10 +101,19 @@ def fail_run(
     runtime_context: dict[str, Any],
     result: NodeExecutionResult,
 ) -> WorkflowRunResult:
+    code = str((result.output or {}).get("error_code") or "")
+    state = (
+        "timed_out"
+        if code == "timeout"
+        else "rejected"
+        if code in {"approval_rejected", "approval_timeout"}
+        else "failed"
+    )
     runtime_context["workflow_status"] = {
-        "state": "failed",
+        "state": state,
         "failed_node_id": result.node_id,
         "message": result.error,
+        "error_code": code,
         "recovery_hint": result.recovery_hint,
     }
     return WorkflowRunResult(
