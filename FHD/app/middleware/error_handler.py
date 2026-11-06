@@ -15,6 +15,8 @@ from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.errors import AppError
+from app.middleware.request_id import ensure_request_id
+from app.security.log_redaction import redact_log_text
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -170,13 +172,20 @@ def register_exception_handlers(app: FastAPI) -> None:
             logger.warning(
                 "HTTP Exception %s: %s - Path: %s", exc.status_code, exc.detail, request.url.path
             )
+        detail = exc.detail
+        message = str(detail)
+        redacted = redact_log_text(message)
+        if not context and ("Traceback" in message or "\n" in message):
+            message = "请求失败"
+        elif redacted != message:
+            message = redacted
         return JSONResponse(
             status_code=exc.status_code,
-            headers={"X-Request-ID": context["request_id"]} if context else None,
+            headers={"X-Request-ID": context["request_id"] if context else ensure_request_id(request)},
             content={
                 "success": False,
                 "error_code": f"http_{exc.status_code}",
-                "message": str(exc.detail),
+                "message": message,
                 **(_elt_model_error(exc.detail) if context else {}),
                 "path": request.url.path,
                 **context,
@@ -217,13 +226,22 @@ def register_exception_handlers(app: FastAPI) -> None:
         context = _reviewed_excel_context(request)
         if context:
             return _reviewed_excel_failure(request, exc)
-        logger.exception("Unhandled Exception: %s - Path: %s", exc, request.url.path)
+        request_id = ensure_request_id(request)
+        logger.error(
+            "Unhandled %s request_id=%s path=%s detail=%s",
+            type(exc).__name__,
+            request_id,
+            request.url.path,
+            redact_log_text(str(exc))[:300],
+        )
         return JSONResponse(
             status_code=500,
+            headers={"X-Request-ID": request_id},
             content={
                 "success": False,
                 "error_code": "internal_error",
                 "message": "服务器内部错误",
+                "request_id": request_id,
                 "path": request.url.path,
             },
         )

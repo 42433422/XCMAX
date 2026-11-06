@@ -1,19 +1,30 @@
 import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { getActiveExtensionModHeaders } from '@/utils/apiBase'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
+import { createTraceId, sseConnections } from '@/utils/networkStability'
 
 /** Credentialed SSE transport. Reconnection belongs to the owning view/store. */
 export class AuthenticatedEventStream extends EventTarget {
   onerror: (() => void) | null = null
   private controller = new AbortController()
+  private released = false
+  private readonly connId = createTraceId()
 
   constructor(url: string) {
     super()
+    sseConnections.open(this.connId)
     void this.read(url)
   }
 
   close(): void {
     this.controller.abort()
+    this.release()
+  }
+
+  private release(): void {
+    if (this.released) return
+    this.released = true
+    sseConnections.close(this.connId)
   }
 
   private async read(url: string): Promise<void> {
@@ -28,7 +39,12 @@ export class AuthenticatedEventStream extends EventTarget {
     try {
       const response = await fetch(url, {
         credentials: 'include',
-        headers: { Accept: 'text/event-stream', ...clientShellRequestHeaders(), ...getActiveExtensionModHeaders(url) },
+        headers: {
+          Accept: 'text/event-stream',
+          'X-Request-ID': this.connId,
+          ...clientShellRequestHeaders(),
+          ...getActiveExtensionModHeaders(url),
+        },
         signal: this.controller.signal,
       })
       if (response.status === 401 || response.status === 403) {
@@ -67,6 +83,8 @@ export class AuthenticatedEventStream extends EventTarget {
       if (!this.controller.signal.aborted) this.onerror?.()
     } catch {
       if (!this.controller.signal.aborted) this.onerror?.()
+    } finally {
+      this.release()
     }
   }
 }

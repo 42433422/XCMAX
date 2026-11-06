@@ -20,6 +20,7 @@ import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { extractLikelyProductQueryKeyword } from '../useChatPersistence'
 import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useChatSessionActivity'
 import { asPlannerPayload, errorMessage } from './chatOrchestrationShared'
+import { classifyRawError } from '@/utils/networkStability'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
@@ -489,9 +490,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
                 : `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
         if (round.isActive()) {
+          const transport = /failed to fetch|networkerror|econnrefused|offline/i.test(errText) ? classifyRawError(errText) : null
           const visibleError = err instanceof IncompletePlannerSseError
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] ${errText}`
-            : timedOut && streamRunId ? errText : `处理失败：${errText}`
+            : transport || (timedOut && streamRunId ? errText : `处理失败：${errText}`)
           applyPlainTextToMessageIndex(msgIndex, visibleError)
           if (streamMessage) {
             streamMessage.workflowAction = 'failed'

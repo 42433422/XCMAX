@@ -5,6 +5,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
 import { resolveErpApiPathWhenReady } from '@/utils/erpDomainPaths'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { classifyTransportFailure, createTraceId, RefreshSingleFlight, SideEffectGate } from '@/utils/networkStability'
 
 /**
  * 后端 LanLicenseGuard 返回 401 + error=license_* 时派发；
@@ -127,6 +128,18 @@ export interface RequestOptions extends RequestInit {
   timeoutMs?: number
   /** 显式预算的读请求（如登录行业 8s）不再自动再等一轮。 */
   retry?: boolean
+  /** 同一键的写入只执行一次。结果未知时必须显式确认后才允许再提交。 */
+  idempotencyKey?: string
+  sideEffect?: boolean
+  confirmUnknownRetry?: boolean
+  authRetried?: boolean
+}
+
+const refreshGate = new RefreshSingleFlight()
+const sideEffectGate = new SideEffectGate()
+
+export function registerSessionRefresh(fn: (() => Promise<boolean>) | null): void {
+  refreshGate.setRefresher(fn)
 }
 
 export type { ApiResponse } from '@/types/api'
@@ -134,8 +147,18 @@ export type { ApiResponse } from '@/types/api'
 const READ_RETRY_DELAY_MS = 250
 const READ_RETRYABLE_STATUSES = new Set([408, 429])
 
+function stabilityKind(error: ApiError): string {
+  const data = error.data
+  if (!data || typeof data !== 'object') return ''
+  const stability = (data as { stability?: { kind?: string } }).stability
+  return stability?.kind || ''
+}
+
+const RETRYABLE_TRANSPORT_KINDS = new Set(['timeout', 'offline', 'server_down', 'backend_restart'])
+
 function isTransientReadFailure(error: ApiError): boolean {
   if (error.status >= 500 || READ_RETRYABLE_STATUSES.has(error.status)) return true
+  if (RETRYABLE_TRANSPORT_KINDS.has(stabilityKind(error))) return true
   if (error.status !== 0) return false
   const message = error.message
   // 只重试传输失败和调用方设置的超时。响应形状错误不能再读一次。
@@ -153,7 +176,24 @@ function shouldRetryRead(error: unknown, options: RequestOptions): boolean {
   return error instanceof ApiError && isTransientReadFailure(error)
 }
 
-async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
+const AUTH_REFRESH_EXEMPT = /\/api\/(auth|market\/auth)\b/
+
+async function authRecovery(
+  url: string,
+  status: number,
+  errorData: unknown,
+  options: RequestOptions,
+): Promise<'retry' | 'stop' | 'none'> {
+  if (status !== 401 || options.authRetried || !refreshGate.enabled) return 'none'
+  if (AUTH_REFRESH_EXEMPT.test(url)) return 'none'
+  const payload = errorData && typeof errorData === 'object' ? (errorData as Record<string, unknown>) : {}
+  const code = String(payload.error || '').trim()
+  if (LAN_GATE_ERROR_CODES.has(code)) return 'none'
+  const ok = await refreshGate.run()
+  return ok ? 'retry' : 'stop'
+}
+
+async function requestWithRetry<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
   const resolvedUrl = await resolveErpApiPathWhenReady(url)
   const accountEpoch = productReadAccountEpoch.value
   try {
@@ -170,6 +210,20 @@ async function request<T = unknown>(url: string, options: RequestOptions = {}): 
     }
     return requestOnce<T>(resolvedUrl, options, accountEpoch)
   }
+}
+
+async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
+  const method = String(options.method || 'GET').toUpperCase()
+  const key = options.idempotencyKey
+  const sideEffect = options.sideEffect === true || (!!key && method !== 'GET' && method !== 'HEAD')
+  if (sideEffect && key) {
+    return sideEffectGate.submit(
+      key,
+      () => requestWithRetry<T>(url, options),
+      options.confirmUnknownRetry === true,
+    ) as Promise<T | Response>
+  }
+  return requestWithRetry<T>(url, options)
 }
 
 async function requestOnce<T = unknown>(
@@ -216,6 +270,9 @@ async function requestOnce<T = unknown>(
       ;(config.headers as Record<string, string>)['X-CSRF-Token'] = tok
     }
   }
+  const traceHeaders = config.headers as Record<string, string>
+  const hasTrace = Object.keys(traceHeaders).some((key) => key.toLowerCase() === 'x-request-id' && String(traceHeaders[key] || '').trim())
+  if (!hasTrace) traceHeaders['X-Request-ID'] = createTraceId()
 
   const assertSameAccount = () => {
     if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(url)) {
@@ -247,10 +304,18 @@ async function requestOnce<T = unknown>(
         }
       }
 
-      const method = String(config.method || 'GET').toUpperCase()
-      notifyDbReadTokenRequiredAfter403(response.status, fullUrl, method)
-      notifyDbWriteTokenRequiredAfter403(response.status, fullUrl, method)
+      const verb = String(config.method || 'GET').toUpperCase()
+      notifyDbReadTokenRequiredAfter403(response.status, fullUrl, verb)
+      notifyDbWriteTokenRequiredAfter403(response.status, fullUrl, verb)
       maybeNotifyLanGate(response.status, errorData)
+      const recovery = await authRecovery(url, response.status, errorData, options)
+      if (recovery === 'retry') {
+        return requestOnce<T>(url, { ...options, authRetried: true }, accountEpoch)
+      }
+      if (recovery === 'stop') {
+        const expired = classifyTransportFailure({ status: 401, errorCode: 'token_expired' })
+        throw new ApiError(expired.message, 401, { success: false, stability: expired })
+      }
 
       throw new ApiError(errorMessage, response.status, errorData)
     }
@@ -270,13 +335,21 @@ async function requestOnce<T = unknown>(
     if (error instanceof ApiError) {
       throw error
     }
-    const message =
-      timeoutController?.signal.aborted && !callerSignal?.aborted
-        ? `请求超时（>${Math.ceil(Number(timeoutMs) / 1000)}s）`
-        : error instanceof Error
-          ? error.message
-          : '网络错误'
-    throw new ApiError(message, 0, null)
+    const rawMessage = error instanceof Error ? error.message : '网络错误'
+    if (callerSignal?.aborted) {
+      throw new ApiError(rawMessage, 0, { success: false, stability: { kind: 'interrupted', message: rawMessage, action: 'check_result', success: false } })
+    }
+    const timedOut = Boolean(timeoutController?.signal.aborted)
+    const online = typeof navigator === 'undefined' ? true : navigator.onLine
+    const stability = classifyTransportFailure({
+      timeout: timedOut || rawMessage.includes('请求超时'),
+      online,
+      message: timedOut ? '请求超时' : rawMessage,
+    })
+    const message = timedOut
+      ? `请求超时（>${Math.ceil(Number(timeoutMs) / 1000)}s）。该请求未成功。`
+      : stability.message
+    throw new ApiError(message, 0, { success: false, stability })
   } finally {
     if (timeoutId) clearTimeout(timeoutId)
     detachCallerAbort?.()

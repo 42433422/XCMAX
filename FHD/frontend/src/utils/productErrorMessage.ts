@@ -1,10 +1,14 @@
 /**
  * 将 HTTP/SDK 原始错误转为用户可读文案（对齐 Android AppViewModel.productErrorMessage）。
  */
+import { classifyRawError } from './networkStability'
+
 export function productErrorMessage(raw: unknown, fallback: string): string {
   const msg = String(raw instanceof Error ? raw.message : (raw ?? '')).trim()
   const lower = msg.toLowerCase()
   if (!msg) return fallback
+  const specific = classifyRawError(msg)
+  if (specific) return specific
   if (lower.includes('401') || msg.includes('未授权') || msg.includes('未登录')) {
     return '登录已过期，请重新登录或重新扫码绑定'
   }

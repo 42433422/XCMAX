@@ -6,6 +6,7 @@ import type { ApiResponse } from '@/types/api'
 import type { ChatRequest, ChatResponse, ChatSession } from '@/types/chat'
 import type { ChatModelRoute } from '@/utils/chatModelRoute'
 import { readPlannerSseResponse, resolveChatStreamPath, type PlannerSseEvent } from '@/utils/chatSseStream'
+import { createTraceId } from '@/utils/networkStability'
 import { asRecord, asString } from '@/utils/typeGuards'
 import {
   resolvePlannerChatBatchPath,
@@ -102,6 +103,7 @@ export const chatApi = {
     const body = JSON.stringify(payload)
     const headers = withChatCsrfHeader({
       'Content-Type': 'application/json',
+      'X-Request-ID': createTraceId(),
       ...readMarketBearerHeader(),
       ...(hdr as Record<string, string>),
     })
