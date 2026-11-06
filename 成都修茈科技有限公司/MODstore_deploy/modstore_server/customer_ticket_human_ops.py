@@ -224,7 +224,11 @@ def request_sensitive_action(
         detail={"action_id": action.id, "status": action.status, "change": change[:200]},
     )
     db.commit()
-    return {"action_id": action.id, "status": action.status, "executed": action.status == "completed"}
+    return {
+        "action_id": action.id,
+        "status": action.status,
+        "executed": action.status == "completed",
+    }
 
 
 def decide_sensitive_action(
@@ -256,9 +260,10 @@ def decide_sensitive_action(
         or str((request.get("approval") or {}).get("decision") or "") == "rejected"
         or request.get("consumed_approval_id")
     ):
-        if str((request.get("approval") or {}).get("decision") or "") == "rejected" or str(
-            action.error or ""
-        ) == "approval_rejected":
+        if (
+            str((request.get("approval") or {}).get("decision") or "") == "rejected"
+            or str(action.error or "") == "approval_rejected"
+        ):
             action.status = "rejected"
             action.error = "approval_rejected"
         db.commit()

@@ -21,6 +21,8 @@ paths = [
     '''FHD/tests/.*stub.*''',
     # CI 自治脚本测试中的 mock token (AKIAIOSFODNN7EXAMPLE / ghp_aBcD... 等文档示例)
     '''FHD/tests/test_ci/.*''',
+    # 支持包脱敏测试使用 AWS 文档示例键，断言压缩包里已经没有它。
+    '''FHD/tests/test_desktop/test_support_bundle_customer_redaction\.py''',
     # 文档中的示例密钥
     '''docs/.*\.md''',
     '''\.md$''',

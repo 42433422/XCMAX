@@ -111,7 +111,11 @@ def test_human_loop_blocks_false_close_and_keeps_history(client):
     )
     assert blocked.json()["ticket"]["status"] == "processing"
     _as(customer)
-    visible = next(row for row in http.get("/api/customer-service/issues/mine").json()["items"] if row["id"] == ticket_id)
+    visible = next(
+        row
+        for row in http.get("/api/customer-service/issues/mine").json()["items"]
+        if row["id"] == ticket_id
+    )
     assert visible["latest_result"]["source"] == "human"
     assert visible["latest_result"]["fault_remains"] is True
     assert "原故障仍在" in visible["latest_result"]["progress"]
@@ -119,13 +123,21 @@ def test_human_loop_blocks_false_close_and_keeps_history(client):
     assert visible["can_reopen"] is False
     still_open = http.post(
         f"/api/customer-service/issues/{ticket_id}/decision",
-        json={"decision": "reopen", "note": "故障还在但不能重开", "idempotency_key": "reopen-while-open"},
+        json={
+            "decision": "reopen",
+            "note": "故障还在但不能重开",
+            "idempotency_key": "reopen-while-open",
+        },
     )
     assert still_open.status_code == 409
     _as(customer)
     close = http.post(
         f"/api/customer-service/issues/{ticket_id}/decision",
-        json={"decision": "resolved", "note": "我确认已经好了", "idempotency_key": "close-too-soon-1"},
+        json={
+            "decision": "resolved",
+            "note": "我确认已经好了",
+            "idempotency_key": "close-too-soon-1",
+        },
     )
     assert close.status_code == 409
 
@@ -139,7 +151,11 @@ def test_human_loop_blocks_false_close_and_keeps_history(client):
     _as(second)
     rejected = http.post(
         f"/api/customer-service/tickets/{ticket_id}/sensitive-action/decision",
-        json={"action_id": requested.json()["action_id"], "decision": "rejected", "reason": "没有充分理由"},
+        json={
+            "action_id": requested.json()["action_id"],
+            "decision": "rejected",
+            "reason": "没有充分理由",
+        },
     )
     assert rejected.json()["executed"] is False
     assert rejected.json()["status"] == "rejected"
@@ -161,7 +177,11 @@ def test_human_loop_blocks_false_close_and_keeps_history(client):
     _as(customer)
     confirmed = http.post(
         f"/api/customer-service/issues/{ticket_id}/decision",
-        json={"decision": "resolved", "note": "员工节点已经显示", "idempotency_key": "customer-ok-0001"},
+        json={
+            "decision": "resolved",
+            "note": "员工节点已经显示",
+            "idempotency_key": "customer-ok-0001",
+        },
     )
     assert confirmed.status_code == 200, confirmed.text
     assert confirmed.json()["issue"]["status"] == "resolved"

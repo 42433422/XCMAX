@@ -466,18 +466,27 @@ def test_customer_confirms_only_after_verification_and_reopen_keeps_history(clie
         _as(owner)
         assert _decide(client, ticket_id, "resolved", "loop-confirm-early").status_code == 409
         _as(admin)
-        assert client.post(
-            f"{BASE}/tickets/{ticket_id}/assign",
-            json={"assignee_id": admin.id, "reason": "指派给诊断人"},
-        ).status_code == 200
-        assert client.post(
-            f"{BASE}/tickets/{ticket_id}/accept",
-            json={"reason": "开始核查"},
-        ).status_code == 200
-        assert client.post(
-            f"{BASE}/tickets/{ticket_id}/diagnose",
-            json={"reason": "画面仍需另一位管理员复测"},
-        ).status_code == 200
+        assert (
+            client.post(
+                f"{BASE}/tickets/{ticket_id}/assign",
+                json={"assignee_id": admin.id, "reason": "指派给诊断人"},
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"{BASE}/tickets/{ticket_id}/accept",
+                json={"reason": "开始核查"},
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"{BASE}/tickets/{ticket_id}/diagnose",
+                json={"reason": "画面仍需另一位管理员复测"},
+            ).status_code
+            == 200
+        )
         _as(reviewer)
         ready = client.post(
             f"{BASE}/tickets/{ticket_id}/result",

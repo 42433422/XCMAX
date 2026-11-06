@@ -864,7 +864,13 @@ def handle_customer_message(
     elif ticket.assigned_admin_id:
         ticket.status = "processing"
         ticket.closed_at = None
-    elif ticket.status not in {"awaiting_customer", "resolved", "closed", "expired", "waiting_user"}:
+    elif ticket.status not in {
+        "awaiting_customer",
+        "resolved",
+        "closed",
+        "expired",
+        "waiting_user",
+    }:
         # 对话登记还没有处理人，不能直接写成处理中。
         ticket.status = "open"
         ticket.closed_at = None
@@ -2375,7 +2381,11 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
     resolution = evidence.get("resolution") or {}
     state = str(resolution.get("state") or "received")
     reports = [r for r in evidence.get("employee_reports") or [] if isinstance(r, dict)]
-    human = evidence.get("handling_result") if isinstance(evidence.get("handling_result"), dict) else None
+    human = (
+        evidence.get("handling_result")
+        if isinstance(evidence.get("handling_result"), dict)
+        else None
+    )
     human_text = str((human or {}).get("text") or "").strip()
     if human_text:
         latest_result = {
@@ -2406,7 +2416,6 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
         "closed_at": row.closed_at.isoformat() if row.closed_at else "",
         "reopen_count": len(evidence.get("reopen_history") or []),
         "can_resolve": row.status == "awaiting_customer" and not closed,
-        "can_reopen": closed or (
-            not fault_open and state not in {"received", "reopened", "processing"}
-        ),
+        "can_reopen": closed
+        or (not fault_open and state not in {"received", "reopened", "processing"}),
     }

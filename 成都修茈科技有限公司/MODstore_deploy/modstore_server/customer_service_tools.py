@@ -139,13 +139,12 @@ def _approval_already_settled(action: CustomerServiceAction) -> bool:
     rejected = (
         action.status == "rejected"
         or str(action.error or "") == "approval_rejected"
-        or (
-            action.status == "failed"
-            and str(action.error or "").startswith("approval_rejected")
-        )
+        or (action.status == "failed" and str(action.error or "").startswith("approval_rejected"))
     )
     already = rejected or action.status in {"completed", "skipped", "pending_execution"}
-    already = already or bool(consumed) or (isinstance(prior, dict) and bool(prior.get("approval_id")))
+    already = (
+        already or bool(consumed) or (isinstance(prior, dict) and bool(prior.get("approval_id")))
+    )
     if not already:
         return False
     if rejected or decided == "rejected":

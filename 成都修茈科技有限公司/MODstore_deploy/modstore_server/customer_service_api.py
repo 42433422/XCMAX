@@ -379,11 +379,12 @@ def _human_ticket(db: Session, ticket_id: int):
 
 
 @router.get("/staff")
-async def list_ticket_staff(
-    db: Session = Depends(get_db), user: User = Depends(_require_admin)
-):
+async def list_ticket_staff(db: Session = Depends(get_db), user: User = Depends(_require_admin)):
     rows = db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).limit(50).all()
-    return {"items": [{"id": row.id, "username": row.username} for row in rows], "viewer_id": user.id}
+    return {
+        "items": [{"id": row.id, "username": row.username} for row in rows],
+        "viewer_id": user.id,
+    }
 
 
 @router.post("/tickets/{ticket_id}/assign")
@@ -395,7 +396,9 @@ async def assign_ticket_handler(
 ):
     from modstore_server.customer_ticket_human_ops import assign_ticket
 
-    ticket = assign_ticket(db, _human_ticket(db, ticket_id), user, body.assignee_id, body.reason.strip())
+    ticket = assign_ticket(
+        db, _human_ticket(db, ticket_id), user, body.assignee_id, body.reason.strip()
+    )
     return {"ticket": ticket_payload(ticket)}
 
 

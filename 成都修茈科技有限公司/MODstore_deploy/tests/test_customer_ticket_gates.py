@@ -143,7 +143,9 @@ def test_rejected_approval_cannot_be_reset_and_approved(client):
         with get_session_factory()() as db:
             ticket = db.get(CustomerServiceTicket, ticket_id)
             actor = db.get(User, assignee.id)
-            requested = request_sensitive_action(db, ticket, actor, "调整客户可见配置", "需要改显示配置")
+            requested = request_sensitive_action(
+                db, ticket, actor, "调整客户可见配置", "需要改显示配置"
+            )
         action_id = int(requested["action_id"])
         with get_session_factory()() as db:
             ticket = db.get(CustomerServiceTicket, ticket_id)
@@ -191,7 +193,9 @@ def test_duplicate_decision_and_stale_ticket_status_fail(client):
     with get_session_factory()() as db:
         ticket = db.get(CustomerServiceTicket, ticket_id)
         actor = db.get(User, assignee.id)
-        requested = request_sensitive_action(db, ticket, actor, "调整客户可见配置", "需要改显示配置")
+        requested = request_sensitive_action(
+            db, ticket, actor, "调整客户可见配置", "需要改显示配置"
+        )
     action_id = int(requested["action_id"])
     with get_session_factory()() as db:
         ticket = db.get(CustomerServiceTicket, ticket_id)
@@ -245,7 +249,9 @@ def test_decision_reloads_ticket_status_before_approving(client):
     with get_session_factory()() as db:
         ticket = db.get(CustomerServiceTicket, ticket_id)
         actor = db.get(User, assignee.id)
-        requested = request_sensitive_action(db, ticket, actor, "调整客户可见配置", "需要改显示配置")
+        requested = request_sensitive_action(
+            db, ticket, actor, "调整客户可见配置", "需要改显示配置"
+        )
     action_id = int(requested["action_id"])
     db = get_session_factory()()
     db.expire_on_commit = False
@@ -390,7 +396,9 @@ def test_concurrent_diagnosis_result_and_reassign_keep_one_history(client):
     texts = [row["text"] for row in evidence["diagnoses"]]
     assert len(texts) == 1
     assert texts[0] in {"诊断结论甲：节点缺失", "诊断结论乙：接口超时"}
-    history = [row["reason"] for row in evidence["handling_history"] if row["action"] == "ticket_diagnosed"]
+    history = [
+        row["reason"] for row in evidence["handling_history"] if row["action"] == "ticket_diagnosed"
+    ]
     assert history == texts
 
     resulted = _race(
@@ -426,12 +434,16 @@ def test_concurrent_diagnosis_result_and_reassign_keep_one_history(client):
             _loaded_call(
                 ticket_id,
                 assignee.id,
-                lambda db, ticket, user: assign_ticket(db, ticket, user, other.id, "改派给另一位管理员"),
+                lambda db, ticket, user: assign_ticket(
+                    db, ticket, user, other.id, "改派给另一位管理员"
+                ),
             ),
             _loaded_call(
                 ticket_id,
                 other.id,
-                lambda db, ticket, user: assign_ticket(db, ticket, user, assignee.id, "改派回原处理人"),
+                lambda db, ticket, user: assign_ticket(
+                    db, ticket, user, assignee.id, "改派回原处理人"
+                ),
             ),
         ]
     )
@@ -460,7 +472,9 @@ def test_concurrent_approval_commits_one_decision(client):
         with get_session_factory()() as db:
             ticket = db.get(CustomerServiceTicket, ticket_id)
             actor = db.get(User, assignee.id)
-            requested = request_sensitive_action(db, ticket, actor, "并发审批的配置变更", "需要改显示配置")
+            requested = request_sensitive_action(
+                db, ticket, actor, "并发审批的配置变更", "需要改显示配置"
+            )
         action_id = int(requested["action_id"])
         outcomes = _race(
             [
