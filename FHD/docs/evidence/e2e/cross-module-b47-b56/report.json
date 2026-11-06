@@ -1,1039 +1,129 @@
 {
-  "verdict": "PASS",
+  "verdict": "PARTIAL PASS",
   "scenarios": {
     "S01": "PASS",
     "S02": "PASS",
     "S03": "PASS",
     "S04": "PASS"
   },
+  "http": {
+    "submit": {
+      "status": 202,
+      "deduplicated": false,
+      "status_text": "waiting_user"
+    },
+    "duplicate": {
+      "status": 202,
+      "deduplicated": true,
+      "run_id": "run_c626a64b397b4f9a8f1d201434355392"
+    },
+    "rows_after_duplicate_submit": [],
+    "approve": {
+      "status": 200,
+      "success": true,
+      "stored_status_before": "pending",
+      "snapshot_in_db_before": true,
+      "memory_cleared_before": true,
+      "request_no": "0412a526a9df447e89e27739b0b8d51c"
+    },
+    "rows_after_approve": [
+      [
+        "HX-1",
+        "15.00"
+      ],
+      [
+        "HX-2",
+        "30.00"
+      ]
+    ],
+    "approval_status_after": "approved",
+    "download": {
+      "status": 200,
+      "sha256": "41e9db38551f9b925db6f6f1110ad6e2742c4d7f1ea50e9d4dbf50e074fe5d23",
+      "file_sha256": "41e9db38551f9b925db6f6f1110ad6e2742c4d7f1ea50e9d4dbf50e074fe5d23",
+      "bytes": 5751
+    },
+    "history": {
+      "task_status": 200,
+      "audit_status": 200,
+      "file_status": 200,
+      "task_id": "task-http-b47",
+      "trace_id": "69cc2514f0bd4d1fb4f9b72b28eb85fa"
+    },
+    "holes": {
+      "1_http_entry": true,
+      "2_persisted_approval": true,
+      "3_http_download_sha": true,
+      "4_duplicate_submit": true,
+      "5_second_session": true
+    }
+  },
+  "checks": {
+    "HTTP-01": {
+      "status": "PASS",
+      "detail": 202
+    },
+    "HTTP-02": {
+      "status": "PASS",
+      "detail": "approved"
+    },
+    "HTTP-03": {
+      "status": "PASS",
+      "detail": "41e9db38551f9b925db6f6f1110ad6e2742c4d7f1ea50e9d4dbf50e074fe5d23"
+    },
+    "HTTP-04": {
+      "status": "PASS",
+      "detail": 202
+    },
+    "HTTP-05": {
+      "status": "PASS",
+      "detail": {
+        "task_status": 200,
+        "audit_status": 200,
+        "file_status": 200,
+        "task_id": "task-http-b47",
+        "trace_id": "69cc2514f0bd4d1fb4f9b72b28eb85fa"
+      }
+    },
+    "S04-original-unchanged": {
+      "status": "PASS",
+      "detail": "1c7a353de27b43c98e301408b39086005fc26810c72e44376d0c53ccad01a5cc"
+    },
+    "S04-partial-anomalies": {
+      "status": "PASS",
+      "detail": "导入 2 条，异常 2 条"
+    },
+    "B47-B56-harness": {
+      "status": "NOT TESTED",
+      "detail": "Previous matrix was only run_cross_module_acceptance. Not marked PASS on this HTTP path."
+    }
+  },
   "failed": [],
   "ids": {
-    "trace_id": "1136559a6ed445ddb1c3e06377722b6b",
-    "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
-    "run_id": "run_9a16e7aa90944ccfb5a01bca07adefba",
-    "plan_id": "plan-s01-f9863f26eb884eb6aa226e6edbc6429d",
-    "original_sha256": "32756d06aa97a07681d941364514339c9f7d943243a12a0bf2860215dc49cfe2",
-    "result_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
-    "approval_request_ids": [
-      "29da5c33247149eb90f150ea17b6e1dd"
-    ]
+    "task_id": "task-http-b47",
+    "trace_id": "69cc2514f0bd4d1fb4f9b72b28eb85fa",
+    "run_id": "run_c626a64b397b4f9a8f1d201434355392",
+    "approval_request_db_id": 1,
+    "request_no": "0412a526a9df447e89e27739b0b8d51c",
+    "original_sha256": "1c7a353de27b43c98e301408b39086005fc26810c72e44376d0c53ccad01a5cc",
+    "result_sha256": "41e9db38551f9b925db6f6f1110ad6e2742c4d7f1ea50e9d4dbf50e074fe5d23"
   },
   "verification": {
-    "accepted": true,
     "status": "partial",
-    "tool_success_ignored_when_counts_disagree": false,
-    "qualifying_count": 2,
-    "anomaly_count": 2,
-    "stored_count": 2,
-    "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
+    "success": false,
+    "summary": "导入 2 条，异常 2 条",
+    "stored_rows": [
+      [
+        "HX-1",
+        "15.00"
+      ],
+      [
+        "HX-2",
+        "30.00"
+      ]
+    ],
+    "source_unchanged": true,
     "anomalies_reported": true
   },
-  "s02": {
-    "success": true,
-    "before": "12.50",
-    "after": "15.00",
-    "match_ref": "1",
-    "stored_after": "15.00"
-  },
-  "audit_count": 7,
-  "checks": {
-    "B48-01": {
-      "status": "PASS",
-      "detail": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入华东涂料产品库，并调用已发布 MOD 做后续读取"
-    },
-    "B48-02": {
-      "status": "PASS",
-      "detail": {
-        "file_name": "upload-shipment.xlsx",
-        "inherited": false
-      }
-    },
-    "B48-03": {
-      "status": "PASS",
-      "detail": [
-        "result.xlsx",
-        "anomaly_list"
-      ]
-    },
-    "B48-04": {
-      "status": "PASS",
-      "detail": [
-        "合格行才写入产品库",
-        "原件不得修改",
-        "异常行必须单独列出"
-      ]
-    },
-    "B48-05": {
-      "status": "PASS",
-      "detail": [
-        "敏感写入必须审批",
-        "成功标记不能代替复核"
-      ]
-    },
-    "B48-06": {
-      "status": "PASS",
-      "detail": {
-        "complete": false,
-        "question": "请提供要处理的业务 Excel，并说明要写入的 ERP 区域。",
-        "tool_calls": [],
-        "goal": ""
-      }
-    },
-    "B48-07": {
-      "status": "PASS",
-      "detail": {
-        "complete": false,
-        "question": "目标不明确。需要确认是只核对表格，还是写入 ERP。未确认前不会执行高风险写入。",
-        "tool_calls": [],
-        "goal": "",
-        "rejected_high_risk": true
-      }
-    },
-    "B48-08": {
-      "status": "PASS",
-      "detail": {
-        "complete": true,
-        "goal": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入华东涂料产品库，并调用已发布 MOD 做后续读取",
-        "inputs": {
-          "file_name": "upload-shipment.xlsx",
-          "inherited": true
-        },
-        "outputs": [
-          "result.xlsx",
-          "anomaly_list"
-        ],
-        "rules": [
-          "合格行才写入产品库",
-          "原件不得修改",
-          "异常行必须单独列出"
-        ],
-        "constraints": [
-          "敏感写入必须审批",
-          "成功标记不能代替复核"
-        ],
-        "tool_match": [
-          "excel_analysis.read",
-          "elt.parse_file",
-          "products.batch_create",
-          "excel-full-read-employee"
-        ],
-        "useless_tools_omitted": [
-          "products.delete",
-          "products.batch_delete"
-        ],
-        "tool_calls_planned": [
-          "excel_analysis.read",
-          "elt.parse_file",
-          "products.batch_create",
-          "excel-full-read-employee"
-        ]
-      }
-    },
-    "B48-09": {
-      "status": "PASS",
-      "detail": [
-        "excel_analysis.read",
-        "elt.parse_file",
-        "products.batch_create",
-        "excel-full-read-employee"
-      ]
-    },
-    "B48-10": {
-      "status": "PASS",
-      "detail": [
-        "products.delete",
-        "products.batch_delete"
-      ]
-    },
-    "B48-11": {
-      "status": "PASS",
-      "detail": {
-        "complete": true,
-        "goal": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入华东涂料产品库，并调用已发布 MOD 做后续读取",
-        "inputs": {
-          "file_name": "upload-shipment.xlsx",
-          "inherited": false
-        },
-        "outputs": [
-          "result.xlsx",
-          "anomaly_list"
-        ],
-        "rules": [
-          "合格行才写入产品库",
-          "原件不得修改",
-          "异常行必须单独列出"
-        ],
-        "constraints": [
-          "敏感写入必须审批",
-          "成功标记不能代替复核"
-        ],
-        "tool_match": [
-          "excel_analysis.read",
-          "elt.parse_file",
-          "products.batch_create",
-          "excel-full-read-employee"
-        ],
-        "useless_tools_omitted": [
-          "products.delete",
-          "products.batch_delete"
-        ],
-        "tool_calls_planned": [
-          "excel_analysis.read",
-          "elt.parse_file",
-          "products.batch_create",
-          "excel-full-read-employee"
-        ]
-      }
-    },
-    "B48-12": {
-      "status": "PASS",
-      "detail": {
-        "complete": true,
-        "goal": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入华东涂料产品库，并调用已发布 MOD 做后续读取",
-        "inputs": {
-          "file_name": "upload-shipment.xlsx",
-          "inherited": false
-        },
-        "outputs": [
-          "result.xlsx",
-          "anomaly_list"
-        ],
-        "rules": [
-          "合格行才写入产品库",
-          "原件不得修改",
-          "异常行必须单独列出"
-        ],
-        "constraints": [
-          "敏感写入必须审批",
-          "成功标记不能代替复核"
-        ],
-        "tool_match": [
-          "excel_analysis.read",
-          "elt.parse_file",
-          "products.batch_create",
-          "excel-full-read-employee"
-        ],
-        "useless_tools_omitted": [
-          "products.delete",
-          "products.batch_delete"
-        ],
-        "tool_calls_planned": [
-          "excel_analysis.read",
-          "elt.parse_file",
-          "products.batch_create",
-          "excel-full-read-employee"
-        ]
-      }
-    },
-    "B47-01": {
-      "status": "PASS",
-      "detail": "task-33b5d3d51fbd4e0eb16a4101ca259e0a"
-    },
-    "B47-02": {
-      "status": "PASS",
-      "detail": "7"
-    },
-    "B47-03": {
-      "status": "PASS",
-      "detail": "1"
-    },
-    "B47-04": {
-      "status": "PASS",
-      "detail": "session-b47"
-    },
-    "B47-05": {
-      "status": "PASS",
-      "detail": "32756d06aa97a07681d941364514339c9f7d943243a12a0bf2860215dc49cfe2"
-    },
-    "B47-06": {
-      "status": "PASS",
-      "detail": {
-        "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
-        "status": "queued",
-        "message": "任务已接收，排队处理",
-        "file_name": "upload-shipment.xlsx"
-      }
-    },
-    "B47-07": {
-      "status": "PASS",
-      "detail": "task-33b5d3d51fbd4e0eb16a4101ca259e0a"
-    },
-    "B47-08": {
-      "status": "PASS",
-      "detail": "idem-e2a4f4d63e82476f8ad00a4bbd515ef4"
-    },
-    "B47-09": {
-      "status": "PASS",
-      "detail": {
-        "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
-        "status": "queued",
-        "message": "任务已接收，排队处理",
-        "file_name": "upload-shipment.xlsx"
-      }
-    },
-    "B47-10": {
-      "status": "PASS",
-      "detail": "1136559a6ed445ddb1c3e06377722b6b"
-    },
-    "B49-01": {
-      "status": "PASS",
-      "detail": [
-        "workbook.identify",
-        "workbook.slice",
-        "workbook.verify",
-        "workbook.clean",
-        "probe.flaky",
-        "probe.flaky"
-      ]
-    },
-    "B49-02": {
-      "status": "PASS",
-      "detail": [
-        "workbook.identify",
-        "workbook.slice",
-        "workbook.verify",
-        "workbook.clean",
-        "probe.flaky",
-        "probe.flaky"
-      ]
-    },
-    "B49-12": {
-      "status": "PASS",
-      "detail": {
-        "success": true,
-        "result_path": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result.xlsx",
-        "anomaly_csv": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result-anomalies.csv",
-        "sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
-        "qualifying_count": 2,
-        "anomaly_count": 2
-      }
-    },
-    "B49-03": {
-      "status": "PASS",
-      "detail": [
-        "left",
-        "right",
-        "after",
-        "failonce",
-        "failonce"
-      ]
-    },
-    "B49-04": {
-      "status": "PASS",
-      "detail": [
-        "a",
-        "b",
-        "c",
-        "d"
-      ]
-    },
-    "B49-05": {
-      "status": "PASS",
-      "detail": [
-        "left",
-        "right",
-        "after",
-        "failonce",
-        "failonce"
-      ]
-    },
-    "B49-06": {
-      "status": "PASS",
-      "detail": {
-        "first": false,
-        "resumed": true
-      }
-    },
-    "B49-08": {
-      "status": "PASS",
-      "detail": {
-        "redone": [],
-        "calls": [
-          "left",
-          "right",
-          "after",
-          "failonce",
-          "failonce"
-        ]
-      }
-    },
-    "B49-10": {
-      "status": "PASS",
-      "detail": "cancelled"
-    },
-    "B49-11": {
-      "status": "PASS",
-      "detail": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入华东涂料产品库，并调用已发布 MOD 做后续读取"
-    },
-    "B50-06": {
-      "status": "PASS",
-      "detail": "run_6f356e8d1be8426c865d74d9ac3280fe"
-    },
-    "B50-08": {
-      "status": "PASS",
-      "detail": 1
-    },
-    "B50-02": {
-      "status": "PASS",
-      "detail": "unknown_tool_action"
-    },
-    "B50-01": {
-      "status": "PASS",
-      "detail": "excel_analysis"
-    },
-    "B50-05": {
-      "status": "PASS",
-      "detail": "schema_validation_failed"
-    },
-    "B50-04": {
-      "status": "PASS",
-      "detail": {
-        "success": false,
-        "error_code": "tool_identity_required",
-        "outcome": "unknown",
-        "retryable": false,
-        "message": "查询未能在已授权数据范围内完成"
-      }
-    },
-    "B50-09": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B50-10": {
-      "status": "PASS",
-      "detail": 2
-    },
-    "B50-11": {
-      "status": "PASS",
-      "detail": 2
-    },
-    "B50-12": {
-      "status": "PASS",
-      "detail": 1
-    },
-    "B50-07": {
-      "status": "PASS",
-      "detail": 0
-    },
-    "B50-03": {
-      "status": "PASS",
-      "detail": "1"
-    },
-    "B49-07": {
-      "status": "PASS",
-      "detail": "dict_keys(['identified', 'cleaned'])"
-    },
-    "B49-09": {
-      "status": "PASS",
-      "detail": "stop"
-    },
-    "B51-01": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B51-02": {
-      "status": "PASS",
-      "detail": {
-        "id": "excel-full-read-employee",
-        "version": "1.0.0"
-      }
-    },
-    "B51-03": {
-      "status": "PASS",
-      "detail": {
-        "id": "excel-full-read-employee",
-        "version": "1.0.0"
-      }
-    },
-    "B51-04": {
-      "status": "PASS",
-      "detail": {
-        "read": true,
-        "anomaly": true
-      }
-    },
-    "B51-05": {
-      "status": "PASS",
-      "detail": {
-        "id": "csv-full-read-employee",
-        "version": "1.0.0"
-      }
-    },
-    "B51-06": {
-      "status": "PASS",
-      "detail": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result-anomalies.csv"
-    },
-    "B51-07": {
-      "status": "PASS",
-      "detail": "progress recorded by employee runtime result"
-    },
-    "B51-08": {
-      "status": "PASS",
-      "detail": {
-        "task": "缺少文件",
-        "handlers": [
-          "direct_python"
-        ],
-        "outputs": [
-          {
-            "handler": "direct_python",
-            "ok": false,
-            "output": {
-              "ok": false,
-              "summary": "文件不存在：/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/missing.xlsx",
-              "items": [],
-              "warnings": [
-                "请检查输入文件、模板文件和题目规则是否匹配。"
-              ],
-              "error": "文件不存在：/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/missing.xlsx",
-              "meta": {
-                "handler": "direct_python",
-                "action": "convert",
-                "runtime": "generated_python"
-              }
-            }
-          }
-        ],
-        "summary": "executed 1 handlers"
-      }
-    },
-    "B51-09": {
-      "status": "PASS",
-      "detail": []
-    },
-    "B51-10": {
-      "status": "PASS",
-      "detail": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result.xlsx"
-    },
-    "B51-11": {
-      "status": "PASS",
-      "detail": "1.0.0"
-    },
-    "B51-12": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-17": {
-      "status": "PASS",
-      "detail": {
-        "pending_count": 2,
-        "approved": true
-      }
-    },
-    "B52-08": {
-      "status": "PASS",
-      "detail": {
-        "success": true,
-        "written": [
-          {
-            "match_ref": "1",
-            "after": {
-              "unit": "华东涂料",
-              "model_number": "HX-1",
-              "name": "内墙底漆",
-              "specification": "20kg",
-              "price": "12.50",
-              "category": null,
-              "brand": null,
-              "description": null
-            }
-          },
-          {
-            "match_ref": "2",
-            "after": {
-              "unit": "华东涂料",
-              "model_number": "HX-2",
-              "name": "外墙面漆",
-              "specification": "18kg",
-              "price": "30",
-              "category": null,
-              "brand": null,
-              "description": null
-            }
-          }
-        ],
-        "before": {},
-        "after": {
-          "HX-1": "12.50",
-          "HX-2": "30.00"
-        },
-        "count": 2
-      }
-    },
-    "B52-09": {
-      "status": "PASS",
-      "detail": {
-        "success": true,
-        "before": "12.50",
-        "after": "15.00",
-        "match_ref": "1",
-        "stored_after": "15.00"
-      }
-    },
-    "B52-10": {
-      "status": "PASS",
-      "detail": "15.00"
-    },
-    "B52-16": {
-      "status": "PASS",
-      "detail": 0
-    },
-    "B52-18": {
-      "status": "PASS",
-      "detail": "32756d06aa97a07681d941364514339c9f7d943243a12a0bf2860215dc49cfe2"
-    },
-    "B54-01": {
-      "status": "PASS",
-      "detail": {
-        "accepted": true,
-        "status": "partial",
-        "tool_success_ignored_when_counts_disagree": false,
-        "qualifying_count": 2,
-        "anomaly_count": 2,
-        "stored_count": 2,
-        "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
-        "anomalies_reported": true
-      }
-    },
-    "B54-02": {
-      "status": "PASS",
-      "detail": {
-        "accepted": true,
-        "status": "partial",
-        "tool_success_ignored_when_counts_disagree": false,
-        "qualifying_count": 2,
-        "anomaly_count": 2,
-        "stored_count": 2,
-        "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
-        "anomalies_reported": true
-      }
-    },
-    "B54-03": {
-      "status": "PASS",
-      "detail": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result.xlsx"
-    },
-    "B54-04": {
-      "status": "PASS",
-      "detail": {
-        "accepted": true,
-        "status": "partial",
-        "tool_success_ignored_when_counts_disagree": false,
-        "qualifying_count": 2,
-        "anomaly_count": 2,
-        "stored_count": 2,
-        "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
-        "anomalies_reported": true
-      }
-    },
-    "B54-05": {
-      "status": "PASS",
-      "detail": {
-        "unit": "华东涂料",
-        "model_number": "HX-1",
-        "name": "内墙底漆",
-        "specification": "20kg",
-        "price": "12.50"
-      }
-    },
-    "B54-06": {
-      "status": "PASS",
-      "detail": {
-        "accepted": false,
-        "status": "failed",
-        "tool_success_ignored_when_counts_disagree": true,
-        "qualifying_count": 2,
-        "anomaly_count": 2,
-        "stored_count": 11,
-        "file_sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
-        "anomalies_reported": true
-      }
-    },
-    "B54-12": {
-      "status": "PASS",
-      "detail": "partial"
-    },
-    "B55-01": {
-      "status": "PASS",
-      "detail": {
-        "business_result": {
-          "protocol": "xcagi.business-harness.v1",
-          "status": "partial",
-          "success": false,
-          "summary": "导入 2 条，异常 2 条",
-          "file_name": "result.xlsx",
-          "sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
-          "trace_id": "1136559a6ed445ddb1c3e06377722b6b",
-          "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
-          "run_id": "run_9a16e7aa90944ccfb5a01bca07adefba"
-        }
-      }
-    },
-    "B55-02": {
-      "status": "PASS",
-      "detail": 2
-    },
-    "B55-03": {
-      "status": "PASS",
-      "detail": "result.xlsx"
-    },
-    "B55-04": {
-      "status": "PASS",
-      "detail": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab"
-    },
-    "B55-05": {
-      "status": "PASS",
-      "detail": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab"
-    },
-    "B55-06": {
-      "status": "PASS",
-      "detail": "completed"
-    },
-    "B55-07": {
-      "status": "PASS",
-      "detail": "session-b47"
-    },
-    "B55-12": {
-      "status": "PASS",
-      "detail": "failed"
-    },
-    "B53-01": {
-      "status": "PASS",
-      "detail": "task-33b5d3d51fbd4e0eb16a4101ca259e0a"
-    },
-    "B53-02": {
-      "status": "PASS",
-      "detail": [
-        "write",
-        "mod"
-      ]
-    },
-    "B53-03": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B53-04": {
-      "status": "PASS",
-      "detail": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab"
-    },
-    "B53-05": {
-      "status": "PASS",
-      "detail": 2
-    },
-    "B53-06": {
-      "status": "PASS",
-      "detail": "partial"
-    },
-    "B53-09": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B53-10": {
-      "status": "PASS",
-      "detail": {
-        "count": 2,
-        "ids": [
-          "1",
-          "2"
-        ]
-      }
-    },
-    "B53-12": {
-      "status": "PASS",
-      "detail": "completed"
-    },
-    "B56-01": {
-      "status": "PASS",
-      "detail": 7
-    },
-    "B56-02": {
-      "status": "PASS",
-      "detail": "1136559a6ed445ddb1c3e06377722b6b"
-    },
-    "B56-18": {
-      "status": "PASS",
-      "detail": 1
-    },
-    "B56-17": {
-      "status": "PASS",
-      "detail": [
-        "2026-11-06T06:09:35.883986+00:00",
-        "2026-11-06T06:09:36.579306+00:00",
-        "2026-11-06T06:09:36.579513+00:00",
-        "2026-11-06T06:09:36.579596+00:00",
-        "2026-11-06T06:09:36.579666+00:00",
-        "2026-11-06T06:09:36.579731+00:00",
-        "2026-11-06T06:09:36.579802+00:00"
-      ]
-    },
-    "B56-16": {
-      "status": "PASS",
-      "detail": "1"
-    },
-    "B52-01": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-02": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-03": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-04": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-05": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-06": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-07": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-11": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-12": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-13": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-14": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B52-15": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B53-07": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B53-08": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B53-11": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B54-07": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B54-08": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B54-09": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B54-10": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B54-11": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B55-08": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B55-09": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B55-10": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B55-11": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-03": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-04": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-05": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-06": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-07": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-08": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-09": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-10": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-11": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-12": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-13": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-14": {
-      "status": "PASS",
-      "detail": true
-    },
-    "B56-15": {
-      "status": "PASS",
-      "detail": true
-    }
-  },
-  "evidence": {
-    "trace_id": "1136559a6ed445ddb1c3e06377722b6b",
-    "task": {
-      "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
-      "run_id": "run_9a16e7aa90944ccfb5a01bca07adefba",
-      "feedback": {
-        "task_id": "task-33b5d3d51fbd4e0eb16a4101ca259e0a",
-        "status": "queued",
-        "message": "任务已接收，排队处理",
-        "file_name": "upload-shipment.xlsx"
-      },
-      "intent": {
-        "complete": true,
-        "goal": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入华东涂料产品库，并调用已发布 MOD 做后续读取",
-        "inputs": {
-          "file_name": "upload-shipment.xlsx",
-          "inherited": false
-        },
-        "outputs": [
-          "result.xlsx",
-          "anomaly_list"
-        ],
-        "rules": [
-          "合格行才写入产品库",
-          "原件不得修改",
-          "异常行必须单独列出"
-        ],
-        "constraints": [
-          "敏感写入必须审批",
-          "成功标记不能代替复核"
-        ],
-        "tool_match": [
-          "excel_analysis.read",
-          "elt.parse_file",
-          "products.batch_create",
-          "excel-full-read-employee"
-        ],
-        "useless_tools_omitted": [
-          "products.delete",
-          "products.batch_delete"
-        ],
-        "tool_calls_planned": [
-          "excel_analysis.read",
-          "elt.parse_file",
-          "products.batch_create",
-          "excel-full-read-employee"
-        ]
-      }
-    },
-    "s01": {
-      "success": true,
-      "sheets": [
-        "发货明细",
-        "说明"
-      ],
-      "regions": [
-        {
-          "sheet": "发货明细",
-          "kind": "table",
-          "header_row": 1,
-          "headers": [
-            "购买单位",
-            "型号",
-            "产品名称",
-            "规格",
-            "价格"
-          ]
-        },
-        {
-          "sheet": "说明",
-          "kind": "note",
-          "headers": []
-        }
-      ],
-      "files": {
-        "success": true,
-        "result_path": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result.xlsx",
-        "anomaly_csv": "/tmp/pytest-of-ubuntu/pytest-4/test_cross_module_business_cha0/workspace/result-anomalies.csv",
-        "sha256": "b1e67bb4b6402e4bbe3483c708c8b9a42234f74de15736a6f053204dd8d310ab",
-        "qualifying_count": 2,
-        "anomaly_count": 2
-      },
-      "excel_tool": {
-        "success": false,
-        "error_code": "output_schema_validation_failed",
-        "keys": [
-          "action",
-          "error_code",
-          "message",
-          "output_keys",
-          "raw_error_code",
-          "raw_message",
-          "raw_success",
-          "success",
-          "tool_id"
-        ]
-      }
-    },
-    "employees": {
-      "excel": {
-        "success": true,
-        "pack": {
-          "id": "excel-full-read-employee",
-          "version": "1.0.0"
-        }
-      },
-      "csv": {
-        "success": true,
-        "pack": {
-          "id": "csv-full-read-employee",
-          "version": "1.0.0"
-        }
-      },
-      "missing": {
-        "success": false
-      }
-    }
-  }
+  "note": "PARTIAL PASS"
 }

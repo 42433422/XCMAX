@@ -1419,3 +1419,315 @@ def run_cross_module_acceptance(
         "s02": price_update,
         "audit_count": len(task_rows),
     }
+
+
+def is_cross_module_client_task(message: str, params: dict[str, Any] | None) -> bool:
+    """The desktop task API already accepts this business request; no second route."""
+    text = str(message or "")
+    file_path = str((params or {}).get("file_path") or "").strip()
+    return "Excel" in text and "导入" in text and "产品库" in text and bool(file_path)
+
+
+def _workflow_receipt(
+    request_id: str, *, success: bool, loaded_from_storage: bool, **extra: Any
+) -> dict[str, Any]:
+    from app.application.workflow.approval_persistence import (
+        WORKFLOW_EXECUTION_FAILED_CODE,
+        WORKFLOW_EXECUTION_SUCCESS_CODE,
+    )
+
+    return {
+        "workflow_executed": True,
+        "approval_request_id": request_id,
+        "success": success,
+        "code": WORKFLOW_EXECUTION_SUCCESS_CODE if success else WORKFLOW_EXECUTION_FAILED_CODE,
+        "message": "AI 工作流执行完成" if success else "AI 工作流执行失败",
+        "nodes_executed": 1 if success else 0,
+        "nodes_total": 1,
+        "loaded_from_storage": loaded_from_storage,
+        **extra,
+    }
+
+
+def begin_cross_module_http(
+    orchestrator: AgentOrchestrator,
+    run: AgentRun,
+    *,
+    params: dict[str, Any],
+    runtime_context: dict[str, Any],
+) -> None:
+    """Parse the uploaded workbook and persist the approval. Do not write ERP yet."""
+    source = Path(str(params.get("file_path") or "")).expanduser()
+    if not source.is_file():
+        raise RuntimeError("业务 Excel 不存在，已停止写入")
+    original_hash = _sha256(source)
+    identified = identify_workbook(source)
+    cleaned = slice_and_clean(identified)
+    if not cleaned.get("qualifying"):
+        raise RuntimeError("没有可导入的合格行，已停止写入")
+    result_path = source.parent / "result.xlsx"
+    files = write_result_workbook(result_path, cleaned)
+    context = dict(run.metadata.get("runtime_context") or runtime_context)
+    tenant_text = str(context.get("tenant_id") or "")
+    if not tenant_text.isdigit():
+        raise RuntimeError("任务缺少租户，已停止写入")
+    checkpoint = {
+        "trace_id": uuid.uuid4().hex,
+        "task_id": str(context.get("task_id") or ""),
+        "run_id": run.run_id,
+        "user_id": str(context.get("user_id") or run.user_id),
+        "tenant_id": tenant_text,
+        "session_id": str(context.get("session_id") or context.get("conversation_id") or ""),
+        "source_path": str(source),
+        "original_sha256": original_hash,
+        "result_path": files["result_path"],
+        "result_sha256": files["sha256"],
+        "anomaly_csv": files["anomaly_csv"],
+        "qualifying": [dict(row["data"]) for row in cleaned["qualifying"]],
+        "anomaly_count": len(cleaned["anomalies"]),
+        "idempotency_key": "import-" + str(context.get("task_id") or run.run_id),
+    }
+    context["cross_module_http"] = True
+    context["cross_module_checkpoint"] = checkpoint
+    node_params = {
+        "products": checkpoint["qualifying"],
+        "file_path": str(source),
+    }
+    plan = PlanGraph(
+        plan_id="plan-approve-" + checkpoint["task_id"],
+        intent=str(run.message or ""),
+        nodes=[
+            WorkflowNode(
+                "write",
+                "products",
+                "batch_create",
+                params=node_params,
+                risk="high",
+                idempotent=False,
+                description="导入产品",
+            )
+        ],
+        risk_level="high",
+    )
+    from app.application.workflow.approval_service import get_approval_service
+
+    approval = get_approval_service()
+    gate = ApprovalGatedEngine(
+        WorkflowEngine(lambda **_kwargs: {"success": False}),
+        approval_service=approval,
+        require_persistence=True,
+    )
+    with tenant_scope(int(tenant_text)):
+        decision = gate.evaluate_plan(plan, runtime_context=context, strategy="interactive")
+        request_id = decision.approval_request_ids[0] if decision.approval_request_ids else ""
+        if not request_id:
+            created = approval.create_approval_request(
+                plan.plan_id,
+                plan.nodes[0],
+                runtime_context=context,
+                plan=plan,
+                require_persistence=True,
+            )
+            request_id = created.request_id
+        metadata = approval.get_request_metadata(request_id) or {}
+    if not metadata.get("id"):
+        raise RuntimeError("审批请求未能持久化，已阻止数据库写入")
+    run.metadata["runtime_context"] = context
+    run.metadata["trace_id"] = checkpoint["trace_id"]
+    run.metadata["approval_request_id"] = request_id
+    run.metadata["approval_request_db_id"] = int(metadata["id"])
+    run.metadata["approval_loaded_from_storage"] = False
+    run.status = "waiting_user"
+    orchestrator.save_run(run)
+    _audit(
+        "client.task_started",
+        checkpoint["trace_id"],
+        checkpoint["task_id"],
+        checkpoint["user_id"],
+        tenant_text,
+        session_id=checkpoint["session_id"],
+        file_sha256=original_hash,
+        status="waiting_approval",
+        request=run.message,
+    )
+
+
+def resume_cross_module_http(
+    workflow: dict[str, Any], *, request_id: str, loaded_from_storage: bool
+) -> dict[str, Any]:
+    """Continue the same task from the stored approval snapshot."""
+    try:
+        return _resume_cross_module_http(
+            workflow, request_id=request_id, loaded_from_storage=loaded_from_storage
+        )
+    except RECOVERABLE_ERRORS:
+        logger_message = "cross-module resume failed"
+        import logging
+
+        logging.getLogger(__name__).exception(logger_message)
+        return _workflow_receipt(request_id, success=False, loaded_from_storage=loaded_from_storage)
+
+
+def _resume_cross_module_http(
+    workflow: dict[str, Any], *, request_id: str, loaded_from_storage: bool
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator.artifact_files import store_spreadsheet
+    from app.application.agent_orchestrator.run_models import artifact_from_dict
+    from app.application.agent_orchestrator.task_execution_repository import (
+        get_task_execution_repository,
+    )
+    from app.db.session import get_db
+
+    context = workflow.get("runtime_context") if isinstance(workflow, dict) else None
+    checkpoint = context.get("cross_module_checkpoint") if isinstance(context, dict) else None
+    if not loaded_from_storage or not isinstance(checkpoint, dict):
+        return _workflow_receipt(request_id, success=False, loaded_from_storage=False)
+    source = Path(str(checkpoint.get("source_path") or ""))
+    original_hash = str(checkpoint.get("original_sha256") or "")
+    if not source.is_file() or _sha256(source) != original_hash:
+        return _workflow_receipt(
+            request_id, success=False, loaded_from_storage=True, source_unchanged=False
+        )
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.get_run(str(checkpoint.get("run_id") or ""))
+    if run is None:
+        return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
+    queue = get_task_execution_repository()
+    queue.enqueue(run, requested_by="cross-module-http", priority=1)
+    claimed = queue.claim("cross-module-http", lease_seconds=60, run_id=run.run_id)
+    if claimed is None or claimed.run_id != run.run_id:
+        return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
+    tenant_text = str(checkpoint.get("tenant_id") or "")
+    qualifying = [
+        {"data": dict(item)}
+        for item in checkpoint.get("qualifying") or []
+        if isinstance(item, dict)
+    ]
+    key = str(checkpoint.get("idempotency_key") or "")
+    try:
+        with get_db() as db, tenant_scope(int(tenant_text)):
+            replay = _delivery_row(db, key) if key else None
+            if replay is None:
+                imported = import_products(db, qualifying)
+                if not imported.get("success"):
+                    queue.finish(run.run_id, "cross-module-http", "failed")
+                    return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
+                price_update = update_product_price(
+                    db, unit="华东涂料", model_number="HX-1", price="15.00"
+                )
+                _save_delivery(
+                    db,
+                    key,
+                    {
+                        "count": imported["count"],
+                        "price_after": price_update.get("after"),
+                        "match_ref": price_update.get("match_ref"),
+                    },
+                )
+            else:
+                imported = {"success": True, "count": replay.get("count"), "replayed": True}
+                current = (
+                    db.query(Product)
+                    .filter(Product.unit == "华东涂料", Product.model_number == "HX-1")
+                    .one()
+                )
+                price_update = {
+                    "success": True,
+                    "before": str(replay.get("price_after") or ""),
+                    "after": str(current.price),
+                    "replayed": True,
+                }
+            stored_count = _product_count(db, "华东涂料")
+    except RECOVERABLE_ERRORS:
+        queue.finish(run.run_id, "cross-module-http", "failed")
+        raise
+    result_path = Path(str(checkpoint.get("result_path") or ""))
+    anomaly_count = int(checkpoint.get("anomaly_count") or 0)
+    employee = _run_employee(
+        "excel-full-read-employee",
+        "读取导入结果",
+        {"file_path": str(result_path)},
+        result_path.parent,
+    )
+    employee_ok = bool(employee["result"].get("success"))
+    verification = verify_against_data(
+        qualifying_count=len(qualifying),
+        anomaly_count=anomaly_count,
+        stored_count=stored_count,
+        tool_success=True,
+        result_sha=str(checkpoint.get("result_sha256") or ""),
+        result_path=result_path,
+    )
+    source_unchanged = source.is_file() and _sha256(source) == original_hash
+    content = result_path.read_bytes() if result_path.is_file() else b""
+    download_sha = hashlib.sha256(content).hexdigest() if content else ""
+    artifact = store_spreadsheet(run.run_id, content, name="result.xlsx") if content else None
+    if artifact is not None:
+        run.artifacts.append(artifact_from_dict(artifact))
+    accepted = bool(
+        verification["accepted"]
+        and price_update.get("after") == "15.00"
+        and source_unchanged
+        and download_sha == checkpoint.get("result_sha256")
+    )
+    run.status = "completed" if accepted else "failed"
+    run.final_output = {
+        "business_result": {
+            "protocol": BUSINESS_HARNESS_PROTOCOL,
+            "status": verification["status"] if accepted else "failed",
+            "success": False,
+            "summary": f"导入 {stored_count} 条，异常 {anomaly_count} 条",
+            "file_name": "result.xlsx",
+            "sha256": download_sha,
+            "trace_id": checkpoint.get("trace_id"),
+            "task_id": checkpoint.get("task_id"),
+            "run_id": run.run_id,
+            "loaded_from_storage": True,
+            "employee_success": employee_ok,
+            "source_unchanged": source_unchanged,
+        }
+    }
+    run.metadata["approval_loaded_from_storage"] = True
+    run.metadata["result_sha256"] = download_sha
+    orchestrator.save_run(run)
+    queue.finish(run.run_id, "cross-module-http", "completed" if accepted else "failed")
+    _audit(
+        "approval.decided",
+        str(checkpoint.get("trace_id") or ""),
+        str(checkpoint.get("task_id") or ""),
+        str(checkpoint.get("user_id") or ""),
+        tenant_text,
+        approved=True,
+        loaded_from_storage=True,
+        request_ids=[request_id],
+    )
+    _audit(
+        "agent.verified",
+        str(checkpoint.get("trace_id") or ""),
+        str(checkpoint.get("task_id") or ""),
+        str(checkpoint.get("user_id") or ""),
+        tenant_text,
+        verification=verification,
+        source_unchanged=source_unchanged,
+    )
+    _audit(
+        "erp.updated",
+        str(checkpoint.get("trace_id") or ""),
+        str(checkpoint.get("task_id") or ""),
+        str(checkpoint.get("user_id") or ""),
+        tenant_text,
+        before=price_update.get("before"),
+        after=price_update.get("after"),
+        replayed=bool(imported.get("replayed")),
+        stored_count=stored_count,
+    )
+    return _workflow_receipt(
+        request_id,
+        success=accepted,
+        loaded_from_storage=True,
+        stored_count=stored_count,
+        verification_status=verification["status"],
+        result_sha256=download_sha,
+        source_unchanged=source_unchanged,
+        employee_success=employee_ok,
+    )

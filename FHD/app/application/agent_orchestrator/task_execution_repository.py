@@ -80,13 +80,16 @@ class InMemoryTaskExecutionRepository:
         *,
         lease_seconds: float,
         now: str | None = None,
+        run_id: str | None = None,
     ) -> AgentTaskExecution | None:
         current = str(now or utc_now_iso())
+        wanted = str(run_id or "")
         with self._lock:
             eligible = [
                 row
                 for row in self._rows.values()
-                if row.available_at <= current
+                if (not wanted or row.run_id == wanted)
+                and row.available_at <= current
                 and (
                     row.state == "queued"
                     or (

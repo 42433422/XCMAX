@@ -108,6 +108,7 @@ class SQLAlchemyTaskExecutionRepository:
         *,
         lease_seconds: float,
         now: str | None = None,
+        run_id: str | None = None,
     ) -> AgentTaskExecution | None:
         self._ensure_schema()
         current = str(now or utc_now_iso())
@@ -123,9 +124,13 @@ class SQLAlchemyTaskExecutionRepository:
                     AgentTaskExecutionRecord.lease_expires_at <= current,
                 ),
             )
+            candidate_filter = [AgentTaskExecutionRecord.available_at <= current, eligible]
+            wanted = str(run_id or "")
+            if wanted:
+                candidate_filter.append(AgentTaskExecutionRecord.run_id == wanted)
             candidates = (
                 db.query(AgentTaskExecutionRecord)
-                .filter(AgentTaskExecutionRecord.available_at <= current, eligible)
+                .filter(*candidate_filter)
                 .order_by(
                     AgentTaskExecutionRecord.priority.asc(),
                     AgentTaskExecutionRecord.available_at.asc(),
