@@ -80,7 +80,7 @@ describe('agentRunsApi', () => {
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/tasks', {
       limit: 25,
       include_archived: false,
-    }, { timeoutMs: 8000 })
+    }, { timeoutMs: 30000, quiet: true })
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/tasks/task-1')
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/task-runtime')
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/tasks/task-1/archive', {})
