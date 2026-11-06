@@ -21,7 +21,9 @@ TERMINAL = frozenset({"succeeded", "failed", "timed_out", "cancelled", "rejected
 # failed/timed_out → queued is listed here and still requires retryable=True.
 _ALLOWED: dict[str, frozenset[str]] = {
     "created": frozenset({"queued"}),
-    "queued": frozenset({"running", "cancelled"}),
+    # High-risk work is queued before any worker runs, then parks for a person.
+    # Rejection is also legal from the queue so a refused task cannot be claimed.
+    "queued": frozenset({"running", "waiting_approval", "cancelled", "rejected"}),
     "running": frozenset({"waiting_approval", "succeeded", "failed", "timed_out", "cancelled"}),
     "waiting_approval": frozenset({"queued", "rejected", "cancelled"}),
     "succeeded": frozenset(),

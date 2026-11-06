@@ -100,6 +100,7 @@ class TaskExecutionRepository(Protocol):
         lease_seconds: float,
         now: str | None = None,
         run_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> AgentTaskExecution | None: ...
 
     def heartbeat(

@@ -216,9 +216,38 @@ class AgentTaskDispatcher:
             repository = ClaimedRunRepository(repository, execution, owner_id)
         error_code = ""
         state = "failed"
+        abandon = False
         effect_token = _open_effect.set(self._execution_repo)
         try:
             orchestrator = self._orchestrator_factory(repository)
+            preview = self._run_repo.get(execution.run_id)
+            from app.application.agent_orchestrator.cross_module_chain import (
+                InjectedTransactionFault,
+                cross_module_ready,
+                execute_claimed_cross_module,
+            )
+
+            if cross_module_ready(preview):
+                try:
+                    request_id = str(preview.metadata.get("approval_request_id") or "")
+                    receipt = execute_claimed_cross_module(
+                        orchestrator,
+                        preview,
+                        owner=owner_id,
+                        queue=self._execution_repo,
+                        request_id=request_id,
+                        finish=False,
+                    )
+                    state = "succeeded" if receipt.get("success") else "failed"
+                    if state == "failed":
+                        error_code = "cross_module_failed"
+                except InjectedTransactionFault:
+                    abandon = True
+                    logger.warning(
+                        "cross-module transaction fault abandoned lease for %s",
+                        execution.run_id,
+                    )
+                return
             scope = (
                 worker_claim_scope(self._run_repo, execution, owner_id)
                 if isinstance(self._run_repo, SQLAlchemyAgentRunRepository)
@@ -248,6 +277,9 @@ class AgentTaskDispatcher:
                     error_code = "needs_verification"
                 elif state == "failed" and run.status != "failed":
                     error_code = "worker_incomplete_state"
+        except InjectedTransactionFault:
+            abandon = True
+            logger.warning("transaction fault abandoned lease for %s", execution.run_id)
         except WorkerLeaseLost:
             error_code = "worker_lease_lost"
             logger.info("worker stopped after lease loss for run %s", execution.run_id)
@@ -265,12 +297,13 @@ class AgentTaskDispatcher:
                 logger.exception("agent task failure receipt could not be persisted")
         finally:
             _open_effect.reset(effect_token)
-            self._execution_repo.finish(
-                execution.run_id,
-                owner_id,
-                state,
-                error_code=error_code,
-            )
+            if not abandon:
+                self._execution_repo.finish(
+                    execution.run_id,
+                    owner_id,
+                    state,
+                    error_code=error_code,
+                )
             with self._active_lock:
                 self._active.pop(execution.run_id, None)
             self._wake.set()

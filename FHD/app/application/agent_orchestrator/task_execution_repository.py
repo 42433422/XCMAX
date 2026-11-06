@@ -105,6 +105,22 @@ class InMemoryTaskExecutionRepository:
                 run_id: copy.deepcopy(row) for run_id, row in self._rows.items() if run_id in wanted
             }
 
+    def enqueue_waiting_approval(
+        self,
+        run: AgentRun,
+        *,
+        requested_by: str = "",
+        priority: int = 100,
+        approver: str = "",
+    ) -> AgentTaskExecution:
+        """Queue then park before any other worker can observe the queued row."""
+        with self._lock:
+            self.enqueue(run, requested_by=requested_by, priority=priority)
+            parked = self.request_approval(run.run_id, approver or run.user_id)
+            if parked is None:
+                raise RuntimeError("审批队列行未能持久化")
+            return parked
+
     def claim(
         self,
         owner_id: str,
@@ -112,6 +128,7 @@ class InMemoryTaskExecutionRepository:
         lease_seconds: float,
         now: str | None = None,
         run_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> AgentTaskExecution | None:
         current = str(now or utc_now_iso())
         wanted = str(run_id or "")
@@ -123,6 +140,7 @@ class InMemoryTaskExecutionRepository:
                 row
                 for row in self._rows.values()
                 if (not wanted or row.run_id == wanted)
+                and (tenant_id is None or row.tenant_id == str(tenant_id))
                 and row.available_at <= current
                 and (
                     row.state == "queued"

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,7 +49,20 @@ from app.utils.logging.audit_logger import audit_log
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _DELIVERY_MODULE = "cross_module_import"
+_RESPONSE_MODULE = "cross_module_http_response"
 _IMPORT_ERRORS: tuple[type[Exception], ...] = (SQLAlchemyError, *RECOVERABLE_ERRORS)
+_QUEUE_OWNER = "agent-task-queue"
+
+
+class InjectedTransactionFault(RuntimeError):
+    """Test-only interrupt at a real commit boundary. Off unless XCAGI_TX_FAULT is set."""
+
+
+def raise_if_tx_fault(point: str) -> None:
+    """Fault injection for interrupted commits. The default environment does nothing."""
+    mode = os.environ.get("XCAGI_TX_FAULT", "").strip()
+    if mode and mode == point:
+        raise InjectedTransactionFault(point)
 
 _HEADER_ALIASES = {
     "购买单位": "unit",
@@ -446,7 +461,131 @@ def _import_approved_products(
         if stored is None:
             raise ValueError("导入产品不存在或不属于该租户")
         assert_created_row_unchanged(stored, item["after"], ProductAdapter.fields, "产品")
+    _persist_http_result(
+        db,
+        checkpoint,
+        http_status=200,
+        execution_status="committed",
+        body={
+            "success": True,
+            "idempotency_key": str(checkpoint["idempotency_key"]),
+            "request_digest": fingerprint,
+            "execution_status": "committed",
+            "business_result_ref": _business_result_ref(checkpoint),
+            "data": {
+                "run_id": run_id,
+                "task_id": str(checkpoint["task_id"]),
+                "status": "committed",
+                "stored_count": len(seen),
+                "replayed": replayed,
+            },
+        },
+        overwrite=False,
+    )
     return {"count": len(seen), "replayed": replayed}, len(seen)
+
+
+def _business_result_ref(checkpoint: dict[str, Any]) -> dict[str, str]:
+    return {
+        "module": _DELIVERY_MODULE,
+        "tenant_id": str(checkpoint.get("tenant_id") or ""),
+        "run_id": str(checkpoint.get("run_id") or ""),
+        "task_id": str(checkpoint.get("task_id") or ""),
+    }
+
+
+def _persist_http_result(
+    db: Session,
+    checkpoint: dict[str, Any],
+    *,
+    http_status: int,
+    execution_status: str,
+    body: dict[str, Any],
+    overwrite: bool,
+) -> None:
+    """Store the client payload in the same database as the business rows."""
+    tenant = str(checkpoint.get("tenant_id") or "")
+    key = str(checkpoint.get("idempotency_key") or "")
+    if not tenant or not key:
+        return
+    book = SessionBook(db)
+    current = book.get(_RESPONSE_MODULE, tenant, key)
+    if current.get("body") and (not overwrite or current.get("execution_status") != "committed"):
+        return
+    book.put(
+        _RESPONSE_MODULE,
+        tenant,
+        key,
+        {
+            "idempotency_key": key,
+            "request_digest": str(checkpoint.get("approval_fingerprint") or ""),
+            "execution_status": execution_status,
+            "http_status": int(http_status),
+            "body": body,
+            "business_result_ref": _business_result_ref(checkpoint),
+        },
+    )
+
+
+def load_cross_module_http_result(tenant_id: str, idempotency_key: str) -> dict[str, Any] | None:
+    """Read the committed response. Missing rows are not an execution."""
+    if not str(tenant_id or "").strip() or not str(idempotency_key or "").strip():
+        return None
+    from app.db.session import get_db
+
+    with get_db() as db:
+        stored = SessionBook(db).get(_RESPONSE_MODULE, str(tenant_id), str(idempotency_key))
+    if not isinstance(stored, dict) or not isinstance(stored.get("body"), dict):
+        return None
+    return stored
+
+
+def reject_cross_module_task(run_id: str, reason: str) -> AgentRun | None:
+    """Persist rejection on the task and the queue. A rejected task cannot be claimed."""
+    from app.application.agent_orchestrator.task_execution_repository import (
+        get_task_execution_repository,
+    )
+
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.get_run(str(run_id or ""))
+    if run is None:
+        return None
+    if run.status not in {"completed", "failed", "cancelled", "rejected"}:
+        run.status = "rejected"
+        run.error = str(reason or "审批已拒绝")[:500]
+        run.add_event("approval.rejected", run.error, {"run_id": run.run_id})
+        orchestrator.save_run(run)
+    queue = get_task_execution_repository()
+    current = queue.get(run.run_id)
+    if current is not None and current.state not in {
+        "succeeded",
+        "failed",
+        "rejected",
+        "cancelled",
+        "timed_out",
+    }:
+        queue.transition(run.run_id, "rejected", error_code="approval_rejected")
+    return orchestrator.get_run(run.run_id) or run
+
+
+def project_rejected_approval(run: AgentRun) -> AgentRun:
+    """Restart reads the approval row. A rejected request cannot stay waiting_user."""
+    if str(run.status or "") not in {"waiting_user", "waiting_approval", "queued"}:
+        return run
+    db_id = run.metadata.get("approval_request_db_id")
+    if not db_id:
+        return run
+    from app.db.models.approval import ApprovalRequest
+    from app.db.session import get_db
+
+    with get_db() as db:
+        row = db.get(ApprovalRequest, int(db_id))
+        status = "" if row is None else str(row.status or "")
+        reason = "" if row is None else str(row.rejection_reason or "")
+    if status != "rejected":
+        return run
+    stored = reject_cross_module_task(run.run_id, reason or "审批已拒绝")
+    return stored or run
 
 
 def is_cross_module_client_task(message: str, params: dict[str, Any] | None) -> bool:
@@ -581,8 +720,24 @@ def begin_cross_module_http(
     run.metadata["approval_request_id"] = request_id
     run.metadata["approval_request_db_id"] = int(metadata["id"])
     run.metadata["approval_loaded_from_storage"] = False
+    # waiting_user is the existing person-wait alias of canonical waiting_approval.
     run.status = "waiting_user"
+    run.add_event(
+        "task.queued",
+        "任务已写入持久队列，等待审批后由调度器认领",
+        {"priority": 1, "queue": "agent_task_executions"},
+    )
     orchestrator.save_run(run)
+    from app.application.agent_orchestrator.task_execution_repository import (
+        get_task_execution_repository,
+    )
+
+    get_task_execution_repository().enqueue_waiting_approval(
+        run,
+        requested_by=_QUEUE_OWNER,
+        priority=1,
+        approver=user_text,
+    )
     _audit(
         "client.task_started",
         checkpoint["trace_id"],
@@ -592,6 +747,7 @@ def begin_cross_module_http(
         session_id=checkpoint["session_id"],
         file_sha256=original_hash,
         status="waiting_approval",
+        queue_state="queued",
         request=run.message,
     )
 
@@ -611,51 +767,48 @@ def resume_cross_module_http(
         return _workflow_receipt(request_id, success=False, loaded_from_storage=loaded_from_storage)
 
 
-def _resume_cross_module_http(
-    workflow: dict[str, Any], *, request_id: str, loaded_from_storage: bool
+def cross_module_ready(run: AgentRun | None) -> bool:
+    if run is None or run.metadata.get("cross_module_dispatch") != "approved":
+        return False
+    context = run.metadata.get("runtime_context") or {}
+    return isinstance(context.get("cross_module_checkpoint"), dict)
+
+
+def execute_claimed_cross_module(
+    orchestrator: AgentOrchestrator,
+    run: AgentRun,
+    *,
+    owner: str,
+    queue: Any,
+    request_id: str,
+    finish: bool,
 ) -> dict[str, Any]:
+    """Run one already-claimed queue row. Callers finish the lease unless faulted."""
     from app.application.agent_orchestrator.artifact_files import store_spreadsheet
     from app.application.agent_orchestrator.run_models import artifact_from_dict
-    from app.application.agent_orchestrator.task_execution_repository import (
-        get_task_execution_repository,
-    )
     from app.db.session import get_db
 
-    context = workflow.get("runtime_context") if isinstance(workflow, dict) else None
-    checkpoint = context.get("cross_module_checkpoint") if isinstance(context, dict) else None
-    if not loaded_from_storage or not isinstance(checkpoint, dict):
-        return _workflow_receipt(request_id, success=False, loaded_from_storage=False)
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.get_run(str(checkpoint.get("run_id") or ""))
-    if run is None:
+    context = run.metadata.get("runtime_context") or {}
+    checkpoint = context.get("cross_module_checkpoint")
+    if not isinstance(checkpoint, dict) or run.status == "rejected":
+        if finish:
+            queue.finish(run.run_id, owner, "failed", error_code="approval_rejected")
         return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
-    products = _approved_products(workflow, run, checkpoint, request_id)
+    products = list(checkpoint.get("qualifying") or [])
     source = Path(checkpoint["source_path"])
     result_path = Path(checkpoint["result_path"])
     original_hash = str(checkpoint["original_sha256"])
     user_id = int(checkpoint["user_id"])
-    _, source_body = _source_bytes(source, user_id=user_id)
-    if (
-        hashlib.sha256(source_body).hexdigest() != original_hash
-        or not result_path.is_file()
-        or _sha256(result_path) != checkpoint["result_sha256"]
-    ):
-        return _workflow_receipt(
-            request_id, success=False, loaded_from_storage=True, source_unchanged=False
-        )
-    queue = get_task_execution_repository()
-    queue.enqueue(run, requested_by="cross-module-http", priority=1)
-    owner = "cross-module-http-" + uuid.uuid4().hex
-    claimed = queue.claim(owner, lease_seconds=60, run_id=run.run_id)
-    if claimed is None or claimed.run_id != run.run_id:
-        return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
     tenant_text = str(checkpoint["tenant_id"])
     try:
+        raise_if_tx_fault("crash_before_import")
         with get_db() as db, tenant_scope(int(tenant_text)):
             imported, stored_count = _import_approved_products(db, checkpoint, products)
             _, source_body = _source_bytes(source, user_id=user_id, db=db)
             if hashlib.sha256(source_body).hexdigest() != original_hash:
                 raise ValueError("上传文件已变化，已回滚导入")
+            raise_if_tx_fault("rollback_before_commit")
+        raise_if_tx_fault("crash_after_commit")
         with tenant_scope(int(tenant_text)):
             employee = _run_employee(
                 "excel-full-read-employee",
@@ -689,11 +842,12 @@ def _resume_cross_module_http(
             and source_unchanged
             and download_sha == checkpoint["result_sha256"]
         )
+        business_status = verification["status"] if accepted else "failed"
         run.status = "completed" if accepted else "failed"
         run.final_output = {
             "business_result": {
                 "protocol": BUSINESS_HARNESS_PROTOCOL,
-                "status": verification["status"] if accepted else "failed",
+                "status": business_status,
                 "success": accepted and verification["status"] == "completed",
                 "summary": f"导入 {stored_count} 条，异常 {anomaly_count} 条",
                 "file_name": "result.xlsx",
@@ -704,12 +858,51 @@ def _resume_cross_module_http(
                 "loaded_from_storage": True,
                 "employee_success": employee_ok,
                 "source_unchanged": source_unchanged,
+                "idempotency_key": checkpoint["idempotency_key"],
+                "request_digest": checkpoint.get("approval_fingerprint"),
             }
         }
         run.metadata["approval_loaded_from_storage"] = True
         run.metadata["result_sha256"] = download_sha
         orchestrator.save_run(run)
-        queue.finish(run.run_id, owner, "completed" if accepted else "failed")
+        receipt = _workflow_receipt(
+            request_id,
+            success=accepted,
+            loaded_from_storage=True,
+            stored_count=stored_count,
+            verification_status=verification["status"],
+            result_sha256=download_sha,
+            source_unchanged=source_unchanged,
+            employee_success=employee_ok,
+            replayed=imported["replayed"],
+        )
+        response_body = {
+            "success": accepted,
+            "idempotency_key": str(checkpoint["idempotency_key"]),
+            "request_digest": str(checkpoint.get("approval_fingerprint") or ""),
+            "execution_status": business_status,
+            "business_result_ref": _business_result_ref(checkpoint),
+            "data": {
+                "run_id": run.run_id,
+                "task_id": str(checkpoint["task_id"]),
+                "status": run.status,
+                "final_output": run.final_output,
+                "stored_count": stored_count,
+                "replayed": imported["replayed"],
+            },
+            "workflow": receipt,
+        }
+        with get_db() as db:
+            _persist_http_result(
+                db,
+                checkpoint,
+                http_status=200,
+                execution_status=business_status,
+                body=response_body,
+                overwrite=True,
+            )
+        if finish:
+            queue.finish(run.run_id, owner, "completed" if accepted else "failed")
         for event, details in (
             (
                 "approval.decided",
@@ -729,24 +922,134 @@ def _resume_cross_module_http(
                 tenant_text,
                 **details,
             )
-        return _workflow_receipt(
-            request_id,
-            success=accepted,
-            loaded_from_storage=True,
-            stored_count=stored_count,
-            verification_status=verification["status"],
-            result_sha256=download_sha,
-            source_unchanged=source_unchanged,
-            employee_success=employee_ok,
-            replayed=imported["replayed"],
-        )
-    except _IMPORT_ERRORS as exc:
-        queue.finish(
-            run.run_id,
-            owner,
-            "failed",
-            error_code="invalid_approved_input"
-            if isinstance(exc, (ValueError, EltError))
-            else "upstream_unavailable",
-        )
+        return receipt
+    except InjectedTransactionFault:
         raise
+    except _IMPORT_ERRORS as exc:
+        if finish:
+            queue.finish(
+                run.run_id,
+                owner,
+                "failed",
+                error_code="invalid_approved_input"
+                if isinstance(exc, (ValueError, EltError))
+                else "upstream_unavailable",
+            )
+        raise
+
+
+def _stored_receipt(run: AgentRun, request_id: str) -> dict[str, Any] | None:
+    context = run.metadata.get("runtime_context") or {}
+    checkpoint = context.get("cross_module_checkpoint") or {}
+    stored = load_cross_module_http_result(
+        str(checkpoint.get("tenant_id") or ""),
+        str(checkpoint.get("idempotency_key") or ""),
+    )
+    if stored is None:
+        return None
+    workflow = stored["body"].get("workflow")
+    if isinstance(workflow, dict) and workflow.get("approval_request_id"):
+        return workflow
+    data = stored["body"].get("data") if isinstance(stored["body"].get("data"), dict) else {}
+    return _workflow_receipt(
+        request_id,
+        success=bool(stored["body"].get("success")),
+        loaded_from_storage=True,
+        stored_count=int(data.get("stored_count") or 0),
+        replayed=True,
+        idempotent_replay=True,
+    )
+
+
+def drive_cross_module_execution(
+    orchestrator: AgentOrchestrator,
+    run: AgentRun,
+    queue: Any,
+    request_id: str,
+) -> dict[str, Any]:
+    """One worker claims the queued run. A second claimant waits for that result."""
+    from app.application.agent_orchestrator.task_dispatcher import get_agent_task_dispatcher
+
+    dispatcher = get_agent_task_dispatcher()
+    dispatcher.notify()
+    # Only the dispatcher that owns this queue may take the claim. A dispatcher
+    # left over from another database must not strand the approval request.
+    same_queue = getattr(dispatcher, "_execution_repo", None) is queue
+    if dispatcher.snapshot().get("running") and same_queue:
+        return _wait_cross_module_result(run, queue, request_id)
+    owner = _QUEUE_OWNER + "-" + uuid.uuid4().hex
+    claimed = queue.claim(owner, lease_seconds=60, run_id=run.run_id)
+    if claimed is None or claimed.run_id != run.run_id:
+        return _wait_cross_module_result(run, queue, request_id)
+    return execute_claimed_cross_module(
+        orchestrator, run, owner=owner, queue=queue, request_id=request_id, finish=True
+    )
+
+
+def _wait_cross_module_result(run: AgentRun, queue: Any, request_id: str) -> dict[str, Any]:
+    deadline = time.monotonic() + 60.0
+    while time.monotonic() < deadline:
+        current = queue.get(run.run_id)
+        state = "" if current is None else str(current.state)
+        if state in {"succeeded", "failed", "rejected", "cancelled", "timed_out"}:
+            stored = _stored_receipt(run, request_id)
+            if stored is not None:
+                return stored
+            return _workflow_receipt(
+                request_id,
+                success=state == "succeeded",
+                loaded_from_storage=True,
+            )
+        time.sleep(0.05)
+    return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
+
+
+def _resume_cross_module_http(
+    workflow: dict[str, Any], *, request_id: str, loaded_from_storage: bool
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator.task_execution_repository import (
+        get_task_execution_repository,
+    )
+
+    context = workflow.get("runtime_context") if isinstance(workflow, dict) else None
+    checkpoint = context.get("cross_module_checkpoint") if isinstance(context, dict) else None
+    if not loaded_from_storage or not isinstance(checkpoint, dict):
+        return _workflow_receipt(request_id, success=False, loaded_from_storage=False)
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.get_run(str(checkpoint.get("run_id") or ""))
+    if run is None:
+        return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
+    if run.status == "rejected":
+        return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
+    _approved_products(workflow, run, checkpoint, request_id)
+    source = Path(checkpoint["source_path"])
+    result_path = Path(checkpoint["result_path"])
+    original_hash = str(checkpoint["original_sha256"])
+    user_id = int(checkpoint["user_id"])
+    _, source_body = _source_bytes(source, user_id=user_id)
+    if (
+        hashlib.sha256(source_body).hexdigest() != original_hash
+        or not result_path.is_file()
+        or _sha256(result_path) != checkpoint["result_sha256"]
+    ):
+        return _workflow_receipt(
+            request_id, success=False, loaded_from_storage=True, source_unchanged=False
+        )
+    queue = get_task_execution_repository()
+    current = queue.get(run.run_id)
+    if current is not None and current.state in {"rejected", "cancelled"}:
+        return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
+    if current is not None and current.state in {"succeeded", "completed"}:
+        stored = _stored_receipt(run, request_id)
+        if stored is not None:
+            return stored
+    run.metadata["cross_module_dispatch"] = "approved"
+    run.status = "queued"
+    run.add_event("task.queued", "审批已通过，任务进入执行队列", {"priority": 1})
+    orchestrator.save_run(run)
+    released = queue.enqueue(run, requested_by=_QUEUE_OWNER, priority=1)
+    if released is None or released.state != "queued":
+        return _workflow_receipt(request_id, success=False, loaded_from_storage=True)
+    return drive_cross_module_execution(orchestrator, run, queue, request_id)
+
+

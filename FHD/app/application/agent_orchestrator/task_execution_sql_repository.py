@@ -136,6 +136,56 @@ class SQLAlchemyTaskExecutionRepository:
             )
             return {str(record.run_id): self._to_model(record) for record in records}
 
+    def enqueue_waiting_approval(
+        self,
+        run: AgentRun,
+        *,
+        requested_by: str = "",
+        priority: int = 100,
+        approver: str = "",
+    ) -> AgentTaskExecution:
+        """Insert a queued row and park it for approval in one commit.
+
+        Other workers never observe a claimable ``queued`` row. The lifecycle
+        history still records ``queued → waiting_approval``.
+        """
+        self._ensure_schema()
+        now = utc_now_iso()
+        with self._session_scope() as db:
+            self.enqueue_in_session(db, run, requested_by=requested_by, priority=priority)
+            db.flush()
+            from app.db.models.agent import AgentTaskExecutionRecord
+            from app.domain.task_lifecycle.adapters import execution_transition_allowed
+            from app.domain.task_lifecycle.control import SessionBook, remember
+
+            record = db.get(AgentTaskExecutionRecord, run.run_id)
+            if record is not None and str(record.state) == "queued":
+                if not execution_transition_allowed("queued", "waiting_approval"):
+                    raise RuntimeError("队列不能从 queued 进入 waiting_approval")
+                book = SessionBook(db)
+                tenant = str(record.tenant_id or "")
+                body = book.get("agent", tenant, run.run_id)
+                body["approver"] = str(approver or record.user_id or "")
+                body["approval_requested_at"] = now
+                remember(
+                    body,
+                    at=now,
+                    source="queued",
+                    target="waiting_approval",
+                    code="approval_required",
+                    actor=str(approver or ""),
+                )
+                book.put("agent", tenant, run.run_id, body)
+                record.state = "waiting_approval"
+                record.lease_owner = None
+                record.lease_expires_at = None
+                record.heartbeat_at = None
+                record.updated_at = now
+        stored = self.get(run.run_id)
+        if stored is None:
+            raise RuntimeError("审批队列行未能持久化")
+        return stored
+
     def claim(
         self,
         owner_id: str,
@@ -143,6 +193,7 @@ class SQLAlchemyTaskExecutionRepository:
         lease_seconds: float,
         now: str | None = None,
         run_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> AgentTaskExecution | None:
         self._ensure_schema()
         current = str(now or utc_now_iso())
@@ -162,6 +213,8 @@ class SQLAlchemyTaskExecutionRepository:
             wanted = str(run_id or "")
             if wanted:
                 candidate_filter.append(AgentTaskExecutionRecord.run_id == wanted)
+            if tenant_id is not None:
+                candidate_filter.append(AgentTaskExecutionRecord.tenant_id == str(tenant_id))
             candidates = (
                 db.query(AgentTaskExecutionRecord)
                 .filter(*candidate_filter)

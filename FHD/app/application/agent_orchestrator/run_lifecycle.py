@@ -38,7 +38,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 return None
             if not same_run_generation(previous, expected):
                 return cast("AgentRun", previous)
-            if previous.status in {"completed", "failed", "cancelled"}:
+            if previous.status in {"completed", "failed", "cancelled", "rejected"}:
                 return cast("AgentRun", previous)
             run = copy.deepcopy(previous)
             self._mark_controlled(run, control, requested_by=requested_by, command_id=command_id)
@@ -84,7 +84,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         run = self._repo.get(run_id)
         if run is None:
             return None
-        if run.status in {"completed", "failed", "cancelled"}:
+        if run.status in {"completed", "failed", "cancelled", "rejected"}:
             return cast("AgentRun | None", run)
         command = self._repo.request_task_control(run_id, "cancel", requested_by=requested_by)
         execution = run.metadata.get("execution")
@@ -100,6 +100,8 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         stored = self._persist_control(
             run, "cancel", requested_by=requested_by, command_id=command.command_id
         )
+        if stored is not None and stored.status == "cancelled":
+            self._cancel_queued_execution(run_id)
         self._repo.mark_task_control(
             command.command_id,
             "applied"
@@ -245,6 +247,23 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
             command.command_id, "applied" if applied else "rejected", applied_at=utc_now_iso()
         )
         return True
+
+    @staticmethod
+    def _cancel_queued_execution(run_id: str) -> None:
+        from app.application.agent_orchestrator.task_execution_repository import (
+            get_task_execution_repository,
+        )
+
+        queue = get_task_execution_repository()
+        current = queue.get(run_id)
+        if current is None or current.state not in {
+            "queued",
+            "waiting_approval",
+            "paused",
+            "blocked",
+        }:
+            return
+        queue.transition(run_id, "cancelled", error_code="cancelled")
 
     @staticmethod
     def _mark_controlled(
