@@ -45,7 +45,12 @@ def _models(prefix: str) -> list[list[str]]:
     ]
 
 
-def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def _client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    engine=None,
+):
     from app.application.agent_orchestrator.run_repository import (
         set_agent_run_repository_for_tests,
     )
@@ -68,17 +73,18 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     from app.utils.time import utc_now_naive
     from tests.fixtures.cross_module_business import _build_source_workbook
 
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    if engine is None:
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
 
-    @event.listens_for(engine, "connect")
-    def _fk_off(dbapi_connection, _record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=OFF")
-        cursor.close()
+        @event.listens_for(engine, "connect")
+        def _fk_off(dbapi_connection, _record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=OFF")
+            cursor.close()
 
     Base.metadata.create_all(engine)
     TaskLifecycleRecord.__table__.create(bind=engine, checkfirst=True)
@@ -679,17 +685,30 @@ def test_approval_http_returns_while_dispatcher_owns_the_queue(tmp_path, monkeyp
         assert _product_models(env) == []
         release.set()
         assert started.wait(5)
+        # The import commits before the dispatcher finishes the lease.
         deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and _product_models(env) != ["HAND-1", "HAND-2"]:
+        finished = None
+        task_status = ""
+        while time.monotonic() < deadline:
+            finished = env["queue"].get(created["data"]["run_id"])
+            task_status = env["client"].get("/api/agent/tasks/task-http-handoff").json()["data"][
+                "status"
+            ]
+            if (
+                _product_models(env) == ["HAND-1", "HAND-2"]
+                and finished is not None
+                and finished.state == "succeeded"
+                and finished.execution_count == 1
+                and task_status == "completed"
+            ):
+                break
             time.sleep(0.05)
         assert _product_models(env) == ["HAND-1", "HAND-2"]
-        finished = env["queue"].get(created["data"]["run_id"])
         assert finished is not None
         assert finished.state == "succeeded"
         assert finished.execution_count == 1
-        task = env["client"].get("/api/agent/tasks/task-http-handoff")
-        assert task.json()["data"]["status"] == "completed"
-        assert env["queue"].get(created["data"]["run_id"]).state != "waiting_approval"
+        assert task_status == "completed"
+        assert finished.state != "waiting_approval"
     finally:
         release.set()
         dispatcher.stop(timeout=5)

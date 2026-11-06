@@ -23,6 +23,7 @@ def test_sync_contracts_allow_dal_but_reject_bypasses(tmp_path, violation):
         "app/domain/shared_services",
         "app/application",
         "app/services",
+        "app/fastapi_routes",
     ):
         directory = tmp_path / package
         directory.mkdir(parents=True, exist_ok=True)
@@ -36,6 +37,7 @@ def test_sync_contracts_allow_dal_but_reject_bypasses(tmp_path, violation):
     # debt19: import-linter contract targets domain.shared_services (not app.services)
     (tmp_path / "app/domain/shared_services/xcmax_sync_service.py").write_text(service)
     (tmp_path / "app/db/xcmax_sync.py").write_text(dao)
+    (tmp_path / "app/fastapi_app.py").write_text("")
     (tmp_path / "app/helpers.py").write_text("from app.application.service import action\n")
     (tmp_path / "app/application/service.py").write_text("def action(): pass\n")
     environment = {**os.environ, "PYTHONPATH": str(tmp_path)}

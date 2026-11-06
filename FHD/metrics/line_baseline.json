@@ -1,5 +1,5 @@
 {
-  "lines": 2441027,
+  "lines": 2441447,
   "updated": "2026-11-06",
-  "note": "审批请求不再在线程上 sleep 等待执行：认领执行与幂等响应拆到 cross_module_execution.py（约 493 行，两文件均低于 40KB 与 800 行），审批交接与状态映射测试约净增 309 行。G11 大文件基线未改。用户要求本 PR 收口时若净增则按此脚本抬行数基线。"
+  "note": "修复 _import_approved_products 从 cross_module_chain 拆走后的导入失败。新增 cross_module_execution 事务测试约 397 行，覆盖 SQLite 与 PostgreSQL 的队列停放、审批拒绝、响应落库、提交前回滚和提交后崩溃恢复；调度器收尾改为等待真实 succeeded；import-linter 2.16 需要契约里的 fastapi 模块在夹具中存在。相对上一基线净增 420 行，都是测试和 CI 收集，未改 py>40KB 计数基线。用户要求本批仅在净删除门禁需要时抬行数基线。"
 }
