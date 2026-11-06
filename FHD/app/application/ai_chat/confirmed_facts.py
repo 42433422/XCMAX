@@ -50,6 +50,23 @@ def try_confirmed_fact_reply(message: str, context: Mapping[str, Any] | None) ->
     return _public(reply, state, context)
 
 
+def confirmed_continuity_reply(context: Mapping[str, Any] | None) -> dict[str, str] | None:
+    """Keep the confirmed ledger when smalltalk would otherwise greet a new user."""
+    key = conversation_key(context)
+    if not key:
+        return None
+    reply = _render(_read(key), "已确认")
+    if reply == "本会话没有已确认的这条信息。":
+        return None
+    return {
+        "response": reply,
+        "text": reply,
+        "thinking_steps": "[已确认事实：继续当前会话]",
+        "action": "confirmed_facts",
+        "trace_intent": "confirmed_facts",
+    }
+
+
 def fact_context_line(context: Mapping[str, Any] | None) -> str:
     key = conversation_key(context)
     if not key:

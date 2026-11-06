@@ -218,6 +218,9 @@ def persist_chat_turn(
         metadata=meta_assistant,
         idempotency_key=assistant_idempotency_key,
     )
+    from app.application.ai_chat.active_conversation import remember_active_conversation
+
+    remember_active_conversation(context, conversation_id=session_id)
 
 
 def authorized_memory_context(

@@ -66,6 +66,22 @@ def _history_actor(request: Request) -> str:
     return str(actor)
 
 
+@router.get("/api/conversations/active")
+def conversations_active(request: Request):
+    """The conversation this owner last finished, so a restart reopens that id."""
+    from app.application.ai_chat.active_conversation import active_conversation_for
+    from app.infrastructure.auth.tenant_context import resolve_tenant_id
+    from app.request_active_mod_ctx import get_request_active_mod_id
+
+    tenant = resolve_tenant_id(request)
+    conversation_id = active_conversation_for(
+        _history_actor(request),
+        tenant_id="" if tenant is None else str(tenant),
+        mod_id=get_request_active_mod_id() or "",
+    )
+    return {"success": True, "conversation_id": conversation_id}
+
+
 @router.get("/api/conversations/{session_id}")
 def conversations_get(request: Request, session_id: str, limit: int = Query(default=50)):
     from app.application.ai_chat.conversation_history import apply_history_fault

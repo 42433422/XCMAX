@@ -257,6 +257,8 @@ import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { chooseActiveConversationId } from '@/utils/activeConversation'
+import chatApi from '@/api/chat'
 import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from '@/composables/useRoutedTaskWorkspace'
 
 const props = withDefaults(
@@ -461,10 +463,27 @@ const {
 
 // Best-effort ASR warm so first push-to-talk is not a 6–7s cold load (item 4 latency).
 let voiceWarmTimer: number | undefined
+async function adoptServerActiveConversation() {
+  if (initialWorkspaceSessionId) return
+  try {
+    const data = await chatApi.getActiveConversation()
+    const body = data as { conversation_id?: string; data?: { conversation_id?: string } }
+    const serverId = String(body.conversation_id || body.data?.conversation_id || '')
+    const chosen = chooseActiveConversationId(currentSessionId.value, serverId)
+    if (!chosen || chosen === currentSessionId.value) return
+    currentSessionId.value = chosen
+    writeAiSessionIdToStorage(chosen)
+    await chatViewApi.syncSessionMessages()
+  } catch {
+    // Offline or a new user keeps the local session and setup screen.
+  }
+}
+
 onMounted(() => {
   voiceWarmTimer = window.setTimeout(() => {
     void warmVoiceModel()
   }, 2500)
+  void adoptServerActiveConversation()
 })
 onBeforeUnmount(() => window.clearTimeout(voiceWarmTimer))
 onDeactivated(() => window.clearTimeout(voiceWarmTimer))
