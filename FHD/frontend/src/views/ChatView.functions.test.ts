@@ -3,6 +3,15 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { defineComponent, h, nextTick, ref } from 'vue'
+import { writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+
+const { getActiveConversation } = vi.hoisted(() => ({
+  getActiveConversation: vi.fn(async () => {
+    throw new Error('offline')
+  }),
+}))
 
 // ===== Mock pinia 的 storeToRefs，使其直接返回 store 对象 =====
 vi.mock('pinia', async () => {
@@ -81,7 +90,7 @@ const mockChatViewApi = {
   startPrintFromTaskCard: vi.fn(),
   copyAssistantPushContent: vi.fn(),
   openAssistantFloatFromTaskPanel: vi.fn(),
-  syncSessionMessages: vi.fn(),
+  syncSessionMessages: vi.fn(async () => undefined),
   handleAutoAction: vi.fn(),
   ttsEnabled: { value: false },
   setTtsEnabled: vi.fn(),
@@ -91,6 +100,12 @@ const mockChatViewApi = {
 
 vi.mock('@/composables/useChatView', () => ({
   useChatView: () => mockChatViewApi,
+}))
+
+vi.mock('@/api/chat', () => ({
+  default: {
+    getActiveConversation,
+  },
 }))
 
 vi.mock('@/composables/useChatVoiceInput', () => ({
@@ -557,8 +572,12 @@ describe('ChatView functions – currentSessionId', () => {
     vi.clearAllMocks()
     localStorage.clear()
     resetMockRefs()
+    getActiveConversation.mockReset()
+    getActiveConversation.mockRejectedValue(new Error('offline'))
   })
   afterEach(() => {
+    setRuntimeTenantStorageScopeInput(null)
+    invalidateTenantStorageScopeCache()
     localStorage.clear()
   })
 
@@ -567,6 +586,22 @@ describe('ChatView functions – currentSessionId', () => {
     const vm = wrapper.vm as any
     expect(typeof vm.currentSessionId).toBe('string')
     expect(vm.currentSessionId.length).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+
+  it('adopts the server conversation and keeps it when the tenant scope arrives', async () => {
+    getActiveConversation.mockResolvedValueOnce({ conversation_id: 'server-last' })
+    const { wrapper } = await mountChatView()
+    const vm = wrapper.vm as any
+    expect(vm.currentSessionId).toBe('server-last')
+    expect(writeAiSessionIdToStorage).toHaveBeenCalledWith('server-last')
+    expect(mockChatViewApi.syncSessionMessages).toHaveBeenCalled()
+
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, marketUserId: '2' })
+    await nextTick()
+    await flushPromises()
+    expect(vm.currentSessionId).toBe('server-last')
+    expect(writeAiSessionIdToStorage).toHaveBeenCalledWith('server-last')
     wrapper.unmount()
   })
 })

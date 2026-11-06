@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+const { chatStorageScope } = vi.hoisted(() => ({ chatStorageScope: { value: 'local' } }))
 import { speakText, stopSpeaking } from '@/utils/tts'
 import { useChatMessageUi } from './useChatMessageUi'
 import { ref, nextTick } from 'vue'
@@ -40,7 +42,7 @@ vi.mock('@/constants/industryPresets', () => ({
 
 vi.mock('@/utils/chatStorageKeys', () => ({
   resolveChatIdentity: (modId = '') => `identity:${modId}`,
-  resolveChatStorageScope: () => 'local',
+  resolveChatStorageScope: () => chatStorageScope.value,
   buildChatMessagesKey: (sid: string, modId: string) => `chat_${sid}_${modId}`,
   buildChatSessionMetaKey: (sid: string, modId: string) => `chat_meta_${sid}_${modId}`,
 }))
@@ -58,6 +60,8 @@ describe('useChatMessages', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     vi.clearAllMocks()
+    chatStorageScope.value = 'local'
+    activeModIdRef.value = ''
     messages = useChatMessages(ref('session-1'))
   })
 
@@ -383,6 +387,17 @@ describe('useChatMessages', () => {
     })
     const result = await messages.syncFromServer()
     expect(result).toBe(true)
+  })
+
+  it('does not copy the provisional welcome onto a newly signed-in scope', async () => {
+    const sid = ref('session-scope')
+    const chat = useChatMessages(sid)
+    chat.messages.value = [{ role: 'user', content: 'provisional', time: '1' }]
+    chatStorageScope.value = 'tenant:1:owner:2'
+    activeModIdRef.value = 'attendance'
+    await nextTick()
+    expect(chat.messages.value.some(row => row.content === 'provisional')).toBe(false)
+    expect(chat.messages.value.some(row => String(row.content).includes('智能助手'))).toBe(true)
   })
 
   it.each(['session', 'mod', 'account', 'live-message'])('ignores a late history response after %s changes', async (change) => {
