@@ -72,8 +72,10 @@ def finish_employee_run_log(
         target = str(status or "failed")
         book = SessionBook(db)
         body = book.get("employee", str(tenant_id), str(run_id))
-        if target == "failed" and error_code == "timeout" and not failure_retries(
-            int(attempts), error_code or ""
+        if (
+            target == "failed"
+            and error_code == "timeout"
+            and not failure_retries(int(attempts), error_code or "")
         ):
             target = "timed_out"
         scheduled = target == "failed" and failure_retries(int(attempts), error_code or "")

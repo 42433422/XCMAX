@@ -97,7 +97,9 @@ class SQLAlchemyTaskExecutionRepository:
         else:
             from app.domain.task_lifecycle.adapters import execution_requeue_allowed
 
-            if record.state not in LEASED_STATES and not execution_requeue_allowed(str(record.state)):
+            if record.state not in LEASED_STATES and not execution_requeue_allowed(
+                str(record.state)
+            ):
                 return
             if record.state not in LEASED_STATES:
                 record.state = "queued"
@@ -547,13 +549,21 @@ class SQLAlchemyTaskExecutionRepository:
             with self._session_scope(read_only=True) as db:
                 from app.db.db_base import Base
                 from app.db.models.agent import AgentTaskExecutionRecord
+                from app.db.models.task_lifecycle import (
+                    TaskLifecycleIdempotency,
+                    TaskLifecycleRecord,
+                )
 
                 bind = db.get_bind()
                 if self._schema_ready and self._schema_bind is bind:
                     return
                 Base.metadata.create_all(
                     bind=bind,
-                    tables=[cast("Table", AgentTaskExecutionRecord.__table__)],
+                    tables=[
+                        cast("Table", AgentTaskExecutionRecord.__table__),
+                        cast("Table", TaskLifecycleRecord.__table__),
+                        cast("Table", TaskLifecycleIdempotency.__table__),
+                    ],
                     checkfirst=True,
                 )
                 self._schema_bind = bind

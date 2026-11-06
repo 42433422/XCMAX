@@ -52,9 +52,7 @@ class NodeExecutor:
             started_at=datetime.now(UTC).isoformat(),
         )
         # Total attempts, including the first, never exceed the shared cap.
-        effective_max_retries = min(
-            max_retries if retryable else 0, DEFAULT_MAX_ATTEMPTS - 1
-        )
+        effective_max_retries = min(max_retries if retryable else 0, DEFAULT_MAX_ATTEMPTS - 1)
         while retries <= effective_max_retries:
             attempt_started = time.perf_counter()
             try:
@@ -77,7 +75,11 @@ class NodeExecutor:
             except RECOVERABLE_ERRORS as err:
                 last_error = str(err)
                 if isinstance(err, TimeoutError):
-                    result.output = {"success": False, "error_code": "timeout", "message": last_error}
+                    result.output = {
+                        "success": False,
+                        "error_code": "timeout",
+                        "message": last_error,
+                    }
                 elif isinstance(err, ConnectionError):
                     result.output = {
                         "success": False,

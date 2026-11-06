@@ -60,15 +60,18 @@ def _child_dispatch(run_id, results):
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             execution = queue.get(run_id)
-            if execution.state in {"completed", "failed", "blocked"}:
+            if execution.state in {"succeeded", "failed", "rejected", "cancelled", "timed_out"}:
                 run = runs.get(run_id)
                 assert run is not None
-                assert run.status == execution.state
+                expected_run_state = (
+                    "completed" if execution.state == "succeeded" else execution.state
+                )
+                assert run.status == expected_run_state
                 output = run.tool_calls[-1].output if run.tool_calls else {}
                 results.put(
                     {
-                        "success": run.status == "completed",
-                        "state": run.status,
+                        "success": execution.state == "succeeded",
+                        "state": execution.state,
                         "recovery_count": execution.recovery_count,
                         "error_code": (output or {}).get("error_code", ""),
                     }

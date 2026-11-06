@@ -62,7 +62,11 @@ def approve_and_enqueue(
             book = SessionBook(db)
             tenant = str(execution.tenant_id or "") if execution is not None else ""
             body = book.get("agent", tenant, run_id)
-            if execution is not None and execution.state in {"waiting_approval", "paused", "blocked"}:
+            if execution is not None and execution.state in {
+                "waiting_approval",
+                "paused",
+                "blocked",
+            }:
                 started = str(body.get("approval_requested_at") or execution.updated_at or "")
                 if started:
                     moment = datetime.fromisoformat(utc_now_iso().replace("Z", "+00:00"))

@@ -449,7 +449,9 @@ class WorkflowDefinitionAppService:
     def fail_run(self, run_id: int, *, error_code: str, attempts: int = 1) -> dict[str, Any]:
         from app.domain.task_lifecycle.control import settle_target
 
-        target, code = settle_target(WorkflowRunStatus.FAILED.value, error_code, attempts, open_effects=False)
+        target, code = settle_target(
+            WorkflowRunStatus.FAILED.value, error_code, attempts, open_effects=False
+        )
         status = {
             "queued": WorkflowRunStatus.PENDING.value,
             "timed_out": WorkflowRunStatus.TIMED_OUT.value,

@@ -650,13 +650,12 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
         completed = _drain_background_run(run_id)
         assert completed.status == "completed"
         assert len(completed.tool_calls) == 1
-        assert (
-            owner.post(
-                f"/api/agent/runs/{run_id}/continue",
-                json={"approval_grant": grant},
-            ).status_code
-            == 403
+        finished = owner.post(
+            f"/api/agent/runs/{run_id}/continue",
+            json={"approval_grant": grant},
         )
+        assert finished.status_code == 409
+        assert finished.json()["message"] == "任务已结束，不能审批通过后执行"
         execution = get_task_execution_repository().get(run_id)
         assert execution is not None
         assert execution.state == "succeeded"

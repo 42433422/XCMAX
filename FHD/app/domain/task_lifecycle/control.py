@@ -15,25 +15,6 @@ from app.domain.task_lifecycle.machine import (
 )
 
 RETRYABLE_CODES = frozenset({"timeout", "upstream_unavailable", "rate_limited"})
-_DDL = """
-CREATE TABLE IF NOT EXISTS task_lifecycle_records (
-    module TEXT NOT NULL,
-    tenant_id TEXT NOT NULL,
-    task_id TEXT NOT NULL,
-    body_json TEXT NOT NULL,
-    PRIMARY KEY (module, tenant_id, task_id)
-)
-"""
-_IDEMPOTENCY = """
-CREATE TABLE IF NOT EXISTS task_lifecycle_idempotency (
-    module TEXT NOT NULL,
-    tenant_id TEXT NOT NULL,
-    idem_key TEXT NOT NULL,
-    fingerprint TEXT NOT NULL,
-    task_id TEXT NOT NULL,
-    PRIMARY KEY (module, tenant_id, idem_key)
-)
-"""
 
 
 class TaskLifecycleError(ValueError):
@@ -138,8 +119,6 @@ class SessionBook:
 
     def __init__(self, db: Session) -> None:
         self._db = db
-        db.execute(text(_DDL))
-        db.execute(text(_IDEMPOTENCY))
 
     def get(self, module: str, tenant: str, task_id: str) -> dict[str, Any]:
         row = self._db.execute(

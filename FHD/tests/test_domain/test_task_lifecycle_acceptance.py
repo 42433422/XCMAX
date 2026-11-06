@@ -22,6 +22,7 @@ from app.application.employee_runtime import run_ledger
 from app.application.workflow_definition_app_service import WorkflowDefinitionAppService
 from app.db.db_base import Base
 from app.db.models.employee_run_log import EmployeeRunLog
+from app.db.models.task_lifecycle import TaskLifecycleRecord
 from app.db.models.workflow import WorkflowRun, WorkflowRunStatus
 from app.errors import WorkflowError
 
@@ -103,7 +104,9 @@ def test_employee_success_and_unknown_are_not_rewritten(monkeypatch) -> None:
     engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
-    EmployeeRunLog.__table__.create(engine)
+    Base.metadata.create_all(
+        engine, tables=[EmployeeRunLog.__table__, TaskLifecycleRecord.__table__]
+    )
 
     from contextlib import contextmanager
 
@@ -280,7 +283,9 @@ def test_employee_retry_approval_and_rejection(monkeypatch) -> None:
     engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
-    EmployeeRunLog.__table__.create(engine)
+    Base.metadata.create_all(
+        engine, tables=[EmployeeRunLog.__table__, TaskLifecycleRecord.__table__]
+    )
 
     @contextmanager
     def database():
