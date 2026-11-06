@@ -369,3 +369,86 @@ def test_workflow_retry_approval_and_history() -> None:
         service.fail_run(timed["id"], error_code="timeout", attempts=1)
     assert exc.value.status_code == 409
     engine.dispose()
+
+
+def test_workflow_engine_retry_stops_at_three_attempts() -> None:
+    from app.application.workflow.engine import WorkflowEngine
+    from app.application.workflow.workflow_types import WorkflowNode
+
+    calls = []
+
+    def dispatch(tool_id, action, params):
+        calls.append(tool_id)
+        return {"success": False, "message": "timeout"}
+
+    node = WorkflowNode("n1", "products", "query", risk="low", idempotent=True)
+    result = WorkflowEngine(dispatch)._run_node(node, {}, max_retries=9)
+    assert len(calls) == 3
+    assert result.success is False
+    assert len(result.attempts) == 3
+
+
+def test_employee_runner_retries_the_same_run() -> None:
+    from app.fastapi_routes.admin_control.employee_run import EmployeeRunner, EmployeeWork
+
+    class Backend:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.finished: dict[str, object] = {}
+
+        def start(self, work: EmployeeWork) -> int:
+            return 41
+
+        def execute(self, work: EmployeeWork, run_id: int) -> dict[str, object]:
+            self.calls += 1
+            if self.calls < 3:
+                return {"success": False, "error": "upstream timeout"}
+            return {"success": True, "summary": "done"}
+
+        def verify(self, employee_id: str, result: dict[str, object]) -> tuple[bool, str]:
+            return True, ""
+
+        def requires_reconciliation(self, result: dict[str, object]) -> bool:
+            return False
+
+        def awaits_approval(self, result: dict[str, object]) -> bool:
+            return False
+
+        def finish(self, run_id: int, **kwargs: object) -> None:
+            self.finished = {"run_id": run_id, **kwargs}
+
+    backend = Backend()
+    response = EmployeeRunner(backend).run(
+        EmployeeWork("worker", "write", {}, 7, 1, "session", None)
+    )
+    assert backend.calls == 3
+    assert response["run_id"] == 41 and response["attempts"] == 3
+    assert backend.finished["run_id"] == 41
+    assert backend.finished["status"] == "success"
+
+
+def test_dispatcher_timeout_requeues_the_same_execution() -> None:
+    from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
+
+    repo = InMemoryTaskExecutionRepository(jitter_ratio=0.0)
+    run = _run("dispatcher-timeout")
+    repo.enqueue(run)
+    claimed = repo.claim("worker", lease_seconds=30)
+    assert claimed is not None
+
+    class TimeoutOrchestrator:
+        def execute_dispatched_run(self, run_id: str, *, recovered: bool = False) -> None:
+            raise TimeoutError("upstream timeout")
+
+        def fail_dispatched_run(self, run_id: str) -> None:
+            raise AssertionError("timeout must stay on the same queued task")
+
+    dispatcher = AgentTaskDispatcher(
+        execution_repository=repo,
+        orchestrator_factory=lambda repository: TimeoutOrchestrator(),
+    )
+    dispatcher._execute_claim(claimed, claimed.lease_owner)
+    stored = repo.get(run.run_id)
+    assert stored is not None
+    assert stored.state == "queued" and stored.run_id == run.run_id
+    assert stored.last_error_code == "timeout"

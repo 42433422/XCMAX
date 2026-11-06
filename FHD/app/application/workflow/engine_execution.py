@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from app.application.product_query_context import inject_product_query_fallback
+from app.domain.task_lifecycle.control import jittered_delay
+from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .workflow_types import NodeExecutionResult, WorkflowNode
@@ -48,7 +51,10 @@ class NodeExecutor:
             retryable=retryable,
             started_at=datetime.now(UTC).isoformat(),
         )
-        effective_max_retries = max_retries if retryable else 0
+        # Total attempts, including the first, never exceed the shared cap.
+        effective_max_retries = min(
+            max_retries if retryable else 0, DEFAULT_MAX_ATTEMPTS - 1
+        )
         while retries <= effective_max_retries:
             attempt_started = time.perf_counter()
             try:
@@ -80,8 +86,9 @@ class NodeExecutor:
                 )
             result.attempts.append(attempt_summary(retries + 1, False, last_error, attempt_started))
             retries += 1
-            if not result.retryable:
+            if not result.retryable or retries > effective_max_retries:
                 break
+            time.sleep(jittered_delay(retries, jitter_ratio=0.2, rng=random.Random()))
         result.params = dict(params or {})
         result.retries = retries if result.success else max(0, retries - 1)
         result.finished_at = datetime.now(UTC).isoformat()

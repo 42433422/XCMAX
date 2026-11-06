@@ -79,7 +79,7 @@ class EmployeeRunner:
             )
             error_code = _retryable_code(error) if status == "failed" else ""
             if failure_retries(attempts, error_code):
-                time.sleep(jittered_delay(attempts, jitter_ratio=0.0, rng=_rng()))
+                time.sleep(jittered_delay(attempts, jitter_ratio=0.2, rng=_rng()))
                 attempts += 1
                 continue
             break

@@ -44,6 +44,16 @@ def approve_and_enqueue(
             )
             if record is None:
                 raise ApprovalGrantError("审批任务不存在")
+            from app.db.models.agent import AgentTaskExecutionRecord
+
+            execution = db.get(AgentTaskExecutionRecord, run_id)
+            if execution is not None and execution.state in {
+                "rejected",
+                "completed",
+                "cancelled",
+                "failed",
+            }:
+                raise ApprovalGrantError("任务已结束，不能审批通过后执行")
             old_payload = record.payload_json
             run = agent_run_from_dict(json.loads(old_payload))
             claims = validate_approval_grant(token, run=run, principal_id=principal_id)
