@@ -328,6 +328,18 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     clearMessages()
   }
 
+  let restoreChain: Promise<void> = Promise.resolve()
+  function restoreLatestOwnedSession() {
+    const run = restoreChain.then(async () => {
+      await refreshHistorySessions()
+      const latest = historySessions.value.find((row) => String(row.session_id || '').trim() && Number(row.message_count || 0) > 0)
+      if (!latest || historyLoading.value) return
+      await loadSession(latest.session_id)
+    })
+    restoreChain = run.then(() => undefined, () => undefined)
+    return run
+  }
+
   function newConversation() {
     requestEpoch += 1
     historyLoading.value = false
@@ -370,6 +382,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     historyLoadingMore,
     loadMoreHistorySessions,
     refreshHistorySessions,
+    restoreLatestOwnedSession,
     showHistoryPanel,
     loadSession,
     clearHistorySessions,

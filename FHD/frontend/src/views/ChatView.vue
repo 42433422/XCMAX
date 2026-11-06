@@ -229,7 +229,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, onDeactivated } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onDeactivated, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
@@ -355,6 +355,7 @@ const {
   cancelTaskById,
   jumpToTaskMessage,
   refreshHistorySessions,
+  restoreLatestOwnedSession,
   showHistoryPanel,
   loadSession,
   clearHistorySessions,
@@ -465,6 +466,25 @@ onMounted(() => {
   voiceWarmTimer = window.setTimeout(() => {
     void warmVoiceModel()
   }, 2500)
+})
+function plainMessage(content: unknown) {
+  return String(content || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+}
+function restoreOwnedHistoryIfEmpty() {
+  const hasRealTurn = messages.value.some((msg) => {
+    const text = plainMessage(msg.content)
+    if (!text) return false
+    if (msg.role === 'user' || msg.role === 'task') return true
+    return !/^(你好，我是|您好！我是)/.test(text)
+  })
+  if (hasRealTurn || typeof restoreLatestOwnedSession !== 'function') return
+  void restoreLatestOwnedSession()
+}
+watch(productReadAccountEpoch, restoreOwnedHistoryIfEmpty, { immediate: true })
+// 登录后 Mod 才落到具体 id，身份监听会先清空当前空白会话。首次从空 id 落到 Mod 时把本账号最近一条对话拉回来。
+watch(() => String(modsStore.activeModId || ''), (modId, previous) => {
+  if (previous || !modId) return
+  restoreOwnedHistoryIfEmpty()
 })
 onBeforeUnmount(() => window.clearTimeout(voiceWarmTimer))
 onDeactivated(() => window.clearTimeout(voiceWarmTimer))

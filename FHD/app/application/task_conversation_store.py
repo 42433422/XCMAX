@@ -212,7 +212,27 @@ class TaskConversationStore:
                 .limit(limit)
                 .all()
             )
-            return [_session_row(session) for session in sessions]
+            rows: list[dict[str, Any]] = []
+            changed = False
+            for session in sessions:
+                if not (session.title or "").strip():
+                    first_user = (
+                        db.query(AIConversation)
+                        .filter(
+                            AIConversation.session_id == session.session_id,
+                            AIConversation.role == "user",
+                        )
+                        .order_by(AIConversation.id.asc())
+                        .first()
+                    )
+                    plain = _plain_text(first_user.content if first_user else "").replace("\n", " ")
+                    if plain:
+                        session.title = f"{plain[:48]}…" if len(plain) > 48 else plain
+                        changed = True
+                rows.append(_session_row(session))
+            if changed:
+                db.commit()
+            return rows
 
     def delete_session(self, *, session_id: str, user_id: int) -> bool:
         """Delete one owner-scoped session and its messages; missing/foreign sessions are no-ops."""

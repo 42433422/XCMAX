@@ -6,6 +6,7 @@
 
 import json
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import Any
@@ -114,6 +115,10 @@ class ConversationService(NeuroEventPublisherMixin):
                         raise PermissionError("conversation session belongs to another user")
                     session.message_count += 1
                     session.last_message_at = datetime.now()
+                    if role == "user" and not session.title:
+                        plain = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", content or "")).strip()
+                        if plain:
+                            session.title = f"{plain[:48]}…" if len(plain) > 48 else plain
                 else:
                     session = AIConversationSession(
                         session_id=session_id,

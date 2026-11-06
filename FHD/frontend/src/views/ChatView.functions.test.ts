@@ -73,6 +73,7 @@ const mockChatViewApi = {
   cancelTaskById: vi.fn(),
   jumpToTaskMessage: vi.fn(),
   refreshHistorySessions: vi.fn(),
+  restoreLatestOwnedSession: vi.fn(),
   showHistoryPanel: vi.fn(),
   loadSession: vi.fn(),
   clearHistorySessions: vi.fn(),
@@ -244,6 +245,26 @@ describe('ChatView functions – generateSessionId', () => {
   })
   afterEach(() => {
     localStorage.clear()
+  })
+
+  it('空白首页会拉回本账号最近一条会话', async () => {
+    const { wrapper } = await mountChatView()
+    expect(mockChatViewApi.restoreLatestOwnedSession).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('只有欢迎语时仍拉回最近会话', async () => {
+    messagesRef.value = [{ role: 'ai', content: '你好，我是业务助手。', time: '14:56' }]
+    const { wrapper } = await mountChatView()
+    expect(mockChatViewApi.restoreLatestOwnedSession).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('已有用户消息时不覆盖当前会话', async () => {
+    messagesRef.value = [{ role: 'user', content: '员工图谱无法显示', time: '14:56' }]
+    const { wrapper } = await mountChatView()
+    expect(mockChatViewApi.restoreLatestOwnedSession).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('生成非空字符串 session ID', async () => {

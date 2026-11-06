@@ -199,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
@@ -307,6 +307,7 @@ const {
   cancelTaskById,
   jumpToTaskMessage,
   showHistoryPanel,
+  restoreLatestOwnedSession,
   loadSession,
   clearHistorySessions,
   newConversation,
@@ -321,6 +322,25 @@ const {
   addAndSaveMessage,
   stageExcelAnalysisContext,
 } = chatViewApi
+
+function plainMessage(content: unknown) {
+  return String(content || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+}
+function restoreOwnedHistoryIfEmpty() {
+  const hasRealTurn = messages.value.some((msg) => {
+    const text = plainMessage(msg.content)
+    if (!text) return false
+    if (msg.role === 'user' || msg.role === 'task') return true
+    return !/^(你好，我是|您好！我是)/.test(text)
+  })
+  if (hasRealTurn || typeof restoreLatestOwnedSession !== 'function') return
+  void restoreLatestOwnedSession()
+}
+watch(productReadAccountEpoch, restoreOwnedHistoryIfEmpty, { immediate: true })
+watch(() => String(modsStore.activeModId || ''), (modId, previous) => {
+  if (previous || !modId) return
+  restoreOwnedHistoryIfEmpty()
+})
 
 const messageInput = ref('')
 function fillComposer(text: string) {
