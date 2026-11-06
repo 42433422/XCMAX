@@ -3,6 +3,8 @@
 
 
 export type AgentRunEventType =
+  | 'approval.rejected'
+  | 'approval.timed_out'
   | 'artifact.attached'
   | 'billing.debit_failed'
   | 'billing.debited'
@@ -42,6 +44,7 @@ export type AgentRunEventType =
   | 'task.approval_required'
   | 'tool.completed'
   | 'tool.failed'
+  | 'tool.permission_denied'
   | 'tool.receipt_observed'
   | 'tool.started';
 

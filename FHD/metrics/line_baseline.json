@@ -1,5 +1,5 @@
 {
-  "lines": 2418520,
+  "lines": 2419418,
   "updated": "2026-11-06",
-  "note": "A42-A50 acceptance: tenant-scoped business data and tools, approval-gated writes, durable idempotency, traceable tool records, and real customer/file effects"
+  "note": "A42-A50 工具验收与 CI 修复超出原基线 898 行：确认后再校验密封身份、普通工具失败不再误标不可重试、NeuroBus 审批与拒权事件，以及超限源码审查记录。由本分支 CI 修复提交抬升。"
 }
