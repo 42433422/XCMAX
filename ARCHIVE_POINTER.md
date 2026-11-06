@@ -101,4 +101,8 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 |----|------|------|
 | **sandbox-app 实验壳** | `~/XCMAX-archives/experiment-residue-20261106/FHD/sandbox-app/` | `FHD/sandbox-app`（19 文件 / 1,163 行）全仓零引用：不参与任何构建入口、CI 工作流、pytest 收集或发布产物。已 `git rm`；逐文件 SHA256 与来源提交见 `MANIFEST.json`。 |
 
+| **过期历史快照文档** | `~/XCMAX-archives/docs-20261106-stale/` | 20 篇 / 1,256 行，全部由 `FHD/scripts/dev/docs_triage.py report` 判定为 `archive_reason=historical-snapshot`（自述日期快照、零入链、非 SSOT 登记、非运行时资产）。已 `git rm`；逐文件 SHA256 见 `MANIFEST.json`。 |
+
+**同轮保留待判（规则可命中但不宜直接删除）**：`FHD/app/security/SSOT.md`、`FHD/app/neuro_bus/BOUNDARY.md` 是安全/总线边界映射，属治理缺口（应登记 SSOT 而非归档）；`FHD/docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md` 是 Android 商店提审清单，属移动端交付依赖；`docs/MUTATION_TESTING_SCOPE.md` 与 `docs/security/aiopen-*-20261028.md` 是近期口径与安全审计记录；两个 `MANIFEST_POINTER.md` 是归档资产恢复指针。以上 7 篇不作为本轮归档对象。
+
 **同轮评估但保留（承重，不可作为残留清退）**：`FHD/sunbird-console` 是 `FHD/frontend/sunbirdConsole.vite.config.js` 的构建输入；`FHD/AMIN` 经 `@amin` 别名进入前端打包；`FHD/mobile-flutter-poc` 由 `.github/workflows/fhd-ci-mobile-flutter.yml`、`fhd-release-android.yml`、`fhd-release-ios.yml` 驱动，属移动端交付链路；`FHD/tests/odoo_absorption` 与 `FHD/tests/langgraph_absorption` 是运行中的契约/边界回归测试；`FHD/rasa` 与 `FHD/XCAGI/rasa` 是 `app/ai_engines/rasa/nlu_service.py` 模型发现与再训练的种子配置。目录名带 poc/absorption 属命名债，不是死代码。
