@@ -1,5 +1,5 @@
 {
-  "lines": 2439646,
+  "lines": 2439648,
   "updated": "2026-11-06",
-  "note": "docs(changelog): 为任务列表超时误报修复补充 Unreleased 说明（+1 行）。"
+  "note": "test(dev): 收敛违约包清单补充 fastapi_routes/fastapi_app 桩包，修复 main 上 shard5 契约测试失败（+2 行）。"
 }
