@@ -4,7 +4,7 @@ vi.mock('@/utils/erpDomainPaths', () => ({
   resolveErpApiPathWhenReady: async (url: string) => url,
 }))
 
-import api, { AccountSwitchedError } from './core'
+import api, { AccountSwitchedError, registerSessionRefresh } from './core'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 function deferredJsonResponse() {
@@ -23,6 +23,8 @@ function deferredJsonResponse() {
 
 describe('api core account switch guard', () => {
   afterEach(() => {
+    registerSessionRefresh(null)
+    vi.restoreAllMocks()
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
@@ -49,6 +51,39 @@ describe('api core account switch guard', () => {
     const release = deferredJsonResponse()
     release()
     await expect(api.get('/api/orders')).resolves.toMatchObject({ data: ['tenant-a'] })
+  })
+
+  it.each([true, false])('discards a stale auth refresh (%s) before retrying or redirecting the new owner', async refreshed => {
+    let finish!: (ok: boolean) => void
+    const refresh = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve }))
+    registerSessionRefresh(refresh)
+    const fetchMock = vi.fn(async () => new Response('{"message":"expired"}', {
+      status: 401, headers: { 'content-type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const events = vi.spyOn(window, 'dispatchEvent')
+    const pending = api.get('/api/orders')
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    productReadAccountEpoch.value += 1
+    finish(refreshed)
+    await expect(pending).rejects.toBeInstanceOf(AccountSwitchedError)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(events).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'xcagi:enterprise-session-invalid' }))
+  })
+
+  it.each([
+    ['/api/orders', {}, true],
+    ['/api/auth/login', {}, false],
+    ['/api/orders', { error: 'license_expired' }, false],
+  ] as const)('handles production 401 on %s without an experimental refresher', async (path, body, expired) => {
+    registerSessionRefresh(null)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), {
+      status: 401, headers: { 'content-type': 'application/json' },
+    })))
+    const events = vi.spyOn(window, 'dispatchEvent')
+    await expect(api.get(path)).rejects.toMatchObject({ status: 401 })
+    const invalid = events.mock.calls.filter(([event]) => event.type === 'xcagi:enterprise-session-invalid')
+    expect(invalid).toHaveLength(expired ? 1 : 0)
   })
 
   it('does not start the second read after the caller aborts during backoff', async () => {

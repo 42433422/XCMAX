@@ -12,6 +12,7 @@ const {
   pushStreamingAiShell,
   saveMessage,
   sendChatStream,
+  getConversation,
   readPlannerSseResponse,
   requestChatByModeWithTimeout,
   refreshHistorySessions,
@@ -25,6 +26,7 @@ const {
   pushStreamingAiShell: vi.fn(() => 0),
   saveMessage: vi.fn().mockResolvedValue(undefined),
   sendChatStream: vi.fn(),
+  getConversation: vi.fn(),
   readPlannerSseResponse: vi.fn(),
   requestChatByModeWithTimeout: vi.fn(),
   refreshHistorySessions: vi.fn().mockResolvedValue(undefined),
@@ -224,7 +226,7 @@ vi.mock('@/stores/mods', () => ({
   useModsStore: () => modState,
 }))
 vi.mock('@/api/chat', () => ({
-  default: { sendChatStream },
+  default: { sendChatStream, getConversation },
   parseChatStreamErrorResponse: vi.fn().mockResolvedValue('流式接口错误'),
 }))
 vi.mock('@/api/shipment', () => ({ shipmentApi: { getProductMetaForPreview: previewMeta, fetchNextOrderNumber: vi.fn() } }))
@@ -248,6 +250,7 @@ vi.mock('@/constants/coreWorkflowMod', () => ({ isCoreWorkflowModInstalled: () =
 import { useChatOrchestration } from './useChatOrchestration'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { extractLikelyProductQueryKeyword } from './useChatPersistence'
+import { authApi } from '@/api/auth'
 
 describe('useChatOrchestration stream', () => {
   beforeEach(() => {
@@ -263,6 +266,7 @@ describe('useChatOrchestration stream', () => {
     syncAgentRunFromPayload.mockResolvedValue(undefined)
     pushStreamingAiShell.mockReturnValue(0)
     sendChatStream.mockResolvedValue({ ok: true, body: {} })
+    getConversation.mockReset().mockResolvedValue({ success: true, messages: [] })
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
       onEvent({ type: 'token', text: '你' })
       onEvent({ type: 'done', result: { success: true, response: '你好' } })
@@ -278,6 +282,57 @@ describe('useChatOrchestration stream', () => {
     expect(refreshHistorySessions).toHaveBeenCalledOnce()
     expect(saveMessage).not.toHaveBeenCalled()
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it('checks the official session immediately after an SSE 401', async () => {
+    const validate = vi.spyOn(authApi, 'validateSession').mockResolvedValueOnce({ valid: false })
+    const events = vi.spyOn(window, 'dispatchEvent')
+    try {
+      sendChatStream.mockResolvedValueOnce({ ok: false, status: 401, body: {} })
+      await useChatOrchestration({ sessionId: ref('expired-session') }).sendMessage('hello')
+      await vi.waitFor(() => expect(validate).toHaveBeenCalledOnce())
+      expect(events).toHaveBeenCalledWith(expect.objectContaining({ type: 'xcagi:enterprise-session-invalid' }))
+    } finally { validate.mockRestore(); events.mockRestore() }
+  })
+
+  it.each([
+    [{ success: true }, 'completed', '已保存的最终答复'],
+    [{ success: false, status: 'completed' }, 'failed', '已保存的最终答复'],
+    [{}, 'unknown', '未标记为成功'],
+  ])('reconciles a dropped stream using its persisted turn outcome', async (summary, status, text) => {
+    const api = useChatOrchestration({ sessionId: ref('dropped-session') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    sendChatStream.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    getConversation.mockImplementationOnce(async () => ({ success: true, messages: [{
+      role: 'assistant', content: '已保存的最终答复', metadata: JSON.stringify({
+        summary: { ...summary, turn_id: api.messages.value[0].turnId },
+      }),
+    }] }))
+    await api.sendMessage('hello')
+    expect(getConversation).toHaveBeenCalledWith('dropped-session')
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, expect.stringContaining(text))
+    expect(api.messages.value[0].workflowAction).toBe(status)
+  })
+
+  it.each(['owner', 'conversation', 'stop'])('discards dropped-stream history after a %s change', async action => {
+    const sessionId = ref('dropped-session')
+    const api = useChatOrchestration({ sessionId })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    sendChatStream.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    let finish!: (value: unknown) => void
+    getConversation.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const pending = api.sendMessage('hello')
+    await vi.waitFor(() => expect(getConversation).toHaveBeenCalledOnce())
+    const turnId = api.messages.value[0].turnId
+    if (action === 'owner') productReadAccountEpoch.value += 1
+    else if (action === 'conversation') sessionId.value = 'another-session'
+    else api.stopReply()
+    applyPlainTextToMessageIndex.mockClear()
+    finish({ success: true, messages: [{ role: 'assistant', content: '旧账号结果', metadata: {
+      summary: { turn_id: turnId, success: true },
+    } }] })
+    await pending
+    expect(applyPlainTextToMessageIndex).not.toHaveBeenCalled()
   })
 
   it('never speaks typed progress or split legacy tool markers, but speaks the full answer once', async () => {
@@ -634,7 +689,7 @@ describe('useChatOrchestration stream', () => {
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => onEvent({ type: 'error', message: '模型不可用' }))
     const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('hello')
-    expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('处理失败'))
+    expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining(kind === 'http' ? '未标记为成功' : '处理失败'))
     expect(api.isLoading.value).toBe(false)
     expect(api.isStreamingReply.value).toBe(false)
     sendChatStream.mockResolvedValue({ ok: true, body: {} })

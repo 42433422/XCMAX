@@ -6,6 +6,7 @@ live role permissions, and an employee allowlist is checked again at execution.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import sqlite3
@@ -31,6 +32,8 @@ _SERVER_FIELDS = frozenset(
         "_actor_authorization",
         "_mod_authorization",
         "task_id",
+        "run_id",
+        "agent_run_id",
         "parent_task_id",
         "parent_run_id",
         "idempotency_key",
@@ -76,9 +79,32 @@ def _denial(
     tool_id: str,
     action: str,
     reason: str,
+    event_type: str = "security.tool_permission_denied",
+    execution_state: str = "",
 ) -> dict[str, Any]:
     user_id = str(context.get("user_id") or "")
     task_id = str(context.get("task_id") or context.get("run_id") or "")
+    audit = {
+        "reason": reason,
+        "user_id": user_id,
+        "tool_id": tool_id,
+        "task_id": task_id,
+        "tenant_id": str(context.get("tenant_id") or ""),
+        "action": action,
+        "execution_state": execution_state,
+    }
+    try:
+        from app.utils.logging.audit_logger import audit_log
+
+        audit_log(
+            event_type,
+            user_id=user_id or None,
+            success=False,
+            severity="warning",
+            details=audit,
+        )
+    except RECOVERABLE_ERRORS:
+        pass
     return {
         "success": False,
         "error_code": code,
@@ -90,12 +116,7 @@ def _denial(
         "reason": reason,
         "user_id": user_id,
         "task_id": task_id,
-        "audit": {
-            "reason": reason,
-            "user_id": user_id,
-            "tool_id": tool_id,
-            "task_id": task_id,
-        },
+        "audit": audit,
     }
 
 
@@ -230,6 +251,112 @@ def actor_tool_denial(
             reason="permission_check_failed",
         )
     return None
+
+
+def _gate_state(state: str) -> str:
+    from app.domain.task_lifecycle.adapters import (
+        LegacyTransitionError,
+        canonical_execution_state,
+        canonicalize,
+    )
+
+    raw = str(state or "").strip().lower()
+    mapped = canonical_execution_state(raw)
+    if mapped != raw:
+        return mapped
+    try:
+        return canonicalize("agent", raw)
+    except LegacyTransitionError:
+        return mapped
+
+
+def _approval_expired(repository: object, run_id: str) -> bool:
+    from datetime import UTC, datetime
+
+    lifecycle = getattr(repository, "lifecycle", None)
+    if not callable(lifecycle):
+        return False
+    body = lifecycle(run_id)
+    if not isinstance(body, dict):
+        return False
+    started = str(body.get("approval_requested_at") or "")
+    if not started:
+        return False
+    timeout = float(getattr(repository, "_approval_timeout_seconds", 86400.0) or 0)
+    requested = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    if requested.tzinfo is None:
+        requested = requested.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - requested).total_seconds() >= timeout
+
+
+def approval_execution_denial(
+    tool_id: str, action: str, context: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Block a business write while this task is waiting, rejected, or expired.
+
+    Caller-supplied approval_id and approved flags are ignored. A task with no
+    lifecycle row is an ordinary ERP call and is left alone.
+    """
+    ctx = dict(context or {})
+    task_id = str(ctx.get("task_id") or ctx.get("run_id") or "").strip()
+    if not task_id:
+        return None
+    from app.application.agent_orchestrator.task_execution_repository import (
+        locate_task_execution,
+    )
+
+    repository, row = locate_task_execution(str(ctx.get("run_id") or task_id), fallback_id=task_id)
+    if repository is None or row is None:
+        return None
+    approval_run_id = str(getattr(row, "run_id", "") or "")
+    if task_id not in {approval_run_id, str(getattr(row, "task_id", "") or "")}:
+        return _denial(
+            "approval_required",
+            "执行任务与审批任务不一致，已拒绝执行",
+            context=ctx,
+            tool_id=str(tool_id or ""),
+            action=str(action or ""),
+            reason="approval_task_mismatch",
+            event_type="security.approval_execution_denied",
+        )
+    ctx_tenant = str(ctx.get("tenant_id") or "")
+    row_tenant = str(getattr(row, "tenant_id", "") or "")
+    if ctx_tenant and row_tenant and ctx_tenant != row_tenant:
+        return _denial(
+            "approval_required",
+            "其他租户的审批不能授权本任务",
+            context=ctx,
+            tool_id=str(tool_id or ""),
+            action=str(action or ""),
+            reason="approval_tenant_mismatch",
+            event_type="security.approval_execution_denied",
+            execution_state=str(getattr(row, "state", "") or ""),
+        )
+    state = _gate_state(str(getattr(row, "state", "") or ""))
+    expired = _approval_expired(repository, approval_run_id) or (
+        str(getattr(row, "last_error_code", "") or "") == "approval_timeout"
+    )
+    if state not in {"waiting_approval", "rejected"} and not expired:
+        return None
+    if expired:
+        reason = "approval_expired"
+        message = "审批已过期，已拒绝执行"
+    elif state == "rejected":
+        reason = "approval_rejected"
+        message = "任务已驳回，已拒绝执行"
+    else:
+        reason = "approval_required"
+        message = "任务仍在等待审批，已拒绝执行"
+    return _denial(
+        "approval_required",
+        message,
+        context=ctx,
+        tool_id=str(tool_id or ""),
+        action=str(action or ""),
+        reason=reason,
+        event_type="security.approval_execution_denied",
+        execution_state=state,
+    )
 
 
 def _fingerprint(params: dict[str, Any]) -> str:
@@ -382,6 +509,187 @@ def drop_process_idempotency_memory() -> None:
         _LIVE_OWNERS.clear()
 
 
+def _owner_liveness(owner: str) -> str:
+    """alive, dead, or unknown. A live pid is never treated as a timeout."""
+    pid_text, separator, _token = str(owner or "").partition(":")
+    if not separator or not pid_text.isdigit():
+        return "unknown"
+    pid = int(pid_text)
+    if pid <= 0:
+        return "unknown"
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return "dead"
+    except PermissionError:
+        return "alive"
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            return "dead"
+        if exc.errno == errno.EPERM:
+            return "alive"
+        return "unknown"
+    return "alive"
+
+
+def _customer_create_effect(
+    tenant: str, params: dict[str, Any], *, key: str, fingerprint: str, receipted: bool
+) -> tuple[str, dict[str, Any] | None]:
+    """Resolve a transaction-bound row id; a matching name is not an operation receipt."""
+    name = str(
+        params.get("unit_name") or params.get("customer_name") or params.get("name") or ""
+    ).strip()
+    if not tenant.isdigit() or int(tenant) <= 0 or not name:
+        return "unknown", None
+    tenant_id = int(tenant)
+    phone = params.get("contact_phone")
+    person = params.get("contact_person")
+    address = params.get("contact_address", params.get("address"))
+    from sqlalchemy.exc import SQLAlchemyError
+
+    lookup_errors = RECOVERABLE_ERRORS + (SQLAlchemyError,)
+    try:
+        from sqlalchemy import select
+
+        from app.application.customer_app_service import get_customers_session
+        from app.application.customer_creation_receipt import CUSTOMER_CREATE_RECEIPTS
+        from app.db.models.purchase_unit import PurchaseUnit
+        from app.domain.task_lifecycle.control import SessionBook
+
+        session = get_customers_session()
+        try:
+            receipt = SessionBook(session).get(CUSTOMER_CREATE_RECEIPTS, tenant, key)
+            customer_id = receipt.get("customer_id")
+            if type(customer_id) is not int or customer_id <= 0:
+                if not receipted:
+                    return "unknown", None
+                existing = session.execute(
+                    select(PurchaseUnit.id)
+                    .where(PurchaseUnit.unit_name == name, PurchaseUnit.tenant_id == tenant_id)
+                    .limit(1)
+                    .execution_options(skip_tenant_filter=True)
+                ).first()
+                return ("absent" if existing is None else "unknown"), None
+            if receipt.get("fingerprint") != fingerprint:
+                return "unknown", None
+            row = session.execute(
+                select(PurchaseUnit)
+                .where(PurchaseUnit.id == customer_id, PurchaseUnit.tenant_id == tenant_id)
+                .execution_options(skip_tenant_filter=True)
+            ).scalar_one_or_none()
+            if row is None:
+                return "unknown", None
+            if str(row.tenant_id) != tenant or str(row.unit_name or "") != name:
+                return "unknown", None
+            for expected, actual in (
+                (phone, row.contact_phone),
+                (person, row.contact_person),
+                (address, row.address),
+            ):
+                if expected not in (None, "") and str(actual or "") != str(expected):
+                    return "unknown", None
+            data = {
+                "id": int(row.id),
+                "customer_name": row.unit_name,
+                "contact_person": row.contact_person or "",
+                "contact_phone": row.contact_phone or "",
+                "contact_address": row.address or "",
+                "tenant_id": int(row.tenant_id),
+                "version": int(row.version),
+            }
+        finally:
+            session.close()
+    except lookup_errors:
+        return "unknown", None
+    return "matched", {
+        "success": True,
+        "created": True,
+        "id": data["id"],
+        "data": data,
+        "message": "客户创建成功",
+    }
+
+
+def _claim_transaction(statements: list[tuple[str, tuple[Any, ...]]]) -> int:
+    """Run one immediate transaction. The last statement's rowcount is the result."""
+    conn = _idempotency_conn()
+    if conn is None:
+        return 0
+    try:
+        conn.execute("begin immediate")
+        changed = 0
+        for sql, args in statements:
+            changed = conn.execute(sql, args).rowcount
+        conn.commit()
+        return int(changed)
+    except sqlite3.Error:
+        conn.rollback()
+        return 0
+    finally:
+        conn.close()
+
+
+def _complete_dead_claim(key: str, owner: str, output: dict[str, Any]) -> bool:
+    changed = _claim_transaction(
+        [
+            (
+                "update tool_idempotency set inflight = 0, output_json = ? "
+                "where scope_key = ? and owner = ? and inflight = 1",
+                (json.dumps(output, ensure_ascii=False), key, owner),
+            )
+        ]
+    )
+    return changed == 1
+
+
+def _replace_dead_claim(key: str, owner: str, fingerprint: str, new_owner: str) -> bool:
+    conn = _idempotency_conn()
+    if conn is None:
+        return False
+    try:
+        conn.execute("begin immediate")
+        deleted = conn.execute(
+            "delete from tool_idempotency where scope_key = ? and owner = ? and inflight = 1",
+            (key, owner),
+        ).rowcount
+        if deleted != 1:
+            conn.rollback()
+            return False
+        inserted = conn.execute(
+            "insert into tool_idempotency(scope_key, fingerprint, owner, inflight, output_json) "
+            "values (?, ?, ?, 1, '')",
+            (key, fingerprint, new_owner),
+        ).rowcount
+        if inserted != 1:
+            conn.rollback()
+            return False
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def _reread_claim(key: str) -> dict[str, Any] | None:
+    conn = _idempotency_conn()
+    if conn is None:
+        return _IDEMPOTENCY.get(key)
+    try:
+        row = conn.execute(
+            "select fingerprint, owner, inflight, output_json from tool_idempotency where scope_key = ?",
+            (key,),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    return _stored_claim(row)
+
+
 def recover_idempotent_claims() -> dict[str, int]:
     """Retain unfinished claims: another process may still run or have committed an effect."""
     report = {"cleared_unknown": 0, "retained_unknown": 0, "replayable": 0}
@@ -430,7 +738,10 @@ def begin_idempotent_replay(
             reason="idempotency_fingerprint_rejected",
         )
     with _IDEMPOTENCY_LOCK:
-        owner = f"{os.getpid()}:{uuid.uuid4().hex}"
+        receipt_marker = (
+            "customer-receipt-v1:" if (tool_id, action) == ("customers", "create") else ""
+        )
+        owner = f"{os.getpid()}:{receipt_marker}{uuid.uuid4().hex}"
         record = {"fingerprint": fingerprint, "inflight": True, "output": None, "owner": owner}
         current = _try_claim(key, record)
         if current is None:
@@ -450,6 +761,59 @@ def begin_idempotent_replay(
         saved = _retained_result(cached) if isinstance(cached, dict) else None
         if not current.get("inflight") and saved is not None:
             return key, saved
+        if (
+            current.get("inflight")
+            and tool_id == "customers"
+            and action == "create"
+            and _owner_liveness(str(current.get("owner") or "")) == "dead"
+        ):
+            effect, receipt = _customer_create_effect(
+                str(context.get("tenant_id") or ""),
+                params,
+                key=key,
+                fingerprint=fingerprint,
+                receipted=":customer-receipt-v1:" in str(current.get("owner") or ""),
+            )
+            owner = str(current.get("owner") or "")
+            if effect == "matched" and receipt is not None:
+                if _complete_dead_claim(key, owner, receipt):
+                    current["inflight"] = False
+                    current["output"] = receipt
+                    _IDEMPOTENCY[key] = current
+                    return key, receipt
+                latest = _reread_claim(key)
+                replay = latest.get("output") if isinstance(latest, dict) else None
+                restored = _retained_result(replay) if isinstance(replay, dict) else None
+                if restored is not None and restored.get("success") is True:
+                    return key, restored
+            elif effect == "absent":
+                new_owner = f"{os.getpid()}:{receipt_marker}{uuid.uuid4().hex}"
+                if _replace_dead_claim(key, owner, fingerprint, new_owner):
+                    record["owner"] = new_owner
+                    _IDEMPOTENCY[key] = record
+                    _LIVE_OWNERS.add(new_owner)
+                    return key, None
+                latest = _reread_claim(key)
+                if latest is not None and str(latest.get("owner") or "") != owner:
+                    saved_latest = latest.get("output")
+                    restored = (
+                        _retained_result(saved_latest) if isinstance(saved_latest, dict) else None
+                    )
+                    if not latest.get("inflight") and restored is not None:
+                        return key, restored
+                    if _owner_liveness(str(latest.get("owner") or "")) == "alive":
+                        return key, {
+                            **_denial(
+                                "idempotency_in_progress",
+                                "相同幂等键的调用仍在执行或结果待核验，不可重复执行",
+                                context=context,
+                                tool_id=tool_id,
+                                action=action,
+                                reason="idempotency_in_progress",
+                            ),
+                            "outcome": "unknown",
+                            "reconciliation_required": True,
+                        }
         code = (
             "idempotency_in_progress" if current.get("inflight") else "idempotency_outcome_unknown"
         )

@@ -58,6 +58,11 @@ import { syncWindowsBackupTasks } from './backup-task-sync'
 // 测试中通过 vi.mock('electron') 替换 app，故下列两行在测试环境下也安全。
 app.setPath('userData', process.env.XCAGI_DESKTOP_USER_DATA_DIR?.trim() || path.join(app.getPath('appData'), 'XCAGI'))
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+// A lost GL context after unmap paints a uniform white client area that Ctrl+R cannot composite.
+if (process.platform === 'linux') {
+  app.disableHardwareAcceleration?.()
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+}
 // OTA 代理绕过 commandLine 开关（含 win32 系统代理不可达时的直连兜底）。
 configureOtaProxyCommandLine()
 

@@ -705,7 +705,11 @@ class TestBusinessDbRouter:
 
     def test_write_customers_create(self):
         with patch("app.application.get_customer_app_service") as mock_get:
-            mock_get.return_value.create.return_value = {"success": True}
+            mock_get.return_value.create.return_value = {"success": True, "data": {"id": 1}}
+            mock_get.return_value.get_by_id.return_value = {
+                "success": True,
+                "data": {"id": 1, "customer_name": "X"},
+            }
             result = _registered_router_business_db(
                 "write",
                 {"entity": "customers", "operation": "create", "payload": {"customer_name": "X"}},
@@ -714,6 +718,8 @@ class TestBusinessDbRouter:
                 "",
             )
         assert result["success"] is True
+        assert result["id"] == 1 and result["data"]["customer_name"] == "X"
+        mock_get.return_value.get_by_id.assert_called_once_with(1)
 
     def test_write_customers_ensure_exists(self):
         from app.infrastructure.tenant_scope import tenant_scope
@@ -789,6 +795,15 @@ class TestBusinessDbRouter:
                 "success": True,
                 "data": {"id": 10},
             }
+            mock_get.return_value.get_by_id.return_value = {
+                "success": True,
+                "data": {
+                    "id": 10,
+                    "customer_name": "Y",
+                    "contact_person": "李经理",
+                    "contact_phone": "13900000000",
+                },
+            }
             result = _registered_router_business_db(
                 "write",
                 {
@@ -813,6 +828,9 @@ class TestBusinessDbRouter:
                 "contact_address": "",
             }
         )
+        mock_get.return_value.get_by_id.assert_called_once_with(10)
+        assert result["data"]["contact_person"] == "李经理"
+        assert result["data"]["contact_phone"] == "13900000000"
 
     def test_write_customers_unsupported_op(self):
         result = _registered_router_business_db(

@@ -206,6 +206,12 @@
           "required_params": [],
           "availability": "shared"
         },
+        "export": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
         "ensure_exists": {
           "risk": "medium",
           "idempotent": true,

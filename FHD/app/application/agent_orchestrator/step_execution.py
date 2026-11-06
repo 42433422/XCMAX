@@ -22,6 +22,82 @@ from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _confirm_customer_create(
+    step: AgentStep, output: dict[str, Any], runtime_context: dict[str, Any]
+) -> dict[str, Any]:
+    """A child success payload is not proof the caller database contains the row."""
+    if step.tool_id != "customers" or step.action != "create" or output.get("success") is not True:
+        return output
+    name = str(
+        (step.params or {}).get("unit_name")
+        or (step.params or {}).get("customer_name")
+        or (step.params or {}).get("name")
+        or ""
+    ).strip()
+    claimed = output.get("id")
+    raw_data = output.get("data")
+    data = raw_data if isinstance(raw_data, dict) else {}
+    if claimed is None:
+        claimed = data.get("id")
+    unverified = {
+        **output,
+        "success": False,
+        "error_code": "customer_receipt_unverified",
+        "outcome": "unknown",
+        "retryable": False,
+        "reconciliation_required": True,
+        "message": "客户写入未在调用方数据库确认",
+    }
+    if not name or type(claimed) is not int:
+        return unverified
+    from sqlalchemy import select
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    try:
+        from app.application.customer_app_service import get_customers_session
+
+        session = get_customers_session()
+    except RECOVERABLE_ERRORS:
+        return unverified
+    try:
+        rows = (
+            session.execute(
+                select(PurchaseUnit)
+                .where(PurchaseUnit.unit_name == name)
+                .execution_options(skip_tenant_filter=True)
+            )
+            .scalars()
+            .all()
+        )
+    except RECOVERABLE_ERRORS + (SQLAlchemyError,):
+        return unverified
+    finally:
+        session.close()
+    tenant = str((runtime_context or {}).get("tenant_id") or "")
+    matched = [
+        row
+        for row in rows
+        if row.unit_name == name
+        and int(row.id) == claimed
+        and (not tenant or str(row.tenant_id) == tenant)
+    ]
+    if len(matched) != 1:
+        return unverified
+    row = matched[0]
+    confirmed = dict(data)
+    confirmed.update(
+        {
+            "id": int(row.id),
+            "customer_name": row.unit_name,
+            "tenant_id": row.tenant_id,
+        }
+    )
+    return {**output, "success": True, "id": int(row.id), "data": confirmed}
+
+
 class StepExecution:
     def __init__(
         self,
@@ -161,7 +237,7 @@ class StepExecution:
                     "error_code": "tool_exception",
                     "message": "工具执行失败",
                 }
-        step.output = dict(output or {})
+        step.output = _confirm_customer_create(step, dict(output or {}), runtime_context)
         if step.output.get("success") is not True:
             step.output["success"] = False
         from app.application.agent_orchestrator.tool_permission import absorb_tool_output

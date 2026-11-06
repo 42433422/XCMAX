@@ -85,6 +85,7 @@ def build_support_bundle_zip(
     data_dir: str | os.PathLike[str] | None = None,
     fastapi_version: str = "unknown",
     screenshots: Sequence[bytes] = (),
+    customer_logs: Sequence[tuple[str, bytes]] = (),
 ) -> bytes:
     """Return ZIP bytes with non-secret diagnostics (no live DB copy).
 
@@ -148,7 +149,15 @@ def build_support_bundle_zip(
     ]
     if updater_chunk:
         logs.append(("logs/updater-events.jsonl", _redact_log_bytes(updater_chunk)))
-    readme = "清单不含密钥，日志已脱敏；数据库和崩溃转储不随包提供。\n"
+    readme = "清单不含密钥。平台日志和客户随工单提交的日志都先脱敏再写入压缩包；数据库和崩溃转储不随包提供。\n"
+    attached_logs = [
+        (f"customer-logs/{name or f'log-{index}.log'}", _redact_log_bytes(data)[:80_000])
+        for index, (name, data) in enumerate(customer_logs, 1)
+        if data
+    ]
+    if attached_logs:
+        readme += "customer-logs/ 是客户随工单提交的日志，写入压缩包前已脱敏。\n"
+        manifest["customerLogs"] = [name for name, _data in attached_logs]
     if shots:
         readme += "screenshots/ 是客户报障时所选的截图，已压缩。\n"
 
@@ -159,6 +168,7 @@ def build_support_bundle_zip(
                 ("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode()),
                 *((name, data[-keep:]) for name, data in logs),
                 *((f"screenshots/{index}.jpg", shot) for index, shot in enumerate(shots, 1)),
+                *attached_logs,
             ]
         )
 
@@ -176,6 +186,7 @@ def build_evidence_ref(
     data_dir: str | os.PathLike[str] | None = None,
     keep_last: int = 10,
     screenshots: Sequence[bytes] = (),
+    customer_logs: Sequence[tuple[str, bytes]] = (),
 ) -> dict[str, Any] | None:
     """落盘一份支持诊断包并返回工单 context 用的证据引用（best-effort）。
 
@@ -189,7 +200,9 @@ def build_evidence_ref(
         dirs = ensure_desktop_dirs(data_dir or os.environ.get("XCAGI_DATA_DIR"))
         bundle_dir = dirs["root"] / "support-bundles"
         bundle_dir.mkdir(parents=True, exist_ok=True)
-        blob = build_support_bundle_zip(data_dir=data_dir, screenshots=screenshots)
+        blob = build_support_bundle_zip(
+            data_dir=data_dir, screenshots=screenshots, customer_logs=customer_logs
+        )
         stamp = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{time.time_ns() % 100000:05d}"
         path = bundle_dir / f"support-bundle-{stamp}.zip"
         path.write_bytes(blob)

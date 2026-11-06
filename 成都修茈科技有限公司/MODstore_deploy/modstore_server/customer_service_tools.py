@@ -11,6 +11,8 @@ import json
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
+from fastapi import HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from modstore_server import payment_orders, webhook_dispatcher
@@ -127,10 +129,37 @@ _FORBIDDEN_ACTION_TYPES = frozenset(
 )
 
 
+def _approval_already_settled(action: CustomerServiceAction) -> bool:
+    """拒绝和已经消耗过的审批不能靠改回 pending 再执行一次。"""
+    request = json_loads(action.request_json, {})
+    approval = request.get("approval") if isinstance(request, dict) else None
+    decided = str(approval.get("decision") or "") if isinstance(approval, dict) else ""
+    prior = json_loads(action.result_json, {})
+    consumed = str(request.get("consumed_approval_id") or "") if isinstance(request, dict) else ""
+    rejected = (
+        action.status == "rejected"
+        or str(action.error or "") == "approval_rejected"
+        or (action.status == "failed" and str(action.error or "").startswith("approval_rejected"))
+    )
+    already = rejected or action.status in {"completed", "skipped", "pending_execution"}
+    already = (
+        already or bool(consumed) or (isinstance(prior, dict) and bool(prior.get("approval_id")))
+    )
+    if not already:
+        return False
+    if rejected or decided == "rejected":
+        action.status = "rejected"
+        action.error = "approval_rejected"
+        return True
+    if action.status in {"completed", "skipped", "pending_execution"}:
+        return True
+    executed = isinstance(prior, dict) and prior.get("executed") is True
+    action.status = "completed" if executed else "pending_execution"
+    return True
+
+
 def execute_action(db: Session, action: CustomerServiceAction, user: User) -> CustomerServiceAction:
-    if action.status in {"completed", "skipped"}:
-        return action
-    if action.status == "failed" and str(action.error or "").startswith("approval_rejected"):
+    if _approval_already_settled(action):
         return action
     action_type = str(action.action_type or "").strip().lower()
     # 硬闸：任何提权/管理员动作一律拒绝执行（即使误建 action）
@@ -475,44 +504,182 @@ def _report_diagnosis(
     }
 
 
-def _execute_gated_change(
+# 真正改业务数据的执行器。没有登记时，审批通过只表示允许执行，不表示已经执行。
+_GATED_EXECUTORS: dict[str, Any] = {}
+
+
+def register_gated_change_executor(name: str, executor: Any) -> None:
+    _GATED_EXECUTORS[str(name)] = executor
+
+
+def _gated_execution(request: dict[str, Any]) -> dict[str, Any] | None:
+    change = request.get("change")
+    key = change if isinstance(change, str) else ""
+    executor = _GATED_EXECUTORS.get(key)
+    if executor is None:
+        return None
+    outcome = executor(request)
+    return outcome if isinstance(outcome, dict) else None
+
+
+def begin_immediate_write(db: Session) -> None:
+    """SQLite 的延迟事务会让两个读锁互相卡住。写入前先拿保留锁。"""
+    if db.in_transaction():
+        return
+    bind = db.get_bind()
+    if bind is not None and bind.dialect.name == "sqlite":
+        db.execute(text("BEGIN IMMEDIATE"))
+
+
+def claim_gated_decision(
     db: Session, action: CustomerServiceAction, user: User, request: dict[str, Any]
 ) -> CustomerServiceAction:
-    """写入类动作必须先有一次性审批。拒绝后不能靠重试绕过。"""
-    approval = request.get("approval") if isinstance(request.get("approval"), dict) else {}
+    """把等待中的审批一次写成终态。拒绝不能再变回 pending。"""
+    if str(action.status or "") != "waiting_approval":
+        raise HTTPException(409, "只有等待审批的操作可以批准或拒绝")
+    return _settle_gated_change(db, action, user, request, claim=True)
+
+
+def _settle_gated_change(
+    db: Session,
+    action: CustomerServiceAction,
+    user: User,
+    request: dict[str, Any],
+    *,
+    claim: bool,
+) -> CustomerServiceAction:
+    begin_immediate_write(db)
+    raw_approval = request.get("approval")
+    approval = raw_approval if isinstance(raw_approval, dict) else {}
     decision = str(approval.get("decision") or "")
     now = datetime.now(UTC)
+    if "ticket_status" not in request:
+        from modstore_server.models_cs import CustomerServiceTicket
+
+        ticket = db.get(CustomerServiceTicket, action.ticket_id)
+        request["ticket_status"] = str(ticket.status or "") if ticket is not None else ""
+        request["ticket_lock_version"] = int(getattr(ticket, "lock_version", 0) or 0)
+    if str(action.status or "") == "rejected" or str(action.error or "") == "approval_rejected":
+        db.rollback()
+        raise HTTPException(409, "审批已拒绝，不能再次决定")
+    consumed = str(request.get("consumed_approval_id") or "")
+    if consumed and (claim or decision):
+        db.rollback()
+        raise HTTPException(409, "这张审批已经处理过，不能再次决定")
+    approval_id = str(approval.get("id") or "").strip()
+    run_executor = False
     if decision == "rejected":
-        action.status = "failed"
-        action.error = "approval_rejected"
-        action.result_json = json_dumps(
-            {"ok": False, "executed": False, "message": "审批已拒绝，敏感操作未执行"}
-        )
-    elif decision != "approved" or not str(approval.get("id") or "").strip():
-        action.status = "waiting_approval"
-        action.error = ""
-        action.result_json = json_dumps(
-            {
-                "ok": False,
-                "executed": False,
-                "message": "等待人工审批",
-                "state": "waiting_approval",
-            }
-        )
+        request["consumed_approval_id"] = approval_id or "rejected"
+        new_status = "rejected"
+        error = "approval_rejected"
+        result = {
+            "ok": False,
+            "executed": False,
+            "approval_granted": False,
+            "business_executed": False,
+            "verified": False,
+            "message": "审批已拒绝，敏感操作未执行",
+        }
+    elif decision != "approved" or not approval_id:
+        new_status = "waiting_approval"
+        error = ""
+        result = {
+            "ok": False,
+            "executed": False,
+            "approval_granted": False,
+            "business_executed": False,
+            "verified": False,
+            "message": "等待人工审批",
+            "state": "waiting_approval",
+        }
     else:
-        action.status = "completed"
-        action.error = ""
-        action.result_json = json_dumps(
-            {
-                "ok": True,
-                "executed": True,
-                "tool": "ticket.apply_change",
-                "approval_id": str(approval.get("id")),
-                "change": request.get("change"),
-                "observed_at": now.isoformat(),
-            }
+        # 先占住这张审批，赢下版本锁之后才调用业务执行器。
+        request["consumed_approval_id"] = approval_id
+        new_status = "pending_execution"
+        error = ""
+        result = {
+            "ok": False,
+            "executed": False,
+            "approval_granted": True,
+            "business_executed": False,
+            "verified": False,
+            "message": "审批已通过，业务执行器未完成核验，操作未执行",
+            "tool": "ticket.apply_change",
+            "approval_id": approval_id,
+            "change": request.get("change"),
+            "observed_at": now.isoformat(),
+        }
+        run_executor = True
+    expected_version = int(getattr(action, "lock_version", 0) or 0)
+    expected_status = str(action.status or "pending")
+    if claim and expected_status not in {"waiting_approval", "pending"}:
+        db.rollback()
+        raise HTTPException(409, "只有等待审批的操作可以批准或拒绝")
+    values = {
+        "status": new_status,
+        "error": error,
+        "request_json": json_dumps(request),
+        "result_json": json_dumps(result),
+        "updated_at": now,
+        "lock_version": expected_version + 1,
+    }
+    changed = (
+        db.query(CustomerServiceAction)
+        .filter(
+            CustomerServiceAction.id == action.id,
+            CustomerServiceAction.status == expected_status,
+            CustomerServiceAction.lock_version == expected_version,
         )
-    action.updated_at = now
+        .update(values, synchronize_session=False)
+    )
+    if changed != 1:
+        db.rollback()
+        raise HTTPException(409, "这张审批已经处理过，不能再次决定")
+    db.refresh(action)
+    if run_executor:
+        # 先提交占用，业务执行器的外部效果不能跟着事务回滚后再跑一遍。
+        db.commit()
+        outcome = _gated_execution(request)
+        verified = bool(outcome and outcome.get("ok") is True and outcome.get("verified") is True)
+        if outcome is not None:
+            owned = expected_version + 1
+            if verified:
+                result = {
+                    "ok": True,
+                    "executed": True,
+                    "approval_granted": True,
+                    "business_executed": True,
+                    "verified": True,
+                    "tool": "ticket.apply_change",
+                    "approval_id": approval_id,
+                    "change": request.get("change"),
+                    "observed_at": now.isoformat(),
+                }
+                follow_status = "completed"
+            else:
+                result["business_executed"] = True
+                result["verified"] = False
+                follow_status = "pending_execution"
+            follow = (
+                db.query(CustomerServiceAction)
+                .filter(
+                    CustomerServiceAction.id == action.id,
+                    CustomerServiceAction.lock_version == owned,
+                )
+                .update(
+                    {
+                        "status": follow_status,
+                        "result_json": json_dumps(result),
+                        "updated_at": datetime.now(UTC),
+                        "lock_version": owned + 1,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            if follow != 1:
+                db.rollback()
+                raise HTTPException(409, "这张审批已经处理过，不能再次决定")
+            db.refresh(action)
     audit(
         db,
         event_type="action_executed",
@@ -526,6 +693,16 @@ def _execute_gated_change(
         },
     )
     return action
+
+
+def _execute_gated_change(
+    db: Session, action: CustomerServiceAction, user: User, request: dict[str, Any]
+) -> CustomerServiceAction:
+    """写入类动作必须先有一次性审批。没有核验过的业务执行器时不算已执行。"""
+    raw_approval = request.get("approval")
+    approval = raw_approval if isinstance(raw_approval, dict) else {}
+    decision = str(approval.get("decision") or "")
+    return _settle_gated_change(db, action, user, request, claim=bool(decision))
 
 
 def execute_matching_integrations(

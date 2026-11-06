@@ -291,6 +291,37 @@ def register_routes(
                 "PATCH",
                 customer_tickets.admin_update_customer_ticket_expected_completion,
             ),
+            ("/admin/customer-service/staff", "GET", customer_tickets.admin_customer_ticket_staff),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/assign",
+                "POST",
+                customer_tickets.admin_assign_customer_ticket,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/accept",
+                "POST",
+                customer_tickets.admin_accept_customer_ticket,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/diagnose",
+                "POST",
+                customer_tickets.admin_diagnose_customer_ticket,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/result",
+                "POST",
+                customer_tickets.admin_result_customer_ticket,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/sensitive-action",
+                "POST",
+                customer_tickets.admin_sensitive_customer_ticket,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/sensitive-action/decision",
+                "POST",
+                customer_tickets.admin_sensitive_decision_customer_ticket,
+            ),
             ("/admin/token-usage", "GET", usage_summary.admin_token_usage),
         ),
     )

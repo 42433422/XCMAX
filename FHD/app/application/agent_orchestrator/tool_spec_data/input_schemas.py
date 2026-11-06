@@ -110,6 +110,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "contact_phone": {"type": "string"},
             "contact_address": {"type": "string"},
             "address": {"type": "string"},
+            "expected_version": {"type": "integer"},
         },
     },
     ("customers", "delete"): {

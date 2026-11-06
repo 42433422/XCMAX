@@ -74,6 +74,14 @@ describe('sidebarNavigation', () => {
     expect(router.push).toHaveBeenCalledWith({ name: 'print' })
   })
 
+  it('opens customers and products on their own host routes', async () => {
+    const router = makeRouter(['print', 'products', 'customers', 'workflow-employee-space'])
+    await navigateFromSidebarKey(router, 'customers')
+    expect(router.push).toHaveBeenCalledWith({ name: 'customers' })
+    await navigateFromSidebarKey(router, 'products')
+    expect(router.push).toHaveBeenLastCalledWith({ name: 'products' })
+  })
+
   it('coalesces rapid sidebar clicks to the last target', async () => {
     const router = makeRouter()
     void navigateFromSidebarKey(router, 'customers')

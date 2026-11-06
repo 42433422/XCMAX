@@ -23,6 +23,7 @@ from app.application.agent_orchestrator.context_window_manager import (
     ContextWindowManager,
     estimate_messages_tokens,
 )
+from app.application.employee_runtime.handoff_identity import load_identity_card
 
 SOURCE = "employee_runtime.task_continuity"
 CONTINUE_TEXT = "继续执行剩余任务"
@@ -50,7 +51,6 @@ _ACTIONS = {
     "chain",
     "metrics",
 }
-_EMPLOYEE_FLAGS = ("available", "timeout", "crash", "unrecoverable")
 
 
 def _now() -> str:
@@ -133,6 +133,9 @@ class TaskContinuityRuntime:
             }.get(op)
             if handler is None:
                 return self._fail(None, "unknown_op", f"不支持的连续性操作: {op}")
+            identity_error = self._stored_chain_identity_error(op, actor, payload, tenant, user)
+            if identity_error:
+                return self._fail(None, identity_error, "员工链身份不可核验，未继续执行")
             return handler(actor, text, payload, user=user, tenant=tenant, session=session)
 
     def pollution_findings(self) -> list[dict[str, str]]:
@@ -364,8 +367,8 @@ class TaskContinuityRuntime:
         task = self._authorized(payload, actor, scope, write=True)
         if not _is_task(task):
             return task
-        target = str(payload.get("target_employee") or "")
-        if not target:
+        target = payload.get("target_employee")
+        if target is None or target == "":
             return self._fail(task, "missing_target", "交接必须指定目标员工")
         record = self._perform_handoff(
             task,
@@ -373,15 +376,19 @@ class TaskContinuityRuntime:
             target=target,
             permissions=list(payload.get("permissions") or []),
             new_conditions=dict(payload.get("conditions") or {}),
-            idempotency_key=str(
-                payload.get("idempotency_key") or f"{task['task_id']}:handoff:{actor}:{target}"
-            ),
+            idempotency_key=str(payload.get("idempotency_key") or ""),
             effect=dict(payload.get("effect") or {"action": "execute"}),
             policy=str(payload.get("policy") or "retry"),
+            target_tenant_id=str(payload.get("target_tenant_id") or ""),
+            delegated_tool=str(payload.get("delegated_tool") or ""),
+            delegated_action=str(payload.get("delegated_action") or ""),
+            delegated_params=dict(payload.get("delegated_params") or {})
+            if isinstance(payload.get("delegated_params"), dict)
+            else None,
         )
         self._event("handoff_recorded", task)
         self._write()
-        return self._envelope(task, extra={"handoff": record})
+        return self._envelope(task, extra={"handoff": _presented_handoff(record)})
 
     def _retry_handoff(
         self, actor: str, text: str, payload: dict[str, Any], **scope: str
@@ -393,8 +400,13 @@ class TaskContinuityRuntime:
             payload.get("handoff_id") or (task["handoff_ids"][-1] if task["handoff_ids"] else "")
         )
         previous = self.state["handoffs"].get(previous_id)
-        if previous is None:
+        if previous is None or previous.get("task_id") != task["task_id"]:
             return self._fail(task, "handoff_not_found", "没有可重试的交接")
+        target_card, identity_error = self._handoff_identity(previous.get("target_employee"), task)
+        source_card, source_error = self._handoff_identity(previous.get("source_employee"), task)
+        if identity_error or source_error:
+            return self._fail(None, identity_error or source_error, "交接身份不可核验，未重试")
+        assert target_card is not None and source_card is not None
         task["retry_count"] = int(task["retry_count"]) + 1
         inherited = _clone(previous["context_snapshot"])
         policy = str(payload.get("policy") or previous.get("policy") or "retry")
@@ -413,8 +425,7 @@ class TaskContinuityRuntime:
             return self._envelope(
                 task, business=False, extra={"recovery_record": recovery, "inherited": inherited}
             )
-        flags = self._flags(str(previous["target_employee"]))
-        if flags.get("unrecoverable"):
+        if target_card["unrecoverable"]:
             task["status"] = "failed"
             task["error_code"] = str(previous.get("error_code") or "employee_unrecoverable")
             task["error_message"] = str(previous.get("error_message") or "目标员工不可恢复")
@@ -426,8 +437,8 @@ class TaskContinuityRuntime:
             )
         record = self._perform_handoff(
             task,
-            source=str(previous["source_employee"]),
-            target=str(previous["target_employee"]),
+            source=source_card["employee_id"],
+            target=target_card["employee_id"],
             permissions=list(previous.get("permissions") or []),
             new_conditions={},
             idempotency_key=str(previous["idempotency_key"]),
@@ -435,8 +446,19 @@ class TaskContinuityRuntime:
             policy=policy,
             retry_of=previous_id,
             inherited=inherited,
+            target_tenant_id=str(previous.get("target_tenant_id") or ""),
+            delegated_tool=str(previous.get("delegated_tool") or ""),
+            delegated_action=str(previous.get("delegated_action") or ""),
+            delegated_params=dict(previous.get("delegated_params") or {}),
         )
         record["retry_count"] = int(task["retry_count"])
+        chain_step_id = str(previous.get("chain_step_id") or "")
+        if chain_step_id:
+            record["chain_step_id"] = chain_step_id
+            if self._complete_chain_handoff(task, record):
+                self._event("handoff_retried", task)
+                self._write()
+                return self._continue_chain(task, extra={"inherited": inherited})
         self._event("handoff_retried", task)
         self._write()
         return self._envelope(task, extra={"handoff": record, "inherited": inherited})
@@ -763,45 +785,139 @@ class TaskContinuityRuntime:
         task = self._authorized(payload, actor, scope, write=True)
         if not _is_task(task):
             return task
-        employees = [str(item) for item in payload.get("employees") or []]
-        if employees[:1] != [actor] or len(employees) != 4:
+        employees = payload.get("employees")
+        if (
+            not isinstance(employees, list)
+            or len(employees) != 4
+            or any(type(item) is not str for item in employees)
+        ):
             return self._fail(task, "chain_shape", "交接链必须是发起员工起的 4 人链")
-        opened = self._execute_named_tool(
-            "handoff_commit",
-            {"stage": actor, "goal": task["goal"], "source": actor, "target": actor},
-            task["task_id"],
-        )
-        if not opened.get("ok"):
-            return self._fail(task, "chain_tool_failed", "交接链起点没有工具执行记录")
-        task["prior_results"].append({"employee": actor, "result": opened, "confirmed": True})
-        self._touch(task)
-        for source, target in zip(employees, employees[1:]):
+        permissions = list(payload.get("permissions") or [])
+        steps = payload.get("steps")
+        if (
+            not isinstance(steps, list)
+            or len(steps) != len(employees)
+            or not permissions
+            or any(
+                not isinstance(step, dict)
+                or not str(step.get("tool") or "").strip()
+                or not str(step.get("action") or "").strip()
+                or not isinstance(step.get("params"), dict)
+                for step in steps
+            )
+        ):
+            return self._fail(
+                task, "chain_context_missing", "每位员工都必须有明确的业务工具、动作和参数"
+            )
+        plan = [
+            dict(step, step_id=str(step.get("step_id") or f"s{index + 1}"))
+            for index, step in enumerate(steps)
+        ]
+        if len({step["step_id"] for step in plan}) != len(plan):
+            return self._fail(task, "chain_shape", "业务步骤标识不能重复")
+        employees, identity_error = self._chain_identities(task, employees)
+        if identity_error:
+            return self._fail(None, identity_error, "员工链身份不可核验，未保存交接链")
+        assert employees is not None
+        if employees[0] != actor:
+            return self._fail(task, "chain_shape", "交接链必须从当前员工开始")
+        definition = {"employees": employees, "permissions": permissions, "steps": plan}
+        existing = task.get("chain")
+        if existing is not None and any(
+            existing.get(key) != value for key, value in definition.items()
+        ):
+            return self._fail(
+                task, "chain_plan_changed", "重试必须沿用原业务链，不能替换已执行任务"
+            )
+        if existing is None:
+            task["chain"] = _clone(definition) | {"completed": {}}
+        return self._continue_chain(task)
+
+    def _continue_chain(
+        self, task: dict[str, Any], *, extra: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        from app.application.agent_orchestrator.param_references import resolve_references
+
+        chain = task["chain"]
+        employees, identity_error = self._chain_identities(task, chain.get("employees"))
+        if identity_error:
+            return self._fail(None, identity_error, "员工链身份不可核验，未继续执行")
+        assert employees is not None
+        for index, step in enumerate(chain["steps"]):
+            step_id = step["step_id"]
+            if step_id in chain["completed"]:
+                continue
+            outputs = {
+                key: self.state["handoffs"][value]["result_payload"]["result"]["final_output"][
+                    "node_outputs"
+                ]["handoff-work"]
+                for key, value in chain["completed"].items()
+            }
+            problems: list[str] = []
+            params = resolve_references(_clone(step["params"]), outputs, problems)
+            if problems:
+                task.update(
+                    status="failed",
+                    error_code="unresolved_param_reference",
+                    error_message="；".join(problems),
+                )
+                self._touch(task)
+                self._write()
+                return self._envelope(task, business=False)
+            self._write()
+            target = employees[index]
             record = self._perform_handoff(
                 task,
-                source=source,
+                source=employees[max(index - 1, 0)],
                 target=target,
-                permissions=list(payload.get("permissions") or ["continue"]),
+                permissions=list(chain["permissions"]),
                 new_conditions={},
-                idempotency_key=f"{task['task_id']}:chain:{source}:{target}",
+                idempotency_key=f"{task['task_id']}:chain:{step_id}",
                 effect={
                     "stage": target,
                     "saw_prior": _clone(task["prior_results"]),
                     "goal": task["goal"],
                 },
                 policy="retry",
+                delegated_tool=step["tool"],
+                delegated_action=step["action"],
+                delegated_params=params,
             )
-            if record["status"] != _TERMINAL_OK:
+            record["chain_step_id"] = step_id
+            if not self._complete_chain_handoff(task, record):
                 self._write()
                 return self._envelope(task, business=False, extra={"handoff": record})
+            self._write()
         task["result_payload"] = _clone(task["prior_results"][-1])
         task["holder_employee"] = employees[-1]
-        task["status"] = _TERMINAL_OK
+        if not any(step["status"] != "success" for step in task["steps"]):
+            task["status"] = _TERMINAL_OK
         task["error_code"] = ""
         task["error_message"] = ""
         self._touch(task)
         self._event("chain_completed", task)
         self._write()
-        return self._envelope(task)
+        return self._envelope(task, extra=extra)
+
+    def _complete_chain_handoff(self, task: dict[str, Any], record: dict[str, Any]) -> bool:
+        if record["status"] != _TERMINAL_OK:
+            return False
+        receipt = record["result_payload"]
+        output = ((receipt.get("result") or {}).get("final_output") or {}).get("node_outputs") or {}
+        if not receipt.get("child_task_id") or "handoff-work" not in output:
+            record.update(
+                status="failed",
+                error_code="chain_tool_failed",
+                error_message="业务链缺少真实子员工执行回执",
+            )
+            task.update(
+                status="failed",
+                error_code=record["error_code"],
+                error_message=record["error_message"],
+            )
+            return False
+        task["chain"]["completed"][record["chain_step_id"]] = record["handoff_id"]
+        return True
 
     def _metrics_op(
         self, actor: str, text: str, payload: dict[str, Any], **scope: str
@@ -825,7 +941,7 @@ class TaskContinuityRuntime:
         task: dict[str, Any],
         *,
         source: str,
-        target: str,
+        target: Any,
         permissions: list[str],
         new_conditions: dict[str, Any],
         idempotency_key: str,
@@ -833,14 +949,19 @@ class TaskContinuityRuntime:
         policy: str,
         retry_of: str = "",
         inherited: dict[str, Any] | None = None,
+        target_tenant_id: str = "",
+        delegated_tool: str = "",
+        delegated_action: str = "",
+        delegated_params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        if new_conditions:
+        target_card, identity_error = self._handoff_identity(target, task)
+        source_card, source_error = self._handoff_identity(source, task)
+        identity_error = identity_error or source_error
+        target = target_card["employee_id"] if target_card is not None else ""
+        source = source_card["employee_id"] if source_card is not None else ""
+        idempotency_key = idempotency_key or f"{task['task_id']}:handoff:{source}:{target}"
+        if new_conditions and not identity_error:
             task["conditions"] = _merge_conditions(task["conditions"], new_conditions)
-        if target not in task["authorized_employees"]:
-            task["authorized_employees"].append(target)
-        task["grants"][target] = list(permissions)
-        task["holder_employee"] = target
-        flags = self._flags(target)
         record = {
             "handoff_id": _new_id("handoff"),
             "task_id": task["task_id"],
@@ -854,6 +975,10 @@ class TaskContinuityRuntime:
             "retry_of": retry_of,
             "retry_count": int(task["retry_count"]),
             "effect": effect,
+            "target_tenant_id": target_tenant_id,
+            "delegated_tool": delegated_tool,
+            "delegated_action": delegated_action,
+            "delegated_params": _clone(delegated_params or {}),
             "status": "pending",
             "error_code": "",
             "error_message": "",
@@ -868,7 +993,11 @@ class TaskContinuityRuntime:
             inherited if inherited is not None else _clone(task["context_snapshot"])
         )
         record["context_version"] = task["context_version"]
-        failure = _availability_failure(flags)
+        failure = (
+            (identity_error, "交接身份不可核验")
+            if identity_error
+            else _availability_failure(target_card or {})
+        )
         if failure:
             code, message = failure
             record["status"] = "failed"
@@ -879,9 +1008,22 @@ class TaskContinuityRuntime:
             task["error_message"] = message
             self._recovery(task, record["handoff_id"], code, message)
         elif idempotency_key in self.state["side_effects"]:
-            record["status"] = _TERMINAL_OK
-            record["duplicate_prevented"] = True
-            record["result_payload"] = _clone(self.state["side_effects"][idempotency_key]["result"])
+            saved = self.state["side_effects"][idempotency_key]
+            if saved.get("task_id") != task["task_id"]:
+                record.update(
+                    status="failed",
+                    error_code="idempotency_scope_conflict",
+                    error_message="幂等回执不属于当前任务",
+                )
+                task.update(
+                    status="failed",
+                    error_code=record["error_code"],
+                    error_message=record["error_message"],
+                )
+            else:
+                record["status"] = _TERMINAL_OK
+                record["duplicate_prevented"] = True
+                record["result_payload"] = _clone(saved["result"])
         else:
             result = self._execute_named_tool(
                 "handoff_commit",
@@ -891,8 +1033,22 @@ class TaskContinuityRuntime:
                     "source": source,
                     "target": target,
                     "idempotency_key": idempotency_key,
+                    "task_id": task["task_id"],
+                    "tenant_id": task["tenant_id"],
+                    "user_id": task["user_id"],
+                    "permissions": list(permissions),
+                    "target_tenant_id": target_tenant_id,
+                    "delegated_tool": delegated_tool,
+                    "delegated_action": delegated_action,
+                    "delegated_params": dict(delegated_params or {}),
                 },
                 task["task_id"],
+                runtime_context={
+                    "tenant_id": task["tenant_id"],
+                    "user_id": task["user_id"],
+                    "employee_id": source,
+                    "task_id": task["task_id"],
+                },
             )
             call_id = _new_id("tool")
             call_status = "success" if result.get("ok") else "failed"
@@ -927,6 +1083,11 @@ class TaskContinuityRuntime:
                 }
                 record["status"] = _TERMINAL_OK
                 record["result_payload"] = result
+                if target not in task["authorized_employees"]:
+                    task["authorized_employees"].append(target)
+                task["grants"][target] = list(permissions)
+                task["holder_employee"] = target
+                self._remember_handoff_child(task, target, result)
                 task["prior_results"].append(
                     {
                         "employee": target,
@@ -936,7 +1097,9 @@ class TaskContinuityRuntime:
                     }
                 )
                 open_steps = [step for step in task["steps"] if step["status"] != "success"]
-                if not open_steps:
+                chain = task.get("chain")
+                chain_pending = chain and len(chain["completed"]) < len(chain["steps"])
+                if not open_steps and not chain_pending:
                     task["status"] = _TERMINAL_OK
                     task["error_code"] = ""
                     task["error_message"] = ""
@@ -948,6 +1111,44 @@ class TaskContinuityRuntime:
         task["handoff_ids"].append(record["handoff_id"])
         self._touch(task)
         return record
+
+    def _remember_handoff_child(
+        self, task: dict[str, Any], target: str, result: dict[str, Any]
+    ) -> None:
+        child_id = str(result.get("child_task_id") or "")
+        if not child_id or child_id == task["task_id"] or child_id in self.state["tasks"]:
+            return
+        child = _clone(task)
+        child["task_id"] = child_id
+        child["parent_task_id"] = task["task_id"]
+        child["root_task_id"] = task.get("root_task_id") or task["task_id"]
+        child["child_task_ids"] = []
+        child["conversation_id"] = f"{task['conversation_id']}:{child_id}"
+        child["owner_employee"] = target
+        child["holder_employee"] = target
+        child["authorized_employees"] = [target, task["owner_employee"]]
+        child["grants"] = {target: list(result.get("delegated_tools") or [])}
+        child["steps"] = []
+        child.pop("chain", None)
+        child["status"] = _TERMINAL_OK
+        child["error_code"] = ""
+        child["error_message"] = ""
+        child["handoff_ids"] = []
+        child["prior_results"] = []
+        child["messages"] = []
+        child["business_data"] = {}
+        child["result_payload"] = {
+            "parent_task_id": task["task_id"],
+            "child_task_id": child_id,
+            "parent_run_id": result.get("parent_run_id"),
+            "child_run_id": result.get("child_run_id"),
+            "execution_status": result.get("execution_status"),
+            "result": result.get("result"),
+        }
+        self._touch(child)
+        self.state["tasks"][child_id] = child
+        if child_id not in task["child_task_ids"]:
+            task["child_task_ids"].append(child_id)
 
     def _execute_pending(
         self, task: dict[str, Any], actor: str, *, limit: int | None, only: set[str] | None = None
@@ -973,6 +1174,14 @@ class TaskContinuityRuntime:
             step["status"] = "failed"
             step["error_code"] = "unauthorized_tool"
             step["error_message"] = "员工无权调用该工具"
+            return
+        cached = self.state["side_effects"].get(step["idempotency_key"])
+        if cached is not None and cached.get("task_id") != task["task_id"]:
+            step.update(
+                status="failed",
+                error_code="idempotency_scope_conflict",
+                error_message="幂等回执不属于当前任务",
+            )
             return
         if step["status"] == "success" or step["idempotency_key"] in self.state["side_effects"]:
             if step["idempotency_key"] in self.state["side_effects"]:
@@ -1135,21 +1344,66 @@ class TaskContinuityRuntime:
             return False
         return actor == task["owner_employee"] or actor in task["authorized_employees"]
 
-    def _flags(self, employee_id: str) -> dict[str, Any]:
-        path = self.workspace / "employees" / f"{employee_id}.json"
-        flags = {key: key == "available" for key in _EMPLOYEE_FLAGS}
-        if not path.is_file():
-            return flags
-        try:
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return flags
-        if not isinstance(loaded, dict):
-            return flags
-        for key in _EMPLOYEE_FLAGS:
-            if key in loaded:
-                flags[key] = bool(loaded[key])
-        return flags
+    def _handoff_identity(
+        self, candidate: Any, task: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, str]:
+        card, error = load_identity_card(self.workspace, candidate)
+        if error:
+            return None, error
+        assert card is not None
+        if card["tenant_id"] != task["tenant_id"]:
+            return None, "handoff_cross_tenant"
+        return card, ""
+
+    def _chain_identities(
+        self, task: dict[str, Any], candidates: Any
+    ) -> tuple[list[str] | None, str]:
+        if not isinstance(candidates, list) or len(candidates) != 4:
+            return None, "chain_shape"
+        identities = []
+        for candidate in candidates:
+            card, error = self._handoff_identity(candidate, task)
+            if error:
+                return None, error
+            assert card is not None
+            identities.append(card["employee_id"])
+        if len(set(identities)) != 4:
+            return None, "chain_shape"
+        return identities, ""
+
+    def _stored_chain_identity_error(
+        self, op: str, actor: str, payload: dict[str, Any], tenant: str, user: str
+    ) -> str:
+        if op in {"start", "read", "metrics"}:
+            return ""
+        task = self.state["tasks"].get(str(payload.get("task_id") or ""))
+        if op == "reenter":
+            link = self._conversation(f"{tenant}:{user}:{payload.get('conversation_id') or ''}")
+            task = self.state["tasks"].get(str((link or {}).get("task_id") or ""))
+        if op == "restart":
+            # Restart recovers all in-flight calls even when a focus task is supplied.
+            # Completed history does not require its role cards to remain installed.
+            tasks = [row for row in self.state["tasks"].values() if row["status"] != _TERMINAL_OK]
+        else:
+            tasks = (
+                [task]
+                if isinstance(task, dict)
+                and self._allows(task, actor, {"tenant": tenant, "user": user})
+                else []
+            )
+        for current in tasks:
+            if op in {"leave", "reenter"} and current["status"] == _TERMINAL_OK:
+                continue
+            chain = current.get("chain")
+            if chain is None:
+                continue
+            if not isinstance(chain, dict):
+                return "chain_shape"
+            identities, error = self._chain_identities(current, chain.get("employees"))
+            if error:
+                return error
+            chain["employees"] = identities
+        return ""
 
     def _conversation(self, key: str) -> dict[str, Any] | None:
         raw = self.state["conversations"].get(key)
@@ -1177,7 +1431,11 @@ class TaskContinuityRuntime:
         return _Guard()
 
     def _execute_named_tool(
-        self, name: str, params: dict[str, Any], task_id: str
+        self,
+        name: str,
+        params: dict[str, Any],
+        task_id: str,
+        runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         script = self.workspace / "tools" / f"{name}.py"
         if script.is_file():
@@ -1220,7 +1478,9 @@ class TaskContinuityRuntime:
         try:
             from app.application.tools.workflow import execute_workflow_tool
 
-            raw = execute_workflow_tool(name, params, str(self.workspace))
+            raw = execute_workflow_tool(
+                name, params, str(self.workspace), runtime_context=runtime_context
+            )
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             return {"ok": False, "error_code": "tool_missing", "error_message": str(exc)}
         try:
@@ -1481,6 +1741,18 @@ def _summary(task: dict[str, Any]) -> list[dict[str, str]]:
         }
         for step in task["steps"]
     ]
+
+
+def _presented_handoff(record: dict[str, Any]) -> dict[str, Any]:
+    """Show the shared employee status. The ledger keeps its own completed word."""
+    shown: dict[str, Any] = _clone(record)
+    from app.domain.task_lifecycle.adapters import LegacyTransitionError, canonicalize
+
+    try:
+        shown["status"] = canonicalize("employee", str(record.get("status") or ""))
+    except LegacyTransitionError:
+        return shown
+    return shown
 
 
 def _public_task(task: dict[str, Any]) -> dict[str, Any]:

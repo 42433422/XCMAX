@@ -192,11 +192,12 @@ def persist_attendance_rows(
     source_file: str,
     upload_path: Path,
     run_id: str,
+    fault: str | None = None,
 ) -> dict[str, Any]:
     """Write cleaned rows once, then the workbook. Missing output is a failure."""
     from app.application.attendance_import_app_service import _ensure_schema
 
-    fault = os.environ.get("FHD_ETL_ATTENDANCE_FAULT", "")
+    fault = os.environ.get("FHD_ETL_ATTENDANCE_FAULT", "") if fault is None else fault
     db_path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     skipped = 0

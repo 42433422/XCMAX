@@ -21,9 +21,11 @@ import { extractLikelyProductQueryKeyword } from '../useChatPersistence'
 import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useChatSessionActivity'
 import { asPlannerPayload, errorMessage } from './chatOrchestrationShared'
 import { classifyRawError } from '@/utils/networkStability'
+import { droppedRoundFromHistory, droppedRoundPresentation } from '@/utils/droppedRoundPresentation'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
+import { captureAuthSession, probeEnterpriseSession } from '@/utils/authSessionCache'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -159,7 +161,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const requestScope = scope || { sessionId: sessionId.value, messages: [...messages.value] }
     if (!requestScope.isCurrent) Object.assign(requestScope, chatSessionActivity.beginRound(requestScope.sessionId))
     const identity = requestScope.identity ?? resolveChatIdentity(String(modsStore.activeModId || ''))
-    const isOwnerCurrent = () => requestScope.isCurrent?.() !== false && identity === resolveChatIdentity(String(modsStore.activeModId || ''))
+    const isAuthCurrent = captureAuthSession()
+    const isOwnerCurrent = () => isAuthCurrent() && requestScope.isCurrent?.() !== false && identity === resolveChatIdentity(String(modsStore.activeModId || ''))
     if (!isOwnerCurrent()) return
     const activity = chatSessionActivity.forSession(requestScope.sessionId)
     const round = {
@@ -370,7 +373,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         )
         if (!isOwnerCurrent()) { controller.abort(); return }
         if (!res.ok) {
-          throw new Error(await parseChatStreamErrorResponse(res, consumeRoute))
+          throw Object.assign(new Error(await parseChatStreamErrorResponse(res, consumeRoute)), { status: res.status })
         }
         await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
           if (!isOwnerCurrent()) { controller.abort(); return }
@@ -479,8 +482,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
         }
       } catch (err: unknown) {
+        if (Number(asRecord(err).status) === 401 && round.isActive()) void probeEnterpriseSession()
         const timedOut = asRecord(err).name === 'AbortError'
-        const stallText = `请求超时（>${Math.floor(CHAT_STREAM_STALL_MS / 1000)}s）。本轮尚未收到可显示的回复，请重试。已执行的操作请到任务工作区核对，勿重复提交。`
+        const stallText = `请求超时（>${Math.floor(CHAT_STREAM_STALL_MS / 1000)}s）。本轮尚未收到完成回执。`
         const errText =
           timedOut
             ? streamRunId
@@ -489,7 +493,28 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
                 ? stallText
                 : `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
-        if (round.isActive()) {
+        const dropped = !sseError && (timedOut || err instanceof IncompletePlannerSseError
+          || [408, 502, 503, 504].includes(Number(asRecord(err).status))
+          || /failed to fetch|networkerror|econnrefused|econnreset|err_connection|socket hang up|load failed|网络中断|连接中断/i.test(errText))
+        if (dropped && round.isActive()) {
+          let presentation = droppedRoundPresentation({ reachable: false })
+          try {
+            const convo = await chatApi.getConversation(String(requestScope.sessionId || ''))
+            presentation = droppedRoundFromHistory(convo, String(requestScope.turnId || ''))
+          } catch {
+            presentation = droppedRoundPresentation({ reachable: false })
+          }
+          if (!round.isActive()) return
+          const pendingText = err instanceof IncompletePlannerSseError
+            ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] `
+            : timedOut ? `${errText}\n` : ''
+          applyPlainTextToMessageIndex(msgIndex, `${presentation.status === 'unknown' ? pendingText : ''}${presentation.text}`)
+          if (streamMessage) {
+            streamMessage.workflowAction = presentation.workflowAction
+            delete streamMessage.streamingShell
+            delete streamMessage.waitingHint
+          }
+        } else if (round.isActive()) {
           const transport = /failed to fetch|networkerror|econnrefused|offline/i.test(errText) ? classifyRawError(errText) : null
           const visibleError = err instanceof IncompletePlannerSseError
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] ${errText}`

@@ -122,18 +122,24 @@ export function useLoginViewActions(
     window.location.href = url
   }
 
+  let loginAttempt = 0
+
   async function submitLogin(_event?: Event) {
     if (!canSubmit.value) {
       errorMessage.value = loginMode.value === 'phone' ? t('login.errNeedPhoneAndCode') : t('login.errNeedUsernamePassword')
       return
     }
+    const attempt = ++loginAttempt
     loading.value = true
     errorMessage.value = ''
+    const invitation = invitationCode.value.trim()
+    const invitationForRequest = invitation && invitation !== password.value ? invitation : ''
     try {
       const result =
         loginMode.value === 'phone'
           ? await authApi.loginWithPhoneCode(phone.value.trim(), smsCode.value.trim(), accountKind.value)
-          : await authApi.login(username.value.trim(), password.value, accountKind.value, invitationCode.value.trim())
+          : await authApi.login(username.value.trim(), password.value, accountKind.value, invitationForRequest)
+      if (attempt !== loginAttempt) return
       const raw = result as unknown as Record<string, unknown>
       const ok = raw?.success === true || (raw?.data as Record<string, unknown> | undefined)?.success === true
       if (!ok) {
@@ -154,6 +160,7 @@ export function useLoginViewActions(
       })
       await completeLoginSuccess(raw)
     } catch (error: unknown) {
+      if (attempt !== loginAttempt) return
       if (error instanceof ApiError) {
         const d = error.data && typeof error.data === 'object' ? (error.data as Record<string, unknown>) : {}
         errorMessage.value = formatLoginFailurePayload({
@@ -173,7 +180,7 @@ export function useLoginViewActions(
         errorMessage.value = data?.error?.message || data?.message || t('login.errLoginFailedRetry')
       }
     } finally {
-      loading.value = false
+      if (attempt === loginAttempt) loading.value = false
     }
   }
 

@@ -4,6 +4,7 @@ import VueI18n from '@intlify/unplugin-vue-i18n/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+import { routerDevtoolsNullGuard } from './routerDevtoolsGuard.js'
 
 /**
  * @param {object} opts
@@ -30,6 +31,7 @@ export function createVitePlugins({ staticCopyPlugin, xcmaxPublicApiPrefix = '',
       dts: false,
     }),
     staticCopyPlugin,
+    routerDevtoolsNullGuard(),
     {
       name: 'inject-xcmax-api-base',
       transformIndexHtml(html) {

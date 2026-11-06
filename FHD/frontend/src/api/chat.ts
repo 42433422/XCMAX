@@ -167,6 +167,10 @@ export const chatApi = {
     return api.post(resolvePlannerUnifiedChatBatchPath(), payload, withMarketAuthorization(options))
   },
 
+  getActiveConversation(): Promise<ApiResponse<{ conversation_id: string }>> {
+    return api.get<ApiResponse<{ conversation_id: string }>>('/api/conversations/active', {}, { timeoutMs: 20_000, cache: 'no-store' })
+  },
+
   getConversations(params: Record<string, unknown> = {}): Promise<ApiResponse<ChatSession[]>> {
     return api.get<ApiResponse<ChatSession[]>>('/api/conversations/sessions', params, { timeoutMs: 20_000 })
   },

@@ -861,8 +861,18 @@ def handle_customer_message(
         ticket.closed_at = _facade().datetime.now(_facade().timezone.utc)
     elif decision.decision == "needs_more_info":
         ticket.status = "waiting_user"
-    else:
+    elif ticket.assigned_admin_id:
         ticket.status = "processing"
+        ticket.closed_at = None
+    elif ticket.status not in {
+        "awaiting_customer",
+        "resolved",
+        "closed",
+        "expired",
+        "waiting_user",
+    }:
+        # 对话登记还没有处理人，不能直接写成处理中。
+        ticket.status = "open"
         ticket.closed_at = None
     ticket.updated_at = _facade().datetime.now(_facade().timezone.utc)
     reply, cards = _facade().build_reply(
@@ -1966,6 +1976,8 @@ def ticket_lifecycle_stage(status: str | None = None, decision_status: str | Non
         return 5
     if s == "waiting_user" or d == "needs_more_info":
         return 4
+    if s == "awaiting_customer":
+        return 3
     if s in {"open", "pending", "queued"}:
         return 1
     if s == "processing":
@@ -2244,6 +2256,20 @@ def ticket_lifecycle_payload(
             "lifecycle_label": "已过期不再处理",
             "lifecycle_steps": [],
         }
+    if status == "awaiting_customer":
+        stage = 3
+        return {
+            "lifecycle_stage": stage,
+            "lifecycle_label": "待客户确认",
+            "lifecycle_steps": [
+                {
+                    "stage": num,
+                    "label": name,
+                    "state": "done" if num < stage else "current" if num == stage else "todo",
+                }
+                for (num, name) in _facade().TICKET_LIFECYCLE_STEPS
+            ],
+        }
     stage = _facade().ticket_lifecycle_stage(status, decision_status)
     label = next(
         (name for (num, name) in _facade().TICKET_LIFECYCLE_STEPS if num == stage),
@@ -2355,7 +2381,26 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
     resolution = evidence.get("resolution") or {}
     state = str(resolution.get("state") or "received")
     reports = [r for r in evidence.get("employee_reports") or [] if isinstance(r, dict)]
+    human = (
+        evidence.get("handling_result")
+        if isinstance(evidence.get("handling_result"), dict)
+        else None
+    )
+    human_text = str((human or {}).get("text") or "").strip()
+    if human_text:
+        latest_result = {
+            "source": "human",
+            "progress": human_text,
+            "fault_remains": bool(human.get("fault_remains")),
+            "at": human.get("at"),
+        }
+    elif reports:
+        latest_result = {k: reports[-1].get(k) for k in ("team_ok", "progress", "at")}
+        latest_result["source"] = "employee"
+    else:
+        latest_result = None
     closed = row.status in CLOSED_CUSTOMER_ISSUE_STATES
+    fault_open = evidence.get("fault_remains") is True and not closed
     return {
         "id": row.id,
         "ticket_no": row.ticket_no,
@@ -2366,12 +2411,11 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
         "lifecycle_label": _facade().ticket_lifecycle_payload(row.status, row.decision_status)[
             "lifecycle_label"
         ],
-        "latest_result": (
-            {k: reports[-1].get(k) for k in ("team_ok", "progress", "at")} if reports else None
-        ),
+        "latest_result": latest_result,
         "last_error": str(resolution.get("last_error") or ""),
         "closed_at": row.closed_at.isoformat() if row.closed_at else "",
         "reopen_count": len(evidence.get("reopen_history") or []),
-        "can_resolve": not closed,
-        "can_reopen": closed or state not in {"received", "reopened"},
+        "can_resolve": row.status == "awaiting_customer" and not closed,
+        "can_reopen": closed
+        or (not fault_open and state not in {"received", "reopened", "processing"}),
     }

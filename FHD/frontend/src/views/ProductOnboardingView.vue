@@ -193,6 +193,18 @@ watch(pickedIndustryId, () => {
 })
 
 onMounted(async () => {
+  if (!fromTutorial.value) {
+    void (async () => {
+      const { workspaceHasPriorUse } = await import('@/utils/hostPackOnboardingGate')
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        if (await workspaceHasPriorUse()) {
+          void router.replace('/')
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 700))
+      }
+    })()
+  }
   try {
     productSku.value = await fetchProductSku()
   } catch {

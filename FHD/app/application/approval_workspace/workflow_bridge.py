@@ -21,6 +21,24 @@ if TYPE_CHECKING:
     from app.application.workflow.workflow_types import PlanGraph
 
 
+def _cross_module_run_id(workflow: JsonObject) -> str:
+    direct = str(workflow.get("agent_run_id") or "").strip()
+    if direct:
+        return direct
+    context = workflow.get("runtime_context")
+    if not isinstance(context, dict):
+        return ""
+    checkpoint = context.get("cross_module_checkpoint")
+    if isinstance(checkpoint, dict) and str(checkpoint.get("run_id") or "").strip():
+        return str(checkpoint.get("run_id") or "").strip()
+    return str(context.get("agent_run_id") or "").strip()
+
+
+def _is_cross_module_workflow(workflow: JsonObject) -> bool:
+    context = workflow.get("runtime_context")
+    return isinstance(context, dict) and context.get("cross_module_http") is True
+
+
 class WorkflowApprovalBridge:
     def __init__(
         self,
@@ -208,8 +226,15 @@ class WorkflowApprovalBridge:
             rejected = approvals.reject(request_id, reason)
             workflow = approvals.get_pending_workflow(request_id)
             workflow = workflow if isinstance(workflow, dict) else {}
-            run_id = str(workflow.get("agent_run_id") or "").strip()
-            if run_id:
+            run_id = _cross_module_run_id(workflow)
+            if run_id and _is_cross_module_workflow(workflow):
+                from app.application.agent_orchestrator.cross_module_chain import (
+                    reject_cross_module_task,
+                )
+
+                rejected_run = reject_cross_module_task(run_id, reason)
+                cancelled_run_id = str(getattr(rejected_run, "run_id", "") or run_id)
+            elif run_id:
                 cancelled = self.backends.agent().cancel_run(
                     run_id, requested_by="approval_rejected"
                 )

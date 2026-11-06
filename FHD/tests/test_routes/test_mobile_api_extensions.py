@@ -256,6 +256,10 @@ class TestPairingLookup:
 
 
 class TestPairingExchange:
+    @pytest.fixture(autouse=True)
+    def _pairing_jwt_key(self, monkeypatch):
+        monkeypatch.setenv("SECRET_KEY", "test-only-mobile-pairing-jwt-key-minimum-32-bytes")
+
     @pytest.mark.asyncio
     async def test_exchange_by_nonce(self, ext_mod, monkeypatch):
         monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")

@@ -7,7 +7,7 @@ import type { TaskItem, LinkedExcelSheet } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
 import type { ChatMessage } from './useChatMessages'
 
-const { chatApiMock, writeAiSessionIdToStorageMock, activeModIdRef } = vi.hoisted(() => {
+const { chatApiMock, readAiSessionIdFromStorageMock, writeAiSessionIdToStorageMock, activeModIdRef } = vi.hoisted(() => {
   return {
     chatApiMock: {
       getConversations: vi.fn(),
@@ -16,6 +16,7 @@ const { chatApiMock, writeAiSessionIdToStorageMock, activeModIdRef } = vi.hoiste
       renameConversation: vi.fn(),
       deleteConversation: vi.fn(),
     },
+    readAiSessionIdFromStorageMock: vi.fn(() => ''),
     writeAiSessionIdToStorageMock: vi.fn(),
     activeModIdRef: { value: '' } as { value: string },
   }
@@ -46,6 +47,7 @@ vi.mock('@/stores/mods', async () => {
 
 vi.mock('@/utils/chatStorageKeys', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
+  readAiSessionIdFromStorage: readAiSessionIdFromStorageMock,
   writeAiSessionIdToStorage: (...args: unknown[]) => writeAiSessionIdToStorageMock(...args),
   CHAT_MESSAGES_STORAGE_PREFIX: 'xcagi_chat_messages_',
   CHAT_SESSION_META_PREFIX: 'xcagi_chat_session_meta_',
@@ -119,6 +121,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
     chatApiMock.renameConversation.mockReset()
     chatApiMock.deleteConversation.mockReset()
     writeAiSessionIdToStorageMock.mockReset()
+    readAiSessionIdFromStorageMock.mockReturnValue('')
     // 默认 window.confirm 返回 true
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     // 默认 console.error 静音
@@ -129,6 +132,50 @@ describe('useChatSessionHistory — coverage ramp', () => {
     for (const scope of scopes.splice(0)) scope.stop()
     vi.restoreAllMocks()
     setRuntimeTenantStorageScopeInput(null)
+  })
+
+  it('retains the destination scope session id before resetting its view', () => {
+    const { deps } = makeDeps()
+    const history = makeHistory(deps)
+    history.registerHistoryModWatch(async () => {})
+    readAiSessionIdFromStorageMock.mockReturnValue('previously-saved')
+    setRuntimeTenantStorageScopeInput({ tenantId: 8, localUserId: 2 })
+    expect(deps.sessionId.value).toBe('previously-saved')
+    expect(writeAiSessionIdToStorageMock).toHaveBeenLastCalledWith('previously-saved')
+  })
+
+  it.each(['new conversation', 'owner', 'dispose', 'send'])('retires latest-history restoration after %s', async action => {
+    const { deps, mocks } = makeDeps()
+    const history = makeHistory(deps)
+    history.registerHistoryModWatch(async () => {})
+    let finish!: (value: unknown) => void
+    chatApiMock.getConversations.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    let allowed = true
+    const pending = history.restoreLatestOwnedSession(() => allowed)
+    if (action === 'new conversation') history.newConversation()
+    else if (action === 'owner') setRuntimeTenantStorageScopeInput({ tenantId: 8, localUserId: 2 })
+    else if (action === 'dispose') scopes[scopes.length - 1].stop()
+    else allowed = false
+    finish({ success: true, sessions: [{ session_id: 'old-latest', message_count: 2 }] })
+    await pending
+    expect(chatApiMock.getConversation).not.toHaveBeenCalled()
+    expect(mocks.loadMessages).not.toHaveBeenCalled()
+  })
+
+  it('does not overwrite a new turn while the fallback conversation body is pending', async () => {
+    const { deps, mocks } = makeDeps()
+    const history = makeHistory(deps)
+    chatApiMock.getConversations.mockResolvedValueOnce({ success: true, sessions: [{ session_id: 'latest', message_count: 2 }] })
+    let finish!: (value: unknown) => void
+    chatApiMock.getConversation.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    let allowed = true
+    const pending = history.restoreLatestOwnedSession(() => allowed)
+    await vi.waitFor(() => expect(chatApiMock.getConversation).toHaveBeenCalledWith('latest'))
+    allowed = false
+    finish({ success: true, messages: [{ role: 'assistant', content: 'old history' }] })
+    await pending
+    expect(mocks.loadMessages).not.toHaveBeenCalled()
+    expect(history.historyLoading.value).toBe(false)
   })
 
   // showHistoryPanel

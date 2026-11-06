@@ -22,7 +22,7 @@ from app.db.models.approval import (
     ApprovalStatus,
 )
 
-from .outcomes import execution_outcome, persist_outcome
+from .outcomes import execution_handed_off, execution_outcome, persist_outcome
 from .protocols import (
     ApprovalAccess,
     ApprovalNodes,
@@ -161,23 +161,46 @@ class ApprovalDecisions:
                         approved_by=str(actor),
                     )
                 outcome = execution_outcome(workflow_execution)
-                persist_outcome(req, **outcome)
-                if not outcome["success"]:
-                    req.status = ApprovalStatus.CANCELLED.value
-                    req.rejection_reason = outcome["code"]
-                    self.effects.audit(
-                        db,
-                        actor=actor,
-                        action="approval.execute_ai_workflow_failed",
-                        payload={
-                            "request_no": req.request_no,
-                            "code": outcome["code"],
-                            "message": outcome["message"],
-                        },
+                handed_off = execution_handed_off(workflow_execution)
+                if handed_off:
+                    persist_outcome(
+                        req,
+                        status=req.status,
+                        success=False,
+                        code="queued",
+                        message="审批已通过，执行已交给调度器",
+                        workflow_executed=False,
                     )
+                else:
+                    persist_outcome(req, **outcome)
+                    if not outcome["success"]:
+                        req.status = ApprovalStatus.CANCELLED.value
+                        req.rejection_reason = outcome["code"]
+                        self.effects.audit(
+                            db,
+                            actor=actor,
+                            action="approval.execute_ai_workflow_failed",
+                            payload={
+                                "request_no": req.request_no,
+                                "code": outcome["code"],
+                                "message": outcome["message"],
+                            },
+                        )
             db.commit()
             db.refresh(req)
             self.project_workflow(workflow_execution, req)
+            if final_workflow and handed_off:
+                data = self.view(req, include_records=False)
+                data["workflow_execution"] = workflow_execution
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "accepted": True,
+                        "data": data,
+                        "message": "审批已通过，执行已交给调度器",
+                    },
+                    status_code=202,
+                )
             if final_workflow and not outcome["success"]:
                 return {
                     "success": False,
@@ -336,15 +359,37 @@ class ApprovalDecisions:
         )
         bounded_outcome = execution_outcome(workflow_execution)
         _execution_success = bounded_outcome["success"]
+        handed_off = execution_handed_off(workflow_execution)
         if _execution_success and restore_approval:
             # The restored database may predate this request; merge its identity after restore.
             db.expunge(req)
             req = db.merge(req)
         status_before = req.status
         safe_code, safe_message = bounded_outcome["code"], bounded_outcome["message"]
-        persist_outcome(req, **bounded_outcome)
-        req.status = bounded_outcome["status"]
-        if _execution_success:
+        if handed_off:
+            persist_outcome(
+                req,
+                status=ApprovalStatus.APPROVED.value,
+                success=False,
+                code="queued",
+                message="审批已通过，执行已交给调度器",
+                workflow_executed=False,
+            )
+            req.status = ApprovalStatus.APPROVED.value
+            safe_code, safe_message = "queued", "审批已通过，执行已交给调度器"
+            bounded_outcome = {
+                "status": ApprovalStatus.APPROVED.value,
+                "success": False,
+                "code": "queued",
+                "message": safe_message,
+                "workflow_executed": False,
+                "nodes_executed": 0,
+                "nodes_total": 1,
+            }
+        else:
+            persist_outcome(req, **bounded_outcome)
+            req.status = bounded_outcome["status"]
+        if _execution_success or handed_off:
             req.approved_at = datetime.now()
             req.approved_by = actor
             req.approved_by_name = approver_name
@@ -388,7 +433,7 @@ class ApprovalDecisions:
                 "workflow_execution_message": bounded_outcome["message"],
             },
         )
-        if not _execution_success:
+        if not _execution_success and not handed_off:
             req.rejection_reason = WORKFLOW_EXECUTION_FAILED_CODE
             self.effects.audit(
                 db,
@@ -408,6 +453,17 @@ class ApprovalDecisions:
             self.effects.notify(*notification)
         data = self.view(req, include_records=True)
         data["workflow_execution"] = bounded_outcome
+        if handed_off:
+            data["workflow_execution"]["execution_accepted"] = True
+            return JSONResponse(
+                {
+                    "success": False,
+                    "accepted": True,
+                    "data": data,
+                    "message": "审批已通过，执行已交给调度器",
+                },
+                status_code=202,
+            )
         if not _execution_success:
             failure_message = "审批通过后 AI 工作流执行失败，审批已取消"
             if safe_code in SETUP_GUIDANCE_CODES:

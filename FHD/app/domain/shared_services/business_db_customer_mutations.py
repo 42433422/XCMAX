@@ -46,14 +46,59 @@ def _customer_selector(params: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _unverified_customer(data: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        "success": False,
+        "outcome": "unknown",
+        "retryable": False,
+        "reconciliation_required": True,
+        "error_code": "customer_receipt_unverified",
+        "message": "客户结果未独立确认，请核对原操作，勿自动重试",
+        "data": data or {},
+    }
+
+
+def _read_back_customer(
+    svc: CustomerMutationService, customer_id: object, unit_name: str
+) -> dict[str, Any] | None:
+    if type(customer_id) is not int or customer_id <= 0 or not unit_name:
+        return None
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    try:
+        readback = svc.get_by_id(customer_id)
+    except RECOVERABLE_ERRORS + (SQLAlchemyError,):
+        return None
+    row = readback.get("data") if isinstance(readback, dict) else None
+    if (
+        not isinstance(readback, dict)
+        or readback.get("success") is not True
+        or not isinstance(row, dict)
+        or type(row.get("id")) is not int
+        or row.get("id") != customer_id
+        or row.get("customer_name") != unit_name
+    ):
+        return None
+    return row
+
+
 def _create_customer(params: dict[str, Any], svc: CustomerMutationService) -> dict[str, Any]:
     data = _customer_data(params)
     if not data["customer_name"]:
         return {"success": False, "message": "缺少 unit_name"}
     result = svc.create(data)
-    if result.get("success"):
-        return {"success": True, "created": True, "data": result.get("data", {})}
-    return {"success": False, "message": result.get("message") or "创建失败"}
+    if not isinstance(result, dict):
+        return {"success": False, "message": "创建失败"}
+    if result.get("success") is not True:
+        return {**result, "success": False, "message": result.get("message") or "创建失败"}
+    raw_payload = result.get("data")
+    payload = raw_payload if isinstance(raw_payload, dict) else {}
+    row = _read_back_customer(svc, payload.get("id"), data["customer_name"])
+    if row is None:
+        return _unverified_customer(payload)
+    return {"success": True, "created": True, "id": row["id"], "data": row}
 
 
 def _ensure_customer(params: dict[str, Any], svc: CustomerMutationService) -> dict[str, Any]:

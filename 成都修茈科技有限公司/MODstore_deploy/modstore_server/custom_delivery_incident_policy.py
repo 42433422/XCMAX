@@ -26,7 +26,15 @@ def success_reply(subject: str, progress: str, delivery_managed: bool) -> str:
 
 
 def apply_ticket_outcome(ticket: Any, team_ok: bool, delivery_managed: bool) -> None:
-    """所有修复工单都必须等待真实交付和运行证据，不能凭员工执行结案。"""
+    """员工自动回写不能把未指派工单推进到处理中，也不能覆盖待客户确认。"""
+    status = str(getattr(ticket, "status", "") or "")
+    if status in {"awaiting_customer", "resolved", "closed", "expired"}:
+        ticket.updated_at = datetime.now(UTC)
+        return
+    if status in {"", "open", "pending", "queued"}:
+        ticket.closed_at = None
+        ticket.updated_at = datetime.now(UTC)
+        return
     if not delivery_managed:
         ticket.decision_status = "approved"
     ticket.status = "processing"

@@ -20,9 +20,15 @@ describe('multimodalAttachments', () => {
   })
 
   it('rejects unsupported extension', async () => {
-    const r = await filesToMultimodalRows([makeFile('a.txt', 'text/plain')])
+    const r = await filesToMultimodalRows([makeFile('a.exe', 'application/octet-stream')])
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toContain('不支持')
+  })
+
+  it('accepts a plain text log', async () => {
+    const r = await filesToMultimodalRows([makeFile('a.txt', 'text/plain')])
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.rows[0].kind).toBe('log')
   })
 
   it('accepts png image', async () => {

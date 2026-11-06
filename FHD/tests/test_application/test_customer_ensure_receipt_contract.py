@@ -113,17 +113,22 @@ def test_tenantless_lookup_is_unknown_without_create(store):
         assert db.query(PurchaseUnit).count() == 0
 
 
-def test_postcommit_refresh_failure_is_unknown_not_retryable(store, monkeypatch):
+def test_postcommit_readback_failure_is_unknown_without_replaying_create(store, monkeypatch):
     svc, sessions, calls = store
+    readbacks = []
 
-    def refresh_failed(*args, **kwargs):
-        raise OperationalError("refresh", {}, RuntimeError("synthetic unavailable"))
+    def readback_failed(customer_id):
+        readbacks.append(customer_id)
+        raise OperationalError("readback", {}, RuntimeError("synthetic unavailable"))
 
-    monkeypatch.setattr(sessions.class_, "refresh", refresh_failed)
+    monkeypatch.setattr(svc, "get_by_id", readback_failed)
     with tenant_scope(7):
-        result = ensure(svc)
+        results = [ensure(svc), ensure(svc)]
         with sessions() as db:
-            assert db.query(PurchaseUnit).one().id > 0
-    assert len(calls) == 1 and result["success"] is False
-    assert result["outcome"] == "unknown" and result["retryable"] is False
-    assert result["reconciliation_required"] is True
+            row = db.query(PurchaseUnit).one()
+            assert row.id > 0 and row.unit_name == "Alpha" and row.tenant_id == 7
+            assert readbacks == [row.id, row.id]
+    assert len(calls) == 1
+    for result in results:
+        assert result["success"] is False and result["outcome"] == "unknown"
+        assert result["retryable"] is False and result["reconciliation_required"] is True

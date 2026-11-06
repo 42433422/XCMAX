@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
 import random
 import threading
+import weakref
 from datetime import datetime
 from typing import cast
 
@@ -44,6 +46,7 @@ class InMemoryTaskExecutionRepository:
         from app.domain.task_lifecycle.control import MemoryBook
 
         self._book = MemoryBook()
+        remember_open_repository(self)
 
     def enqueue(
         self,
@@ -105,6 +108,22 @@ class InMemoryTaskExecutionRepository:
                 run_id: copy.deepcopy(row) for run_id, row in self._rows.items() if run_id in wanted
             }
 
+    def enqueue_waiting_approval(
+        self,
+        run: AgentRun,
+        *,
+        requested_by: str = "",
+        priority: int = 100,
+        approver: str = "",
+    ) -> AgentTaskExecution:
+        """Queue then park before any other worker can observe the queued row."""
+        with self._lock:
+            self.enqueue(run, requested_by=requested_by, priority=priority)
+            parked = self.request_approval(run.run_id, approver or run.user_id)
+            if parked is None:
+                raise RuntimeError("审批队列行未能持久化")
+            return parked
+
     def claim(
         self,
         owner_id: str,
@@ -112,6 +131,7 @@ class InMemoryTaskExecutionRepository:
         lease_seconds: float,
         now: str | None = None,
         run_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> AgentTaskExecution | None:
         current = str(now or utc_now_iso())
         wanted = str(run_id or "")
@@ -123,6 +143,7 @@ class InMemoryTaskExecutionRepository:
                 row
                 for row in self._rows.values()
                 if (not wanted or row.run_id == wanted)
+                and (tenant_id is None or row.tenant_id == str(tenant_id))
                 and row.available_at <= current
                 and (
                     row.state == "queued"
@@ -413,6 +434,36 @@ class InMemoryTaskExecutionRepository:
 
 
 _task_execution_repository: TaskExecutionRepository | None = None
+_OPEN_REPOSITORIES: weakref.WeakSet = weakref.WeakSet()
+
+
+def remember_open_repository(repository: object) -> None:
+    """Keep a live queue visible to the executor without a second state machine."""
+    _OPEN_REPOSITORIES.add(repository)
+
+
+def locate_task_execution(run_id: str, *, fallback_id: str = ""):
+    """Return the open queue row for this task, or nothing when no lifecycle exists."""
+    wanted = str(run_id or "")
+    if not wanted:
+        return None, None
+    candidates = tuple(dict.fromkeys(item for item in (wanted, str(fallback_id or "")) if item))
+    repositories = list(_OPEN_REPOSITORIES)
+    if _task_execution_repository is not None:
+        repositories.append(_task_execution_repository)
+    for candidate in candidates:
+        for repository in repositories:
+            row = repository.get(candidate)
+            if row is not None:
+                return repository, row
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return None, None
+    repository = get_task_execution_repository()
+    for candidate in candidates:
+        row = repository.get(candidate)
+        if row is not None:
+            return repository, row
+    return None, None
 
 
 def get_task_execution_repository() -> TaskExecutionRepository:
@@ -437,6 +488,8 @@ def set_task_execution_repository_for_tests(
 ) -> None:
     global _task_execution_repository
     _task_execution_repository = repository
+    if repository is not None:
+        remember_open_repository(repository)
 
 
 __all__ = [

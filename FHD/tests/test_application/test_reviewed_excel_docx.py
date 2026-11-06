@@ -7,9 +7,11 @@ import io
 import json
 import zipfile
 
+import pytest
 from openpyxl import load_workbook
 from sqlalchemy import text
 
+from app.application.elt.errors import ReviewedExcelError
 from app.application.reviewed_excel_docx import is_docx_package
 from app.application.reviewed_excel_legacy import prepare_archive_workbook
 from tests.test_application.test_reviewed_excel_template import (
@@ -87,6 +89,98 @@ def test_is_docx_package_rejects_plain_xlsx():
     book.save(out)
     assert not is_docx_package(out.getvalue())
     assert is_docx_package(_minimal_docx())
+
+
+def _replace_document(body: bytes, transform) -> bytes:
+    out = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(body)) as original,
+        zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as target,
+    ):
+        for name in original.namelist():
+            content = original.read(name)
+            if name == "word/document.xml":
+                content = transform(content.decode()).encode()
+            target.writestr(name, content)
+    return out.getvalue()
+
+
+def test_docx_preserves_literal_formulas_long_cells_and_trailing_paragraphs():
+    formula = "=SUM(1,2)"
+    long_text = "原始正文" * 200
+    body = _minimal_docx(rows=[["摘要", "内容"], [formula, long_text]])
+    body = _replace_document(
+        body,
+        lambda xml: xml.replace(
+            "<w:sectPr/>",
+            "<w:p><w:r><w:t>表后余额说明</w:t></w:r></w:p><w:sectPr/>",
+        ),
+    )
+    converted, review = prepare_archive_workbook(body)
+    book = load_workbook(io.BytesIO(converted), data_only=False)
+    try:
+        cells = [cell for sheet in book for row in sheet for cell in row]
+        matched = [cell for cell in cells if cell.value == formula]
+        assert len(matched) == 1 and matched[0].data_type == "s"
+        assert any(cell.value == long_text for cell in cells)
+        assert any(cell.value == "表后余额说明" for cell in cells)
+        assert review["conversion_receipt"]["truncated"] is False
+        assert review["conversion_receipt"]["paragraph_count"] == 3
+    finally:
+        book.close()
+
+
+@pytest.mark.parametrize("limit", ["_MAX_ROWS", "_MAX_COLUMNS", "_MAX_TEXT"])
+def test_docx_refuses_limit_overflow_without_truncation(monkeypatch, limit):
+    monkeypatch.setattr(f"app.application.reviewed_excel_docx.{limit}", 2)
+    with pytest.raises(ReviewedExcelError, match="超过"):
+        prepare_archive_workbook(_minimal_docx())
+
+
+def test_docx_refuses_merged_cells_instead_of_shifting_columns():
+    body = _replace_document(
+        _minimal_docx(),
+        lambda xml: xml.replace("<w:tcPr/>", '<w:tcPr><w:gridSpan w:val="2"/></w:tcPr>', 1),
+    )
+    with pytest.raises(ReviewedExcelError, match="合并单元格"):
+        prepare_archive_workbook(body)
+
+
+@pytest.mark.parametrize(
+    "fragment",
+    [
+        "<w:customXml><w:p><w:r><w:t>余额999.00</w:t></w:r></w:p></w:customXml>",
+        "<w:customXml><w:tbl><w:tr><w:tc><w:p><w:r><w:t>余额999.00</w:t>"
+        "</w:r></w:p></w:tc></w:tr></w:tbl></w:customXml>",
+        "<w:p><w:moveFrom><w:r><w:t>旧金额999.00</w:t></w:r></w:moveFrom>"
+        "<w:moveTo><w:r><w:t>新金额999.00</w:t></w:r></w:moveTo></w:p>",
+        "<w:p><w:ins><w:r><w:t>未确认金额999.00</w:t></w:r></w:ins></w:p>",
+        "<w:altChunk/>",
+        "<w:unknown><w:p><w:r><w:t>余额999.00</w:t></w:r></w:p></w:unknown>",
+        "<w:tbl><w:unknown><w:tr><w:tc><w:p><w:r><w:t>余额999.00</w:t>"
+        "</w:r></w:p></w:tc></w:tr></w:unknown></w:tbl>",
+    ],
+)
+def test_docx_refuses_unhandled_wrappers_and_revisions(fragment):
+    body = _replace_document(
+        _minimal_docx(), lambda xml: xml.replace("<w:sectPr/>", fragment + "<w:sectPr/>")
+    )
+    with pytest.raises(ReviewedExcelError, match="无法|不支持"):
+        prepare_archive_workbook(body)
+
+
+def test_docx_invalid_xml_is_a_business_error():
+    body = _replace_document(_minimal_docx(), lambda xml: xml[:-30])
+    with pytest.raises(ReviewedExcelError, match="XML"):
+        prepare_archive_workbook(body)
+
+
+def test_docx_checks_uncompressed_xml_before_reading(monkeypatch):
+    body = _replace_document(_minimal_docx(), lambda xml: xml + " " * 200_000)
+    monkeypatch.setattr("app.application.reviewed_excel_docx.MAX_BYTES", 4096)
+    assert len(body) < 4096
+    with pytest.raises(ReviewedExcelError, match="解压大小"):
+        prepare_archive_workbook(body)
 
 
 def test_prepare_archive_workbook_converts_docx_with_receipt():

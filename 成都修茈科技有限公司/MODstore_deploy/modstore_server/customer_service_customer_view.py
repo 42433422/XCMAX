@@ -155,13 +155,16 @@ def customer_chat_result(result: dict[str, Any]) -> dict[str, Any]:
 
 def customer_issue(row: dict[str, Any]) -> dict[str, Any]:
     latest = row.get("latest_result")
+    view = None
+    if isinstance(latest, dict):
+        view = {"progress": customer_text(latest.get("progress")), "at": latest.get("at")}
+        if latest.get("source"):
+            view["source"] = latest.get("source")
+        if "fault_remains" in latest:
+            view["fault_remains"] = bool(latest.get("fault_remains"))
     return {
         **row,
-        "latest_result": (
-            {"progress": customer_text(latest.get("progress")), "at": latest.get("at")}
-            if isinstance(latest, dict)
-            else None
-        ),
+        "latest_result": view,
         "last_error": SAFE_FAILURE if row.get("last_error") else "",
     }
 

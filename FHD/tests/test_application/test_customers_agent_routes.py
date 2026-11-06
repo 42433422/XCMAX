@@ -5,8 +5,11 @@ from unittest.mock import patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from app.db.models.purchase_unit import PurchaseUnit
 from app.fastapi_routes.domains.customer import routes as customer_routes
 
 
@@ -14,6 +17,24 @@ def _client() -> TestClient:
     app = FastAPI()
     app.include_router(customer_routes.router)
     return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture
+def customer_sessions(tmp_path, monkeypatch):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'customers.sqlite'}",
+        connect_args={"check_same_thread": False},
+    )
+    PurchaseUnit.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.application.customer_app_service.get_customers_session", factory)
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+    try:
+        yield factory
+    finally:
+        engine.dispose()
 
 
 def _assert_customer_run(repo: InMemoryAgentRunRepository, run_id: str, action: str) -> None:
@@ -32,16 +53,26 @@ def _assert_customer_run(repo: InMemoryAgentRunRepository, run_id: str, action: 
 
 
 def test_customer_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools
+    customer_sessions, local_tools
 ) -> None:
     repo = InMemoryAgentRunRepository()
     client = _client()
 
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-
     deleted_ids: list[int] = []
+
+    def _insert_customer(name: str, contact: str, phone: str, address: str) -> dict:
+        with customer_sessions.begin() as db:
+            row = PurchaseUnit(
+                id=7,
+                tenant_id=7,
+                unit_name=name,
+                contact_person=contact,
+                contact_phone=phone,
+                address=address,
+            )
+            db.add(row)
+            db.flush()
+            return {"id": row.id, "unit_name": row.unit_name}
 
     def _delete_customer(customer_id: int) -> None:
         deleted_ids.append(customer_id)
@@ -63,7 +94,7 @@ def test_customer_mutation_routes_execute_through_agent_orchestrator(
         patch.object(
             customer_routes,
             "_customer_pg_insert",
-            return_value={"id": 7, "unit_name": "星光贸易"},
+            side_effect=_insert_customer,
         ) as insert_customer,
         patch.object(
             customer_routes,
@@ -112,3 +143,45 @@ def test_customer_mutation_routes_execute_through_agent_orchestrator(
     _assert_customer_run(repo, update_customer_resp.json()["run_id"], "update")
     _assert_customer_run(repo, delete_customer.json()["run_id"], "delete")
     _assert_customer_run(repo, batch_delete.json()["run_id"], "batch_delete")
+
+
+def test_customer_create_route_requires_a_persisted_row(customer_sessions, local_tools) -> None:
+    repo = InMemoryAgentRunRepository()
+    with (
+        patch(
+            "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
+            return_value=False,
+        ),
+        patch.object(customer_routes, "_customers_write_raise"),
+        patch.object(
+            customer_routes,
+            "_customer_body_name_contact",
+            return_value=("未落库客户", "张三", "13900000000", "上海"),
+        ),
+        patch.object(
+            customer_routes,
+            "_customer_pg_insert",
+            return_value={"id": 7, "unit_name": "未落库客户"},
+        ),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
+        response = _client().post(
+            "/customers", json={"unit_name": "未落库客户"}, headers={"X-User-Id": "tenant-a"}
+        )
+    assert response.status_code == 200
+    output = response.json()
+    assert output["success"] is False
+    assert output["error_code"] == "customer_receipt_unverified"
+    assert output["reconciliation_required"] is True
+    assert output["retryable"] is False
+    run = repo.get(output["run_id"])
+    assert run is not None and run.status == "blocked"
+    assert "run.completed" not in {event.event_type for event in run.events}
+    with customer_sessions() as db:
+        assert (
+            db.scalars(select(PurchaseUnit.id).execution_options(skip_tenant_filter=True)).all()
+            == []
+        )

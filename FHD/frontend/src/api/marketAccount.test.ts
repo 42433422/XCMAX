@@ -23,6 +23,18 @@ describe('marketAccount', () => {
     expect(LS_MARKET_ACCESS_TOKEN).toContain('market')
   })
 
+  it('repairs a blank market access token once per flight and stays a boolean', async () => {
+    const { repairBlankMarketAccessToken } = await import('./marketAccount')
+    vi.mocked(apiFetch).mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: { market_access_token: 'restored', market_refresh_token: 'r' },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const [first, second] = await Promise.all([repairBlankMarketAccessToken(), repairBlankMarketAccessToken()])
+    expect(first).toBe(true)
+    expect(second).toBe(true)
+    expect(apiFetch).toHaveBeenCalledTimes(1)
+  })
+
   it('normalizePastedAuthorization strips Authorization prefix', () => {
     expect(normalizePastedAuthorization('Authorization: Bearer abc')).toBe('Bearer abc')
     expect(normalizePastedAuthorization('  token123  ')).toBe('token123')

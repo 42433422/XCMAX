@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_customer_service_api import _make_user
+from tests.test_customer_service_api import _as_user, _make_user
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EMPLOYEE_ROOT = REPO_ROOT / "FHD" / "mods" / "_employees"
@@ -240,6 +240,20 @@ def test_case_a_progress_writeback_lifecycle(client, monkeypatch, case_ticket_pa
         assert str(ticket.get("ticket_no") or "").startswith("CS")
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+    assert ticket["status"] == "open"
+    with _as_user(_make_user("cs_case_handler", admin=True)) as handler:
+        assigned = client.post(
+            f"/api/customer-service/tickets/{ticket_id}/assign",
+            json={"assignee_id": handler.id, "reason": "接受该案例的人工处理"},
+        )
+        assert assigned.status_code == 200, assigned.text
+        accepted = client.post(
+            f"/api/customer-service/tickets/{ticket_id}/accept",
+            json={"reason": "人工开始处理后接收员工结果"},
+        )
+        assert accepted.status_code == 200, accepted.text
+        assert accepted.json()["ticket"]["status"] == "processing"
 
     sf = get_session_factory()
     with sf() as db:

@@ -31,6 +31,9 @@ _SOFTWARE_CONTEXT_RE = re.compile(
     r"软件|页面|界面|后台|客户端|桌面|功能|模块|交付中心|每日摘要|客服|菜单|侧栏|样式|显示|跨端|审计|自动化|审批|看板|图谱|管理端|市场总览"
 )
 _IMAGE_DATA_URL = re.compile(r"(?i)^data:image/[\w.+-]+;base64,")
+_LOG_DATA_URL = re.compile(r"(?i)^data:(?:text/plain|application/octet-stream|text/x-log);base64,")
+_ASSISTANT_ROLES = frozenset({"assistant", "ai"})
+_ALREADY_REGISTERED_RE = re.compile(r"(?:工单.*已(?:受理|登记)|已(?:受理|登记).*工单)")
 
 
 def looks_like_issue_report(message: str) -> bool:
@@ -103,10 +106,9 @@ def report_message_with_context(message: str, context: dict[str, Any]) -> str:
         ):
             continue
         content = str(item.get("content") or "").strip()[:3000]
-        if item.get("role") == "assistant" and re.search(
-            r"(?:工单.*已(?:受理|登记)|已(?:受理|登记).*工单)", content
-        ):
-            break
+        if item.get("role") in _ASSISTANT_ROLES and _ALREADY_REGISTERED_RE.search(content):
+            # 客户端气泡角色是 ai。已登记后再说「提交工单」不得再开一张。
+            return message
         if item.get("role") != "user" or not content or content == message.strip():
             continue
         if not (_plain_intake_match(content) or _manufacturing_intake(content)) and (
@@ -117,17 +119,46 @@ def report_message_with_context(message: str, context: dict[str, Any]) -> str:
     return message
 
 
-def _attached_screenshots(attachments: Any) -> list[bytes]:
-    """Decode the images the customer attached to the report message."""
+def _labeled_line(message: str, label: str) -> str:
+    match = re.search(rf"(?:^|\n)\s*{label}[：:]\s*(.+)", message or "")
+    if not match:
+        return ""
+    return match.group(1).strip().split("\n", 1)[0][:2000]
+
+
+def _attached_payloads(attachments: Any) -> tuple[list[bytes], list[tuple[str, bytes]]]:
+    """Images stay screenshots. Text logs are named zip entries, never dropped silently."""
     images: list[bytes] = []
+    logs: list[tuple[str, bytes]] = []
     for item in attachments if isinstance(attachments, list) else []:
-        url = str(item.get("data_url") or "") if isinstance(item, dict) else ""
-        if match := _IMAGE_DATA_URL.match(url):
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("data_url") or "")
+        name = re.sub(r"[^A-Za-z0-9._-]", "_", str(item.get("filename") or "attachment"))[:80]
+        if image := _IMAGE_DATA_URL.match(url):
             try:
-                images.append(base64.b64decode(url[match.end() :], validate=True))
+                images.append(base64.b64decode(url[image.end() :], validate=True))
             except ValueError:
                 logger.info("customer screenshot is not valid base64")
-    return images[:6]
+            continue
+        kind = str(item.get("kind") or "")
+        if kind == "log" or name.lower().endswith((".log", ".txt")):
+            raw = url
+            if log_match := _LOG_DATA_URL.match(url):
+                raw = url[log_match.end() :]
+                try:
+                    logs.append((name or "client.log", base64.b64decode(raw, validate=True)))
+                except ValueError:
+                    logger.info("customer log is not valid base64")
+            elif raw and not raw.startswith("data:"):
+                logs.append((name or "client.log", raw.encode()))
+    return images[:6], logs[:6]
+
+
+def _attached_screenshots(attachments: Any) -> list[bytes]:
+    """Decode the images the customer attached to the report message."""
+    images, _logs = _attached_payloads(attachments)
+    return images
 
 
 def classify_explicit_report(message: str) -> dict[str, Any] | None:
@@ -224,7 +255,8 @@ async def submit_product_issue(
         _private_delivery_market_token,
     )
 
-    evidence = build_evidence_ref(screenshots=_attached_screenshots(attachments))
+    shots, customer_logs = _attached_payloads(attachments)
+    evidence = build_evidence_ref(screenshots=shots, customer_logs=customer_logs)
     if not evidence:
         return {"state": "NEEDS_MORE_EVIDENCE", "missing_evidence": ["support_bundle"]}
     bundle_path = Path(str(evidence.get("path") or ""))
@@ -241,7 +273,7 @@ async def submit_product_issue(
     digest = hashlib.sha256(
         json.dumps([scope, customer_message.strip()], ensure_ascii=False).encode()
     ).hexdigest()
-    reason = customer_message.strip()[:1000]
+    reason = customer_message.strip()[:8000]
     token = await _private_delivery_market_token(request)
     if not token:
         return {"state": "OWNER_ROUTE_UNAVAILABLE"}
@@ -273,7 +305,8 @@ async def submit_product_issue(
     wo_id = str(candidate.get("wo_id") or "")
     if not wo_id:
         return {"state": "OWNER_ROUTE_UNAVAILABLE"}
-    title = f"客户端产品缺陷 · {reason[:100]}"
+    stated_title = _labeled_line(customer_message, "标题")
+    title = f"客户端产品缺陷 · {stated_title or reason[:80]}"[:256]
     # 同一需求正文保持稳定；补报附件及运行身份由接收端单独持久化。
     description = (
         f"work_order_id：{wo_id}\n客户原话：{reason}\n"

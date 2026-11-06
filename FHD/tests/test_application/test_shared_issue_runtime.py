@@ -91,10 +91,16 @@ async def test_confirmation_response_loss_replays_saved_payload_after_ticket_lea
 @pytest.mark.asyncio
 async def test_list_flags_only_fixes_running_here_and_decision_forwards_owner_note(host):
     request, remote, _, target = host
-    mine = {"items": [{"id": 7, "state": "awaiting_customer_verification"}, {"id": 8}]}
+    mine = {
+        "items": [
+            {"id": 7, "state": "awaiting_customer_verification", "status": "awaiting_customer"},
+            {"id": 8},
+        ]
+    }
     remote.side_effect = [mine, {"items": [{"id": 7, "ready": True, "target": target}]}]
     listed = await bridge.list_issues(request)
     assert [(row["id"], row["ready"]) for row in listed["items"]] == [(7, True), (8, False)]
+    assert listed["items"][0]["state"] == "awaiting_customer"
     assert remote.await_args_list[0].args[1] == "/api/customer-service/issues/mine"
     with pytest.raises(HTTPException) as caught:
         await bridge.decide_issue(

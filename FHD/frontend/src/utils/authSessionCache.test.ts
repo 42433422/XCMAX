@@ -1,11 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   validateEnterpriseSessionCached,
+  canResumeRecentDesktopSession,
   consumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint,
   invalidateEnterpriseSessionCache,
   LS_ENTERPRISE_SESSION_HINT,
   markEnterpriseSessionValid,
+  probeEnterpriseSession,
 } from './authSessionCache'
 
 vi.mock('@/api/auth', () => ({
@@ -15,6 +17,7 @@ vi.mock('@/api/auth', () => ({
 }))
 
 import { authApi } from '@/api/auth'
+import { productReadAccountEpoch } from './productReadAccountScope'
 
 describe('authSessionCache', () => {
   beforeEach(() => {
@@ -115,6 +118,95 @@ describe('authSessionCache', () => {
     else vi.mocked(authApi.validateSession).mockResolvedValue(response)
     await expect(validateEnterpriseSessionCached(true)).resolves.toBe(false)
     expect(hasRecentEnterpriseSessionHint()).toBe(false)
+  })
+
+  it('resumes a persisted desktop session even when the login URL still has an old error', async () => {
+    localStorage.setItem(LS_ENTERPRISE_SESSION_HINT, String(Date.now()))
+    await expect(canResumeRecentDesktopSession(true, true, { error: '用户名或密码错误' })).resolves.toBe(true)
+  })
+
+  it.each([false, true])('requires explicit login without consuming a desktop hint (local hint: %s)', async (localHint) => {
+    const consumeBootstrapSessionHint = vi.fn().mockResolvedValue(true)
+    vi.stubGlobal('xcagiDesktop', { consumeBootstrapSessionHint })
+    try {
+      if (localHint) localStorage.setItem(LS_ENTERPRISE_SESSION_HINT, String(Date.now()))
+      await expect(canResumeRecentDesktopSession(true, true, { reauthenticate: '1' })).resolves.toBe(false)
+      expect(consumeBootstrapSessionHint).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('sends the shell to login when the server says the session is gone, and not on a network miss', async () => {
+    const events: string[] = []
+    const onInvalid = () => events.push('invalid')
+    window.addEventListener('xcagi:enterprise-session-invalid', onInvalid)
+    vi.mocked(authApi.validateSession).mockResolvedValueOnce({ valid: false })
+    await expect(probeEnterpriseSession()).resolves.toBe('invalid')
+    expect(events).toEqual(['invalid'])
+    vi.mocked(authApi.validateSession).mockRejectedValueOnce(new Error('Failed to fetch'))
+    await expect(probeEnterpriseSession()).resolves.toBe('unknown')
+    expect(events).toEqual(['invalid'])
+    window.removeEventListener('xcagi:enterprise-session-invalid', onInvalid)
+  })
+
+  it('does not reuse another account scope cache or pending validation', async () => {
+    markEnterpriseSessionValid()
+    let finish!: (value: unknown) => void
+    vi.mocked(authApi.validateSession).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const oldProbe = probeEnterpriseSession()
+    productReadAccountEpoch.value += 1
+    vi.mocked(authApi.validateSession).mockResolvedValueOnce({ valid: true })
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
+    expect(authApi.validateSession).toHaveBeenCalledTimes(2)
+    const invalid = vi.spyOn(window, 'dispatchEvent')
+    finish({ valid: false })
+    await expect(oldProbe).resolves.toBe('unknown')
+    expect(invalid).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'xcagi:enterprise-session-invalid' }))
+    expect(hasRecentEnterpriseSessionHint()).toBe(true)
+    invalid.mockRestore()
+  })
+
+  it('retires a probe across logout even before another login is established', async () => {
+    let finish!: (value: unknown) => void
+    vi.mocked(authApi.validateSession).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const pending = probeEnterpriseSession()
+    invalidateEnterpriseSessionCache()
+    const invalid = vi.spyOn(window, 'dispatchEvent')
+    finish({ valid: false })
+    await expect(pending).resolves.toBe('unknown')
+    expect(invalid).not.toHaveBeenCalled()
+    invalid.mockRestore()
+  })
+
+  it('does not restore an old Electron bootstrap hint after logout', async () => {
+    let finish!: (value: boolean) => void
+    Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: {
+      consumeBootstrapSessionHint: () => new Promise<boolean>(resolve => { finish = resolve }),
+    } })
+    const pending = consumeDesktopSessionBootstrapHint()
+    invalidateEnterpriseSessionCache()
+    finish(true)
+    await expect(pending).resolves.toBe(false)
+    Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: undefined })
+  })
+
+  it('lets the new desktop owner validate while an old background refresh is pending', async () => {
+    const { refreshDesktopSessionInBackground } = await import('./desktopSessionRestore')
+    let finish!: (value: unknown) => void
+    vi.mocked(authApi.validateSession).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const router = { replace: vi.fn().mockResolvedValue(undefined) }
+    const previous = { loaded: false, refreshFromServer: vi.fn().mockResolvedValue(undefined) }
+    const current = { loaded: false, refreshFromServer: vi.fn().mockResolvedValue(undefined) }
+    refreshDesktopSessionInBackground(router, previous, '/old-workspace')
+    productReadAccountEpoch.value += 1
+    vi.mocked(authApi.validateSession).mockResolvedValueOnce({ valid: true })
+    refreshDesktopSessionInBackground(router, current, '/new-workspace')
+    await vi.waitFor(() => expect(current.refreshFromServer).toHaveBeenCalledOnce())
+    finish({ valid: false })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(router.replace).not.toHaveBeenCalled()
+    expect(previous.refreshFromServer).not.toHaveBeenCalled()
   })
 
   it('coalesces concurrent validation and ignores its result after a new login', async () => {

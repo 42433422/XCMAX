@@ -23,10 +23,10 @@ export function useWorkflowEmployeeRegistrySync() {
   onMounted(syncRegistry)
 
   watch(
-    () => modsStore.modsForWorkflowUi,
-    (list) => {
+    () => [modsStore.modsForWorkflowUi, modsStore.entitledModIds],
+    () => {
       if (modsStore.clientModsUiOff) return
-      void syncEnterpriseWorkflowRegistry(list).catch(reportSyncError)
+      void syncEnterpriseWorkflowRegistry(modsStore.modsForWorkflowUi).catch(reportSyncError)
     },
     { deep: true },
   )

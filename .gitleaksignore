@@ -78,3 +78,9 @@ aa5ed862a31ecc5a46ba7713919e8a53859bac08:FHD/docs/legal/software-copyright/V10-�
 9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152:成都修茈科技有限公司/MODstore_deploy/java_payment_service/src/main/java/com/modstore/util/AlipayKeyNormalizer.java:private-key:27
 bd82363655b570611240eeea9da69d06aaa5b235:成都修茈科技有限公司/vibe-coding/tests/agent/test_security_env.py:generic-api-key:69
 fe810a41529aea4cc86bf85a99a8e7f024bb567d:FHD/tests/test_services/test_modstore_conversation_components.py:generic-api-key:179
+
+# AWS public documentation example in historical support-bundle redaction tests only.
+# Verified against https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html
+# Exact original commit/file/rule/line; this file and all other credentials continue to scan.
+b3c539a991a6df97b2afdae2cd97e65eb4162a56:FHD/tests/test_desktop/test_support_bundle_customer_redaction.py:aws-access-token:31
+b3c539a991a6df97b2afdae2cd97e65eb4162a56:FHD/tests/test_desktop/test_support_bundle_customer_redaction.py:aws-access-token:48

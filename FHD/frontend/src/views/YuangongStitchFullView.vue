@@ -83,9 +83,10 @@ import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeIns
 import { useWorkflowEmployeeDesks, type WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav'
 import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible'
-import { employeeBelongsToEnterpriseStack, isWorkflowCarrierModId, type EnterpriseModStack } from '@/constants/enterpriseModStack'
-import { isHostBridgeModId } from '@/constants/genericModPack'
+import { type EnterpriseModStack } from '@/constants/enterpriseModStack'
+import { useModsStore } from '@/stores/mods'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
+import { workflowHostVisibleOnPanorama } from '@/utils/workflowEmployeeScope'
 
 const workflowVisualizationLocation = resolveWorkflowVisualizationLocation()
 const { showWorkflowPanoramaNav } = useWorkflowPanoramaNavVisible()
@@ -94,16 +95,13 @@ const PANORAMA_LAYOUT_MQ = '(max-width: 960px)'
 const enterpriseStack = ref<EnterpriseModStack | null>(null)
 const enterpriseStackLabel = computed(() => enterpriseStack.value?.stackLabel || '')
 
+const modsStore = useModsStore()
 const { desks, isBusy } = useWorkflowEmployeeDesks()
 
 const panoramaDesks = computed<WorkflowEmployeeDeskRow[]>(() => {
   const stack = enterpriseStack.value
-  return desks.value.filter((d) => {
-    const host = d.hostModId
-    if (!host) return false
-    if (stack) return employeeBelongsToEnterpriseStack(host, stack)
-    return isWorkflowCarrierModId(host) || isHostBridgeModId(host)
-  })
+  const entitled = modsStore.entitledModIds
+  return desks.value.filter((d) => workflowHostVisibleOnPanorama(d.hostModId || d.carrierModId, stack, entitled))
 })
 
 const selectedEmpId = ref<string | null>(null)

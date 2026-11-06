@@ -573,3 +573,7 @@ router.include_router(custom_delivery_payment_router)
 from modstore_server.customer_issue_api import router as customer_issue_router
 
 router.include_router(customer_issue_router)
+
+from modstore_server.customer_service_human_api import router as customer_human_router
+
+router.include_router(customer_human_router)

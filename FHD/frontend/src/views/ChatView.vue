@@ -229,7 +229,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, onDeactivated } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
@@ -256,7 +256,11 @@ import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
-import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { captureAuthSession } from '@/utils/authSessionCache'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
+import chatApi from '@/api/chat'
+import { isDurableChatScope } from '@/utils/chatSessionRestore'
 import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from '@/composables/useRoutedTaskWorkspace'
 
 const props = withDefaults(
@@ -285,11 +289,13 @@ function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
 
-const _storedSessionId = readAiSessionIdFromStorage()
 const initialWorkspaceSessionId = resolveWorkspaceSessionId(props)
-const currentSessionId = ref(initialWorkspaceSessionId || _storedSessionId || generateSessionId())
+const openedScope = resolveChatStorageScope()
+const openedStoredId = isDurableChatScope(openedScope) ? readAiSessionIdFromStorage() : ''
+const currentSessionId = ref(initialWorkspaceSessionId || openedStoredId || generateSessionId())
 const messageSessionKey = computed(() => JSON.stringify([currentSessionId.value, modsStore.activeModId, productReadAccountEpoch.value]))
-if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
+if (!initialWorkspaceSessionId && isDurableChatScope(openedScope) && !openedStoredId) writeAiSessionIdToStorage(currentSessionId.value)
+const chatScope = computed(() => resolveChatStorageScope())
 
 const chatViewApi = useChatView({ sessionId: currentSessionId })
 const chatRefBag = {
@@ -355,6 +361,7 @@ const {
   cancelTaskById,
   jumpToTaskMessage,
   refreshHistorySessions,
+  restoreLatestOwnedSession,
   showHistoryPanel,
   loadSession,
   clearHistorySessions,
@@ -461,13 +468,65 @@ const {
 
 // Best-effort ASR warm so first push-to-talk is not a 6–7s cold load (item 4 latency).
 let voiceWarmTimer: number | undefined
+let restoreGeneration = 0
+let restoreActive = true
+async function restoreOwnedConversation() {
+  const generation = ++restoreGeneration
+  const scope = chatScope.value
+  const mod = modsStore.activeModId
+  const originalSession = currentSessionId.value
+  const isOwnerCurrent = captureAuthSession()
+  const canApply = () => restoreActive && generation === restoreGeneration && isOwnerCurrent()
+    && scope === chatScope.value && mod === modsStore.activeModId && !resolveWorkspaceSessionId(props) && !isLoading.value
+  if (!isDurableChatScope(scope) || !canApply()) return
+  let serverId = ''
+  try {
+    const data = await chatApi.getActiveConversation()
+    const body = data as { conversation_id?: string; data?: { conversation_id?: string } }
+    serverId = String(body.conversation_id || body.data?.conversation_id || '').trim()
+  } catch {
+    // An unavailable active pointer may still have an owned local/history fallback.
+  }
+  if (!canApply() || currentSessionId.value !== originalSession) return
+  if (serverId) {
+    currentSessionId.value = serverId
+    writeAiSessionIdToStorage(serverId)
+    await syncSessionMessages().catch(() => undefined)
+    return
+  }
+  const hasRealTurn = messages.value.some((msg) => {
+    const text = plainTextFromChatHtml(msg.content).replace(/\s+/g, ' ').trim()
+    return text && (msg.role === 'user' || msg.role === 'task' || !/^(你好，我是|您好！我是)/.test(text))
+  })
+  if (!hasRealTurn) {
+    try { await restoreLatestOwnedSession?.(canApply) } catch { /* History exposes its own retry state. */ }
+  }
+}
+
 onMounted(() => {
   voiceWarmTimer = window.setTimeout(() => {
     void warmVoiceModel()
   }, 2500)
 })
-onBeforeUnmount(() => window.clearTimeout(voiceWarmTimer))
-onDeactivated(() => window.clearTimeout(voiceWarmTimer))
+watch(() => [chatScope.value, modsStore.activeModId, productReadAccountEpoch.value], (_, previous) => {
+  const workspaceSession = resolveWorkspaceSessionId(props)
+  if (previous) {
+    currentSessionId.value = workspaceSession || readAiSessionIdFromStorage() || generateSessionId()
+    if (workspaceSession && isDurableChatScope(chatScope.value)) void syncSessionMessages().catch(() => undefined)
+  }
+  void restoreOwnedConversation()
+}, { immediate: true, flush: 'post' })
+watch(isLoading, (loading) => { if (loading) restoreGeneration += 1 }, { flush: 'sync' })
+function retireRestore() {
+  restoreActive = false
+  restoreGeneration += 1
+  window.clearTimeout(voiceWarmTimer)
+}
+onBeforeUnmount(retireRestore)
+onDeactivated(retireRestore)
+onActivated(() => {
+  if (!restoreActive) { restoreActive = true; void restoreOwnedConversation() }
+})
 
 const {
   messageHeights,
@@ -527,6 +586,7 @@ const sendMessage = async () => {
   const raw = messageInput.value || (domInput && domInput.value) || ''
   const message = raw.trim()
   if (!message) return
+  restoreGeneration += 1
   messageInput.value = ''
   await chatSendMessage(message)
 }

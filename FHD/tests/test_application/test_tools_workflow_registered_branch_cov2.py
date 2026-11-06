@@ -219,11 +219,17 @@ class TestCustomersRouter:
     def test_create_success(self) -> None:
         mock_svc = MagicMock()
         mock_svc.create.return_value = {"success": True, "data": {"id": 1}}
+        mock_svc.get_by_id.return_value = {
+            "success": True,
+            "data": {"id": 1, "customer_name": "acme"},
+        }
         with patch("app.application.get_customer_app_service", return_value=mock_svc):
             result = _registered_router_customers(
                 "create", {"unit_name": "acme"}, _ctx(), "normal", ""
             )
             assert result["success"] is True
+        assert result["id"] == 1 and result["data"]["customer_name"] == "acme"
+        mock_svc.get_by_id.assert_called_once_with(1)
 
     def test_unknown_action_returns_failure(self) -> None:
         with patch("app.application.get_customer_app_service"):
@@ -1815,7 +1821,8 @@ class TestExecuteExcelImportRecords:
         PurchaseUnit.__table__.create(engine)
 
         class LostReceiptSession(Session):
-            def refresh(self, *args, **kwargs):
+            def commit(self):
+                super().commit()
                 raise error_type("response lost after commit")
 
         sessions = sessionmaker(bind=engine, class_=LostReceiptSession)

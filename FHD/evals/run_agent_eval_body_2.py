@@ -1123,8 +1123,11 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
 def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.db.models.purchase_unit import PurchaseUnit
     from app.fastapi_routes.domains.customer import routes as customer_routes
 
     expected = dict(task.get("expected") or {})
@@ -1170,6 +1173,30 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            engine = create_engine("sqlite:///" + str(Path(tmp_dir) / "customers.sqlite"))
+            stack.callback(engine.dispose)
+            PurchaseUnit.__table__.create(engine)
+            customer_sessions = sessionmaker(bind=engine)
+
+            def _insert_customer(name, contact, phone, address):
+                with customer_sessions.begin() as db:
+                    row = PurchaseUnit(
+                        id=7,
+                        tenant_id=7,
+                        unit_name=name,
+                        contact_person=contact,
+                        contact_phone=phone,
+                        address=address,
+                    )
+                    db.add(row)
+                    db.flush()
+                    return {"id": row.id, "unit_name": row.unit_name}
+
+            stack.enter_context(
+                patch(
+                    "app.application.customer_app_service.get_customers_session", customer_sessions
+                )
+            )
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1195,7 +1222,7 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 patch.object(
                     customer_routes,
                     "_customer_pg_insert",
-                    return_value={"id": 7, "unit_name": name},
+                    side_effect=_insert_customer,
                 )
             )
             update_customer = stack.enter_context(

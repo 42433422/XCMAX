@@ -6,10 +6,8 @@ import pytest
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
-from app.application.agent_orchestrator.cross_module_chain import (
-    _approval_fingerprint,
-    _import_approved_products,
-)
+from app.application.agent_orchestrator.cross_module_chain import _approval_fingerprint
+from app.application.agent_orchestrator.cross_module_execution import _import_approved_products
 from app.application.elt.targets.products import ProductAdapter
 from app.db.db_base import Base
 from app.db.models.product import Product
@@ -113,5 +111,9 @@ def test_committed_import_replays_across_sessions_and_rejects_changed_approval(
             ("DH-5", "63.20"),
             ("SW-42", "17.65"),
         ]
-        assert db.query(TaskLifecycleRecord).count() == 1
+        # The import transaction stores the delivery receipt and the HTTP body together.
+        assert sorted(row.module for row in db.query(TaskLifecycleRecord)) == [
+            "cross_module_http_response",
+            "cross_module_import",
+        ]
         assert db.query(TaskLifecycleIdempotency).count() == 1

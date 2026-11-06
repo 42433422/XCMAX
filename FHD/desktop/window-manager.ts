@@ -23,6 +23,7 @@ import { DESKTOP_MIN_HEIGHT, DESKTOP_MIN_WIDTH, clampWindowBounds, readWindowSta
 import { checkPendingRollback } from './rollback'
 import { configureUpdater } from './updater'
 import { configureDesktopDownloads } from './desktop-downloads'
+import { attachRendererSurfaceRecovery } from './renderer-surface'
 import {
   handleDesktopWindowOpen,
   handleDesktopWillNavigate,
@@ -384,9 +385,11 @@ export async function createWindow(): Promise<void> {
     preload: path.join(__dirname, 'preload.js'),
     contextIsolation: true,
     nodeIntegration: false,
-    sandbox: true
+    sandbox: true,
+    backgroundThrottling: false,
   } })
   desktopRuntime.mainWindow = mainWindow
+  attachRendererSurfaceRecovery(mainWindow, writeBackendLog)
   desktopRuntime.rendererFailedDuringStartup = false
   let startupWindowShown = false
   let lastRendererReloadAt = 0

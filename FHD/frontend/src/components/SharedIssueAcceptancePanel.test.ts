@@ -162,6 +162,35 @@ it.each([['resolved', false], ['resolved', true], ['reopen', false], ['reopen', 
   wrapper.unmount()
 })
 
+it('shows the human handling conclusion ahead of the automatic employee summary', async () => {
+  vi.mocked(apiFetch).mockResolvedValueOnce(response([{
+    id: 31,
+    ticket_no: 'CI-31',
+    summary: '员工图谱无法显示',
+    ready: false,
+    state: 'processing',
+    can_resolve: false,
+    can_reopen: false,
+    latest_result: { source: 'human', progress: '故障仍在，员工节点仍未出现', fault_remains: true },
+  }]))
+  const { wrapper } = await setup()
+  expect(wrapper.text()).toContain('处理结果：故障仍在，员工节点仍未出现')
+  expect(wrapper.text()).not.toContain('AI 处理结果')
+  wrapper.unmount()
+})
+
+it('tells the customer a result is waiting for confirmation before the ticket can close', async () => {
+  vi.mocked(apiFetch).mockResolvedValueOnce(response([{
+    id: 32, ticket_no: 'CI-32', summary: '员工图谱无法显示', ready: false, state: 'awaiting_customer', can_resolve: true, can_reopen: false,
+    latest_result: { source: 'human', progress: '全景已显示考勤 AI 助手', fault_remains: false },
+  }]))
+  const { wrapper } = await setup()
+  expect(wrapper.text()).toContain('处理结果已提交，等待您确认。确认前工单不会关闭。')
+  expect(wrapper.text()).toContain('处理结果：全景已显示考勤 AI 助手')
+  expect(wrapper.text()).not.toContain('修复尚未到达当前客户端')
+  wrapper.unmount()
+})
+
 it('offers only reopen on a closed ticket', async () => {
   vi.mocked(apiFetch).mockResolvedValueOnce(response([{ id: 22, ticket_no: 'CI-22', summary: '打印乱码', ready: false, state: 'resolved', can_resolve: false, can_reopen: true }]))
   const { wrapper } = await setup()

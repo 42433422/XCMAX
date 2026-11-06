@@ -90,9 +90,12 @@ export const useModsStore = defineStore('mods', () => {
     activeModId.value = readActiveModId(scope)
   }
 
+  const entitledModIds = ref<string[]>([])
+
   const selection = useModsActiveSelection({
     mods,
     activeModId,
+    entitledModIds,
     clientModsUiOff,
     setActiveModId,
     resolveModsAccountContext,
@@ -385,6 +388,7 @@ export const useModsStore = defineStore('mods', () => {
 
   return {
     mods,
+    entitledModIds,
     modsForUi,
     modsForWorkflowUi,
     modRoutes,

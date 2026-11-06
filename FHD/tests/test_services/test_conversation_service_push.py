@@ -125,3 +125,24 @@ class TestSaveMessagePush:
                 content="测试推送失败不影响保存",
             )
             assert result == 101
+
+
+@pytest.mark.parametrize(
+    "content, expected",
+    [
+        ("<p>  查询&nbsp;订单 </p>\n <strong>状态</strong>", "查询 订单 状态"),
+        ("<" * 100_000, "<" * 48 + "…"),
+        ("<p>" + "长" * 60 + "</p>", "长" * 48 + "…"),
+    ],
+)
+def test_user_message_title_keeps_plain_text_and_preserves_message(svc, content, expected):
+    mock_db = _mock_db_with_session()
+    session = mock_db.query.return_value.filter.return_value.first.return_value
+    session.title = ""
+    with patch("app.domain.shared_services.conversation_service.get_db") as mock_get_db:
+        mock_get_db.return_value.__enter__.return_value = mock_db
+        svc.save_message("sess-123", "42", "user", content)
+
+    assert session.title == expected
+    assert mock_db.add.call_args.args[0].content == content
+    mock_db.commit.assert_called_once()
