@@ -26,6 +26,7 @@ import {
 import { useModsStore } from '@/stores/mods'
 import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, isAdminConsoleSpa, resolveAdminConsoleHomeUrl } from '@/utils/adminConsoleUrl'
 import { isDesktopShell } from '@/utils/desktopShell'
+import { committedRouteTitle } from '@/utils/routeTitle'
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes'
 import { ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES, ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav'
 import { buildRoleMenuProfile, canShowCoreMenuKey, tenantScopedBusinessPath, UNSCOPED_HOST_BUSINESS_KEYS } from '@/utils/roleMenuProfile'
@@ -490,9 +491,9 @@ if (typeof window !== 'undefined') {
   })
 }
 
-router.afterEach((to) => {
-  const title = to.meta?.title
-  document.title = title ? `${title} - XCAGI` : 'XCAGI'
+router.afterEach((to, _from, failure) => {
+  const nextTitle = committedRouteTitle(to, failure, router.currentRoute.value.fullPath)
+  if (nextTitle) document.title = nextTitle
 })
 
 // 管理端：懒加载页面文件失败时（断网 / 刚发版旧分包已下线）给出可见提示和刷新入口，
