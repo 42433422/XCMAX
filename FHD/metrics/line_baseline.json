@@ -1,5 +1,5 @@
 {
-  "lines": 2419418,
+  "lines": 2419518,
   "updated": "2026-11-06",
-  "note": "A42-A50 工具验收与 CI 修复超出原基线 898 行：确认后再校验密封身份、普通工具失败不再误标不可重试、NeuroBus 审批与拒权事件，以及超限源码审查记录。由本分支 CI 修复提交抬升。"
+  "note": "CI ruff format 重排工具权限文件：产品换行净增 21（orchestrator +2、run_lifecycle +2、tool_executor +4、tool_permission +5、tools_execute +8），验收测试换行净增 80（effects +75、a41 +1、route +4），eval 夹具授予 tool.ocr.request 净减 1。合计净增 100。本次 CI 修复要求基线必须移动时记录原因。"
 }
