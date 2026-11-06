@@ -379,6 +379,11 @@ class TaskContinuityRuntime:
             effect=dict(payload.get("effect") or {"action": "execute"}),
             policy=str(payload.get("policy") or "retry"),
             target_tenant_id=str(payload.get("target_tenant_id") or ""),
+            delegated_tool=str(payload.get("delegated_tool") or ""),
+            delegated_action=str(payload.get("delegated_action") or ""),
+            delegated_params=dict(payload.get("delegated_params") or {})
+            if isinstance(payload.get("delegated_params"), dict)
+            else None,
         )
         self._event("handoff_recorded", task)
         self._write()
@@ -835,6 +840,9 @@ class TaskContinuityRuntime:
         retry_of: str = "",
         inherited: dict[str, Any] | None = None,
         target_tenant_id: str = "",
+        delegated_tool: str = "",
+        delegated_action: str = "",
+        delegated_params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if new_conditions:
             task["conditions"] = _merge_conditions(task["conditions"], new_conditions)
@@ -897,10 +905,18 @@ class TaskContinuityRuntime:
                     "tenant_id": task["tenant_id"],
                     "user_id": task["user_id"],
                     "permissions": list(permissions),
-                    "parent_grant": list(task["grants"].get(source) or []),
                     "target_tenant_id": target_tenant_id,
+                    "delegated_tool": delegated_tool,
+                    "delegated_action": delegated_action,
+                    "delegated_params": dict(delegated_params or {}),
                 },
                 task["task_id"],
+                runtime_context={
+                    "tenant_id": task["tenant_id"],
+                    "user_id": task["user_id"],
+                    "employee_id": source,
+                    "task_id": task["task_id"],
+                },
             )
             call_id = _new_id("tool")
             call_status = "success" if result.get("ok") else "failed"
@@ -1223,7 +1239,11 @@ class TaskContinuityRuntime:
         return _Guard()
 
     def _execute_named_tool(
-        self, name: str, params: dict[str, Any], task_id: str
+        self,
+        name: str,
+        params: dict[str, Any],
+        task_id: str,
+        runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         script = self.workspace / "tools" / f"{name}.py"
         if script.is_file():
@@ -1266,7 +1286,9 @@ class TaskContinuityRuntime:
         try:
             from app.application.tools.workflow import execute_workflow_tool
 
-            raw = execute_workflow_tool(name, params, str(self.workspace))
+            raw = execute_workflow_tool(
+                name, params, str(self.workspace), runtime_context=runtime_context
+            )
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             return {"ok": False, "error_code": "tool_missing", "error_message": str(exc)}
         try:

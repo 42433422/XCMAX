@@ -255,7 +255,7 @@ def _json_tool(
 def _execute_registered_handoff(call: ToolCall) -> Payload:
     from app.application.employee_runtime.handoff_commit import commit_registered_handoff
 
-    return commit_registered_handoff(call.args, call.workspace_root)
+    return commit_registered_handoff(call.args, call.workspace_root, call.runtime_context)
 
 
 def execute_workflow_tool(
