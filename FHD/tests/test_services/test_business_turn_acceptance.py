@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
@@ -13,6 +12,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 import app.db.models
+import app.db.models.purchase_unit  # noqa: F401  customers.query 读购买单位表
 from app.application.agent_orchestrator.tool_spec import validate_tool_call
 from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
@@ -36,6 +36,11 @@ def orders(tmp_path, monkeypatch):
         conn.execute(text("PRAGMA journal_mode=WAL"))
     factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    monkeypatch.setattr("app.db.SessionLocal", factory)
+    monkeypatch.setattr(
+        "app.application.customer_app_service.get_customers_session",
+        factory,
+    )
     with tenant_scope(1):
         db = factory()
         chengdu = Customer(customer_name="成都客户", contact_address="成都市高新区")
@@ -125,24 +130,6 @@ def test_filtered_query_and_export_match_database(orders):
     assert {row["order_no"] for row in query.output["data"]} == {"IN", "EDGE", "HIGH"}
     assert _excel_amount(exported.output) == pytest.approx(18000.01)
     assert query.started_at and query.finished_at
-    evidence = {
-        "task_id": plan.plan_id,
-        "tool_name": query.tool_id,
-        "arguments": query.params,
-        "execution_status": "success" if query.success else "failed",
-        "started_at": query.started_at,
-        "finished_at": query.finished_at,
-        "retry_count": query.retries,
-        "result": {
-            "count": query.output["summary"]["count"],
-            "amount": query.output["summary"]["amount"],
-            "orders": sorted(row["order_no"] for row in query.output["data"]),
-        },
-        "excel_amount": _excel_amount(exported.output),
-    }
-    path = "/opt/cursor/artifacts/business-turn-evidence.json"
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(evidence, handle, ensure_ascii=False, indent=2)
 
 
 def test_exact_boundary_region_and_payment_are_not_widened(orders):
@@ -159,7 +146,9 @@ def test_followup_export_uses_previous_filters(orders):
     first = _plan("查询今天未付款的订单")
     result, _context = _run(first)
     assert {row["order_no"] for row in result.node_results[0].output["data"]} == {"TODAY"}
-    second = _plan("把这些订单导出成 Excel", {"tool_turn_filters": first.metadata["tool_turn_filters"]})
+    second = _plan(
+        "把这些订单导出成 Excel", {"tool_turn_filters": first.metadata["tool_turn_filters"]}
+    )
     exported, _context = _run(second)
     assert exported.node_results[0].tool_id == "reports"
     assert _excel_amount(exported.node_results[0].output) == pytest.approx(100)
@@ -168,7 +157,9 @@ def test_followup_export_uses_previous_filters(orders):
 def test_parallel_reads_use_the_workflow_scheduler(orders):
     plan = _plan("同时查询订单、客户和库存流水")
     assert [node.tool_id for node in plan.nodes] == ["sales", "customers", "inventory"]
-    assert all(node.depends_on == [] and node.idempotent and node.risk == "low" for node in plan.nodes)
+    assert all(
+        node.depends_on == [] and node.idempotent and node.risk == "low" for node in plan.nodes
+    )
     result, _context = _run(plan)
     assert result.success
     assert result.final_context["parallel_batches"][0]["node_ids"] == [
@@ -226,12 +217,18 @@ def test_one_hundred_distinct_queries_match_rows_read_back_from_sqlite(orders):
         for order, customer in stored
     ]
     sentences = []
-    windows = (("11月1日", "11月5日", 1, 5), ("11月6日", "11月7日", 6, 7), ("11月1日", "11月7日", 1, 7))
+    windows = (
+        ("11月1日", "11月5日", 1, 5),
+        ("11月6日", "11月7日", 6, 7),
+        ("11月1日", "11月7日", 1, 7),
+    )
     for region in ("成都", "北京"):
         for payment, state in (("未付款", "unpaid"), ("已付款", "paid")):
             for amount in (0, 100, 200, 4000, 5000, 6000, 7000, 8000, 9000, 10000):
                 for label_start, label_end, start_day, end_day in windows:
-                    sentences.append((region, state, amount, start_day, end_day, label_start, label_end, payment))
+                    sentences.append(
+                        (region, state, amount, start_day, end_day, label_start, label_end, payment)
+                    )
     assert len({item[0:5] for item in sentences}) >= 100
     for region, state, amount, start_day, end_day, label_start, label_end, payment in sentences:
         sentence = f"查询{label_start}到{label_end}{region}地区{payment}且超过{amount}的订单"
@@ -255,9 +252,7 @@ def test_one_hundred_distinct_queries_match_rows_read_back_from_sqlite(orders):
 
 def test_missing_sales_tool_does_not_invent_a_query():
     registry = {
-        name: spec
-        for name, spec in get_tool_registry().items()
-        if name not in {"sales", "reports"}
+        name: spec for name, spec in get_tool_registry().items() if name not in {"sales", "reports"}
     }
     planner = object.__new__(LLMWorkflowPlanner)
     plan = planner._fallback_plan("wp-missing", "查询今天的订单", registry, {"today": TODAY})
@@ -266,7 +261,9 @@ def test_missing_sales_tool_does_not_invent_a_query():
 
 def test_closed_loop_sentence_is_not_replaced_by_order_query():
     plan = _plan("把 A 产品卖给客户B，10 个，单价 100，开票收款")
-    assert any(node.tool_id == "sales" and node.action == "execute_closed_loop" for node in plan.nodes)
+    assert any(
+        node.tool_id == "sales" and node.action == "execute_closed_loop" for node in plan.nodes
+    )
 
 
 def test_twenty_closed_loops_invoice_collect_and_replay_without_new_rows(tmp_path, monkeypatch):
@@ -289,7 +286,9 @@ def test_twenty_closed_loops_invoice_collect_and_replay_without_new_rows(tmp_pat
     sentences = [f"把 A 产品卖给客户B，{qty} 个，单价 100，开票收款" for qty in range(1, 21)]
     with tenant_scope(1):
         for sentence in sentences:
-            plan = planner._fallback_plan("wp-loop", sentence, get_tool_registry(), {"today": TODAY})
+            plan = planner._fallback_plan(
+                "wp-loop", sentence, get_tool_registry(), {"today": TODAY}
+            )
             assert plan.nodes[0].action == "execute_closed_loop"
             result, _approval = _run_approved_closed_loop(plan, {}, {"message": sentence})
             assert result.success, getattr(result, "message", result)

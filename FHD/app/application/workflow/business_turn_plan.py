@@ -32,7 +32,9 @@ def plan_business_turn(
     if any(mark in text for mark in ("不要查", "别查", "不用查", "不要查询")):
         return _bare(plan_id, "refused")
     if "订单" in text and any(mark in text for mark in ("处理一下", "搞定", "弄一下")):
-        return _clarify(plan_id, "ambiguous", "请说明要查询、统计、导出还是创建，未说明前不会改订单。")
+        return _clarify(
+            plan_id, "ambiguous", "请说明要查询、统计、导出还是创建，未说明前不会改订单。"
+        )
     if any(mark in text for mark in ("创建订单", "新建订单", "下一个订单")):
         return _clarify(
             plan_id,
