@@ -413,7 +413,7 @@ def parse_file(
                 )
             except EltError:
                 raise
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - legacy presets remain a safe fallback
+            except RECOVERABLE_ERRORS:
                 regional = None
             if regional is not None:
                 if covers_required_target_fields(regional, target_type):
@@ -443,7 +443,7 @@ def parse_file(
                 generic = _parse_workbook(source, max_rows, target_type)
             except EltError:
                 raise
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - a proven legacy preset remains a safe fallback
+            except RECOVERABLE_ERRORS:
                 return compatibility
             if generic.rows and covers_required_target_fields(generic, target_type):
                 generic.warnings.insert(

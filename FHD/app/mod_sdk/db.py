@@ -6,6 +6,6 @@ Mod 代码应在 ``try/finally`` 中显式 ``close()``，或用 ``contextlib.clo
 
 from __future__ import annotations
 
-from app.db import SessionLocal  # noqa: F401
+from app.db import SessionLocal
 
 __all__ = ["SessionLocal"]

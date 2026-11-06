@@ -86,7 +86,7 @@ class TestNormalizeCidrs:
         assert result == ["10.0.0.0/8"]
 
     def test_none_items_skipped(self):
-        result = _normalize_cidrs([None, "10.0.0.0/8"])  # type: ignore[list-item]
+        result = _normalize_cidrs([None, "10.0.0.0/8"])
         assert result == ["10.0.0.0/8"]
 
     def test_invalid_cidr_raises_400(self):

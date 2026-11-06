@@ -13,8 +13,8 @@ CI_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts" / "ci"
 if str(CI_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(CI_SCRIPTS))
 
-import ai_self_heal as heal  # noqa: E402
-import self_heal_freshness as fr  # noqa: E402
+import ai_self_heal as heal
+import self_heal_freshness as fr
 
 REPO = "o/r"
 OLD, NEW = "a" * 40, "b" * 40

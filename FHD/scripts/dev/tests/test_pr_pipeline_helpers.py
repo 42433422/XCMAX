@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 # FHD/scripts/dev/tests/test_pr_pipeline_helpers.py
 """PR 流水线辅助脚本单元测试。"""
 

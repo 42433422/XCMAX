@@ -85,7 +85,7 @@ class ProfessionalUploadHandler:
             conn.close()
             return analysis_result
 
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:
             return {"error": str(e)}
 
     def process_upload_response(self, user_response, file_path):
@@ -245,7 +245,7 @@ class ProfessionalUploadHandler:
                 "purchase_unit": purchase_unit,
             }
 
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:
             return {"success": False, "message": f"导入失败: {str(e)}"}
 
     def _ensure_target_table_exists(self, cursor):

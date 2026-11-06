@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """Tests for app.infrastructure.rag.hybrid_retriever — coverage ramp C3.3-b.
 
 Covers:

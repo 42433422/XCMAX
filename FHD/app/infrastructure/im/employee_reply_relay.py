@@ -73,7 +73,7 @@ def relay_boss_reply_to_employee(boss_user_id: int, employee_id: str, answer: st
             )
             return False
         return True
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 回流失败不影响 IM 主流程
+    except RECOVERABLE_ERRORS:
         logger.debug("relay_boss_reply_to_employee failed", exc_info=True)
         return False
 

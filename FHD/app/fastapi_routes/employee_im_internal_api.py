@@ -147,7 +147,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
                     continue
                 await im_ws_hub.send_to_user(member_id, legacy_payload)
                 await im_ws_hub.send_to_user(member_id, sync_payload)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - websocket fanout is best-effort after DB write
+        except RECOVERABLE_ERRORS:
             logger.debug("employee_im_send ws push skipped", exc_info=True)
 
         # 离线推送:老板 App 未在线(WS 未连)时,把员工主动汇报写进自建推送离线队列
@@ -163,7 +163,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
             await _notify_offline_im_members(
                 off_member_ids, off_sender_uid, payload.body, title=emp_title
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - offline push is best-effort after DB write
+        except RECOVERABLE_ERRORS:
             logger.debug("employee_im_send offline push skipped", exc_info=True)
 
         logger.info("employee_im_send ok: conv=%s", result.get("conversation_id"))
@@ -179,7 +179,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
     finally:
         try:
             db.close()
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
+        except RECOVERABLE_ERRORS:
             pass
 
 
@@ -228,5 +228,5 @@ def employee_im_set_owner(request: Request, payload: EmployeeImSetOwnerRequest =
     finally:
         try:
             db.close()
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
+        except RECOVERABLE_ERRORS:
             pass

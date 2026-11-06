@@ -45,11 +45,11 @@ class TestServiceRegistry:
 
     def test_invalidate_shipment_wiring_clears_lazy_attrs(self):
         container = get_service_registry()
-        container._shipment_application_service_core = object()  # noqa: SLF001
-        container._shipment_event_primary_facade = object()  # noqa: SLF001
+        container._shipment_application_service_core = object()
+        container._shipment_event_primary_facade = object()
         container.invalidate_shipment_wiring()
-        assert container._shipment_application_service_core is None  # noqa: SLF001
-        assert container._shipment_event_primary_facade is None  # noqa: SLF001
+        assert container._shipment_application_service_core is None
+        assert container._shipment_event_primary_facade is None
 
 
 class TestFastapiDeps:
@@ -73,11 +73,11 @@ class TestRegistryArchitecture:
         from app import bootstrap
 
         container = ServiceContainer()
-        container._template_application_service = object()  # noqa: SLF001
-        container._materials_service = object()  # noqa: SLF001
-        container._products_service = object()  # noqa: SLF001
-        container._extract_log_service = object()  # noqa: SLF001
-        container._product_import_service = object()  # noqa: SLF001
+        container._template_application_service = object()
+        container._materials_service = object()
+        container._products_service = object()
+        container._extract_log_service = object()
+        container._product_import_service = object()
         set_service_registry(container)
 
         for name in (
@@ -89,11 +89,11 @@ class TestRegistryArchitecture:
         ):
             assert not hasattr(getattr(bootstrap, name), "cache_info")
 
-        assert bootstrap.get_template_app_service() is container._template_application_service  # noqa: SLF001
-        assert bootstrap.get_materials_service() is container._materials_service  # noqa: SLF001
-        assert bootstrap.get_products_service() is container._products_service  # noqa: SLF001
-        assert bootstrap.get_extract_log_service() is container._extract_log_service  # noqa: SLF001
-        assert bootstrap.get_product_import_service() is container._product_import_service  # noqa: SLF001
+        assert bootstrap.get_template_app_service() is container._template_application_service
+        assert bootstrap.get_materials_service() is container._materials_service
+        assert bootstrap.get_products_service() is container._products_service
+        assert bootstrap.get_extract_log_service() is container._extract_log_service
+        assert bootstrap.get_product_import_service() is container._product_import_service
 
     def test_app_code_has_no_function_scoped_di_registry_imports(self):
         app_root = Path(__file__).resolve().parents[2] / "app"

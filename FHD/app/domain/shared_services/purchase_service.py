@@ -156,7 +156,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                         items=list(items_data or []),
                         total_amount=Decimal(str(total_amount or 0)),
                     )
-                except RECOVERABLE_ERRORS:  # noqa: BLE001 - never block purchase on bus emit
+                except RECOVERABLE_ERRORS:
                     logger.debug("emit_order_created skipped", exc_info=True)
 
                 return {
@@ -394,7 +394,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                         )
                         if not journal_result.get("success"):
                             logger.warning("应付账款记账失败: %s", journal_result.get("message"))
-                    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 记账失败不阻断入库主流程
+                    except RECOVERABLE_ERRORS:
                         logger.warning("应付账款记账失败", exc_info=True)
 
                 self._publish_event(

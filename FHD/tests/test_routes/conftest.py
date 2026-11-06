@@ -18,8 +18,8 @@ import pytest
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 try:  # pragma: no cover - environment dependent
-    import torch  # noqa: F401
-except BOUNDARY_ERRORS:  # noqa: BLE001 - torch absent or broken → tests degrade gracefully
+    import torch
+except BOUNDARY_ERRORS:
     pass
 
 

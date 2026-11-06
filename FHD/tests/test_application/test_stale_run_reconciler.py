@@ -57,7 +57,7 @@ def _backdate_run(factory, run_id: str, *, status: str, updated_at: str) -> None
 def _make_repo(tmp_path, name: str):
     engine = create_engine(f"sqlite:///{tmp_path / name}")
     # 显式注册模型，并补齐启动对账所需的队列租约表。
-    import app.db.models.agent  # noqa: F401
+    import app.db.models.agent
 
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)

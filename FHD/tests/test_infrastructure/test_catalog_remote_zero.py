@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """Tests for app.infrastructure.mods.catalog_remote."""
 
 from __future__ import annotations

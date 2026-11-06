@@ -39,7 +39,7 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 GOLDEN_PATH = REPO / "tests" / "benchmarks" / "intent_golden_set.json"
 HOLDOUT_PATH = REPO / "tests" / "benchmarks" / "intent_holdout_set.json"

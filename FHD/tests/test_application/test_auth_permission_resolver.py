@@ -1,4 +1,3 @@
-# mypy: disable-error-code="func-returns-value"
 from __future__ import annotations
 
 from types import SimpleNamespace

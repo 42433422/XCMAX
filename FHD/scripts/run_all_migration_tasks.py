@@ -55,7 +55,7 @@ class MigrationTaskRunner:
                 self.results[name] = False
                 return False
 
-        except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except BOUNDARY_ERRORS as e:
             print(f"[ERROR] {name} 异常: {e}")
             self.results[name] = False
             return False

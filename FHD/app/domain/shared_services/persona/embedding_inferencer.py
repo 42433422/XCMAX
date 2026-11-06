@@ -98,7 +98,7 @@ class EmbeddingInferencer:
             pattern, confidence = _nearest_pattern(dominant, refs)
             axes = _CLUSTER_AXES_MAP.get(pattern, PersonaAxes())
             return EmbeddingInferResult(axes=axes, pattern_label=pattern, confidence=confidence)
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001  embedding API 边界：任何异常都降级为中性值
+        except RECOVERABLE_ERRORS as e:
             logger.warning("L2 embedding 推断失败，返回中性值: %s", e)
             return EmbeddingInferResult(axes=PersonaAxes(), pattern_label="error", confidence=0.0)
 
@@ -122,7 +122,7 @@ class EmbeddingInferencer:
                     grouped.setdefault(owner, []).append(vec)
                 for pattern, vecs in grouped.items():
                     centroids[pattern] = np.mean(np.stack(vecs), axis=0)
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001  参照向量失败不致命，退化为无锚点
+        except RECOVERABLE_ERRORS as e:
             logger.warning("L2 参照质心加载失败，退化为中性匹配: %s", e)
 
         self._ref_centroids = centroids
@@ -137,7 +137,7 @@ def _as_matrix(raw: object) -> np.ndarray | None:
         arr = np.asarray(raw, dtype=float)
     except (TypeError, ValueError):
         return None
-    if arr.ndim != 2 or arr.shape[0] == 0 or arr.shape[1] == 0:
+    if arr.ndim != 2 or arr.size == 0:
         return None
     return arr
 

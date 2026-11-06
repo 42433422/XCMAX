@@ -139,7 +139,7 @@ class TestNotifyUrlPathOk:
 
     def test_empty_or_none(self) -> None:
         assert alipay_mod._notify_url_path_ok("") is False
-        assert alipay_mod._notify_url_path_ok(None) is False  # type: ignore[arg-type]
+        assert alipay_mod._notify_url_path_ok(None) is False
 
 
 class TestWarnNotifyUrl:
@@ -362,7 +362,7 @@ class TestCloseOrderValidation:
 
 class TestQueryRefundValidation:
     def test_missing_out_trade_no(self) -> None:
-        out = alipay_mod.query_refund(out_trade_no="")  # type: ignore[arg-type]
+        out = alipay_mod.query_refund(out_trade_no="")
         assert out["success"] is False
         assert "out_trade_no 必填" in out["message"]
 

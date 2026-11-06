@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, assignment, attr-defined, exit-return, operator, union-attr"
 from __future__ import annotations
 
 import argparse

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return, var-annotated"
 """Branch-coverage tests for app.application.agent_orchestrator.repair_advisor.
 
 Targets branches in:

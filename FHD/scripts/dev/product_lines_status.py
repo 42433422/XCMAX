@@ -40,7 +40,7 @@ FHD_ROOT = HERE.parents[1]
 REPO_ROOT = FHD_ROOT.parent
 sys.path.insert(0, str(HERE))
 
-from verify_version_anchors import canonical_version, toolchain_version  # noqa: E402
+from verify_version_anchors import canonical_version, toolchain_version
 
 CONFIG_PATH = FHD_ROOT / "config" / "product_lines.yaml"
 CAPABILITY_BUILDER = REPO_ROOT / "成都修茈科技有限公司" / "scripts" / "build_capability_center.py"

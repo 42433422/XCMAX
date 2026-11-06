@@ -150,7 +150,7 @@ def _make_planner() -> Any:
 
 def _make_planner_with_fence() -> Any:
     planner = _make_planner()
-    planner._strip_json_code_fence = lambda raw: raw  # type: ignore[attr-defined]
+    planner._strip_json_code_fence = lambda raw: raw
     return planner
 
 
@@ -3183,7 +3183,7 @@ class TestPlanWithLLMAdditional:
                 user_id="u1",
                 message="test",
                 tool_registry=_sample_registry(),
-                context=None,  # type: ignore[arg-type]
+                context=None,
             )
             assert result is not None
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="call-overload"
 """
 XCAGI 共享数据库与路径配置
 
@@ -92,7 +91,7 @@ def initialize_databases():
                 cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
                 tables = [t[0] for t in cur.fetchall()]
                 logger.info(f"  数据库表：{tables}")
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"  处理数据库文件失败 {db_file}: {e}")
 
 
@@ -141,7 +140,7 @@ def _query_purchase_units_from_db(db_path):
         rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         logger.warning(f"查询 purchase_units 失败 {db_path}: {e}")
         return []
 
@@ -237,7 +236,7 @@ def get_unit_db_connection(unit):
             return None
 
         return conn, cursor
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"获取单位数据库连接失败：{e}")
         return None
 
@@ -252,7 +251,7 @@ def query_db(sql, params=(), fetch_one=False):
         result = cursor.fetchone() if fetch_one else cursor.fetchall()
         conn.close()
         return result
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"数据库查询失败：{e}")
         return None
 
@@ -274,7 +273,7 @@ def execute_db(sql, params=()):
         last_id = cursor.lastrowid
         conn.close()
         return last_id
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"数据库操作失败：{e}")
         return None
 
@@ -288,7 +287,7 @@ def get_unit_id_by_name(unit_name):
             fetch_one=True,
         )
         return unit["id"] if unit else None
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return None
 
 

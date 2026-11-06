@@ -1,4 +1,3 @@
-# mypy: disable-error-code="method-assign, no-any-return"
 """
 W1-10 端到端契约 + 真实 SQLite 原子闭环 + 桌面验收（W1-09 R2 确定性销售写路由纠正后）。
 
@@ -95,10 +94,10 @@ class _LLMBomb:
     （``_ai_service``）的任意属性或调用，立即引爆，测试失败。
     """
 
-    def __getattr__(self, _name):  # noqa: ANN001
+    def __getattr__(self, _name):
         raise AssertionError("planner model/completion 网关不得被触达")
 
-    def __call__(self, *args, **kwargs):  # noqa: ANN002, ANN003
+    def __call__(self, *args, **kwargs):
         raise AssertionError("planner model/completion 网关不得被触达")
 
 
@@ -236,7 +235,7 @@ class TestPlannerDeterministicBypassNoLLM:
     """
 
     def test_plan_no_llm_single_high_risk_idempotent_node_payload_preserved(self):
-        def _bomb(*args, **kwargs):  # noqa: ANN002, ANN003
+        def _bomb(*args, **kwargs):
             raise AssertionError("LLM completion/request 路径不得被触达")
 
         from app.application.workflow.planner import (
@@ -298,10 +297,10 @@ class TestAppServiceDeterministicApproval:
         from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
         from app.application.workflow.checkpointer import WorkflowCheckpointer
 
-        def _dispatch_bomb(*args, **kwargs):  # noqa: ANN002, ANN003
+        def _dispatch_bomb(*args, **kwargs):
             raise AssertionError("workflow 分发器不得在获批前被调用")
 
-        def _llm_tool_bomb(*args, **kwargs):  # noqa: ANN002, ANN003
+        def _llm_tool_bomb(*args, **kwargs):
             raise AssertionError("AgentToolExecutor / LLM / planner 路径不得被触达")
 
         # 真实 WorkflowEngine（分发器炸弹）+ 真实 WorkflowCheckpointer，替代 langgraph 桩。
@@ -324,7 +323,7 @@ class TestAppServiceDeterministicApproval:
                 workflow_runtime=real_engine,
                 workflow_checkpointer=real_checkpointer,
             )
-        svc.approval_service._persist_request_to_db = lambda req, **k: {  # noqa: ARG005
+        svc.approval_service._persist_request_to_db = lambda req, **k: {
             "request_no": req.request_id
         }
         # 计划落库为尽力而为的持久化边界 → no-op，保持测试隔离。
@@ -430,13 +429,13 @@ class TestE2EApprovalReachability:
         # 引擎分发器 spy：一旦被调用即失败并记录调用。
         dispatch_calls: list[str] = []
 
-        def _dispatch_spy(*args, **kwargs):  # noqa: ANN002, ANN003
+        def _dispatch_spy(*args, **kwargs):
             dispatch_calls.append("called")
             raise AssertionError("engine.run 不应在待审批时被调用")
 
         # 真实 ApprovalService，仅将 DB 持久化替换为 no-op。
         approval = ApprovalService()
-        approval._persist_request_to_db = lambda *a, **k: None  # noqa: ARG005
+        approval._persist_request_to_db = lambda *a, **k: None
 
         # 真实生产 WorkflowEngine，内置分发器 spy：一旦被调用即失败并记录调用。
         real_engine = WorkflowEngine(tool_dispatcher=_dispatch_spy)
@@ -664,7 +663,7 @@ def _ledger_available(factory, tenant_id: int, product_id: int) -> float | None:
 def _new_approval() -> ApprovalService:
     """真实 ApprovalService，仅把 DB 持久化重定向为 no-op（与既有聚焦测试一致）。"""
     approval = ApprovalService()
-    approval._persist_request_to_db = lambda *a, **k: None  # noqa: ARG005
+    approval._persist_request_to_db = lambda *a, **k: None
     return approval
 
 
@@ -1262,7 +1261,7 @@ class TestRealSqliteAtomicClosedLoop:
             orig = getattr(SalesAppService, method)
 
             def make_wrapper(original):
-                def wrapper(self, *args, **kwargs):  # noqa: ANN001, ANN202
+                def wrapper(self, *args, **kwargs):
                     recorded.append(kwargs.get("db"))
                     return original(self, *args, **kwargs)
 
@@ -1634,7 +1633,7 @@ class TestRealSqliteAtomicClosedLoop:
                 orig = getattr(SalesAppService, method)
 
                 def make_wrapper(original, m):
-                    def wrapper(self, *args, **kwargs):  # noqa: ANN001, ANN202
+                    def wrapper(self, *args, **kwargs):
                         calls[m] += 1
                         return original(self, *args, **kwargs)
 
@@ -2098,7 +2097,7 @@ class TestDurableRecoveryAfterRestart:
         monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval2)
 
         # 使真实引擎执行失败：分发器抛可恢复错误 → 节点失败 → run_result.success=False。
-        def _boom(*_args, **_kwargs):  # noqa: ANN002, ANN003
+        def _boom(*_args, **_kwargs):
             raise RuntimeError("tool dispatch failed")
 
         with tenant_scope(1):

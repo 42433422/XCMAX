@@ -84,9 +84,9 @@ class SessionManager:
             # SQLAlchemy resultproxy：桌面 SQLite 下偶发 tuple index out of range
             try:
                 return self._validate_session_once(session_id, use_joinedload=False)
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - session validation must fail closed
+            except RECOVERABLE_ERRORS:
                 return None
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - session validation must fail closed
+        except RECOVERABLE_ERRORS:
             return None
 
     def _validate_session_once(self, session_id: str, *, use_joinedload: bool = True):

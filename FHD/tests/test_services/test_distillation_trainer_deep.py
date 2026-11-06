@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """Deep coverage tests for app.domain.shared_services.distillation_trainer.
 
 Root cause of near-zero coverage: the source module imports ``torch`` and
@@ -190,9 +189,9 @@ def _install_torch_transformers_stubs() -> None:
 # Stubs (if needed) are installed by tests/test_services/conftest.py.
 # Now safe to import the source module — its top-level imports will resolve
 # against the stubs (or the real library if torch is installed).
-import torch  # noqa: E402
+import torch
 
-from app.domain.shared_services.distillation_trainer import (  # noqa: E402
+from app.domain.shared_services.distillation_trainer import (
     CHECKPOINT_DIR,
     DISTILL_DIR,
     ID_TO_LABEL,
@@ -202,7 +201,7 @@ from app.domain.shared_services.distillation_trainer import (  # noqa: E402
     DistillationDataset,
     DistillationTrainer,
     main,
-)  # noqa: E402
+)
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """读取 capability_proposal.jsonl → 创建受控 GitHub 治理 issue。
 
 CI 用法（在 capability-proposal-to-issue.yml workflow 中）:
@@ -35,15 +34,15 @@ _FHD_ROOT = Path(__file__).resolve().parents[2]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
 
-from app.domain.shared_services.capability_proposal_recorder import (  # noqa: E402  pylint: disable=wrong-import-position
+from app.domain.shared_services.capability_proposal_recorder import (
     list_pending_proposals,
     mark_proposals_processed,
 )
 from app.domain.shared_services.ssot import (
-    classify_track,  # noqa: E402  pylint: disable=wrong-import-position
-    derive_wo_id,  # noqa: E402  pylint: disable=wrong-import-position
+    classify_track,
+    derive_wo_id,
 )
-from app.utils.operational_errors import (  # noqa: E402  pylint: disable=wrong-import-position
+from app.utils.operational_errors import (
     BOUNDARY_ERRORS,
 )
 
@@ -411,7 +410,7 @@ def _link_work_order(
             issue_url=str(issue_url or ""),
             track=str(track or ""),
         )
-    except BOUNDARY_ERRORS:  # noqa: BLE001 - CI/中继边界兜底，不影响 issue 流程
+    except BOUNDARY_ERRORS:
         logger.debug("work_order link skipped", exc_info=True)
 
 

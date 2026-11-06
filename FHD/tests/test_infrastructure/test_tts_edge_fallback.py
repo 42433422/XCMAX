@@ -1,4 +1,3 @@
-# mypy: disable-error-code="return-value"
 """Tests for app.domain.shared_services.tts_service — coverage ramp C3.3-b.
 
 Covers:
@@ -382,7 +381,7 @@ class TestSynthesizeHappyPath:
 
 class TestNestedLoopFallback:
     def test_runtime_error_with_other_message_re_raises(self, monkeypatch) -> None:
-        async def _raise_other(_req) -> bytes:  # noqa: ARG001
+        async def _raise_other(_req) -> bytes:
             raise RuntimeError("some other error")
 
         monkeypatch.setattr(tts, "_synthesize_mp3_bytes", _raise_other)
@@ -394,7 +393,7 @@ class TestNestedLoopFallback:
         # RuntimeError with a specific message. Verify the fallback path.
         calls = {"n": 0}
 
-        def _factory(req) -> bytes:  # noqa: ARG001
+        def _factory(req) -> bytes:
             calls["n"] += 1
             if calls["n"] == 1:
 
@@ -477,7 +476,7 @@ class TestEdgeUpstreamFailure:
         class ForbiddenHandshake(Exception):
             status = 403
 
-        async def _forbidden(_req) -> bytes:  # noqa: ARG001
+        async def _forbidden(_req) -> bytes:
             raise ForbiddenHandshake("Invalid response status")
 
         monkeypatch.setattr(tts, "_synthesize_mp3_bytes", _forbidden)
@@ -492,7 +491,7 @@ class TestEdgeUpstreamFailure:
         class WeirdSdkError(Exception):
             pass
 
-        async def _weird(_req) -> bytes:  # noqa: ARG001
+        async def _weird(_req) -> bytes:
             raise WeirdSdkError("boom")
 
         monkeypatch.setattr(tts, "_synthesize_mp3_bytes", _weird)
@@ -542,7 +541,7 @@ class TestWarmup:
         """The warmup worker must continue past per-phrase errors."""
         counter = {"n": 0}
 
-        def _explode(**kw) -> dict:  # noqa: ARG001
+        def _explode(**kw) -> dict:
             counter["n"] += 1
             raise RuntimeError("synth fail")
 

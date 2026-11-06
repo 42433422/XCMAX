@@ -189,7 +189,7 @@ class TestReflexResponses:
 
     def test_get_reflex_response_missing_type(self):
         # pass a type not in the dict at all (simulate via sentinel)
-        resp = get_reflex_response("NONEXISTENT_TYPE")  # type: ignore[arg-type]
+        resp = get_reflex_response("NONEXISTENT_TYPE")
         assert resp == ""
 
     def test_all_types_have_responses(self):

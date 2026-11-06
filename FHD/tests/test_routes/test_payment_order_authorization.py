@@ -9,7 +9,7 @@ from app.db.models.permission import Permission, Role
 from app.db.models.user import User
 from app.fastapi_routes import model_payment
 from app.infrastructure.payment import order_store
-from tests.test_routes.test_payment_checkout_identity import payment_client  # noqa: F401
+from tests.test_routes.test_payment_checkout_identity import payment_client
 
 pytestmark = pytest.mark.release_gate
 

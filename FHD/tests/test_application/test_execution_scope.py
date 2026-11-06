@@ -56,4 +56,4 @@ def test_require_factory_capability_gate():
     with pytest.raises(PermissionError):
         require_factory_capability(CapabilityGrant.product())
     with pytest.raises(PermissionError):
-        require_factory_capability(None)  # type: ignore[arg-type]
+        require_factory_capability(None)

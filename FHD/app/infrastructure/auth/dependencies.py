@@ -122,7 +122,7 @@ def resolve_session_user(request: HTTPConnection) -> Any | None:
 
         if assert_desktop_allows_session_id(sid) is not None:
             return None
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         pass
     user = get_session_service().validate_session(sid)
     if user is not None:

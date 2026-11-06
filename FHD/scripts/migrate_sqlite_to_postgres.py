@@ -1,4 +1,3 @@
-# mypy: disable-error-code="assignment"
 from __future__ import annotations
 
 import argparse
@@ -99,7 +98,7 @@ def main() -> None:
                 copied = _copy_table(sqlite_conn, pg_engine, table)
                 total += copied
                 print(f"[migrate] {table}: {copied} rows")
-            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except BOUNDARY_ERRORS as exc:
                 print(f"[migrate] {table}: skipped ({exc})")
         print(f"[migrate] done, total rows copied: {total}")
     finally:

@@ -13,15 +13,15 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from dotenv import load_dotenv  # type: ignore[import-not-found]
+from dotenv import load_dotenv
 
 load_dotenv(_ROOT / ".env")
 
-from sqlalchemy import create_engine, text  # noqa: E402
-from sqlalchemy.engine import make_url  # noqa: E402
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
-from app.infrastructure.db.sync_engine import resolve_database_url_for_active_mod  # noqa: E402
-from app.request_active_mod_ctx import set_request_active_mod_id  # noqa: E402
+from app.infrastructure.db.sync_engine import resolve_database_url_for_active_mod
+from app.request_active_mod_ctx import set_request_active_mod_id
 
 MODS = ["taiyangniao-pro"]
 
@@ -67,7 +67,7 @@ def main() -> int:
         try:
             info = _probe(url)
             print(f"  probe    -> {info}")
-        except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except BOUNDARY_ERRORS as exc:
             ok = False
             print(f"  probe FAILED: {exc}")
     return 0 if ok else 2

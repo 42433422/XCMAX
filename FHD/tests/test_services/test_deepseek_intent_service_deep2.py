@@ -219,7 +219,7 @@ class TestNormalizeSlotsDeep:
         assert out.get("key") == ""
 
     def test_none_value_skipped(self, recognizer: DeepSeekIntentRecognizer) -> None:
-        out = recognizer._normalize_slots({"key": None}, "")  # type: ignore[dict-item]
+        out = recognizer._normalize_slots({"key": None}, "")
         assert "key" not in out
 
 

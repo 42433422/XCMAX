@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 """_approval_ledger_client.py 单元测试。
 
 覆盖：
@@ -25,7 +24,7 @@ CI_SCRIPTS = FHD_ROOT / "scripts" / "ci"
 if str(CI_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(CI_SCRIPTS))
 
-import _approval_ledger_client as client  # noqa: E402
+import _approval_ledger_client as client
 
 # =====================================================================
 # 测试 fixtures

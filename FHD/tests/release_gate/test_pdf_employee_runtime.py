@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-untyped"
 """Release-level checks for the PDF employee runtime shipped in desktop builds."""
 
 from __future__ import annotations

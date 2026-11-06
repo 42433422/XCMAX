@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, var-annotated"
 """COVERAGE_RAMP Phase 6 round 13: backend low-coverage modules.
 
 Targets:
@@ -189,7 +188,7 @@ class TestMergeToolRuntimeContext:
         with tenant_scope(1):
             result = AIChatApplicationService._merge_tool_runtime_context(
                 "u1", "hello", "not a dict"
-            )  # type: ignore[arg-type]
+            )
         assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_skips_none_values(self) -> None:

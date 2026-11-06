@@ -42,7 +42,7 @@ from pathlib import Path
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.pool import StaticPool
 
-import app.db.models  # noqa: F401  (registers every ORM table on Base.metadata)
+import app.db.models
 from app.db import init_db
 from app.db.db_base import Base
 

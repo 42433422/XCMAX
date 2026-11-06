@@ -12,8 +12,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 
-import app.fastapi_routes.mobile_api as mobile_api_mod  # noqa: E402, F401 — must precede mobile_api_extensions to break circular import
-import app.fastapi_routes.mobile_api_extensions as mobile_ext  # noqa: E402
+import app.fastapi_routes.mobile_api as mobile_api_mod
+import app.fastapi_routes.mobile_api_extensions as mobile_ext
 from app.db import init_db as init_db_mod
 from app.utils.path_io.print_utils import PrinterUtils
 

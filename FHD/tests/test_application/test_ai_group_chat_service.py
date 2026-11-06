@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 from __future__ import annotations
 
 import asyncio
@@ -765,16 +764,16 @@ async def test_acceptance_followup_reports_pending_work_order_progress(tmp_path:
         member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
     )
     work_order_id = "work-order-pending"
-    svc._append_messages(  # noqa: SLF001 - 覆盖工具卡片回访真实消息流水
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
                 sender_id="ai-group-dispatcher",
                 sender_name="工作流调度",
                 sender_avatar="",
-                body=svc._format_work_order_message(  # noqa: SLF001
+                body=svc._format_work_order_message(
                     "修复手机端消息长按复制删除",
                     ["超级员工-Codex"],
                 ),
@@ -783,7 +782,7 @@ async def test_acceptance_followup_reports_pending_work_order_progress(tmp_path:
                 work_order_id=work_order_id,
                 payload={"task": "修复手机端消息长按复制删除"},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -844,9 +843,9 @@ def test_duplicate_super_development_groups_are_merged_and_alias_resolves(tmp_pa
     for group in [first, second]:
         for member in members:
             svc.add_member(user_id=1, group_id=group["id"], member=member)
-    svc._append_messages(  # noqa: SLF001 - 覆盖重复群合并
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=first["id"],
                 role="ai",
@@ -855,7 +854,7 @@ def test_duplicate_super_development_groups_are_merged_and_alias_resolves(tmp_pa
                 sender_avatar="",
                 body="旧群消息",
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=second["id"],
                 role="ai",
@@ -871,7 +870,7 @@ def test_duplicate_super_development_groups_are_merged_and_alias_resolves(tmp_pa
     visible_super = [g for g in visible if g["name"] == "超级开发部"]
     assert len(visible_super) == 1
     all_groups = svc.list_groups(user_id=1, include_hidden=True)
-    hidden_alias = next(g for g in svc._user_groups(1) if g.get("is_hidden"))  # noqa: SLF001
+    hidden_alias = next(g for g in svc._user_groups(1) if g.get("is_hidden"))
     assert hidden_alias.get("alias_group_id") == visible_super[0]["id"]
     alias_messages = svc.get_messages(user_id=1, group_id=str(hidden_alias["id"]))
     assert {m["body"] for m in alias_messages} == {"旧群消息", "新群消息"}
@@ -940,9 +939,9 @@ def test_get_messages_caps_historical_long_work_report_body(tmp_path: Path):
         "执行日志：[all_hands_app_service.py](/private/var/folders/tmp/demo/FHD/app/application/all_hands_app_service.py:2)"
         + ("这是很长的执行输出。" * 300)
     )
-    svc._append_messages(  # noqa: SLF001 - 验证旧消息公开展示折叠
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -967,7 +966,7 @@ def test_get_messages_caps_historical_long_work_report_body(tmp_path: Path):
 
 
 def test_chat_friendly_summary_removes_markdown_links_and_temp_paths():
-    summary = AiGroupChatService._chat_friendly_summary(  # noqa: SLF001
+    summary = AiGroupChatService._chat_friendly_summary(
         "**职责结论**：[all_hands_app_service.py](/private/var/folders/tmp/demo/FHD/app/application/all_hands_app_service.py:2) 已验证。",
         limit=140,
         include_detail_note=False,
@@ -980,7 +979,7 @@ def test_chat_friendly_summary_removes_markdown_links_and_temp_paths():
 
 
 def test_public_chat_body_removes_broken_markdown_links():
-    body = AiGroupChatService._clean_public_chat_body(  # noqa: SLF001
+    body = AiGroupChatService._clean_public_chat_body(
         "结果：职责结论：[all_hands_app_service.py](临时执行工作区\n"
         "风险：未发现阻塞；中继任务：53b992e79ea7453bb7183761fe7d6568。"
     )
@@ -999,16 +998,16 @@ def test_append_relay_work_report_adds_acceptance_when_work_order_done(tmp_path:
     ]:
         svc.add_member(user_id=1, group_id=group["id"], member=member)
     work_order_id = "work-order-1"
-    svc._append_messages(  # noqa: SLF001 - 覆盖真实消息流水收口
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
                 sender_id="ai-group-dispatcher",
                 sender_name="工作流调度",
                 sender_avatar="",
-                body=svc._format_work_order_message(  # noqa: SLF001
+                body=svc._format_work_order_message(
                     "移动端派工验收测试",
                     ["超级员工-Codex", "超级员工-Cursor"],
                 ),
@@ -1017,7 +1016,7 @@ def test_append_relay_work_report_adds_acceptance_when_work_order_done(tmp_path:
                 work_order_id=work_order_id,
                 payload={"task": "移动端派工验收测试"},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -1030,7 +1029,7 @@ def test_append_relay_work_report_adds_acceptance_when_work_order_done(tmp_path:
                 work_order_id=work_order_id,
                 payload={"raw": {"task_id": "relay-task-1"}},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -1100,16 +1099,16 @@ def test_append_relay_work_report_marks_acceptance_needs_review_on_blocked_body(
         member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
     )
     work_order_id = "work-order-blocked"
-    svc._append_messages(  # noqa: SLF001 - 覆盖真实消息流水收口
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
                 sender_id="ai-group-dispatcher",
                 sender_name="工作流调度",
                 sender_avatar="",
-                body=svc._format_work_order_message(  # noqa: SLF001
+                body=svc._format_work_order_message(
                     "修复手机端消息长按复制删除",
                     ["超级员工-Codex"],
                 ),
@@ -1118,7 +1117,7 @@ def test_append_relay_work_report_marks_acceptance_needs_review_on_blocked_body(
                 work_order_id=work_order_id,
                 payload={"task": "修复手机端消息长按复制删除"},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -1180,16 +1179,16 @@ def test_acceptance_rejects_read_only_patch_not_applied_report(tmp_path: Path):
         member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
     )
     work_order_id = "work-order-read-only"
-    svc._append_messages(  # noqa: SLF001 - 覆盖线上真实假阳性形态
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
                 sender_id="ai-group-dispatcher",
                 sender_name="工作流调度",
                 sender_avatar="",
-                body=svc._format_work_order_message(  # noqa: SLF001
+                body=svc._format_work_order_message(
                     "任务1：解决软件老是闪退的问题",
                     ["超级员工-Codex"],
                 ),
@@ -1198,7 +1197,7 @@ def test_acceptance_rejects_read_only_patch_not_applied_report(tmp_path: Path):
                 work_order_id=work_order_id,
                 payload={"task": "任务1：解决软件老是闪退的问题"},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -1259,16 +1258,16 @@ def test_acceptance_rejects_long_nested_read_only_report(tmp_path: Path):
     )
     work_order_id = "work-order-long-read-only"
     task_id = "relay-task-long-read-only"
-    svc._append_messages(  # noqa: SLF001 - 覆盖线上长报告截断漏判
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
                 sender_id="ai-group-dispatcher",
                 sender_name="工作流调度",
                 sender_avatar="",
-                body=svc._format_work_order_message(  # noqa: SLF001
+                body=svc._format_work_order_message(
                     "任务2：解决自动分支没法选择分支的问题",
                     ["超级员工-Codex"],
                 ),
@@ -1277,7 +1276,7 @@ def test_acceptance_rejects_long_nested_read_only_report(tmp_path: Path):
                 work_order_id=work_order_id,
                 payload={"task": "任务2：解决自动分支没法选择分支的问题"},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -1344,16 +1343,16 @@ def test_acceptance_rejects_cannot_execute_without_evidence(tmp_path: Path):
         member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
     )
     work_order_id = "work-order-no-evidence"
-    svc._append_messages(  # noqa: SLF001
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
                 sender_id="ai-group-dispatcher",
                 sender_name="工作流调度",
                 sender_avatar="",
-                body=svc._format_work_order_message(  # noqa: SLF001
+                body=svc._format_work_order_message(
                     "提供改动文件、测试和 APK 安装证据",
                     ["超级员工-Codex"],
                 ),
@@ -1362,7 +1361,7 @@ def test_acceptance_rejects_cannot_execute_without_evidence(tmp_path: Path):
                 work_order_id=work_order_id,
                 payload={"task": "提供改动文件、测试和 APK 安装证据"},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -1424,16 +1423,16 @@ def test_acceptance_rejects_research_only_completion_for_dev_task(tmp_path: Path
         member={"employee_id": "claude-super-employee", "name": "超级员工-Claude"},
     )
     work_order_id = "work-order-research-only"
-    svc._append_messages(  # noqa: SLF001
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
                 sender_id="ai-group-dispatcher",
                 sender_name="工作流调度",
                 sender_avatar="",
-                body=svc._format_work_order_message(  # noqa: SLF001
+                body=svc._format_work_order_message(
                     "修复超级开发部先讨论再派工，并完成手机端验收测试",
                     ["超级员工-Claude"],
                 ),
@@ -1442,7 +1441,7 @@ def test_acceptance_rejects_research_only_completion_for_dev_task(tmp_path: Path
                 work_order_id=work_order_id,
                 payload={"task": "修复超级开发部先讨论再派工，并完成手机端验收测试"},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -1506,16 +1505,16 @@ def test_acceptance_rejects_phone_observed_progress_and_review_only_reports(tmp_
         svc.add_member(user_id=1, group_id=group["id"], member=member)
     work_order_id = "work-order-phone-observed"
     task_text = "修复超级开发部任务讨论假讨论、执行假完成、小C验收假阳性"
-    svc._append_messages(  # noqa: SLF001
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
                 sender_id="ai-group-dispatcher",
                 sender_name="工作流调度",
                 sender_avatar="",
-                body=svc._format_work_order_message(  # noqa: SLF001
+                body=svc._format_work_order_message(
                     task_text,
                     ["超级员工-Cursor", "超级员工-Claude"],
                 ),
@@ -1524,7 +1523,7 @@ def test_acceptance_rejects_phone_observed_progress_and_review_only_reports(tmp_
                 work_order_id=work_order_id,
                 payload={"task": task_text},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -1537,7 +1536,7 @@ def test_acceptance_rejects_phone_observed_progress_and_review_only_reports(tmp_
                 work_order_id=work_order_id,
                 payload={"raw": {"task_id": "relay-task-cursor-progress"}},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
@@ -1644,16 +1643,16 @@ def test_get_messages_syncs_super_employee_result_without_false_acceptance(
     )
     work_order_id = "work-order-devfleet-sync"
     task_text = "修复超级开发部先讨论再派工和假阳性验收"
-    svc._append_messages(  # noqa: SLF001
+    svc._append_messages(
         [
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",
                 sender_id="ai-group-dispatcher",
                 sender_name="工作流调度",
                 sender_avatar="",
-                body=svc._format_work_order_message(  # noqa: SLF001
+                body=svc._format_work_order_message(
                     task_text,
                     ["超级员工-Codex"],
                 ),
@@ -1662,7 +1661,7 @@ def test_get_messages_syncs_super_employee_result_without_false_acceptance(
                 work_order_id=work_order_id,
                 payload={"task": task_text},
             ),
-            svc._message_row(  # noqa: SLF001
+            svc._message_row(
                 user_id=1,
                 group_id=group["id"],
                 role="ai",

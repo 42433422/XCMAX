@@ -1,4 +1,3 @@
-# mypy: disable-error-code="call-overload, no-any-return, union-attr"
 """COVERAGE_RAMP Phase 6 round 7: backend low-coverage modules.
 
 Targets:

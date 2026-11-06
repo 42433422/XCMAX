@@ -30,7 +30,7 @@ class TestGetSection:
         assert exec_mod._get_section({"actions": [1, 2]}, "actions") == {}
 
     def test_returns_empty_when_config_not_dict(self):
-        assert exec_mod._get_section(None, "actions") == {}  # type: ignore[arg-type]
+        assert exec_mod._get_section(None, "actions") == {}
 
 
 class TestNormalizeActionsCfg:

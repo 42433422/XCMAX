@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="truthy-function"
 """将 lan-gate-ai-employee 登记到 MODstore catalog（material_category=ai_employee）。"""
 
 from __future__ import annotations
@@ -125,7 +124,7 @@ def main() -> int:
                 db.commit()
                 try:
                     mirror_catalog_file_to_market_files(row.stored_filename)
-                except BOUNDARY_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+                except BOUNDARY_ERRORS:
                     pass
         print(f"[SEED] {PACK_ID} ok")
         return 0

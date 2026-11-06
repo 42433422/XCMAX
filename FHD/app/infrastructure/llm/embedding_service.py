@@ -56,7 +56,7 @@ def _resolve_mode() -> EmbeddingMode:
 
         if is_desktop_mode():
             return "disabled"
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - env bootstrap must not fail import
+    except RECOVERABLE_ERRORS:
         pass
     return "hash"
 

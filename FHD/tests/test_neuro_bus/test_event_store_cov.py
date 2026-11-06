@@ -1,4 +1,3 @@
-# mypy: disable-error-code="union-attr"
 """
 Branch-coverage tests for app/neuro_bus/event_store.py
 

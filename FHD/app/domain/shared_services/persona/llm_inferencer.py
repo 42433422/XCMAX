@@ -87,7 +87,7 @@ class LlmInferencer:
             content = response["choices"][0]["message"]["content"]
 
             return self._parse_response(content)
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001  LLM API 边界：任何异常都降级为中性值
+        except RECOVERABLE_ERRORS as e:
             logger.warning("L3 LLM 推断失败，返回中性值: %s", e)
             return LlmInferResult(
                 axes=PersonaAxes(),

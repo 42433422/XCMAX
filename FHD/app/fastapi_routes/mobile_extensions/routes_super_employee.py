@@ -300,7 +300,7 @@ class SuperEmployeeRoutes:
                                 reader.cancel()
                             with suppress(asyncio.CancelledError):
                                 await reader
-                except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+                except RECOVERABLE_ERRORS as exc:
                     logger.exception("mobile_super_employee_stream failed: %s", exc)
                     yield ports.sse_line({"type": "error", "message": "流式调用失败，请稍后重试"})
 

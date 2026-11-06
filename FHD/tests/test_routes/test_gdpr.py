@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """Tests for app.fastapi_routes.gdpr — coverage ramp."""
 
 from __future__ import annotations

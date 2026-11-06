@@ -191,7 +191,7 @@ class ShadowCanaryRouter(WorkflowRuntime):
         if self._diff_sink is not None:
             try:
                 self._diff_sink(diff)
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - diff must never break the run
+            except RECOVERABLE_ERRORS:
                 logger.exception("shadow diff sink 处理失败 plan=%s", diff.plan_id)
             return
         if not diff.equal:
@@ -355,7 +355,7 @@ class ShadowCanaryRouter(WorkflowRuntime):
         def _run_langgraph_safely() -> tuple[WorkflowRunResult, str]:
             try:
                 return langgraph_call(), ""
-            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - shadow must never break serving
+            except RECOVERABLE_ERRORS as exc:
                 logger.warning("shadow 运行失败 plan=%s: %s", plan_id, exc)
                 return (
                     WorkflowRunResult(

@@ -6,6 +6,6 @@
 使用约定:``from app.shell.<subpkg>.<module> import <symbol>``。
 """
 
-from . import mod_database_gate  # noqa: F401  # 保持历史隐式导入行为
+from . import mod_database_gate  # 保持历史隐式导入行为
 
 __all__ = ["mod_database_gate"]

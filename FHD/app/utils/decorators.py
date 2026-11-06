@@ -205,7 +205,7 @@ def monitored(name: str | None = None, slow_threshold_ms: float = 1000.0):
 
                 if duration_ms > slow_threshold_ms:
                     logger.warning(
-                        f"慢调用检测 [{metric_name}]: {duration_ms:.2f}ms > {slow_threshold_ms:.0f}ms"  # noqa: G004
+                        f"慢调用检测 [{metric_name}]: {duration_ms:.2f}ms > {slow_threshold_ms:.0f}ms"
                     )
 
                 return result

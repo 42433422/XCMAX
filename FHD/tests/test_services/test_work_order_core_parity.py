@@ -81,7 +81,7 @@ class TestTransitionParity:
                     "",
                     "already_in_state",
                 )
-                assert fhd_blocked is server_blocked, (current, target)  # type: ignore[attr-defined]
+                assert fhd_blocked is server_blocked, (current, target)
 
     def test_state_sets_identical(self) -> None:
         if server is None:

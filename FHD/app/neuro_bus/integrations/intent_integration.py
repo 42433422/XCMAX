@@ -331,7 +331,7 @@ class NeuroIntentRecognizer:
         except RECOVERABLE_ERRORS:
             logger.debug("conscious processor path failed; fallback unified", exc_info=True)
             return None
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             logger.debug("conscious processor path failed; fallback unified", exc_info=True)
             return None
 

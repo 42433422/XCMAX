@@ -27,7 +27,7 @@ def _patch_invoke(svc: AiGroupChatService, replies: dict[str, dict]) -> None:
     def fake(*, employee_id: str, task: str, input_data: dict, user_id: int) -> dict:
         return dict(replies.get(employee_id, {"success": False, "summary": "未知员工"}))
 
-    svc._invoke_super_employee_task = fake  # type: ignore[assignment]
+    svc._invoke_super_employee_task = fake
 
 
 async def _run(svc: AiGroupChatService, employee_id: str) -> dict:

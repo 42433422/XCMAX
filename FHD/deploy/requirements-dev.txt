@@ -13,6 +13,7 @@ types-pyyaml
 types-psutil
 types-aiofiles
 types-pillow
+types-reportlab
 types-openpyxl
 types-defusedxml
 celery-types

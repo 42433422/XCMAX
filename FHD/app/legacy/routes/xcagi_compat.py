@@ -45,7 +45,7 @@ def _register_router_events():
             "[XCAGICompat] 路由已注册到 NeuroBus，当前订阅者: %s",
             bus.get_stats().get("handlers", 0),
         )
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:
         logger.debug("[XCAGICompat] NeuroBus 注册跳过: %s", e)
 
 

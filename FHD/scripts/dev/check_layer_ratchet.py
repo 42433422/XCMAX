@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """分层债棘轮（ratchet）：只减不增地收口后端分层债。
 
 守护三条后端分层基线（v10 线内迭代）：

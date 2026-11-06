@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# mypy: disable-error-code="import-not-found, import-untyped"
 """
 XCAGI 商业计划书 Markdown 转 PDF
 """

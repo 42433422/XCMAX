@@ -98,7 +98,7 @@ from app.db.models.workflow import (
 from app.infrastructure.persona.models import PersonaEventLogModel, PersonaProfileModel
 
 # 所有模型映射完成后安装全局多租户过滤事件（继承 TenantScopedMixin 的业务模型自动隔离）。
-from app.db import tenant_filter as _tenant_filter  # noqa: E402,F401
+from app.db import tenant_filter as _tenant_filter
 
 __all__ = [
     "PurchaseUnit",

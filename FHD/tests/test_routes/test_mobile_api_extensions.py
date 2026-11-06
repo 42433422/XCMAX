@@ -18,8 +18,8 @@ def _resolve_circular_import():
     """Import both public modules after moving router composition to the owner."""
     if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
         from app.fastapi_routes import (
-            mobile_api,  # noqa: F401
-            mobile_api_extensions,  # noqa: F401
+            mobile_api,
+            mobile_api_extensions,
         )
     yield
 

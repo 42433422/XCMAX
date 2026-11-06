@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """AIOPEN MCP stdio 桥：将 Cursor / Claude Desktop 的 stdio MCP 转发到 HTTP。
 
 环境变量：
@@ -84,7 +83,7 @@ def main() -> None:
             resp = _post_message(msg)
             if resp is not None:
                 _write_response(resp)
-        except BOUNDARY_ERRORS as err:  # noqa: BLE001 — stdio 桥需兜底并回 JSON-RPC 错误
+        except BOUNDARY_ERRORS as err:
             _write_response(
                 {
                     "jsonrpc": "2.0",

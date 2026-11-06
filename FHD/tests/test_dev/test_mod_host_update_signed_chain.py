@@ -14,10 +14,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "FHD/scripts/deploy/lib"))
 
-import mod_tree_guard as guard  # noqa: E402
+import mod_tree_guard as guard
 
-from app.infrastructure.mods import install_receipts as receipts  # noqa: E402
-from app.infrastructure.mods.package import ModPackage  # noqa: E402
+from app.infrastructure.mods import install_receipts as receipts
+from app.infrastructure.mods.package import ModPackage
 
 
 @pytest.fixture

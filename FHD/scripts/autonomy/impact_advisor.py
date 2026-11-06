@@ -66,7 +66,7 @@ async def advise_impact(
 
     try:
         from app.domain.neuro.cognition.llm_port import get_llm_port
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return {
             "enabled": True,
             "allow": True,

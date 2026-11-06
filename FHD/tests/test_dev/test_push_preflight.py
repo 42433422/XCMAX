@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.dev import push_preflight as pf  # noqa: E402
+from scripts.dev import push_preflight as pf
 
 
 def test_product_patterns_follow_ci_gate():

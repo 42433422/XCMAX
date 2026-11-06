@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hmac
 import os
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
@@ -72,7 +72,7 @@ async def wechat_context(
     tenant_id: int | None = None,
     authorization: str | None = Header(default=None),
     x_wechat_token: str | None = Header(default=None, alias="X-Wechat-Token"),
-    request: Request = None,  # type: ignore[assignment]
+    request: Request = cast(Request, None),
 ) -> dict[str, Any]:
     """查询单个联系人的客户情报（身份绑定 + 档案 + 最近消息）。"""
     _auth(authorization, x_wechat_token, request)
@@ -85,7 +85,7 @@ async def wechat_contacts(
     limit: int = 200,
     authorization: str | None = Header(default=None),
     x_wechat_token: str | None = Header(default=None, alias="X-Wechat-Token"),
-    request: Request = None,  # type: ignore[assignment]
+    request: Request = cast(Request, None),
 ) -> dict[str, Any]:
     """联系人映射列表（管理端用）。"""
     _auth(authorization, x_wechat_token, request)
@@ -98,7 +98,7 @@ async def wechat_contact_link(
     payload: dict[str, Any],
     authorization: str | None = Header(default=None),
     x_wechat_token: str | None = Header(default=None, alias="X-Wechat-Token"),
-    request: Request = None,  # type: ignore[assignment]
+    request: Request = cast(Request, None),
 ) -> dict[str, Any]:
     """管理端人工绑定联系人 → 客户。"""
     _auth(authorization, x_wechat_token, request)

@@ -1,13 +1,16 @@
-# mypy: disable-error-code="attr-defined, valid-type"
 """Excel 导入管线：表头词条与列统计的回退式角色启发（叶子模块）。"""
 
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 
 class ExcelImportColumnFallbackMixin:
+    if TYPE_CHECKING:
+        _PACK_OR_MEASURE_RE: Any
+        _is_number_text: Any
+
     @staticmethod
     def _model_like_score(value: str) -> float:
         text = str(value or "").strip()

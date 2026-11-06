@@ -116,7 +116,7 @@ class DatabaseWorkflowCheckpointer:
                 tables=[cast("Table", WorkflowCheckpoint.__table__)],
                 checkfirst=True,
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 建表失败不阻断工作流，仅告警
+        except RECOVERABLE_ERRORS:
             logger.warning(
                 "workflow_checkpoints 建表失败，checkpoint 将记录告警降级", exc_info=True
             )

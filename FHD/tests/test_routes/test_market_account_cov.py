@@ -62,7 +62,7 @@ class TestAuthHeader:
         assert result == ""
 
     def test_none_string(self):
-        result = ma._auth_header(None)  # type: ignore[arg-type]
+        result = ma._auth_header(None)
         assert result == ""
 
 
@@ -178,7 +178,7 @@ class TestProxyErrorHttpStatus:
         assert ma._proxy_error_http_status({"__proxy_error__": True, "status_code": "bad"}) is None
 
     def test_non_dict_returns_none(self):
-        assert ma._proxy_error_http_status("string") is None  # type: ignore[arg-type]
+        assert ma._proxy_error_http_status("string") is None
 
 
 # ===========================================================================
@@ -376,7 +376,7 @@ class TestTokenExtraction:
         assert ma._token_from_auth_response(payload) == "tokens_top"
 
     def test_token_non_dict(self):
-        assert ma._token_from_auth_response("not a dict") == ""  # type: ignore[arg-type]
+        assert ma._token_from_auth_response("not a dict") == ""
 
     def test_refresh_from_data_nested(self):
         payload = {"data": {"refresh_token": "rt_inner"}}
@@ -399,7 +399,7 @@ class TestTokenExtraction:
         assert ma._refresh_token_from_auth_response(payload) == "rt_deep"
 
     def test_refresh_non_dict_returns_empty(self):
-        assert ma._refresh_token_from_auth_response(None) == ""  # type: ignore[arg-type]
+        assert ma._refresh_token_from_auth_response(None) == ""
 
 
 # ===========================================================================
@@ -433,7 +433,7 @@ class TestUserBlobFromMarketPayload:
         assert ma._user_blob_from_market_payload(payload) == {}
 
     def test_non_dict_returns_empty(self):
-        assert ma._user_blob_from_market_payload(None) == {}  # type: ignore[arg-type]
+        assert ma._user_blob_from_market_payload(None) == {}
 
 
 # ===========================================================================
@@ -1055,7 +1055,7 @@ class TestBootstrapOverviewNeedsLiveMerge:
         assert ma._bootstrap_overview_needs_live_merge(None) is True
 
     def test_non_dict_returns_true(self):
-        assert ma._bootstrap_overview_needs_live_merge("string") is True  # type: ignore[arg-type]
+        assert ma._bootstrap_overview_needs_live_merge("string") is True
 
     def test_complete_data_returns_false(self):
         data = {"user": {}, "wallet": {}, "membership": {}}

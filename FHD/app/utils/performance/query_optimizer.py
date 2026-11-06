@@ -87,7 +87,7 @@ class QueryOptimizer:
         if stats.is_slow:
             self._slow_queries.append(stats)
             logger.warning(
-                f"慢查询检测 [{stats.query_id}]: {duration_ms:.2f}ms > {SLOW_QUERY_THRESHOLD * 1000:.0f}ms | SQL: {sql[:200]}"  # noqa: G004
+                f"慢查询检测 [{stats.query_id}]: {duration_ms:.2f}ms > {SLOW_QUERY_THRESHOLD * 1000:.0f}ms | SQL: {sql[:200]}"
             )
 
         if len(self._query_stats) > self._max_stats:

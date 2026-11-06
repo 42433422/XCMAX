@@ -1,9 +1,14 @@
-# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Customer/product multi-region parsing orchestration."""
 
 from __future__ import annotations
 
 import importlib
+from collections import deque
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from app.application.elt.parser_regions import ParsedDataset, ParsedRow
 
 
 def _facade():
@@ -11,34 +16,32 @@ def _facade():
 
 
 def parse_customer_product_regions(
-    path: _facade().Path, *, max_rows: int, target_type: str = "customer_products"
-) -> _facade().ParsedDataset | None:
+    path: Path, *, max_rows: int, target_type: str = "customer_products"
+) -> ParsedDataset | None:
     """Parse explicit buyer + product-table regions without treating the whole sheet as one table."""
     from openpyxl import load_workbook
 
     workbook = load_workbook(path, read_only=True, data_only=True, keep_links=False)
     workbook_sheet_names = [str(name) for name in workbook.sheetnames]
-    parsed_rows: list[_facade().ParsedRow] = []
+    parsed_rows: list[ParsedRow] = []
     all_headers: list[str] = []
-    regions: list[dict[str, _facade().Any]] = []
-    probes: list[dict[str, _facade().Any]] = []
-    skipped_sheets: list[dict[str, _facade().Any]] = []
+    regions: list[dict[str, Any]] = []
+    probes: list[dict[str, Any]] = []
+    skipped_sheets: list[dict[str, Any]] = []
     excluded_charge_rows: list[str] = []
     imported_by_sheet: dict[str, int] = {}
     history_product_count = 0
     companion_sheet_counts: dict[str, int] = {}
     companion_candidate_count = 0
     companion_stale_records_skipped = 0
-    future_dated_source_rows: list[dict[str, _facade().Any]] = []
+    future_dated_source_rows: list[dict[str, Any]] = []
     same_date_source_conflicts = 0
     model_identity_ambiguity_count = 0
     sheet_domain_hints: dict[str, str] = {}
     try:
         for worksheet in workbook.worksheets:
-            recent: _facade().deque[tuple[int, tuple[_facade().Any, ...]]] = _facade().deque(
-                maxlen=5
-            )
-            active: dict[str, _facade().Any] | None = None
+            recent: deque[tuple[int, tuple[Any, ...]]] = _facade().deque(maxlen=5)
+            active: dict[str, Any] | None = None
             sheet_candidates = 0
             for row_number, raw_values in enumerate(worksheet.iter_rows(values_only=True), start=1):
                 values = tuple(raw_values)
@@ -120,14 +123,14 @@ def parse_customer_product_regions(
                         if _facade()._NON_PRODUCT_RE.fullmatch(business_name):
                             excluded_charge_rows.append(f"{worksheet.title}:{row_number}")
                         else:
-                            projected_input: dict[str, _facade().Any] = {
+                            projected_input: dict[str, Any] = {
                                 "customer_name": active["meta"]["customer_name"]
                             }
                             if active["meta"].get("contact_person"):
                                 projected_input["contact_person"] = active["meta"]["contact_person"]
                             if active["meta"].get("contact_phone"):
                                 projected_input["contact_phone"] = active["meta"]["contact_phone"]
-                            original_fragment: dict[str, _facade().Any] = {}
+                            original_fragment: dict[str, Any] = {}
                             columns: dict[str, int] = {}
                             for field, column in mapping.items():
                                 value = _facade()._value_at(values, column)
@@ -217,8 +220,8 @@ def parse_customer_product_regions(
             for (alias, names) in canonical_candidates.items()
             if len(names) == 1
         }
-        customer_product_latest: dict[tuple[str, str, str], _facade().ParsedRow] = {}
-        same_date_conflict_rows: list[_facade().ParsedRow] = []
+        customer_product_latest: dict[tuple[str, str, str], ParsedRow] = {}
+        same_date_conflict_rows: list[ParsedRow] = []
         if target_type == "customer_products":
             for row in parsed_rows:
                 key = _facade().product_match_key(row.values)
@@ -235,7 +238,7 @@ def parse_customer_product_regions(
                 else:
                     companion_stale_records_skipped += 1
         existing_keys = {_facade().product_match_key(row.values) for row in parsed_rows}
-        history_latest: dict[tuple[str, str, str], _facade().ParsedRow] = {}
+        history_latest: dict[tuple[str, str, str], ParsedRow] = {}
         delivery_sheets = {
             str(region.get("sheet") or "")
             for region in regions
@@ -303,7 +306,7 @@ def parse_customer_product_regions(
                         companion_stale_records_skipped += 1
         companion_candidate_count = len(history_latest)
         if target_type == "customer_products":
-            selected_rows: list[_facade().ParsedRow] = []
+            selected_rows: list[ParsedRow] = []
             seen_rows: set[tuple[str, int]] = set()
             for row in [*customer_product_latest.values(), *same_date_conflict_rows]:
                 row_key = (str(row.sheet), int(row.row_number))
@@ -359,7 +362,7 @@ def parse_customer_product_regions(
     selected = [region for region in regions if region["status"] == "selected"]
     excluded = [region for region in regions if region["status"] == "excluded"]
     target_label = "发货单" if target_type == "shipment_records" else "客户产品"
-    warnings: list[dict[str, _facade().Any]] = [
+    warnings: list[dict[str, Any]] = [
         {
             "code": "ELT_MULTI_REGION_WORKBOOK_PLANNED",
             "message": f"已从混合工作簿识别 {len(selected)} 个{target_label}业务区块，排除 {len(excluded)} 个其他业务区块。",
@@ -431,28 +434,31 @@ def parse_customer_product_regions(
         companion_sheet_counts=companion_sheet_counts,
         sheet_domain_hints=sheet_domain_hints,
     )
-    return _facade().ParsedDataset(
-        headers=all_headers,
-        rows=parsed_rows,
-        source_features={
-            "structure_detection": "deterministic_regions_v1",
-            **_facade().region_source_features(
-                target_type=target_type, regions=regions, rows=len(parsed_rows)
-            ),
-            "regions": regions,
-            "shipment_history_product_candidates": companion_candidate_count,
-            "latest_record_selection": {
-                "basis": "source_date_then_same_sheet_row",
-                "unique_candidates": companion_candidate_count,
-                "stale_records_skipped": companion_stale_records_skipped,
-                "future_dated_records_skipped": len(future_dated_source_rows),
-                "same_date_conflicts": same_date_source_conflicts,
-                "model_identity_ambiguity_groups": model_identity_ambiguity_count,
+    return cast(
+        "ParsedDataset",
+        _facade().ParsedDataset(
+            headers=all_headers,
+            rows=parsed_rows,
+            source_features={
+                "structure_detection": "deterministic_regions_v1",
+                **_facade().region_source_features(
+                    target_type=target_type, regions=regions, rows=len(parsed_rows)
+                ),
+                "regions": regions,
+                "shipment_history_product_candidates": companion_candidate_count,
+                "latest_record_selection": {
+                    "basis": "source_date_then_same_sheet_row",
+                    "unique_candidates": companion_candidate_count,
+                    "stale_records_skipped": companion_stale_records_skipped,
+                    "future_dated_records_skipped": len(future_dated_source_rows),
+                    "same_date_conflicts": same_date_source_conflicts,
+                    "model_identity_ambiguity_groups": model_identity_ambiguity_count,
+                },
+                "sheet_plan": sheet_plan,
+                "skipped_sheets": skipped_sheets,
+                "headers": all_headers,
+                "llm_structure": {**llm.public_metadata(), "suggestion_count": len(llm_by_region)},
             },
-            "sheet_plan": sheet_plan,
-            "skipped_sheets": skipped_sheets,
-            "headers": all_headers,
-            "llm_structure": {**llm.public_metadata(), "suggestion_count": len(llm_by_region)},
-        },
-        warnings=warnings,
+            warnings=warnings,
+        ),
     )

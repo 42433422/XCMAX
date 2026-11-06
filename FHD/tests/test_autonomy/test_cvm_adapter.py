@@ -1,4 +1,3 @@
-# mypy: disable-error-code="func-returns-value"
 """tests/test_autonomy/test_cvm_adapter.py — CvmAutonomyAdapter 单元测试。
 
 覆盖：

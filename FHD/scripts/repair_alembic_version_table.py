@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="union-attr"
 """
 Repair alembic_version when ancestor + descendant revisions are both stamped.
 
@@ -39,9 +38,9 @@ try:
 except ImportError:
     pass
 
-from alembic.config import Config  # noqa: E402
-from alembic.script import ScriptDirectory  # noqa: E402
-from sqlalchemy import create_engine, text  # noqa: E402
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from sqlalchemy import create_engine, text
 
 
 def _database_url() -> str:
@@ -58,7 +57,7 @@ def _redundant_ancestor_ids(script: ScriptDirectory, stamped: list[str]) -> set[
     for vid in stamped:
         try:
             objs.append(rm.get_revision(vid))
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as exc:
             raise SystemExit(f"Unknown revision in alembic_version: {vid!r} ({exc})") from exc
 
     redundant: set[str] = set()

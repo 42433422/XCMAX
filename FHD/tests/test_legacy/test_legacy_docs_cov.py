@@ -25,7 +25,7 @@ class TestLegacyGeneratorLoadResult:
         assert r.legacy_dir == "/tmp/legacy"
         # frozen → mutations raise
         with pytest.raises((AttributeError, TypeError)):
-            r.legacy_dir = "/other"  # type: ignore[misc]
+            r.legacy_dir = "/other"
 
 
 class TestLoadLegacyShipmentDocumentGenerator:

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return, valid-type"
 """Excel 导入管线：路径/表头/工作表解析与默认采购单位推断（叶子模块）。"""
 
 from __future__ import annotations

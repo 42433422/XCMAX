@@ -97,7 +97,7 @@ def main():
                     print(f"  [UPDATED] {route_file.name}")
                 else:
                     print("  [SKIP] 无需更新")
-            except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except BOUNDARY_ERRORS as e:
                 print(f"  [ERROR] {e}")
 
     print("\n" + "=" * 60)

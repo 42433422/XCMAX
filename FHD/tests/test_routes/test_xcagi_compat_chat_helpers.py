@@ -23,10 +23,10 @@ EXACT_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款
 class _LLMBomb:
     """Planner model/completion 网关炸弹：任何属性访问或调用即抛错。"""
 
-    def __getattr__(self, _name):  # noqa: ANN001
+    def __getattr__(self, _name):
         raise AssertionError("planner model/completion 网关不得被触达")
 
-    def __call__(self, *args, **kwargs):  # noqa: ANN002, ANN003
+    def __call__(self, *args, **kwargs):
         raise AssertionError("planner model/completion 网关不得被触达")
 
 
@@ -35,7 +35,7 @@ def _make_real_app_service():
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
     from app.application.workflow.approval_service import ApprovalService
 
-    def _dispatch_bomb(*args, **kwargs):  # noqa: ANN002, ANN003
+    def _dispatch_bomb(*args, **kwargs):
         raise AssertionError("workflow 分发器不得在获批前被调用")
 
     real_engine = WorkflowEngine(tool_dispatcher=_dispatch_bomb)
@@ -57,9 +57,7 @@ def _make_real_app_service():
             workflow_checkpointer=real_checkpointer,
         )
     svc.approval_service = ApprovalService()
-    svc.approval_service._persist_request_to_db = lambda req, **k: {  # noqa: ARG005
-        "request_no": req.request_id
-    }
+    svc.approval_service._persist_request_to_db = lambda req, **k: {"request_no": req.request_id}
     svc._persist_plan_state = lambda *a, **k: None
     svc.workflow_planner._ai_service = _LLMBomb()
     return svc
@@ -159,7 +157,7 @@ def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(
     captured: dict[str, int | None] = {}
     real_process_chat = svc.process_chat
 
-    def _spy_process_chat(*args, **kwargs):  # noqa: ANN002, ANN003
+    def _spy_process_chat(*args, **kwargs):
         captured["tenant_id"] = current_tenant_id()
         return real_process_chat(*args, **kwargs)
 
@@ -326,7 +324,7 @@ def test_executable_sse_request_uses_real_plan_and_waits_for_approval(
     request.cookies = {}
     body = ch.XcagiCompatChatBody(message=message, user_id="web_pro_session", source=source)
 
-    def _bomb(*args, **kwargs):  # noqa: ANN002, ANN003
+    def _bomb(*args, **kwargs):
         raise AssertionError("LLM 客户端 / legacy planner / 工具执行路径不得被触达")
 
     with (

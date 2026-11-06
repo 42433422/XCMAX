@@ -195,7 +195,7 @@ async def _call_openai_compatible_chat(
             r = await client.post(chat_url, headers=headers, json=payload)
             r.raise_for_status()
             return cast("dict[str, Any] | None", r.json())
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:
         logger.error("mod_employee_complete: OpenAI-compatible chat 请求失败: %s", type(e).__name__)
         return None
 
@@ -376,7 +376,7 @@ async def mod_employee_complete(
             max_tokens=int(max_tokens),
             **kwargs,
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         logger.exception("mod_employee_complete: call_deepseek_api 异常")
         return {"success": False, "content": "", "error": "LLM service unavailable"}
 

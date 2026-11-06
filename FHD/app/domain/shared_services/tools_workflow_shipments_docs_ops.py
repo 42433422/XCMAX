@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """单据工具域工作流路由：Excel 分析器 / 工具箱 / 标签与文档模板。"""
 
 from __future__ import annotations

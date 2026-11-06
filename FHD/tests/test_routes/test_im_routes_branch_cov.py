@@ -1,4 +1,3 @@
-# mypy: disable-error-code="assignment"
 """Branch-coverage tests for app.fastapi_routes.im_routes.
 
 Targets branches not covered by existing test_im_routes.py / test_im_routes_ext2.py:

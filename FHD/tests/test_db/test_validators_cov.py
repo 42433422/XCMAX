@@ -48,7 +48,7 @@ def _extract_validators(register_fn):
             return fn
 
     original = _mod.validates
-    _mod.validates = _FakeValidates  # type: ignore[attr-defined]
+    _mod.validates = _FakeValidates
     try:
         dummy_class = type("Dummy", (), {})
         register_fn(dummy_class)

@@ -364,7 +364,7 @@ __all__ = [
 ]
 
 # 联系人派生拆至 employee_ssot_contacts，此处 re-export 保持 import 路径稳定。
-from app.mod_sdk.employee_ssot_contacts import (  # noqa: E402
+from app.mod_sdk.employee_ssot_contacts import (
     SUPER_EMPLOYEE_CONTACT_ORDER,
     derive_employee_contacts,
     employee_description,

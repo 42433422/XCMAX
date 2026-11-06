@@ -1,4 +1,3 @@
-# mypy: disable-error-code="var-annotated"
 """测试 ai_chat_app_service 的分支覆盖（第二轮，聚焦未覆盖方法与边界分支）。
 
 覆盖目标（与 _branch_cov.py 互补）：
@@ -101,7 +100,7 @@ class TestMergeToolRuntimeContext:
 
     def test_non_dict_context(self):
         with tenant_scope(1):
-            result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not dict")  # type: ignore[arg-type]
+            result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not dict")
         assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_dict_with_none_values_skipped(self):
@@ -311,7 +310,7 @@ class TestResolveExcelPathForImport:
 
     def test_none_preview_data(self):
         ea = {"file_path": "/tmp/test.xlsx"}
-        result = AIChatApplicationService._resolve_excel_path_for_import(ea, None)  # type: ignore[arg-type]
+        result = AIChatApplicationService._resolve_excel_path_for_import(ea, None)
         assert result == "/tmp/test.xlsx"
 
     def test_whitespace_stripped(self):
@@ -329,7 +328,7 @@ class TestCustomerHintFromPreviewGrid:
     """_customer_hint_from_preview_grid 分支测试。"""
 
     def test_non_dict_preview_returns_empty(self):
-        result = AIChatApplicationService._customer_hint_from_preview_grid("not dict")  # type: ignore[arg-type]
+        result = AIChatApplicationService._customer_hint_from_preview_grid("not dict")
         assert result == ""
 
     def test_no_grid_preview_returns_empty(self):
@@ -698,7 +697,7 @@ class TestResolveForceHeaderRow1Based:
         assert result is None
 
     def test_non_dict_preview_data(self):
-        result = AIChatApplicationService._resolve_force_header_row_1based({}, "not dict")  # type: ignore[arg-type]
+        result = AIChatApplicationService._resolve_force_header_row_1based({}, "not dict")
         assert result is None
 
     def test_grid_preview_not_dict(self):
@@ -775,7 +774,7 @@ class TestResolveSheetNameForReimport:
         assert result is None
 
     def test_request_context_not_dict(self):
-        result = AIChatApplicationService._resolve_sheet_name_for_reimport({}, {}, "not dict")  # type: ignore[arg-type]
+        result = AIChatApplicationService._resolve_sheet_name_for_reimport({}, {}, "not dict")
         assert result is None
 
     def test_excel_analysis_sheets_not_list(self):
@@ -1279,7 +1278,7 @@ class TestFormatWorkflowRunResponseBranchCov:
         node_result = _make_node_result(
             success=False,
             error="error",
-            recovery_hint=None,  # type: ignore[arg-type]
+            recovery_hint=None,
         )
         run_result = _make_run_result(success=False, node_results=[node_result])
 
@@ -1294,7 +1293,7 @@ class TestFormatWorkflowRunResponseBranchCov:
             success=False,
             error="error",
             retryable=True,
-            retries="invalid",  # type: ignore[arg-type]
+            retries="invalid",
         )
         run_result = _make_run_result(success=False, node_results=[node_result])
 
@@ -1383,7 +1382,7 @@ class TestFormatWorkflowRunResponseBranchCov:
         run_result = _make_run_result(
             success=True,
             node_results=[],
-            final_context="not dict",  # type: ignore[arg-type]
+            final_context="not dict",
         )
 
         result = svc._format_workflow_run_response(plan, run_result)
@@ -1426,7 +1425,7 @@ class TestProcessChatErrorBranches:
 
     def test_none_message_returns_error(self):
         svc = _make_svc()
-        result = svc.process_chat("u1", None, None, None, None)  # type: ignore[arg-type]
+        result = svc.process_chat("u1", None, None, None, None)
         assert result["success"] is False
         assert "不能为空" in result["message"]
 

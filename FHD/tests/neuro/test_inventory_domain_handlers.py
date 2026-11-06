@@ -1,4 +1,3 @@
-# mypy: disable-error-code="func-returns-value"
 """Tests for app.neuro_bus.domains.inventory_domain_handlers.
 
 Covers:

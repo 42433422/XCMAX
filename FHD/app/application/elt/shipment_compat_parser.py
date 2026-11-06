@@ -113,7 +113,7 @@ def parse_delivery_note_with_compat_profile(
             include_ledger=False,
             profile_id=compatibility_preset_id,
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - compatibility detection is a non-blocking probe
+    except RECOVERABLE_ERRORS:
         return None
     notes = result.get("notes") if isinstance(result, dict) else None
     if not result.get("success") or not isinstance(notes, list) or not notes:

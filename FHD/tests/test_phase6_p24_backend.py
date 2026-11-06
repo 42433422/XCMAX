@@ -1,4 +1,3 @@
-# mypy: disable-error-code="call-arg, misc"
 """COVERAGE_RAMP Phase 6 round 24: backend medium-coverage modules.
 
 Substitutions for modules whose literal path does not exist:
@@ -1669,7 +1668,7 @@ class TestIndustrySeedDedupe:
 class TestIndustryModIdFor:
     def test_empty_returns_none(self):
         assert industry_mod_id_for("") is None
-        assert industry_mod_id_for(None) is None  # type: ignore[arg-type]
+        assert industry_mod_id_for(None) is None
 
     def test_unknown_returns_none(self):
         assert industry_mod_id_for("not-an-industry") is None

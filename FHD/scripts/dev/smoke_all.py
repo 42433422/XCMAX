@@ -75,7 +75,7 @@ def step_fastapi_boot() -> int:
         from app.fastapi_app import get_fastapi_app
 
         app = get_fastapi_app()
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"[FastAPI boot] FAILED: {type(e).__name__}: {e}")
         return 1
     dt = time.time() - t0

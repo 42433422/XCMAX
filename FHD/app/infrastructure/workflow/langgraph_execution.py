@@ -49,7 +49,7 @@ class LangGraphExecutionMixin:
             params["_runtime_context"] = state
             try:
                 raw = self._dispatch(node.tool_id, node.action, params)
-            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+            except RECOVERABLE_ERRORS as exc:
                 last_error = str(exc)
                 attempts.append({"error": last_error, "recoverable": True})
                 retries += 1
@@ -335,7 +335,7 @@ class LangGraphExecutionMixin:
         if self._callback is not None:
             try:
                 self._callback(event)
-            except RECOVERABLE_ERRORS:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:
                 logger.exception("state callback failed node=%s", result.node_id)
         if self._publisher is not None:
             try:
@@ -348,5 +348,5 @@ class LangGraphExecutionMixin:
                         payload=event,
                     )
                 )
-            except RECOVERABLE_ERRORS:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:
                 logger.exception("state publisher failed node=%s", result.node_id)

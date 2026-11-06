@@ -384,7 +384,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                             operation_name=getattr(subscription.handler, "__name__", "handler"),
                         )
                     except RECOVERABLE_ERRORS:
-                        retry_count = retry_handler._config.max_retries  # noqa: SLF001
+                        retry_count = retry_handler._config.max_retries
                         raise
                 else:
                     await _invoke()

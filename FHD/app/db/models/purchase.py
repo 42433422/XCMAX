@@ -138,5 +138,5 @@ class PurchaseInboundItem(TenantScopedMixin, Base):
     location: Mapped[Optional[StorageLocation]] = relationship("StorageLocation")
 
 
-from app.db.models.inventory import StorageLocation, Warehouse  # noqa: E402
-from app.db.models.product import Product  # noqa: E402
+from app.db.models.inventory import StorageLocation, Warehouse
+from app.db.models.product import Product

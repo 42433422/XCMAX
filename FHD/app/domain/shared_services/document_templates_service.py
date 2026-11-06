@@ -5,5 +5,5 @@
 所有公共符号通过包的 ``__init__.py`` 重新导出，确保现有导入路径不变。
 """
 
-from app.domain.shared_services.document_templates import *  # noqa: F401,F403
+from app.domain.shared_services.document_templates import *  # noqa: F403
 from app.domain.shared_services.document_templates import __all__  # noqa: F401

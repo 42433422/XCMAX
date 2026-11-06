@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """知识库域工作流路由：dataset_rag / memory_v2。"""
 
 from __future__ import annotations

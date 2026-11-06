@@ -77,7 +77,7 @@ class EltRowAdviser:
                     "after": _bounded_record(after),
                 }
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - model failures never affect execution
+        except RECOVERABLE_ERRORS:
             return {
                 **fallback,
                 "degraded": True,
@@ -123,7 +123,7 @@ class EltRowAdviser:
         ]
         try:
             result = self._batch_provider(payloads)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - model failures never affect execution
+        except RECOVERABLE_ERRORS:
             return [
                 {
                     **fallback,

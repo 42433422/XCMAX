@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, attr-defined, return-value"
 """
 TestPEWhiteBottomPaint - 标签模板生成器
 
@@ -182,7 +181,7 @@ class TestPEWhiteBottomPaint:
             logger.info(f"标签已生成：{output_path}")
             return filename
 
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"生成标签失败：{e}")
             return None
 

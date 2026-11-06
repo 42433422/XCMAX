@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="var-annotated"
 """
 批量迁移修复脚本
 

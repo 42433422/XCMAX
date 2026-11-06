@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, assignment"
 """
 生成实际标签图片的 HTML 预览 - 使用实际检测数据
 """

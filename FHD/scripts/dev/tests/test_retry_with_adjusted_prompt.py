@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 # FHD/scripts/dev/tests/test_retry_with_adjusted_prompt.py
 """retry_with_adjusted_prompt 单元测试。"""
 

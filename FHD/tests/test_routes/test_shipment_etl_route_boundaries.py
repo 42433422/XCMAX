@@ -15,7 +15,7 @@ from fastapi import FastAPI, UploadFile
 from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 
-from app.fastapi_routes import excel_extract as _excel_extract  # noqa: F401
+from app.fastapi_routes import excel_extract as _excel_extract
 from app.fastapi_routes import excel_extract_shipment as api
 
 

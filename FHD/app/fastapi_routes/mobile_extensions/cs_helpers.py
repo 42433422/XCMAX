@@ -28,7 +28,7 @@ def _safe_user_id(user: Any) -> int:
 
         identity = sa_inspect(user).identity or ()
         return int(identity[0]) if identity else 0
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return 0
 
 

@@ -277,7 +277,7 @@ class ShipmentTemplateServiceMixin:
         run.summary_json = dump_json(details)
         try:
             db.commit()
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - file must not outlive an unregistered private record
+        except RECOVERABLE_ERRORS as exc:
             db.rollback()
             destination.unlink(missing_ok=True)
             raise EltError(
@@ -289,7 +289,7 @@ class ShipmentTemplateServiceMixin:
             from app.application.shipment_template_resolve import clear_template_list_cache
 
             clear_template_list_cache()
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - cache invalidation must not roll back the template
+        except RECOVERABLE_ERRORS:
             pass
         return result
 

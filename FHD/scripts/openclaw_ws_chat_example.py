@@ -181,7 +181,7 @@ def main() -> int:
     except KeyboardInterrupt:
         print("\n中断", file=sys.stderr)
         return 130
-    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except BOUNDARY_ERRORS as e:
         print(type(e).__name__, e, file=sys.stderr)
         return 1
 

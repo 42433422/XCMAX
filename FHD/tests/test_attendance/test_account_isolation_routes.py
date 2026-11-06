@@ -51,12 +51,12 @@ def client(tmp_path, monkeypatch):
     app = FastAPI()
     bp.register_fastapi_routes(app, "attendance-industry")
     test_client = TestClient(app)
-    test_client.att_state = state  # type: ignore[attr-defined]
+    test_client.att_state = state
     return test_client
 
 
 def _login(client, username: str | None) -> None:
-    client.att_state["user"] = _FakeUser(username) if username else None  # type: ignore[attr-defined]
+    client.att_state["user"] = _FakeUser(username) if username else None
 
 
 def _employees(client):

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """Mod manager lifecycle and boundary regressions."""
 
 from __future__ import annotations

@@ -243,7 +243,7 @@ def test_dispatch_builtin_unsupported() -> None:
 
 
 def test_dispatch_builtin_error(monkeypatch) -> None:
-    def _boom(params, ctx):  # noqa: ANN001
+    def _boom(params, ctx):
         raise ValueError("kaboom")
 
     monkeypatch.setitem(vb._V1_BUILTIN_NODES, "boom", _boom)

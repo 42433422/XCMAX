@@ -88,7 +88,7 @@ class TestParseWebAuthLoginResponse:
         from fastapi.responses import JSONResponse
 
         resp = JSONResponse(content={"success": True})
-        resp.status_code = None  # type: ignore[assignment]
+        resp.status_code = None
         payload, status = _parse_web_auth_login_response(resp)
         assert status == 200
 

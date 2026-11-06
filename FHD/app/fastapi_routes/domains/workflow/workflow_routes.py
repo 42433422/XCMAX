@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from app.legacy.routes.xcagi_compat import router  # noqa: F401
+from app.legacy.routes.xcagi_compat import router
 
 __all__ = ["router"]

@@ -84,7 +84,7 @@ def record_employee_run(
             task=task,
             summary=summary,
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001  # metrics must never break employee execution
+    except RECOVERABLE_ERRORS:  # metrics must never break employee execution
         pass
 
 

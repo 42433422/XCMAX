@@ -44,7 +44,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
                 from app.utils.performance.redis_cache import get_redis_cache
 
                 redis = get_redis_cache()
-            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  缓存为可选增强，失败则禁用缓存
+            except RECOVERABLE_ERRORS as exc:
                 logger.warning("Persona 缓存初始化失败，禁用缓存层: %s", exc)
                 redis = None
         if session_factory is None:
@@ -60,7 +60,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
             return None
         try:
             return cast("dict[Any, Any] | None", self._redis.get(f"{_CACHE_KEY_PREFIX}{user_id}"))
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:
             logger.debug("Persona 缓存读取失败: %s", exc)
             return None
 
@@ -73,7 +73,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
                 profile.to_dict(),
                 ttl=_CACHE_TTL_SECONDS,
             )
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:
             logger.debug("Persona 缓存写入失败: %s", exc)
 
     def _cache_del(self, user_id: str) -> None:
@@ -81,7 +81,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
             return
         try:
             self._redis.delete(f"{_CACHE_KEY_PREFIX}{user_id}")
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:
             logger.debug("Persona 缓存删除失败: %s", exc)
 
     async def find_by_user_id(self, user_id: str) -> PersonaProfile | None:
@@ -100,7 +100,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
                 row = session.get(PersonaProfileModel, user_id)
             finally:
                 session.close()
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  DB 不可用时降级为空画像（冷启动）
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("Persona DB 查询失败，返回空画像（将冷启动）: %s", exc)
             return None
 
@@ -120,7 +120,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
                 session.commit()
             finally:
                 session.close()
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  DB 失败不阻断对话（缓存已持有最新画像）
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("Persona DB 保存失败（已写缓存，画像仍可用）: %s", exc)
         return profile
 
@@ -136,7 +136,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
                     session.commit()
             finally:
                 session.close()
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("Persona DB 删除失败: %s", exc)
         return True
 
@@ -155,7 +155,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
                 session.commit()
             finally:
                 session.close()
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  事件日志为辅助数据，失败可忽略
+        except RECOVERABLE_ERRORS as exc:
             logger.debug("Persona 事件日志写入失败（忽略）: %s", exc)
 
     async def list_recent_events(self, user_id: str, limit: int = 20) -> list[dict]:
@@ -173,7 +173,7 @@ class PersonaRepositoryImpl(PersonaProfileRepository):
                 )
             finally:
                 session.close()
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:
             logger.debug("Persona 事件日志读取失败: %s", exc)
             return []
         return [

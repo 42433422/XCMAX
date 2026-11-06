@@ -31,7 +31,7 @@ class TestManifest:
             handler_module="app.handlers.x",
         )
         with pytest.raises(AttributeError):
-            meta.context_id = "y"  # type: ignore[misc]
+            meta.context_id = "y"
 
 
 class TestFlags:

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="import-not-found, no-any-return"
 """显式 autonomy callback（SSOT）。
 
 契约符号（供搜索与验收）:
@@ -29,7 +28,7 @@ if str(_CI_SCRIPTS) not in sys.path:
 try:
     from _approval_ledger_client import post_to_approval_ledger
 except ImportError:  # pragma: no cover
-    post_to_approval_ledger = None  # type: ignore[assignment]
+    post_to_approval_ledger = None
 
 try:
     import httpx
@@ -67,7 +66,7 @@ def autonomy_callback(
             source=source,
             action_id=action_id,
         )
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+    except RECOVERABLE_ERRORS as exc:
         print(f"[autonomy_callback] error: {exc!r}", file=sys.stderr)
         return None
 
@@ -170,7 +169,7 @@ def _post_github_decision(
             },
             timeout=10.0,
         )
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+    except RECOVERABLE_ERRORS as exc:
         print(f"[autonomy_callback] http error: {exc!r}", file=sys.stderr)
         return None
 
@@ -184,7 +183,7 @@ def _post_github_decision(
 
     try:
         data = resp.json()
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+    except RECOVERABLE_ERRORS as exc:
         print(f"[autonomy_callback] json decode error: {exc!r}", file=sys.stderr)
         return None
     if not isinstance(data, dict):

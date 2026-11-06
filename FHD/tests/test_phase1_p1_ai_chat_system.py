@@ -1,4 +1,3 @@
-# mypy: disable-error-code="method-assign"
 """COVERAGE_RAMP Phase 1 (p1-p0-core): ai_chat_app_service helpers + more system/auth routes."""
 
 from __future__ import annotations

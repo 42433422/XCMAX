@@ -1,4 +1,3 @@
-# mypy: disable-error-code="union-attr, var-annotated"
 """Branch-coverage tests for app.domain.shared_services.kitten_report.service.
 
 Targets KittenReportExportService branches:
@@ -22,7 +21,7 @@ import pytest
 from openpyxl import Workbook, load_workbook
 
 # Pre-import app.application to break circular import between app.services and app.mod_sdk
-import app.application  # noqa: F401
+import app.application
 from app.domain.shared_services.kitten_report.plugins import PluginResult
 from app.domain.shared_services.kitten_report.service import KittenReportExportService
 

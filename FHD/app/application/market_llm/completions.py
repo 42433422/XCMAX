@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from typing import Any, cast
 
 import httpx
 
@@ -51,7 +52,7 @@ def _status_error(request: ChatInput, response: httpx.Response, status: int) -> 
         error: Exception = market_response_error(response, status)
     else:
         error = ValueError(f"平台错误({status}): {response.text[:500]}")
-    error.response = response  # type: ignore[attr-defined]
+    cast(Any, error).response = response
     return error
 
 

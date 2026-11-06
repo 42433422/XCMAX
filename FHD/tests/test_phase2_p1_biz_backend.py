@@ -1,4 +1,3 @@
-# mypy: disable-error-code="var-annotated"
 """COVERAGE_RAMP Phase 2 (p2-p1-biz): application / infrastructure / domain / ai_engines helpers."""
 
 from __future__ import annotations
@@ -36,7 +35,7 @@ from app.infrastructure.persistence.compat_db.writes import (
 from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
 from app.infrastructure.rag.rag_service import RagService, is_rag_enabled
 from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
-from tests.fixtures.backend_ci_isolation import isolated_login_host_db  # noqa: F401
+from tests.fixtures.backend_ci_isolation import isolated_login_host_db
 
 # ---------------------------------------------------------------------------
 # price_list_export helpers

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """通过 App Store Connect API 签发 Developer ID Application 并导入本机钥匙串。
 
 依赖环境变量（可由 setup-mac-signing.sh 从 GitHub Secrets 注入）：

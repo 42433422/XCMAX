@@ -1,4 +1,3 @@
-# mypy: disable-error-code="var-annotated"
 """测试 app.domain.shared_services.mobile_relay_service 的辅助函数分支覆盖。
 
 覆盖目标：
@@ -212,36 +211,36 @@ class TestRowDict:
 
     def test_converts_row_to_dict(self) -> None:
         # dict(dict) 返回副本，所以可以直接传 dict
-        result = _row_dict({"id": 1, "name": "test"})  # type: ignore[arg-type]
+        result = _row_dict({"id": 1, "name": "test"})
         assert result == {"id": 1, "name": "test"}
 
     def test_unpacks_capabilities_json(self) -> None:
-        result = _row_dict({"capabilities_json": '{"x": 1}'})  # type: ignore[arg-type]
+        result = _row_dict({"capabilities_json": '{"x": 1}'})
         assert "capabilities" in result
         assert "capabilities_json" not in result
         assert result["capabilities"] == {"x": 1}
 
     def test_unpacks_payload_json(self) -> None:
-        result = _row_dict({"payload_json": '{"y": 2}'})  # type: ignore[arg-type]
+        result = _row_dict({"payload_json": '{"y": 2}'})
         assert "payload" in result
         assert result["payload"] == {"y": 2}
 
     def test_unpacks_result_json(self) -> None:
-        result = _row_dict({"result_json": '{"z": 3}'})  # type: ignore[arg-type]
+        result = _row_dict({"result_json": '{"z": 3}'})
         assert "result" in result
         assert result["result"] == {"z": 3}
 
     def test_keeps_non_json_fields(self) -> None:
-        result = _row_dict({"id": 1, "capabilities_json": '{"x": 1}'})  # type: ignore[arg-type]
+        result = _row_dict({"id": 1, "capabilities_json": '{"x": 1}'})
         assert result["id"] == 1
         assert result["capabilities"] == {"x": 1}
 
     def test_handles_invalid_json_in_field(self) -> None:
-        result = _row_dict({"capabilities_json": "invalid"})  # type: ignore[arg-type]
+        result = _row_dict({"capabilities_json": "invalid"})
         assert result["capabilities"] == {}
 
     def test_does_not_touch_other_keys(self) -> None:
-        result = _row_dict({"id": 5, "name": "x", "status": "queued"})  # type: ignore[arg-type]
+        result = _row_dict({"id": 5, "name": "x", "status": "queued"})
         assert result == {"id": 5, "name": "x", "status": "queued"}
 
 
@@ -253,7 +252,7 @@ class TestPublicBaseUrl:
         assert result == "https://xiu-ci.com/fhd-api/"
 
     def test_returns_default_when_none(self) -> None:
-        result = _public_base_url(None)  # type: ignore[arg-type]
+        result = _public_base_url(None)
         assert result == "https://xiu-ci.com/fhd-api/"
 
     def test_returns_default_when_whitespace(self) -> None:

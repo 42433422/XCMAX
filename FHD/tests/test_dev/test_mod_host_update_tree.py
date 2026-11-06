@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "FHD/scripts/deploy/lib"))
-import mod_tree_guard as guard  # noqa: E402
+import mod_tree_guard as guard
 
 
 class ModTreeGuardTests(unittest.TestCase):

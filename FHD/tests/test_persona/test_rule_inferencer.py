@@ -52,5 +52,5 @@ class TestRuleInferencer:
         assert result.axes.detail == 0.5
 
     def test_none_message_returns_neutral(self, inferencer):
-        result = inferencer.infer(None, [])  # type: ignore[arg-type]
+        result = inferencer.infer(None, [])
         assert result.axes.warmth == 0.5

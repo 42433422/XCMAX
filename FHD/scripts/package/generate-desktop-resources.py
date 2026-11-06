@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="arg-type"
 """
 生成 desktop/resources 下 NSIS 安装包位图与应用图标（icon.png / icon.ico）。
 在 macOS 上若存在 iconutil/sips，同时生成 icon.icns。

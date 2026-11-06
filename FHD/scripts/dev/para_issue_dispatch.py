@@ -37,7 +37,7 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 if str(FHD_ROOT / "scripts" / "dev") not in sys.path:
     sys.path.insert(0, str(FHD_ROOT / "scripts" / "dev"))
 
-import ai_issue_implement as impl  # noqa: E402
+import ai_issue_implement as impl
 
 REPORT_DIR = FHD_ROOT / "test_reports"
 DEFAULT_DISPATCH_BASE = "https://xiu-ci.com"

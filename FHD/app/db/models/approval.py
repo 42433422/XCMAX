@@ -361,4 +361,4 @@ class ApprovalDelegation(Base):
         }
 
 
-from app.db.models.user import User  # noqa: E402
+from app.db.models.user import User

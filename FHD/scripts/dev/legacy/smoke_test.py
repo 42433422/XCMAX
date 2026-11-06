@@ -87,7 +87,7 @@ def test_endpoint(base_url, endpoint, method, data, description):
         return False, e.code, str(e.reason)
     except URLError as e:
         return False, 0, str(e.reason)
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         return False, 0, str(e)
 
 
@@ -100,7 +100,7 @@ def check_service_available(base_url, description):
             if resp.status == 200:
                 print_success(f"{description} 服务正常运行")
                 return True
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         pass
     return False
 
@@ -191,6 +191,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n测试已取消")
         sys.exit(1)
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print_error(f"测试过程出错: {e}")
         sys.exit(1)

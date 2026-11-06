@@ -17,12 +17,12 @@ _FHD_ROOT = Path(__file__).resolve().parents[2]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
 
-from app.domain.shared_services.gate import gate_receipts, record_gate  # noqa: E402
-from app.domain.shared_services.ssot import (  # noqa: E402
+from app.domain.shared_services.gate import gate_receipts, record_gate
+from app.domain.shared_services.ssot import (
     get_work_order,
     record_transition,
 )
-from app.domain.shared_services.state import _ALLOWED_TRANSITIONS  # noqa: E402
+from app.domain.shared_services.state import _ALLOWED_TRANSITIONS
 
 _LOOP_DIR = Path(
     os.environ.get("SELF_HEAL_LOOP_DIR") or (_FHD_ROOT / "test_reports" / "self_heal_loop")

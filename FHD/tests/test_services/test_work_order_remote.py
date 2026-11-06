@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """Shared/local Work Order persistence tests; all network calls are mocked."""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="list-item, misc"
 """COVERAGE_RAMP Phase 6 round 8: backend low-coverage modules.
 
 Targets:

@@ -33,7 +33,7 @@ def _disk_clean_threshold() -> float:
         from app.domain.autonomy.adaptive_thresholds import get_threshold
 
         return float(get_threshold("disk_clean_threshold").value)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return float(DISK_CLEAN_THRESHOLD)
 
 

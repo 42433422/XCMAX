@@ -135,7 +135,7 @@ class TestInjectExcelVectorContextEdge:
 
     def test_context_not_dict_returns_empty(self):
         svc = _make_svc()
-        result = svc._inject_excel_vector_context("hello", "not-a-dict")  # type: ignore[arg-type]
+        result = svc._inject_excel_vector_context("hello", "not-a-dict")
         assert result == {}
 
     def test_no_excel_index_id_returns_context_unchanged(self):
@@ -282,7 +282,7 @@ class TestAttachDeterministicWorkflowTraceEdge:
                 source="pro",
                 context={"k": "v"},
                 intent="test",
-                file_context="not-a-dict",  # type: ignore[arg-type]
+                file_context="not-a-dict",
             )
         assert result["traced"] is True
         call_kwargs = mock_attach.call_args
@@ -319,7 +319,7 @@ class TestAttachDeterministicWorkflowTraceEdge:
                 user_id="u1",
                 message="hello",
                 source="pro",
-                context="not-dict",  # type: ignore[arg-type]
+                context="not-dict",
                 intent="test",
             )
         call_kwargs = mock_attach.call_args

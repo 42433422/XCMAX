@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="arg-type, index"
 """拆得开还不够：验证「抽出的数据 + 版式」能否真正用来建单/打单。
 
 链路：

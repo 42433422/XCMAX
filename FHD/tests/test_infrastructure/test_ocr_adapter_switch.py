@@ -1,4 +1,3 @@
-# mypy: disable-error-code="assignment"
 """Tests for app.infrastructure.ocr.ocr_adapter + ocr_service — coverage ramp C3.3-b.
 
 Covers:

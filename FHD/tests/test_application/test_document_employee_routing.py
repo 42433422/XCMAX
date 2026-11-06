@@ -1,4 +1,3 @@
-# mypy: disable-error-code="index"
 from app.domain.app_pure.document_employee_routing import (
     forced_document_tool_choice,
     select_document_employee_tool,

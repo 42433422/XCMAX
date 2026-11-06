@@ -246,7 +246,7 @@ class CvmAutonomyAdapter:
         if self._health_probe is not None:
             try:
                 return bool(self._health_probe(self.health_url))
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS:
                 return False
         # 真实路径：subprocess 调用 curl
         try:
@@ -265,7 +265,7 @@ class CvmAutonomyAdapter:
                 timeout=10,
             )
             return result.returncode == 0 and result.stdout.strip() == "200"
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:
             return False
 
     def _probe_compose_status(self) -> tuple[str, bool]:
@@ -278,7 +278,7 @@ class CvmAutonomyAdapter:
             try:
                 status, running = self._compose_status_probe(self.deploy_root)
                 return status, running
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS:
                 return "unknown", False
         compose_file = self._resolve_compose_file()
         if compose_file is None:
@@ -308,7 +308,7 @@ class CvmAutonomyAdapter:
                 except json.JSONDecodeError:
                     continue
             return status, service_running
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:
             return "unknown", False
 
     def _resolve_compose_file(self) -> str | None:
@@ -340,7 +340,7 @@ class CvmAutonomyAdapter:
             if total <= 0:
                 return 0.0
             return round((used / total) * 100, 2)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:
             return 0.0
 
     def _probe_last_backup_ts(self, rollback_tarball: str) -> int | None:
@@ -725,7 +725,7 @@ class CvmAutonomyAdapter:
         """
         try:
             entries = list_audit_entries(self.audit_path)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:
             return False, "audit read failed"
         # 倒序找最近的同 key action（跳过 skipped / escalate / open_incident_issue 自身）
         for entry in reversed(entries):
@@ -852,7 +852,7 @@ class CvmAutonomyAdapter:
         if self._github_api_get is not None:
             try:
                 return self._github_api_get(url, token)
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:
                 return {"_error": "mock_threw", "_body": str(e)}
         req = urllib.request.Request(
             url,
@@ -865,7 +865,7 @@ class CvmAutonomyAdapter:
                 return payload if isinstance(payload, dict) else {"_error": "invalid_json_shape"}
         except urllib.error.HTTPError as exc:
             return {"_error": exc.code, "_body": exc.read().decode("utf-8", errors="replace")}
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as exc:
             return {"_error": "request_threw", "_body": str(exc)}
 
     def _github_post(self, url: str, token: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -873,7 +873,7 @@ class CvmAutonomyAdapter:
         if self._github_api_post is not None:
             try:
                 return self._github_api_post(url, token, body)
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:
                 return {"_error": "mock_threw", "_body": str(e)}
         data = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(
@@ -888,7 +888,7 @@ class CvmAutonomyAdapter:
                 return payload if isinstance(payload, dict) else {"_error": "invalid_json_shape"}
         except urllib.error.HTTPError as exc:
             return {"_error": exc.code, "_body": exc.read().decode("utf-8", errors="replace")}
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as exc:
             return {"_error": "request_threw", "_body": str(exc)}
 
     # ------------------------------------------------------------------ #
@@ -902,7 +902,7 @@ class CvmAutonomyAdapter:
             os.makedirs(self.audit_dir, exist_ok=True)
             with open(self.audit_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:
             # 审计失败不影响主流程
             pass
 
@@ -956,7 +956,7 @@ class CvmAutonomyAdapter:
         """
         if self._subprocess_runner is not None:
             return self._subprocess_runner(cmd, timeout=timeout, cwd=cwd, env=env)
-        return subprocess.run(  # noqa: S603 - cmd 是 list，非 shell=True
+        return subprocess.run(
             cmd,
             timeout=timeout,
             capture_output=True,
@@ -996,7 +996,7 @@ def cleanup_old_logs(deploy_root: str, days: int = 7) -> bool:
     if not os.path.isdir(logs_dir):
         return False
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             ["find", logs_dir, "-mtime", f"+{days}", "-delete"],
             timeout=CLEAR_LOGS_TIMEOUT,
             capture_output=True,
@@ -1004,7 +1004,7 @@ def cleanup_old_logs(deploy_root: str, days: int = 7) -> bool:
             check=False,
         )
         return result.returncode == 0
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return False
 
 

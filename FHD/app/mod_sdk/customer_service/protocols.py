@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.mod_sdk.customer_service.customer_service_ports import (  # noqa: F401
+from app.mod_sdk.customer_service.customer_service_ports import (
     ChangesServices,
     ContractsServices,
     CrmServices,

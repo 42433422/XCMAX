@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, exit-return"
 """COVERAGE_RAMP Phase 4 round 16: xcmax_sync_service helpers + push/pull/apply (33%→)."""
 
 from __future__ import annotations
@@ -41,7 +40,7 @@ def test_sync_meta_roundtrip(tmp_path, monkeypatch) -> None:
 
 def test_register_entity_applier() -> None:
     @svc.register_entity_applier("__test_entity__")
-    def _applier(item):  # noqa: ANN001
+    def _applier(item):
         return None
 
     assert svc._ENTITY_APPLIERS["__test_entity__"] is _applier
@@ -99,14 +98,14 @@ class _DbContext:
     def __enter__(self) -> MagicMock:
         return self._db
 
-    def __exit__(self, *args) -> bool:  # noqa: ANN002
+    def __exit__(self, *args) -> bool:
         return False
 
 
 class _FakeUser:
     username = "username-column"
 
-    def __init__(self, **kwargs) -> None:  # noqa: ANN003
+    def __init__(self, **kwargs) -> None:
         self.__dict__.update(kwargs)
 
 
@@ -206,10 +205,10 @@ class _FakeResp:
     def __init__(self, data: bytes = b"") -> None:
         self._data = data
 
-    def __enter__(self):  # noqa: ANN204
+    def __enter__(self):
         return self
 
-    def __exit__(self, *a):  # noqa: ANN002, ANN204
+    def __exit__(self, *a):
         return False
 
     def read(self, n: int = -1) -> bytes:
@@ -336,7 +335,7 @@ def test_apply_inbox_applies_and_skips() -> None:
     seen = []
 
     @svc.register_entity_applier("__rt_entity__")
-    def _applier(item):  # noqa: ANN001
+    def _applier(item):
         seen.append(item)
 
     fake_db = MagicMock()
@@ -370,7 +369,7 @@ def test_apply_inbox_applies_and_skips() -> None:
 
 def test_apply_inbox_conflict_on_applier_error() -> None:
     @svc.register_entity_applier("__boom_entity__")
-    def _applier(item):  # noqa: ANN001
+    def _applier(item):
         raise ValueError("bad")
 
     fake_db = MagicMock()

@@ -121,7 +121,7 @@ class TestNormalizeSlotsExtended:
         assert "unit_name" in out
 
     def test_normalize_slots_none_value_skipped(self, recognizer: DeepSeekIntentRecognizer) -> None:
-        out = recognizer._normalize_slots({"key": None}, "")  # type: ignore[dict-item]
+        out = recognizer._normalize_slots({"key": None}, "")
         assert "key" not in out
 
     def test_normalize_slots_contact_phone(self, recognizer: DeepSeekIntentRecognizer) -> None:

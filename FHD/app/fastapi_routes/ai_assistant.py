@@ -103,7 +103,7 @@ def _trace_ai_assistant_route(
         traced["run_id"] = run.run_id
         traced["agent_run_id"] = run.run_id
         return traced
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - route tracing must not break legacy compat endpoints
+    except RECOVERABLE_ERRORS:
         logger.exception("failed to attach AgentRun trace to ai_assistant compat route")
         return payload
 

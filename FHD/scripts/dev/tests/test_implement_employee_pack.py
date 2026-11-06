@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 # FHD/scripts/dev/tests/test_implement_employee_pack.py
 """implement_employee_pack 单元测试。"""
 

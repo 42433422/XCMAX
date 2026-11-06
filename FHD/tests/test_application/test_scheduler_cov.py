@@ -275,9 +275,9 @@ def test_employees_root_loop_mods_root_empty_string(tmp_path: Path):
 def test_parse_manifest_schedule_non_dict_manifest():
     """Branch [237,238]: manifest is not a dict → return None."""
     mod = _get_mod()
-    assert mod._parse_manifest_schedule("not a dict") is None  # type: ignore[arg-type]
-    assert mod._parse_manifest_schedule(None) is None  # type: ignore[arg-type]
-    assert mod._parse_manifest_schedule([]) is None  # type: ignore[arg-type]
+    assert mod._parse_manifest_schedule("not a dict") is None
+    assert mod._parse_manifest_schedule(None) is None
+    assert mod._parse_manifest_schedule([]) is None
 
 
 def test_parse_manifest_schedule_no_schedule_key():

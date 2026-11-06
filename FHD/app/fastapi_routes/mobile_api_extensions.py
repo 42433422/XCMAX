@@ -1,4 +1,3 @@
-# ruff: noqa: E402
 """Mobile composition root and compatibility exports.
 
 Components receive only the operations they use. Callbacks deliberately resolve
@@ -755,6 +754,6 @@ extension_router.include_router(_auth_router)
 # Import the completed route owner only after this module has finished building
 # its extension router. Keeping mobile_api free of an eager reverse import makes
 # cold import order deterministic and avoids registering a partially populated router.
-from app.fastapi_routes.mobile_api import router as _mobile_router  # noqa: E402
+from app.fastapi_routes.mobile_api import router as _mobile_router
 
 _mobile_router.include_router(extension_router)

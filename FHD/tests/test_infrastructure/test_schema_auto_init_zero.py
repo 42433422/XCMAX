@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """Tests for app.infrastructure.db.schema_auto_init."""
 
 from __future__ import annotations

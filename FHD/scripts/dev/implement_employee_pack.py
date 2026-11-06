@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """LLM 实现 employee_pack。
 
 输入：LLM 提议 JSON（含 employee_pack 字段）。
@@ -22,7 +21,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"))
 
-from modstore_server.evolution_ledger import append_event  # noqa: E402
+from modstore_server.evolution_ledger import append_event
 
 MAX_FILES = 5
 
@@ -41,7 +40,7 @@ def _call_llm(proposal: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(resp, dict):
             return resp
         return json.loads(resp)
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         raise RuntimeError(f"LLM call failed: {e}") from e
 
 

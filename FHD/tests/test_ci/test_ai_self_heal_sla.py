@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 """ai_self_heal_sla.py 单元测试。
 
 覆盖：
@@ -29,7 +28,7 @@ CI_SCRIPTS = FHD_ROOT / "scripts" / "ci"
 if str(CI_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(CI_SCRIPTS))
 
-import ai_self_heal_sla as sla  # noqa: E402, I001
+import ai_self_heal_sla as sla
 
 
 def test_script_help_imports_app_from_fhd_working_directory() -> None:

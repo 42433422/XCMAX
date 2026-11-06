@@ -23,7 +23,7 @@ def test_set_chat_stream_port_injection() -> None:
             yield {"type": "text", "text": message}
 
     stub = Stub()
-    set_chat_stream_port(stub)  # type: ignore[arg-type]
+    set_chat_stream_port(stub)
     try:
         events = list(get_chat_stream_port().chat_stream_sse_events("hi"))
         assert events == [{"type": "text", "text": "hi"}]

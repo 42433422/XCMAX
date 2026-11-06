@@ -1,4 +1,3 @@
-# mypy: disable-error-code="call-arg"
 """Tests for app.fastapi_routes.shipment.schemas."""
 
 from __future__ import annotations

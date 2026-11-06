@@ -55,7 +55,7 @@ class EltService(
             from app.application.shipment_etl_profile import list_profiles
 
             compatibility_presets = list_profiles()
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             compatibility_presets = []
         return {
             "enabled": True,
@@ -122,7 +122,7 @@ def mark_interrupted_runs_on_startup(bind: Any) -> int:
             """)
             )
             return max(0, int(result.rowcount or 0)) + max(0, int(batch_result.rowcount or 0))
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         logger.exception("Unable to mark interrupted ETL runs during startup")
         return 0
 

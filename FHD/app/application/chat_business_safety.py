@@ -30,7 +30,7 @@ def _authenticated_user_from_request(request: Any) -> Any | None:
         from app.infrastructure.auth.dependencies import resolve_session_user
 
         return resolve_session_user(request)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - identity resolution must fail closed
+    except RECOVERABLE_ERRORS:
         return None
 
 

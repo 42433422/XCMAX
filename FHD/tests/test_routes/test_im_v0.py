@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """IM V0 API 冒烟。"""
 
 from __future__ import annotations

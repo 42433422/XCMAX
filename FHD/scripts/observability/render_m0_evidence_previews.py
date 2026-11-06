@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="arg-type, assignment, index, no-any-return, operator"
 """Render M0 SLO panel preview PNGs (Grafana-style, no fake metrics).
 
 Outputs to docs/evidence/slo/ and updates docs/evidence/m0-evidence-manifest.json.

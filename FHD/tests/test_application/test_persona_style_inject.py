@@ -46,7 +46,7 @@ def test_style_section_low_axes_differs():
 def test_style_for_user_zero_or_negative_empty():
     assert inj.persona_style_for_user(0) == ""
     assert inj.persona_style_for_user(-1) == ""
-    assert inj.persona_style_for_user(None) == ""  # type: ignore[arg-type]
+    assert inj.persona_style_for_user(None) == ""
 
 
 def test_style_for_user_running_loop_returns_empty_without_creating_coroutine():

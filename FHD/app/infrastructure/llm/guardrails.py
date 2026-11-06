@@ -271,7 +271,7 @@ def check_input(messages: list[dict[str, Any]]) -> GuardrailResult:
             result.score = 1.0
             result.action = "block"
         return result
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 — fail-open
+    except RECOVERABLE_ERRORS:
         logger.error("guardrail check_input failed, fail-open", exc_info=True)
         return GuardrailResult()
 
@@ -299,6 +299,6 @@ def check_output(text: str) -> tuple[str, GuardrailResult]:
         if result.action == "block":
             return text, result
         return get_sensitive_words().mask(text), result
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 — fail-open
+    except RECOVERABLE_ERRORS:
         logger.error("guardrail check_output failed, fail-open", exc_info=True)
         return text, GuardrailResult()

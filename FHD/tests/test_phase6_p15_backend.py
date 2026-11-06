@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, index, no-any-return, var-annotated"
 """Regression coverage for market, Mod catalog/store, labels, and workflow routers."""
 
 from __future__ import annotations

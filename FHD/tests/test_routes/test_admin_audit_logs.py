@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """管理员审计日志 API。"""
 
 from __future__ import annotations

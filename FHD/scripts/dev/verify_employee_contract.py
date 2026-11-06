@@ -53,7 +53,7 @@ def _load_yaml_depends(yaml_path: Path) -> list[str]:
                     if isinstance(deps, list)
                     else []
                 )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:
             pass
     # Fallback: regex parse
     content = yaml_path.read_text(encoding="utf-8")
@@ -76,7 +76,7 @@ def _load_yaml_handlers(yaml_path: Path) -> list[str]:
                     return (
                         [str(x).strip() for x in h if str(x).strip()] if isinstance(h, list) else []
                     )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:
             pass
     return []
 
@@ -107,7 +107,7 @@ def check_employee(emp_dir: Path) -> tuple[str, list[tuple[str, str]]]:
 
     try:
         mf = json.loads(mf_path.read_text())
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         return emp_dir.name, [(ERROR, f"manifest.json parse error: {e}")]
 
     pkg_id = mf.get("id", emp_dir.name)

@@ -78,7 +78,7 @@ def test_generate_success_invalid_input_and_recoverable_fallback() -> None:
         patch.dict(sys.modules, {"barcode": fake_barcode, "barcode.writer": fake_writer}),
         patch.object(generator, "_generate_fallback_barcode", return_value=fallback) as make,
     ):
-        fake_barcode.get_barcode.side_effect = RuntimeError("broken")  # type: ignore[attr-defined]
+        fake_barcode.get_barcode.side_effect = RuntimeError("broken")
         assert generator.generate("ABC") is fallback
     make.assert_called_once_with("ABC", {})
 

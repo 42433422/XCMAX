@@ -114,7 +114,7 @@ def _probe_pgvector() -> dict:
             "ivfflat_index_count": int(idx),
             "vector_tables": tables,
         }
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as exc:
         return {"status": "unhealthy", "error": str(exc)}
 
 

@@ -8,8 +8,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.dev import version_sync  # noqa: E402
-from scripts.dev.verify_version_anchors import ANCHORS  # noqa: E402
+from scripts.dev import version_sync
+from scripts.dev.verify_version_anchors import ANCHORS
 
 
 class TestReplaceVersionInText:

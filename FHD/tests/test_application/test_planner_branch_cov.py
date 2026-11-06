@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """Branch-coverage tests for app/application/workflow/planner.py.
 
 聚焦未覆盖分支：execute_tool 默认 action、_execute_import_excel_tool 异常路径、
@@ -1668,7 +1667,7 @@ class TestCriticRepairWithLLM:
         """创建 planner 并补上 _strip_json_code_fence 方法（源码中调用但未定义）。"""
         planner = _make_planner()
         # 源码调用了 self._strip_json_code_fence 但未定义，补上 no-op 实现
-        planner._strip_json_code_fence = lambda raw: raw  # type: ignore[attr-defined]
+        planner._strip_json_code_fence = lambda raw: raw
         return planner
 
     def test_no_api_key_returns_none(self) -> None:
@@ -2100,7 +2099,7 @@ class TestPlanWithLLMErrorPaths:
                 user_id="u1",
                 message="test",
                 tool_registry=_sample_registry(),
-                context=None,  # type: ignore[arg-type]
+                context=None,
             )
             assert result is not None
 

@@ -206,7 +206,7 @@ def record_capability_proposal(
             context=context,
             evidence_ref=evidence_ref,
         )
-    except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单写入失败不阻塞提案记录（跨仓导入边界兜底）
+    except BOUNDARY_ERRORS:
         logger.debug("work_order upsert skipped", exc_info=True)
     return {
         "recorded": True,

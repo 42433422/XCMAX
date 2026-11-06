@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
 
-import app.db.models  # noqa: F401
+import app.db.models
 from app.application.tutorial_v2.catalog import COURSE_VERSION, COURSES, public_course
 from app.application.tutorial_v2.scope import resolve_tutorial_scope
 from app.application.tutorial_v2.service import (

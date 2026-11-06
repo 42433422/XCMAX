@@ -47,7 +47,7 @@ def persona_style_for_user(user_id: int) -> str:
         if profile is None:
             return ""
         return persona_style_section(profile)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 注入必须 fail-safe,绝不打断员工执行
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("persona style inject skipped: %s", exc)
         return ""
 

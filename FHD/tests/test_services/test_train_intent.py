@@ -1,12 +1,11 @@
 """Tests for app.domain.shared_services.train_intent — intent model training/evaluation/serve CLI."""
 
-# ruff: noqa: E402, I001
 from __future__ import annotations
 
 import sys
 from unittest.mock import MagicMock, patch
 
-from app.domain.shared_services.train_intent import (  # noqa: E402
+from app.domain.shared_services.train_intent import (
     evaluate_model,
     main,
     serve_model,

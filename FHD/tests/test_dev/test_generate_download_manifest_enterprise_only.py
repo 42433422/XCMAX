@@ -1,4 +1,3 @@
-# mypy: disable-error-code="index"
 from __future__ import annotations
 
 import hashlib
@@ -333,7 +332,7 @@ def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path
     exe.write_bytes(b"MZ" + b"\0" * 1022)
     dmg.write_bytes(b"\0" * 512 + b"koly" + b"\0" * 508)
 
-    handler = lambda *args, **kwargs: http.server.SimpleHTTPRequestHandler(  # noqa: E731
+    handler = lambda *args, **kwargs: http.server.SimpleHTTPRequestHandler(
         *args, directory=str(web_root), **kwargs
     )
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)

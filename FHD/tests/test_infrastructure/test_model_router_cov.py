@@ -1,4 +1,3 @@
-# mypy: disable-error-code="misc"
 """Tests for app.infrastructure.llm.model_router — 覆盖率补齐。
 
 聚焦现有 test_model_router.py 未覆盖的路径：
@@ -175,7 +174,7 @@ class TestRoutingRequestPostInit:
 
     def test_history_len_bool_converted(self) -> None:
         # bool is subclass of int; int(True) = 1
-        req = RoutingRequest(message="hi", conversation_history_len=True)  # type: ignore[arg-type]
+        req = RoutingRequest(message="hi", conversation_history_len=True)
         assert req.conversation_history_len == 1
 
     def test_history_len_invalid_string_falls_back(self) -> None:

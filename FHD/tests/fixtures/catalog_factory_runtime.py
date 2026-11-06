@@ -76,7 +76,7 @@ def _seed(root):
     from sqlalchemy.orm import sessionmaker
     from starlette.requests import Request
 
-    import app.db.models  # noqa: F401 - register canonical fixture schemas
+    import app.db.models
     from app.application.elt.batch_owned_source import OwnedSqlSessions
     from app.db.db_base import Base
     from app.db.models.agent_business_action import AgentBusinessActionRecord

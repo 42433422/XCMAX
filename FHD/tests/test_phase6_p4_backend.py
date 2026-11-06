@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, index, var-annotated"
 """COVERAGE_RAMP Phase 6 round 4: backend low-coverage modules.
 
 Targets:

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="arg-type, no-any-return"
 """NeuroBus NN 路由策略在线更新 daemon。
 
 定期从 routing_decisions.jsonl 读取带 reward 的样本（规则路由的实际 SLA/success），
@@ -72,7 +71,7 @@ def _load_state() -> int:
     try:
         if STATE_FILE.is_file():
             return json.loads(STATE_FILE.read_text()).get("offset", 0)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         pass
     return 0
 
@@ -80,7 +79,7 @@ def _load_state() -> int:
 def _save_state(offset: int) -> None:
     try:
         STATE_FILE.write_text(json.dumps({"offset": offset}))
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:
         logger.warning("保存 state 失败：%s", e)
 
 
@@ -106,7 +105,7 @@ def _read_new_samples(log_path: Path, offset: int) -> tuple[list[dict], int]:
                     continue
             new_offset = f.tell()
         return samples, new_offset
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:
         logger.warning("读取日志失败：%s", e)
         return [], offset
 
@@ -191,7 +190,7 @@ def _write_canary_state(
             accuracy,
             version,
         )
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:
         logger.warning("写入 canary_state 失败：%s", e)
 
 
@@ -335,7 +334,7 @@ def run_daemon(args: argparse.Namespace) -> int:
                     f"(喂入 {result['fed_to_learner']} 条)",
                     flush=True,
                 )
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as e:
             logger.error("daemon 循环异常：%s", e)
 
         # 等待 interval 秒（可被信号中断）

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="return-value"
 """
 服务迁移工具 - 自动将传统服务迁移到 Neuro-DDD
 

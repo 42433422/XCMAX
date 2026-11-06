@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="union-attr"
 """Publish one reviewed package to MODstore and verify its public postconditions."""
 
 from __future__ import annotations

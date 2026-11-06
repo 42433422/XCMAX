@@ -146,7 +146,7 @@ class AsyncTaskManager:
             if config.on_success:
                 config.on_success(result)
 
-            logger.info(f"[同步完成] 任务 {result.task_id}: {result.duration_ms:.2f}ms")  # noqa: G004
+            logger.info(f"[同步完成] 任务 {result.task_id}: {result.duration_ms:.2f}ms")
 
         except RECOVERABLE_ERRORS as e:
             result.status = TaskStatus.FAILURE

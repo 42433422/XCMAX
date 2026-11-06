@@ -1,4 +1,3 @@
-# mypy: disable-error-code="var-annotated"
 """Branch-coverage tests for app.application.employee_runtime.orchestrator.
 
 Targets branches in:

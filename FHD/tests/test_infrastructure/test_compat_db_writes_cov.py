@@ -631,7 +631,7 @@ def test_customer_pg_delete_anywhere_resolved_from_purchase_units():
 
     # _products_delete_by_unit_pg must have been called with "ResolvedCo"
     from app.infrastructure.persistence.compat_db.writes import (
-        _products_delete_by_unit_pg,  # noqa: F401
+        _products_delete_by_unit_pg,
     )
 
 

@@ -233,7 +233,7 @@ class TestStripB64AttachImageUrlsBranchCov:
     def test_non_dict_surface_returns_as_is(self):
         from app.application.aibiz_web_terminal_service import _strip_b64_attach_image_urls
 
-        result = _strip_b64_attach_image_urls("not a dict", terminal="web")  # type: ignore[arg-type]
+        result = _strip_b64_attach_image_urls("not a dict", terminal="web")
         assert result == "not a dict"
 
     def test_non_list_pages_returns_surface(self):
@@ -455,7 +455,7 @@ class TestSanitizePwAdminPages:
     def test_non_dict_surface_returns_as_is(self):
         from app.application.aibiz_web_terminal_service import _sanitize_pw_admin_pages
 
-        result = _sanitize_pw_admin_pages("P-W", "not a dict")  # type: ignore[arg-type]
+        result = _sanitize_pw_admin_pages("P-W", "not a dict")
         assert result == "not a dict"
 
     def test_non_list_pages_returns_surface(self):

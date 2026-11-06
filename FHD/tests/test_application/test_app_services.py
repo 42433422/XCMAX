@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 """
 应用服务层测试
 
@@ -17,7 +16,7 @@ try:
     from app.domain.conversation.intent_recognition_service import IntentRecognitionService
 except ModuleNotFoundError:
     # Legacy tuple-returning service removed; superseded by UnifiedIntentRecognizer (dict API).
-    IntentRecognitionService = None  # type: ignore[assignment,misc]
+    IntentRecognitionService = None
 
 from app.application.customer_app_service import CustomerApplicationService
 from app.application.extract_log_app_service import ExtractLogApplicationService

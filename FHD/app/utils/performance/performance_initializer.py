@@ -156,7 +156,7 @@ class PerformanceOptimizer:
 
         logger.info("=" * 60)
         logger.info(
-            f"🎉 性能优化系统初始化完成 ({success_count}/{total_count} 成功, 耗时 {init_duration:.2f}ms)"  # noqa: G004
+            f"🎉 性能优化系统初始化完成 ({success_count}/{total_count} 成功, 耗时 {init_duration:.2f}ms)"
         )
         logger.info("=" * 60)
 

@@ -45,7 +45,7 @@ def install_tenant_filter() -> None:
     _INSTALLED = True
 
     @event.listens_for(Session, "do_orm_execute")
-    def _tenant_read_filter(execute_state):  # noqa: ANN001
+    def _tenant_read_filter(execute_state):
         if not execute_state.is_select:
             return
         if execute_state.execution_options.get("skip_tenant_filter"):
@@ -64,7 +64,7 @@ def install_tenant_filter() -> None:
         )
 
     @event.listens_for(Session, "before_flush")
-    def _tenant_write_tag(session, flush_context, instances):  # noqa: ANN001
+    def _tenant_write_tag(session, flush_context, instances):
         tid = current_tenant_id()
         owned = owned_tenant_id()
         if owned is not None:

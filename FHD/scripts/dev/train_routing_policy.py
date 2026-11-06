@@ -54,8 +54,8 @@ SILVER_WEIGHT = 0.7
 
 def _import_torch():
     try:
-        import torch  # type: ignore[import-not-found]
-        from torch import nn  # type: ignore[import-not-found]
+        import torch
+        from torch import nn
 
         return torch, nn
     except ImportError as e:  # pragma: no cover

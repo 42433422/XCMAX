@@ -377,7 +377,7 @@ def resume_action(
         )
         outcome = raw_outcome if isinstance(raw_outcome, dict) else {"result": raw_outcome}
         ok = bool(outcome.get("ok", outcome.get("success", True)))
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - executor boundary must become an audited outcome
+    except RECOVERABLE_ERRORS as exc:
         outcome = {"ok": False, "error": str(exc)}
         ok = False
     return complete_action(

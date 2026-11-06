@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, union-attr"
 """
 详细测试 OCR 提取结果 - 捕获所有异常
 """
@@ -53,6 +52,6 @@ try:
     else:
         print(f"✗ 失败：{result.get('error')}")
 
-except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:
     print(f"✗ 异常：{e}")
     traceback.print_exc()

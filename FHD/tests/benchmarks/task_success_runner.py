@@ -239,7 +239,7 @@ def _execute_plan(plan: Any, task: dict[str, Any]) -> tuple[bool, str, dict[str,
 
 def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     _bootstrap_isolated_db()
-    import app.db.models  # noqa: F401  确保全部模型注册后再建表
+    import app.db.models
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.db import engine
     from app.db.db_base import Base

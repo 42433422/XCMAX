@@ -421,7 +421,7 @@ def _build_persona_repository():
         from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
 
         return PersonaRepositoryImpl()
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("Persona 持久化仓储不可用，降级内存仓储: %s", exc)
         return _InMemoryPersonaRepository()
 

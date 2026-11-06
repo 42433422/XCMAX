@@ -18,7 +18,7 @@ from app.domain.approval.safe_dsl import (
 
 class TestEmptyAndNonString:
     def test_none_passes(self):
-        assert SafeExpressionEvaluator({}).evaluate(None) is True  # type: ignore[arg-type]
+        assert SafeExpressionEvaluator({}).evaluate(None) is True
 
     def test_empty_string_passes(self):
         assert SafeExpressionEvaluator({}).evaluate("") is True
@@ -27,7 +27,7 @@ class TestEmptyAndNonString:
         assert SafeExpressionEvaluator({}).evaluate("   ") is True
 
     def test_non_string_passes(self):
-        assert SafeExpressionEvaluator({}).evaluate(123) is True  # type: ignore[arg-type]
+        assert SafeExpressionEvaluator({}).evaluate(123) is True
 
 
 class TestComparisons:

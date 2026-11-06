@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """演化决策 ledger CLI - 5 连接点统一入口。
 
 连接点 1: collect-signals    - 聚合 legacy/intent/slo 信号 → signal_detected 事件
@@ -39,25 +38,25 @@ _SCRIPT_DIR = _sys.path[0]  # 直接脚本执行时，sys.path[0] 就是脚本�
 if _SCRIPT_DIR:
     _sys.path = [p for p in _sys.path if p != _SCRIPT_DIR]
 
-import argparse  # noqa: E402
-import os  # noqa: E402
-import subprocess  # noqa: E402
-import sys  # noqa: E402
-import uuid  # noqa: E402
-from pathlib import Path  # noqa: E402
-from typing import Any, Dict, List, Optional  # noqa: E402
+import argparse
+import os
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # 添加 MODstore_deploy 到 sys.path
 REPO_ROOT = Path(__file__).resolve().parents[3]  # XCMAX/
 MODSTORE_DEPLOY = REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"
 sys.path.insert(0, str(MODSTORE_DEPLOY))
 
-from modstore_server.evolution_ledger import (  # noqa: E402
+from modstore_server.evolution_ledger import (
     append_event,
     list_events,
     mark_audited,
 )
-from modstore_server.evolution_signal_collector import aggregate_signals  # noqa: E402
+from modstore_server.evolution_signal_collector import aggregate_signals
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -295,7 +294,7 @@ def cmd_open_issue(args: argparse.Namespace) -> int:
 
     try:
         issue_url = open_issue_for_proposal(proposal, add_implement_label=False)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         evt = append_event(
             {
                 "event_type": "issue_open_failed",

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="var-annotated"
 """Tests for app.domain.shared_services.tax_invoice_provider."""
 
 from __future__ import annotations

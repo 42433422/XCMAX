@@ -39,5 +39,5 @@ for i, payload in enumerate(test_cases):
             with open(filename, "wb") as f:
                 f.write(audio_data)
             print(f"  Saved to: {filename}")
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         print(f"  Error: {e}")

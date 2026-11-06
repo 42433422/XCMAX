@@ -1,5 +1,5 @@
 {
-  "lines": 2415368,
+  "lines": 2415090,
   "updated": "2026-11-06",
-  "note": "SSOT Drift Gate net-deletion: tree 2415368 vs stale baseline 2414406 after prior rememeasure; raise to current tracked code+docs lines"
+  "note": "refresh line_baseline after CI net-deletion DRIFT on tip 73ca5256"
 }

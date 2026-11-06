@@ -6,7 +6,7 @@ import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.application.group_chat.constants import (
     _BRANCH_SAFE_RE,
@@ -127,7 +127,7 @@ def _default_departments() -> dict[str, Any]:
 
         depts = load_departments()
         return depts if isinstance(depts, dict) else {}
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 部门配置缺失时回退到内置 6 部门
+    except RECOVERABLE_ERRORS:
         return {}
 
 
@@ -195,14 +195,14 @@ def _default_duty_employee_loader() -> list[dict[str, Any]]:
 
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
-        get_mod_manager = None  # type: ignore[assignment]
+    except RECOVERABLE_ERRORS:
+        get_mod_manager = cast(Any, None)
 
     installed_by_id: dict[str, tuple[str, dict[str, Any], dict[str, Any]]] = {}
     if get_mod_manager is not None:
         try:
             mods = get_mod_manager().list_all_mods() or []
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:
             mods = []
         for m in mods:
             if not isinstance(m, dict):
@@ -285,7 +285,7 @@ def _append_super_employees(employees: list[dict[str, Any]]) -> None:
             CURSOR_PROFILE,
             TRAE_PROFILE,
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 超级员工模块不可用时静默跳过
+    except RECOVERABLE_ERRORS:
         return
     existing = {str(e.get("employee_id") or "") for e in employees if isinstance(e, dict)}
     for profile in (CODEX_PROFILE, CURSOR_PROFILE, CLAUDE_PROFILE, TRAE_PROFILE):
@@ -314,13 +314,13 @@ def _default_enterprise_employee_loader() -> list[dict[str, Any]]:
 
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return []
 
     employees: list[dict[str, Any]] = []
     try:
         mods = get_mod_manager().list_all_mods() or []
-    except RECOVERABLE_ERRORS:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:
         return []
     for m in mods:
         if not isinstance(m, dict):

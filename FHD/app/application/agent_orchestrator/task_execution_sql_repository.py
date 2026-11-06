@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.task_execution_models import (
     AgentTaskExecution,
+    ExecutionState,
     _deadline,
     _task_id_of,
 )
@@ -43,7 +44,7 @@ class SQLAlchemyTaskExecutionRepository:
         self._ensure_schema()
         with self._session_scope() as db:
             self.enqueue_in_session(db, run, requested_by=requested_by, priority=priority)
-        return self.get(run.run_id)  # type: ignore[return-value]
+        return cast(AgentTaskExecution, self.get(run.run_id))
 
     def enqueue_in_session(
         self, db: Session, run: AgentRun, *, requested_by: str = "", priority: int = 100
@@ -340,7 +341,7 @@ class SQLAlchemyTaskExecutionRepository:
             task_id=str(record.task_id),
             user_id=str(record.user_id),
             tenant_id=str(record.tenant_id or ""),
-            state=str(record.state),  # type: ignore[arg-type]
+            state=cast(ExecutionState, str(record.state)),
             priority=int(record.priority or 100),
             available_at=str(record.available_at or ""),
             lease_owner=str(record.lease_owner or ""),

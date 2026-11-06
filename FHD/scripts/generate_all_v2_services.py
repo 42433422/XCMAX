@@ -208,7 +208,7 @@ def get_{service_name}_v2() -> {class_name}V2:
             try:
                 v2_file = self.generate_v2_service(py_file)
                 generated_files.append(v2_file)
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:
                 print(f"  [ERROR] 生成失败: {e}")
 
         return generated_files

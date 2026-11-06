@@ -44,7 +44,7 @@ class _FakeAppHandler(BaseHTTPRequestHandler):
     retest_status = 200
     health_version = "1.0.0.4"
 
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         if self.path.startswith("/api/health"):
             body = json.dumps({"status": "healthy", "version": self.health_version}).encode()
             self.send_response(200)
@@ -112,7 +112,7 @@ class TestRetest:
         base_url, _ = fake_app
 
         class BrokenHandler(_FakeAppHandler):
-            def do_GET(self):  # noqa: N802
+            def do_GET(self):
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"not-json")
@@ -132,7 +132,7 @@ class TestRetest:
         base_url, _ = fake_app
 
         class FatHealthHandler(_FakeAppHandler):
-            def do_GET(self):  # noqa: N802
+            def do_GET(self):
                 if self.path.startswith("/api/health"):
                     payload = {
                         "status": "healthy",

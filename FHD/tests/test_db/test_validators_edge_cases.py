@@ -143,7 +143,7 @@ class TestRegisterModelValidators:
         # Patch the importlib in the validators module by injecting a bad __import__
         original_import = __builtins__["__import__"]  # type: ignore[index]
 
-        def fake_import(name: str, *args, **kwargs):  # type: ignore[no-untyped-def]
+        def fake_import(name: str, *args, **kwargs):
             if "product" in name:
                 raise ImportError("forced")
             return original_import(name, *args, **kwargs)
@@ -157,7 +157,7 @@ class TestRegisterModelValidators:
 
         original_import = __builtins__["__import__"]  # type: ignore[index]
 
-        def fake_import(name: str, *args, **kwargs):  # type: ignore[no-untyped-def]
+        def fake_import(name: str, *args, **kwargs):
             if "customer" in name:
                 raise RuntimeError("unexpected")
             return original_import(name, *args, **kwargs)

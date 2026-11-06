@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """Branch-coverage tests for app/application/agent_orchestrator/chat_trace.py.
 
 Targets the ~83 missing branches reported in coverage_new.json.
@@ -841,7 +840,7 @@ class TestAttachRunId:
 
 class TestAttachChatTraceRun:
     def test_non_dict_payload_returned_as_is(self):
-        result = ct.attach_chat_trace_run("not a dict", message="q")  # type: ignore[arg-type]
+        result = ct.attach_chat_trace_run("not a dict", message="q")
         assert result == "not a dict"
 
     def test_already_has_run_id_returns_as_is(self):
@@ -963,7 +962,7 @@ class TestFinalizeLegacyChatRun:
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
         ):
-            result = ct.finalize_legacy_chat_run("any-run-id", payload, message="q")  # type: ignore[arg-type]
+            result = ct.finalize_legacy_chat_run("any-run-id", payload, message="q")
         assert result == payload
 
     def test_run_not_found_calls_attach(self, repo):

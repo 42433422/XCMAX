@@ -32,7 +32,7 @@ import pytest
 # employee_pack_runner → app.mod_sdk.__init__ → app.mod_sdk.services →
 # app.services.get_products_service (circular).
 # Importing app.application first ensures the chain resolves cleanly.
-import app.application  # noqa: F401
+import app.application
 from app.domain.shared_services.tools_workflow_registered import (
     _execute_excel_import_records,
     _normalize_business_db_entity,

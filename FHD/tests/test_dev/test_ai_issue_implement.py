@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type, attr-defined"
 """ai_issue_implement 决策矩阵约束的纯函数单测。
 
 只测不依赖 GitHub API / git / LLM 的纯逻辑：
@@ -210,14 +209,14 @@ class TestIsAuthorized:
         # monkeypatch patterns via _allowlist_preauthorized patterns arg is internal;
         # call _is_authorized after temporarily stubbing loader
         original = _ai_impl._load_allowlist_patterns
-        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^refactor-.*"]  # type: ignore[assignment]
+        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^refactor-.*"]
         try:
             ok, msg, source = _ai_impl._is_authorized(issue, [], "owner/repo")
             assert ok is True
             assert "域预授权" in msg
             assert source == "allowlist"
         finally:
-            _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
+            _ai_impl._load_allowlist_patterns = original
 
     def test_falls_back_to_owner_confirm(self) -> None:
         issue = {
@@ -226,7 +225,7 @@ class TestIsAuthorized:
             "labels": [{"name": "ai-implement"}],
         }
         original = _ai_impl._load_allowlist_patterns
-        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]  # type: ignore[assignment]
+        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]
         try:
             ok, _, source = _ai_impl._is_authorized(
                 issue,
@@ -242,7 +241,7 @@ class TestIsAuthorized:
             assert ok is True
             assert source == "owner"
         finally:
-            _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
+            _ai_impl._load_allowlist_patterns = original
 
     def test_not_authorized_returns_empty_source(self) -> None:
         issue = {
@@ -251,13 +250,13 @@ class TestIsAuthorized:
             "labels": [{"name": "ai-implement"}],
         }
         original = _ai_impl._load_allowlist_patterns
-        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]  # type: ignore[assignment]
+        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]
         try:
             ok, _, source = _ai_impl._is_authorized(issue, [], "owner/repo")
             assert ok is False
             assert source == ""
         finally:
-            _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
+            _ai_impl._load_allowlist_patterns = original
 
     def test_allowlist_takes_priority_over_owner(self) -> None:
         # 同时命中 allowlist 且 owner 确认 → source 必须是 allowlist（更优先）
@@ -267,7 +266,7 @@ class TestIsAuthorized:
             "labels": [{"name": "ai-implement"}, {"name": "bug-mech-typo"}],
         }
         original = _ai_impl._load_allowlist_patterns
-        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]  # type: ignore[assignment]
+        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]
         try:
             ok, _, source = _ai_impl._is_authorized(
                 issue,
@@ -283,7 +282,7 @@ class TestIsAuthorized:
             assert ok is True
             assert source == "allowlist"
         finally:
-            _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
+            _ai_impl._load_allowlist_patterns = original
 
 
 class TestCommitAndPrLabelRouting:

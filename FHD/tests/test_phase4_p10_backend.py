@@ -1,4 +1,3 @@
-# mypy: disable-error-code="index"
 """COVERAGE_RAMP Phase 4 round 10: traditional_mode_fs (12%→) on a temp ROOT_DIR."""
 
 from __future__ import annotations

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="import-not-found"
 """3 次重试失败后转人工：issue comment + 打 needs-human 标签 + 写 ledger。"""
 
 from __future__ import annotations
@@ -29,9 +28,9 @@ sys.path.insert(0, str(_REPO_ROOT / "成都修茈科技有限公司" / "MODstore
 _FHD_SCRIPTS = Path(__file__).resolve().parent.parent  # FHD/scripts
 sys.path.insert(0, str(_FHD_SCRIPTS / "ci"))
 
-from _approval_ledger_client import post_to_approval_ledger  # noqa: E402
-from _im_notify_client import notify_boss_im  # noqa: E402
-from modstore_server.evolution_ledger import append_event  # noqa: E402
+from _approval_ledger_client import post_to_approval_ledger
+from _im_notify_client import notify_boss_im
+from modstore_server.evolution_ledger import append_event
 
 
 def escalate(
@@ -120,7 +119,7 @@ def escalate(
             workflow_action="escalate_to_human",
             source="ci_escalate",
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         pass
 
     # 管理端 IM（fail-open）：让人能及时介入，不阻断 escalate

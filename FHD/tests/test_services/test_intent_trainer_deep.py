@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined"
 """Deep coverage tests for app.domain.shared_services.intent_trainer.
 
 Root cause of near-zero coverage: the source module imports ``torch`` and
@@ -172,7 +171,7 @@ def _install_torch_transformers_stubs() -> None:
 
 # Stubs (if needed) are installed by tests/test_services/conftest.py.
 # Now safe to import the source module.
-from app.domain.shared_services.intent_trainer import (  # noqa: E402
+from app.domain.shared_services.intent_trainer import (
     HAS_YAML,
     ID_TO_LABEL,
     INTENT_LABELS,
@@ -186,7 +185,7 @@ from app.domain.shared_services.intent_trainer import (  # noqa: E402
     parse_nlu_yaml,
     split_data,
     train_intent_model,
-)  # noqa: E402
+)
 
 # ---------------------------------------------------------------------------
 # Helpers

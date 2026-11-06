@@ -1,4 +1,3 @@
-# mypy: disable-error-code="import-not-found"
 """ai_review.py 单元测试。
 
 覆盖：
@@ -28,7 +27,7 @@ CI_SCRIPTS = FHD_ROOT / "scripts" / "ci"
 if str(CI_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(CI_SCRIPTS))
 
-import ai_review as review  # noqa: E402
+import ai_review as review
 
 # =====================================================================
 # parse_diff 测试
@@ -38,7 +37,7 @@ import ai_review as review  # noqa: E402
 class TestParseDiff:
     def test_empty_diff_returns_empty(self) -> None:
         assert review.parse_diff("") == []
-        assert review.parse_diff(None) == []  # type: ignore[arg-type]
+        assert review.parse_diff(None) == []
 
     def test_single_file_single_hunk(self) -> None:
         diff = (
@@ -213,12 +212,12 @@ class TestMatchRules:
             review.DiffHunk(
                 file_path="config.py",
                 start_line=1,
-                lines=[(1, "+", "TOKEN = 'ghp_' + 'a' * 36")],  # noqa: S105 - 测试用
+                lines=[(1, "+", "TOKEN = 'ghp_' + 'a' * 36")],
                 raw_header="@@ -1,1 +1,1 @@",
             )
         ]
         # 简化：直接构造完整 token 字符串
-        hunks[0].lines = [(1, "+", "TOKEN = 'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'")]  # noqa: S105
+        hunks[0].lines = [(1, "+", "TOKEN = 'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'")]
         findings = review.match_high_risk_rules(hunks)
         assert any(f.rule == "hardcoded-aws-secret" for f in findings)
 

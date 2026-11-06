@@ -1,4 +1,3 @@
-# mypy: disable-error-code="attr-defined, import-not-found, no-any-return"
 """CI 自愈脚本：失败 workflow → 提取错误 → 规则匹配 + LLM 兜底 → 创建修复 PR。
 
 七元契约沿用桌面端：Signal(workflow_run failure) → Diagnosis(error extract) →
@@ -50,7 +49,7 @@ except ImportError:  # pragma: no cover - 测试环境可能未装 httpx
 try:
     from _approval_ledger_client import post_to_approval_ledger
 except ImportError:  # pragma: no cover - 测试环境路径可能不通
-    post_to_approval_ledger = None  # type: ignore[assignment]
+    post_to_approval_ledger = None
 
 
 # =====================================================================
@@ -159,13 +158,13 @@ def fetch_workflow_logs(
                 return "\n".join(parts)
         except zipfile.BadZipFile:
             return ""
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
+    except RECOVERABLE_ERRORS:
         return ""
     finally:
         if close_after:
             try:
                 client.close()
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+            except RECOVERABLE_ERRORS:
                 pass
 
 
@@ -538,7 +537,7 @@ def check_incident_budget(
                 )
             if len(payload) < 100:
                 break
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - circuit breaker must fail closed
+    except RECOVERABLE_ERRORS as exc:
         return IncidentBudgetDecision(
             False,
             f"budget_lookup_error:{type(exc).__name__}",
@@ -550,7 +549,7 @@ def check_incident_budget(
         if close_after:
             try:
                 client.close()
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+            except RECOVERABLE_ERRORS:
                 pass
     return IncidentBudgetDecision(
         True,
@@ -686,13 +685,13 @@ def find_existing_remediation_issue(
                 return str(item.get("html_url") or "")
             if len(payload) < 100:
                 break
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return ""
     finally:
         if close_after:
             try:
                 client.close()
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+            except RECOVERABLE_ERRORS:
                 pass
     return ""
 
@@ -886,7 +885,7 @@ def call_llm(
         finally:
             if close_after:
                 client.close()
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return None
     fixes_data = data.get("fixes") if isinstance(data, dict) else None
     if not isinstance(fixes_data, list):
@@ -985,7 +984,7 @@ def create_pr(
                     headers=headers,
                     json={"labels": labels},
                 )
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS:
                 pass
         # 3. 旁路写 approval ledger（fire-and-forget，fail-open 在 client 内处理）
         if post_to_approval_ledger is not None:
@@ -1008,16 +1007,16 @@ def create_pr(
                     },
                     source="ci_self_heal",
                 )
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
+            except RECOVERABLE_ERRORS:
                 pass
         return pr_url
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return ""
     finally:
         if close_after:
             try:
                 client.close()
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+            except RECOVERABLE_ERRORS:
                 pass
 
 
@@ -1088,13 +1087,13 @@ def create_remediation_issue(
             return ""
         data = response.json()
         return str(data.get("html_url") or "")
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return ""
     finally:
         if close_after:
             try:
                 client.close()
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+            except RECOVERABLE_ERRORS:
                 pass
 
 
@@ -1144,13 +1143,13 @@ def dispatch_issue_implementation(
             },
         )
         return response.status_code == 204
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return False
     finally:
         if close_after:
             try:
                 client.close()
-            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+            except RECOVERABLE_ERRORS:
                 pass
 
 
@@ -1383,7 +1382,7 @@ def _github_getter(token: str, repo: str) -> freshness.Getter:
         try:
             resp = client.get(f"{GITHUB_API}{path}", headers=headers, params=params)
             return resp.status_code, resp.json()
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - fail-closed boundary
+        except RECOVERABLE_ERRORS as exc:
             raise freshness.LookupFailed(f"GET {path}: {type(exc).__name__}") from exc
 
     return get

@@ -183,7 +183,7 @@ def main() -> int:
             data = json.loads(resp.read().decode())
         top = [(r.get("id"), r.get("day")) for r in (data.get("data") or [])[:5]]
         print("[digest-sync] public top:", data.get("total"), top)
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         print("[digest-sync] public verify skipped:", exc)
     return 0
 

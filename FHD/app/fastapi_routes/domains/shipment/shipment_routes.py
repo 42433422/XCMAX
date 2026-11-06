@@ -69,7 +69,7 @@ def _trace_approval_route(
             channel="approval_route",
             intent=intent,
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break approval responses
+    except RECOVERABLE_ERRORS:
         logger.exception("failed to attach AgentRun trace to approval route response")
         return payload
 

@@ -181,7 +181,7 @@ class PreviewWorkerMixin:
                     self._update_linked_companion_summary(db, run, status="failed")
                     db.commit()
                     self._record_preview_metrics(run, started_at, status="failed")
-            except RECOVERABLE_ERRORS:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 logger.exception("Unable to persist ETL preview failure for run %s", run_id)
         finally:

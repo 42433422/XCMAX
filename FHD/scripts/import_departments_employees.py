@@ -1,4 +1,3 @@
-# mypy: disable-error-code="index"
 """
 从考勤 Excel 提取部门和人员，导入 taiyangniao_pro.db（考勤表 + products/customers，供前端列表）。
 
@@ -373,7 +372,7 @@ def import_departments_and_employees(
 
         conn.commit()
         return dept_rows, emp_rows, prod_rows, cust_rows
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         conn.rollback()
         raise
     finally:

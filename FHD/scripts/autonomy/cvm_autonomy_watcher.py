@@ -49,12 +49,12 @@ def _bootstrap_direct_script_import() -> None:
 
 _bootstrap_direct_script_import()
 
-import argparse  # noqa: E402
-import time  # noqa: E402
-from datetime import UTC, datetime  # noqa: E402
-from typing import Any  # noqa: E402
+import argparse
+import time
+from datetime import UTC, datetime
+from typing import Any
 
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS  # noqa: E402
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 # 支持直接 ``python scripts/autonomy/cvm_autonomy_watcher.py --help``：
 # 当直接执行脚本时，__package__ 为 None，需将 FHD 根目录放到 sys.path
@@ -65,7 +65,7 @@ if __package__ in (None, ""):
     from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter
     from scripts.autonomy.impact_predictor import predict
     from scripts.autonomy.policies import ALL_POLICIES
-    from scripts.autonomy.types import (  # noqa: F401  # 仅导出供模块内使用
+    from scripts.autonomy.types import (  # 仅导出供模块内使用
         Action,
         ActionResult,
         ActionTracker,
@@ -102,7 +102,7 @@ else:
 
 # 显式 autonomy callback（优先）+ 旁路 approval ledger client（fail-open）
 try:
-    from scripts.autonomy.autonomy_callback import (  # noqa: E402
+    from scripts.autonomy.autonomy_callback import (
         autonomy_callback as _autonomy_callback,
     )
 except ImportError:  # pragma: no cover
@@ -116,10 +116,10 @@ try:
     )
     if _ci_scripts_dir not in sys.path:
         sys.path.insert(0, _ci_scripts_dir)
-    from scripts.ci._approval_ledger_client import (  # noqa: E402
+    from scripts.ci._approval_ledger_client import (
         post_to_approval_ledger,
     )
-    from scripts.ci._im_notify_client import notify_boss_im  # noqa: E402
+    from scripts.ci._im_notify_client import notify_boss_im
 except ImportError:  # pragma: no cover - 测试环境路径可能不通
     post_to_approval_ledger = None  # type: ignore[assignment]
     notify_boss_im = None  # type: ignore[assignment]
@@ -360,7 +360,7 @@ def _try_execute_single(
     tracker.last_attempt_ts = int(time.time() * 1000)
     try:
         result = adapter.execute_action(action)
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         result = _make_error_result(action, f"execute_threw: {e}")
 
     entry = AuditEntry(
@@ -388,7 +388,7 @@ def _try_execute_single(
                 },
                 source="cvm_watcher",
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
+        except RECOVERABLE_ERRORS:
             pass
 
     # 失败且耗尽 attempts → escalate
@@ -429,7 +429,7 @@ def _escalate(
     )
     try:
         result = adapter.execute_action(escalate_action)
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         result = _make_error_result(escalate_action, f"escalate_threw: {e}")
     entry = AuditEntry(
         ts=datetime.now(UTC).isoformat(),
@@ -456,7 +456,7 @@ def _escalate(
                 _escalate_payload,
                 source="cvm_watcher",
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
+        except RECOVERABLE_ERRORS:
             pass
     elif post_to_approval_ledger is not None:
         try:
@@ -465,7 +465,7 @@ def _escalate(
                 payload=_escalate_payload,
                 source="cvm_watcher",
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
+        except RECOVERABLE_ERRORS:
             pass
     # 回调 /github-approval：decision=execution_failed（fail-open）
     try:
@@ -482,7 +482,7 @@ def _escalate(
             },
             source="cvm_watcher",
         )
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
+    except RECOVERABLE_ERRORS:
         pass
     # 管理端 IM（fail-open）：needs-human 及时触达
     if notify_boss_im is not None:
@@ -496,7 +496,7 @@ def _escalate(
                 display_name="CVM 自治",
                 source="cvm_watcher",
             )
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
+        except RECOVERABLE_ERRORS:
             pass
     return entry
 
@@ -557,7 +557,7 @@ def tick(
     # 1. 采集 truth（容错）
     try:
         truth = adapter.collect_truth()
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         detail = f"truth_collect_failed: {e}"
         adapter.audit(
             AuditEntry(
@@ -639,7 +639,7 @@ def _try_unfreeze_expired_manifest(
 
     try:
         needed, age_seconds = check_fn()
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         # 检查失败不影响主流程
         return None
 
@@ -680,7 +680,7 @@ def _try_unfreeze_expired_manifest(
     # adapter._action_unfreeze_manifest 内部已守护 mtime + ttl + health。
     try:
         result = adapter.execute_action(action)
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:
         result = _make_error_result(action, f"execute_threw: {e}")
 
     entry = AuditEntry(
@@ -752,7 +752,7 @@ def main(argv: list[str] | None = None) -> int:
     state = WatcherState()
     try:
         truth, signals, plans, audits = tick(adapter, ALL_POLICIES, state, dry_run=args.dry_run)
-    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except BOUNDARY_ERRORS as e:
         # truth 采集失败已写 audit；返回 1
         print(f"[cvm-autonomy-watcher] tick failed: {e}", file=sys.stderr)
         return 1

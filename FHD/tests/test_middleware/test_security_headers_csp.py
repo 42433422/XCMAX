@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-any-return"
 """COVERAGE_RAMP C3.0: SecurityHeaders 中间件 - 默认 / sandbox / https / 非 http。
 
 覆盖：

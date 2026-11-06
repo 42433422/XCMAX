@@ -1,4 +1,3 @@
-# mypy: disable-error-code="arg-type"
 """Tests for app.application.employee_runtime.agent_loop."""
 
 from __future__ import annotations

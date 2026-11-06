@@ -55,7 +55,7 @@ def _has_column(conn, table: str, col: str) -> bool:
 
     try:
         cols = {c["name"] for c in inspect(conn).get_columns(table)}
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:
         return False
     return col in cols
 

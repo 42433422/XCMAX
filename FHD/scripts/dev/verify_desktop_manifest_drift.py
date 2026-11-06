@@ -21,14 +21,14 @@ DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
 def _fetch(url: str, timeout: int = 30) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=timeout) as response:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=timeout) as response:
         return response.read()
 
 
 def _content_length(url: str, timeout: int = 30) -> int | None:
     req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             length = response.headers.get("Content-Length")
             return int(length) if length is not None else None
     except (urllib.error.URLError, OSError, ValueError):

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="misc"
 """
 Dev static file server with long-lived cache headers for webfonts.
 

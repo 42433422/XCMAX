@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="no-any-return"
 """从 GitHub issue body 中提取 LLM 提议 JSON。"""
 
 from __future__ import annotations

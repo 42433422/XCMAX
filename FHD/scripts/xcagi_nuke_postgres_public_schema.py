@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code="misc"
 """
 危险操作：清空当前 DATABASE_URL 指向的 PostgreSQL 数据库中的 **public** 架构（DROP SCHEMA … CASCADE），
 相当于删除该库内几乎所有业务表与数据；随后重建 public、恢复 pgvector 扩展。
@@ -87,7 +86,7 @@ def main() -> int:
     print("即将 DROP SCHEMA public CASCADE，数据库:", parsed.path or "", "host:", host)
     try:
         conn = psycopg.connect(conn_s, connect_timeout=15, autocommit=True)
-    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except BOUNDARY_ERRORS as e:
         print("连接失败:", e, file=sys.stderr)
         return 5
 
