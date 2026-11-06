@@ -120,7 +120,9 @@ def test_b34_mixed_issue_stays_pending_verification():
     )
 
     text = "账户余额没到账，同时员工图谱无法显示"
-    out = classify_customer_intent(text, extract_fields(text, {}), context={"scene": "account"})
+    out = classify_customer_intent(
+        text, extract_fields(text, {}), context={"scene": "account"}
+    )
     assert out["intent"] == "general"
     assert out["classification_status"] == "pending_verification"
     assert out["intent"] != "account_support"
@@ -173,13 +175,17 @@ def test_b37_b40_admin_sees_ticket_and_other_callers_do_not(client):
         assert "工具无法调用" in (body["ticket"].get("summary") or "")
         kinds = {row["action_type"] for row in body["actions"]}
         assert {"ticket.diagnose", "ticket.report_diagnosis"} <= kinds
-        diagnose = next(row for row in body["actions"] if row["action_type"] == "ticket.diagnose")
+        diagnose = next(
+            row for row in body["actions"] if row["action_type"] == "ticket.diagnose"
+        )
         assert diagnose["status"] == "completed"
         assert diagnose["result"]["executed"] is True
         assert diagnose["result"]["ticket_no"] == body["ticket"]["ticket_no"]
         assert "已记录客服处理建议" not in str(diagnose["result"])
         report = next(
-            row for row in body["actions"] if row["action_type"] == "ticket.report_diagnosis"
+            row
+            for row in body["actions"]
+            if row["action_type"] == "ticket.report_diagnosis"
         )
         assert report["result"]["ticket_no"] == diagnose["result"]["ticket_no"]
         _as(other)
@@ -230,7 +236,11 @@ def test_b47_distinct_tickets_do_not_share_ids(client):
 
 
 def test_b49_b52_b55_unknown_or_bad_tool_call_is_rejected(client):
-    from modstore_server.customer_service_tools import build_action, execute_action, json_loads
+    from modstore_server.customer_service_tools import (
+        build_action,
+        execute_action,
+        json_loads,
+    )
 
     user = _user("loop_tool")
     try:
@@ -255,7 +265,11 @@ def test_b49_b52_b55_unknown_or_bad_tool_call_is_rejected(client):
                 action_type="ticket.diagnose",
                 target_type="ticket",
                 target_id="not-this-ticket",
-                request={"ticket_id": "abc", "user_id": user.id, "file_path": "../secrets"},
+                request={
+                    "ticket_id": "abc",
+                    "user_id": user.id,
+                    "file_path": "../secrets",
+                },
             )
             execute_action(session, bad, db_user)
             denied = build_action(
@@ -351,7 +365,11 @@ def test_b56_b61_sensitive_change_requires_one_approval(client):
 def _decide(client, ticket_id, decision, key):
     return client.post(
         f"{BASE}/issues/{ticket_id}/decision",
-        json={"decision": decision, "note": "问题仍未消失，不能当成已经修好", "idempotency_key": key},
+        json={
+            "decision": decision,
+            "note": "问题仍未消失，不能当成已经修好",
+            "idempotency_key": key,
+        },
     )
 
 
@@ -378,11 +396,16 @@ def test_b71_b74_failed_verification_cannot_close(client):
         ticket_id = submitted["ticket"]["id"]
         assert submitted["ticket"]["status"] == "failed"
         _as(owner)
-        assert _decide(client, ticket_id, "resolved", "loop-close-001").status_code == 409
+        assert (
+            _decide(client, ticket_id, "resolved", "loop-close-001").status_code == 409
+        )
         _as(admin)
         assert _admin_close(client, ticket_id).status_code == 409
         _as(owner)
-        assert client.get(f"{BASE}/tickets/{ticket_id}").json()["ticket"]["status"] == "failed"
+        assert (
+            client.get(f"{BASE}/tickets/{ticket_id}").json()["ticket"]["status"]
+            == "failed"
+        )
     finally:
         _clear_auth()
 
@@ -419,8 +442,12 @@ def test_graph_account_and_tool_lanes_use_different_employees(client):
         tool = _open_product(client, tool_user, "AI 工具调用失败")
         _as(admin)
         detail = client.get(f"{BASE}/tickets/{tool['ticket']['id']}").json()
-        assert detail["ticket"]["evidence"]["loop_public"]["employee_id"] == "emp.ai_tools"
-        registry = next(row for row in detail["actions"] if row["action_type"] == "tool.registry")
+        assert (
+            detail["ticket"]["evidence"]["loop_public"]["employee_id"] == "emp.ai_tools"
+        )
+        registry = next(
+            row for row in detail["actions"] if row["action_type"] == "tool.registry"
+        )
         assert registry["result"]["executed"] is True
         assert registry["result"]["registered"] is True
         balance_user = _user("loop_balance")
@@ -430,10 +457,14 @@ def test_graph_account_and_tool_lanes_use_different_employees(client):
         _as(admin)
         account = client.get(f"{BASE}/tickets/{filed['ticket']['id']}").json()
         assert account["ticket"]["evidence"]["loop"]["employee_id"] == "emp.account"
-        lookup = next(row for row in account["actions"] if row["action_type"] == "account.lookup")
+        lookup = next(
+            row for row in account["actions"] if row["action_type"] == "account.lookup"
+        )
         assert lookup["result"]["executed"] is True
         assert lookup["result"]["mutated"] is False
-        assert "ticket.apply_change" not in {row["action_type"] for row in account["actions"]}
+        assert "ticket.apply_change" not in {
+            row["action_type"] for row in account["actions"]
+        }
         assert _admin_close(client, filed["ticket"]["id"]).status_code == 409
         assert account["ticket"]["status"] == "waiting_user"
     finally:
@@ -450,11 +481,20 @@ def test_customer_confirms_only_after_verification_and_reopen_keeps_history(clie
         assert _admin_close(client, ticket_id).status_code == 409
         _as(owner)
         assert _decide(client, ticket_id, "resolved", "loop-confirm").status_code == 200
-        assert client.get(f"{BASE}/tickets/{ticket_id}").json()["ticket"]["status"] == "resolved"
+        assert (
+            client.get(f"{BASE}/tickets/{ticket_id}").json()["ticket"]["status"]
+            == "resolved"
+        )
         reopened = _decide(client, ticket_id, "reopen", "loop-reopen")
         assert reopened.status_code == 200, reopened.text
-        assert client.get(f"{BASE}/tickets/{ticket_id}").json()["ticket"]["status"] == "processing"
-        assert _decide(client, ticket_id, "resolved", "loop-confirm-again").status_code == 409
+        assert (
+            client.get(f"{BASE}/tickets/{ticket_id}").json()["ticket"]["status"]
+            == "processing"
+        )
+        assert (
+            _decide(client, ticket_id, "resolved", "loop-confirm-again").status_code
+            == 409
+        )
         _as(admin)
         detail = client.get(f"{BASE}/tickets/{ticket_id}").json()
         assert detail["ticket"]["evidence"]["reopen_history"]
@@ -488,14 +528,22 @@ def test_offline_employee_can_be_rescheduled_without_dropping_the_ticket(client)
         before = len(first["actions"])
         stayed = client.post(f"{BASE}/tickets/{ticket_id}/loop/resume")
         assert stayed.status_code == 409, stayed.text
-        assert len(client.get(f"{BASE}/tickets/{ticket_id}").json()["actions"]) == before
+        assert (
+            len(client.get(f"{BASE}/tickets/{ticket_id}").json()["actions"]) == before
+        )
         HOOKS["offline"].clear()
         resumed = client.post(f"{BASE}/tickets/{ticket_id}/loop/resume")
         assert resumed.status_code == 200, resumed.text
         after = client.get(f"{BASE}/tickets/{ticket_id}").json()
         assert after["ticket"]["status"] == "processing"
-        assert after["ticket"]["evidence"]["loop"]["task_id"] == first["ticket"]["evidence"]["loop"]["task_id"]
-        assert any(row["action_type"] == "ticket.diagnose" and row["status"] == "completed" for row in after["actions"])
+        assert (
+            after["ticket"]["evidence"]["loop"]["task_id"]
+            == first["ticket"]["evidence"]["loop"]["task_id"]
+        )
+        assert any(
+            row["action_type"] == "ticket.diagnose" and row["status"] == "completed"
+            for row in after["actions"]
+        )
         assert client.post(f"{BASE}/tickets/{ticket_id}/loop/resume").status_code == 409
     finally:
         _clear_auth()
@@ -511,7 +559,11 @@ def test_sensitive_write_waits_for_one_approval(client):
         assert filed["ticket"]["status"] == "waiting_approval"
         _as(admin)
         waiting = client.get(f"{BASE}/tickets/{ticket_id}").json()
-        change = next(row for row in waiting["actions"] if row["action_type"] == "ticket.apply_change")
+        change = next(
+            row
+            for row in waiting["actions"]
+            if row["action_type"] == "ticket.apply_change"
+        )
         assert change["status"] == "waiting_approval"
         assert change["result"]["executed"] is False
         _as(owner)
@@ -529,7 +581,11 @@ def test_sensitive_write_waits_for_one_approval(client):
         )
         assert again.json()["changed"] is False
         detail = client.get(f"{BASE}/tickets/{ticket_id}").json()
-        done = [row for row in detail["actions"] if row["action_type"] == "ticket.apply_change"]
+        done = [
+            row
+            for row in detail["actions"]
+            if row["action_type"] == "ticket.apply_change"
+        ]
         assert len(done) == 1
         assert done[0]["result"]["executed"] is True
         assert done[0]["result"]["approval_id"] == "ap-loop-1"
@@ -550,7 +606,11 @@ def test_restart_timeout_and_repeat_do_not_double_write(client):
         ticket_id = filed["ticket"]["id"]
         assert filed["ticket"]["status"] == "processing"
         with get_session_factory()() as session:
-            paused = session.query(CustomerServiceAction).filter_by(ticket_id=ticket_id).count()
+            paused = (
+                session.query(CustomerServiceAction)
+                .filter_by(ticket_id=ticket_id)
+                .count()
+            )
         HOOKS["pause_after"] = ""
         HOOKS["stale"] = True
         with get_session_factory()() as session:
@@ -559,14 +619,21 @@ def test_restart_timeout_and_repeat_do_not_double_write(client):
             assert recover_ticket_loop(session, ticket, user)
             session.commit()
             assert ticket.status == "failed"
-            assert session.query(CustomerServiceAction).filter_by(ticket_id=ticket_id).count() == paused
+            assert (
+                session.query(CustomerServiceAction)
+                .filter_by(ticket_id=ticket_id)
+                .count()
+                == paused
+            )
         with get_session_factory()() as session:
             ticket = session.get(CustomerServiceTicket, ticket_id)
             ticket.status = "processing"
             evidence = __import__("json").loads(ticket.evidence_json)
             evidence["loop"]["state"] = "processing"
             evidence["loop"]["verified"] = False
-            ticket.evidence_json = __import__("json").dumps(evidence, ensure_ascii=False)
+            ticket.evidence_json = __import__("json").dumps(
+                evidence, ensure_ascii=False
+            )
             session.commit()
         HOOKS["stale"] = False
         with get_session_factory()() as session:
@@ -583,13 +650,22 @@ def test_restart_timeout_and_repeat_do_not_double_write(client):
             assert ticket.status == "processing"
             again = len(recover_ticket_loop(session, ticket, user))
             session.commit()
-            assert session.query(CustomerServiceAction).filter_by(ticket_id=ticket_id).count() == again
+            assert (
+                session.query(CustomerServiceAction)
+                .filter_by(ticket_id=ticket_id)
+                .count()
+                == again
+            )
     finally:
         _clear_auth()
 
 
 def test_supplement_reply_and_capability_checks(client):
-    from modstore_server.customer_service_tools import build_action, execute_action, json_loads
+    from modstore_server.customer_service_tools import (
+        build_action,
+        execute_action,
+        json_loads,
+    )
     from modstore_server.models import User
 
     owner = _user("loop_extra")
@@ -628,7 +704,10 @@ def test_supplement_reply_and_capability_checks(client):
         stored = client.get(f"{BASE}/tickets/{ticket_id}").json()
         notes = stored["ticket"]["evidence"]["loop"]["supplements"]
         assert notes[-1]["note"].startswith("补充")
-        assert stored["ticket"]["evidence"]["loop"]["notified_employee_id"] == "emp.software"
+        assert (
+            stored["ticket"]["evidence"]["loop"]["notified_employee_id"]
+            == "emp.software"
+        )
         with get_session_factory()() as session:
             db_user = session.get(User, owner.id)
             wrong = build_action(
@@ -677,7 +756,10 @@ def test_session_stays_usable_and_ticket_reads_do_not_return_502(client):
         opened = _open_product(client, owner, "白屏打不开首页")
         _as(owner)
         assert client.get(f"{BASE}/sessions").status_code == 200
-        assert client.get(f"{BASE}/sessions/{opened['ticket']['session_id']}").status_code == 200
+        assert (
+            client.get(f"{BASE}/sessions/{opened['ticket']['session_id']}").status_code
+            == 200
+        )
         for _ in range(2):
             response = client.get(f"{BASE}/tickets/{opened['ticket']['id']}")
             assert response.status_code == 200
