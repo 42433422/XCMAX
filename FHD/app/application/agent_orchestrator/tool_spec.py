@@ -404,7 +404,8 @@ def _validate_schema_payload(
         ):
             return False, f"{subject} 缺少字段：{key}"
 
-    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    raw_properties = schema.get("properties")
+    properties = raw_properties if isinstance(raw_properties, dict) else {}
     if schema.get("additionalProperties") is False:
         unknown = [key for key in payload if key not in properties]
         if unknown:
@@ -443,7 +444,8 @@ def _validate_schema_payload(
                 return False, f"{subject} 字段 {key} 数量不足"
             if "maxItems" in prop and len(value) > int(prop["maxItems"]):
                 return False, f"{subject} 字段 {key} 数量超限"
-            item_schema = prop.get("items") if isinstance(prop.get("items"), dict) else {}
+            raw_items = prop.get("items")
+            item_schema = raw_items if isinstance(raw_items, dict) else {}
             item_type = str(item_schema.get("type") or "")
             for index, item in enumerate(value):
                 if item_type and not _type_matches(item, item_type):

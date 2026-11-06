@@ -220,14 +220,15 @@ class ModstorePlatformAdapter:
                     await client.aclose()
                 except RuntimeError:
                     pass
-            self._client = httpx.AsyncClient(
+            client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
                 trust_env=False,
             )
+            self._client = client
             self._client_loop_id = loop_id
-        return self._client
+        return client
 
     def _build_headers(self) -> Dict[str, str]:
         """构建请求头"""
