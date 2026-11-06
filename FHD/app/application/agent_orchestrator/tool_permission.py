@@ -12,7 +12,7 @@ import sqlite3
 import threading
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2, get_tool_action_spec
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -659,25 +659,24 @@ def execution_trace(
     error_code: str,
     retry_count: int,
 ) -> dict[str, Any]:
-    return redact(
-        {
-            "trace_id": trace_id,
-            "task_id": task_id,
-            "parent_task_id": parent_task_id,
-            "tenant_id": tenant_id,
-            "user_id": user_id,
-            "employee_id": employee_id,
-            "tool_id": tool_id,
-            "tool_name": tool_id,
-            "tool_version": tool_version,
-            "execution_id": execution_id,
-            "started_at": started_at,
-            "finished_at": finished_at,
-            "execution_status": execution_status,
-            "error_code": error_code,
-            "retry_count": retry_count,
-        }
-    )
+    traced: dict[str, Any] = {
+        "trace_id": trace_id,
+        "task_id": task_id,
+        "parent_task_id": parent_task_id,
+        "tenant_id": tenant_id,
+        "user_id": user_id,
+        "employee_id": employee_id,
+        "tool_id": tool_id,
+        "tool_name": tool_id,
+        "tool_version": tool_version,
+        "execution_id": execution_id,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "execution_status": execution_status,
+        "error_code": error_code,
+        "retry_count": retry_count,
+    }
+    return cast("dict[str, Any]", redact(traced))
 
 
 def attach_child_result(parent: Any, child: Any) -> bool:

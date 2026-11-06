@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall, utc_now_iso
 from app.application.agent_orchestrator.run_repository import AgentRunRepository
@@ -280,7 +280,7 @@ class StepExecution:
     def _redacted_params(params: dict[str, Any] | None) -> dict[str, Any]:
         from app.application.agent_orchestrator.tool_permission import redact
 
-        return redact(dict(params or {}))
+        return cast("dict[str, Any]", redact(dict(params or {})))
 
     @staticmethod
     def _trace(

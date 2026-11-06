@@ -306,7 +306,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None or run.status == "cancelled":
-            return run
+            return cast("AgentRun | None", run)
         waiting_step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if waiting_step is None and str(approved_step_id or "").strip():
             wanted = str(approved_step_id).strip()
@@ -361,10 +361,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         """Stop a waiting sensitive step. Rejection records who, when, and why, and does not execute."""
         run = self._repo.get(run_id)
         if run is None or run.status != "waiting_user":
-            return run
+            return cast("AgentRun | None", run)
         step = self._find_waiting_step(run)
         if step is None:
-            return run
+            return cast("AgentRun | None", run)
         step.status = "failed"
         step.error = reason or "approval_rejected"
         run.status = "failed"
@@ -389,7 +389,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         """An expired approval window does not approve or execute the step."""
         run = self._repo.get(run_id)
         if run is None or run.status != "waiting_user":
-            return run
+            return cast("AgentRun | None", run)
         run.metadata["approval_timeout"] = {
             "auto_approved": False,
             "at": utc_now_iso(),
@@ -418,11 +418,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         )
 
         stored = dict(parent.metadata.get("runtime_context") or {})
-        task = (
-            parent.metadata.get("task_context")
-            if isinstance(parent.metadata.get("task_context"), dict)
-            else {}
-        )
+        raw_task = parent.metadata.get("task_context")
+        task = raw_task if isinstance(raw_task, dict) else {}
         parent_task_id = str(task.get("task_id") or stored.get("task_id") or parent.run_id)
         context = handoff_runtime_context(
             stored,

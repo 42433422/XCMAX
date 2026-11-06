@@ -5,7 +5,7 @@ import os
 import time
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from app.application.agent_orchestrator.param_references import (
     UNRESOLVED_CODE,
@@ -342,6 +342,7 @@ class AgentToolExecutor:
             scope = (
                 owned_tenant_scope(runtime_tenant_id)
                 if (validation.tool_id, action) == ("products", "exists")
+                and isinstance(runtime_tenant_id, int)
                 else tenant_scope(runtime_tenant_id)
             )
             with (
@@ -433,7 +434,7 @@ class AgentToolExecutor:
             }
         if idem_key:
             finish_idempotent_replay(idem_key, result)
-        return result
+        return cast("dict[str, Any]", result)
 
 
 def execute_with_tool_deadline(

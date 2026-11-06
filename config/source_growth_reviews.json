@@ -16,9 +16,9 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "040044d50a8243beb8a10ff81e101c880aa9f424",
-      "head_blob": "fdc8c6dc5520b134135c82763e70571a02bb9990",
+      "head_blob": "20d2379adc81acc88bec8e7a98d040ce9f3f7d16",
       "before_lines": 678,
-      "after_lines": 817,
+      "after_lines": 816,
       "reason": "A41-A50 approval and permission handling stays in the orchestrator run loop so medium-risk tools pause for confirmation before a sealed actor is checked.",
       "boundary": "Agent run continuation only. Tool contracts, catalog receipts, and route handlers stay in their existing modules.",
       "validation": "A41-A50 acceptance tests plus chat import confirmation, employee workflow, and system maintenance route tests.",
