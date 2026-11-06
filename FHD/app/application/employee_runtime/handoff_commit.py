@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
@@ -11,6 +9,7 @@ from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+from app.application.employee_runtime.handoff_identity import load_identity_card
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
@@ -37,10 +36,16 @@ def commit_registered_handoff(
     authorized = {str(item) for item in parent.get("authorized_employees") or []}
     if identity_ids["employee_id"] not in {owner, *authorized}:
         return _rejected("handoff_unauthorized", "父员工与任务记录不一致")
-    target = str(body.get("target") or "").strip()
+    target = body.get("target")
     permissions = body.get("permissions")
-    if not target or not isinstance(permissions, list) or not permissions:
+    if (
+        type(target) is not str
+        or not target.strip()
+        or not isinstance(permissions, list)
+        or not permissions
+    ):
         return _rejected("handoff_context_missing", "交接缺少目标员工或工具范围")
+    target = target.strip()
     card, card_error = _employee_card(workspace, target)
     if card_error:
         return _rejected(card_error, "目标员工身份不可核验")
@@ -138,29 +143,13 @@ def _parent_task(workspace: str | None, task_id: str) -> dict[str, Any] | None:
 
 
 def _employee_card(workspace: str | None, target: str) -> tuple[dict[str, str] | None, str]:
-    if not target or target in {".", ".."} or "/" in target or "\\" in target:
+    card, error = load_identity_card(workspace, target)
+    if error:
+        return None, error
+    assert card is not None
+    if not card["available"]:
         return None, "handoff_unknown_employee"
-    root = Path(workspace) if workspace else None
-    folder = None if root is None else root / "employees"
-    cards = sorted(folder.glob("*.json")) if folder is not None and folder.is_dir() else []
-    if not cards:
-        return None, "handoff_identity_unverified"
-    path = folder / f"{target}.json" if folder is not None else None
-    if path is None or not path.is_file():
-        return None, "handoff_unknown_employee"
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None, "handoff_identity_unverified"
-    if not isinstance(loaded, dict):
-        return None, "handoff_identity_unverified"
-    if loaded.get("available") is False:
-        return None, "handoff_unknown_employee"
-    named = str(loaded.get("employee_id") or "").strip()
-    tenant_id = str(loaded.get("tenant_id") or "").strip()
-    if not named or named != target or not tenant_id:
-        return None, "handoff_identity_unverified"
-    return {"employee_id": named, "tenant_id": tenant_id}, ""
+    return {"employee_id": card["employee_id"], "tenant_id": card["tenant_id"]}, ""
 
 
 def _task_grant(task: dict[str, Any], employee_id: str) -> list[str]:

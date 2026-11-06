@@ -52,13 +52,13 @@
     "FHD/app/application/employee_runtime/task_continuity.py": {
       "base_file": "FHD/app/application/employee_runtime/task_continuity.py",
       "base_blob": "6b94c3e2aca11b7591832ba3e2c55be29d4ebc36",
-      "head_blob": "8e8f2dbd2dca2f21bd71517f7537ab7230535f6e",
+      "head_blob": "75408da92682d3e375139a032351f2ac5a2f6f58",
       "before_lines": 1655,
-      "after_lines": 1855,
-      "reason": "Employee chains must carry explicit authorized business steps, persist their actual child receipts, and resume only the failed or pending hop. Rejected handoffs must not expand grants or reuse another task receipt.",
-      "boundary": "The existing continuity ledger and handoff commands own chain progress. Tool execution remains in handoff_commit and the existing orchestrator, with no parallel execution ledger or new public route.",
-      "validation": "Authorization and cross-task receipt denials pass locally. Real customer, order, spreadsheet and summary tools pass a synchronous diagnostic; strict spawn and restart acceptance remains enabled for the integration CI because local process inspection is unavailable.",
-      "follow_up": "Separate chain progression from the existing continuity command handler after the four-hop and restart contracts are stable; preserve original call parameters and completed receipts when extracting.",
+      "after_lines": 1927,
+      "reason": "Employee chains must persist actual authorized child receipts and resume only failed or pending hops. Registered same-tenant role identities now resolve before chain persistence, handoff metadata, retry counters or default idempotency keys, preventing arbitrary input from becoming durable identity fields.",
+      "boundary": "The existing continuity ledger owns chain progress and recovery. Shared card identity validation lives in handoff_identity; availability remains a per-hop decision. Completed historical chains remain readable after card removal. Existing tool execution, ledger format and public routes are unchanged.",
+      "validation": "Real-disk boundary regressions prove rejection without input reflection or ledger changes, canonical IDs, legacy recovery checks and completed-history compatibility. Existing synchronous continuity and authorization tests pass. Strict E01-E30 and real E26/E27 failed-hop recovery remain required on the final integration CI head.",
+      "follow_up": "Separate chain progression from the existing continuity handler after the four-hop and restart contracts are stable; keep card identity validation in its shared module and preserve completed receipts and original call parameters.",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_merged.py": {

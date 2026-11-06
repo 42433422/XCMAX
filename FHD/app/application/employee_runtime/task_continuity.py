@@ -23,6 +23,7 @@ from app.application.agent_orchestrator.context_window_manager import (
     ContextWindowManager,
     estimate_messages_tokens,
 )
+from app.application.employee_runtime.handoff_identity import load_identity_card
 
 SOURCE = "employee_runtime.task_continuity"
 CONTINUE_TEXT = "继续执行剩余任务"
@@ -50,7 +51,6 @@ _ACTIONS = {
     "chain",
     "metrics",
 }
-_EMPLOYEE_FLAGS = ("available", "timeout", "crash", "unrecoverable")
 
 
 def _now() -> str:
@@ -133,6 +133,9 @@ class TaskContinuityRuntime:
             }.get(op)
             if handler is None:
                 return self._fail(None, "unknown_op", f"不支持的连续性操作: {op}")
+            identity_error = self._stored_chain_identity_error(op, actor, payload, tenant, user)
+            if identity_error:
+                return self._fail(None, identity_error, "员工链身份不可核验，未继续执行")
             return handler(actor, text, payload, user=user, tenant=tenant, session=session)
 
     def pollution_findings(self) -> list[dict[str, str]]:
@@ -364,8 +367,8 @@ class TaskContinuityRuntime:
         task = self._authorized(payload, actor, scope, write=True)
         if not _is_task(task):
             return task
-        target = str(payload.get("target_employee") or "")
-        if not target:
+        target = payload.get("target_employee")
+        if target is None or target == "":
             return self._fail(task, "missing_target", "交接必须指定目标员工")
         record = self._perform_handoff(
             task,
@@ -373,9 +376,7 @@ class TaskContinuityRuntime:
             target=target,
             permissions=list(payload.get("permissions") or []),
             new_conditions=dict(payload.get("conditions") or {}),
-            idempotency_key=str(
-                payload.get("idempotency_key") or f"{task['task_id']}:handoff:{actor}:{target}"
-            ),
+            idempotency_key=str(payload.get("idempotency_key") or ""),
             effect=dict(payload.get("effect") or {"action": "execute"}),
             policy=str(payload.get("policy") or "retry"),
             target_tenant_id=str(payload.get("target_tenant_id") or ""),
@@ -401,6 +402,11 @@ class TaskContinuityRuntime:
         previous = self.state["handoffs"].get(previous_id)
         if previous is None or previous.get("task_id") != task["task_id"]:
             return self._fail(task, "handoff_not_found", "没有可重试的交接")
+        target_card, identity_error = self._handoff_identity(previous.get("target_employee"), task)
+        source_card, source_error = self._handoff_identity(previous.get("source_employee"), task)
+        if identity_error or source_error:
+            return self._fail(None, identity_error or source_error, "交接身份不可核验，未重试")
+        assert target_card is not None and source_card is not None
         task["retry_count"] = int(task["retry_count"]) + 1
         inherited = _clone(previous["context_snapshot"])
         policy = str(payload.get("policy") or previous.get("policy") or "retry")
@@ -419,8 +425,7 @@ class TaskContinuityRuntime:
             return self._envelope(
                 task, business=False, extra={"recovery_record": recovery, "inherited": inherited}
             )
-        flags = self._flags(str(previous["target_employee"]))
-        if flags.get("unrecoverable"):
+        if target_card["unrecoverable"]:
             task["status"] = "failed"
             task["error_code"] = str(previous.get("error_code") or "employee_unrecoverable")
             task["error_message"] = str(previous.get("error_message") or "目标员工不可恢复")
@@ -432,8 +437,8 @@ class TaskContinuityRuntime:
             )
         record = self._perform_handoff(
             task,
-            source=str(previous["source_employee"]),
-            target=str(previous["target_employee"]),
+            source=source_card["employee_id"],
+            target=target_card["employee_id"],
             permissions=list(previous.get("permissions") or []),
             new_conditions={},
             idempotency_key=str(previous["idempotency_key"]),
@@ -780,8 +785,12 @@ class TaskContinuityRuntime:
         task = self._authorized(payload, actor, scope, write=True)
         if not _is_task(task):
             return task
-        employees = [str(item) for item in payload.get("employees") or []]
-        if employees[:1] != [actor] or len(employees) != 4 or len(set(employees)) != 4:
+        employees = payload.get("employees")
+        if (
+            not isinstance(employees, list)
+            or len(employees) != 4
+            or any(type(item) is not str for item in employees)
+        ):
             return self._fail(task, "chain_shape", "交接链必须是发起员工起的 4 人链")
         permissions = list(payload.get("permissions") or [])
         steps = payload.get("steps")
@@ -806,6 +815,12 @@ class TaskContinuityRuntime:
         ]
         if len({step["step_id"] for step in plan}) != len(plan):
             return self._fail(task, "chain_shape", "业务步骤标识不能重复")
+        employees, identity_error = self._chain_identities(task, employees)
+        if identity_error:
+            return self._fail(None, identity_error, "员工链身份不可核验，未保存交接链")
+        assert employees is not None
+        if employees[0] != actor:
+            return self._fail(task, "chain_shape", "交接链必须从当前员工开始")
         definition = {"employees": employees, "permissions": permissions, "steps": plan}
         existing = task.get("chain")
         if existing is not None and any(
@@ -824,7 +839,10 @@ class TaskContinuityRuntime:
         from app.application.agent_orchestrator.param_references import resolve_references
 
         chain = task["chain"]
-        employees = chain["employees"]
+        employees, identity_error = self._chain_identities(task, chain.get("employees"))
+        if identity_error:
+            return self._fail(None, identity_error, "员工链身份不可核验，未继续执行")
+        assert employees is not None
         for index, step in enumerate(chain["steps"]):
             step_id = step["step_id"]
             if step_id in chain["completed"]:
@@ -923,7 +941,7 @@ class TaskContinuityRuntime:
         task: dict[str, Any],
         *,
         source: str,
-        target: str,
+        target: Any,
         permissions: list[str],
         new_conditions: dict[str, Any],
         idempotency_key: str,
@@ -936,9 +954,14 @@ class TaskContinuityRuntime:
         delegated_action: str = "",
         delegated_params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        if new_conditions:
+        target_card, identity_error = self._handoff_identity(target, task)
+        source_card, source_error = self._handoff_identity(source, task)
+        identity_error = identity_error or source_error
+        target = target_card["employee_id"] if target_card is not None else ""
+        source = source_card["employee_id"] if source_card is not None else ""
+        idempotency_key = idempotency_key or f"{task['task_id']}:handoff:{source}:{target}"
+        if new_conditions and not identity_error:
             task["conditions"] = _merge_conditions(task["conditions"], new_conditions)
-        flags = self._flags(target)
         record = {
             "handoff_id": _new_id("handoff"),
             "task_id": task["task_id"],
@@ -970,7 +993,11 @@ class TaskContinuityRuntime:
             inherited if inherited is not None else _clone(task["context_snapshot"])
         )
         record["context_version"] = task["context_version"]
-        failure = _availability_failure(flags)
+        failure = (
+            (identity_error, "交接身份不可核验")
+            if identity_error
+            else _availability_failure(target_card or {})
+        )
         if failure:
             code, message = failure
             record["status"] = "failed"
@@ -1317,21 +1344,66 @@ class TaskContinuityRuntime:
             return False
         return actor == task["owner_employee"] or actor in task["authorized_employees"]
 
-    def _flags(self, employee_id: str) -> dict[str, Any]:
-        path = self.workspace / "employees" / f"{employee_id}.json"
-        flags = {key: key == "available" for key in _EMPLOYEE_FLAGS}
-        if not path.is_file():
-            return flags
-        try:
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return flags
-        if not isinstance(loaded, dict):
-            return flags
-        for key in _EMPLOYEE_FLAGS:
-            if key in loaded:
-                flags[key] = bool(loaded[key])
-        return flags
+    def _handoff_identity(
+        self, candidate: Any, task: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, str]:
+        card, error = load_identity_card(self.workspace, candidate)
+        if error:
+            return None, error
+        assert card is not None
+        if card["tenant_id"] != task["tenant_id"]:
+            return None, "handoff_cross_tenant"
+        return card, ""
+
+    def _chain_identities(
+        self, task: dict[str, Any], candidates: Any
+    ) -> tuple[list[str] | None, str]:
+        if not isinstance(candidates, list) or len(candidates) != 4:
+            return None, "chain_shape"
+        identities = []
+        for candidate in candidates:
+            card, error = self._handoff_identity(candidate, task)
+            if error:
+                return None, error
+            assert card is not None
+            identities.append(card["employee_id"])
+        if len(set(identities)) != 4:
+            return None, "chain_shape"
+        return identities, ""
+
+    def _stored_chain_identity_error(
+        self, op: str, actor: str, payload: dict[str, Any], tenant: str, user: str
+    ) -> str:
+        if op in {"start", "read", "metrics"}:
+            return ""
+        task = self.state["tasks"].get(str(payload.get("task_id") or ""))
+        if op == "reenter":
+            link = self._conversation(f"{tenant}:{user}:{payload.get('conversation_id') or ''}")
+            task = self.state["tasks"].get(str((link or {}).get("task_id") or ""))
+        if op == "restart":
+            # Restart recovers all in-flight calls even when a focus task is supplied.
+            # Completed history does not require its role cards to remain installed.
+            tasks = [row for row in self.state["tasks"].values() if row["status"] != _TERMINAL_OK]
+        else:
+            tasks = (
+                [task]
+                if isinstance(task, dict)
+                and self._allows(task, actor, {"tenant": tenant, "user": user})
+                else []
+            )
+        for current in tasks:
+            if op in {"leave", "reenter"} and current["status"] == _TERMINAL_OK:
+                continue
+            chain = current.get("chain")
+            if chain is None:
+                continue
+            if not isinstance(chain, dict):
+                return "chain_shape"
+            identities, error = self._chain_identities(current, chain.get("employees"))
+            if error:
+                return error
+            chain["employees"] = identities
+        return ""
 
     def _conversation(self, key: str) -> dict[str, Any] | None:
         raw = self.state["conversations"].get(key)

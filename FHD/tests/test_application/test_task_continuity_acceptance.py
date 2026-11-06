@@ -110,7 +110,9 @@ def _effects(workspace: Path, tool: str | None = None) -> list[dict]:
 def _employee_flags(workspace: Path, employee: str, **flags: bool) -> None:
     folder = workspace / "employees"
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{employee}.json").write_text(json.dumps(flags), encoding="utf-8")
+    (folder / f"{employee}.json").write_text(
+        json.dumps({"employee_id": employee, "tenant_id": "t1", **flags}), encoding="utf-8"
+    )
 
 
 def _run(workspace: Path, employee: str, text: str = "", **payload):
@@ -253,6 +255,8 @@ def scenario_a31(tmp_path: Path) -> dict:
 def scenario_a32(tmp_path: Path) -> dict:
     workspace = tmp_path
     _install(workspace, "note", "handoff_commit")
+    for employee in ("analyst", "executor"):
+        _employee_flags(workspace, employee)
     started = _run(
         workspace,
         "analyst",
@@ -397,6 +401,8 @@ def scenario_a33(tmp_path: Path) -> dict:
 def scenario_a34(tmp_path: Path) -> dict:
     workspace = tmp_path
     _install(workspace, "analyze", "ship", "handoff_commit")
+    for employee in ("A", "B"):
+        _employee_flags(workspace, employee)
     started = _run(
         workspace,
         "A",
@@ -637,6 +643,7 @@ def scenario_a36(tmp_path: Path) -> dict:
 def scenario_a37(tmp_path: Path) -> dict:
     workspace = tmp_path
     _install(workspace, "handoff_commit")
+    _employee_flags(workspace, "A")
     started = _run(
         workspace,
         "A",
@@ -1053,6 +1060,8 @@ def _crash_worker(workspace: Path, task_id: str) -> None:
 def scenario_a40(tmp_path: Path) -> dict:
     workspace = tmp_path
     _install(workspace, "done", "wait", "handoff_commit", "child_work", kill=("fly",))
+    for employee in ("clerk", "relay"):
+        _employee_flags(workspace, employee)
     started = _run(
         workspace,
         "clerk",
