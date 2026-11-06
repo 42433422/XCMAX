@@ -1,5 +1,5 @@
 {
-  "lines": 2419509,
+  "lines": 2419890,
   "updated": "2026-11-06",
-  "note": "A31–A40 员工多轮交接连续性：task_continuity.py +1504、EmployeeAgent 接入 +7、pyproject BLE001 例外 +1、验收测试 +1028、CHANGELOG +1，合计 +2541。现有编排器没有可复用的交接账本，不能靠删平行实现抵消；本验收任务授权抬升基线。"
+  "note": "A31–A40 反钻空子：验收改走 execute_employee_task_local，工具必须命中工作区脚本或 execute_workflow_tool，重启要在独立进程死亡后从 employee_task_ledger.json 重载。相比上一版内存回声账本，新增跨线程文件锁、工具子进程和崩溃恢复断言，净增 381 行。"
 }
