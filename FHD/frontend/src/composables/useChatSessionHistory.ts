@@ -118,8 +118,21 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     historyLoading.value = !append
     historyLoadingMore.value = append
     historyError.value = ''
+    let data: Awaited<ReturnType<typeof chatApi.getConversations>> | undefined
+    let lastError: unknown
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        data = await chatApi.getConversations({ limit: 20, offset: append ? nextHistoryOffset : 0 })
+        lastError = undefined
+        break
+      } catch (error) {
+        lastError = error
+        const text = error instanceof Error ? error.message : ''
+        if (!/500|502|504|超时|Network|Failed to fetch|network/i.test(text) || attempt === 2) break
+      }
+    }
     try {
-      const data = await chatApi.getConversations({ limit: 20, offset: append ? nextHistoryOffset : 0 })
+      if (lastError) throw lastError
       if (!request.isCurrent()) return
       if (!data?.success) throw new Error(String(data?.message || '加载历史失败'))
       const dataRow = asRecord(data)

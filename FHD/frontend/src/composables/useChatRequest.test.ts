@@ -116,9 +116,9 @@ describe('useChatRequest', () => {
     expect(history[0].content).not.toContain('<b>')
   })
 
-  it('buildPlannerChatRequestPayload limits history to 6 messages', () => {
+  it('buildPlannerChatRequestPayload keeps forty messages and does not stop at six', () => {
     const deps = makeDeps()
-    deps.messages.value = Array.from({ length: 10 }, (_, i) => ({
+    deps.messages.value = Array.from({ length: 50 }, (_, i) => ({
       role: 'user' as const,
       content: `msg ${i}`,
       time: '10:00',
@@ -126,8 +126,10 @@ describe('useChatRequest', () => {
     const req = useChatRequest(deps)
     const { body } = req.buildPlannerChatRequestPayload('hello')
     const ctx = body.context as Record<string, unknown>
-    const history = ctx.recent_messages as unknown[]
-    expect(history.length).toBeLessThanOrEqual(6)
+    const history = ctx.recent_messages as Array<{ content: string }>
+    expect(history).toHaveLength(40)
+    expect(history[0].content).toBe('msg 10')
+    expect(history.at(-1)?.content).toBe('msg 49')
   })
 
   it('buildPlannerChatRequestPayload with fromWriteUnlock option', () => {
