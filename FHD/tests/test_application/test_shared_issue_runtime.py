@@ -121,6 +121,7 @@ async def test_rejected_ticket_is_not_executed_and_repeat_decision_is_idempotent
         request, 8, decision="reject", note="导出还是报错", idempotency_key="reject-key"
     )
     assert first["decision"] == "reject"
+    assert first["state"] == "rejected"
     assert remote.await_count == 1
     replay = await bridge.decide_issue(
         request, 8, decision="reject", note="导出还是报错", idempotency_key="reject-key"
@@ -131,6 +132,26 @@ async def test_rejected_ticket_is_not_executed_and_repeat_decision_is_idempotent
             request, 8, decision="reopen", note="导出还是报错", idempotency_key="reopen-key"
         )
     assert caught.value.status_code == 409
+    assert remote.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_old_decision_receipt_restores_original_state_without_repeating_remote_call(host):
+    request, remote, _, _ = host
+    remote.return_value = {"success": True, "decision": "approve"}
+    first = await bridge.decide_issue(
+        request, 8, decision="approve", note="修复现在已生效", idempotency_key="approved-key"
+    )
+    owner = bridge._owner(request)
+    saved = bridge._ticket_load(owner)
+    saved["idem"]["approved-key"]["result"].pop("state")
+    saved["tickets"]["8"]["status"] = "succeeded"
+    bridge._ticket_save(owner, saved)
+
+    replay = await bridge.decide_issue(
+        request, 8, decision="approve", note="修复现在已生效", idempotency_key="approved-key"
+    )
+    assert replay == first == {"success": True, "decision": "approve", "state": "queued"}
     assert remote.await_count == 1
 
 

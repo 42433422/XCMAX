@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -22,6 +22,10 @@ class EmployeePrincipal:
     session_id: str
     user: User
     metadata: JsonObject
+
+
+class _RunFailure(TypedDict):
+    error: NotRequired[str]
 
 
 def employee_identity(request: Request) -> EmployeePrincipal | JSONResponse:
@@ -122,7 +126,7 @@ class CanonicalEmployeeBackend:
         from app.application.employee_runtime.run_ledger import finish_employee_run_log
 
         # Preserve the success call shape for legacy adapters and patch consumers.
-        failure = {} if verified else {"error": error}
+        failure: _RunFailure = {} if verified else {"error": error}
         finish_employee_run_log(
             run_id,
             tenant_id=tenant_id,

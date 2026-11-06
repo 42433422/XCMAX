@@ -362,11 +362,9 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
             if allow_drawings and any(item.filename.startswith("xl/drawings/") for item in entries):
                 from app.application.reviewed_excel_drawing import extract_drawing_evidence
 
-                try:
-                    drawing_evidence = extract_drawing_evidence(archive)
-                except ReviewedExcelError:
-                    fidelity_skipped.append("xl/drawings/")
-                    drawing_evidence = []
+                # Invalid relationships or unknown XML must not become an empty
+                # drawing list: downstream slicing would silently discard them.
+                drawing_evidence = extract_drawing_evidence(archive)
         with warnings.catch_warnings(record=True) as found:
             warnings.simplefilter("always")
             wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
@@ -673,6 +671,8 @@ def derive_document_workbook(
     import re
 
     info = inspect_workbook(body)
+    if info.get("fidelity_skipped"):
+        raise ReviewedExcelError("工作簿含尚未核验的保真部件，仅可分类，不能派生文件")
     if print_area_mode not in {"source", "selected"}:
         raise ReviewedExcelError("打印区域选择无效")
     if (
@@ -914,6 +914,8 @@ def derive_document_workbook(
 
 def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) -> bytes:
     inspection = inspect_workbook(body)
+    if inspection.get("fidelity_skipped"):
+        raise ReviewedExcelError("工作簿含尚未核验的保真部件，仅可分类，不能清理文件")
     from app.application.reviewed_excel_range_objects import require_cleanable_range_metadata
 
     if inspection["sha256"] != expected_sha256:

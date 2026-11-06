@@ -379,8 +379,16 @@ def _string_constraint_error(key: str, value: Any, prop: dict[str, Any]) -> str:
     expected = str(prop.get("format") or "")
     if expected == "date" and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
         return f"字段 {key} 不是日期"
-    if expected == "email" and re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value) is None:
-        return f"字段 {key} 不是邮箱"
+    if expected == "email":
+        local, separator, domain = value.partition("@")
+        if (
+            not local
+            or not separator
+            or "@" in domain
+            or "." not in domain[1:-1]
+            or any(char.isspace() for char in value)
+        ):
+            return f"字段 {key} 不是邮箱"
     if expected == "phone" and re.fullmatch(r"1\d{10}", value) is None:
         return f"字段 {key} 不是手机号"
     return ""

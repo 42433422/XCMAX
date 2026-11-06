@@ -277,8 +277,10 @@ def create_agent_task(
         return JSONResponse(
             {"success": False, "message": str(exc) or "任务参数无效"}, status_code=400
         )
-    except RuntimeError as exc:
-        return JSONResponse({"success": False, "message": str(exc)[:400]}, status_code=503)
+    except RuntimeError:
+        error_response = internal_error_response("create agent task")
+        error_response.status_code = 503
+        return error_response
     except RECOVERABLE_ERRORS:
         return internal_error_response("create agent task")
 

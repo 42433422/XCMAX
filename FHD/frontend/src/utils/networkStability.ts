@@ -72,7 +72,7 @@ export function classifyTransportFailure(input: {
   }
   if (lower.includes('econnrefused') || message.includes('连接被拒绝')) return notice('server_down')
   if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network')) {
-    return input.online === false ? notice('offline') : notice('server_down')
+    return notice('server_down')
   }
   return notice('server_down')
 }

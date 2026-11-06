@@ -233,13 +233,14 @@ const activeParentKeys = computed(() => {
 
 let queuedViewKey = ''
 let viewFlushQueued = false
+let lastViewKey = ''
+let lastViewAt = 0
 
 const selectView = (key) => {
   if (draggingKey.value) return
   const normalized = String(key || '').trim()
-  if (!normalized) return
-  // 同一帧内的连点只保留最后一次。不能再按 80ms 丢掉这个入口：
-  // 快速连点会在 80ms 内回到刚才点过的页面，最后一次必须生效。
+  if (!normalized || (normalized === lastViewKey && Date.now() - lastViewAt < 80)) return
+  // 只去重紧邻的同入口连点；快速切换不同页面仍保留最后一个选择。
   queuedViewKey = normalized
   if (viewFlushQueued) return
   viewFlushQueued = true
@@ -248,6 +249,8 @@ const selectView = (key) => {
     const nextKey = queuedViewKey
     queuedViewKey = ''
     if (!nextKey) return
+    lastViewKey = nextKey
+    lastViewAt = Date.now()
     emit('change-view', nextKey)
   })
 }

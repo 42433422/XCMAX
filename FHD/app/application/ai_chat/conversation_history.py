@@ -27,6 +27,7 @@ class ConversationStore(Protocol):
 
 def apply_history_fault(payload: dict[str, Any]) -> dict[str, Any]:
     """开发机故障注入。未设置 XCAGI_HISTORY_FAULT_FILE 时原样返回。"""
+    import math
     import time
     from pathlib import Path
 
@@ -37,10 +38,16 @@ def apply_history_fault(payload: dict[str, Any]) -> dict[str, Any]:
         return payload
     try:
         spec = Path(spec_path).read_text(encoding="utf-8").strip()
-    except OSError:
+    except (OSError, UnicodeError):
         return payload
     if spec.startswith("delay:"):
-        time.sleep(min(float(spec.split(":", 1)[1] or 0), 30))
+        try:
+            delay = float(spec.split(":", 1)[1] or 0)
+        except ValueError:
+            return payload
+        if math.isfinite(delay) and delay > 0:
+            # All callers are sync FastAPI handlers, executed in its worker thread pool.
+            time.sleep(min(delay, 30))
         return payload
     if spec in {"500", "502", "504"}:
         raise HTTPException(status_code=int(spec), detail=f"history fault {spec}")

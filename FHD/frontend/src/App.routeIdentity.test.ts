@@ -76,6 +76,50 @@ it('limits the desktop cache and handles rapid route changes', async () => {
   wrapper.unmount(); mode.admin = true; mode.desktop = false
 })
 
+it('stops pending scroll restoration and router observation when the app unmounts', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] })
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/page/:id', component: { template: '<section>page</section>' } }] })
+  await router.push('/page/one')
+  const wrapper = mount(App, { attachTo: document.body, global: { plugins: [router] } })
+  const query = vi.spyOn(document, 'querySelector')
+  try {
+    await router.push('/page/two'); await flushPromises()
+    expect(query).toHaveBeenCalledWith('.route-view-shell')
+    wrapper.unmount()
+    query.mockClear()
+    await vi.advanceTimersByTimeAsync(100)
+    await router.push('/page/three'); await flushPromises()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(query).not.toHaveBeenCalledWith('.route-view-shell')
+  } finally {
+    if (wrapper.exists()) wrapper.unmount()
+    query.mockRestore(); vi.useRealTimers()
+  }
+})
+
+it('restores a returning page without applying its delayed scroll to a newer route', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] })
+  const page = { template: '<section class="shared-scroll">page</section>' }
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/page/:id', component: page }] })
+  await router.push('/page/one')
+  const wrapper = mount(App, { attachTo: document.body, global: { plugins: [router] } })
+  try {
+    await flushPromises()
+    const first = wrapper.get('.route-view-shell').element
+    Object.defineProperties(first, { scrollHeight: { value: 1000 }, clientHeight: { value: 200 } })
+    first.scrollTop = 400
+    await router.push('/page/two'); await flushPromises()
+    await vi.advanceTimersByTimeAsync(100)
+    await router.push('/page/one'); await flushPromises()
+    expect(wrapper.get('.route-view-shell').element.scrollTop).toBe(400)
+    await router.push('/page/two'); await flushPromises()
+    const current = wrapper.get('.route-view-shell').element
+    current.scrollTop = 120
+    await vi.advanceTimersByTimeAsync(100)
+    expect(current.scrollTop).toBe(120)
+  } finally { wrapper.unmount(); vi.useRealTimers() }
+})
+
 it.each([80, 450])('shows async page content immediately after its %sms setup, without a bare-text flash', async (delay) => {
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
   mode.admin = false; mode.desktop = true

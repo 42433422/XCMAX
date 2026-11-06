@@ -74,8 +74,8 @@ def actor_from_request(request: Request) -> Actor:
     employee_header = str(request.headers.get("X-Employee-Id") or "").strip()
     if role != "admin" and employee_header and employee_header != actor_id:
         raise ToolLifecycleError("forged_employee", "员工不存在", 404)
-    employee_id: str | None = None if role == "admin" else actor_id
-    return Actor(actor_id, role, employee_id, tenant)
+    header_employee_id: str | None = None if role == "admin" else actor_id
+    return Actor(actor_id, role, header_employee_id, tenant)
 
 
 def _run(action: Callable[[], JSONResponse]) -> JSONResponse:
@@ -97,7 +97,11 @@ def employee_discovery(request: Request) -> JSONResponse:
 
 @router.get("/audit")
 def audit_log(request: Request, tool_id: str | None = None) -> JSONResponse:
-    return _run(lambda: _ok(service.list_audit(actor_from_request(request), tool_id)))
+    return _run(
+        lambda: _ok(
+            service.list_audit(actor_from_request(request), tool_id, dict(request.query_params))
+        )
+    )
 
 
 @router.post("/permissions")
@@ -129,7 +133,11 @@ def list_tools(request: Request) -> JSONResponse:
 
 @router.get("/{tool_id}")
 def get_tool(request: Request, tool_id: str) -> JSONResponse:
-    return _run(lambda: _ok(service.get_tool(actor_from_request(request), tool_id)))
+    return _run(
+        lambda: _ok(
+            service.get_tool(actor_from_request(request), tool_id, dict(request.query_params))
+        )
+    )
 
 
 @router.put("/{tool_id}")

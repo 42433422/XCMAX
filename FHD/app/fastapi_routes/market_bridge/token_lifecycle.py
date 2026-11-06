@@ -1,5 +1,6 @@
 """One access-token validation state machine with explicit fast-probe policy."""
 
+import hashlib
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -15,7 +16,14 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 # A successful fast probe is enough for the next navigation. Repeating the
 # market round-trip on every reload is what keeps the desktop splash up.
 _FAST_OK_TTL_S = 45.0
-_fast_ok_until: dict[str, tuple[str, float]] = {}
+_fast_ok_until: dict[tuple[str, int, str], tuple[str, float]] = {}
+_FAST_OK_MAX_ENTRIES = 1024
+
+
+def invalidate_fast_token_validation(session_id: str) -> None:
+    for key in list(_fast_ok_until):
+        if key[0] == (session_id or "").strip():
+            _fast_ok_until.pop(key, None)
 
 
 @dataclass
@@ -33,6 +41,7 @@ class TokenLifecycle:
     is_demo: Callable[[str], bool]
     proxy_status: Callable[[Any], int | None]
     fast_timeout: Callable[[], float]
+    validation_origin: Callable[[], str]
     logger: Logger
 
     async def refresh(self, session_id: str, *, distinguish_errors: bool = False) -> str:
@@ -81,10 +90,13 @@ class TokenLifecycle:
         if allow_latest and not token and owner is not None:
             token = self.normalize(self.latest_token(user_id=owner))
         if not token or self.is_demo(token):
+            invalidate_fast_token_validation(sid)
             return token
-        if fast:
-            cached = _fast_ok_until.get(sid)
-            if cached and cached[0] == token and cached[1] > time.monotonic():
+        cache_key = (sid, owner, self.validation_origin()) if sid and owner is not None else None
+        token_digest = hashlib.sha256(token.encode()).hexdigest()
+        if fast and cache_key is not None:
+            cached = _fast_ok_until.get(cache_key)
+            if cached and cached[0] == token_digest and cached[1] > time.monotonic():
                 return token
         try:
             if fast:
@@ -113,6 +125,9 @@ class TokenLifecycle:
             )
             return token
         if isinstance(response, JSONResponse):
+            if response.status_code == 401:
+                invalidate_fast_token_validation(sid)
+                return self.normalize(await self.refresh_session(sid))
             if not fast:
                 self.logger.warning(
                     "market unreachable during token validation (session_id=%s), using local token",
@@ -121,7 +136,7 @@ class TokenLifecycle:
             return token
         if isinstance(response, dict) and response.get("__proxy_error__"):
             if self.proxy_status(response) == 401:
-                _fast_ok_until.pop(sid, None)
+                invalidate_fast_token_validation(sid)
                 return self.normalize(await self.refresh_session(sid))
             if not fast:
                 self.logger.warning(
@@ -132,8 +147,23 @@ class TokenLifecycle:
         if isinstance(response, dict) and (
             response.get("ok") is False or response.get("success") is False
         ):
-            _fast_ok_until.pop(sid, None)
+            invalidate_fast_token_validation(sid)
             return self.normalize(await self.refresh_session(sid))
-        if fast:
-            _fast_ok_until[sid] = (token, time.monotonic() + _FAST_OK_TTL_S)
+        if (
+            fast
+            and cache_key is not None
+            and isinstance(response, dict)
+            and (
+                isinstance(response.get("user"), dict)
+                or response.get("ok") is True
+                or response.get("success") is True
+            )
+        ):
+            now = time.monotonic()
+            for key, (_, expires) in list(_fast_ok_until.items()):
+                if expires <= now:
+                    _fast_ok_until.pop(key, None)
+            if len(_fast_ok_until) >= _FAST_OK_MAX_ENTRIES:
+                _fast_ok_until.pop(next(iter(_fast_ok_until)))
+            _fast_ok_until[cache_key] = (token_digest, now + _FAST_OK_TTL_S)
         return token

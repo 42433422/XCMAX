@@ -305,7 +305,7 @@ def _write_output(upload_path: Path, run_id: str, rows: list[dict[str, Any]]) ->
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"etl-{run_id}.xlsx"
     book = Workbook()
-    sheet = book.active
+    sheet = book.worksheets[0]
     sheet.title = "考勤结果"
     headers = [
         "员工姓名",
@@ -344,7 +344,7 @@ def _write_output(upload_path: Path, run_id: str, rows: list[dict[str, Any]]) ->
     book.close()
     reopened = load_workbook(path, read_only=True)
     try:
-        saved = [cell.value for cell in next(reopened.active.iter_rows(max_row=1))]
+        saved = [cell.value for cell in next(reopened.worksheets[0].iter_rows(max_row=1))]
     finally:
         reopened.close()
     if saved != headers:

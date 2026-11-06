@@ -73,18 +73,6 @@ class CompatChatApplication:
         context = self.admission.context(request, body.context, body.message)
         self.assert_access(request)
         context = self.admission.with_tier(context, self.resolve_tier(request))
-        from app.application.ai_chat.dialogue_memory import dialogue_reply, prepare_chat_turn
-
-        prepared = prepare_chat_turn(body.message, context)
-        if prepared is not None:
-            return self._attach(
-                prepared, ChatTurn(body, body.message, context, "compat_chat_dialogue_memory")
-            )
-        dialogue = await dialogue_reply(body.message, context)
-        if dialogue is not None:
-            return self._attach(
-                dialogue, ChatTurn(body, body.message, context, "compat_chat_dialogue_memory")
-            )
         issue = await self.fast_paths.issue(request, context, body.message)
         if issue is not None:
             return self._attach(
@@ -116,6 +104,11 @@ class CompatChatApplication:
                     turn.channel,
                 ),
             )
+        from app.application.ai_chat.dialogue_memory import prepare_chat_turn
+
+        prepared = prepare_chat_turn(body.message, context)
+        if prepared is not None:
+            return self._attach(prepared, turn)
         return await self.execution.execute(request, turn, timeout=self.timeout_seconds())
 
     async def batch(self, request: Request, body: XcagiCompatChatBatchBody) -> Payload:

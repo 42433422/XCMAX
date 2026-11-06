@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.security.log_redaction import redact_log_text
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 FAILURE_NOTICES: dict[str, tuple[str, str]] = {
     "offline": ("当前网络已断开。请检查网络后重试。", "retry"),
@@ -147,7 +148,7 @@ class RefreshSingleFlight:
                 def work() -> None:
                     try:
                         box["ok"] = bool(refresh())
-                    except Exception:  # noqa: BLE001 — 刷新回调的任何失败都按重新登录处理，不能当成网络成功。
+                    except RECOVERABLE_ERRORS:
                         box["ok"] = False
                     finally:
                         done.set()
@@ -353,7 +354,7 @@ def emit_current_lane(lane: str, *, status: int = 0, error_code: str = "") -> No
                 lane=lane,
             )
         )
-    except Exception:  # noqa: BLE001 — 埋点写日志失败不能影响业务响应。
+    except RECOVERABLE_ERRORS:
         return
 
 

@@ -51,7 +51,7 @@ describe('usePrintService', () => {
       vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network down'))
       const result = await service.printLabel('/path/to/label.pdf')
       expect(result.success).toBe(false)
-      expect(result.message).toContain('Network down')
+      expect(result.message).toContain('服务暂时不可用')
     })
 
     it('sends copies parameter', async () => {
@@ -100,7 +100,7 @@ describe('usePrintService', () => {
       vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Timeout'))
       const result = await service.printDocument('/path/to/doc.pdf')
       expect(result.success).toBe(false)
-      expect(result.message).toContain('Timeout')
+      expect(result.message).toContain('请求超时')
     })
   })
 

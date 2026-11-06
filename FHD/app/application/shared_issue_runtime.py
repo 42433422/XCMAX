@@ -20,6 +20,15 @@ from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _DELIVERY_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (HTTPException,)
+_TICKET_TARGETS = {
+    "approve": "queued",
+    "approved": "queued",
+    "reject": "rejected",
+    "rejected": "rejected",
+    "reopen": "queued",
+    "cancel": "cancelled",
+    "resolve": "succeeded",
+}
 
 
 def _owner(request: Request) -> str:
@@ -118,9 +127,7 @@ async def decide_issue(
         method="POST",
         payload={"decision": decision, "note": note.strip(), "idempotency_key": idempotency_key},
     )
-    _ticket_commit(owner, ticket_id, decision, idempotency_key, note.strip(), result)
-    stored = _ticket_load(owner)["tickets"].get(str(ticket_id)) or {}
-    return {**result, "state": _ticket_state(str(stored.get("status") or ""))}
+    return _ticket_commit(owner, ticket_id, decision, idempotency_key, note.strip(), result)
 
 
 def _ticket_state(status: str) -> str:
@@ -172,17 +179,12 @@ def _ticket_gate(
     if isinstance(idem, dict):
         if idem.get("fingerprint") != fingerprint:
             return {"action": "deny", "reason": "幂等键与已有工单决定冲突"}
-        return {"action": "replay", "result": idem.get("result") or {}}
-    targets = {
-        "approve": "queued",
-        "approved": "queued",
-        "reject": "rejected",
-        "rejected": "rejected",
-        "reopen": "queued",
-        "cancel": "cancelled",
-        "resolve": "succeeded",
-    }
-    target = targets.get(decision)
+        result = dict(idem.get("result") or {})
+        # Older receipts stored the remote body without the local state field.
+        if "state" not in result and decision in _TICKET_TARGETS:
+            result["state"] = _ticket_state(_TICKET_TARGETS[decision])
+        return {"action": "replay", "result": result}
+    target = _TICKET_TARGETS.get(decision)
     current = str((book["tickets"].get(str(ticket_id)) or {}).get("status") or "waiting_approval")
     if target is not None and not legacy_transition_allowed(
         "ticket", current, target, retryable=decision == "reopen"
@@ -198,29 +200,22 @@ def _ticket_commit(
     idempotency_key: str,
     note: str,
     result: dict[str, Any],
-) -> None:
-    targets = {
-        "approve": "queued",
-        "approved": "queued",
-        "reject": "rejected",
-        "rejected": "rejected",
-        "reopen": "queued",
-        "cancel": "cancelled",
-        "resolve": "succeeded",
-    }
+) -> dict[str, Any]:
     book = _ticket_load(owner)
     current = book["tickets"].get(str(ticket_id)) or {"status": "created", "history": []}
-    target = targets.get(decision, current.get("status") or "created")
+    target = _TICKET_TARGETS.get(decision, current.get("status") or "created")
     current.setdefault("history", []).append(
         {"from": current.get("status"), "to": target, "decision": decision}
     )
     current["status"] = target
     book["tickets"][str(ticket_id)] = current
+    response = {**result, "state": _ticket_state(str(target))}
     book["idem"][idempotency_key] = {
         "fingerprint": json.dumps([ticket_id, decision, note], ensure_ascii=False),
-        "result": result,
+        "result": response,
     }
     _ticket_save(owner, book)
+    return response
 
 
 async def report_issue(

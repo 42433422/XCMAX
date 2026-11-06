@@ -546,13 +546,21 @@ def test_idempotency_concurrency_restart_and_unknown_claim(business, local_tools
     assert key and replayed is None
     drop_process_idempotency_memory()
     report = recover_idempotent_claims()
-    assert report["cleared_unknown"] >= 1
+    assert report["cleared_unknown"] == 0
+    assert report["retained_unknown"] >= 1
     connection = sqlite3.connect(os.environ["XCAGI_TOOL_IDEMPOTENCY_PATH"])
     stored = connection.execute(
         "select output_json from tool_idempotency where scope_key = ?", (key,)
     ).fetchone()
     connection.close()
-    assert stored is None
+    assert stored is not None and not stored[0]
+    _key, blocked = begin_idempotent_replay(
+        _ctx(actor, task_id="unknown-task"),
+        "business_db",
+        "write",
+        {"idempotency_key": "unknown", "entity": "customers"},
+    )
+    assert blocked["outcome"] == "unknown" and blocked["retryable"] is False
 
 
 def test_timeout_cancel_and_interruption_do_not_mark_success(business, local_tools):

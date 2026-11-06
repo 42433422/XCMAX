@@ -7,25 +7,52 @@ import sqlite3
 from datetime import date
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 from openpyxl import Workbook, load_workbook
 
 from app.application.elt.attendance_pipeline import _hours, parse_attendance_dataset
+from app.application.elt.errors import ReviewedExcelError
 from app.application.elt.target_detection import detect_etl_target
 from app.application.reviewed_excel_basic_classification import classify_review_workbook
 from app.application.reviewed_excel_template import inspect_workbook
 
 CUSTOMER = Path("/opt/cursor/artifacts/etl-b01-b31/customer-sources")
-SYNTHETIC = Path("/opt/cursor/artifacts/etl-b01-b31/synthetic")
 
-# 这些用例依赖 B01–B31 验收现场导出的真实工作簿，工作簿含客户数据、不随仓库分发。
-pytestmark = pytest.mark.skipif(
-    not CUSTOMER.is_dir() or not SYNTHETIC.is_dir(),
+
+def test_classification_of_skipped_parts_does_not_authorize_lossy_export():
+    from app.application.reviewed_excel_template import clean_workbook, derive_document_workbook
+
+    book = Workbook()
+    book.active.append(["字段", "值"])
+    book.active.append(["记录", 7])
+    original = BytesIO()
+    book.save(original)
+    book.close()
+    packaged = BytesIO()
+    with ZipFile(original) as source, ZipFile(packaged, "w") as target:
+        for entry in source.infolist():
+            target.writestr(entry, source.read(entry.filename))
+        target.writestr("customXml/item1.xml", "<metadata>unverified layout</metadata>")
+    body = packaged.getvalue()
+    review = inspect_workbook(body)
+    assert review["fidelity_skipped"] == ["customXml/item1.xml"]
+    assert len(review["cells"]) == 4
+    assert classify_review_workbook(review)
+    with pytest.raises(ReviewedExcelError, match="仅可分类"):
+        clean_workbook(body, review["sha256"], [])
+    with pytest.raises(ReviewedExcelError, match="仅可分类"):
+        derive_document_workbook(body, [{"sheet": "Sheet", "range": "A1:B2"}])
+
+
+@pytest.mark.skipif(
+    not all(
+        (CUSTOMER / name).is_file()
+        for name in ("dingtalk-export.xlsx", "kaoqin-2026-03-template.xlsx")
+    ),
     reason="缺少 ETL 验收原始工作簿（/opt/cursor/artifacts/etl-b01-b31）",
 )
-
-
 def test_real_customer_workbooks_classify_without_size_or_fidelity_rejection():
     dingtalk = (CUSTOMER / "dingtalk-export.xlsx").read_bytes()
     template = (CUSTOMER / "kaoqin-2026-03-template.xlsx").read_bytes()
@@ -40,9 +67,7 @@ def test_real_customer_workbooks_classify_without_size_or_fidelity_rejection():
     assert {item["sheet"] for item in classified} == set(ding["sheets"])
     parsed = parse_attendance_dataset(CUSTOMER / "dingtalk-export.xlsx", max_rows=20000)
     daily = [row for row in parsed.rows if row.sheet == "每日统计"]
-    invalid = [row for row in daily if row.provenance["clean"]["validation_result"]]
     assert len(daily) >= 4500
-    assert len(daily) == len(invalid) + len(daily) - len(invalid)
     assert all("business_id" not in row.provenance["slice"] for row in daily)
     assert all(
         row.provenance["clean"]["business_id"]
@@ -56,17 +81,34 @@ def test_unknown_and_similar_templates_are_not_forced(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     unknown = tmp_path / "unknown-template.xlsx"
     similar = tmp_path / "similar-headers-multitable.xlsx"
-    unknown.write_bytes((SYNTHETIC / "unknown-template.xlsx").read_bytes())
-    similar.write_bytes((SYNTHETIC / "similar-headers-multitable.xlsx").read_bytes())
+    book = Workbook()
+    book.active.append(["自定义字段", "记录值"])
+    book.active.append(["甲", 1])
+    book.save(unknown)
+    book.close()
+    book = Workbook()
+    sheet = book.active
+    for start, end in ((1, 5), (7, 10)):
+        for column, label in enumerate(("姓名", "上班时间", "下班时间", "班组", "备注", "汇总"), 1):
+            sheet.cell(start, column, label)
+        for row in range(start + 1, end + 1):
+            for column, value in enumerate((f"样例{row}", "08:00", "17:30", "甲", "记录", row), 1):
+                sheet.cell(row, column, value)
+    sheet["F5"] = "=1+1"
+    book.save(similar)
+    book.close()
     assert detect_etl_target(unknown)["target_type"] == "abnormal"
     assert detect_etl_target(similar)["target_type"] == "abnormal"
     review = classify_review_workbook(inspect_workbook(similar.read_bytes()))[0]
     ranges = [region["range"] for region in review["regions"]]
-    assert "A1:H10" not in ranges
-    assert sum(region.get("data_region", True) for region in review["regions"]) >= 2
-    title = classify_review_workbook(
-        inspect_workbook((SYNTHETIC / "title-only.xlsx").read_bytes())
-    )[0]
+    assert ranges == ["A1:F5", "A7:F10"]
+    assert all(region.get("data_region", True) for region in review["regions"])
+    book = Workbook()
+    book.active["A1"] = "考勤汇总"
+    buffer = BytesIO()
+    book.save(buffer)
+    book.close()
+    title = classify_review_workbook(inspect_workbook(buffer.getvalue()))[0]
     assert title["processable"] is False and title["regions"][0]["data_region"] is False
     from app.application.reviewed_excel_auto_slice import derive_rule_slices
 
@@ -80,9 +122,16 @@ def test_unknown_and_similar_templates_are_not_forced(tmp_path, monkeypatch):
     )
     assert formula["kind"] == "formula" and formula["value"].startswith("=")
     assert all(item["basis"] == "rule_region" for item in slices)
-    hidden = classify_review_workbook(
-        inspect_workbook((SYNTHETIC / "hidden-blank.xlsx").read_bytes())
-    )
+    book = Workbook()
+    book.active.title = "空白"
+    sheet = book.create_sheet("隐藏")
+    sheet.append(["姓名", "上班时间", "下班时间"])
+    sheet.append(["甲", "08:00", "17:30"])
+    sheet.sheet_state = "hidden"
+    buffer = BytesIO()
+    book.save(buffer)
+    book.close()
+    hidden = classify_review_workbook(inspect_workbook(buffer.getvalue()))
     blank = next(item for item in hidden if item["sheet"] == "空白")
     concealed = next(item for item in hidden if item["sheet"] == "隐藏")
     assert blank["blank"] is True and blank["processable"] is False
@@ -244,16 +293,10 @@ def test_fault_retry_does_not_duplicate_written_rows(tmp_path, monkeypatch):
 
 
 def test_corrupt_and_empty_workbooks_still_fail():
-    try:
+    with pytest.raises(ReviewedExcelError, match="为空|无法读取"):
         inspect_workbook(b"")
-        raise AssertionError("empty workbook must fail")
-    except Exception as exc:
-        assert "为空" in str(exc) or "无法读取" in str(exc)
-    try:
+    with pytest.raises(ReviewedExcelError, match="为空|无法读取"):
         inspect_workbook(b"this is not a workbook")
-        raise AssertionError("corrupt workbook must fail")
-    except Exception as exc:
-        assert "无法读取" in str(exc) or "为空" in str(exc)
     buffer = BytesIO()
     Workbook().save(buffer)
     assert inspect_workbook(buffer.getvalue())["sha256"]

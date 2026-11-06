@@ -352,6 +352,12 @@ class ApiMixin(ConversationLlmMixin, NeuroEventPublisherMixin):
             messages.extend(context.conversation_history)
 
         messages.append({"role": "user", "content": message})
+        from app.application.ai_chat.dialogue_memory import enrich_model_messages
+
+        request_context = (context.metadata or {}).get("request_context")
+        messages = enrich_model_messages(
+            messages, message, request_context if isinstance(request_context, dict) else None
+        )
 
         # 获取当前LLM模式和信息（用于日志）
         if hasattr(self, "modstore_adapter") and self.modstore_adapter:

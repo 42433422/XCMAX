@@ -381,10 +381,22 @@ class AgentToolExecutor:
                         "error_code": "tool_exception",
                         "message": "工具执行失败",
                         "exception_type": type(exc).__name__,
+                        "outcome": "unknown",
+                        "retryable": False,
+                        "reconciliation_required": True,
                     }
                 finally:
                     if idem_key and not isinstance(result, dict):
-                        finish_idempotent_replay(idem_key, {"success": False})
+                        finish_idempotent_replay(
+                            idem_key,
+                            {
+                                "success": False,
+                                "error_code": "tool_execution_interrupted",
+                                "outcome": "unknown",
+                                "retryable": False,
+                                "reconciliation_required": True,
+                            },
+                        )
         except AgentModAuthorizationError as exc:
             return {
                 "success": False,
@@ -401,6 +413,9 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": action,
                 "raw_result_type": type(result).__name__,
+                "outcome": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
             }
         from app.application.agent_orchestrator.tool_permission import (
             classify_http_status,
@@ -417,7 +432,7 @@ class AgentToolExecutor:
             result = {**result, **classify_http_status(status_value)}
         empty = reject_empty_business_result(result, action=action)
         if empty is not None:
-            result = empty
+            result = {**empty, "outcome": "unknown", "reconciliation_required": True}
 
         output_validation = validate_tool_result(validation.tool_id, action, result)
         if not output_validation.ok:
@@ -431,6 +446,9 @@ class AgentToolExecutor:
                 "raw_message": result.get("message") or result.get("error"),
                 "raw_error_code": result.get("error_code"),
                 "output_keys": sorted(str(key) for key in result.keys()),
+                "outcome": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
             }
         if idem_key:
             finish_idempotent_replay(idem_key, result)

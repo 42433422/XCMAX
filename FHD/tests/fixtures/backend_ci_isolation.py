@@ -46,9 +46,13 @@ def trusted_actor(tmp_path, monkeypatch):
     from app.db.models.user import User
     from app.domain.shared_services.session_service import SessionService
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth import agent_principal, dependencies
     from app.infrastructure.auth.agent_principal import require_agent_principal
     from app.utils.time import utc_now_naive
 
+    # Lazy imports during another test's resolver patch must not retain its fake actor.
+    # This fixture exercises the real resolver against its real session rows.
+    monkeypatch.setattr(agent_principal, "resolve_session_user", dependencies.resolve_session_user)
     engine = create_engine(f"sqlite:///{tmp_path / 'trusted-actors.sqlite'}")
     monkeypatch.setenv("DATABASE_URL", str(engine.url))
     Base.metadata.create_all(engine)

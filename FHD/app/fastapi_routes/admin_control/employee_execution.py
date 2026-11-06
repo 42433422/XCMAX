@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import Body, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.application.admin_control.protocols import ErrorPolicy, JsonObject
 
@@ -73,7 +74,8 @@ class EmployeeExecution:
         payload.update(
             user_id=user_id, session_id=sid, tenant_id=tenant_id, employee_id=pid, task=task
         )
-        return self._run(
+        return await run_in_threadpool(
+            self._run,
             EmployeeWork(
                 employee_id=pid,
                 task=task,
@@ -82,7 +84,7 @@ class EmployeeExecution:
                 tenant_id=tenant_id,
                 session_id=sid,
                 workspace_root=str(body.get("workspace_root") or "").strip() or None,
-            )
+            ),
         )
 
     async def local_employee_runs(self, request: Request, employee_id: str, limit: int = 50):
@@ -134,6 +136,8 @@ class EmployeeExecution:
             decide_employee_run_log(
                 int(run_id), tenant_id=tenant_id, decision=decision, actor=actor
             )
-        except ValueError as exc:
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=409)
+        except ValueError:
+            return JSONResponse(
+                {"success": False, "message": "审批决定无效或任务状态已变化"}, status_code=409
+            )
         return {"success": True, "run_id": int(run_id), "decision": decision}

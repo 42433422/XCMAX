@@ -23,6 +23,8 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy.sql.elements import ColumnElement
+
 from app.application.agent_orchestrator.run_models import agent_run_from_dict, utc_now_iso
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -102,7 +104,7 @@ def reconcile_stale_running_runs(
             AgentTaskRecord,
         )
 
-        filters = [AgentRunRecord.status.in_(IN_FLIGHT_RUN_STATUSES)]
+        filters: list[ColumnElement[bool]] = [AgentRunRecord.status.in_(IN_FLIGHT_RUN_STATUSES)]
         if not desktop:
             filters.append(AgentRunRecord.updated_at <= _stale_cutoff(current, stale_after_seconds))
         records = db.query(AgentRunRecord).filter(*filters).all()
@@ -168,7 +170,7 @@ def reconcile_stale_running_runs(
             if (
                 desktop
                 and execution is not None
-                and str(execution.state or "") in {"queued", "claimed"}
+                and str(execution.state or "") in {"queued", "claimed", "running"}
             ):
                 # 桌面没有第二个 worker。先关掉执行行，dispatcher 不能把这条租约再认领。
                 execution.state = "failed"

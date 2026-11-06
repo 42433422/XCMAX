@@ -121,6 +121,9 @@ def _prepare_chat(user_message, runtime_context, system_prompt, client, model):
     messages = [{"role": "user", "content": content}]
     if sys:
         messages.insert(0, {"role": "system", "content": sys})
+    from app.application.ai_chat.dialogue_memory import enrich_model_messages
+
+    messages = enrich_model_messages(messages, user_message, runtime_context)
     has_image_input = facade.messages_have_image_parts(messages)
     cli = client
     if cli is None:

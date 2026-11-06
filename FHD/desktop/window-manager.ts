@@ -183,7 +183,8 @@ export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | nu
   const icon = shellIconPath()
   const partition = nextAuxiliaryPartition()
   const isolated = session.fromPartition(partition)
-  const winOpts: Electron.BrowserWindowConstructorOptions = {
+  const win = new BrowserWindow({
+    ...(fs.existsSync(icon) ? { icon } : {}),
     x: origin.x + 28 * index,
     y: origin.y + 28 * index,
     width: origin.width,
@@ -201,9 +202,7 @@ export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | nu
       nodeIntegration: false,
       sandbox: true,
     },
-  }
-  if (fs.existsSync(icon)) winOpts.icon = icon
-  const win = new BrowserWindow(winOpts)
+  })
   desktopRuntime.auxiliaryWindows.add(win)
   attachAuxiliaryGuards(win)
   win.on('closed', () => {

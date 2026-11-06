@@ -4,8 +4,17 @@ import { productErrorMessage } from '@/utils/productErrorMessage'
 import { createTraceId, publishStabilityNotice } from '@/utils/networkStability'
 import { buildFullApiUrl, registerSessionRefresh } from './core'
 
-/** 把实验会话的刷新并进全局单飞，并在页面上显示分类后的失败文案。 */
+/** 生产只安装失败提示；实验刷新与故障注入须显式启用 VITE_STABILITY_LAB。 */
 export function installStabilityClient(): void {
+  window.addEventListener('xcagi:stability-notice', (event) => {
+    const message = String((event as CustomEvent<{ message?: string }>).detail?.message || '')
+    if (!message) return
+    publishStabilityNotice(message)
+    showAppToast(message, 'error', { duration: 8000 })
+  })
+
+  if (import.meta.env.VITE_STABILITY_LAB !== '1') return
+
   registerSessionRefresh(async () => {
     const refresh = window.localStorage.getItem('xcagi_stability_refresh') || ''
     if (!refresh) return false
@@ -25,13 +34,6 @@ export function installStabilityClient(): void {
     const body = await response.json() as { success?: boolean; refresh_token?: string }
     if (body.refresh_token) window.localStorage.setItem('xcagi_stability_refresh', body.refresh_token)
     return body.success === true
-  })
-
-  window.addEventListener('xcagi:stability-notice', (event) => {
-    const message = String((event as CustomEvent<{ message?: string }>).detail?.message || '')
-    if (!message) return
-    publishStabilityNotice(message)
-    showAppToast(message, 'error', { duration: 8000 })
   })
 
   void fetch(buildFullApiUrl('/api/stability/ui-notice'), { credentials: 'include' })

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import perf_counter
 from unittest.mock import patch
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import (
+    _string_constraint_error,
     build_tool_specs_v2,
     get_tool_action_spec,
     validate_tool_call,
@@ -621,3 +623,28 @@ def test_agent_tool_executor_rejects_non_object_tool_result() -> None:
     assert result["error_code"] == "tool_result_not_object"
     assert result["tool_id"] == "business_db"
     assert result["action"] == "read"
+
+
+@pytest.mark.parametrize(
+    "value, valid",
+    [
+        ("a@b.c", True),
+        ("first+tag@example.co.uk", True),
+        ("a@b..c", True),
+        ("@b.c", False),
+        ("a@.c", False),
+        ("a@b.", False),
+        ("a@b", False),
+        ("a@@b.c", False),
+        ("a b@c.d", False),
+        ("a@b.c\n", False),
+    ],
+)
+def test_email_contract_keeps_validation_semantics(value, valid):
+    assert (_string_constraint_error("email", value, {"format": "email"}) == "") is valid
+
+
+def test_email_contract_rejects_long_invalid_input_without_backtracking():
+    started = perf_counter()
+    assert _string_constraint_error("email", "x@" + "!" * 50_000, {"format": "email"})
+    assert perf_counter() - started < 1

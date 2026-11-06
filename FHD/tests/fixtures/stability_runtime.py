@@ -1,5 +1,6 @@
 """本机稳定性探针：超时、幂等副作用、租户隔离和实验会话刷新。
 
+只由独立验收应用显式挂载，生产应用不包含这些路由。
 只接受回环和稳定性试验网卡上的调用。刷新令牌和口令不写入日志。
 """
 
@@ -22,13 +23,13 @@ from fastapi.responses import JSONResponse
 from app.application.network_stability import (
     FAILURE_NOTICES,
     OPERATION_TIMEOUT_S,
-    RefreshSingleFlight,
     effect_claim,
     effect_finish,
     emit_current_lane,
     failure_payload,
     timeout_outcome,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["stability-runtime"])
 _ALLOWED_HOSTS = {"127.0.0.1", "::1", "10.88.0.2"}
@@ -38,8 +39,7 @@ _lane_lock = asyncio.Lock()
 _lane_sem = {name: asyncio.Semaphore(limit) for name, limit in _LANES.items()}
 _lane_queued = dict.fromkeys(_LANES, 0)
 _notice: dict[str, Any] = {}
-_refresh_gate = RefreshSingleFlight()
-_refresh_box: dict[str, Any] = {}
+_refresh_tasks: dict[str, asyncio.Task[dict[str, Any] | None]] = {}
 _refresh_rotations = 0
 
 
@@ -84,6 +84,8 @@ def _read_refresh(token: str) -> dict[str, Any] | None:
         if not hmac.compare_digest(expected, sig):
             return None
         payload = json.loads(raw.decode())
+        if not isinstance(payload, dict):
+            return None
         if payload.get("typ") != "refresh" or int(payload.get("exp") or 0) <= int(time.time()):
             return None
         if not str(payload.get("jti") or "").isalnum():
@@ -213,7 +215,7 @@ async def lane(request: Request, lane_name: str = "chat", sleep_ms: int = 0, que
             async with _lane_lock:
                 _lane_queued[lane_name] -= 1
             await asyncio.sleep(max(0, sleep_ms) / 1000)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         async with _lane_lock:
             _lane_queued[lane_name] = max(0, _lane_queued[lane_name] - 1)
         raise
@@ -365,7 +367,7 @@ async def operations(request: Request, body: dict[str, Any] = Body(default_facto
                 create_chat_trace_run(
                     {"response": text, "success": True}, message=text, user_id=str(user.id)
                 )
-            except Exception:  # noqa: BLE001 — 探针追踪失败时回落到普通 lane 埋点。
+            except RECOVERABLE_ERRORS:
                 emit_current_lane("chat", status=200)
             ref = await asyncio.to_thread(_write_chat, int(user.id), claim["key"], text)
         else:
@@ -376,7 +378,7 @@ async def operations(request: Request, body: dict[str, Any] = Body(default_facto
         return JSONResponse(
             {"success": True, "state": "succeeded", "ref": ref, "lane": lane_name}, headers=headers
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         import logging
 
         logging.getLogger("app.stability").exception(
@@ -474,7 +476,14 @@ async def lab_session(request: Request, body: dict[str, Any] = Body(default_fact
             "refresh_token": issued["refresh_token"],
         }
     )
-    response.set_cookie("session_id", issued["session_id"], httponly=True, samesite="lax", path="/")
+    response.set_cookie(
+        "session_id",
+        issued["session_id"],
+        httponly=True,
+        samesite="lax",
+        path="/",
+        secure=request.url.scheme == "https",
+    )
     return response
 
 
@@ -510,34 +519,37 @@ async def lab_refresh(request: Request, body: dict[str, Any] = Body(default_fact
             headers={"X-Error-Code": "token_expired"},
         )
 
-    def rotate() -> bool:
+    def rotate() -> dict[str, Any] | None:
         global _refresh_rotations
         if not _consume_refresh(payload):
-            _refresh_box.clear()
-            _refresh_box["error"] = "used"
-            return False
+            return None
         from app.infrastructure.session.session_manager import get_session_manager
 
         created = get_session_manager().create_session(int(payload["uid"]))
-        _refresh_box.clear()
-        _refresh_box.update(
-            {
-                "session_id": created["session_id"],
-                "refresh_token": _issue_refresh(int(payload["uid"])),
-                "user_id": int(payload["uid"]),
-            }
-        )
         _refresh_rotations += 1
-        return True
+        return {
+            "session_id": created["session_id"],
+            "refresh_token": _issue_refresh(int(payload["uid"])),
+            "user_id": int(payload["uid"]),
+        }
 
-    ok = await asyncio.to_thread(_refresh_gate.run, rotate)
-    if not ok:
+    # Coalesce only the same credential, and retain its own result for every waiter.
+    key = str(payload["jti"])
+    task = _refresh_tasks.get(key)
+    if task is None:
+        task = asyncio.create_task(asyncio.to_thread(rotate))
+        _refresh_tasks[key] = task
+        task.add_done_callback(lambda _done: _refresh_tasks.pop(key, None))
+    try:
+        issued = await asyncio.wait_for(asyncio.shield(task), timeout=5)
+    except RECOVERABLE_ERRORS:
+        issued = None
+    if not issued:
         return JSONResponse(
             failure_payload("token_expired"),
             status_code=401,
             headers={"X-Error-Code": "token_expired"},
         )
-    issued = dict(_refresh_box)
     response = JSONResponse(
         {
             "success": True,
@@ -548,7 +560,12 @@ async def lab_refresh(request: Request, body: dict[str, Any] = Body(default_fact
     )
     if issued.get("session_id"):
         response.set_cookie(
-            "session_id", issued["session_id"], httponly=True, samesite="lax", path="/"
+            "session_id",
+            issued["session_id"],
+            httponly=True,
+            samesite="lax",
+            path="/",
+            secure=request.url.scheme == "https",
         )
     return response
 
@@ -558,3 +575,15 @@ async def lab_metrics(request: Request):
     if not _allowed(request):
         return _deny()
     return {"success": True, "refresh_rotations": _refresh_rotations}
+
+
+def create_app():
+    """Explicit manual entry: uvicorn tests.fixtures.stability_runtime:create_app --factory."""
+    from tests.fixtures.app_factory import get_test_fastapi_app
+
+    app = get_test_fastapi_app()
+    production_routes = list(app.router.routes)
+    app.router.routes.clear()
+    app.include_router(router)
+    app.router.routes.extend(production_routes)
+    return app

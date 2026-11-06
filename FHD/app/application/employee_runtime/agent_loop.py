@@ -246,7 +246,7 @@ def _missing_required(
             key = str(name)
             if key in args:
                 continue
-            prop = properties.get(key) if isinstance(properties.get(key), dict) else {}
+            prop = _as_mapping(properties.get(key))
             if "default" not in prop:
                 missing.append(key)
         return missing

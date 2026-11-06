@@ -287,54 +287,7 @@ def _idempotency_conn() -> sqlite3.Connection | None:
     return conn
 
 
-def _persist_claim(key: str, record: dict[str, Any]) -> None:
-    conn = _idempotency_conn()
-    if conn is None:
-        return
-    try:
-        output = record.get("output")
-        conn.execute(
-            "insert into tool_idempotency(scope_key, fingerprint, owner, inflight, output_json) "
-            "values (?, ?, ?, ?, ?) "
-            "on conflict(scope_key) do update set fingerprint=excluded.fingerprint, "
-            "owner=excluded.owner, inflight=excluded.inflight, output_json=excluded.output_json",
-            (
-                key,
-                str(record.get("fingerprint") or ""),
-                str(record.get("owner") or ""),
-                1 if record.get("inflight") else 0,
-                json.dumps(output, ensure_ascii=False) if isinstance(output, dict) else "",
-            ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def _delete_claim(key: str) -> None:
-    conn = _idempotency_conn()
-    if conn is None:
-        return
-    try:
-        conn.execute("delete from tool_idempotency where scope_key = ?", (key,))
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def _load_claim(key: str) -> dict[str, Any] | None:
-    conn = _idempotency_conn()
-    if conn is None:
-        return None
-    try:
-        row = conn.execute(
-            "select fingerprint, owner, inflight, output_json from tool_idempotency where scope_key = ?",
-            (key,),
-        ).fetchone()
-    finally:
-        conn.close()
-    if row is None:
-        return None
+def _stored_claim(row: tuple[Any, ...]) -> dict[str, Any]:
     output = None
     if row[3]:
         try:
@@ -350,6 +303,78 @@ def _load_claim(key: str) -> dict[str, Any] | None:
     }
 
 
+def _try_claim(key: str, record: dict[str, Any]) -> dict[str, Any] | None:
+    """Atomically insert a claim, or read the record that already owns the key."""
+    conn = _idempotency_conn()
+    if conn is None:
+        return _IDEMPOTENCY.get(key)
+    try:
+        with conn:
+            inserted = conn.execute(
+                "insert into tool_idempotency(scope_key, fingerprint, owner, inflight, output_json) "
+                "values (?, ?, ?, 1, '') on conflict(scope_key) do nothing",
+                (key, record["fingerprint"], record["owner"]),
+            ).rowcount
+            if inserted == 1:
+                return None
+            row = conn.execute(
+                "select fingerprint, owner, inflight, output_json "
+                "from tool_idempotency where scope_key = ?",
+                (key,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("工具幂等记录不可用，已拒绝重复执行")
+            return _stored_claim(row)
+    finally:
+        conn.close()
+
+
+def _finish_claim(key: str, owner: str, output: dict[str, Any] | None) -> None:
+    """Only the worker that claimed a key may settle it or release a known failure."""
+    conn = _idempotency_conn()
+    if conn is None:
+        return
+    try:
+        with conn:
+            if output is None:
+                changed = conn.execute(
+                    "delete from tool_idempotency where scope_key = ? and owner = ? and inflight = 1",
+                    (key, owner),
+                ).rowcount
+            else:
+                changed = conn.execute(
+                    "update tool_idempotency set inflight = 0, output_json = ? "
+                    "where scope_key = ? and owner = ? and inflight = 1",
+                    (json.dumps(output, ensure_ascii=False), key, owner),
+                ).rowcount
+            if changed != 1:
+                raise RuntimeError("工具幂等执行权已变化，必须核验原调用结果")
+    finally:
+        conn.close()
+
+
+def _retained_result(output: dict[str, Any]) -> dict[str, Any] | None:
+    from app.application.employee_runtime.result_verifier import (
+        execution_result_requires_reconciliation,
+    )
+
+    if (
+        execution_result_requires_reconciliation(output)
+        or str(output.get("execution_status") or "").lower()
+        in {"unknown", "timeout", "timed_out", "interrupted"}
+        or "unknown" in str(output.get("error_code") or "").lower()
+        or (output.get("success") is not True and output.get("success") is not False)
+    ):
+        return {
+            **output,
+            "success": False,
+            "outcome": "unknown",
+            "retryable": False,
+            "reconciliation_required": True,
+        }
+    return dict(output) if output.get("success") is True else None
+
+
 def drop_process_idempotency_memory() -> None:
     """Simulate a process restart: memory claims die, the sqlite record remains."""
     with _IDEMPOTENCY_LOCK:
@@ -358,46 +383,38 @@ def drop_process_idempotency_memory() -> None:
 
 
 def recover_idempotent_claims() -> dict[str, int]:
-    """Drop crashed in-flight claims. Stored successes stay replayable and are not successes-by-default."""
-    cleared = 0
-    replayable = 0
-    conn = _idempotency_conn()
-    if conn is None:
-        with _IDEMPOTENCY_LOCK:
-            for key, record in list(_IDEMPOTENCY.items()):
-                if record.get("output"):
-                    replayable += 1
-                    continue
-                if record.get("inflight") and record.get("owner") not in _LIVE_OWNERS:
-                    _IDEMPOTENCY.pop(key, None)
-                    cleared += 1
-        return {"cleared_unknown": cleared, "replayable": replayable}
-    try:
-        rows = conn.execute(
-            "select scope_key, owner, inflight, output_json from tool_idempotency"
-        ).fetchall()
-        for key, owner, inflight, output_json in rows:
-            if output_json:
-                replayable += 1
-                continue
-            if inflight and owner not in _LIVE_OWNERS:
-                conn.execute("delete from tool_idempotency where scope_key = ?", (key,))
-                cleared += 1
-        conn.commit()
-    finally:
-        conn.close()
+    """Retain unfinished claims: another process may still run or have committed an effect."""
+    report = {"cleared_unknown": 0, "retained_unknown": 0, "replayable": 0}
     with _IDEMPOTENCY_LOCK:
-        for key in list(_IDEMPOTENCY):
-            if key not in _LIVE_OWNERS and not (_IDEMPOTENCY[key].get("output")):
-                if _IDEMPOTENCY[key].get("inflight"):
-                    _IDEMPOTENCY.pop(key, None)
-    return {"cleared_unknown": cleared, "replayable": replayable}
+        conn = _idempotency_conn()
+        try:
+            records = (
+                (
+                    _stored_claim(row)
+                    for row in conn.execute(
+                        "select fingerprint, owner, inflight, output_json from tool_idempotency"
+                    )
+                )
+                if conn is not None
+                else iter(_IDEMPOTENCY.values())
+            )
+            for record in records:
+                output = record.get("output")
+                saved = _retained_result(output) if isinstance(output, dict) else None
+                if not record.get("inflight") and saved and saved.get("success") is True:
+                    report["replayable"] += 1
+                else:
+                    report["retained_unknown"] += 1
+        finally:
+            if conn is not None:
+                conn.close()
+    return report
 
 
 def begin_idempotent_replay(
     context: dict[str, Any], tool_id: str, action: str, params: dict[str, Any]
 ) -> tuple[str, dict[str, Any] | None]:
-    """Return a cached success, or claim the key. Failures stay retryable."""
+    """Return a stored result or atomically claim a new key. Unknown effects cannot replay."""
     key = idempotency_scope_key(context, tool_id, action, params)
     if key.endswith(":"):
         return "", None
@@ -413,17 +430,14 @@ def begin_idempotent_replay(
             reason="idempotency_fingerprint_rejected",
         )
     with _IDEMPOTENCY_LOCK:
-        current = _IDEMPOTENCY.get(key)
+        owner = f"{os.getpid()}:{uuid.uuid4().hex}"
+        record = {"fingerprint": fingerprint, "inflight": True, "output": None, "owner": owner}
+        current = _try_claim(key, record)
         if current is None:
-            loaded = _load_claim(key)
-            if loaded is not None:
-                if loaded.get("inflight") and loaded.get("owner") not in _LIVE_OWNERS:
-                    _delete_claim(key)
-                    loaded = None
-                else:
-                    current = loaded
-                    _IDEMPOTENCY[key] = current
-        if current and current.get("fingerprint") != fingerprint:
+            _IDEMPOTENCY[key] = record
+            _LIVE_OWNERS.add(owner)
+            return key, None
+        if current.get("fingerprint") != fingerprint:
             return key, _denial(
                 "idempotency_conflict",
                 "相同幂等键不能改用新的执行参数",
@@ -432,24 +446,25 @@ def begin_idempotent_replay(
                 action=action,
                 reason="idempotency_conflict",
             )
-        cached = current.get("output") if current else None
-        if isinstance(cached, dict) and cached.get("success") is True:
-            return key, dict(cached)
-        if current and current.get("inflight") and current.get("owner") in _LIVE_OWNERS:
-            return key, _denial(
-                "idempotency_in_progress",
-                "相同幂等键的调用正在执行",
+        cached = current.get("output")
+        saved = _retained_result(cached) if isinstance(cached, dict) else None
+        if not current.get("inflight") and saved is not None:
+            return key, saved
+        code = (
+            "idempotency_in_progress" if current.get("inflight") else "idempotency_outcome_unknown"
+        )
+        return key, {
+            **_denial(
+                code,
+                "相同幂等键的调用仍在执行或结果待核验，不可重复执行",
                 context=context,
                 tool_id=tool_id,
                 action=action,
-                reason="idempotency_in_progress",
-            )
-        owner = uuid.uuid4().hex
-        _LIVE_OWNERS.add(owner)
-        record = {"fingerprint": fingerprint, "inflight": True, "output": None, "owner": owner}
-        _IDEMPOTENCY[key] = record
-        _persist_claim(key, record)
-    return key, None
+                reason=code,
+            ),
+            "outcome": "unknown",
+            "reconciliation_required": True,
+        }
 
 
 def finish_idempotent_replay(key: str, output: dict[str, Any]) -> None:
@@ -460,14 +475,16 @@ def finish_idempotent_replay(key: str, output: dict[str, Any]) -> None:
         if current is None:
             return
         owner = str(current.get("owner") or "")
+        if owner not in _LIVE_OWNERS or not owner.startswith(f"{os.getpid()}:"):
+            return
+        saved = _retained_result(output)
+        _finish_claim(key, owner, saved)
         _LIVE_OWNERS.discard(owner)
-        if output.get("success") is True:
-            current["output"] = dict(output)
+        if saved is not None:
+            current["output"] = saved
             current["inflight"] = False
-            _persist_claim(key, current)
             return
         _IDEMPOTENCY.pop(key, None)
-        _delete_claim(key)
 
 
 def clear_idempotent_replay_for_tests() -> None:

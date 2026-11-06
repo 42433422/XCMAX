@@ -39,5 +39,6 @@ def upgrade():
 
 
 def downgrade():
-    for name, _columns in reversed(_TABLES):
-        op.drop_table(name)
+    # Business side effects cannot be rolled back with the schema. Keep their
+    # history and idempotency receipts so a later upgrade cannot replay them.
+    pass

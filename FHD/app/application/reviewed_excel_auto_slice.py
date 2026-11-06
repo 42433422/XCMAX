@@ -88,9 +88,11 @@ def derive_rule_slices(body: bytes, latest: dict) -> list[dict]:
     from app.application.reviewed_excel_template import derive_document_workbook
 
     source = inspect_workbook(body)
-    results = []
+    results: list[dict] = []
     used_names: set[str] = set()
-    sheets = latest.get("sheets") if isinstance(latest.get("sheets"), list) else []
+    sheets = latest.get("sheets")
+    if not isinstance(sheets, list):
+        return results
     for sheet in sheets:
         if not isinstance(sheet, dict):
             continue
@@ -126,8 +128,9 @@ def derive_rule_slices(body: bytes, latest: dict) -> list[dict]:
                 record["status"] = "error"
                 record["error"] = str(exc)
                 failed = Workbook()
-                failed.active["A1"] = "切片未提取"
-                failed.active["A2"] = str(exc)[:180]
+                failed_sheet = failed.worksheets[0]
+                failed_sheet["A1"] = "切片未提取"
+                failed_sheet["A2"] = str(exc)[:180]
                 buffer = BytesIO()
                 failed.save(buffer)
                 failed.close()

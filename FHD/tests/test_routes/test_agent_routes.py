@@ -1605,3 +1605,16 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
             assert _client("another-user").get(run.artifacts[0].uri).status_code in {403, 404}
     finally:
         engine.dispose()
+
+
+def test_create_task_internal_failure_returns_stable_public_message() -> None:
+    client = _client()
+    with patch(
+        "app.fastapi_routes.domains.agent.task_routes.create_unified_task",
+        side_effect=RuntimeError("Traceback: database password=do-not-expose"),
+    ):
+        response = client.post(
+            "/api/agent/tasks", json={"task_id": "task-error", "title": "执行任务"}
+        )
+    assert response.status_code == 503
+    assert response.json() == {"success": False, "message": "Agent 服务暂时不可用，请稍后重试"}

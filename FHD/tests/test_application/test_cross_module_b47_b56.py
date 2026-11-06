@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
+from copy import deepcopy
 from datetime import timedelta
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -29,9 +32,7 @@ def acceptance_db(tmp_path, monkeypatch):
 
 
 def test_cross_module_business_chain_s01_through_s04(acceptance_db):
-    from app.application.agent_orchestrator.cross_module_chain import (
-        run_cross_module_acceptance,
-    )
+    from tests.fixtures.cross_module_acceptance import run_cross_module_acceptance
 
     db, workspace, audit_path = acceptance_db
     with tenant_scope(1):
@@ -55,12 +56,27 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch):
+@pytest.mark.parametrize("source_mode", ["workspace", "owned_upload"])
+@pytest.mark.parametrize(
+    "valid_rows",
+    [
+        [
+            ["西南材料", "SW-42", "防护涂层", "10kg", "17.65"],
+            ["东海配件", "DH-5", "密封组件", "5件", "63.20"],
+        ],
+        [
+            ["北方电气", "NB-77", "继电器", "220V", "0.10"],
+            ["北方电气", "NB-78", "断路器", "380V", "45.05"],
+        ],
+    ],
+)
+def test_cross_module_http_submit_approve_download_history(
+    tmp_path, monkeypatch, valid_rows, source_mode
+):
     """POST /api/agent/tasks drives the chain; approval and the file come back over HTTP."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator.cross_module_chain import _build_source_workbook
     from app.application.agent_orchestrator.run_repository import (
         InMemoryAgentRunRepository,
         set_agent_run_repository_for_tests,
@@ -69,9 +85,11 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
         InMemoryTaskExecutionRepository,
         set_task_execution_repository_for_tests,
     )
+    from app.application.elt.service_uploads import UploadServiceMixin
     from app.application.workflow.approval_service import get_approval_service
     from app.db.db_base import Base
     from app.db.models.approval import ApprovalRequest
+    from app.db.models.elt import EltUpload
     from app.db.models.product import Product
     from app.db.models.user import Session as UserSession
     from app.db.models.user import User
@@ -82,6 +100,7 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
     from app.fastapi_routes.domains.agent.agent_routes import router as agent_router
     from app.middleware.industry_context import IndustryContextMiddleware
     from app.utils.time import utc_now_naive
+    from tests.fixtures.cross_module_business import _build_source_workbook
 
     engine = create_engine(
         "sqlite://",
@@ -105,8 +124,31 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
     set_task_execution_repository_for_tests(InMemoryTaskExecutionRepository())
     workspace = tmp_path / "workspace"
     workspace.mkdir()
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
     source = workspace / "upload-shipment.xlsx"
-    _build_source_workbook(source)
+    _build_source_workbook(
+        source,
+        rows=[
+            *valid_rows,
+            ["异常客户", "BAD", "", "1件", "9"],
+            ["异常客户", "NEG", "负价样品", "1件", "-3"],
+            ["合计", "", "", "", ""],
+        ],
+    )
+    expected_products = [
+        {
+            "unit": row[0],
+            "model_number": row[1],
+            "name": row[2],
+            "specification": row[3],
+            "price": row[4],
+        }
+        for row in valid_rows
+    ]
+    preserved = ("华东涂料", "HX-1", "99.00")
+    expected_rows = sorted([preserved, *((row[0], row[1], row[4]) for row in valid_rows)])
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
     original_sha = _sha256(source)
     original_bytes = source.read_bytes()
     db = factory()
@@ -141,10 +183,45 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
                 account_kind="enterprise",
             )
         )
+        db.add(
+            Product(
+                tenant_id=1,
+                unit=preserved[0],
+                model_number=preserved[1],
+                name="已有产品",
+                price=preserved[2],
+            )
+        )
+        db.add(
+            Product(
+                tenant_id=2,
+                unit=valid_rows[0][0],
+                model_number=valid_rows[0][1],
+                name="其他租户产品",
+                price="88.00",
+            )
+        )
         db.commit()
         user_id = int(user.id)
     finally:
         db.close()
+
+    def owned_upload(tenant_id: int, owner_user_id: int) -> Path:
+        with factory.begin() as db, tenant_scope(tenant_id):
+            saved = UploadServiceMixin().save_upload(
+                db,
+                owner_user_id=owner_user_id,
+                file_name="business.xlsx",
+                content_type=None,
+                stream=BytesIO(original_bytes),
+            )
+            return Path(db.get(EltUpload, saved["upload_id"]).storage_path)
+
+    outside = tmp_path / "outside.xlsx"
+    outside.write_bytes(original_bytes)
+    forbidden_sources = [outside, owned_upload(1, user_id + 1), owned_upload(2, user_id)]
+    if source_mode == "owned_upload":
+        source = owned_upload(1, user_id)
 
     app = FastAPI()
     app.add_middleware(IndustryContextMiddleware)
@@ -154,18 +231,11 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
     body = {
         "task_id": "task-http-b47",
         "title": "发货明细导入",
-        "message": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入华东涂料产品库，并调用已发布 MOD 做后续读取",
+        "message": "处理上传的业务 Excel：识别有效表和区域，按规则切片清洗，导入产品库，并调用已发布 MOD 做后续读取",
         "tool_id": "products",
         "action": "batch_create",
         "params": {
-            "products": [
-                {
-                    "unit": "华东涂料",
-                    "model_number": "HX-1",
-                    "name": "内墙底漆",
-                    "price": "12.50",
-                }
-            ],
+            "products": expected_products,
             "file_path": str(source),
         },
         "runtime_context": {"conversation_id": "session-b47", "session_id": "session-b47"},
@@ -180,24 +250,24 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
 
     def persist(note: str) -> None:
         evidence["note"] = note
-        out = Path("docs/evidence/e2e/cross-module-b47-b56")
+        out = evidence_dir
         out.mkdir(parents=True, exist_ok=True)
         (out / "report.json").write_text(
             json.dumps(evidence, ensure_ascii=False, indent=2, default=str) + "\n",
             encoding="utf-8",
         )
 
-    def product_rows() -> list[tuple[str, str]]:
+    def product_rows() -> list[tuple[str, str, str]]:
         session = factory()
         try:
             with tenant_scope(1):
                 rows = (
                     session.query(Product)
-                    .filter(Product.unit == "华东涂料")
-                    .order_by(Product.model_number.asc())
+                    .filter(Product.tenant_id == 1)
+                    .order_by(Product.unit.asc(), Product.model_number.asc())
                     .all()
                 )
-                return [(str(row.model_number), str(row.price)) for row in rows]
+                return [(str(row.unit), str(row.model_number), str(row.price)) for row in rows]
         finally:
             session.close()
 
@@ -205,6 +275,13 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
         with TestClient(app) as client:
             try:
                 client.cookies.set("session_id", "sid-http-1")
+                for index, forbidden in enumerate(forbidden_sources):
+                    denied_body = deepcopy(body)
+                    denied_body["task_id"] = f"task-http-forbidden-{index}"
+                    denied_body["params"]["file_path"] = str(forbidden)
+                    denied = client.post("/api/agent/tasks", json=denied_body)
+                    assert denied.status_code == 400, denied.text
+                    assert product_rows() == [preserved]
                 first = client.post("/api/agent/tasks", json=body)
                 second = client.post("/api/agent/tasks", json=body)
                 evidence["http"]["submit"] = {
@@ -243,6 +320,32 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
                     request_no = None if stored is None else str(stored.request_no)
                 finally:
                     session.close()
+                from app.application.agent_orchestrator.cross_module_chain import (
+                    resume_cross_module_http,
+                )
+                from app.application.workflow.approval_persistence import (
+                    load_workflow_snapshot_for_execution,
+                )
+
+                with tenant_scope(1):
+                    snapshot = load_workflow_snapshot_for_execution(str(request_no))
+                    assert snapshot is not None
+                    assert snapshot["plan"].nodes[0].params["products"] == expected_products
+                    for corrupt in ("params", "checkpoint", "actor"):
+                        changed = deepcopy(snapshot)
+                        if corrupt == "params":
+                            changed["plan"].nodes[0].params["products"][0]["price"] = "999.00"
+                        elif corrupt == "checkpoint":
+                            changed["runtime_context"]["cross_module_checkpoint"]["qualifying"][0][
+                                "price"
+                            ] = "999.00"
+                        else:
+                            changed["runtime_context"]["user_id"] = str(user_id + 1)
+                        rejected = resume_cross_module_http(
+                            changed, request_id=str(request_no), loaded_from_storage=True
+                        )
+                        assert rejected["success"] is False
+                assert product_rows() == [preserved]
                 service = get_approval_service()
                 service._pending_requests.clear()
                 service._pending_workflows.clear()
@@ -292,16 +395,15 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
                 download_sha = (
                     hashlib.sha256(download.content).hexdigest() if download is not None else ""
                 )
-                file_sha = _sha256(
-                    Path(
-                        str(
-                            (metadata.get("runtime_context") or {})
-                            .get("cross_module_checkpoint", {})
-                            .get("result_path")
-                            or workspace / "result.xlsx"
-                        )
+                result_file = Path(
+                    str(
+                        (metadata.get("runtime_context") or {})
+                        .get("cross_module_checkpoint", {})
+                        .get("result_path")
+                        or workspace / "result.xlsx"
                     )
                 )
+                file_sha = _sha256(result_file)
                 evidence["http"]["download"] = {
                     "status": None if download is None else download.status_code,
                     "sha256": download_sha,
@@ -336,17 +438,17 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
                     and memory_cleared
                     and approved.status_code == 200
                     and status_after == "approved"
-                    and rows_after_duplicate == []
-                    and ("HX-1", "15.00") in rows_after_approve,
+                    and rows_after_duplicate == [preserved]
+                    and rows_after_approve == expected_rows,
                     "3_http_download_sha": download is not None
                     and download.status_code == 200
                     and download_sha
                     and download_sha == file_sha
-                    and download.content == Path(workspace / "result.xlsx").read_bytes(),
+                    and download.content == result_file.read_bytes(),
                     "4_duplicate_submit": second.status_code in {200, 202}
                     and second.json().get("deduplicated") is True
-                    and rows_after_duplicate == []
-                    and len(rows_after_approve) == 2,
+                    and rows_after_duplicate == [preserved]
+                    and rows_after_approve == expected_rows,
                     "5_second_session": history_task.status_code == 200
                     and task_id in history_task.text
                     and history_audit.status_code == 200
@@ -427,18 +529,18 @@ def test_cross_module_http_submit_approve_download_history(tmp_path, monkeypatch
                     if holes and all(holes.values()) and evidence["scenarios"]["S04"] == "PASS"
                     else "FAIL"
                 )
-                if (workspace / "result-anomalies.csv").is_file():
-                    target = Path("docs/evidence/e2e/cross-module-b47-b56")
-                    (target / "result-anomalies.csv").write_bytes(
-                        (workspace / "result-anomalies.csv").read_bytes()
-                    )
-                    (target / "result.xlsx").write_bytes((workspace / "result.xlsx").read_bytes())
-                    (target / "upload-shipment.xlsx").write_bytes(original_bytes)
-                persist(evidence["verdict"])
-            except Exception as exc:
-                evidence["error"] = f"{type(exc).__name__}: {exc}"
-                persist("exception")
-                raise
+                anomaly_file = result_file.with_name(result_file.stem + "-anomalies.csv")
+                if anomaly_file.is_file():
+                    (evidence_dir / "result-anomalies.csv").write_bytes(anomaly_file.read_bytes())
+                    (evidence_dir / "result.xlsx").write_bytes(result_file.read_bytes())
+                    (evidence_dir / "upload-shipment.xlsx").write_bytes(original_bytes)
+                with factory() as other_db, tenant_scope(2):
+                    assert str(other_db.query(Product).one().price) == "88.00"
+            finally:
+                failure = sys.exception()
+                if failure is not None:
+                    evidence["error"] = f"{type(failure).__name__}: {failure}"
+                persist("exception" if failure is not None else evidence["verdict"])
     finally:
         set_task_execution_repository_for_tests(None)
         set_agent_run_repository_for_tests(None)

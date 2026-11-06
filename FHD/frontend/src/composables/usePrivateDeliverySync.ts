@@ -40,8 +40,8 @@ export function usePrivateDeliverySync() {
     return root.dataset.startupReady !== 'true'
   }
 
-  function syncWhenShellReady() {
-    if (!shellStillStarting()) return sync()
+  function syncWhenShellReady(): void {
+    if (!shellStillStarting()) { void sync(); return }
     if (waitingForShell || typeof window === 'undefined') return
     waitingForShell = true
     window.addEventListener('xcagi:startup-ready', () => {
@@ -50,7 +50,7 @@ export function usePrivateDeliverySync() {
     }, { once: true })
   }
 
-  async function sync() {
+  async function sync(): Promise<void> {
     if (shellStillStarting()) return syncWhenShellReady()
     if (!active() || controller || navigator.onLine === false) return
     const current = generation

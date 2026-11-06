@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -61,11 +62,15 @@ _CONFIRM = re.compile(r"^(确认|取消|好的|可以|同意|拒绝)[。.!！]?$
 
 
 def conversation_key(context: Mapping[str, Any] | None) -> str:
-    raw = ""
-    if context:
-        raw = str(context.get("conversation_id") or context.get("session_id") or "")
-    cleaned = re.sub(r"[^0-9A-Za-z_\-]", "", raw)[:80]
-    return cleaned or "default"
+    from app.application.task_conversation_store import durable_user_id
+
+    context = context or {}
+    raw = str(context.get("conversation_id") or context.get("session_id") or "").strip()
+    owner = durable_user_id(context.get("local_user_id") or context.get("actor_id"))
+    if owner is None or not raw:
+        return ""
+    scope = [str(owner), str(context.get("tenant_id") or ""), str(context.get("mod_id") or ""), raw]
+    return hashlib.sha256(json.dumps(scope, ensure_ascii=False).encode()).hexdigest()
 
 
 def set_dialogue_complete(complete: Complete | None) -> None:
@@ -94,6 +99,8 @@ def should_answer_as_dialogue(message: str, context: Mapping[str, Any] | None) -
 def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[str, Any] | None:
     """同一轮重复提交不再执行。进行中的轮次不会被另一条消息覆盖。"""
     key = conversation_key(context)
+    if not key:
+        return None
     turn_id = str((context or {}).get("turn_id") or "").strip()
     text = str(message or "").strip()
     with _lock(key):
@@ -139,6 +146,8 @@ def settle_chat_turn(
     status: str,
 ) -> None:
     key = conversation_key(context)
+    if not key:
+        return
     turn_id = str((context or {}).get("turn_id") or "").strip()
     text = str(message or "").strip()
     reply = ""
@@ -182,8 +191,7 @@ async def dialogue_reply(message: str, context: Mapping[str, Any] | None) -> dic
     text = str(message or "").strip()
     if not should_answer_as_dialogue(text, context):
         return None
-    loaded = _read(conversation_key(context))
-    messages = _model_messages(loaded, str((context or {}).get("turn_id") or ""))
+    messages = _request_messages(text, context)
     try:
         reply = await _invoke_complete(messages)
         revise = (
@@ -203,6 +211,37 @@ async def dialogue_reply(message: str, context: Mapping[str, Any] | None) -> dic
     except RECOVERABLE_ERRORS as exc:
         return _payload(f"模型没有完成回复：{exc}", "failed", context)
     return _payload(str(reply or "").strip(), "completed", context)
+
+
+def _request_messages(text: str, context: Mapping[str, Any] | None) -> list[dict[str, str]]:
+    key = conversation_key(context)
+    loaded = _read(key) if key else {"turns": []}
+    if not key:
+        _append_user(loaded, text, "", context)
+    return _model_messages(loaded, str((context or {}).get("turn_id") or ""))
+
+
+def enrich_model_messages(
+    messages: list[dict[str, Any]],
+    message: str,
+    context: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Add owned transcript to the existing model turn without replacing its execution chain."""
+    if not conversation_key(context) or not should_answer_as_dialogue(message, context):
+        return messages
+    memory = _request_messages(message, context)
+    # The current model message may contain images or tool protocol fields; preserve it.
+    history = memory[1:]
+    if history and history[-1].get("content") == message.strip():
+        history = history[:-1]
+    if not history:
+        return messages
+    return [
+        *messages[:-1],
+        {"role": "system", "content": memory[0]["content"]},
+        *history,
+        messages[-1],
+    ]
 
 
 def _model_messages(data: Mapping[str, Any], turn_id: str) -> list[dict[str, str]]:
@@ -269,7 +308,7 @@ async def _desktop_complete(messages: Sequence[Mapping[str, str]]) -> str:
 
         def call() -> str:
             result = client.chat.completions.create(
-                messages=list(messages),
+                messages=[dict(item) for item in messages],
                 model=model,
                 temperature=0,
                 max_tokens=1500,
@@ -279,7 +318,9 @@ async def _desktop_complete(messages: Sequence[Mapping[str, str]]) -> str:
         return await asyncio.to_thread(call)
     from app.mod_sdk.mod_employee_llm import mod_employee_complete
 
-    parsed = await mod_employee_complete(list(messages), max_tokens=1500, temperature=0)
+    parsed = await mod_employee_complete(
+        [dict(item) for item in messages], max_tokens=1500, temperature=0
+    )
     if not parsed.get("success"):
         raise RuntimeError(str(parsed.get("error") or "模型没有返回"))
     return str(parsed.get("content") or "")
@@ -336,7 +377,7 @@ def _public_payload(payload: Mapping[str, Any] | None, status: str) -> dict[str,
         data = copied.get("data")
         if isinstance(data, dict):
             data["status"] = status
-        return copied
+        return dict(copied)
     return _payload(str((payload or {}).get("response") or ""), status)
 
 
@@ -399,7 +440,7 @@ def _user_turn(data: dict[str, Any], turn_id: str) -> dict[str, Any] | None:
         return None
     for item in data.get("turns") or []:
         if item.get("role") == "user" and item.get("turn_id") == turn_id:
-            return item
+            return dict(item)
     receipt = (data.get("receipts") or {}).get(turn_id)
     if isinstance(receipt, dict):
         return {"role": "user", "content": receipt.get("message"), "turn_id": turn_id}
@@ -411,7 +452,7 @@ def _assistant_for(data: dict[str, Any], turn_id: str) -> dict[str, Any] | None:
         return None
     for item in data.get("turns") or []:
         if item.get("role") == "assistant" and item.get("turn_id") == turn_id:
-            return item
+            return dict(item)
     receipt = (data.get("receipts") or {}).get(turn_id)
     if isinstance(receipt, dict) and receipt.get("status") in {
         "completed",
@@ -448,7 +489,11 @@ def _read(key: str) -> dict[str, Any]:
         return {"active": False, "turns": [], "receipts": {}}
     if not isinstance(data, dict):
         return {"active": False, "turns": [], "receipts": {}}
-    turns = data.get("turns") if isinstance(data.get("turns"), list) else []
+    turns = (
+        [item for item in data.get("turns", []) if isinstance(item, dict)]
+        if isinstance(data.get("turns"), list)
+        else []
+    )
     receipts = data.get("receipts") if isinstance(data.get("receipts"), dict) else {}
     return {"active": bool(data.get("active")), "turns": turns, "receipts": receipts}
 

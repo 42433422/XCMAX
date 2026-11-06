@@ -10,7 +10,7 @@ import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/u
 import { isDesktopShell } from '@/utils/desktopShell'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useRoute, useRouter } from 'vue-router'
@@ -36,6 +36,15 @@ const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
 const currentRoute = useRoute()
 const router = useRouter()
 const scrollMemory = new Map()
+const removeScrollGuards = []
+let scrollActive = true, scrollGeneration = 0, scrollFrame, scrollTimer
+function cancelScrollRestore() {
+  scrollGeneration++
+  if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
+  if (scrollTimer !== undefined) clearTimeout(scrollTimer)
+  scrollFrame = scrollTimer = undefined
+}
+watch(cacheScope, () => { cancelScrollRestore(); scrollMemory.clear() })
 function scrollSignature(el) {
   return `${el.id || ''}::${el.className || ''}`
 }
@@ -58,13 +67,33 @@ function restoreRouteScroll(fullPath) {
   }
 }
 onMounted(() => {
-  router.beforeEach((to, from) => { rememberRouteScroll(from.fullPath) })
-  router.afterEach((to) => {
-    nextTick(() => restoreRouteScroll(to.fullPath)).then(() => {
-      requestAnimationFrame(() => restoreRouteScroll(to.fullPath))
-      setTimeout(() => restoreRouteScroll(to.fullPath), 60)
-    })
-  })
+  removeScrollGuards.push(
+    router.beforeEach((to, from) => {
+      if (!scrollActive) return
+      cancelScrollRestore()
+      rememberRouteScroll(from.fullPath)
+    }),
+    router.afterEach((to, from, failure) => {
+      if (failure || !scrollActive) return
+      cancelScrollRestore()
+      const generation = scrollGeneration, scope = cacheScope.value
+      const current = () => scrollActive && generation === scrollGeneration &&
+        currentRoute.fullPath === to.fullPath && cacheScope.value === scope
+      const restore = () => { if (current()) restoreRouteScroll(to.fullPath) }
+      nextTick(() => {
+        if (!current()) return
+        restore()
+        scrollFrame = requestAnimationFrame(() => { scrollFrame = undefined; restore() })
+        scrollTimer = setTimeout(() => { scrollTimer = undefined; restore() }, 60)
+      })
+    }),
+  )
+})
+onBeforeUnmount(() => {
+  scrollActive = false
+  cancelScrollRestore()
+  for (const remove of removeScrollGuards) remove()
+  scrollMemory.clear()
 })
 const routeReadinessHandlers = computed(() => {
   const path = currentRoute.fullPath, scope = cacheScope.value
