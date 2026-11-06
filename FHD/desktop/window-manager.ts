@@ -19,7 +19,7 @@ import {
   waitForBackendStatus,
   writeBackendLog,
 } from './backend-process'
-import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
+import { DESKTOP_MIN_HEIGHT, DESKTOP_MIN_WIDTH, clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { checkPendingRollback } from './rollback'
 import { configureUpdater } from './updater'
 import { configureDesktopDownloads } from './desktop-downloads'
@@ -142,8 +142,8 @@ function ensureMacWindowInWorkArea(win: BrowserWindow): void {
   if (process.platform !== 'darwin') return
   const bounds = win.getBounds()
   const work = screen.getDisplayMatching(bounds).workArea
-  const minW = 1180
-  const minH = 760
+  const minW = DESKTOP_MIN_WIDTH
+  const minH = DESKTOP_MIN_HEIGHT
   let { x, y, width, height } = bounds
   if (width < minW) width = Math.min(minW, work.width)
   if (height < minH) height = Math.min(minH, work.height)
@@ -207,8 +207,8 @@ export async function createWindow(): Promise<void> {
   const initialBounds = clampWindowBounds(savedBounds, display.workArea)
   const winOpts: Electron.BrowserWindowConstructorOptions = {
     ...initialBounds,
-    minWidth: 1180,
-    minHeight: 760,
+    minWidth: DESKTOP_MIN_WIDTH,
+    minHeight: DESKTOP_MIN_HEIGHT,
     title: APP_NAME,
     autoHideMenuBar: process.platform !== 'darwin',
     // Avoid exposing an empty native surface before the local splash has painted.

@@ -10,10 +10,10 @@ import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/u
 import { isDesktopShell } from '@/utils/desktopShell'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const viewPending = ref(false)
 const { hideChrome, appReady, startupVisible, startupError, startupStage, retryStartup, cancelStartup, isAdminConsoleSpa } = useAppBoot(viewPending)
@@ -22,12 +22,50 @@ watch([startupVisible, startupError], async ([visible]) => {
   if (visible) { await nextTick(); startupPanel.value?.focus() }
 }, { immediate: true })
 const reloadStartup = () => window.location.reload()
+watch(routeChunkErrorPath, (path) => {
+  if (path) startupVisible.value = false
+}, { immediate: true })
+watch(startupVisible, (visible) => {
+  if (visible && routeChunkErrorPath.value) startupVisible.value = false
+})
 usePrivateDeliverySync()
 const account = useAccountProfileStore()
 // Identity only. Profile refreshes after idle must not drop every cached page.
 const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
   account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId]))
 const currentRoute = useRoute()
+const router = useRouter()
+const scrollMemory = new Map()
+function scrollSignature(el) {
+  return `${el.id || ''}::${el.className || ''}`
+}
+function rememberRouteScroll(fullPath) {
+  const root = document.querySelector('.route-view-shell')
+  if (!root) return
+  const items = [root, ...root.querySelectorAll('*')]
+    .filter((el) => el.scrollHeight > el.clientHeight + 40 && el.clientHeight > 40 && el.scrollTop > 0)
+    .map((el) => ({ sig: scrollSignature(el), top: el.scrollTop }))
+  if (items.length) scrollMemory.set(fullPath, items)
+}
+function restoreRouteScroll(fullPath) {
+  const items = scrollMemory.get(fullPath)
+  const root = document.querySelector('.route-view-shell')
+  if (!items?.length || !root) return
+  const nodes = [root, ...root.querySelectorAll('*')]
+  for (const item of items) {
+    const el = nodes.find((node) => scrollSignature(node) === item.sig)
+    if (el) el.scrollTop = item.top
+  }
+}
+onMounted(() => {
+  router.beforeEach((to, from) => { rememberRouteScroll(from.fullPath) })
+  router.afterEach((to) => {
+    nextTick(() => restoreRouteScroll(to.fullPath)).then(() => {
+      requestAnimationFrame(() => restoreRouteScroll(to.fullPath))
+      setTimeout(() => restoreRouteScroll(to.fullPath), 60)
+    })
+  })
+})
 const routeReadinessHandlers = computed(() => {
   const path = currentRoute.fullPath, scope = cacheScope.value
   const current = () => path === currentRoute.fullPath && scope === cacheScope.value

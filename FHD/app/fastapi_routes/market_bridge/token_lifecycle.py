@@ -1,5 +1,6 @@
 """One access-token validation state machine with explicit fast-probe policy."""
 
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from logging import Logger
@@ -10,6 +11,11 @@ from fastapi.responses import JSONResponse
 
 from app.application.market_bridge.protocols import LatestToken, ProxyJSON, SaveToken
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+# A successful fast probe is enough for the next navigation. Repeating the
+# market round-trip on every reload is what keeps the desktop splash up.
+_FAST_OK_TTL_S = 45.0
+_fast_ok_until: dict[str, tuple[str, float]] = {}
 
 
 @dataclass
@@ -76,6 +82,10 @@ class TokenLifecycle:
             token = self.normalize(self.latest_token(user_id=owner))
         if not token or self.is_demo(token):
             return token
+        if fast:
+            cached = _fast_ok_until.get(sid)
+            if cached and cached[0] == token and cached[1] > time.monotonic():
+                return token
         try:
             if fast:
                 # The proxy's legacy retries argument is an attempt budget.
@@ -111,6 +121,7 @@ class TokenLifecycle:
             return token
         if isinstance(response, dict) and response.get("__proxy_error__"):
             if self.proxy_status(response) == 401:
+                _fast_ok_until.pop(sid, None)
                 return self.normalize(await self.refresh_session(sid))
             if not fast:
                 self.logger.warning(
@@ -121,5 +132,8 @@ class TokenLifecycle:
         if isinstance(response, dict) and (
             response.get("ok") is False or response.get("success") is False
         ):
+            _fast_ok_until.pop(sid, None)
             return self.normalize(await self.refresh_session(sid))
+        if fast:
+            _fast_ok_until[sid] = (token, time.monotonic() + _FAST_OK_TTL_S)
         return token

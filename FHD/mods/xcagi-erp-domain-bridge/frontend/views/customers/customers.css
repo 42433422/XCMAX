@@ -39,6 +39,19 @@
   height: 32px;
 }
 
+.customers-load-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #f5c2c7;
+  border-radius: 8px;
+  background: #fff5f5;
+  color: #842029;
+}
+
 .customers-header-actions {
   flex-shrink: 0;
   align-self: flex-start;

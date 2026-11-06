@@ -2,6 +2,9 @@ import fs from 'node:fs'
 
 export type WindowBounds = { x: number; y: number; width: number; height: number }
 
+export const DESKTOP_MIN_WIDTH = 800
+export const DESKTOP_MIN_HEIGHT = 640
+
 export const DEFAULT_WINDOW_BOUNDS: WindowBounds = {
   x: 80,
   y: 60,
@@ -32,7 +35,7 @@ export function readWindowState(filePath: string): WindowBounds | null {
 export function clampWindowBounds(
   saved: WindowBounds | null,
   workArea: WindowBounds,
-  minimum = { width: 1180, height: 760 },
+  minimum = { width: DESKTOP_MIN_WIDTH, height: DESKTOP_MIN_HEIGHT },
 ): WindowBounds {
   const source = saved || DEFAULT_WINDOW_BOUNDS
   const width = Math.min(Math.max(source.width, minimum.width), workArea.width)

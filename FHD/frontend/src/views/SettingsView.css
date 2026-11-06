@@ -16,6 +16,8 @@
 .settings-page__scroll {
   padding: 0;
   background: var(--settings-bg);
+  container-type: inline-size;
+  container-name: settings;
 }
 
 .settings-layout {
@@ -485,6 +487,31 @@
   font-weight: 500;
   color: #1a1a1a;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container settings (max-width: 720px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    max-width: none;
+  }
+
+  .settings-profile {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 12px 16px;
+    text-align: left;
+  }
+
+  .settings-profile__actions,
+  .settings-profile__btn {
+    width: auto;
+  }
 }
 
 .settings-row__meta {

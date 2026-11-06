@@ -27,6 +27,8 @@ vi.mock('./desktop-config', () => ({
   shouldClearFrontendCache: vi.fn(() => false),
 }))
 vi.mock('./window-state', () => ({
+  DESKTOP_MIN_WIDTH: 800,
+  DESKTOP_MIN_HEIGHT: 640,
   clampWindowBounds: vi.fn((b: unknown) => b),
   readWindowState: vi.fn(() => null),
   writeWindowState: vi.fn(),
