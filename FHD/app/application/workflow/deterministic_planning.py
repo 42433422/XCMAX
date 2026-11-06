@@ -30,6 +30,13 @@ def _route_by_intent_service(message: str, tool_registry: dict[str, Any]):
 
     识别失败/异常一律返回 None（fail-safe 交给 clarify，绝不回退 products.query）。
     """
+    from app.application.ai_chat.dialogue_arbitration import (
+        is_client_version_question,
+        is_dialogue_fact_message,
+    )
+
+    if is_dialogue_fact_message(message) or is_client_version_question(message):
+        return None
     try:
         # 延迟 import：intent_service 依赖链较重，且避免模块级 application↔services 环。
         from app.domain.shared_services.intent_service import recognize_intents

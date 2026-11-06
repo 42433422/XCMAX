@@ -92,7 +92,10 @@ def should_answer_as_dialogue(message: str, context: Mapping[str, Any] | None) -
         if not _NARRATIVE_STOCK.search(text):
             return False
     if _ERP_COMMAND.search(text) and not _HYPOTHETICAL.search(text):
-        return False
+        from app.application.ai_chat.dialogue_arbitration import is_dialogue_fact_message
+
+        if not is_dialogue_fact_message(text):
+            return False
     return True
 
 

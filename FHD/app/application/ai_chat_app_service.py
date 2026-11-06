@@ -389,13 +389,23 @@ class AIChatApplicationService(
                 )
             )
         self._handle_confirmation_flow(user_id, message, file_context)
-        workflow_result = self._try_handle_dynamic_workflow(
-            user_id=user_id,
-            message=message,
-            source=source,
-            context=ctx,
-            file_context=file_context or {},
+        from app.application.ai_chat.dialogue_arbitration import (
+            is_client_version_question,
+            is_dialogue_fact_message,
         )
+
+        # Spoken facts and client-version questions are not ERP workflows.
+        # An empty customer database must not replace numbers said in chat.
+        if is_dialogue_fact_message(message) or is_client_version_question(message):
+            workflow_result = None
+        else:
+            workflow_result = self._try_handle_dynamic_workflow(
+                user_id=user_id,
+                message=message,
+                source=source,
+                context=ctx,
+                file_context=file_context or {},
+            )
         if workflow_result is not None:
             return _finalize(workflow_result)
         multimodal_result = self._try_handle_multimodal_chat(

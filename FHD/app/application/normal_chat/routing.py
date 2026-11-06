@@ -8,6 +8,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from app.application.ai_chat.dialogue_arbitration import (
+    is_client_version_question,
+    is_dialogue_fact_message,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _MAX_ROUTING_MESSAGE_CHARS = 4096
@@ -179,8 +183,13 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     template_preview = bool(
         re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
     )
-    if ports.is_negated_action(text) or re.search(
-        r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text
+    if is_client_version_question(text):
+        return {"intent": "unknown", "slots": {}}
+    if not is_dialogue_fact_message(text) and (
+        ports.is_negated_action(text)
+        or re.search(
+            r"(?:不要|别|禁止|不准)[^，,。；;]{0,30}(?:出货|发货|送货)", text
+        )
     ):
         return {"intent": "unknown", "slots": {}}
     if re.search(r"(?:出货|发货)(?:记录|历史|列表|查询|明细)", text):
@@ -204,6 +213,8 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
             "action": "execute_closed_loop",
             "payload": sales_write_payload,
         }
+    if is_dialogue_fact_message(text):
+        return {"intent": "dialogue_fact", "slots": {}}
     query_keywords = ("查询", "查一下", "查下", "查", "看看", "看下", "搜索", "找下", "找", "检索")
     m_model = re.search(r"(?:型号|编号)\s*(?:[:：]\s*)?([0-9A-Za-z-]{2,})", text)
     model_signal = bool(m_model)
