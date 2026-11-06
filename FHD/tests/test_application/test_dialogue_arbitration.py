@@ -52,6 +52,18 @@ def test_desktop_version_question_is_not_a_product_lookup() -> None:
     assert route_normal_mode_message(text)["intent"] == "unknown"
 
 
+def test_read_only_customer_database_query_is_not_a_mutation_workflow() -> None:
+    from app.domain.conversation.services.chat_tool_intent import (
+        looks_like_explicit_workflow_tool_intent,
+    )
+
+    text = "请只读查询企业客户库，不要修改数据。"
+    assert looks_like_explicit_workflow_tool_intent(text) is False
+    assert looks_like_explicit_workflow_tool_intent("修改客户资料") is True
+    assert looks_like_explicit_workflow_tool_intent("查数据库里的客户") is True
+    assert route_normal_mode_message(text)["intent"] == "customers_query"
+
+
 def test_operational_customer_lookup_still_skips_dialogue_memory() -> None:
     assert (
         should_answer_as_dialogue("查一下客户", {"local_user_id": 1, "conversation_id": "c"})
