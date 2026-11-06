@@ -48,6 +48,10 @@ class InMemoryTaskExecutionRepository:
                     tenant_id=tenant_id_of_run(run),
                     created_at=now,
                 )
+            from app.domain.task_lifecycle.adapters import execution_requeue_allowed
+
+            if row.state != "claimed" and not execution_requeue_allowed(row.state):
+                return copy.deepcopy(row)
             if row.state != "claimed":
                 row.state = "queued"
                 row.lease_owner = ""
@@ -101,17 +105,29 @@ class InMemoryTaskExecutionRepository:
             eligible.sort(
                 key=lambda row: (row.priority, row.available_at, row.created_at, row.run_id)
             )
-            row = eligible[0]
-            recovered = row.state == "claimed"
-            row.state = "claimed"
-            row.lease_owner = str(owner_id or "")
-            row.lease_expires_at = _deadline(current, lease_seconds)
-            row.heartbeat_at = current
-            row.execution_count += 1
-            row.recovery_count += int(recovered)
-            row.updated_at = current
-            self._rows[row.run_id] = copy.deepcopy(row)
-            return copy.deepcopy(row)
+            from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
+
+            for row in eligible:
+                recovered = row.state == "claimed"
+                if recovered and row.execution_count + 1 > DEFAULT_MAX_ATTEMPTS:
+                    row.state = "failed"
+                    row.lease_owner = ""
+                    row.lease_expires_at = ""
+                    row.last_error_code = "retries_exhausted"
+                    row.finished_at = current
+                    row.updated_at = current
+                    self._rows[row.run_id] = copy.deepcopy(row)
+                    continue
+                row.state = "claimed"
+                row.lease_owner = str(owner_id or "")
+                row.lease_expires_at = _deadline(current, lease_seconds)
+                row.heartbeat_at = current
+                row.execution_count += 1
+                row.recovery_count += int(recovered)
+                row.updated_at = current
+                self._rows[row.run_id] = copy.deepcopy(row)
+                return copy.deepcopy(row)
+            return None
 
     def heartbeat(
         self,
@@ -176,7 +192,11 @@ class InMemoryTaskExecutionRepository:
         state: str,
         *,
         error_code: str,
-    ) -> AgentTaskExecution:
+    ) -> AgentTaskExecution | None:
+        from app.domain.task_lifecycle.adapters import execution_transition_allowed
+
+        if not execution_transition_allowed(row.state, str(state)):
+            return None
         now = utc_now_iso()
         row.state = cast(ExecutionState, str(state))
         row.lease_owner = ""

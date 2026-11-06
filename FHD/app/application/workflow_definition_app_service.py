@@ -366,12 +366,18 @@ class WorkflowDefinitionAppService:
                     message=f"工作流运行不存在: {run_id}",
                     status_code=404,
                 )
-            terminal = {
-                WorkflowRunStatus.SUCCEEDED.value,
-                WorkflowRunStatus.FAILED.value,
-                WorkflowRunStatus.CANCELLED.value,
-            }
-            if run.status in terminal:
+            from app.domain.task_lifecycle.adapters import (
+                LegacyTransitionError,
+                legacy_transition_allowed,
+            )
+
+            try:
+                allowed = legacy_transition_allowed(
+                    "workflow", run.status, WorkflowRunStatus.CANCELLED.value
+                )
+            except LegacyTransitionError:
+                allowed = False
+            if run.status == WorkflowRunStatus.CANCELLED.value or not allowed:
                 raise WorkflowError(
                     message=f"运行已处于终态，无法取消: {run.status}",
                     status_code=409,

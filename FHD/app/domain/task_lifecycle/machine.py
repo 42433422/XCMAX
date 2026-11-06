@@ -40,7 +40,7 @@ NON_RETRYABLE_CODES = frozenset(
     }
 )
 
-# Delay(n) = min(1 * 2^(n-1), 30), n starts at 1. Jitter is applied by the ledger.
+# Delay(n) = min(1 * 2^(n-1), 30), n starts at 1. Callers apply jitter.
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_MAX_WAIT_SECONDS = 30.0
 

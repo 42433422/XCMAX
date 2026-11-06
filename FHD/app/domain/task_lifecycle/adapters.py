@@ -37,7 +37,6 @@ _LEGACY: dict[str, dict[str, str]] = {
         "rejected": "rejected",
     },
     "employee": {
-        "unknown": "created",
         "pending": "queued",
         "accepted": "queued",
         "running": "running",
@@ -46,6 +45,8 @@ _LEGACY: dict[str, dict[str, str]] = {
         "success": "succeeded",
         "succeeded": "succeeded",
         "completed": "succeeded",
+        # Unverified employee results stay non-success. They are not a retry.
+        "unknown": "failed",
         "failed": "failed",
         "timed_out": "timed_out",
         "cancelled": "cancelled",
@@ -93,6 +94,48 @@ def legacy_transition_allowed(
     if current_state == target_state:
         return True
     return transition_allowed(current_state, target_state, retryable=retryable)
+
+
+_EXECUTION = {
+    "queued": "queued",
+    "claimed": "running",
+    "running": "running",
+    "paused": "waiting_approval",
+    "blocked": "waiting_approval",
+    "waiting_approval": "waiting_approval",
+    "completed": "succeeded",
+    "succeeded": "succeeded",
+    "failed": "failed",
+    "timed_out": "timed_out",
+    "cancelled": "cancelled",
+    "rejected": "rejected",
+}
+
+
+def execution_transition_allowed(
+    current: str,
+    target: str,
+    *,
+    retryable: bool = False,
+) -> bool:
+    """Scheduler queue words mapped onto the canonical machine before a write."""
+    if current == target:
+        return True
+    current_state = _EXECUTION.get(str(current or ""))
+    target_state = _EXECUTION.get(str(target or ""))
+    if current_state is None or target_state is None:
+        return False
+    if current_state == target_state:
+        return True
+    return transition_allowed(current_state, target_state, retryable=retryable)
+
+
+def execution_requeue_allowed(current: str, *, retryable: bool = False) -> bool:
+    """Enqueue may reopen only a legal non-terminal queue state."""
+    state = str(current or "queued")
+    if state == "queued":
+        return True
+    return execution_transition_allowed(state, "queued", retryable=retryable)
 
 
 def assert_legacy_transition(

@@ -67,12 +67,17 @@ class SQLAlchemyTaskExecutionRepository:
                 updated_at=now,
             )
             db.add(record)
-        elif record.state != "claimed":
-            record.state = "queued"
-            record.lease_owner = None
-            record.lease_expires_at = None
-            record.heartbeat_at = None
-            record.finished_at = None
+        else:
+            from app.domain.task_lifecycle.adapters import execution_requeue_allowed
+
+            if record.state != "claimed" and not execution_requeue_allowed(str(record.state)):
+                return
+            if record.state != "claimed":
+                record.state = "queued"
+                record.lease_owner = None
+                record.lease_expires_at = None
+                record.heartbeat_at = None
+                record.finished_at = None
         record.priority = int(priority)
         record.available_at = now
         record.requested_by = str(requested_by or "") or None
@@ -137,6 +142,24 @@ class SQLAlchemyTaskExecutionRepository:
             )
             for candidate in candidates:
                 recovered = candidate.state == "claimed"
+                from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
+
+                if recovered and int(candidate.execution_count or 0) + 1 > DEFAULT_MAX_ATTEMPTS:
+                    db.query(AgentTaskExecutionRecord).filter(
+                        AgentTaskExecutionRecord.run_id == candidate.run_id,
+                        AgentTaskExecutionRecord.state == "claimed",
+                    ).update(
+                        {
+                            AgentTaskExecutionRecord.state: "failed",
+                            AgentTaskExecutionRecord.lease_owner: None,
+                            AgentTaskExecutionRecord.lease_expires_at: None,
+                            AgentTaskExecutionRecord.last_error_code: "retries_exhausted",
+                            AgentTaskExecutionRecord.finished_at: current,
+                            AgentTaskExecutionRecord.updated_at: current,
+                        },
+                        synchronize_session=False,
+                    )
+                    continue
                 updated = (
                     db.query(AgentTaskExecutionRecord)
                     .filter(
@@ -242,6 +265,17 @@ class SQLAlchemyTaskExecutionRepository:
         now = utc_now_iso()
         with self._session_scope() as db:
             from app.db.models.agent import AgentTaskExecutionRecord
+            from app.domain.task_lifecycle.adapters import execution_transition_allowed
+
+            existing = (
+                db.query(AgentTaskExecutionRecord)
+                .filter(AgentTaskExecutionRecord.run_id == str(run_id or ""))
+                .one_or_none()
+            )
+            if existing is None or not execution_transition_allowed(
+                str(existing.state), str(state)
+            ):
+                return None
 
             query = db.query(AgentTaskExecutionRecord).filter(
                 AgentTaskExecutionRecord.run_id == str(run_id or "")

@@ -9,6 +9,11 @@ from typing import Any
 
 from app.db.models.employee_run_log import EmployeeRunLog
 from app.db.session import get_db
+from app.domain.task_lifecycle.adapters import (
+    LegacyTransitionError,
+    assert_legacy_transition,
+    canonicalize,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +58,18 @@ def finish_employee_run_log(
         row = db.get(EmployeeRunLog, int(run_id))
         if row is None or row.tenant_id != tenant_id:
             return
-        row.status = str(status or "failed")[:32]
+        current = row.status or "running"
+        target = str(status or "failed")
+        try:
+            assert_legacy_transition("employee", current, target)
+        except LegacyTransitionError as exc:
+            raise ValueError(str(exc)) from exc
+        if (
+            canonicalize("employee", current) == canonicalize("employee", target)
+            and current != "running"
+        ):
+            return
+        row.status = target[:32]
         row.output_json = json.dumps(output or {}, ensure_ascii=False)
         row.error_text = str(error or "")[:4000]
         row.attempts = max(1, int(attempts))

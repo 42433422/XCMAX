@@ -2,10 +2,11 @@
 
 from app.domain.task_lifecycle.adapters import (
     assert_legacy_transition,
+    execution_transition_allowed,
     legacy_transition_allowed,
 )
-from app.domain.task_lifecycle.ledger import TaskLedger, TaskLifecycleError
 from app.domain.task_lifecycle.machine import (
+    DEFAULT_MAX_ATTEMPTS,
     STATES,
     TERMINAL,
     retry_delay_seconds,
@@ -13,11 +14,11 @@ from app.domain.task_lifecycle.machine import (
 )
 
 __all__ = [
+    "DEFAULT_MAX_ATTEMPTS",
     "STATES",
     "TERMINAL",
-    "TaskLedger",
-    "TaskLifecycleError",
     "assert_legacy_transition",
+    "execution_transition_allowed",
     "legacy_transition_allowed",
     "retry_delay_seconds",
     "transition_allowed",

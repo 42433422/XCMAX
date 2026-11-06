@@ -143,6 +143,10 @@ def resume_and_enqueue(
         if not needs_approval:
             queue.enqueue_in_session(db, run, requested_by=principal_id)
         elif execution is not None:
+            from app.domain.task_lifecycle.adapters import execution_transition_allowed
+
+            if not execution_transition_allowed(str(execution.state), "paused"):
+                raise ApprovalGrantError("任务队列已结束，不能改回暂停")
             execution.state = "paused"
             execution.updated_at = now
     return run

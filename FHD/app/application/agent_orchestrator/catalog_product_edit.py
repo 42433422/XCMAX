@@ -747,6 +747,12 @@ def prepare_preclaim_finalization(principal, claim, revision, *, payload=None):
             or queue.state not in {"queued", "claimed", "failed", "cancelled", "blocked"}
         ):
             raise ValueError("original dispatch authority unavailable")
+        from app.domain.task_lifecycle.adapters import execution_transition_allowed
+
+        if queue.state != "cancelled" and not execution_transition_allowed(
+            str(queue.state), "cancelled"
+        ):
+            raise ValueError("queue terminal cannot be rewritten")
         now = utc_now_iso()
         queue.state = "cancelled"
         queue.lease_owner = queue.lease_expires_at = queue.heartbeat_at = None
