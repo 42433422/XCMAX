@@ -35,6 +35,21 @@ from app.infrastructure.tenant_scope import tenant_scope
 from app.mod_sdk.catalog_product_store import TOOL, encoded, factory_for, proof, reviewed_params
 
 _claim_admission = ContextVar("catalog_source_claim_admission", default=None)
+_PRECLAIM_CANCEL_STATES = frozenset(
+    {
+        "queued",
+        "running",
+        "claimed",
+        "waiting_approval",
+        "paused",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "succeeded",
+        "completed",
+    }
+)
 
 
 def _execution_owner():
@@ -744,20 +759,7 @@ def prepare_preclaim_finalization(principal, claim, revision, *, payload=None):
             or queue.user_id != run.user_id
             or queue.tenant_id != claim["binding"]["tenant_id"]
             or queue.task_id != _task_id_of(run)
-            or queue.state
-            not in {
-                "queued",
-                "running",
-                "claimed",
-                "waiting_approval",
-                "paused",
-                "blocked",
-                "failed",
-                "timed_out",
-                "cancelled",
-                "succeeded",
-                "completed",
-            }
+            or queue.state not in _PRECLAIM_CANCEL_STATES
         ):
             raise ValueError("original dispatch authority unavailable")
         from app.domain.task_lifecycle.adapters import execution_transition_allowed

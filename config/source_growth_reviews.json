@@ -24,6 +24,18 @@
       "validation": "Task continuity acceptance coverage for multi-turn handoff, resume, and context restore.",
       "follow_up": "Split resume-token and context-store helpers from task_continuity once the A31-A40 contract is stable.",
       "review_owner": "@42433422"
+    },
+    "FHD/app/application/agent_orchestrator/catalog_product_edit.py": {
+      "base_file": "FHD/app/application/agent_orchestrator/catalog_product_edit.py",
+      "base_blob": "16862597707ab07a7d1691097ef1071e3e37e4d8",
+      "head_blob": "65b106cd2bd2cbd21d2129bfbba002f0607caaf0",
+      "before_lines": 921,
+      "after_lines": 942,
+      "reason": "Preclaim finalization must recognize in-flight and terminal queue states and refuse illegal cancel transitions through execution_transition_allowed.",
+      "boundary": "Only the queue-state guard inside prepare_preclaim_finalization in catalog_product_edit; no new public HTTP routes.",
+      "validation": "Task lifecycle acceptance coverage for preclaim cancel and queue-state transitions.",
+      "follow_up": "Extract preclaim finalization helpers from catalog_product_edit once the queue-state machine is stable.",
+      "review_owner": "@42433422"
     }
   }
 }
