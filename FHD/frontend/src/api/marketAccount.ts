@@ -267,6 +267,21 @@ export async function fetchMarketLlmCatalog(authorization = '', refresh = false)
 }
 
 /** Read a session-owned credential handoff; callers must explicitly commit it after their own lifecycle check. */
+let marketRepairInflight: Promise<boolean> | null = null
+
+/** One refresh when the access token is blank. Failure does not log the enterprise session out. */
+export function repairBlankMarketAccessToken(): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false)
+  if (readCurrentMarketAccessToken()) return Promise.resolve(true)
+  if (!marketRepairInflight) {
+    marketRepairInflight = fetchSessionMarketHandoff()
+      .then((handoff) => persistMarketTokensFromHandoff(handoff))
+      .catch(() => false)
+      .finally(() => { marketRepairInflight = null })
+  }
+  return marketRepairInflight
+}
+
 export async function fetchSessionMarketHandoff(options: { signal?: AbortSignal } = {}): Promise<MarketAuthResult | null> {
   const sessionCurrent = captureAuthSession()
   const current = () => sessionCurrent() && !options.signal?.aborted

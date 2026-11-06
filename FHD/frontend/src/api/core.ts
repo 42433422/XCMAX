@@ -315,6 +315,9 @@ async function requestOnce<T = unknown>(
       if (recovery === 'stop') {
         const expired = classifyTransportFailure({ status: 401, errorCode: 'token_expired' })
         publishStabilityNotice(expired.message)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
+        }
         throw new ApiError(expired.message, 401, { success: false, stability: expired })
       }
 

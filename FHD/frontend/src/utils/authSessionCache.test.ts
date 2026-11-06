@@ -1,11 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   validateEnterpriseSessionCached,
+  canResumeRecentDesktopSession,
   consumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint,
   invalidateEnterpriseSessionCache,
   LS_ENTERPRISE_SESSION_HINT,
   markEnterpriseSessionValid,
+  probeEnterpriseSession,
 } from './authSessionCache'
 
 vi.mock('@/api/auth', () => ({
@@ -115,6 +117,22 @@ describe('authSessionCache', () => {
     else vi.mocked(authApi.validateSession).mockResolvedValue(response)
     await expect(validateEnterpriseSessionCached(true)).resolves.toBe(false)
     expect(hasRecentEnterpriseSessionHint()).toBe(false)
+  })
+
+  it('resumes a persisted desktop session even when the login URL still has an old error', async () => {
+    localStorage.setItem(LS_ENTERPRISE_SESSION_HINT, String(Date.now()))
+    await expect(canResumeRecentDesktopSession(true, true, { error: '用户名或密码错误' })).resolves.toBe(true)
+  })
+
+  it('sends the shell to login when the server says the session is gone, and not on a network miss', async () => {
+    const events: string[] = []
+    window.addEventListener('xcagi:enterprise-session-invalid', () => events.push('invalid'))
+    vi.mocked(authApi.validateSession).mockResolvedValueOnce({ valid: false })
+    await expect(probeEnterpriseSession()).resolves.toBe('invalid')
+    expect(events).toEqual(['invalid'])
+    vi.mocked(authApi.validateSession).mockRejectedValueOnce(new Error('Failed to fetch'))
+    await expect(probeEnterpriseSession()).resolves.toBe('unknown')
+    expect(events).toEqual(['invalid'])
   })
 
   it('coalesces concurrent validation and ignores its result after a new login', async () => {

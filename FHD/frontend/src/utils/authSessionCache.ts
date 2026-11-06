@@ -89,9 +89,25 @@ export async function canResumeRecentDesktopSession(
   isEnterprise: boolean,
   query: Record<string, unknown>,
 ): Promise<boolean> {
-  const error = query.error
-  if (!isDesktop || !isEnterprise || query.oidc || query.oidc_error || (typeof error === 'string' && error.trim())) return false
+  if (!isDesktop || !isEnterprise || query.oidc || query.oidc_error) return false
+  // A stale ?error= on the login URL is not a new credential failure.
   return hasRecentEnterpriseSessionHint() || (await consumeDesktopSessionBootstrapHint())
+}
+
+export type EnterpriseSessionProbe = 'valid' | 'invalid' | 'unknown'
+
+/** Force a server check. Network loss stays unknown and does not look like logout. */
+export async function probeEnterpriseSession(): Promise<EnterpriseSessionProbe> {
+  try {
+    const valid = await validateEnterpriseSessionCached(true)
+    if (valid) return 'valid'
+  } catch {
+    return 'unknown'
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
+  }
+  return 'invalid'
 }
 
 function clearDesktopSessionBootstrapHint(): void {
