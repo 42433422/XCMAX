@@ -76,6 +76,8 @@ def _denial(
     tool_id: str,
     action: str,
     reason: str,
+    event_type: str = "security.tool_permission_denied",
+    execution_state: str = "",
 ) -> dict[str, Any]:
     user_id = str(context.get("user_id") or "")
     task_id = str(context.get("task_id") or context.get("run_id") or "")
@@ -86,12 +88,13 @@ def _denial(
         "task_id": task_id,
         "tenant_id": str(context.get("tenant_id") or ""),
         "action": action,
+        "execution_state": execution_state,
     }
     try:
         from app.utils.logging.audit_logger import audit_log
 
         audit_log(
-            "security.tool_permission_denied",
+            event_type,
             user_id=user_id or None,
             success=False,
             severity="warning",
@@ -245,6 +248,101 @@ def actor_tool_denial(
             reason="permission_check_failed",
         )
     return None
+
+
+def _gate_state(state: str) -> str:
+    from app.domain.task_lifecycle.adapters import (
+        LegacyTransitionError,
+        canonical_execution_state,
+        canonicalize,
+    )
+
+    raw = str(state or "").strip().lower()
+    mapped = canonical_execution_state(raw)
+    if mapped != raw:
+        return mapped
+    try:
+        return canonicalize("agent", raw)
+    except LegacyTransitionError:
+        return mapped
+
+
+def _approval_expired(repository: object, run_id: str) -> bool:
+    from datetime import UTC, datetime
+
+    lifecycle = getattr(repository, "lifecycle", None)
+    if not callable(lifecycle):
+        return False
+    body = lifecycle(run_id)
+    if not isinstance(body, dict):
+        return False
+    started = str(body.get("approval_requested_at") or "")
+    if not started:
+        return False
+    timeout = float(getattr(repository, "_approval_timeout_seconds", 86400.0) or 0)
+    requested = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    if requested.tzinfo is None:
+        requested = requested.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - requested).total_seconds() >= timeout
+
+
+def approval_execution_denial(
+    tool_id: str, action: str, context: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Block a business write while this task is waiting, rejected, or expired.
+
+    Caller-supplied approval_id and approved flags are ignored. A task with no
+    lifecycle row is an ordinary ERP call and is left alone.
+    """
+    ctx = dict(context or {})
+    task_id = str(ctx.get("task_id") or "").strip()
+    if not task_id:
+        return None
+    from app.application.agent_orchestrator.task_execution_repository import (
+        locate_task_execution,
+    )
+
+    repository, row = locate_task_execution(task_id)
+    if repository is None or row is None:
+        return None
+    ctx_tenant = str(ctx.get("tenant_id") or "")
+    row_tenant = str(getattr(row, "tenant_id", "") or "")
+    if ctx_tenant and row_tenant and ctx_tenant != row_tenant:
+        return _denial(
+            "approval_required",
+            "其他租户的审批不能授权本任务",
+            context=ctx,
+            tool_id=str(tool_id or ""),
+            action=str(action or ""),
+            reason="approval_tenant_mismatch",
+            event_type="security.approval_execution_denied",
+            execution_state=str(getattr(row, "state", "") or ""),
+        )
+    state = _gate_state(str(getattr(row, "state", "") or ""))
+    expired = _approval_expired(repository, task_id) or (
+        str(getattr(row, "last_error_code", "") or "") == "approval_timeout"
+    )
+    if state not in {"waiting_approval", "rejected"} and not expired:
+        return None
+    if expired:
+        reason = "approval_expired"
+        message = "审批已过期，已拒绝执行"
+    elif state == "rejected":
+        reason = "approval_rejected"
+        message = "任务已驳回，已拒绝执行"
+    else:
+        reason = "approval_required"
+        message = "任务仍在等待审批，已拒绝执行"
+    return _denial(
+        "approval_required",
+        message,
+        context=ctx,
+        tool_id=str(tool_id or ""),
+        action=str(action or ""),
+        reason=reason,
+        event_type="security.approval_execution_denied",
+        execution_state=state,
+    )
 
 
 def _fingerprint(params: dict[str, Any]) -> str:

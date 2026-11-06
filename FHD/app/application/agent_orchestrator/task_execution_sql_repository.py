@@ -43,6 +43,11 @@ class SQLAlchemyTaskExecutionRepository:
         self._jitter_ratio = jitter_ratio
         self._approval_timeout_seconds = approval_timeout_seconds
         self._rng = rng or random.Random()
+        from app.application.agent_orchestrator.task_execution_repository import (
+            remember_open_repository,
+        )
+
+        remember_open_repository(self)
         self._schema_ready = False
         self._schema_bind: object | None = None
         self._schema_lock = threading.RLock()
