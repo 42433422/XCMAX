@@ -252,6 +252,8 @@ def test_rag_service_answer_fixed_chunks() -> None:
 
 
 def test_is_rag_enabled_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("XCAGI_RAG_ENABLED", raising=False)
+    assert is_rag_enabled() is True
     monkeypatch.setenv("XCAGI_RAG_ENABLED", "true")
     assert is_rag_enabled() is True
     monkeypatch.setenv("XCAGI_RAG_ENABLED", "0")

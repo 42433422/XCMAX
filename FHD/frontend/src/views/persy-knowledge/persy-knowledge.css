@@ -275,6 +275,16 @@
   pointer-events: none;
 }
 
+.graph-empty-actions {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 72px;
+  display: flex;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+
 .graph-hud--stats {
   top: 14px;
   left: 14px;

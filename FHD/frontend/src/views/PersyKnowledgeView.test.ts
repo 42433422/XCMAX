@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   graph: vi.fn(),
   memories: vi.fn(),
   omniscient: vi.fn(),
+  listDatasets: vi.fn(),
   query: vi.fn(),
   queryMemories: vi.fn(),
   confirmMemory: vi.fn(),
@@ -87,6 +88,10 @@ describe('PersyKnowledgeView', () => {
     vi.clearAllMocks()
     const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
     vi.mocked(isAdminConsoleSpa).mockReturnValue(false)
+    mocks.listDatasets.mockResolvedValue({
+      success: true,
+      datasets: { 'persy-knowledge': { document_count: 1, chunk_count: 1 } },
+    })
     mocks.omniscient.mockResolvedValue({
       success: true,
       document_count: 0,

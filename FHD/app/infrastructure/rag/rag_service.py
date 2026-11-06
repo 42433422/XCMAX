@@ -131,15 +131,6 @@ def get_default_embedder() -> Callable[[str], list[float]] | None:
 
 
 def is_rag_enabled() -> bool:
-    """RAG 开关：显式 off 关闭；显式 on 打开；未配置时网页模式默认开、桌面默认关。"""
+    """RAG 开关：显式 off 关闭；未配置或显式 on 都打开（桌面与网页相同）。"""
     raw = str(os.environ.get("XCAGI_RAG_ENABLED", "")).strip().lower()
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    if raw in {"1", "true", "yes", "on", "auto"}:
-        return True
-    try:
-        from app.utils.deployment import is_desktop_mode
-
-        return not bool(is_desktop_mode())
-    except RECOVERABLE_ERRORS:
-        return True
+    return raw not in {"0", "false", "no", "off"}

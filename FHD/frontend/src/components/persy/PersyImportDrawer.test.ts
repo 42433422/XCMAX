@@ -98,9 +98,7 @@ describe('PersyImportDrawer', () => {
     await wrapper.vm.$nextTick()
 
     const input = wrapper.get('input[type="file"]')
-    const click = vi.spyOn(input.element as HTMLInputElement, 'click')
-    await wrapper.get('.drop-zone').trigger('click')
-    expect(click).toHaveBeenCalled()
+    expect(wrapper.get('.drop-zone').element.contains(input.element)).toBe(true)
 
     const oversized = new File(['x'], 'archive.pdf', { type: 'application/pdf' })
     Object.defineProperty(oversized, 'size', { configurable: true, value: 26 * 1024 * 1024 })

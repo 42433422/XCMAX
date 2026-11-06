@@ -15,6 +15,15 @@ import { errorText } from '@/composables/persyKnowledgeFormatters'
 
 export type PersyKnowledgeViewMode = 'graph' | 'memories' | 'cards' | 'sources'
 
+const DATASET_LABELS: Record<string, string> = {
+  'persy-knowledge': '企业知识',
+  'office-docking': '业务文档',
+}
+
+function datasetLabel(id: string): string {
+  return DATASET_LABELS[id] || id
+}
+
 export function usePersyKnowledgeData(options: { viewMode: Ref<PersyKnowledgeViewMode> }) {
   const { viewMode } = options
 
@@ -33,18 +42,24 @@ export function usePersyKnowledgeData(options: { viewMode: Ref<PersyKnowledgeVie
   const loadingMemories = ref(false)
   const pageError = ref('')
 
+  const visibleDatasets = ref<Record<string, KnowledgeBaseStatus>>({})
+  const didChooseInitialDataset = ref(false)
+
   const datasetOptions = computed(() => {
-    const map = omniscient.value?.datasets || {}
+    const map = {
+      ...(omniscient.value?.datasets || {}),
+      ...visibleDatasets.value,
+    }
     const rows = Object.entries(map).map(([id, item]) => ({
       id,
-      label: `${id} · ${Number(item?.document_count || 0)} 文档`,
+      label: `${datasetLabel(id)} · ${Number(item?.document_count || 0)} 文档`,
       docs: Number(item?.document_count || 0),
     }))
-    rows.sort((a, b) => b.docs - a.docs || a.id.localeCompare(b.id))
+    rows.sort((a, b) => b.docs - a.docs || (a.id === PERSY_KNOWLEDGE_DATASET_ID ? -1 : a.id.localeCompare(b.id)))
     if (!rows.some((row) => row.id === PERSY_KNOWLEDGE_DATASET_ID)) {
       rows.unshift({
         id: PERSY_KNOWLEDGE_DATASET_ID,
-        label: `${PERSY_KNOWLEDGE_DATASET_ID} · 0 文档`,
+        label: `${datasetLabel(PERSY_KNOWLEDGE_DATASET_ID)} · 0 文档`,
         docs: 0,
       })
     }
@@ -195,9 +210,31 @@ export function usePersyKnowledgeData(options: { viewMode: Ref<PersyKnowledgeVie
     if (rejected?.status === 'rejected') pageError.value = errorText(rejected.reason)
   }
 
+  async function loadVisibleDatasets(): Promise<void> {
+    try {
+      const listed = await knowledgeBaseApi.listDatasets()
+      visibleDatasets.value = listed.datasets || {}
+    } catch (error) {
+      console.warn('[PersyKnowledge] dataset list failed', error)
+    }
+  }
+
+  function chooseInitialDataset(): void {
+    if (didChooseInitialDataset.value) return
+    didChooseInitialDataset.value = true
+    if (activeDatasetId.value !== PERSY_KNOWLEDGE_DATASET_ID) return
+    const persyDocs = datasetOptions.value.find((item) => item.id === PERSY_KNOWLEDGE_DATASET_ID)?.docs || 0
+    const best = datasetOptions.value.find((item) => item.id !== PERSY_KNOWLEDGE_DATASET_ID && item.docs > persyDocs)
+    if (!best) return
+    activeDatasetId.value = best.id
+    datasetIdInput.value = best.id
+  }
+
   async function refreshAll(): Promise<void> {
     pageError.value = ''
     const epoch = ++refreshEpoch
+    await loadVisibleDatasets()
+    chooseInitialDataset()
     await loadOmniscientOverview()
     if (epoch !== refreshEpoch) return
     const datasetId = activeDatasetId.value
