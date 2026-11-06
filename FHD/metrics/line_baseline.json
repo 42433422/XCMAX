@@ -1,5 +1,5 @@
 {
-  "lines": 2419929,
+  "lines": 2420762,
   "updated": "2026-11-06",
-  "note": "Raise G11 for the new task continuity module and record its source-growth review."
+  "note": "变基到 #3027 后重测工具调用验收的净删除基线"
 }
