@@ -6,6 +6,7 @@ live role permissions, and an employee allowlist is checked again at execution.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import sqlite3
@@ -495,6 +496,181 @@ def drop_process_idempotency_memory() -> None:
         _LIVE_OWNERS.clear()
 
 
+def _owner_liveness(owner: str) -> str:
+    """alive, dead, or unknown. A live pid is never treated as a timeout."""
+    pid_text, separator, _token = str(owner or "").partition(":")
+    if not separator or not pid_text.isdigit():
+        return "unknown"
+    pid = int(pid_text)
+    if pid <= 0:
+        return "unknown"
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return "dead"
+    except PermissionError:
+        return "alive"
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            return "dead"
+        if exc.errno == errno.EPERM:
+            return "alive"
+        return "unknown"
+    return "alive"
+
+
+def _customer_create_effect(
+    tenant: str, params: dict[str, Any]
+) -> tuple[str, dict[str, Any] | None]:
+    """Read purchase_units directly. absent, matched, or unknown."""
+    name = str(
+        params.get("unit_name") or params.get("customer_name") or params.get("name") or ""
+    ).strip()
+    if not tenant.isdigit() or int(tenant) <= 0 or not name:
+        return "unknown", None
+    tenant_id = int(tenant)
+    phone = params.get("contact_phone")
+    person = params.get("contact_person")
+    address = params.get("contact_address", params.get("address"))
+    from sqlalchemy.exc import SQLAlchemyError
+
+    lookup_errors = RECOVERABLE_ERRORS + (SQLAlchemyError,)
+    try:
+        from sqlalchemy import select
+
+        from app.application.customer_app_service import get_customers_session
+        from app.db.models.purchase_unit import PurchaseUnit
+
+        session = get_customers_session()
+        try:
+            rows = list(
+                session.execute(
+                    select(PurchaseUnit)
+                    .where(
+                        PurchaseUnit.unit_name == name,
+                        PurchaseUnit.tenant_id == tenant_id,
+                    )
+                    .execution_options(skip_tenant_filter=True)
+                ).scalars()
+            )
+        finally:
+            session.close()
+    except lookup_errors:
+        return "unknown", None
+    matched: list[Any] = []
+    for row in rows:
+        if str(row.tenant_id) != str(tenant_id) or str(row.unit_name or "") != name:
+            continue
+        if phone not in (None, "") and str(row.contact_phone or "") != str(phone):
+            return "unknown", None
+        if person not in (None, "") and str(row.contact_person or "") != str(person):
+            return "unknown", None
+        if address not in (None, "") and str(row.address or "") != str(address):
+            return "unknown", None
+        matched.append(row)
+    if not rows:
+        return "absent", None
+    if len(matched) != 1:
+        return "unknown", None
+    row = matched[0]
+    data = {
+        "id": int(row.id),
+        "customer_name": row.unit_name,
+        "contact_person": row.contact_person or "",
+        "contact_phone": row.contact_phone or "",
+        "contact_address": row.address or "",
+        "tenant_id": int(row.tenant_id),
+    }
+    version = getattr(row, "version", None)
+    if isinstance(version, int) and not isinstance(version, bool):
+        data["version"] = version
+    return "matched", {
+        "success": True,
+        "created": True,
+        "id": data["id"],
+        "data": data,
+        "message": "客户创建成功",
+    }
+
+
+def _claim_transaction(statements: list[tuple[str, tuple[Any, ...]]]) -> int:
+    """Run one immediate transaction. The last statement's rowcount is the result."""
+    conn = _idempotency_conn()
+    if conn is None:
+        return 0
+    try:
+        conn.execute("begin immediate")
+        changed = 0
+        for sql, args in statements:
+            changed = conn.execute(sql, args).rowcount
+        conn.commit()
+        return int(changed)
+    except sqlite3.Error:
+        conn.rollback()
+        return 0
+    finally:
+        conn.close()
+
+
+def _complete_dead_claim(key: str, owner: str, output: dict[str, Any]) -> bool:
+    changed = _claim_transaction(
+        [
+            (
+                "update tool_idempotency set inflight = 0, output_json = ? "
+                "where scope_key = ? and owner = ? and inflight = 1",
+                (json.dumps(output, ensure_ascii=False), key, owner),
+            )
+        ]
+    )
+    return changed == 1
+
+
+def _replace_dead_claim(key: str, owner: str, fingerprint: str, new_owner: str) -> bool:
+    conn = _idempotency_conn()
+    if conn is None:
+        return False
+    try:
+        conn.execute("begin immediate")
+        deleted = conn.execute(
+            "delete from tool_idempotency where scope_key = ? and owner = ? and inflight = 1",
+            (key, owner),
+        ).rowcount
+        if deleted != 1:
+            conn.rollback()
+            return False
+        inserted = conn.execute(
+            "insert into tool_idempotency(scope_key, fingerprint, owner, inflight, output_json) "
+            "values (?, ?, ?, 1, '')",
+            (key, fingerprint, new_owner),
+        ).rowcount
+        if inserted != 1:
+            conn.rollback()
+            return False
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def _reread_claim(key: str) -> dict[str, Any] | None:
+    conn = _idempotency_conn()
+    if conn is None:
+        return _IDEMPOTENCY.get(key)
+    try:
+        row = conn.execute(
+            "select fingerprint, owner, inflight, output_json from tool_idempotency where scope_key = ?",
+            (key,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    return _stored_claim(row)
+
+
 def recover_idempotent_claims() -> dict[str, int]:
     """Retain unfinished claims: another process may still run or have committed an effect."""
     report = {"cleared_unknown": 0, "retained_unknown": 0, "replayable": 0}
@@ -563,6 +739,53 @@ def begin_idempotent_replay(
         saved = _retained_result(cached) if isinstance(cached, dict) else None
         if not current.get("inflight") and saved is not None:
             return key, saved
+        if (
+            current.get("inflight")
+            and tool_id == "customers"
+            and action == "create"
+            and _owner_liveness(str(current.get("owner") or "")) == "dead"
+        ):
+            effect, receipt = _customer_create_effect(str(context.get("tenant_id") or ""), params)
+            owner = str(current.get("owner") or "")
+            if effect == "matched" and receipt is not None:
+                if _complete_dead_claim(key, owner, receipt):
+                    current["inflight"] = False
+                    current["output"] = receipt
+                    _IDEMPOTENCY[key] = current
+                    return key, receipt
+                latest = _reread_claim(key)
+                replay = latest.get("output") if isinstance(latest, dict) else None
+                restored = _retained_result(replay) if isinstance(replay, dict) else None
+                if restored is not None and restored.get("success") is True:
+                    return key, restored
+            elif effect == "absent":
+                new_owner = f"{os.getpid()}:{uuid.uuid4().hex}"
+                if _replace_dead_claim(key, owner, fingerprint, new_owner):
+                    record["owner"] = new_owner
+                    _IDEMPOTENCY[key] = record
+                    _LIVE_OWNERS.add(new_owner)
+                    return key, None
+                latest = _reread_claim(key)
+                if latest is not None and str(latest.get("owner") or "") != owner:
+                    saved_latest = latest.get("output")
+                    restored = (
+                        _retained_result(saved_latest) if isinstance(saved_latest, dict) else None
+                    )
+                    if not latest.get("inflight") and restored is not None:
+                        return key, restored
+                    if _owner_liveness(str(latest.get("owner") or "")) == "alive":
+                        return key, {
+                            **_denial(
+                                "idempotency_in_progress",
+                                "相同幂等键的调用仍在执行或结果待核验，不可重复执行",
+                                context=context,
+                                tool_id=tool_id,
+                                action=action,
+                                reason="idempotency_in_progress",
+                            ),
+                            "outcome": "unknown",
+                            "reconciliation_required": True,
+                        }
         code = (
             "idempotency_in_progress" if current.get("inflight") else "idempotency_outcome_unknown"
         )
