@@ -549,7 +549,8 @@ def _settle_gated_change(
     claim: bool,
 ) -> CustomerServiceAction:
     begin_immediate_write(db)
-    approval = request.get("approval") if isinstance(request.get("approval"), dict) else {}
+    raw_approval = request.get("approval")
+    approval = raw_approval if isinstance(raw_approval, dict) else {}
     decision = str(approval.get("decision") or "")
     now = datetime.now(UTC)
     if "ticket_status" not in request:
@@ -696,7 +697,8 @@ def _execute_gated_change(
     db: Session, action: CustomerServiceAction, user: User, request: dict[str, Any]
 ) -> CustomerServiceAction:
     """写入类动作必须先有一次性审批。没有核验过的业务执行器时不算已执行。"""
-    approval = request.get("approval") if isinstance(request.get("approval"), dict) else {}
+    raw_approval = request.get("approval")
+    approval = raw_approval if isinstance(raw_approval, dict) else {}
     decision = str(approval.get("decision") or "")
     return _settle_gated_change(db, action, user, request, claim=bool(decision))
 
