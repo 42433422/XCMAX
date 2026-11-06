@@ -1,5 +1,5 @@
 {
-  "lines": 2439756,
+  "lines": 2439762,
   "updated": "2026-11-06",
-  "note": "P0 桌面启动恢复：完成引导的企业账号重启后回到原会话，新增会话恢复与引导判断约一百余行。产品负责人要求的验收修复。"
+  "note": "桌面会话恢复 CI：补上 useChatMessages 测试里缺失的 resolveChatStorageScope，并在同步导入契约的隔离包里补上契约点名的 fastapi 入口，否则 import-linter 在判定前中止。测试桩 +1 行，隔离包清单 +5 行。"
 }
