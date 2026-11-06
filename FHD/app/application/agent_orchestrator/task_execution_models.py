@@ -89,6 +89,15 @@ class TaskExecutionRepository(Protocol):
         priority: int = 100,
     ) -> AgentTaskExecution: ...
 
+    def enqueue_waiting_approval(
+        self,
+        run: AgentRun,
+        *,
+        requested_by: str = "",
+        priority: int = 100,
+        approver: str = "",
+    ) -> AgentTaskExecution: ...
+
     def get(self, run_id: str) -> AgentTaskExecution | None: ...
 
     def list_for_run_ids(self, run_ids: list[str]) -> dict[str, AgentTaskExecution]: ...

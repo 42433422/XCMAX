@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -270,7 +271,11 @@ def test_approval_runs_through_one_claim_and_replay_returns_the_body(tmp_path, m
         assert _product_models(env) == ["ONCE-1", "ONCE-2"]
         result = Path(body["data"]["final_output"]["business_result"]["sha256"])
         workbook = load_workbook(
-            (created["data"]["metadata"]["runtime_context"]["cross_module_checkpoint"]["result_path"]),
+            (
+                created["data"]["metadata"]["runtime_context"]["cross_module_checkpoint"][
+                    "result_path"
+                ]
+            ),
             data_only=True,
         )
         sheet = workbook.worksheets[0]
@@ -329,9 +334,13 @@ def test_rejection_survives_reload_and_blocks_another_write(tmp_path, monkeypatc
             session.close()
         with tenant_scope(1):
             snapshot = load_workflow_snapshot_for_execution(request_no)
-        assert snapshot is None or resume_cross_module_http(
-            snapshot, request_id=request_no, loaded_from_storage=True
-        )["success"] is False
+        assert (
+            snapshot is None
+            or resume_cross_module_http(snapshot, request_id=request_no, loaded_from_storage=True)[
+                "success"
+            ]
+            is False
+        )
         assert _product_models(env) == []
         assert env["queue"].get(run_id).state == "rejected"
     finally:
@@ -406,9 +415,7 @@ def test_interrupted_commit_rolls_back_and_recovery_inserts_once(tmp_path, monke
         env["engine"].dispose()
 
 
-def test_crash_after_commit_replays_the_stored_body_without_a_second_insert(
-    tmp_path, monkeypatch
-):
+def test_crash_after_commit_replays_the_stored_body_without_a_second_insert(tmp_path, monkeypatch):
     from app.application.agent_orchestrator.cross_module_chain import (
         InjectedTransactionFault,
         execute_claimed_cross_module,
@@ -508,19 +515,29 @@ def test_two_workers_and_tenant_priority_claim_once(tmp_path, monkeypatch):
         env["queue"].enqueue(low, priority=50)
         env["queue"].enqueue(high, priority=1)
         env["queue"].enqueue(other, priority=1)
-        assert env["queue"].claim("tenant-2", lease_seconds=30, tenant_id="2").run_id == other.run_id
+        assert (
+            env["queue"].claim("tenant-2", lease_seconds=30, tenant_id="2").run_id == other.run_id
+        )
         claimed = env["queue"].claim("tenant-1", lease_seconds=30, tenant_id="1")
         assert claimed is not None and claimed.run_id == high.run_id
-        assert env["queue"].claim("tenant-1-again", lease_seconds=30, tenant_id="1").run_id == low.run_id
+        assert (
+            env["queue"].claim("tenant-1-again", lease_seconds=30, tenant_id="1").run_id
+            == low.run_id
+        )
 
         created = _post_task(env, "task-two-workers", _models("RACE"))
         run = env["runs"].get(created["data"]["run_id"])
         run.metadata["cross_module_dispatch"] = "approved"
         run.status = "queued"
         env["runs"].save(run)
-        assert env["queue"].enqueue(run, requested_by="agent-task-queue", priority=1).state == "queued"
-        errors: list[BaseException] = []
+        assert (
+            env["queue"].enqueue(run, requested_by="agent-task-queue", priority=1).state == "queued"
+        )
+        errors: list[Exception] = []
         receipts: list[dict] = []
+        from sqlalchemy.exc import SQLAlchemyError
+
+        race_errors = (OSError, RuntimeError, ValueError, LookupError, TypeError, SQLAlchemyError)
 
         def worker() -> None:
             try:
@@ -532,7 +549,7 @@ def test_two_workers_and_tenant_priority_claim_once(tmp_path, monkeypatch):
                         str(run.metadata["approval_request_id"]),
                     )
                 )
-            except BaseException as exc:  # thread boundary
+            except race_errors as exc:
                 errors.append(exc)
 
         threads = [threading.Thread(target=worker), threading.Thread(target=worker)]
@@ -548,12 +565,134 @@ def test_two_workers_and_tenant_priority_claim_once(tmp_path, monkeypatch):
         session = env["factory"]()
         try:
             count = session.execute(
-                text("select count(*) from products where tenant_id = 1 and model_number like 'RACE-%'")
+                text(
+                    "select count(*) from products where tenant_id = 1 and model_number like 'RACE-%'"
+                )
             ).scalar()
         finally:
             session.close()
         assert count == 2
     finally:
+        env["engine"].dispose()
+
+
+def test_public_status_maps_to_queue_without_regression(tmp_path, monkeypatch):
+    from app.domain.task_lifecycle.adapters import (
+        canonicalize,
+        execution_transition_allowed,
+        legacy_transition_allowed,
+    )
+    from app.domain.task_lifecycle.machine import transition_allowed
+
+    public_to_queue = {
+        "waiting_user": "waiting_approval",
+        "waiting_approval": "waiting_approval",
+        "completed": "succeeded",
+        "rejected": "rejected",
+        "cancelled": "cancelled",
+        "failed": "failed",
+        "queued": "queued",
+    }
+    for public, queued in public_to_queue.items():
+        assert canonicalize("agent", public) == queued
+    assert canonicalize("agent", "rejected") != "waiting_approval"
+    assert canonicalize("agent", "completed") != "waiting_approval"
+    assert transition_allowed("rejected", "waiting_approval") is False
+    assert transition_allowed("succeeded", "waiting_approval") is False
+    assert execution_transition_allowed("rejected", "waiting_approval") is False
+    assert execution_transition_allowed("completed", "waiting_approval") is False
+    assert execution_transition_allowed("succeeded", "waiting_user") is False
+    assert legacy_transition_allowed("agent", "rejected", "waiting_user") is False
+    assert legacy_transition_allowed("agent", "completed", "waiting_user") is False
+    assert legacy_transition_allowed("agent", "completed", "waiting_approval") is False
+    assert legacy_transition_allowed("agent", "waiting_user", "rejected") is True
+    assert execution_transition_allowed("queued", "waiting_approval") is True
+
+    env = _client(tmp_path, monkeypatch)
+    try:
+        created = _post_task(env, "task-status-map", _models("MAP"))
+        assert created["data"]["status"] == "waiting_user"
+        parked = env["queue"].get(created["data"]["run_id"])
+        assert parked is not None and parked.state == "waiting_approval"
+        assert canonicalize("agent", created["data"]["status"]) == parked.state
+        rejected = env["client"].post(
+            f"/api/approval/requests/{_approval_id(created)}/reject",
+            json={"reason": "不得写入"},
+        )
+        assert rejected.status_code == 200, rejected.text
+        task = env["client"].get("/api/agent/tasks/task-status-map")
+        assert task.status_code == 200
+        assert task.json()["data"]["status"] == "rejected"
+        assert task.json()["data"]["status"] != "waiting_user"
+        assert env["queue"].get(created["data"]["run_id"]).state == "rejected"
+    finally:
+        env["engine"].dispose()
+
+
+def test_approval_http_returns_while_dispatcher_owns_the_queue(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator.cross_module_chain import (
+        execute_claimed_cross_module,
+    )
+    from app.application.agent_orchestrator.task_dispatcher import (
+        AgentTaskDispatcher,
+        set_agent_task_dispatcher_for_tests,
+    )
+
+    env = _client(tmp_path, monkeypatch)
+    release = threading.Event()
+    started = threading.Event()
+    real_execute = execute_claimed_cross_module
+
+    def blocked_execute(*args, **kwargs):
+        started.set()
+        assert release.wait(10)
+        return real_execute(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.cross_module_chain.execute_claimed_cross_module",
+        blocked_execute,
+    )
+    dispatcher = AgentTaskDispatcher(
+        execution_repository=env["queue"],
+        run_repository=env["runs"],
+        poll_seconds=0.05,
+        max_workers=1,
+    )
+    set_agent_task_dispatcher_for_tests(dispatcher)
+    dispatcher.start()
+    try:
+        created = _post_task(env, "task-http-handoff", _models("HAND"))
+        started_at = time.monotonic()
+        approved = env["client"].post(
+            f"/api/approval/requests/{_approval_id(created)}/approve",
+            json={"opinion": "同意导入"},
+        )
+        elapsed = time.monotonic() - started_at
+        assert elapsed < 2.0, elapsed
+        assert approved.status_code == 202, approved.text
+        body = approved.json()
+        assert body["success"] is False
+        assert body["accepted"] is True
+        workflow = (body.get("data") or {}).get("workflow_execution") or {}
+        assert workflow.get("success") is False
+        assert workflow.get("execution_accepted") is True
+        assert _product_models(env) == []
+        release.set()
+        assert started.wait(5)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and _product_models(env) != ["HAND-1", "HAND-2"]:
+            time.sleep(0.05)
+        assert _product_models(env) == ["HAND-1", "HAND-2"]
+        finished = env["queue"].get(created["data"]["run_id"])
+        assert finished is not None
+        assert finished.state == "succeeded"
+        assert finished.execution_count == 1
+        task = env["client"].get("/api/agent/tasks/task-http-handoff")
+        assert task.json()["data"]["status"] == "completed"
+        assert env["queue"].get(created["data"]["run_id"]).state != "waiting_approval"
+    finally:
+        release.set()
+        dispatcher.stop(timeout=5)
         env["engine"].dispose()
 
 
@@ -563,13 +702,13 @@ def test_cancel_releases_the_queued_task(tmp_path, monkeypatch):
     env = _client(tmp_path, monkeypatch)
     try:
         created = _post_task(env, "task-cancel-queue")
-        cancelled = AgentOrchestrator().cancel_run(
-            created["data"]["run_id"], requested_by="tester"
-        )
+        cancelled = AgentOrchestrator().cancel_run(created["data"]["run_id"], requested_by="tester")
         assert cancelled is not None and cancelled.status == "cancelled"
         execution = env["queue"].get(created["data"]["run_id"])
         assert execution is not None and execution.state == "cancelled"
-        assert env["queue"].claim("late", lease_seconds=30, run_id=created["data"]["run_id"]) is None
+        assert (
+            env["queue"].claim("late", lease_seconds=30, run_id=created["data"]["run_id"]) is None
+        )
         assert _product_models(env) == []
     finally:
         env["engine"].dispose()

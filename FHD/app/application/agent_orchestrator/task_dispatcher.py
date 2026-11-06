@@ -227,7 +227,7 @@ class AgentTaskDispatcher:
                 execute_claimed_cross_module,
             )
 
-            if cross_module_ready(preview):
+            if preview is not None and cross_module_ready(preview):
                 try:
                     request_id = str(preview.metadata.get("approval_request_id") or "")
                     receipt = execute_claimed_cross_module(

@@ -27,6 +27,7 @@ RunStatus = Literal[
     "completed",
     "failed",
     "cancelled",
+    "rejected",
 ]
 
 AgentStepStatus = Literal[

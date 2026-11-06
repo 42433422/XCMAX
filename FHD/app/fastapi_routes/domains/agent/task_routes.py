@@ -301,9 +301,7 @@ def create_agent_task(
         response = run_response(result.run, principal=principal)
         response["deduplicated"] = result.deduplicated
         accepted = {"queued", "waiting_user", "waiting_approval"}
-        return JSONResponse(
-            response, status_code=202 if result.run.status in accepted else 200
-        )
+        return JSONResponse(response, status_code=202 if result.run.status in accepted else 200)
     except UnifiedTaskConflictError:
         return JSONResponse({"success": False, "message": "任务状态冲突"}, status_code=409)
     except UnifiedTaskError as exc:
@@ -381,11 +379,14 @@ def get_agent_task(
             )
 
             project_rejected_approval(active)
-            task = orchestrator.get_task(
-                user_id=principal.user_id,
-                task_id=task_id,
-                tenant_id=principal.tenant_id,
-            ) or task
+            task = (
+                orchestrator.get_task(
+                    user_id=principal.user_id,
+                    task_id=task_id,
+                    tenant_id=principal.tenant_id,
+                )
+                or task
+            )
         return success(_task_envelope(orchestrator, task))
     except RECOVERABLE_ERRORS:
         return internal_error_response("get agent task")
