@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import logging
 import math
+import re
 from typing import Any
 
+import aiohttp
+import httpx
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
 from app.domain.shared_services.tts_service import (
     TtsUpstreamBlockedError,
+    TtsUpstreamResponseError,
     edge_cooldown_remaining_seconds,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -81,13 +87,30 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
 
 @router.post("/api/tts")
 def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
-    text = str(payload.get("text") or "").strip()
-    if not text:
+    text = payload.get("text")
+    fields = ("voice", "speakerId", "lang", "rate", "pitch")
+    valid = isinstance(text, str) and 0 < len(text.strip()) <= 4000
+    valid = valid and all(
+        payload.get(field) is None
+        or (isinstance(payload[field], str) and len(payload[field]) <= 120)
+        for field in fields
+    )
+    for field, unit, lower, upper in (("rate", "%", -100, 100), ("pitch", "Hz", -100, 100)):
+        value = payload.get(field)
+        if value is not None:
+            if (
+                not isinstance(value, str)
+                or not re.fullmatch(r"[+-][0-9]{1,3}" + unit, value)
+                or not lower <= int(value[: -len(unit)]) <= upper
+            ):
+                valid = False
+    if not valid or not isinstance(text, str):
         return JSONResponse(
-            {"success": False, "message": "text 不能为空", "data": {}}, status_code=400
+            {"success": False, "message": "TTS 请求参数无效", "data": {}}, status_code=422
         )
+    text = text.strip()
     speaker_id = payload.get("speakerId")
-    lang = str(payload.get("lang") or "zh").lower()
+    lang = (payload.get("lang") or "zh").strip().lower()
     try:
         from app.application.facades.tts_facade import (
             synthesize_to_data_uri,
@@ -103,6 +126,17 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
             rate=payload.get("rate"),
             pitch=payload.get("pitch"),
         )
+        audio = result.get("audioBase64") if isinstance(result, dict) else None
+        if not isinstance(audio, str) or not re.match(
+            r"^data:audio/[a-zA-Z0-9.+-]+;base64,", audio
+        ):
+            raise TtsUpstreamResponseError("TTS returned invalid audio data URI")
+        try:
+            decoded = base64.b64decode(audio.split(",", 1)[1], validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise TtsUpstreamResponseError("TTS returned invalid audio data") from error
+        if not decoded:
+            raise TtsUpstreamResponseError("TTS returned empty audio")
         traced = _trace(
             {
                 "success": True,
@@ -144,8 +178,15 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
                 "Cache-Control": "no-store",
             },
         )
-    except RECOVERABLE_ERRORS as error:
-        logger.warning("TTS 不可用（MiMo/Edge）: %s (type=%s)", error, type(error).__name__)
+    except (TtsUpstreamResponseError, httpx.HTTPError, aiohttp.ClientError, OSError) as error:
+        status = getattr(error, "status", None) or getattr(
+            getattr(error, "response", None), "status_code", None
+        )
+        if isinstance(error, (TimeoutError, httpx.TimeoutException, asyncio.TimeoutError)):
+            status = 504
+        elif status not in (429, 503, 504):
+            status = 502
+        logger.warning("TTS 上游不可用: %s (status=%s)", type(error).__name__, status)
         traced = _trace(
             {
                 "success": False,
@@ -156,4 +197,4 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
             action="tts_synthesize",
             body=payload,
         )
-        return JSONResponse(traced, status_code=503)
+        return JSONResponse(traced, status_code=status)

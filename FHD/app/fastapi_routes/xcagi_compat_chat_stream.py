@@ -144,6 +144,7 @@ def _classify_and_submit_client_issue(
 
 
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
+    sse_event_line = _facade()._sse_event_line
     m = (body.mode or "").strip().lower()
     if m in ("online", "offline"):
         _facade().set_llm_mode(m)
@@ -209,7 +210,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             {"type": "token", "text": issue_reply},
             {"type": "done", "result": payload},
         ):
-            yield _facade()._sse_event_line(event)
+            yield sse_event_line(event)
         return
     if (
         has_pending_workflow
@@ -240,8 +241,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 file_context={},
             )
         response_text = str(payload.get("response") or payload.get("message") or "")
-        yield _facade()._sse_event_line({"type": "token", "text": response_text})
-        yield _facade()._sse_event_line({"type": "done", "result": payload})
+        yield sse_event_line({"type": "token", "text": response_text})
+        yield sse_event_line({"type": "done", "result": payload})
         return
     from app.domain.app_pure.chat_business_safety import try_handle_business_chat_action
 
@@ -255,20 +256,20 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         response_text = str(
             business_payload.get("response") or business_payload.get("message") or ""
         )
-        yield _facade()._sse_event_line({"type": "token", "text": response_text})
-        yield _facade()._sse_event_line({"type": "done", "result": business_payload})
+        yield sse_event_line({"type": "token", "text": response_text})
+        yield sse_event_line({"type": "done", "result": business_payload})
         return
     (ok_read, read_req) = _facade()._ensure_chat_db_read_authorized(
         request, message=body.message, provided_token=body.db_read_token
     )
     if not ok_read and read_req:
-        yield _facade()._sse_event_line(
+        yield sse_event_line(
             {
                 "type": "token",
                 "text": f"[需要授权: {read_req.get('token_description')}]",
             }
         )
-        yield _facade()._sse_event_line(
+        yield sse_event_line(
             {
                 "type": "requires_token",
                 "token_name": read_req.get("token_name"),
@@ -281,7 +282,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     intr = _facade().planner_workflow_interrupt_reply(body.message)
     if intr is not None:
         cleared = _facade().runtime_context_after_workflow_interrupt(runtime_context)
-        yield _facade()._sse_event_line({"type": "token", "text": intr})
+        yield sse_event_line({"type": "token", "text": intr})
         payload = _facade()._xcagi_compat_reply_payload(intr, runtime_context_update=cleared)
         payload = _facade().attach_chat_trace_run(
             payload,
@@ -291,15 +292,16 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             source=body.source,
             channel="compat_chat_stream",
         )
-        yield _facade()._sse_event_line({"type": "done", "result": payload})
+        yield sse_event_line({"type": "done", "result": payload})
         return
     vector_error = _facade()._ensure_vector_index_if_needed(body.message, runtime_context)
     if vector_error:
-        yield _facade()._sse_event_line({"type": "error", "message": vector_error})
+        yield sse_event_line({"type": "error", "message": vector_error})
         return
     workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
+    tool_progress: list[str] = []
     pre_run = None
     planner_runtime_context = {**(runtime_context or {}), "message": body.message}
     try:
@@ -319,7 +321,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         watch_stream_tool_records(
             lambda **receipt: record_legacy_stream_tool_receipt(pre_run, **receipt)
         )
-        yield _facade()._sse_event_line(
+        yield sse_event_line(
             {
                 "type": "tool_progress",
                 "phase": "started",
@@ -368,7 +370,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                         },
                     }
                     finalize(payload)
-                yield _facade()._sse_event_line(
+                yield sse_event_line(
                     _facade()._sse_payload_with_run_id(ev, getattr(pre_run, "run_id", None))
                 )
                 return
@@ -376,7 +378,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 text = str(ev.get("text") or "")
                 if not ev.get("ephemeral"):
                     reply_parts.append(text)
-                yield _facade()._sse_event_line(ev)
+                yield sse_event_line(ev)
+            elif et == "tool_progress":
+                if ev.get("phase") not in {"started", "accepted"}:
+                    text = str(ev.get("text") or ev.get("label") or "").strip()
+                    if text and text not in tool_progress:
+                        tool_progress.append(text)
+                yield sse_event_line(ev)
             elif et == "requires_token":
                 if pre_run is not None:
                     payload = {
@@ -394,7 +402,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                         },
                     }
                     finalize(payload)
-                yield _facade()._sse_event_line(
+                yield sse_event_line(
                     _facade()._sse_payload_with_run_id(ev, getattr(pre_run, "run_id", None))
                 )
                 halted_for_write_token = True
@@ -402,7 +410,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             elif et == "done":
                 continue
             else:
-                yield _facade()._sse_event_line(ev)
+                yield sse_event_line(ev)
         if halted_for_write_token:
             return
         merged = _facade().sanitize_model_chat_reply("".join(reply_parts))
@@ -417,7 +425,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                     "data": {"error": msg},
                 }
                 finalize(payload)
-            yield _facade()._sse_event_line(
+            yield sse_event_line(
                 _facade()._sse_payload_with_run_id(
                     {"type": "error", "message": msg}, getattr(pre_run, "run_id", None)
                 )
@@ -441,6 +449,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
         if not thinking:
             thinking = marker_lines
+        thinking = (
+            "\n".join(dict.fromkeys([*tool_progress, *(thinking or "").splitlines()])) or None
+        )
         done_reply = {
             "response": visible_text,
             "thinking_steps": thinking,
@@ -460,7 +471,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 source=body.source,
                 channel="compat_chat_stream",
             )
-        yield _facade()._sse_event_line({"type": "done", "result": payload})
+        yield sse_event_line({"type": "done", "result": payload})
     except (StreamObservationTimeout, StreamStopped) as observation_error:
         # An observation deadline cannot settle execution as failed: the inner
         # worker may have committed a write and still be running. Persist the
@@ -471,7 +482,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 pending=True,
                 reason=getattr(observation_error, "reason", "observation_timeout"),
             )
-        yield _facade()._sse_event_line(
+        yield sse_event_line(
             _facade()._sse_payload_with_run_id(
                 {
                     "type": "error",
@@ -495,7 +506,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 "data": {"error": message, "status_code": exc.status_code},
             }
             finalize(payload)
-        yield _facade()._sse_event_line(
+        yield sse_event_line(
             _facade()._sse_payload_with_run_id(
                 {"type": "error", "message": message, "status_code": exc.status_code},
                 getattr(pre_run, "run_id", None),

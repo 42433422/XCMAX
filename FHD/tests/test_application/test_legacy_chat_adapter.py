@@ -461,8 +461,11 @@ class TestChatStreamText:
                     "analyze", client=mock_client, model="test-model", max_iterations=1
                 )
             )
-        text_parts = [p for p in parts if isinstance(p, str)]
-        assert any("调用工具" in p for p in text_parts)
+        assert any(
+            p.get("_planner_sse") == "tool_progress" and "调用工具" in p["text"]
+            for p in parts
+            if isinstance(p, dict)
+        )
 
     def test_yields_requires_token_dict(self):
         chunk = _tool_chunk("import_excel_to_database", "{}")

@@ -41,7 +41,7 @@ def source_bindings(monkeypatch):
 
 def extract(path, name, namespace):
     """Load the real entrypoint and bind only the test's explicit dependency seams."""
-    module = _entrypoint_modules[str(Path(path).with_suffix("")).replace("/", ".")]
+    module = _entrypoint_modules[Path(path).with_suffix("").as_posix().replace("/", ".")]
     for key, value in namespace.items():
         _entrypoint_patches.setattr(module, key, value, raising=False)
     namespace[name] = getattr(module, name)
@@ -285,6 +285,15 @@ def test_guard_normal_completion_and_error(monkeypatch):
     }
 
 
+def test_guard_forwards_model_activity_without_treating_it_as_answer(monkeypatch):
+    def events(*a, **k):
+        yield {"type": "model_activity"}
+        yield {"type": "token", "text": "最终正文"}
+
+    result = list(guarded(events, monkeypatch))
+    assert result[1:] == [{"type": "model_activity"}, {"type": "token", "text": "最终正文"}]
+
+
 @pytest.mark.asyncio
 async def test_two_bridges_cancel_propagates_to_read(monkeypatch):
     entered, released, finished = threading.Event(), threading.Event(), threading.Event()
@@ -442,7 +451,8 @@ def test_real_runtime_tool_boundary_is_not_replayed(cancel_when, lifetime):
         },
     )
     with bound_lifetime(lifetime), closing(runtime("synthetic")) as stream:
-        assert "正在调用工具" in next(stream)
+        assert next(stream)["_planner_sse"] == "model_activity"
+        assert "正在调用工具" in next(stream)["text"]
         if cancel_when == "before_tool":
             lifetime.cancel()
         if cancel_when == "none":

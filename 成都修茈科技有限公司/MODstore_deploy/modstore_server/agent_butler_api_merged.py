@@ -932,31 +932,33 @@ async def butler_corp_tts(request: _facade().Request, body: CorpTtsDTO):
     """官网公开 TTS：优先 MiMo，失败回退 Edge 神经音；不使用浏览器系统 TTS。"""
     import base64
 
+    from modstore_server.edge_tts_service import UPSTREAM_ERRORS, is_available
+    from modstore_server.mimo_tts_service import DEFAULT_VOICE as MIMO_VOICE
+    from modstore_server.mimo_tts_service import synthesize_mimo_tts_async
+    from modstore_server.workbench.speech_api import _edge_tts_http_exception
+
     _facade()._corp_chat_rate_allow(_facade()._public_contact_client_key(request))
     text = (body.text or "").strip()
     if not text:
-        raise _facade().HTTPException(400, "text 不能为空")
-    try:
-        from modstore_server.mimo_tts_service import DEFAULT_VOICE as MIMO_VOICE
-        from modstore_server.mimo_tts_service import synthesize_mimo_tts_async
-
-        voice = (body.voice or "").strip() or MIMO_VOICE
-        audio, err, meta = await synthesize_mimo_tts_async(text, voice=voice)
-        if audio and (not err):
-            mime = str(meta.get("mime") or "audio/wav")
-            b64 = base64.b64encode(audio).decode("ascii")
-            return {
-                "success": True,
-                "data": {
-                    "audioBase64": f"data:{mime};base64,{b64}",
-                    "provider": "mimo",
-                    "voice": meta.get("voice") or voice,
-                },
-            }
-        if err:
-            _facade().logger.info("corp-tts MiMo unavailable, fallback Edge: %s", err)
-    except RECOVERABLE_ERRORS as exc:
-        _facade().logger.warning("corp-tts MiMo failed, fallback Edge: %s", exc)
+        raise _facade().HTTPException(422, "text 不能为空")
+    voice = (body.voice or "").strip() or MIMO_VOICE
+    audio, err, meta = await synthesize_mimo_tts_async(text, voice=voice)
+    if audio and (not err):
+        mime = str(meta.get("mime") or "audio/wav")
+        b64 = base64.b64encode(audio).decode("ascii")
+        return {
+            "success": True,
+            "data": {
+                "audioBase64": f"data:{mime};base64,{b64}",
+                "provider": "mimo",
+                "voice": meta.get("voice") or voice,
+            },
+        }
+    if not is_available():
+        status = meta.get("status")
+        raise _facade().HTTPException(
+            status if status in (429, 502, 503, 504) else 503, "语音合成暂不可用"
+        )
     try:
         from modstore_server.edge_tts_service import DEFAULT_VOICE as EDGE_VOICE
         from modstore_server.edge_tts_service import rate_str_from_float, stream_audio
@@ -964,11 +966,13 @@ async def butler_corp_tts(request: _facade().Request, body: CorpTtsDTO):
         edge_voice = EDGE_VOICE
         chunks: list[bytes] = []
         async for data in stream_audio(text, edge_voice, rate_str_from_float(1.05)):
+            if not isinstance(data, bytes):
+                raise _facade().HTTPException(502, "TTS 上游返回无效音频")
             if data:
                 chunks.append(data)
         mp3 = b"".join(chunks)
         if not mp3:
-            raise RuntimeError("edge-tts empty")
+            raise _facade().HTTPException(502, "TTS 上游未返回音频")
         b64 = base64.b64encode(mp3).decode("ascii")
         return {
             "success": True,
@@ -978,9 +982,9 @@ async def butler_corp_tts(request: _facade().Request, body: CorpTtsDTO):
                 "voice": edge_voice,
             },
         }
-    except RECOVERABLE_ERRORS as exc:
-        _facade().logger.warning("corp-tts Edge failed: %s", exc)
-        raise _facade().HTTPException(503, "语音合成暂不可用") from exc
+    except UPSTREAM_ERRORS as exc:
+        _facade().logger.warning("corp-tts Edge failed: %s", type(exc).__name__)
+        raise _edge_tts_http_exception(exc) from exc
 
 
 "Implementation extracted from the public facade module."

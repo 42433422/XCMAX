@@ -5,12 +5,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import binascii
+import json
 import logging
 import os
 from typing import Any, Dict, Optional, Tuple
-
-from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 _LOG = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ DEFAULT_MODEL = "mimo-v2.5-tts"
 DEFAULT_VOICE = "冰糖"
 DEFAULT_STYLE = "温和、清晰、专业的客服语气，语速适中，吐字清楚。"
 DEFAULT_FORMAT = "wav"
+MAX_TEXT_LENGTH = 4000
 _DEFAULT_ROOT = "https://token-plan-cn.xiaomimimo.com"
 
 
@@ -48,6 +50,41 @@ def _chat_completions_url(root: str) -> str:
     return f"{root.rstrip('/')}/v1/chat/completions"
 
 
+def _decode_response(
+    data: Any, voice: str, fmt: str, model: str
+) -> Tuple[Optional[bytes], str, Dict[str, Any]]:
+    choices = data.get("choices") if isinstance(data, dict) else None
+    choice = choices[0] if isinstance(choices, list) and choices else None
+    message = choice.get("message") if isinstance(choice, dict) else None
+    audio = message.get("audio") if isinstance(message, dict) else None
+    encoded = audio.get("data") if isinstance(audio, dict) else None
+    if not isinstance(encoded, str) or not encoded:
+        return None, "mimo-tts response missing audio.data", {"voice": voice, "status": 502}
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        return None, "mimo-tts invalid audio.data", {"voice": voice, "status": 502}
+    if not raw:
+        return None, "mimo-tts returned empty audio", {"voice": voice, "status": 502}
+    mime = "audio/wav" if fmt in ("wav", "wave") else f"audio/{fmt}"
+    return (
+        raw,
+        "",
+        {"model": model, "voice": voice, "format": fmt, "mime": mime, "provider": "mimo"},
+    )
+
+
+def _request_failure(exc: Exception, voice: str) -> Tuple[Optional[bytes], str, Dict[str, Any]]:
+    import httpx
+
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(exc, httpx.TimeoutException):
+        status = 504
+    elif status not in (429, 503, 504):
+        status = 502
+    return None, "mimo-tts request failed", {"voice": voice, "status": status}
+
+
 def synthesize_mimo_tts(
     text: str,
     *,
@@ -61,6 +98,8 @@ def synthesize_mimo_tts(
     t = (text or "").strip()
     if not t:
         return None, "empty text", {}
+    if len(t) > MAX_TEXT_LENGTH:
+        return None, "mimo-tts text exceeds 4000 characters", {}
 
     api_key, root = resolve_mimo_credentials()
     if not api_key:
@@ -75,7 +114,7 @@ def synthesize_mimo_tts(
                 "role": "user",
                 "content": (style or DEFAULT_STYLE).strip() or DEFAULT_STYLE,
             },
-            {"role": "assistant", "content": t[:4000]},
+            {"role": "assistant", "content": t},
         ],
         "audio": {"format": fmt, "voice": voice_id},
     }
@@ -95,37 +134,14 @@ def synthesize_mimo_tts(
         with httpx.Client(timeout=timeout_s) as client:
             resp = client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
-            data = resp.json()
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        _LOG.warning("mimo-tts request failed: %s", exc)
-        return None, str(exc), {"url": url, "voice": voice_id}
-
+    except httpx.HTTPError as exc:
+        _LOG.warning("mimo-tts request failed: %s", type(exc).__name__)
+        return _request_failure(exc, voice_id)
     try:
-        choice0 = (data.get("choices") or [None])[0] or {}
-        message = choice0.get("message") or {}
-        audio = message.get("audio") or {}
-        b64 = audio.get("data") if isinstance(audio, dict) else None
-        if not isinstance(b64, str) or not b64.strip():
-            return None, "mimo-tts response missing audio.data", {"voice": voice_id}
-        raw = base64.b64decode(b64)
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        return None, f"mimo-tts decode failed: {exc}", {"voice": voice_id}
-
-    if not raw:
-        return None, "mimo-tts returned empty audio", {"voice": voice_id}
-
-    mime = "audio/wav" if fmt in ("wav", "wave") else f"audio/{fmt}"
-    return (
-        raw,
-        "",
-        {
-            "model": payload["model"],
-            "voice": voice_id,
-            "format": fmt,
-            "mime": mime,
-            "provider": "mimo",
-        },
-    )
+        data = resp.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None, "mimo-tts invalid JSON", {"voice": voice_id, "status": 502}
+    return _decode_response(data, voice_id, fmt, payload["model"])
 
 
 async def synthesize_mimo_tts_async(
@@ -141,6 +157,8 @@ async def synthesize_mimo_tts_async(
     t = (text or "").strip()
     if not t:
         return None, "empty text", {}
+    if len(t) > MAX_TEXT_LENGTH:
+        return None, "mimo-tts text exceeds 4000 characters", {}
 
     api_key, root = resolve_mimo_credentials()
     if not api_key:
@@ -155,7 +173,7 @@ async def synthesize_mimo_tts_async(
                 "role": "user",
                 "content": (style or DEFAULT_STYLE).strip() or DEFAULT_STYLE,
             },
-            {"role": "assistant", "content": t[:4000]},
+            {"role": "assistant", "content": t},
         ],
         "audio": {"format": fmt, "voice": voice_id},
     }
@@ -172,37 +190,17 @@ async def synthesize_mimo_tts_async(
         return None, "httpx not installed", {}
 
     try:
-        async with httpx.AsyncClient(timeout=timeout_s) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        _LOG.warning("mimo-tts async request failed: %s", exc)
-        return None, str(exc), {"url": url, "voice": voice_id}
-
+        async with asyncio.timeout(timeout_s):
+            async with httpx.AsyncClient(timeout=timeout_s) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                resp.raise_for_status()
+    except TimeoutError:
+        return None, "mimo-tts request timed out", {"voice": voice_id, "status": 504}
+    except httpx.HTTPError as exc:
+        _LOG.warning("mimo-tts async request failed: %s", type(exc).__name__)
+        return _request_failure(exc, voice_id)
     try:
-        choice0 = (data.get("choices") or [None])[0] or {}
-        message = choice0.get("message") or {}
-        audio = message.get("audio") or {}
-        b64 = audio.get("data") if isinstance(audio, dict) else None
-        if not isinstance(b64, str) or not b64.strip():
-            return None, "mimo-tts response missing audio.data", {"voice": voice_id}
-        raw = base64.b64decode(b64)
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        return None, f"mimo-tts decode failed: {exc}", {"voice": voice_id}
-
-    if not raw:
-        return None, "mimo-tts returned empty audio", {"voice": voice_id}
-
-    mime = "audio/wav" if fmt in ("wav", "wave") else f"audio/{fmt}"
-    return (
-        raw,
-        "",
-        {
-            "model": payload["model"],
-            "voice": voice_id,
-            "format": fmt,
-            "mime": mime,
-            "provider": "mimo",
-        },
-    )
+        data = resp.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None, "mimo-tts invalid JSON", {"voice": voice_id, "status": 502}
+    return _decode_response(data, voice_id, fmt, payload["model"])

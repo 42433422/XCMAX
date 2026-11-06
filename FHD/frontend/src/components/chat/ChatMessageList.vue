@@ -50,6 +50,7 @@
             class="message-html"
             v-html="messageHtml(msg)"
           ></div>
+          <ChatTypingIndicator v-if="msg.role === 'ai' && !msg.streamingShell && msg.waitingHint" :label="msg.waitingHint" show-elapsed />
           <details
             v-if="msg.role === 'ai' && !hasOrchestrationTrace(msg) && (msg.toolProgressLabel || msg.executionProgress?.length)"
             class="execution-timeline"

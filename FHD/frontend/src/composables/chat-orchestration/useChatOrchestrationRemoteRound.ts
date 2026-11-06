@@ -15,6 +15,7 @@ import { useModsStore } from '@/stores/mods'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 import { readPlannerSseResponse, isChatStreamEnabled, IncompletePlannerSseError, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
+import { stripPlannerDisplayMarkers } from '@/utils/chatBubbleDisplay'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { extractLikelyProductQueryKeyword } from '../useChatPersistence'
 import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useChatSessionActivity'
@@ -352,30 +353,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       let awaitingAuthorization = false
       let sseError: string | null = null
       let streamRunId = ''
-      let ttsSpokenOffset = 0
       const ttsShouldSpeakThisMessage = ttsEnabled.value
-      const SPEAK_SENTENCE_BOUNDARY = /[。！？!?；;\n]/g
-      const flushTtsFromStream = (text: string, force: boolean) => {
-        if (!round.isActive()) return
-        if (!ttsShouldSpeakThisMessage || !ttsEnabled.value) return
-        const pending = text.slice(ttsSpokenOffset)
-        if (!pending) return
-        if (force) {
-          queueVoice(pending)
-          ttsSpokenOffset = text.length
-          return
-        }
-        SPEAK_SENTENCE_BOUNDARY.lastIndex = 0
-        let lastBoundary = -1
-        let match: RegExpExecArray | null
-        while ((match = SPEAK_SENTENCE_BOUNDARY.exec(pending)) !== null) {
-          lastBoundary = match.index + match[0].length
-        }
-        if (lastBoundary < 0) return
-        const chunk = pending.slice(0, lastBoundary).trim()
-        if (chunk) queueVoice(chunk)
-        ttsSpokenOffset += lastBoundary
-      }
+      let receivedDone = false
       try {
         const { body } = buildPlannerChatRequestPayload(
           primaryForStream,
@@ -396,10 +375,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           if (!isOwnerCurrent()) { controller.abort(); return }
           const heartbeat = (ev.type === 'token' && ev.ephemeral === true)
             || (ev.type === 'tool_progress' && ev.phase === 'accepted')
-          if ((ev.type === 'token' || ev.type === 'tool_progress') && !heartbeat) {
+          if ((ev.type === 'token' || ev.type === 'tool_progress' || ev.type === 'model_activity') && !heartbeat) {
             // Legacy tools send a visible call marker, then can execute silently
             // for minutes. Run creation alone is not evidence of model progress.
-            if ((ev.type === 'token' && ev.text.trim())
+            if (ev.type === 'model_activity' || (ev.type === 'token' && ev.text.trim())
               || (ev.type === 'tool_progress' && ev.phase !== 'started')) {
               window.clearTimeout(stallTimer)
             }
@@ -410,8 +389,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           } else if (ev.type === 'tool_progress') {
             streamRunId = ev.run_id || streamRunId
             const hint = String(ev.text || ev.label || '').trim()
-            if (heartbeat && round.isActive() && streamMessage && hint) streamMessage.waitingHint = hint
-            setLoadingProgress(ev.label || '正在执行任务…', requestScope.sessionId)
+            if (round.isActive() && streamMessage && hint) streamMessage.waitingHint = hint
+            setLoadingProgress(hint || '正在执行任务…', requestScope.sessionId)
             if (streamRunId) syncStreamRun({ run_id: streamRunId })
           } else if (ev.type === 'token') {
             if (ev.ephemeral) {
@@ -424,11 +403,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
                 applyPlainTextToMessageIndex(msgIndex, streamPlain)
                 if (streamMessage) delete streamMessage.waitingHint
               }
-              flushTtsFromStream(streamPlain, false)
               setLoadingProgress('正在生成回复…', requestScope.sessionId)
             }
           } else if (ev.type === 'done') {
             doneResult = ev.result
+            receivedDone = true
             awaitingAuthorization = false
           } else if (ev.type === 'error') {
             consumeRoute(ev.route_metadata)
@@ -443,7 +422,6 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
             streamPlain += `\n[需要授权：${tokenDesc || tokenName || '授权信息'}]\n`
             if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, streamPlain)
-            flushTtsFromStream(streamPlain, false)
             const upTok = String(tokenName || '').toUpperCase()
             if (upTok.includes('WRITE') || /写入|导入|入库|二级|数据库写入|DB_WRITE/i.test(String(tokenDesc || ''))) {
               plannerWriteUnlockResumeDraft.value = streamPlain
@@ -458,6 +436,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           if (streamRunId) syncStreamRun({ run_id: streamRunId })
           return
         }
+        if (!receivedDone) throw new IncompletePlannerSseError()
         const donePayload = asPlannerPayload(doneResult)
         consumeRoute(donePayload.route_metadata)
         const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
@@ -468,14 +447,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             applyPlainTextToMessageIndex(msgIndex, finalText)
           }
         }
-        if (round.isActive() && ttsShouldSpeakThisMessage && ttsEnabled.value) {
-          if (finalText.length >= ttsSpokenOffset) {
-            const tail = finalText.slice(ttsSpokenOffset).trim()
-            if (tail) queueVoice(tail)
-            ttsSpokenOffset = finalText.length
-          } else {
-            flushTtsFromStream(streamPlain, true)
-          }
+        if (round.isActive() && ttsShouldSpeakThisMessage && ttsEnabled.value && donePayload.success !== false) {
+          const clean = stripPlannerDisplayMarkers(finalText.replace(/（正在(?:将 Excel 导入数据库|生成 Word 文档|生成 Excel 工作簿|生成可下载文件)(?:[^（）]|（[^（）]*）)*）/g, '\n')).trim()
+          if (clean && clean !== '（无内容）') queueVoice(clean)
         }
         if (!round.isActive()) return
         const wrap: ChatPlannerPayload = doneResult && typeof doneResult === 'object' ? donePayload : { success: true, response: finalText }
@@ -527,6 +501,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }
         if (streamRunId) syncStreamRun({ run_id: streamRunId })
       } finally {
+        if (round.isActive() && streamMessage) delete streamMessage.waitingHint
         if (round.isActive() && streamMessage?.streamingShell) {
           const leftover = streamPlain.trim()
           applyPlainTextToMessageIndex(

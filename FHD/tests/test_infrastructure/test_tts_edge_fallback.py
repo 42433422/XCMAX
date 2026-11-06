@@ -487,7 +487,7 @@ class TestEdgeUpstreamFailure:
         with pytest.raises(tts.TtsUpstreamBlockedError, match="已暂停重试"):
             synthesize_to_data_uri(text="hi again")
 
-    def test_unknown_sdk_exception_becomes_runtime_error(self, monkeypatch) -> None:
+    def test_unknown_sdk_exception_propagates(self, monkeypatch) -> None:
         class WeirdSdkError(Exception):
             pass
 
@@ -495,7 +495,7 @@ class TestEdgeUpstreamFailure:
             raise WeirdSdkError("boom")
 
         monkeypatch.setattr(tts, "_synthesize_mp3_bytes", _weird)
-        with pytest.raises(RuntimeError, match="Edge TTS 调用失败：WeirdSdkError"):
+        with pytest.raises(WeirdSdkError, match="boom"):
             synthesize_to_data_uri(text="hi")
 
 

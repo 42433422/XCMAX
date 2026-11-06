@@ -281,9 +281,9 @@ def chat_stream_text(
                 content = getattr(delta, "content", None)
                 if content:
                     text_parts.append(str(content))
-                    if not backup_required:
-                        yield str(content)
                 tc_list = getattr(delta, "tool_calls", None) or []
+                if content or tc_list:
+                    yield {"_planner_sse": "model_activity"}
                 for position, tc in enumerate(tc_list):
                     index = getattr(tc, "index", None)
                     idx = position if index is None else int(index)
@@ -305,10 +305,18 @@ def chat_stream_text(
                 raw_args = str(v.get("function", {}).get("arguments") or "")
                 if tool_name:
                     label = _facade()._tool_stream_call_label(tool_name, raw_args)
-                    yield f"\n[正在调用工具: {label}]\n"
+                    yield {
+                        "_planner_sse": "tool_progress",
+                        "phase": "running",
+                        "text": f"[正在调用工具: {label}]",
+                    }
                     slow = _facade()._slow_tool_wait_message(tool_name, raw_args)
                     if slow:
-                        yield slow
+                        yield {
+                            "_planner_sse": "tool_progress",
+                            "phase": "running",
+                            "text": slow.strip(),
+                        }
         if finish_reason == "tool_calls" or tool_calls_by_idx:
             tcs = [
                 SimpleNamespace(
@@ -367,13 +375,18 @@ def chat_stream_text(
                     "message": _NO_PROGRESS,
                 }
                 return
-            yield _facade()._post_tool_round_hint(tcs, tool_payloads)
+            yield {
+                "_planner_sse": "tool_progress",
+                "phase": "returned",
+                "text": _facade()._post_tool_round_hint(tcs, tool_payloads).strip(),
+            }
             tool_choice = "auto"
             continue
         if backup_required:
             yield {"_planner_sse": "error", "message": _BACKUP_NOT_EXECUTED}
             return
         if "".join(text_parts).strip():
+            yield from text_parts
             return
         if has_image_input:
             raise _facade().EmptyMultimodalResponseError(
@@ -399,6 +412,63 @@ def chat_stream_sse_events(
     model: str | None = None,
     client: Any | None = None,
 ):
+    pending = ""
+    prefixes = (
+        "[正在调用工具:",
+        "[正在调用工具：",
+        "【正在调用工具:",
+        "【正在调用工具：",
+        "[工具已返回",
+        "【工具已返回",
+        "[工具未成功",
+        "【工具未成功",
+        "（正在将 Excel 导入数据库",
+        "（正在生成 Word 文档",
+        "（正在生成 Excel 工作簿",
+        "（正在生成可下载文件",
+    )
+
+    def consume(text: str, final: bool = False):
+        nonlocal pending
+        pending += text
+        while pending:
+            start = min(
+                (index for char in "[【（" if (index := pending.find(char)) >= 0), default=-1
+            )
+            if start < 0:
+                yield {"type": "token", "text": pending}
+                pending = ""
+                break
+            if start:
+                yield {"type": "token", "text": pending[:start]}
+                pending = pending[start:]
+            if not any(
+                prefix.startswith(pending) or pending.startswith(prefix) for prefix in prefixes
+            ):
+                yield {"type": "token", "text": pending[0]}
+                pending = pending[1:]
+                continue
+            close = "]" if pending[0] == "[" else "】" if pending[0] == "【" else "）"
+            depth = 0
+            end = -1
+            for index, char in enumerate(pending):
+                if char == pending[0]:
+                    depth += 1
+                elif char == close:
+                    depth -= 1
+                    if depth == 0:
+                        end = index + 1
+                        break
+            if end >= 0 and any(pending.startswith(prefix) for prefix in prefixes):
+                yield {"type": "tool_progress", "phase": "running", "text": pending[:end]}
+                pending = pending[end:]
+            elif final or len(pending) > 4096:
+                if pending in ("[", "【", "（"):
+                    yield {"type": "token", "text": pending}
+                pending = ""
+            else:
+                break
+
     with owned_model_read(
         _facade().chat_stream_text(
             user_message,
@@ -412,6 +482,20 @@ def chat_stream_sse_events(
         )
     ) as stream:
         for item in stream:
+            if isinstance(item, str):
+                yield from consume(item)
+                continue
+            if isinstance(item, dict) and item.get("_planner_sse") == "model_activity":
+                yield {"type": "model_activity"}
+                continue
+            yield from consume("", final=True)
+            if isinstance(item, dict) and item.get("_planner_sse") == "tool_progress":
+                yield {
+                    "type": "tool_progress",
+                    "phase": item.get("phase"),
+                    "text": item.get("text"),
+                }
+                continue
             if isinstance(item, dict) and item.get("_planner_sse") == "error":
                 yield {
                     "type": "error",
@@ -434,4 +518,5 @@ def chat_stream_sse_events(
                 }
                 return
             yield {"type": "token", "text": str(item)}
+        yield from consume("", final=True)
     yield {"type": "done", "result": _facade()._attach_last_tool_records({})}

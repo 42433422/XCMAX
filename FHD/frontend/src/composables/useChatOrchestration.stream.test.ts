@@ -280,6 +280,132 @@ describe('useChatOrchestration stream', () => {
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
+  it('never speaks typed progress or split legacy tool markers, but speaks the full answer once', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'tool_progress', phase: 'running', text: '[正在调用工具: 搜索]' })
+      onEvent({ type: 'token', text: '第一句。\n[正在' })
+      onEvent({ type: 'token', text: '调用工具: 搜索]\n（正在生成 Word 文档（.docx），请稍候。）\n' })
+      onEvent({ type: 'token', text: '[工具已返回结果，正在生成下一条回复…]\n第二句。' })
+      onEvent({ type: 'done', result: { success: true, response: '第一句。\n第二句。' } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.ttsEnabled.value = true
+    await api.sendMessage('hello')
+    expect(queueVoice).toHaveBeenCalledExactlyOnceWith('第一句。\n第二句。')
+  })
+
+  it('filters legacy markers from a final-only reply before speaking', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'done', result: { success: true, response: '[正在调用工具: 搜索]\n最终答案。' } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.ttsEnabled.value = true
+    await api.sendMessage('hello')
+    expect(queueVoice).toHaveBeenCalledWith('最终答案。')
+  })
+
+  it('does not speak a legacy waiting hint split inside nested parentheses', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'token', text: '（正在生成 Word 文档（.docx）' })
+      onEvent({ type: 'token', text: '，通常需数分钟。' })
+      onEvent({ type: 'token', text: '请稍候。）\n最终答案。' })
+      onEvent({ type: 'done', result: { success: true, response: '最终答案。' } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.ttsEnabled.value = true
+    await api.sendMessage('hello')
+    expect(queueVoice.mock.calls.map(call => call[0]).join('')).toBe('最终答案。')
+  })
+
+  it('speaks the remaining final answer when a legacy marker is incomplete', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'token', text: '第一句。\n[正在调用工具: 搜索' })
+      onEvent({ type: 'done', result: { success: true, response: '第一句。\n第二句。' } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.ttsEnabled.value = true
+    await api.sendMessage('hello')
+    expect(queueVoice).toHaveBeenCalledExactlyOnceWith('第一句。\n第二句。')
+  })
+
+  it('speaks the revised final answer when streamed text is replaced', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'token', text: '初稿答案。' })
+      expect(queueVoice).not.toHaveBeenCalled()
+      onEvent({ type: 'done', result: { success: true, response: '修订后的最终答案。' } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.ttsEnabled.value = true
+    await api.sendMessage('hello')
+    expect(queueVoice).toHaveBeenCalledTimes(1)
+    expect(queueVoice).toHaveBeenCalledWith('修订后的最终答案。')
+  })
+
+  it('does not speak partial output when the stream fails', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'token', text: '未完成初稿。' })
+      onEvent({ type: 'error', message: '连接失败' })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.ttsEnabled.value = true
+    await api.sendMessage('hello')
+    expect(queueVoice).not.toHaveBeenCalled()
+  })
+
+  it.each(['eof', 'authorization', 'failed receipt'])('does not speak a draft after %s', async outcome => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'token', text: '未完成初稿。' })
+      if (outcome === 'authorization') onEvent({ type: 'requires_token', token_name: 'DB_WRITE' })
+      if (outcome === 'failed receipt') onEvent({ type: 'done', result: { success: false, response: '未执行' } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.ttsEnabled.value = true
+    await api.sendMessage('hello')
+    expect(queueVoice).not.toHaveBeenCalled()
+  })
+
+  it('keeps the stream alive when buffered model activity arrives', async () => {
+    vi.useFakeTimers()
+    try {
+      let aborted = true
+      readPlannerSseResponse.mockImplementation(async (_res, onEvent, signal) => {
+        await vi.advanceTimersByTimeAsync(30_000)
+        onEvent({ type: 'model_activity' })
+        await vi.advanceTimersByTimeAsync(20_000)
+        aborted = Boolean(signal?.aborted)
+        onEvent({ type: 'done', result: { success: true, response: '完成' } })
+      })
+      await useChatOrchestration({ sessionId: ref('s') }).sendMessage('hello')
+      expect(aborted).toBe(false)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('shows tool progress after answer text has removed the streaming shell', async () => {
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    let visible = ''
+    pushStreamingAiShell.mockImplementation(() => {
+      api.messages.value.push({ role: 'ai', content: '', time: '', streamingShell: true })
+      return api.messages.value.length - 1
+    })
+    applyPlainTextToMessageIndex.mockImplementation((index, text) => {
+      api.messages.value[index].content = text
+      delete api.messages.value[index].streamingShell
+    })
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'token', text: '已开始。' })
+      onEvent({ type: 'tool_progress', phase: 'running', text: '正在搜索资料' })
+      const wrapper = mount(ChatMessageList, { props: {
+        messages: api.messages.value, isLoading: true, isStreamingReply: true, loadingProgressText: '',
+        messageHeights: new Map(), latestAiMessageIndex: api.messages.value.length - 1, playingMsgIdx: -1,
+        isMessageCollapsed: () => false, getCollapsedPreview: () => '', canSpeakMessage: () => false,
+      } })
+      try { visible = wrapper.text() } finally { wrapper.unmount() }
+      onEvent({ type: 'done', result: { success: true, response: '完成。' } })
+    })
+    await api.sendMessage('hello')
+    expect(visible).toContain('正在搜索资料')
+  })
+
   it.each(['stream', 'json'])('records only server route receipts for a %s response', async mode => {
     const route = { provider: 'xiaomi', model: 'flash', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'revision-a', route_state: 'completed' }
     streamMode.enabled = mode === 'stream'

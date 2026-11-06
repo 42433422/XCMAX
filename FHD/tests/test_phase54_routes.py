@@ -877,7 +877,11 @@ def test_ai_print_pdf_labels_501(ai_client: TestClient) -> None:
 def test_ai_tts_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.application.facades.tts_facade.synthesize_to_data_uri",
-        lambda **kwargs: {"audioBase64": "P54", "voice": "zh-CN-female", "lang": "zh"},
+        lambda **kwargs: {
+            "audioBase64": "data:audio/mpeg;base64,UDU0",
+            "voice": "zh-CN-female",
+            "lang": "zh",
+        },
     )
     monkeypatch.setattr(
         "app.application.facades.tts_facade.trigger_common_tts_warmup",
@@ -885,10 +889,10 @@ def test_ai_tts_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) 
     )
     r = ai_client.post(
         "/api/tts",
-        json={"text": "测试语音", "speakerId": 1, "rate": 1.0, "pitch": 1.0},
+        json={"text": "测试语音", "speakerId": "1", "rate": "+0%", "pitch": "+0Hz"},
     )
     assert r.status_code == 200
-    assert r.json()["data"]["audioBase64"] == "P54"
+    assert r.json()["data"]["audioBase64"] == "data:audio/mpeg;base64,UDU0"
 
 
 def test_ai_tts_fallback_on_error(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -898,10 +902,10 @@ def test_ai_tts_fallback_on_error(ai_client: TestClient, monkeypatch: pytest.Mon
     )
     monkeypatch.setattr(
         "app.application.facades.tts_facade.synthesize_to_data_uri",
-        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("edge offline")),
+        lambda **kwargs: (_ for _ in ()).throw(ConnectionError("edge offline")),
     )
     r = ai_client.post("/api/tts", json={"text": "回退测试"})
-    assert r.status_code == 503
+    assert r.status_code == 502
     assert r.json()["success"] is False
     assert "MiMo" in r.json()["message"] or "Edge" in r.json()["message"]
 

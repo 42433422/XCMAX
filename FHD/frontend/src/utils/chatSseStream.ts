@@ -2,6 +2,7 @@ import { resolvePlannerChatStreamPath } from '@/utils/plannerChatPaths'
 
 export type PlannerSseEvent =
   | { type: 'route_metadata'; route_metadata: unknown }
+  | { type: 'model_activity' }
   | { type: 'token'; text: string; ephemeral?: boolean }
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string; run_id?: string }
   | { type: 'done'; result?: unknown }

@@ -10,6 +10,9 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 
+import aiohttp
+import httpx
+
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,10 @@ _EDGE_COOLDOWN_S = 300.0
 
 class TtsUpstreamBlockedError(RuntimeError):
     """语音上游拒绝握手（例如 edge-tts 403），需冷却后重试或改用离线朗读。"""
+
+
+class TtsUpstreamResponseError(RuntimeError):
+    pass
 
 
 _EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2,3}-[A-Za-z]+Neural$")
@@ -265,10 +272,13 @@ async def _synthesize_mp3_bytes(req: TtsRequest) -> bytes:
     async with asyncio.timeout(_EDGE_TIMEOUT_S):
         communicate = edge_tts.Communicate(**kwargs)
         async for item in communicate.stream():
+            if not isinstance(item, dict):
+                raise TtsUpstreamResponseError("edge-tts returned invalid chunk")
             if item.get("type") == "audio":
                 data = item.get("data")
-                if isinstance(data, (bytes, bytearray)) and data:
-                    chunks.append(bytes(data))
+                if not isinstance(data, (bytes, bytearray)) or not data:
+                    raise TtsUpstreamResponseError("edge-tts returned invalid audio")
+                chunks.append(bytes(data))
     return b"".join(chunks)
 
 
@@ -297,17 +307,23 @@ def _synthesize_edge_mp3(req: TtsRequest) -> bytes:
     except TtsUpstreamBlockedError:
         raise
     except BOUNDARY_ERRORS as e:
-        # 语音 SDK 抛出的自定义异常可能不属于 RECOVERABLE_ERRORS；
-        # 这里是集成边界，必须转换为可诊断错误，不能让 /api/tts 变成 500。
         if _is_edge_forbidden(e):
             _trip_edge_block(e)
             raise TtsUpstreamBlockedError(
                 "Edge 语音上游拒绝了握手（HTTP 403）；已暂停重试，请检查系统时间/网络，"
                 "或改用离线语音包。"
             ) from e
-        if isinstance(e, RECOVERABLE_ERRORS):
+        # Timeouts must propagate as TimeoutError (callers/tests assert this).
+        # Do not import edge_tts.exceptions here: tests stub edge_tts as a non-package.
+        if isinstance(e, TimeoutError):
             raise
-        raise RuntimeError(f"Edge TTS 调用失败：{type(e).__name__}") from e
+        try:
+            from edge_tts.exceptions import EdgeTTSException
+        except ImportError:
+            raise
+        if isinstance(e, EdgeTTSException):
+            raise TtsUpstreamResponseError("edge-tts returned an invalid response") from e
+        raise
 
 
 def synthesize_to_data_uri(
@@ -352,6 +368,12 @@ def synthesize_to_data_uri(
 
         if is_configured():
             audio_bytes, meta = synthesize_mimo_bytes(text_norm, voice=mimo_voice)
+            if (
+                not isinstance(audio_bytes, (bytes, bytearray))
+                or not audio_bytes
+                or not isinstance(meta, dict)
+            ):
+                raise TtsUpstreamResponseError("mimo-tts returned invalid audio")
             mime = str(meta.get("mime") or "audio/wav")
             b64 = base64.b64encode(audio_bytes).decode("ascii")
             payload = {
@@ -362,14 +384,14 @@ def synthesize_to_data_uri(
             }
             _set_cache(key, payload)
             return payload
-    except RECOVERABLE_ERRORS as exc:
-        logger.info("MiMo TTS unavailable, falling back to Edge: %s", exc)
+    except (TtsUpstreamResponseError, httpx.HTTPError, aiohttp.ClientError, OSError) as exc:
+        logger.info("MiMo TTS unavailable, falling back to Edge: %s", type(exc).__name__)
 
     # 2) Edge neural
     req = TtsRequest(text=text_norm, voice=edge_voice, lang=normalized_lang, rate=rate, pitch=pitch)
     mp3_bytes = _synthesize_edge_mp3(req)
-    if not mp3_bytes:
-        raise RuntimeError("edge-tts returned empty audio")
+    if not isinstance(mp3_bytes, (bytes, bytearray)) or not mp3_bytes:
+        raise TtsUpstreamResponseError("edge-tts returned empty audio")
 
     b64 = base64.b64encode(mp3_bytes).decode("ascii")
     payload = {

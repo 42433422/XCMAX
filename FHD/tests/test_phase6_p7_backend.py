@@ -912,19 +912,19 @@ def test_compat_print_single_label_recoverable_error_returns_500() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_compat_tts_empty_text_returns_400() -> None:
+def test_compat_tts_empty_text_returns_422() -> None:
     client = _ai_assistant_client()
     resp = client.post("/api/tts", json={})
-    assert resp.status_code == 400
+    assert resp.status_code == 422
     body = resp.json()
     assert body["success"] is False
-    assert "text" in body["message"]
+    assert "参数" in body["message"]
 
 
-def test_compat_tts_whitespace_text_returns_400() -> None:
+def test_compat_tts_whitespace_text_returns_422() -> None:
     client = _ai_assistant_client()
     resp = client.post("/api/tts", json={"text": "   "})
-    assert resp.status_code == 400
+    assert resp.status_code == 422
 
 
 def test_compat_tts_success_returns_audio_payload() -> None:
@@ -935,7 +935,7 @@ def test_compat_tts_success_returns_audio_payload() -> None:
     ):
         mock_warmup.return_value = None
         mock_synth.return_value = {
-            "audioBase64": "AAA",
+            "audioBase64": "data:audio/mpeg;base64,QUFB",
             "voice": "zh-CN-XiaoxiaoNeural",
             "lang": "zh",
         }
@@ -943,25 +943,25 @@ def test_compat_tts_success_returns_audio_payload() -> None:
             "/api/tts",
             json={
                 "text": "你好",
-                "speakerId": 1,
+                "speakerId": "1",
                 "lang": "ZH",
                 "voice": "v1",
-                "rate": 1,
-                "pitch": 0,
+                "rate": "+0%",
+                "pitch": "+0Hz",
             },
         )
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
-    assert body["data"]["audioBase64"] == "AAA"
-    assert body["data"]["speakerId"] == 1
+    assert body["data"]["audioBase64"] == "data:audio/mpeg;base64,QUFB"
+    assert body["data"]["speakerId"] == "1"
     assert body["data"]["lang"] == "zh"
     mock_synth.assert_called_once()
     call_kwargs = mock_synth.call_args.kwargs
     assert call_kwargs["text"] == "你好"
     assert call_kwargs["lang"] == "zh"  # 应被 lower()
     assert call_kwargs["voice"] == "v1"
-    assert call_kwargs["speaker_id"] == 1
+    assert call_kwargs["speaker_id"] == "1"
 
 
 def test_compat_tts_trace_redacts_audio_payload() -> None:
@@ -970,7 +970,11 @@ def test_compat_tts_trace_redacts_audio_payload() -> None:
     with (
         patch(
             "app.application.facades.tts_facade.synthesize_to_data_uri",
-            return_value={"audioBase64": "SECRET_AUDIO_BASE64", "voice": "zh", "lang": "zh"},
+            return_value={
+                "audioBase64": "data:audio/mpeg;base64,U0VDUkVUX0FVRElP",
+                "voice": "zh",
+                "lang": "zh",
+            },
         ),
         patch("app.application.facades.tts_facade.trigger_common_tts_warmup", return_value=None),
         patch(
@@ -982,7 +986,7 @@ def test_compat_tts_trace_redacts_audio_payload() -> None:
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body["data"]["audioBase64"] == "SECRET_AUDIO_BASE64"
+    assert body["data"]["audioBase64"] == "data:audio/mpeg;base64,U0VDUkVUX0FVRElP"
     run_id = body["run_id"]
     assert body["agent_run_id"] == run_id
     run = repo.get(run_id)
@@ -990,21 +994,20 @@ def test_compat_tts_trace_redacts_audio_payload() -> None:
     assert run.metadata["runtime_context"]["route"] == "/api/tts"
     assert run.metadata["runtime_context"]["action"] == "tts_synthesize"
     serialized = str(run.to_dict())
-    assert "SECRET_AUDIO_BASE64" not in serialized
+    assert "U0VDUkVUX0FVRElP" not in serialized
     assert "redacted" in serialized
 
 
-def test_compat_tts_recoverable_error_returns_503_without_browser_voice() -> None:
+def test_compat_tts_connection_error_returns_502_without_browser_voice() -> None:
     client = _ai_assistant_client()
     with (
         patch("app.application.facades.tts_facade.synthesize_to_data_uri") as mock_synth,
         patch("app.application.facades.tts_facade.trigger_common_tts_warmup") as mock_warmup,
     ):
         mock_warmup.return_value = None
-        mock_synth.side_effect = RuntimeError("edge tts offline")
+        mock_synth.side_effect = ConnectionError("edge tts offline")
         resp = client.post("/api/tts", json={"text": "你好"})
-    # MiMo/Edge 均不可用时 503；前端不再回退系统 TTS
-    assert resp.status_code == 503
+    assert resp.status_code == 502
     body = resp.json()
     assert body["success"] is False
     assert "MiMo" in body["message"] or "Edge" in body["message"]

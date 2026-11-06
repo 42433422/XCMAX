@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import binascii
+import json
 import logging
 import os
 from typing import Any
+
+from app.domain.shared_services.tts_service import TtsUpstreamResponseError
 
 logger = logging.getLogger(__name__)
 
@@ -84,20 +88,29 @@ def synthesize_mimo_bytes(
             async with httpx.AsyncClient(timeout=timeout_s) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 resp.raise_for_status()
-                data: dict[str, Any] = resp.json()
-                return data
+                try:
+                    payload_json = resp.json()
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    raise TtsUpstreamResponseError("mimo-tts returned invalid JSON") from exc
+                if not isinstance(payload_json, dict):
+                    raise TtsUpstreamResponseError("mimo-tts returned non-object JSON")
+                return payload_json
 
     data = asyncio.run(request())
 
-    choice0 = (data.get("choices") or [None])[0] or {}
-    message = choice0.get("message") or {}
-    audio = message.get("audio") or {}
+    choices = data.get("choices") if isinstance(data, dict) else None
+    choice0 = choices[0] if isinstance(choices, list) and choices else None
+    message = choice0.get("message") if isinstance(choice0, dict) else None
+    audio = message.get("audio") if isinstance(message, dict) else None
     b64 = audio.get("data") if isinstance(audio, dict) else None
     if not isinstance(b64, str) or not b64.strip():
-        raise RuntimeError("mimo-tts response missing audio.data")
-    raw = base64.b64decode(b64)
+        raise TtsUpstreamResponseError("mimo-tts response missing audio.data")
+    try:
+        raw = base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise TtsUpstreamResponseError("mimo-tts returned invalid audio.data") from exc
     if not raw:
-        raise RuntimeError("mimo-tts returned empty audio")
+        raise TtsUpstreamResponseError("mimo-tts returned empty audio")
 
     mime = "audio/wav" if fmt in ("wav", "wave") else f"audio/{fmt}"
     return raw, {

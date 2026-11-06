@@ -95,9 +95,105 @@ def test_duplicate_tool_stops_without_reexecuting_or_hiding_partial_success(fixt
 def test_usage_only_frames_are_ignored_without_index_error(fixture_tools):
     cli = client(lambda **_: iter([NS(choices=[]), chunk("synthetic answer"), NS(choices=[])]))
     events = list(adapter.chat_stream_sse_events("synthetic", client=cli, model="synthetic"))
-    assert [event["type"] for event in events] == ["token", "done"]
-    assert events[0]["text"] == "synthetic answer"
+    assert [event["type"] for event in events] == ["model_activity", "token", "done"]
+    assert events[1]["text"] == "synthetic answer"
     fixture_tools.assert_not_called()
+
+
+def test_buffered_model_activity_is_emitted_before_the_model_finishes(fixture_tools):
+    def chunks():
+        yield chunk("初稿。", finish=None)
+        raise ValueError("upstream interrupted")
+
+    events = adapter.chat_stream_sse_events(
+        "synthetic", client=client(lambda **_: chunks()), model="synthetic"
+    )
+    assert next(events) == {"type": "model_activity"}
+    with pytest.raises(ValueError, match="upstream interrupted"):
+        next(events)
+
+
+def test_failed_tool_return_does_not_claim_completed(fixture_tools):
+    fixture_tools.return_value = json.dumps({"success": False, "message": "拒绝"})
+    rounds = iter([iter([chunk(calls=[tool()], finish="tool_calls")]), iter([chunk("未成功。")])])
+    events = list(
+        adapter.chat_stream_sse_events(
+            "synthetic", client=client(lambda **_: next(rounds)), model="synthetic"
+        )
+    )
+    progress = [event for event in events if event["type"] == "tool_progress"]
+    assert progress[-1]["phase"] != "completed"
+
+
+def test_tool_messages_are_progress_events_not_answer_tokens(fixture_tools, monkeypatch):
+    monkeypatch.setattr(adapter, "_slow_tool_wait_message", lambda *_: "等待工具完成。")
+    rounds = iter([iter([chunk(calls=[tool()], finish="tool_calls")]), iter([chunk("最终答案。")])])
+    events = list(
+        adapter.chat_stream_sse_events(
+            "synthetic", client=client(lambda **_: next(rounds)), model="synthetic"
+        )
+    )
+    progress = [event for event in events if event["type"] == "tool_progress"]
+    assert len(progress) == 3
+    assert "正在调用工具" in progress[0]["text"]
+    assert "等待工具完成" in progress[1]["text"]
+    assert "工具已返回" in progress[2]["text"]
+    assert [event["text"] for event in events if event["type"] == "token"] == ["最终答案。"]
+
+
+def test_model_text_before_tool_call_is_not_emitted_as_answer(fixture_tools):
+    rounds = iter(
+        [
+            iter([chunk("先检查数据。"), chunk(calls=[tool()], finish="tool_calls")]),
+            iter([chunk("最终答案。")]),
+        ]
+    )
+    events = list(
+        adapter.chat_stream_sse_events(
+            "synthetic", client=client(lambda **_: next(rounds)), model="synthetic"
+        )
+    )
+    assert [event["text"] for event in events if event["type"] == "token"] == ["最终答案。"]
+    assert any(event["type"] == "tool_progress" for event in events)
+
+
+@pytest.mark.parametrize(
+    "marker",
+    ["[正在调用工具: 搜索]", "【工具已返回结果】", "（正在生成 Word 文档（.docx），请稍候。）"],
+)
+def test_legacy_progress_markers_are_not_answer_tokens(monkeypatch, marker):
+    monkeypatch.setattr(adapter, "chat_stream_text", lambda *a, **k: iter([marker, "最终答案。 "]))
+    events = list(adapter.chat_stream_sse_events("synthetic"))
+    assert events[0]["type"] == "tool_progress"
+    assert events[0]["text"] == marker
+    assert events[1] == {"type": "token", "text": "最终答案。 "}
+
+
+@pytest.mark.parametrize(
+    "marker",
+    ["[正在调用工具：搜索]", "【工具已返回结果】", "（正在生成 Word 文档（.docx），请稍候。）"],
+)
+def test_split_legacy_progress_marker_is_not_an_answer_token(monkeypatch, marker):
+    monkeypatch.setattr(adapter, "chat_stream_text", lambda *a, **k: iter([*marker, "最终答案。 "]))
+    events = list(adapter.chat_stream_sse_events("synthetic"))
+    assert [event["text"] for event in events if event["type"] == "token"] == ["最终答案。 "]
+    assert any(event["type"] == "tool_progress" and event["text"] == marker for event in events)
+
+
+def test_partial_marker_at_interruption_is_not_emitted_as_answer(monkeypatch):
+    monkeypatch.setattr(
+        adapter,
+        "chat_stream_text",
+        lambda *a, **k: iter(
+            [
+                "正文。 [正在调用工",
+                {"_planner_sse": "error", "message": "连接失败"},
+            ]
+        ),
+    )
+    events = list(adapter.chat_stream_sse_events("synthetic"))
+    assert "".join(event["text"] for event in events if event["type"] == "token") == "正文。 "
+    assert events[-1]["type"] == "error"
 
 
 @pytest.mark.parametrize(
