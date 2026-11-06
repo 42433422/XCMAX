@@ -1,3 +1,4 @@
+import { installStabilityClient } from '@/api/sessionRefresh'
 import { installDesktopRendererErrorReporting, reportDesktopRendererFault } from '@/utils/desktopRendererErrors'
 import { createApp } from 'vue'
 
@@ -133,6 +134,7 @@ function prefetchStaticRouteChunks(): void {
  * 深链直达 Mod 页时若此请求晚于首跳，仍可由 modsStore.initialize 内 registerModRoutes 补齐。
  */
 async function bootstrap() {
+  installStabilityClient()
   bootstrapEditionDefaults()
   void bootstrapHostConfig()
   applySidebarThemeFromStorage()

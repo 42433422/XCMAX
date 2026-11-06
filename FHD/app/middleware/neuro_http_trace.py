@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from typing import Any
 
 from starlette.requests import Request
@@ -51,10 +50,13 @@ async def neuro_http_trace_middleware(request: Request, call_next):
     except RECOVERABLE_ERRORS:
         return await call_next(request)
 
-    rid = str(uuid.uuid4())
+    from app.middleware.request_id import ensure_request_id
+    from app.security.log_redaction import redact_log_text
+
+    rid = ensure_request_id(request)
     t0 = time.perf_counter()
     path = request.url.path
-    query = str(request.url.query)[:500]
+    query = redact_log_text(str(request.url.query)[:500])
 
     try:
         from app.neuro_bus.application_neuro_bridge import publish_neuro_event
@@ -106,7 +108,7 @@ async def neuro_http_trace_middleware(request: Request, call_next):
                     "method": request.method,
                     "path": path[:800],
                     "latency_ms": round(ms, 3),
-                    "error": str(exc)[:300],
+                    "error": redact_log_text(str(exc))[:300],
                 },
                 domain="global",
             )

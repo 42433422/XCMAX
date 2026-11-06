@@ -36,8 +36,10 @@ type SsePayload = {
 let eventSource: EventSource | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectDelayMs = 3000
+let reconnectAttempt = 0
 let streamActive = false
 let streamCreatedAt = 0
+const MAX_SSE_RECONNECTS = 12
 
 function readStoredCursor(): number {
   if (typeof window === 'undefined') return 0
@@ -128,6 +130,7 @@ function handleSseData(raw: string): void {
   }
   if (data.type === 'connected') {
     reconnectDelayMs = 3000
+    reconnectAttempt = 0
     return
   }
   if (data.type === 'heartbeat') {
@@ -152,6 +155,8 @@ function handleSseData(raw: string): void {
 
 function scheduleReconnect(): void {
   if (!streamActive || reconnectTimer != null) return
+  if (reconnectAttempt >= MAX_SSE_RECONNECTS) return
+  reconnectAttempt += 1
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
     if (streamActive) openEventSource()
@@ -187,6 +192,7 @@ function closeEventSource(): void {
     reconnectTimer = null
   }
   reconnectDelayMs = 3000
+  reconnectAttempt = 0
   const age = Date.now() - streamCreatedAt
   if (age < 2000 && eventSource) {
     const es = eventSource

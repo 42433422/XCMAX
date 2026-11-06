@@ -6,7 +6,7 @@ import re
 
 _BEARER = re.compile(r"(Bearer\s+)[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE)
 _API_KEY = re.compile(
-    r"((?:api[_-]?key|x-api-key|authorization)\s*[:=]\s*)[^\s,;\"']+",
+    r"((?:api[_-]?key|x-api-key|authorization|password|passwd|secret|refresh_token)\s*[:=]\s*)[^\s,;\"']+",
     re.IGNORECASE,
 )
 _COOKIE = re.compile(

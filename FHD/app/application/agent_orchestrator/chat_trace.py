@@ -310,6 +310,9 @@ def create_chat_trace_run(
     channel: str = "compat_chat",
     intent: str = "legacy_chat_adapter",
 ) -> AgentRun:
+    from app.application.network_stability import emit_current_lane
+
+    emit_current_lane("chat")
     return _run_service().create(
         payload,
         message=message,
