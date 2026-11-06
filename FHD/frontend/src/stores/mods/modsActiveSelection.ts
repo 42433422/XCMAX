@@ -15,6 +15,7 @@ import { pickModMatchingIndustry, type ModsInitializeOptions } from './modsShare
 export interface ModsActiveSelectionDeps {
   mods: Ref<ModInfo[]>
   activeModId: Ref<string>
+  entitledModIds: Ref<string[]>
   clientModsUiOff: Ref<boolean>
   setActiveModId: (modId: string | null | undefined, scope?: string) => void
   resolveModsAccountContext: () => { accountUsername: string; isAdminAccount: boolean }
@@ -22,7 +23,7 @@ export interface ModsActiveSelectionDeps {
 }
 
 export function useModsActiveSelection(deps: ModsActiveSelectionDeps) {
-  const { mods, activeModId, clientModsUiOff, setActiveModId, resolveModsAccountContext, readPendingInitOptions } = deps
+  const { mods, activeModId, entitledModIds, clientModsUiOff, setActiveModId, resolveModsAccountContext, readPendingInitOptions } = deps
 
   function ensureActiveModSelection() {
     if (clientModsUiOff.value) return
@@ -62,13 +63,16 @@ export function useModsActiveSelection(deps: ModsActiveSelectionDeps) {
    * 企业版登录/会话：按 entitled_mod_ids 与宿主 client_primary_erp_mod_id 选定当前扩展。
    */
   async function applyEntitledActiveMod(
-    entitledModIds: string[] | undefined,
+    rawEntitledModIds: string[] | undefined,
     options?: { force?: boolean; accountUsername?: string },
   ): Promise<void> {
     if (clientModsUiOff.value || !mods.value.length) return
 
     const username = String(options?.accountUsername || readPendingInitOptions()?.accountUsername || '').trim()
-    const entitled = augmentEntitledModIdsForAccount(username, normalizeEntitledModIds(entitledModIds))
+    if (rawEntitledModIds !== undefined) {
+      entitledModIds.value = augmentEntitledModIdsForAccount(username, normalizeEntitledModIds(rawEntitledModIds))
+    }
+    const entitled = entitledModIds.value
     if (!entitled.length) return
 
     await bootstrapHostConfig()

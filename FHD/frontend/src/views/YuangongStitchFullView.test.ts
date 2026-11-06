@@ -45,6 +45,7 @@ vi.mock('@/utils/workflowNav', () => ({
 }))
 vi.mock('@/utils/workflowEmployeeScope', () => ({
   workflowRegistryEntryBelongsToStack: () => true,
+  workflowHostVisibleOnPanorama: () => true,
 }))
 vi.mock('@/utils/enterpriseModStackApi', () => ({
   resolveEnterpriseModStack: vi.fn().mockResolvedValue(null),

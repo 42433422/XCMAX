@@ -149,10 +149,14 @@ class SessionAccess:
             self.logger.exception("enterprise market session check on validate failed")
         entitled_mod_ids: list[str] = []
         try:
-            background_tasks.add_task(self._refresh_entitlements, session_id)
             cached = self.cached_entitlements()
-            if cached is not None:
+            if cached:
                 entitled_mod_ids = sorted(cached)
+                background_tasks.add_task(self._refresh_entitlements, session_id)
+            else:
+                entitled = await self.sync_entitlements(session_id)
+                if entitled:
+                    entitled_mod_ids = sorted(entitled)
         except self.infra_errors():
             self.logger.exception("sync enterprise entitlements on validate failed")
         session_meta = self.session_meta(request, user)

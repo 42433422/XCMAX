@@ -4,6 +4,7 @@ import type { IndustryBaselinePlan } from '@/constants/platformShell'
 import {
   filterModsForEnterpriseWorkflowRegistry,
   filterWorkflowRegistryEntriesForEnterpriseStack,
+  workflowHostVisibleOnPanorama,
   workflowRegistryEntryBelongsToStack,
 } from './workflowEmployeeScope'
 import { mergeModManifestEntries } from './workflowEmployeeRegistry'
@@ -185,6 +186,27 @@ describe('workflowEmployeeScope', () => {
     ]
     const scoped = filterModsForEnterpriseWorkflowRegistry(mods, stack)
     expect(scoped.map((m) => m.id)).toEqual(['xcagi-erp-domain-bridge'])
+  })
+
+  it('keeps an entitled industry employee when the generic stack does not name it', () => {
+    const generic = buildEnterpriseModStack({
+      ...basePlan,
+      industry_id: '通用',
+      industry_package: { mod_id: 'xcagi-planner-bridge', product_name: '通用基础行业包' },
+      required_mod_ids: ['xcagi-planner-bridge', 'xcagi-neuro-bus-bridge'],
+      industry_mod_ids: ['xcagi-planner-bridge'],
+      custom_mod_ids: ['xcagi-planner-bridge'],
+    })
+    const mods = [
+      { id: 'attendance-industry', workflow_employees: [{ id: 'attendance_ai', label: '考勤 AI 助手' }] },
+      { id: 'artifact-generator', workflow_employees: [{ id: 'artifact-generator', label: '产物' }] },
+      { id: 'xcagi-core-workflow-employees', workflow_employees: [{ id: 'label_print', label: '标签打印' }] },
+    ]
+    const scoped = filterModsForEnterpriseWorkflowRegistry(mods, generic, ['attendance-industry'])
+    expect(scoped.map((m) => m.id)).toEqual(['attendance-industry'])
+    expect(workflowHostVisibleOnPanorama('attendance-industry', generic, ['attendance-industry'])).toBe(true)
+    expect(workflowHostVisibleOnPanorama('artifact-generator', generic, ['attendance-industry'])).toBe(false)
+    expect(workflowHostVisibleOnPanorama('xcagi-core-workflow-employees', generic, ['xcagi-core-workflow-employees'])).toBe(false)
   })
 
   it('filterModsForEnterpriseWorkflowRegistry skips employee pack entries', () => {
