@@ -34,8 +34,9 @@ describe('network stability notices', () => {
     expect(messages.size).toBe(kinds.length)
   })
 
-  it('keeps the desktop relay wording for connect timeouts', () => {
-    expect(classifyRawError('connect ETIMEDOUT')).toBeNull()
+  it('maps connect timeouts away from the relay wording', () => {
+    expect(classifyRawError('connect ETIMEDOUT')).toContain('请求超时')
+    expect(classifyRawError('connect ETIMEDOUT')).not.toContain('中继')
     expect(classifyRawError('Failed to fetch')).toContain('网络已断开')
     expect(classifyRawError('请求超时（>30s）')).toContain('未成功')
   })

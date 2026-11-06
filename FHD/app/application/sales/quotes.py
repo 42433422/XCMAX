@@ -18,7 +18,8 @@ from .idempotency import CLOSED_LOOP_FP_PREFIX
 
 
 def generate_order_no() -> str:
-    return f"SO{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    # 秒级单号在同一秒的并发报价上会撞唯一约束。微秒后缀仍是时间单号。
+    return f"SO{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 
 
 class SalesQuotes:
@@ -67,7 +68,10 @@ class SalesQuotes:
 
     def quote(self, data: dict[str, Any], *, db: Session | None = None) -> dict[str, Any]:
         """创建幂等报价；传入 db 时仅 flush/refresh，缺省时使用自有会话并提交。"""
+        from app.application.network_stability import emit_current_lane
         from app.application.sales_quote_inputs import validated_quote_request
+
+        emit_current_lane("erp")
 
         try:
             items_data = validated_quote_request(data)

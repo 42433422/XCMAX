@@ -15,6 +15,9 @@ from app.application.network_stability import (
     RefreshSingleFlight,
     SseHub,
     TraceLog,
+    effect_claim,
+    effect_drop_process_memory,
+    effect_finish,
     failure_payload,
     format_http_trace_line,
     timeout_outcome,
@@ -154,6 +157,39 @@ def test_slow_lane_does_not_block_other_lanes_or_grow_without_limit():
         pool.run("erp", lambda: "again", queue_limit=1)
     release.set()
     worker.join(timeout=2)
+
+
+def test_effect_claim_does_not_replay_unknown_or_succeeded(tmp_path):
+    path = tmp_path / "effects.sqlite"
+    first = effect_claim("order-1", "erp", "9", path=path)
+    assert first["execute"] is True
+    second = effect_claim("order-1", "erp", "9", path=path)
+    assert second["duplicate"] is True
+    assert second["execute"] is False
+    effect_finish("order-1", "succeeded", "row-1", path=path)
+    replay = effect_claim("order-1", "erp", "9", path=path)
+    assert replay["state"] == "succeeded"
+    assert replay["execute"] is False
+    effect_claim("order-2", "tool", "9", path=path)
+    effect_drop_process_memory()
+    crashed = effect_claim("order-2", "tool", "9", path=path)
+    assert crashed["state"] == "unknown"
+    assert crashed["execute"] is False
+    again = effect_claim("order-2", "tool", "9", path=path)
+    assert again["execute"] is False
+
+
+def test_trace_line_includes_lane_without_query_secrets():
+    line = format_http_trace_line(
+        request_id="req-12345678",
+        method="POST",
+        path="/api/sales/orders?token=secret-value",
+        status=200,
+        duration_ms=4,
+        lane="erp",
+    )
+    assert "lane=erp" in line
+    assert "secret-value" not in line
 
 
 def test_trace_line_correlates_ids_and_redacts_secrets():

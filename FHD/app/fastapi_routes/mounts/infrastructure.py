@@ -59,3 +59,10 @@ def register_infrastructure_routes(app: FastAPI) -> None:
     except RECOVERABLE_ERRORS:
         record_runtime_component(app, "gdpr_routes", ok=False, detail="GDPR routes unavailable")
         logger.exception("GDPR routes skipped")
+    try:
+        from app.fastapi_routes.stability_runtime import router as stability_router
+
+        app.include_router(stability_router)
+        logger.info("Registered stability_runtime (/api/stability/*)")
+    except RECOVERABLE_ERRORS:
+        logger.exception("stability runtime routes skipped")

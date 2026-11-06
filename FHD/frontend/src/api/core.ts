@@ -5,7 +5,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
 import { resolveErpApiPathWhenReady } from '@/utils/erpDomainPaths'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
-import { classifyTransportFailure, createTraceId, RefreshSingleFlight, SideEffectGate } from '@/utils/networkStability'
+import { classifyTransportFailure, createTraceId, publishStabilityNotice, RefreshSingleFlight, SideEffectGate } from '@/utils/networkStability'
 
 /**
  * 后端 LanLicenseGuard 返回 401 + error=license_* 时派发；
@@ -314,6 +314,7 @@ async function requestOnce<T = unknown>(
       }
       if (recovery === 'stop') {
         const expired = classifyTransportFailure({ status: 401, errorCode: 'token_expired' })
+        publishStabilityNotice(expired.message)
         throw new ApiError(expired.message, 401, { success: false, stability: expired })
       }
 
@@ -349,6 +350,7 @@ async function requestOnce<T = unknown>(
     const message = timedOut
       ? `请求超时（>${Math.ceil(Number(timeoutMs) / 1000)}s）。该请求未成功。`
       : stability.message
+    publishStabilityNotice(message)
     throw new ApiError(message, 0, { success: false, stability })
   } finally {
     if (timeoutId) clearTimeout(timeoutId)

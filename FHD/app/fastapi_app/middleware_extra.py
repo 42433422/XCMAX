@@ -89,7 +89,7 @@ def register_extra_middleware(app: FastAPI) -> None:
         import hashlib
         import os
 
-        from app.application.network_stability import format_http_trace_line
+        from app.application.network_stability import format_http_trace_line, lane_for_path
         from app.middleware.request_id import ensure_request_id
 
         verbose = (os.environ.get("XCAGI_REQUEST_LOG") or "").strip().lower() in {
@@ -109,12 +109,12 @@ def register_extra_middleware(app: FastAPI) -> None:
                 response.headers["X-Request-ID"] = request_id
             duration_ms = (time.perf_counter() - started) * 1000
             noisy = path.startswith("/assets/") or path in {"/api/health", "/health", "/metrics"}
+            cookie = request.headers.get("cookie") or ""
+            session_ref = hashlib.sha256(cookie.encode()).hexdigest()[:8] if cookie else ""
+            tenant = request.headers.get("x-xcagi-tenant") or ""
+            if not tenant.replace("-", "").isalnum():
+                tenant = ""
             if not noisy and (verbose or response.status_code >= 400 or logger.isEnabledFor(logging.DEBUG)):
-                cookie = request.headers.get("cookie") or ""
-                session_ref = hashlib.sha256(cookie.encode()).hexdigest()[:8] if cookie else ""
-                tenant = request.headers.get("x-xcagi-tenant") or ""
-                if not tenant.replace("-", "").isalnum():
-                    tenant = ""
                 line = format_http_trace_line(
                     request_id=request_id,
                     method=request.method,
@@ -127,6 +127,22 @@ def register_extra_middleware(app: FastAPI) -> None:
                     session_ref=session_ref,
                 )
                 logger.log(logging.INFO if verbose or response.status_code >= 400 else logging.DEBUG, line)
+            lane = response.headers.get("x-stability-lane") or lane_for_path(path)
+            if lane and not noisy:
+                logging.getLogger("app.stability").info(
+                    format_http_trace_line(
+                        request_id=request_id,
+                        method=request.method,
+                        path=path,
+                        status=response.status_code,
+                        duration_ms=duration_ms,
+                        error_code=response.headers.get("x-error-code") or "",
+                        tenant=tenant[:64],
+                        task=(request.headers.get("x-xcagi-task-id") or "")[:64],
+                        session_ref=session_ref,
+                        lane=lane,
+                    )
+                )
             return response
         finally:
             reset_request_active_mod_id(am_token)

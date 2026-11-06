@@ -84,8 +84,10 @@ export function classifyRawError(raw: string): string | null {
   if (!msg) return null
   if (lower.includes('401') || msg.includes('未授权') || msg.includes('未登录')) return null
   if (lower.includes('403') || msg.includes('无权限')) return null
-  if (lower.includes('etimedout') || lower.includes('failed to connect')) return null
-  if (msg.includes('请求超时') || lower.includes('timeout') || lower.includes('timed out')) return notice('timeout').message
+  if (lower.includes('failed to connect')) return null
+  if (lower.includes('etimedout') || msg.includes('请求超时') || lower.includes('timeout') || lower.includes('timed out') || lower.includes('timedout')) {
+    return notice('timeout').message
+  }
   if (lower.includes('econnrefused') || msg.includes('连接被拒绝') || msg.includes('正在重启')) return notice('backend_restart').message
   if (
     lower.includes('failed to fetch')
@@ -225,3 +227,18 @@ export class SseConnectionRegistry {
 }
 
 export const sseConnections = new SseConnectionRegistry()
+
+export function publishStabilityNotice(message: string): void {
+  if (typeof document === 'undefined') return
+  const text = message.trim()
+  if (!text) return
+  let node = document.getElementById('stability-notice')
+  if (!node) {
+    node = document.createElement('div')
+    node.id = 'stability-notice'
+    node.setAttribute('role', 'alert')
+    node.style.cssText = 'position:fixed;z-index:100000;top:16px;left:50%;transform:translateX(-50%);max-width:min(640px,92vw);padding:14px 18px;border-radius:10px;background:#3f1d1d;color:#fff;font-size:16px;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.28);'
+    document.body.appendChild(node)
+  }
+  node.textContent = text
+}
