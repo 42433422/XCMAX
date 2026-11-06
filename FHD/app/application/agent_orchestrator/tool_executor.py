@@ -230,6 +230,13 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": validation.action or step.action,
             }
+        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+        denied = actor_tool_denial(
+            validation.tool_id, validation.action or step.action, dict(runtime_context or {})
+        )
+        if denied is not None:
+            return denied
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
         reviewed_query = (validation.tool_id, validation.action) in _REVIEWED_QUERY_ACTIONS
@@ -269,6 +276,7 @@ class AgentToolExecutor:
         )
         from app.infrastructure.tenant_scope import owned_tenant_scope, tenant_scope
 
+        result: Any = None
         try:
             # Durable/background Agent runs execute outside the originating HTTP
             # request. Restore the authenticated integer tenant recorded in
@@ -285,11 +293,31 @@ class AgentToolExecutor:
                 if runtime_tenant_id is not None
                 else nullcontext(),
             ):
-                result = (
-                    _dispatch_reviewed_query(step.tool_id, action, params)
-                    if reviewed_query
-                    else execute_registered_workflow_tool(step.tool_id, action, params)
+                from app.application.agent_orchestrator.tool_permission import (
+                    begin_idempotent_replay,
+                    finish_idempotent_replay,
                 )
+
+                idem_key, replay = (
+                    begin_idempotent_replay(
+                        params["_runtime_context"], validation.tool_id, action, params
+                    )
+                    if validation.spec is not None and validation.spec.idempotent
+                    else ("", None)
+                )
+                if replay is not None:
+                    return replay
+                try:
+                    result = (
+                        _dispatch_reviewed_query(step.tool_id, action, params)
+                        if reviewed_query
+                        else execute_registered_workflow_tool(step.tool_id, action, params)
+                    )
+                finally:
+                    if idem_key:
+                        finish_idempotent_replay(
+                            idem_key, result if isinstance(result, dict) else {"success": False}
+                        )
         except AgentModAuthorizationError as exc:
             return {
                 "success": False,

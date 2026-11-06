@@ -1,5 +1,5 @@
 {
-  "lines": 2416995,
+  "lines": 2417658,
   "updated": "2026-11-06",
-  "note": "企业版 ERP 路由高亮映射、同一帧侧栏连点只保留最后一次，以及对应测试：sidebarActiveKey +18、Sidebar 连点合并 +12、测试 +6、CHANGELOG +1，净增 27 行。用户要求按 C01–C10 结果修复导航。"
+  "note": "A41-A50 server-side tool permission, tenant-scoped idempotent replay, and acceptance tests"
 }

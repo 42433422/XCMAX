@@ -429,6 +429,30 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return
             if pause_for_clarification(run, step, node_outputs):
                 return
+            from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+            denial = actor_tool_denial(step.tool_id, step.action, runtime_context)
+            if denial is not None:
+                step.status = "failed"
+                step.output = denial
+                step.error = str(denial.get("message") or "tool_permission_denied")
+                run.status = "failed"
+                run.error = step.error
+                run.add_event(
+                    "tool.permission_denied",
+                    step.error,
+                    {
+                        "step_id": step.step_id,
+                        "tool_id": step.tool_id,
+                        "action": step.action,
+                        "user_id": run.user_id,
+                        "task_id": str((runtime_context or {}).get("task_id") or run.run_id),
+                        "reason": str(denial.get("reason") or denial.get("error_code") or ""),
+                        "error_code": str(denial.get("error_code") or ""),
+                    },
+                )
+                self._repo.save(run)
+                return
             step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
             if not self._can_auto_execute(step) and (not step_is_approved):
                 step.status = "waiting_user"

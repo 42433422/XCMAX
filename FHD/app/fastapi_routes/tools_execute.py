@@ -60,6 +60,19 @@ def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
         # only a validated HTTP status because route adapters need to distinguish
         # validation/not-found/unavailable failures without exposing raw details.
         raw_error_code = str(output.get("error_code") or "tool_failed")[:64]
+        if raw_error_code in {"tool_permission_denied", "tool_identity_required"}:
+            return {
+                "success": False,
+                "message": "权限不足，已拒绝执行工具",
+                "error_code": raw_error_code,
+                "reason": str(output.get("reason") or raw_error_code)[:80],
+                "user_id": str(output.get("user_id") or ""),
+                "tool_id": str(output.get("tool_id") or "")[:80],
+                "task_id": str(output.get("task_id") or getattr(run, "run_id", "") or ""),
+                "run_id": str(getattr(run, "run_id", "") or ""),
+                "agent_run_id": str(getattr(run, "run_id", "") or ""),
+                "agent_status": str(getattr(run, "status", "") or ""),
+            }
         try:
             raw_http_status = int(output.get("http_status_code") or 0)
         except (TypeError, ValueError):
