@@ -170,8 +170,9 @@ def test_screenshots_attached_to_the_report_reach_the_support_bundle(intake_env,
     intake_env.identity(instance="client-instance-6", version="1.0.0.5", git_sha="f" * 40)
     bundled = []
 
-    def evidence(*, screenshots):
+    def evidence(*, screenshots, customer_logs=()):
         bundled.append(screenshots)
+        bundled.append(customer_logs)
         return {**intake_env.evidence, "screenshots": {"selected": 1, "included": 1}}
 
     async def remote(token, route, *, method="GET", payload=None):
@@ -203,7 +204,8 @@ def test_screenshots_attached_to_the_report_reach_the_support_bundle(intake_env,
         "",
         client=object(),
     )
-    assert bundled == [[b"png"]]
+    assert bundled[0] == [b"png"]
+    assert bundled[1] == []
     assert receipt["state"] == "ROUTED" and receipt["screenshots"]["included"] == 1
     assert "支持包已附截图 1/1 张" in stream._client_issue_reply(receipt)
 
@@ -533,6 +535,69 @@ def test_bare_intake_inherits_only_current_conversation_customer_context(
     assert prior in bodies[0]["description"] and followup in bodies[0]["description"]
     assert "最大迭代" not in bodies[0]["description"]
     assert "work_order_id" not in bodies[0]
+
+
+def test_bare_intake_after_ai_registration_does_not_open_another_ticket(monkeypatch):
+    from unittest.mock import Mock
+
+    from app.application import client_product_issue_intake as intake
+    from app.fastapi_routes import xcagi_compat_chat_stream as stream
+
+    remote = Mock(side_effect=AssertionError("registered reply must not create another ticket"))
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    receipt = asyncio.run(
+        stream._classify_and_submit_client_issue_async(
+            object(),
+            {
+                "recent_messages": [
+                    {"role": "user", "content": "页面报错。期望：能打开。实际：空白。"},
+                    {"role": "ai", "content": "产品问题已登记，Work Order：WO-1，市场工单：CI1。"},
+                ]
+            },
+            "提交工单",
+            "",
+        )
+    )
+    assert receipt["missing_evidence"] == ["issue_description"]
+    remote.assert_not_called()
+
+
+def test_labeled_title_is_not_cut_to_the_first_hundred_characters(intake_env, monkeypatch):
+    from app.application import client_product_issue_intake as intake
+
+    intake_env.identity(instance="client-instance-8", version="1.0.0.7", git_sha="a" * 40)
+    seen = []
+
+    async def remote(token, route, *, method="GET", payload=None):
+        seen.append((route, payload))
+        if route.endswith("customer-candidate"):
+            return {"wo_id": "WO-0123456789ab", "status": "candidate", "created": True}
+        return {
+            "success": True,
+            "ticket_id": 11,
+            "ticket_no": "CI11",
+            "support_bundle_saved": True,
+            "support_bundle_sha256": intake_env.sha,
+        }
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    message = (
+        "提交产品功能异常工单。\n标题：员工图谱无法显示\n"
+        "描述：登录后员工节点无法显示\n步骤：登录 → 打开员工图谱 → 等待加载 → 检查页面\n"
+        "期望：正常显示员工节点、关系和图谱结构\n实际：页面空白或员工节点无法显示\n"
+    )
+    result = asyncio.run(
+        intake.submit_product_issue(
+            request=object(),
+            tenant_id=2,
+            customer_message=message,
+            triage={"type": "product_defect", "confidence": 0.95, "expected": "正常显示员工节点、关系和图谱结构", "actual": "页面空白或员工节点无法显示"},
+        )
+    )
+    assert result["state"] == "ROUTED"
+    title = seen[1][1]["title"]
+    assert title == "客户端产品缺陷 · 员工图谱无法显示"
+    assert "检查页面" in seen[1][1]["description"]
 
 
 @pytest.mark.parametrize(

@@ -67,7 +67,7 @@
     <input
       ref="fileInputRef"
       type="file"
-      accept=".xlsx,.xlsm,image/jpeg,image/png,image/webp,image/gif,.pdf,application/pdf"
+      accept=".xlsx,.xlsm,image/jpeg,image/png,image/webp,image/gif,.pdf,application/pdf,.log,.txt,text/plain"
       multiple
       style="display: none"
       @change="onFileChange"

@@ -4,7 +4,7 @@
  */
 
 export type MultimodalAttachmentRow = {
-  kind: 'image' | 'pdf'
+  kind: 'image' | 'pdf' | 'log'
   filename: string
   mime_type: string
   /** ``data:<mime>;base64,...`` */
@@ -27,6 +27,8 @@ const EXT_TO_MIME: Record<string, string> = {
   '.webp': 'image/webp',
   '.gif': 'image/gif',
   '.pdf': 'application/pdf',
+  '.log': 'text/plain',
+  '.txt': 'text/plain',
 }
 
 function resolveMime(file: File): string {
@@ -63,21 +65,22 @@ export async function filesToMultimodalRows(
     }
     const mime = resolveMime(file)
     const ext = extOf(file.name)
-    const allowedExt = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf'])
+    const allowedExt = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf', '.log', '.txt'])
     if (!allowedExt.has(ext)) {
       return {
         ok: false,
         error: `不支持的扩展名: ${ext || '(无)'}（允许: ${[...allowedExt].join(', ')}）`,
       }
     }
-    if (mime !== 'application/pdf' && !mime.startsWith('image/')) {
+    const isLog = ext === '.log' || ext === '.txt'
+    if (!isLog && mime !== 'application/pdf' && !mime.startsWith('image/')) {
       return { ok: false, error: `不支持的类型: ${mime}（${file.name}）` }
     }
     const dataUrl = await readAsDataURL(file)
     if (!dataUrl.startsWith('data:')) {
       return { ok: false, error: `读取失败: ${file.name}` }
     }
-    const kind: MultimodalAttachmentRow['kind'] = mime === 'application/pdf' ? 'pdf' : 'image'
+    const kind: MultimodalAttachmentRow['kind'] = isLog ? 'log' : mime === 'application/pdf' ? 'pdf' : 'image'
     rows.push({
       kind,
       filename: file.name || (kind === 'pdf' ? 'upload.pdf' : 'image.bin'),
