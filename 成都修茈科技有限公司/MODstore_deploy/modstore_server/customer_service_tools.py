@@ -637,6 +637,8 @@ def _settle_gated_change(
         raise HTTPException(409, "这张审批已经处理过，不能再次决定")
     db.refresh(action)
     if run_executor:
+        # 先提交占用，业务执行器的外部效果不能跟着事务回滚后再跑一遍。
+        db.commit()
         outcome = _gated_execution(request)
         verified = bool(outcome and outcome.get("ok") is True and outcome.get("verified") is True)
         if outcome is not None:

@@ -76,10 +76,10 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_tools.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_tools.py",
       "base_blob": "7aaac7e71c94171d1d84f2e444ccfa7c329b2a7b",
-      "head_blob": "9b730074167ec78d562a6b6e8cb5923c1c2ee1fa",
+      "head_blob": "bb13518c32f64d55afd45305c303f0e5c0c5aa66",
       "before_lines": 728,
-      "after_lines": 903,
-      "reason": "Sensitive ticket changes now claim an approval once, reject into a terminal state, and run a business executor only after the row lock is won and the result is verified.",
+      "after_lines": 905,
+      "reason": "Sensitive ticket changes claim an approval once and commit that claim before a business executor runs. Completed and executed=true require a verified executor result.",
       "boundary": "Only the gated-change helpers in customer_service_tools.py. No new public HTTP routes.",
       "validation": "Ticket gate tests cover reject-after-approve, duplicate decisions, concurrent approvals, and verified versus missing executors.",
       "follow_up": "Move gated-change settlement out of customer_service_tools once the approval contract stays stable.",
