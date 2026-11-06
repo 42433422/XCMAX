@@ -41,7 +41,7 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
   function register(classificationId: string, classificationVersion: string, slice: DocumentSlice, source: File) {
     const key = JSON.stringify([classificationId, classificationVersion, slice.index, slice.sha256])
     if (!records.value[key]) records.value[key] = { key, classificationId, classificationVersion, slice, source,
-      displayName: slice.display_name?.trim() || slice.filename.replace(/\.(xlsx|xls)$/i, ''),
+      displayName: slice.display_name?.trim() || slice.filename.replace(/\.(xlsx|xls|docx)$/i, ''),
       review: null, proposals: [], selectedVersion: 0, candidateIndex: -1, phase: '', error: '', unknown: false, dirty: false, generation: 0,
       requirements: [], receipts: [], intake: null, intakePending: false, intakeError: '', intakeKey: '', intakeGeneration: 0 }
     const doc = records.value[key]
@@ -66,11 +66,11 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
     doc.phase = 'generating'; doc.error = ''; clearIntake(doc)
     try {
       const form = new FormData(); let source = doc.source
-      if (/\.xls$/i.test(source.name)) {
+      if (/\.(xls|docx)$/i.test(source.name)) {
         const response = await templatePreviewApi.downloadClassificationSource(doc.classificationId)
         if (!current(doc, session, generation)) return
         const blob = await response.blob(); if (!current(doc, session, generation)) return
-        source = new File([blob], source.name.replace(/\.xls$/i, '.xlsx'), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        source = new File([blob], source.name.replace(/\.(xls|docx)$/i, '.xlsx'), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       }
       form.append('file', source); form.append('classification_id', doc.classificationId); form.append('classification_version', doc.classificationVersion)
       form.append('auto_slice_index', String(doc.slice.index))

@@ -1,5 +1,5 @@
 {
-  "lines": 2439648,
-  "updated": "2026-11-06",
-  "note": "test(dev): 收敛违约包清单补充 fastapi_routes/fastapi_app 桩包，修复 main 上 shard5 契约测试失败（+2 行）。"
+  "lines": 2440067,
+  "updated": "2026-11-07",
+  "note": "ruff import formatting for Word docking archive-classify"
 }

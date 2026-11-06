@@ -502,9 +502,9 @@ function onComposerDrop(event: DragEvent) {
   event.preventDefault()
   composerDragOver.value = false
   if (!alive || busy.value || documentWorkPending.value) return
-  const list = Array.from(event.dataTransfer?.files || []).filter((item) => /\.(xlsx|xls)$/i.test(item.name))
+  const list = Array.from(event.dataTransfer?.files || []).filter((item) => /\.(xlsx|xls|docx)$/i.test(item.name))
   if (!list.length) {
-    error.value = '请拖入 Excel 文件（.xlsx / .xls）'
+    error.value = '请拖入 Excel 或对账单 Word（.xlsx / .xls / .docx）'
     return
   }
   applyChosenFiles(list)
@@ -1064,13 +1064,13 @@ async function preview(slice?: AutoSlice) {
     const form = new FormData()
     form.append('file', file.value)
     const selectedFile = classifications.value[files.value.indexOf(file.value)]
-    if (/\.xls$/i.test(file.value.name)) {
-      if (!selectedFile?.classification_id) throw new Error('旧 XLS 必须先通过归档转换校验')
+    if (/\.(xls|docx)$/i.test(file.value.name)) {
+      if (!selectedFile?.classification_id) throw new Error('转换原件必须先通过归档分类')
       const response = await templatePreviewApi.downloadClassificationSource(selectedFile.classification_id)
       if (!current()) return
       const blob = await response.blob()
       if (!current()) return
-      form.set('file', new File([blob], file.value.name.replace(/\.xls$/i, '.xlsx'), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+      form.set('file', new File([blob], file.value.name.replace(/\.(xls|docx)$/i, '.xlsx'), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     }
     if (slice) {
       const available = selectedFile?.classification_id && selectedFile.version && autoSlices.value[selectedFile.classification_id]
@@ -1333,7 +1333,7 @@ async function downloadCandidate(index: number) {
       <div v-for="(item, i) in classifications" :key="i">
         <label><input type="radio" name="template-file" :checked="file === files[i]" :disabled="busy || item.status !== 'classified'" @change="selectFile(i)"> {{ item.name }}</label>
         <small v-if="item.sha256">分类来源 SHA-256：{{ item.sha256 }}</small>
-        <small v-if="item.conversion_receipt">有限用途 XLS 派生副本；原件 SHA-256：{{ item.conversion_receipt.source_sha256 }}；转换器：{{ item.conversion_receipt.converter }}。未验证 Windows 像素级保真。</small>
+        <small v-if="item.conversion_receipt">有限用途派生副本（XLS/Word）；原件 SHA-256：{{ item.conversion_receipt.source_sha256 }}；转换器：{{ item.conversion_receipt.converter }}。未验证 Windows 像素级保真。</small>
         <p v-for="warning in restrictions(item)" :key="warning" role="alert">{{ warning }}</p>
         <p v-if="item.read_only_print_areas?.length">原打印区域：{{ item.read_only_print_areas.map((area) => `${area.sheet}: ${area.value}`).join('；') }}。逐文档提取时可能需要确认派生打印区域。</p>
         <small v-if="item.checkpoint">批次 {{ item.checkpoint.completed }}/{{ item.checkpoint.total }}；本轮 {{ item.checkpoint.calls_in_round ?? 0 }}/{{ item.checkpoint.max_calls }} 次：{{ item.checkpoint.message }}；停止只在批次之间生效。</small>
@@ -1564,7 +1564,7 @@ async function downloadCandidate(index: number) {
         ref="fileInputRef"
         class="elt-composer__file-input"
         type="file"
-        accept=".xlsx,.xls"
+        accept=".xlsx,.xls,.docx"
         multiple
         :disabled="busy || documentWorkPending"
         @change="choose"
@@ -1572,7 +1572,7 @@ async function downloadCandidate(index: number) {
       <button type="button" class="elt-composer__attach" :disabled="busy || documentWorkPending" @click="openFilePicker">添加文件</button>
       <div class="elt-composer__chips" aria-label="待处理文件">
         <span v-for="(item, index) in files" :key="index" class="elt-composer__chip">{{ item.name }}</span>
-        <span v-if="!files.length" class="elt-composer__placeholder">拖入或选择 Excel（.xlsx / .xls）</span>
+        <span v-if="!files.length" class="elt-composer__placeholder">拖入或选择 Excel / 对账单 Word（.xlsx / .xls / .docx）</span>
       </div>
       <label class="elt-composer__prompt">
         <span class="sr-only">整理要求</span>

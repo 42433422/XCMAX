@@ -79,7 +79,7 @@ describe('reviewed Excel template', () => {
   })
   it('offers legacy XLS through the archive conversion boundary in chatlike intake', () => {
     const archived = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
-    expect(archived.find('input[type=file]').attributes('accept')).toBe('.xlsx,.xls')
+    expect(archived.find('input[type=file]').attributes('accept')).toBe('.xlsx,.xls,.docx')
     expect(archived.find('.elt-admin-panel').exists()).toBe(false)
     expect(archived.find('.elt-composer__input').exists()).toBe(true)
     expect(archived.text()).toContain('上传文件，挑选模板')
