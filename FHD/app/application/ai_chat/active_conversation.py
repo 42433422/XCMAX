@@ -48,8 +48,6 @@ def active_conversation_for(owner: Any, *, tenant_id: str = "", mod_id: str = ""
         return ""
     if str(data.get("tenant_id") or "") != str(tenant_id or ""):
         return ""
-    if str(data.get("mod_id") or "") != str(mod_id or ""):
-        return ""
     return str(data.get("conversation_id") or "").strip()
 
 
@@ -80,5 +78,6 @@ def _key(owner: Any, tenant_id: str, mod_id: str) -> str:
     durable = durable_user_id(owner)
     if durable is None:
         return ""
-    scope = [str(durable), str(tenant_id or ""), str(mod_id or "")]
+    # The pointer is per owner and tenant. A mod header must not hide it.
+    scope = [str(durable), str(tenant_id or "")]
     return hashlib.sha256(json.dumps(scope, ensure_ascii=False).encode()).hexdigest()

@@ -113,6 +113,9 @@ def test_restart_state_points_at_the_previous_conversation(memory_dir: Path) -> 
 
 def test_active_route_is_registered_before_the_session_path() -> None:
     from app.fastapi_routes.domains.conversation.conversation_routes import router
+    from app.legacy.routes.conversation.compat_extra import router as live_router
 
     paths = [getattr(route, "path", "") for route in router.routes]
     assert paths.index("/api/conversations/active") < paths.index("/api/conversations/{session_id}")
+    live_paths = [getattr(route, "path", "") for route in live_router.routes]
+    assert live_paths.index("/conversations/active") < live_paths.index("/conversations/{conversation_id}")

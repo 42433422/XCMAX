@@ -329,6 +329,20 @@ def ai_conversation_new(body: dict = Body(default_factory=dict)) -> dict:
     return {"success": True, "data": {"session_id": sid}}
 
 
+@router.get("/conversations/active")
+def conversations_active(request: Request) -> dict:
+    """Reopen the conversation this owner last finished."""
+    from app.application.ai_chat.active_conversation import active_conversation_for
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+    context = request_runtime_context(request, {})
+    conversation_id = active_conversation_for(
+        context.get("local_user_id") or context.get("actor_id") or context.get("user_id"),
+        tenant_id=str(context.get("tenant_id") or ""),
+    )
+    return {"success": True, "conversation_id": conversation_id}
+
+
 @router.get("/conversations/{conversation_id}")
 def conversations_get(
     request: Request,
