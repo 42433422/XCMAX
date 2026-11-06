@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   OPERATION_TIMEOUT_MS,
   RefreshSingleFlight,
@@ -6,9 +6,16 @@ import {
   SseConnectionRegistry,
   classifyRawError,
   classifyTransportFailure,
+  createTraceId,
   isDuplicateUnsafeSubmit,
+  publishStabilityNotice,
   resetUnsafeSubmitGuard,
 } from './networkStability'
+
+afterEach(() => {
+  vi.restoreAllMocks(); vi.unstubAllGlobals()
+  document.getElementById('stability-notice')?.remove()
+})
 
 describe('network stability notices', () => {
   it('separates offline, server, token, permission and timeout', () => {
@@ -48,6 +55,42 @@ describe('network stability notices', () => {
     expect(OPERATION_TIMEOUT_MS.upload).toBe(30_000)
     expect(OPERATION_TIMEOUT_MS.download).toBe(30_000)
   })
+
+  it.each([
+    ['余额不足', 'insufficient_balance'], ['模型连接失败', 'model_provider'],
+    ['数据库不可用', 'db_down'], ['服务正在重启', 'backend_restart'],
+  ])('retains the business failure meaning when only its message is available: %s', (message, kind) => {
+    expect(classifyTransportFailure({ message }).kind).toBe(kind)
+    expect(classifyTransportFailure({ message }).success).toBe(false)
+  })
+
+  it('leaves auth and relay errors to their existing handlers and sanitizes actionable failures', () => {
+    for (const raw of [' ', 'HTTP 401', 'HTTP 403', 'failed to connect']) expect(classifyRawError(raw)).toBeNull()
+    expect(classifyRawError('connect ECONNREFUSED')).toContain('服务正在重启')
+    expect(classifyRawError('余额不足')).toContain('联系管理员')
+    expect(classifyRawError('数据库不可用')).toContain('操作未成功')
+  })
+
+  it('creates distinct header-safe trace IDs when randomUUID is unavailable', () => {
+    vi.stubGlobal('crypto', {})
+    vi.spyOn(Math, 'random').mockReturnValueOnce(0.125).mockReturnValueOnce(0.25)
+    const first = createTraceId(), second = createTraceId()
+    expect(first).toMatch(/^[a-z0-9]+$/)
+    expect(second).toMatch(/^[a-z0-9]+$/)
+    expect(first).not.toBe(second)
+  })
+
+  it('updates one accessible notice and does not erase it for an empty event', () => {
+    publishStabilityNotice('  请核对提交结果  ')
+    const alert = document.getElementById('stability-notice')
+    expect(alert?.getAttribute('role')).toBe('alert')
+    expect(alert?.textContent).toBe('请核对提交结果')
+    publishStabilityNotice(' ')
+    expect(alert?.textContent).toBe('请核对提交结果')
+    publishStabilityNotice('网络已恢复')
+    expect(document.querySelectorAll('#stability-notice')).toHaveLength(1)
+    expect(alert?.textContent).toBe('网络已恢复')
+  })
 })
 
 describe('unsafe submit and side effects', () => {
@@ -85,6 +128,24 @@ describe('unsafe submit and side effects', () => {
     await expect(unknown.submit('tool-1', async () => 'retried')).rejects.toThrow('结果未知')
     await expect(unknown.submit('tool-1', async () => 'checked', true)).resolves.toBe('checked')
   })
+
+  it('keeps recent submissions guarded after a burst of expired operations', () => {
+    resetUnsafeSubmitGuard()
+    for (let i = 0; i < 200; i++) expect(isDuplicateUnsafeSubmit(`expired-${i}`, 0)).toBe(false)
+    expect(isDuplicateUnsafeSubmit('recent', 1000)).toBe(false)
+    expect(isDuplicateUnsafeSubmit('expired-0', 1100)).toBe(false)
+    expect(isDuplicateUnsafeSubmit('recent', 1100)).toBe(true)
+  })
+
+  it('permits an explicit retry after a known rejection but guards a transport result without a kind', async () => {
+    const gate = new SideEffectGate()
+    await expect(gate.submit('rejected', async () => { throw Object.assign(new Error('invalid input'), { status: 400 }) })).rejects.toThrow('invalid input')
+    await expect(gate.submit('rejected', async () => 'corrected')).resolves.toBe('corrected')
+    await expect(gate.submit('unknown', async () => { throw Object.assign(new Error('connection lost'), { status: 0 }) })).rejects.toThrow('connection lost')
+    const retry = vi.fn(async () => 'must not run')
+    await expect(gate.submit('unknown', retry)).rejects.toThrow('结果未知')
+    expect(retry).not.toHaveBeenCalled()
+  })
 })
 
 describe('session refresh and sse accounting', () => {
@@ -102,6 +163,18 @@ describe('session refresh and sse accounting', () => {
     await expect(pending).resolves.toEqual([true, true, true])
     gate.setRefresher(async () => false)
     await expect(gate.run()).resolves.toBe(false)
+  })
+
+  it('stays disabled without a refresher and releases a rejected refresh for the next attempt', async () => {
+    const gate = new RefreshSingleFlight()
+    expect(gate.enabled).toBe(false)
+    await expect(gate.run()).resolves.toBe(false)
+    const refresh = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(true)
+    gate.setRefresher(refresh)
+    await expect(Promise.all([gate.run(), gate.run()])).resolves.toEqual([false, false])
+    expect(refresh).toHaveBeenCalledTimes(1)
+    await expect(gate.run()).resolves.toBe(true)
+    expect(refresh).toHaveBeenCalledTimes(2)
   })
 
   it('stops reconnecting at the cap and releases the connection', () => {

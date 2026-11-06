@@ -18,7 +18,13 @@ from app.application.agent_orchestrator.tool_spec import (
     validate_tool_call,
     validate_tool_result,
 )
-from app.application.tool_execution_deadline import invocation_deadline
+from app.application.employee_runtime.result_verifier import (
+    execution_result_requires_reconciliation,
+)
+from app.application.tool_execution_deadline import (
+    invocation_deadline,
+    invocation_requires_reconciliation,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
@@ -436,6 +442,18 @@ class AgentToolExecutor:
 
         output_validation = validate_tool_result(validation.tool_id, action, result)
         if not output_validation.ok:
+            # A completed read with an invalid response is a contract failure.
+            # Mutations and any pre-existing uncertainty must retain their claim.
+            requires_reconciliation = (
+                validation.spec is None
+                or not validation.spec.read_only
+                or invocation_requires_reconciliation()
+                or execution_result_requires_reconciliation(result)
+                or result.get("outcome_unknown") is True
+                or str(result.get("execution_status") or "").lower()
+                in {"unknown", "timeout", "timed_out", "interrupted"}
+                or "unknown" in str(result.get("error_code") or "").lower()
+            )
             result = {
                 "success": False,
                 "error_code": output_validation.error_code,
@@ -446,10 +464,9 @@ class AgentToolExecutor:
                 "raw_message": result.get("message") or result.get("error"),
                 "raw_error_code": result.get("error_code"),
                 "output_keys": sorted(str(key) for key in result.keys()),
-                "outcome": "unknown",
-                "retryable": False,
-                "reconciliation_required": True,
             }
+            if requires_reconciliation:
+                result.update(outcome="unknown", retryable=False, reconciliation_required=True)
         if idem_key:
             finish_idempotent_replay(idem_key, result)
         return cast("dict[str, Any]", result)
