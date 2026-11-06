@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from datetime import UTC, datetime
@@ -7,8 +8,9 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
+from starlette.requests import ClientDisconnect
 
 from app.desktop_runtime import (
     build_sqlite_to_postgres_sync_plan,
@@ -35,6 +37,8 @@ from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
     resolve_under_allowed_dirs,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop-runtime"])
 
@@ -407,40 +411,46 @@ async def receive_crash_report(request: Request):
     ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     report_id = uuid.uuid4().hex[:12]
 
-    if "multipart/form-data" in content_type:
-        saved: list[str] = []
-        # The request form owns SpooledTemporaryFile instances for uploaded
-        # dumps. Its async context manager closes every upload on success and
-        # on validation errors, preventing descriptor leaks in the long-lived
-        # desktop backend.
-        async with request.form() as form:
-            for field_name in form:
-                field = form[field_name]
-                filename = str(getattr(field, "filename", "") or "").strip()
-                reader = getattr(field, "read", None)
-                if not filename or not callable(reader):
-                    continue
-                content = await reader()
-                if len(content) > _MAX_CRASH_DUMP_BYTES:
-                    raise HTTPException(status_code=413, detail="崩溃转储超过 20 MB")
-                ext = Path(filename).suffix.lower()
-                if ext not in _ALLOWED_CRASH_SUFFIXES:
-                    ext = ".bin"
-                target = crash_dir / f"crash-{ts}-{report_id}-{len(saved)}{ext}"
-                target.write_bytes(content)
-                saved.append(target.name)
-        if not saved:
-            raise HTTPException(status_code=400, detail="未收到崩溃转储文件")
-        return JSONResponse({"saved": True, "files": saved})
+    try:
+        if "multipart/form-data" in content_type:
+            saved: list[str] = []
+            # The request form owns SpooledTemporaryFile instances for uploaded
+            # dumps. Its async context manager closes every upload on success and
+            # on validation errors, preventing descriptor leaks in the long-lived
+            # desktop backend.
+            async with request.form() as form:
+                for field_name in form:
+                    field = form[field_name]
+                    filename = str(getattr(field, "filename", "") or "").strip()
+                    reader = getattr(field, "read", None)
+                    if not filename or not callable(reader):
+                        continue
+                    content = await reader()
+                    if len(content) > _MAX_CRASH_DUMP_BYTES:
+                        raise HTTPException(status_code=413, detail="崩溃转储超过 20 MB")
+                    ext = Path(filename).suffix.lower()
+                    if ext not in _ALLOWED_CRASH_SUFFIXES:
+                        ext = ".bin"
+                    target = crash_dir / f"crash-{ts}-{report_id}-{len(saved)}{ext}"
+                    target.write_bytes(content)
+                    saved.append(target.name)
+            if not saved:
+                raise HTTPException(status_code=400, detail="未收到崩溃转储文件")
+            return JSONResponse({"saved": True, "files": saved})
 
-    if "application/json" not in content_type:
-        raise HTTPException(status_code=415, detail="仅支持 JSON 或 multipart 崩溃报告")
-    body = await request.body()
-    if len(body) > _MAX_CRASH_JSON_BYTES:
-        raise HTTPException(status_code=413, detail="JSON 崩溃报告超过 1 MB")
-    target = crash_dir / f"crash-{ts}-{report_id}.json"
-    target.write_bytes(body)
-    return JSONResponse({"saved": True, "file": target.name})
+        if "application/json" not in content_type:
+            raise HTTPException(status_code=415, detail="仅支持 JSON 或 multipart 崩溃报告")
+        body = await request.body()
+        if len(body) > _MAX_CRASH_JSON_BYTES:
+            raise HTTPException(status_code=413, detail="JSON 崩溃报告超过 1 MB")
+        target = crash_dir / f"crash-{ts}-{report_id}.json"
+        target.write_bytes(body)
+        return JSONResponse({"saved": True, "file": target.name})
+    except ClientDisconnect:
+        # Electron 在退出/更新/网络抖动时会主动断开上传；这是客户端取消，
+        # 不是服务端异常。吞掉可避免 ASGI 记录整段 ClientDisconnect 栈。
+        logger.info("crash report upload aborted by client before body completed")
+        return Response(status_code=204)
 
 
 @router.get("/support-bundle")

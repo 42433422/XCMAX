@@ -31,6 +31,20 @@ _scoped_client: ContextVar[tuple[Any, str | None] | None] = ContextVar(
 )
 
 
+def _reset_scoped_client(token: Any) -> None:
+    """Best-effort reset; streaming generators may close in another Context.
+
+    ``ContextVar.reset`` raises ``ValueError`` when the token was created in a
+    different Context (e.g. the async-generator finalizer task at loop
+    shutdown).  That original Context is discarded, so skipping the reset is
+    safe and must not surface as a stream failure.
+    """
+    try:
+        _scoped_client.reset(token)
+    except ValueError:
+        logger.debug("scoped_llm_client token belongs to another context; reset skipped")
+
+
 @contextmanager
 def llm_client_scope(client: Any, model: str) -> Iterator[None]:
     """Reuse the authenticated planner client for nested tools without persisting credentials."""
@@ -38,7 +52,7 @@ def llm_client_scope(client: Any, model: str) -> Iterator[None]:
     try:
         yield
     finally:
-        _scoped_client.reset(token)
+        _reset_scoped_client(token)
 
 
 @contextmanager
@@ -48,7 +62,7 @@ def llm_client_factory_scope(factory: Any) -> Iterator[None]:
     try:
         yield
     finally:
-        _scoped_client.reset(token)
+        _reset_scoped_client(token)
 
 
 def _resolved_scoped_client() -> tuple[Any, str] | None:
