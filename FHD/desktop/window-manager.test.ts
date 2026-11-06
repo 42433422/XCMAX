@@ -1,4 +1,31 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+const sessionMocks = vi.hoisted(() => {
+  const partitions = new Map<string, {
+    cookies: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> }
+    on: ReturnType<typeof vi.fn>
+    clearStorageData: ReturnType<typeof vi.fn>
+    clearCache: ReturnType<typeof vi.fn>
+  }>()
+  return {
+    partitions,
+    defaultGet: vi.fn(async () => [] as Array<Record<string, unknown>>),
+    fromPartition: vi.fn((name: string) => {
+      let store = partitions.get(name)
+      if (!store) {
+        store = {
+          cookies: { get: vi.fn(async () => []), set: vi.fn(async () => undefined) },
+          on: vi.fn(),
+          clearStorageData: vi.fn(async () => undefined),
+          clearCache: vi.fn(async () => undefined),
+        }
+        partitions.set(name, store)
+      }
+      return store
+    }),
+  }
+})
+
 import { app, BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import { waitForBackendPing, waitForBackendApplicationReady, waitForBackendStatus } from './backend-process'
@@ -8,6 +35,10 @@ vi.mock('electron', () => ({
   dialog: { showErrorBox: vi.fn() },
   screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })), getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })) },
   shell: {},
+  session: {
+    defaultSession: { cookies: { get: sessionMocks.defaultGet } },
+    fromPartition: sessionMocks.fromPartition,
+  },
 }))
 vi.mock('./backend-process', () => ({
   checkForceUpgrade: vi.fn(),
@@ -43,7 +74,8 @@ vi.mock('./desktop-navigation', () => ({
 }))
 
 import { clampWindowBounds } from './window-state'
-import { createWindow, showMainWindow, toggleMainWindow } from './window-manager'
+import { isTrustedDesktopOrigin } from './desktop-navigation'
+import { createWindow, desktopWindowCount, MAX_DESKTOP_WINDOWS, openAuxiliaryWindow, resetAuxiliaryPartitionSerialForTests, showMainWindow, toggleMainWindow } from './window-manager'
 import { desktopRuntime } from './runtime-state'
 import { checkPendingRollback } from './rollback'
 import { reportRendererError } from './desktop-resilience'
@@ -72,7 +104,9 @@ beforeEach(() => {
   desktopRuntime.splashUrl = ''
   desktopRuntime.mainWindow = null
   desktopRuntime.mainApplicationReady = null
+  desktopRuntime.auxiliaryWindows.clear()
   vi.mocked(BrowserWindow).mockReset()
+  vi.mocked(isTrustedDesktopOrigin).mockReset()
 })
 
 describe('showMainWindow（语音唤起专用：只显示聚焦，绝不隐藏）', () => {
@@ -309,4 +343,100 @@ it.each(['paint', 'aborted', 'failed'])('keeps splash paint readiness across %s 
   expect(win.focus).toHaveBeenCalledTimes(focusBeforePaint + (outcome === 'failed' ? 0 : 1))
   onReadyToShow?.()
   expect(win.show).toHaveBeenCalledTimes(1)
+})
+
+describe('同一进程附加窗口', () => {
+  beforeEach(() => {
+    resetAuxiliaryPartitionSerialForTests()
+    sessionMocks.partitions.clear()
+    sessionMocks.defaultGet.mockReset()
+    sessionMocks.defaultGet.mockResolvedValue([])
+    sessionMocks.fromPartition.mockClear()
+  })
+
+  function fakeAux() {
+    const listeners: Record<string, Array<() => void>> = {}
+    const win = {
+      isDestroyed: vi.fn(() => false),
+      on: vi.fn((event: string, cb: () => void) => {
+        ;(listeners[event] ||= []).push(cb)
+      }),
+      destroy: vi.fn(() => {
+        win.isDestroyed.mockReturnValue(true)
+        for (const cb of listeners.closed || []) cb()
+      }),
+      getBounds: vi.fn(() => ({ x: 10, y: 10, width: 1200, height: 800 })),
+      loadURL: vi.fn(async () => undefined),
+      webContents: {
+        on: vi.fn(),
+        setWindowOpenHandler: vi.fn(),
+        session: { on: vi.fn() },
+        downloadURL: vi.fn(),
+      },
+    }
+    return win
+  }
+
+  it('打开到上限后拒绝，关闭后不再占用进程内窗口名额', () => {
+    vi.mocked(isTrustedDesktopOrigin).mockReturnValue(true)
+    desktopRuntime.mainWindow = makeWindow()
+    const created: ReturnType<typeof fakeAux>[] = []
+    vi.mocked(BrowserWindow).mockImplementation(function () {
+      const win = fakeAux()
+      created.push(win)
+      return win as unknown as BrowserWindow
+    })
+    const url = 'http://127.0.0.1:17500/'
+    for (let i = 0; i < MAX_DESKTOP_WINDOWS - 1; i += 1) {
+      expect(openAuxiliaryWindow(url)).not.toBeNull()
+    }
+    expect(desktopWindowCount()).toBe(MAX_DESKTOP_WINDOWS)
+    expect(openAuxiliaryWindow(url)).toBeNull()
+    created[0].destroy()
+    expect(desktopWindowCount()).toBe(MAX_DESKTOP_WINDOWS - 1)
+    expect(openAuxiliaryWindow(url)).not.toBeNull()
+  })
+
+  it('拒绝不可信地址，且不创建窗口', () => {
+    vi.mocked(isTrustedDesktopOrigin).mockReturnValue(false)
+    expect(openAuxiliaryWindow('https://evil.example/')).toBeNull()
+    expect(BrowserWindow).not.toHaveBeenCalled()
+    expect(desktopWindowCount()).toBe(0)
+  })
+
+  it('每个附加窗口使用独立存储分区，并只复制登录 cookie', async () => {
+    vi.mocked(isTrustedDesktopOrigin).mockReturnValue(true)
+    desktopRuntime.mainWindow = makeWindow()
+    sessionMocks.defaultGet.mockResolvedValue([
+      { name: 'session_id', value: 'live-session', path: '/', httpOnly: true, secure: false, sameSite: 'lax' },
+      { name: 'csrf_token', value: 'csrf-live', path: '/', httpOnly: false, secure: false, sameSite: 'lax' },
+    ])
+    const created: ReturnType<typeof fakeAux>[] = []
+    vi.mocked(BrowserWindow).mockImplementation(function () {
+      const win = fakeAux()
+      created.push(win)
+      return win as unknown as BrowserWindow
+    })
+    const first = openAuxiliaryWindow('http://127.0.0.1:17500/chat')
+    const second = openAuxiliaryWindow('http://127.0.0.1:17500/chat')
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+    const partitions = vi.mocked(BrowserWindow).mock.calls.map(call => {
+      const options = call[0] as { webPreferences?: { partition?: string } }
+      return options.webPreferences?.partition
+    })
+    expect(partitions).toEqual(['xcagi-aux-1', 'xcagi-aux-2'])
+    const firstStore = sessionMocks.partitions.get('xcagi-aux-1')
+    const secondStore = sessionMocks.partitions.get('xcagi-aux-2')
+    expect(firstStore).toBeDefined()
+    expect(secondStore).toBeDefined()
+    expect(firstStore).not.toBe(secondStore)
+    await vi.waitFor(() => expect(firstStore!.cookies.set).toHaveBeenCalled())
+    expect(firstStore!.cookies.set).toHaveBeenCalledWith(expect.objectContaining({ name: 'session_id', value: 'live-session' }))
+    expect(secondStore!.cookies.set).toHaveBeenCalledWith(expect.objectContaining({ name: 'csrf_token', value: 'csrf-live' }))
+    expect(sessionMocks.defaultGet.mock.calls.length).toBeGreaterThan(0)
+    created[0].destroy()
+    expect(sessionMocks.partitions.get('xcagi-aux-1')!.clearStorageData).toHaveBeenCalled()
+    expect(first).not.toBeNull()
+  })
 })

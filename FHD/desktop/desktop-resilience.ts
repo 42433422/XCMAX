@@ -92,6 +92,61 @@ async function sendJsCrashReport(
   }
 }
 
+interface SessionLifetime {
+  pid: number
+  startedAt: string
+  clean: boolean
+  reason?: string
+}
+
+function sessionLifetimePath(userData: string): string {
+  return path.join(userData, 'session-lifecycle.json')
+}
+
+function readSessionLifetime(userData: string): Partial<SessionLifetime> | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(sessionLifetimePath(userData), 'utf8')) as Partial<SessionLifetime>
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** 启动时如果上次没有干净退出标记，把异常退出写进桌面日志。SIGKILL 只能在下次启动发现。 */
+export function recordDesktopProcessStart(userData: string, writeLog: WriteLog): void {
+  const previous = readSessionLifetime(userData)
+  if (previous && previous.clean === false) {
+    writeLog(
+      `[shutdown] previous_exit=abnormal pid=${previous.pid ?? 'unknown'} started=${previous.startedAt ?? 'unknown'}\n`,
+    )
+  }
+  const next: SessionLifetime = {
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    clean: false,
+  }
+  fs.mkdirSync(userData, { recursive: true })
+  fs.writeFileSync(sessionLifetimePath(userData), JSON.stringify(next))
+}
+
+/** 正常退出或已捕获的信号。已有更具体原因时，before-quit 不再覆盖。 */
+export function recordDesktopCleanExit(userData: string, reason: string, writeLog: WriteLog): void {
+  const current = readSessionLifetime(userData)
+  if (current?.clean === true && current.reason && reason === 'before-quit') {
+    writeLog(`[shutdown] reason=${current.reason}\n`)
+    return
+  }
+  const next: SessionLifetime = {
+    pid: typeof current?.pid === 'number' ? current.pid : process.pid,
+    startedAt: typeof current?.startedAt === 'string' ? current.startedAt : new Date().toISOString(),
+    clean: true,
+    reason,
+  }
+  fs.mkdirSync(userData, { recursive: true })
+  fs.writeFileSync(sessionLifetimePath(userData), JSON.stringify(next))
+  writeLog(`[shutdown] reason=${reason}\n`)
+}
+
 export function initializeLocalCrashReporting(options: CrashReportingOptions): void {
   try {
     const crashDir = path.join(app.getPath('userData'), 'crash-dumps')

@@ -8,8 +8,8 @@ import { isTrustedDesktopOrigin } from './desktop-navigation'
  * 但 Electron 默认允许任意 frame（含被注入的 iframe、导航后的页面）调用
  * ipcMain.handle 通道。本守卫把「谁能调用」收敛为：
  *
- * 1. 仅主窗口 webContents（拒绝其他窗口/隐藏视图）；
- * 2. 仅主框架（拒绝子 frame/iframe）；
+ * 1. 主窗口或本进程创建的附加窗口（拒绝隐藏视图与外部 webContents）；
+ * 2. 仅该窗口的主框架（拒绝子 frame/iframe）；
  * 3. 仅配置端口的业务来源，或主进程选定的唯一 splash 文件，
  *    导航到外部站点后的调用一律拒绝。
  */
@@ -34,12 +34,15 @@ export function isTrustedIpcSender(
   event: IpcSenderProbe,
   mainWindow: TrustedSenderWindow | null | undefined,
   policy: TrustedIpcPolicy,
+  peers?: Array<TrustedSenderWindow | null | undefined>,
 ): boolean {
-  if (!mainWindow || mainWindow.isDestroyed()) return false
-  // 只认主窗口（当前应用没有第二台受信窗口；弹窗/其他 webContents 一律拒绝）。
-  if (event.sender.id !== mainWindow.webContents.id) return false
-  // 拒绝子 frame：senderFrame 必须存在且就是主框架（导航后 URL 变化由下面校验兜底）。
-  if (!event.senderFrame || event.senderFrame !== mainWindow.webContents.mainFrame) return false
+  const candidates = [mainWindow, ...(peers ?? [])].filter(
+    (win): win is TrustedSenderWindow => win != null && !win.isDestroyed(),
+  )
+  const match = candidates.find(win => event.sender.id === win.webContents.id)
+  if (!match) return false
+  // 拒绝子 frame：senderFrame 必须存在且就是该窗口主框架。
+  if (!event.senderFrame || event.senderFrame !== match.webContents.mainFrame) return false
   const frameUrl = String((event.senderFrame as { url?: string }).url || '')
   let parsed: URL
   try {

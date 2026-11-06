@@ -1,9 +1,13 @@
 /**
  * useChatWorkflowPanel 拆分：电话员工（phone-agent）状态拉取与轮询。
  */
+import { getCurrentInstance, onActivated, onBeforeUnmount, onDeactivated } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { listPhoneAgentEmployeeIds } from '@/utils/modWorkflowEmployees'
 import type { useModsStore } from '@/stores/mods'
 import type { PhoneAgentStatusPayload } from './phoneAgentStatus'
+
+const phonePollHiders = new Set<() => void>()
 
 export interface PhoneAgentPollingDeps {
   getModsForUi: () => ReturnType<typeof useModsStore>['modsForUi']
@@ -121,7 +125,9 @@ export function usePhoneAgentPolling(deps: PhoneAgentPollingDeps) {
     }
   }
 
+  let phoneHiddenByLeave = false
   function startPhoneAgentStatusPoll() {
+    if (phoneHiddenByLeave) return
     stopPhoneAgentStatusPoll()
     void pollPhoneAgentStatusForEnabledEmployees()
     phoneAgentPollTimer = window.setInterval(() => {
@@ -131,6 +137,27 @@ export function usePhoneAgentPolling(deps: PhoneAgentPollingDeps) {
 
   function isPollActive(): boolean {
     return phoneAgentPollTimer != null
+  }
+
+  let resumePollAfterActivate = false
+  function hidePhonePoll(): void {
+    if (phoneAgentPollTimer == null) return
+    phoneHiddenByLeave = true
+    resumePollAfterActivate = true
+    stopPhoneAgentStatusPoll()
+  }
+  if (getCurrentInstance()) {
+    phonePollHiders.add(hidePhonePoll)
+    const hideEveryPhonePoll = () => { for (const hide of phonePollHiders) hide() }
+    onDeactivated(hideEveryPhonePoll)
+    onBeforeRouteLeave(() => { hideEveryPhonePoll() })
+    onActivated(() => {
+      if (!resumePollAfterActivate) return
+      resumePollAfterActivate = false
+      phoneHiddenByLeave = false
+      startPhoneAgentStatusPoll()
+    })
+    onBeforeUnmount(() => { phonePollHiders.delete(hidePhonePoll) })
   }
 
   return {

@@ -323,3 +323,69 @@ def test_corrupt_no_backup_warning_survives_restart(tmp_path, monkeypatch):
     configure_desktop_environment(tmp_path)
     assert os.environ["XCAGI_DESKTOP_DB_RECOVERY"] == f"restored:{backup.name}"
     assert not (tmp_path / "config" / "database-recovery-required").exists()
+
+
+def test_backup_restore_keeps_rows_mods_and_config(tmp_path, monkeypatch):
+    """升级/回滚数据面：热备份能还原已提交行，旁边的 Mod 与配置文件不被覆盖。"""
+    _reset_desktop_env(monkeypatch)
+    dirs = ensure_desktop_dirs(tmp_path)
+    db_path = dirs["data"] / "xcagi.db"
+    _create_test_db(db_path)
+    mod_file = dirs["mods"] / "sample-mod" / "mod.json"
+    mod_file.parent.mkdir(parents=True)
+    mod_file.write_text('{"id":"sample-mod","keep":true}', encoding="utf-8")
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"sku":"enterprise"}', encoding="utf-8")
+
+    backup = backup_database(tmp_path, version="1.0.0.7")
+    assert backup is not None
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DELETE FROM orders")
+        conn.commit()
+    db_path.write_bytes(b"this is not a sqlite database")
+
+    restored = recover_if_corrupt(tmp_path)
+    assert restored["action"] == "restored"
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 2
+        assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert json_ok(mod_file.read_text(encoding="utf-8"))
+    assert config_file.read_text(encoding="utf-8").startswith("{")
+
+
+def json_ok(text: str) -> bool:
+    return text.startswith("{") and "sample-mod" in text
+
+
+def test_newer_schema_refuses_blind_downgrade_and_keeps_rows(tmp_path, monkeypatch):
+    """库内迁移戳比当前包新时，升级路径保持原戳，不重放、不改已有行、Mod 和配置。"""
+    from app.desktop_runtime.migrate import repair_unknown_stamped_revision, run_alembic_upgrade
+
+    _reset_desktop_env(monkeypatch)
+    dirs = ensure_desktop_dirs(tmp_path)
+    db_path = dirs["data"] / "xcagi.db"
+    _create_test_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute(
+            "INSERT INTO alembic_version (version_num) VALUES ('2099_01_01_future_irreversible')"
+        )
+        conn.commit()
+    mod_file = dirs["mods"] / "sample-mod" / "mod.json"
+    mod_file.parent.mkdir(parents=True)
+    mod_file.write_text('{"id":"sample-mod","keep":true}', encoding="utf-8")
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"sku":"enterprise"}', encoding="utf-8")
+
+    repair = repair_unknown_stamped_revision(tmp_path)
+    assert repair is not None
+    assert repair["action"] == "newer_than_package"
+    run_alembic_upgrade(tmp_path)
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
+            "2099_01_01_future_irreversible"
+        )
+        assert conn.execute("SELECT customer FROM orders ORDER BY id").fetchall() == [("alice",), ("bob",)]
+    assert mod_file.read_text(encoding="utf-8").startswith("{")
+    assert config_file.read_text(encoding="utf-8").startswith("{")

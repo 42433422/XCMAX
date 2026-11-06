@@ -34,7 +34,7 @@ vi.mock('./desktop-install-update', () => ({
   installUpdate: mocks.installUpdate,
 }))
 
-import { createForceUpgradeHandler, initializeLocalCrashReporting, reportRendererError } from './desktop-resilience'
+import { createForceUpgradeHandler, initializeLocalCrashReporting, recordDesktopCleanExit, recordDesktopProcessStart, reportRendererError } from './desktop-resilience'
 
 describe('desktop resilience force-upgrade handler', () => {
   beforeEach(() => {
@@ -160,6 +160,27 @@ describe('desktop crash reporting — M12 CSRF 豁免请求头', () => {
     } finally {
       vi.useRealTimers()
       fs.rmSync(tmpRoot, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('桌面进程退出标记', () => {
+  it('上次未写干净标记时，下次启动记下异常退出', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-life-'))
+    const lines: string[] = []
+    try {
+      recordDesktopProcessStart(dir, line => lines.push(line))
+      recordDesktopProcessStart(dir, line => lines.push(line))
+      expect(lines.some(line => line.includes('previous_exit=abnormal'))).toBe(true)
+      lines.length = 0
+      recordDesktopCleanExit(dir, 'SIGTERM', line => lines.push(line))
+      recordDesktopCleanExit(dir, 'before-quit', line => lines.push(line))
+      expect(lines).toEqual(['[shutdown] reason=SIGTERM\n', '[shutdown] reason=SIGTERM\n'])
+      lines.length = 0
+      recordDesktopProcessStart(dir, line => lines.push(line))
+      expect(lines.some(line => line.includes('previous_exit=abnormal'))).toBe(false)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
     }
   })
 })

@@ -1,4 +1,5 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, getCurrentInstance, onActivated, onDeactivated, ref, type Ref } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import type { ChatMessage } from './useChatMessages'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
@@ -193,6 +194,26 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     if (ticker) window.clearInterval(ticker)
     waitProgressTickers.delete(key)
     setLoadingProgress('处理中...', key)
+  }
+
+  let pausedProgressKeys: string[] = []
+  function pauseWaitProgress(): void {
+    if (waitProgressTickers.size === 0) return
+    pausedProgressKeys = [...waitProgressTickers.keys()]
+    for (const key of pausedProgressKeys) {
+      const ticker = waitProgressTickers.get(key)
+      if (ticker) window.clearInterval(ticker)
+      waitProgressTickers.delete(key)
+    }
+  }
+  if (getCurrentInstance()) {
+    onDeactivated(pauseWaitProgress)
+    onBeforeRouteLeave(() => { pauseWaitProgress() })
+    onActivated(() => {
+      const keys = pausedProgressKeys
+      pausedProgressKeys = []
+      for (const key of keys) startWaitProgressTimer(key)
+    })
   }
 
   async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {

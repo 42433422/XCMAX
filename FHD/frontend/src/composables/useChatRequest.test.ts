@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref } from 'vue'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { defineComponent, h, ref } from 'vue'
+import { mount } from '@vue/test-utils'
 import { useChatRequest } from './useChatRequest'
 
 vi.mock('@/api/chat', () => ({
@@ -317,3 +318,47 @@ describe('useChatRequest', () => {
   expect(vi.getTimerCount()).toBe(0)
   vi.useRealTimers()
  })
+
+describe('useChatRequest page cache', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  it('stops the wait ticker while the chat page is cached and resumes it on return', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-06T04:00:00Z'))
+    const visible = ref(true)
+    let request!: ReturnType<typeof useChatRequest>
+    const Child = defineComponent({
+      setup() {
+        request = useChatRequest({
+          messages: ref([]),
+          sessionId: ref('session-1'),
+          lastRequestContextSummary: ref(''),
+          plannerWriteUnlockResumeDraft: ref(''),
+          resolveChatDbTokensForPayload: () => ({}),
+          injectExcelContextPayload: () => false,
+          consumeMultimodalIntoPlannerContext: () => undefined,
+        })
+        request.startWaitProgressTimer()
+        return () => h('div')
+      },
+    })
+    const Root = defineComponent({
+      components: { Child },
+      setup() { return { visible } },
+      template: '<keep-alive><Child v-if="visible" /></keep-alive>',
+    })
+    const wrapper = mount(Root)
+    await vi.advanceTimersByTimeAsync(1000)
+    const whileVisible = request.loadingProgressText.value
+    expect(whileVisible).toContain('1s')
+    visible.value = false
+    await wrapper.vm.$nextTick()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(request.loadingProgressText.value).toBe(whileVisible)
+    visible.value = true
+    await wrapper.vm.$nextTick()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(request.loadingProgressText.value).toContain('2s')
+    wrapper.unmount()
+  })
+})
