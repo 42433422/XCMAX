@@ -149,14 +149,14 @@ def build_support_bundle_zip(
     ]
     if updater_chunk:
         logs.append(("logs/updater-events.jsonl", _redact_log_bytes(updater_chunk)))
-    readme = "清单不含密钥，日志已脱敏；数据库和崩溃转储不随包提供。\n"
+    readme = "清单不含密钥。平台日志和客户随工单提交的日志都先脱敏再写入压缩包；数据库和崩溃转储不随包提供。\n"
     attached_logs = [
-        (f"customer-logs/{name or f'log-{index}.log'}", data[:80_000])
+        (f"customer-logs/{name or f'log-{index}.log'}", _redact_log_bytes(data)[:80_000])
         for index, (name, data) in enumerate(customer_logs, 1)
         if data
     ]
     if attached_logs:
-        readme += "customer-logs/ 是客户随工单提交的日志。\n"
+        readme += "customer-logs/ 是客户随工单提交的日志，写入压缩包前已脱敏。\n"
         manifest["customerLogs"] = [name for name, _data in attached_logs]
     if shots:
         readme += "screenshots/ 是客户报障时所选的截图，已压缩。\n"
