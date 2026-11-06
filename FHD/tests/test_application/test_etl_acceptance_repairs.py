@@ -8,6 +8,7 @@ from datetime import date
 from io import BytesIO
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook, load_workbook
 
 from app.application.elt.attendance_pipeline import _hours, parse_attendance_dataset
@@ -17,6 +18,12 @@ from app.application.reviewed_excel_template import inspect_workbook
 
 CUSTOMER = Path("/opt/cursor/artifacts/etl-b01-b31/customer-sources")
 SYNTHETIC = Path("/opt/cursor/artifacts/etl-b01-b31/synthetic")
+
+# 这些用例依赖 B01–B31 验收现场导出的真实工作簿，工作簿含客户数据、不随仓库分发。
+pytestmark = pytest.mark.skipif(
+    not CUSTOMER.is_dir() or not SYNTHETIC.is_dir(),
+    reason="缺少 ETL 验收原始工作簿（/opt/cursor/artifacts/etl-b01-b31）",
+)
 
 
 def test_real_customer_workbooks_classify_without_size_or_fidelity_rejection():
