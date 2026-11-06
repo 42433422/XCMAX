@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Body, Request
@@ -73,11 +74,11 @@ def actor_from_request(request: Request) -> Actor:
     employee_header = str(request.headers.get("X-Employee-Id") or "").strip()
     if role != "admin" and employee_header and employee_header != actor_id:
         raise ToolLifecycleError("forged_employee", "员工不存在", 404)
-    employee_id = None if role == "admin" else actor_id
+    employee_id: str | None = None if role == "admin" else actor_id
     return Actor(actor_id, role, employee_id, tenant)
 
 
-def _run(action: Any) -> JSONResponse:
+def _run(action: Callable[[], JSONResponse]) -> JSONResponse:
     try:
         return action()
     except ToolLifecycleError as exc:

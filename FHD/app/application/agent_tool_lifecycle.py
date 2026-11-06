@@ -19,12 +19,14 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, TypeVar, cast
 from zoneinfo import ZoneInfo
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _SCHEMA_TYPES = {"string", "integer", "number", "boolean", "array", "object"}
@@ -218,18 +220,18 @@ def _bump() -> None:
         _CACHE.clear()
 
 
-def _cached(key: tuple[Any, ...], builder: Callable[[], Any]) -> Any:
+def _cached(key: tuple[Any, ...], builder: Callable[[], T]) -> T:
     full = (_GENERATION, key)
     with _LOCK:
         hit = _CACHE.get(full)
     if hit is not None:
-        return json.loads(hit)
+        return cast(T, json.loads(hit))
     value = builder()
     encoded = json.dumps(value, ensure_ascii=False)
     with _LOCK:
         if full[0] == _GENERATION:
             _CACHE[full] = encoded
-    return json.loads(encoded)
+    return cast(T, json.loads(encoded))
 
 
 @contextmanager
@@ -320,7 +322,7 @@ def validate_input_schema(schema: Any) -> dict[str, Any]:
         "required": list(required),
         "additionalProperties": additional,
     }
-    return _redact(cleaned)
+    return cast(dict[str, Any], _redact(cleaned))
 
 
 def _validate_property(name: str, spec: Any) -> None:
@@ -386,7 +388,7 @@ def _tool_row(conn: sqlite3.Connection, actor: Actor, tool_id: str) -> sqlite3.R
     ).fetchone()
     if row is None:
         raise ToolLifecycleError("unknown_tool", "工具不存在", 404)
-    return row
+    return cast(sqlite3.Row, row)
 
 
 def _version_row(conn: sqlite3.Connection, tool_id: str, version_id: str) -> sqlite3.Row:
@@ -395,7 +397,7 @@ def _version_row(conn: sqlite3.Connection, tool_id: str, version_id: str) -> sql
     ).fetchone()
     if row is None:
         raise ToolLifecycleError("unknown_version", "工具版本不存在", 404)
-    return row
+    return cast(sqlite3.Row, row)
 
 
 def _public_tool(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
@@ -576,7 +578,7 @@ def update_tool(actor: Actor, tool_id: str, body: Mapping[str, Any]) -> dict[str
             "field_required", "缺少必填字段 expected_version", 400, field="expected_version"
         )
     try:
-        expected = int(body.get("expected_version"))
+        expected = int(body["expected_version"])
     except (TypeError, ValueError) as exc:
         raise ToolLifecycleError(
             "field_required", "缺少必填字段 expected_version", 400, field="expected_version"
@@ -1023,14 +1025,12 @@ def _list_uncached(
     conn = _connect()
     try:
         total = int(
-            conn.execute(f"SELECT COUNT(*) AS n FROM tools WHERE {where}", params).fetchone()["n"]
+            conn.execute("SELECT COUNT(*) AS n FROM tools WHERE " + where, params).fetchone()["n"]
         )
         rows = conn.execute(
-            f"""
-            SELECT * FROM tools WHERE {where}
-            ORDER BY updated_at DESC, id ASC
-            LIMIT ? OFFSET ?
-            """,
+            "SELECT * FROM tools WHERE "
+            + where
+            + " ORDER BY updated_at DESC, id ASC LIMIT ? OFFSET ?",
             [*params, page_size, (page - 1) * page_size],
         ).fetchall()
         items = []

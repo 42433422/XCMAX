@@ -192,6 +192,10 @@ def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
     return True, None, False
 
 
+def _as_mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def tool_catalog_rules(tools: list[dict[str, Any]]) -> str:
     """Tell the employee the exact catalog it may name or call."""
 
@@ -201,16 +205,12 @@ def tool_catalog_rules(tools: list[dict[str, Any]]) -> str:
     for spec in tools:
         if not isinstance(spec, dict):
             continue
-        function = spec.get("function") if isinstance(spec.get("function"), dict) else {}
+        function = _as_mapping(spec.get("function"))
         name = str(function.get("name") or "").strip()
         if not name:
             continue
-        parameters = (
-            function.get("parameters") if isinstance(function.get("parameters"), dict) else {}
-        )
-        properties = (
-            parameters.get("properties") if isinstance(parameters.get("properties"), dict) else {}
-        )
+        parameters = _as_mapping(function.get("parameters"))
+        properties = _as_mapping(parameters.get("properties"))
         required = [str(item) for item in (parameters.get("required") or [])]
         optional = [str(item) for item in properties if str(item) not in required]
         version = str(spec.get("version_id") or "").strip()
@@ -236,15 +236,11 @@ def _missing_required(
     tools: list[dict[str, Any]], tool_name: str, args: dict[str, Any]
 ) -> list[str]:
     for spec in tools:
-        function = spec.get("function") if isinstance(spec, dict) else None
-        if not isinstance(function, dict) or function.get("name") != tool_name:
+        function = _as_mapping(spec.get("function")) if isinstance(spec, dict) else {}
+        if function.get("name") != tool_name:
             continue
-        parameters = (
-            function.get("parameters") if isinstance(function.get("parameters"), dict) else {}
-        )
-        properties = (
-            parameters.get("properties") if isinstance(parameters.get("properties"), dict) else {}
-        )
+        parameters = _as_mapping(function.get("parameters"))
+        properties = _as_mapping(parameters.get("properties"))
         missing: list[str] = []
         for name in parameters.get("required") or []:
             key = str(name)
@@ -727,16 +723,8 @@ def run_employee_agent_loop(
             except json.JSONDecodeError:
                 tool_payload = None
             if isinstance(tool_payload, dict) and tool_payload.get("version_id"):
-                definition = (
-                    tool_payload.get("definition")
-                    if isinstance(tool_payload.get("definition"), dict)
-                    else {}
-                )
-                function = (
-                    definition.get("function")
-                    if isinstance(definition.get("function"), dict)
-                    else {}
-                )
+                definition = _as_mapping(tool_payload.get("definition"))
+                function = _as_mapping(definition.get("function"))
                 tool_content = (
                     "调用快照"
                     f" version_id={tool_payload['version_id']}"

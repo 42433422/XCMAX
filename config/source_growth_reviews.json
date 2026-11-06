@@ -28,7 +28,7 @@
     "FHD/app/application/agent_tool_lifecycle.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "4b2181cd1e3c8adca723a1e1f03cfcec6983350b",
+      "head_blob": "b93a6ed7e84bcdc9736440525035aa04a61eaccf",
       "before_lines": 0,
       "after_lines": 1632,
       "reason": "New tenant-scoped tool registry, publish, discovery, and invoke flow cannot fit under the 800-line advisory cap without splitting a still-moving lifecycle contract.",

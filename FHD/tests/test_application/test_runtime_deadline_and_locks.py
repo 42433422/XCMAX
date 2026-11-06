@@ -78,7 +78,7 @@ def test_late_tool_does_not_dispatch_next_tool_or_claim_success(monkeypatch):
     )
     seen = []
 
-    def execute(*_):
+    def execute(*_, **__):
         seen.append(remaining_invocation_seconds(100))
         time.sleep(0.04)
         return '{"success": true}'
