@@ -129,14 +129,14 @@ async def test_session_validity_keeps_none_compatibility_and_blocks_disabled_use
     monkeypatch.setattr(
         "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids", lambda: None
     )
+    sync = AsyncMock(return_value={"industry-employee"})
+    monkeypatch.setattr("app.enterprise.mod_entitlements.sync_entitlements_for_session", sync)
     background = BackgroundTasks()
     response = await routes.auth_session_validate(request(), background)
-    sync = AsyncMock(return_value=set())
-    monkeypatch.setattr("app.enterprise.mod_entitlements.sync_entitlements_for_session", sync)
-    await background()
     if principal is None:
         assert isinstance(response, dict) and response["valid"] is True
-        assert len(background.tasks) == 1
+        assert response["entitled_mod_ids"] == ["industry-employee"]
+        assert not background.tasks
         sync.assert_awaited_once_with("fake-session")
     else:
         assert isinstance(response, Response) and response.status_code == 403
