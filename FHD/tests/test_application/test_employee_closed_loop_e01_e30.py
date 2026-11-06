@@ -11,6 +11,10 @@ import hashlib
 import json
 import multiprocessing
 import os
+import sqlite3
+import subprocess
+import sys
+import tempfile
 import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -48,7 +52,15 @@ _HISTORY = (
 )
 _ITEMS = [f"E{index:02d}" for index in range(1, 31)]
 _SESSION_ERRORS = RECOVERABLE_ERRORS + (SQLAlchemyError,)
-_LIVE: dict[str, Acceptance] = {}
+_PROTECTED_RETESTS = frozenset(
+    {
+        "ai-employee-closed-loop-retest-202611062130",
+        "ai-employee-closed-loop-retest-20261106214643",
+        "ai-employee-closed-loop-retest-20261106220105",
+        "ai-employee-closed-loop-retest-202611062206",
+        "ai-employee-closed-loop-retest-202611062226",
+    }
+)
 
 
 def _now() -> str:
@@ -251,8 +263,80 @@ def _seed_sales_customer(engine, customer_id: int, name: str, address: str, tena
 
 
 def _retest_evidence_path() -> Path:
-    stamp = datetime.now(_SH).strftime("%Y%m%d%H%M")
-    return _HISTORY.parents[1] / f"ai-employee-closed-loop-retest-{stamp}" / "acceptance.json"
+    stamp = datetime.now(_SH).strftime("%Y%m%d%H%M%S")
+    path = _HISTORY.parents[1] / f"ai-employee-closed-loop-retest-{stamp}" / "acceptance.json"
+    if path.parent.name in _PROTECTED_RETESTS or path.exists():
+        raise RuntimeError("refusing to overwrite an existing retest evidence file")
+    return path
+
+
+def judge_async_export(entries: list[dict], *, phases: set[str], file_ready: bool) -> str:
+    """A synchronous file is not an async completed export."""
+    async_entries = [str(item.get("name") or "") for item in entries if item.get("async") is True]
+    if not async_entries:
+        return "NOT-IMPLEMENTED"
+    if {"queued", "running", "completed"} <= phases and file_ready:
+        return "PASS"
+    return "FAIL"
+
+
+def judge_tool_timeout(
+    *,
+    process_started: bool,
+    process_exited: bool,
+    resources_released: bool,
+    task_state: str,
+) -> str:
+    """A deadline that expires before the tool process is running is not a pass."""
+    if not process_started or not process_exited or not resources_released:
+        return "FAIL"
+    if task_state not in {"timed_out", "timeout"}:
+        return "FAIL"
+    return "PASS"
+
+
+def judge_cancel(
+    *,
+    task_id: str,
+    task_state: str,
+    db_row: dict | None,
+    receipt_customer_id: object,
+) -> str:
+    """Verification is the cancelled task id plus an independent row id, not a name search."""
+    if not str(task_id or "").strip() or task_state != "cancelled":
+        return "FAIL"
+    if not isinstance(db_row, dict) or type(db_row.get("id")) is not int:
+        return "FAIL"
+    if type(receipt_customer_id) is not int or receipt_customer_id != db_row["id"]:
+        return "FAIL"
+    return "PASS"
+
+
+def judge_restart(
+    *,
+    repository_kind: str,
+    restored_state: str | None,
+    tool_status: str | None,
+    replayed: bool,
+) -> str:
+    """A fresh in-memory queue is not scheduler restore. Restore must not replay."""
+    if repository_kind != "sql":
+        return "FAIL"
+    if restored_state not in {"running", "recovering"}:
+        return "FAIL"
+    if tool_status not in {"running", "recovering"}:
+        return "FAIL"
+    if replayed:
+        return "FAIL"
+    return "PASS"
+
+
+def resolve_retry_task_id(*, invoked: str, scope_key: str) -> str:
+    parts = scope_key.split(":")
+    recorded = parts[1] if len(parts) >= 5 else ""
+    if recorded:
+        return recorded
+    return invoked
 
 
 def _grade(items: dict[str, dict]) -> dict:
@@ -441,33 +525,248 @@ def _e22_worker(
         sender.close()
 
 
+class ClosedLoopRun:
+    """One engine, temp directory, and idempotency file for the whole module."""
+
+    def __init__(self) -> None:
+        self.closed = False
+        self.book: Acceptance | None = None
+        self.engine = None
+        self._tmpdir: tempfile.TemporaryDirectory[str] | None = None
+        self._restore: list[tuple[object, str, object]] = []
+        self._env: dict[str, str | None] = {}
+
+    def open_resources(self) -> Acceptance:
+        if self.closed:
+            raise RuntimeError("closed-loop live run used after fixture teardown")
+        tmp = tempfile.TemporaryDirectory(prefix="closed-loop-")
+        self._tmpdir = tmp
+        root = Path(tmp.name)
+        self._setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(root / "idempotency.sqlite"))
+        self._setenv("AUDIT_LOG_PATH", str(root / "audit.jsonl"))
+        self._setenv("SECRET_KEY", "closed-loop-acceptance-secret-32bytes")
+        permissions.clear_idempotent_replay_for_tests()
+        engine = create_engine(
+            f"sqlite:///{root / 'business.sqlite'}",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        self.engine = engine
+        PurchaseUnit.__table__.create(engine)
+        Customer.__table__.create(engine)
+        SalesOrder.__table__.create(engine)
+        SalesOrderItem.__table__.create(engine)
+        sessions, open_session = _session_factory(engine)
+        import app.application.customer_app_service as customers
+        import app.application.sales_app_service as sales
+        import app.utils.path_io.path_utils as path_utils
+
+        self._patch(customers, "get_customers_session", open_session)
+        self._patch(sales, "get_db", sessions)
+        self._patch(path_utils, "get_data_dir", lambda: str(root / "data"))
+        self.book = Acceptance(engine, root)
+        return self.book
+
+    def open(self) -> Acceptance:
+        book = self.open_resources()
+        _execute_closed_loop(book)
+        return book
+
+    def require(self) -> Acceptance:
+        if self.closed or self.book is None or self.engine is None:
+            raise RuntimeError("closed-loop live run used after fixture teardown")
+        return self.book
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        permissions.clear_idempotent_replay_for_tests()
+        for obj, name, old in reversed(self._restore):
+            setattr(obj, name, old)
+        for key, old in self._env.items():
+            if old is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old
+        if self.engine is not None:
+            self.engine.dispose()
+        if self._tmpdir is not None:
+            self._tmpdir.cleanup()
+            self._tmpdir = None
+
+    def _setenv(self, key: str, value: str) -> None:
+        self._env[key] = os.environ.get(key)
+        os.environ[key] = value
+
+    def _patch(self, obj: object, name: str, value: object) -> None:
+        self._restore.append((obj, name, getattr(obj, name)))
+        setattr(obj, name, value)
+
+
+@pytest.fixture(scope="module")
+def closed_loop_run():
+    run = ClosedLoopRun()
+    run.open()
+    yield run
+    run.close()
+
+
 @pytest.fixture()
-def loop(tmp_path, monkeypatch):
-    cached = _LIVE.get("book")
-    if cached is not None:
-        yield cached
-        return
-    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
-    monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
-    monkeypatch.setenv("SECRET_KEY", "closed-loop-acceptance-secret-32bytes")
-    permissions.clear_idempotent_replay_for_tests()
-    engine = create_engine(
-        f"sqlite:///{tmp_path / 'business.sqlite'}",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+def loop(closed_loop_run: ClosedLoopRun) -> Acceptance:
+    return closed_loop_run.require()
+
+
+def _export_entries() -> list[dict]:
+    """Search the export entry points. A sync writer is not an async job."""
+    import inspect
+
+    from fastapi import HTTPException
+
+    from app.application.customer_transfer_mixin import CustomerTransferMixin
+    from app.domain.shared_services.tools_workflow_erp import _registered_router_customers
+    from app.fastapi_routes.domains.customer.customer_routes import customers_export_stub
+    from app.mod_sdk.erp_customers_facade import customers_export
+
+    registry_path = Path(__file__).resolve().parents[2] / "config" / "risk_actions.registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    spec = ((registry.get("tools") or {}).get("customers") or {}).get("actions", {}).get(
+        "export"
+    ) or {}
+    registry_async = spec.get("async") is True or spec.get("execution") == "async"
+    stub_detail = "missing"
+    try:
+        customers_export_stub()
+    except HTTPException as exc:
+        stub_detail = f"HTTP {exc.status_code}"
+    return [
+        {
+            "name": "customers.export",
+            "async": registry_async,
+            "detail": "sync registry action" if not registry_async else "async",
+        },
+        {
+            "name": "CustomerTransferMixin.export_to_excel",
+            "async": inspect.iscoroutinefunction(CustomerTransferMixin.export_to_excel),
+            "detail": "sync file write",
+        },
+        {
+            "name": "tools_workflow_erp.customers.export",
+            "async": inspect.iscoroutinefunction(_registered_router_customers),
+            "detail": "calls export_to_excel",
+        },
+        {
+            "name": "customer_routes.customers_export_stub",
+            "async": False,
+            "detail": stub_detail,
+        },
+        {
+            "name": "erp_customers_facade.customers_export",
+            "async": inspect.iscoroutinefunction(customers_export),
+            "detail": "sync FileResponse",
+        },
+    ]
+
+
+def _idempotency_scope(path: Path, expected: str, client_key: str) -> str:
+    if not path.is_file():
+        return ""
+    conn = sqlite3.connect(path)
+    try:
+        exact = conn.execute(
+            "select scope_key from tool_idempotency where scope_key = ?",
+            (expected,),
+        ).fetchone()
+        if exact is not None:
+            return str(exact[0])
+        found = conn.execute(
+            "select scope_key from tool_idempotency where scope_key like ?",
+            (f"%:customers:create:{client_key}",),
+        ).fetchall()
+        if len(found) == 1:
+            return str(found[0][0])
+        return ""
+    except sqlite3.Error:
+        return ""
+    finally:
+        conn.close()
+
+
+def _start_blocking_tool(ready: Path) -> subprocess.Popen:
+    script = (
+        "import os, time, pathlib, sys\n"
+        "path = pathlib.Path(sys.argv[1])\n"
+        "path.write_text(str(os.getpid()), encoding='utf-8')\n"
+        "time.sleep(60)\n"
     )
-    PurchaseUnit.__table__.create(engine)
-    Customer.__table__.create(engine)
-    SalesOrder.__table__.create(engine)
-    SalesOrderItem.__table__.create(engine)
-    _bind(monkeypatch, engine)
-    monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: str(tmp_path / "data"))
-    book = Acceptance(engine, tmp_path)
-    _execute_closed_loop(book)
-    _LIVE["book"] = book
-    yield book
-    permissions.clear_idempotent_replay_for_tests()
-    engine.dispose()
+    return subprocess.Popen(
+        [sys.executable, "-c", script, str(ready)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _wait_until_running(proc: subprocess.Popen, ready: Path, timeout: float = 10.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            return False
+        if ready.is_file() and ready.read_text(encoding="utf-8").strip() == str(proc.pid):
+            return proc.poll() is None
+        time.sleep(0.05)
+    return False
+
+
+def _customer_row(engine, name: str) -> dict | None:
+    with Session(engine) as db:
+        row = db.execute(
+            select(PurchaseUnit)
+            .where(PurchaseUnit.unit_name == name)
+            .execution_options(skip_tenant_filter=True)
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        return {"id": int(row.id), "customer_name": row.unit_name}
+
+
+def _restart_sql_task(engine, workspace: Path, restarted: dict) -> tuple:
+    """Read a running SQL task back after a new repository. Do not replay it."""
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.application.employee_runtime.task_continuity import load_employee_task_ledger
+
+    before = len(_units(engine))
+    try:
+        factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+        run = AgentRun(user_id="11", message="e30-running", status="queued")
+        run.metadata["runtime_context"] = {"tenant_id": "11", "task_id": run.run_id}
+        run.metadata["task_context"] = {"task_id": run.run_id}
+        SQLAlchemyTaskExecutionRepository(session_factory=factory).enqueue(run)
+        SQLAlchemyTaskExecutionRepository(session_factory=factory).claim(
+            "scheduler-a", lease_seconds=60, run_id=run.run_id
+        )
+        restored = SQLAlchemyTaskExecutionRepository(session_factory=factory).get(run.run_id)
+        state = None if restored is None else str(restored.state)
+        ledger = load_employee_task_ledger(workspace)
+        calls = ledger.get("tool_calls") if isinstance(ledger, dict) else {}
+        tool_status = None
+        if isinstance(calls, dict):
+            for call in calls.values():
+                if not isinstance(call, dict):
+                    continue
+                if str(call.get("task_id") or "") != run.run_id:
+                    continue
+                if call.get("status") in {"running", "recovering"}:
+                    tool_status = str(call.get("status"))
+                    break
+        after = len(_units(engine))
+        replayed = after != before or (
+            isinstance(restarted, dict) and restarted.get("business_success") is True
+        )
+        return state, tool_status, replayed, run.run_id
+    except _SESSION_ERRORS as exc:
+        return type(exc).__name__, None, False, ""
 
 
 def _note_runtime(loop: Acceptance, result: dict, *, task_id: str, action: str) -> None:
@@ -664,30 +963,16 @@ def _execute_closed_loop(loop: Acceptance) -> None:
         task_id="e04",
         artifact_hash=digest,
     )
-    bulk = loop.call(
-        "customers",
-        "export",
-        {"keyword": "闭环指定客户甲"},
-        loop.context("e05"),
+    export_entries = _export_entries()
+    e05_verdict = judge_async_export(export_entries, phases=set(), file_ready=False)
+    checked = ",".join(
+        f"{item['name']}:{'async' if item.get('async') else item.get('detail')}"
+        for item in export_entries
     )
-    bulk_file = str(bulk.get("file_path") or "")
-    nested = bulk.get("data")
-    if not bulk_file and isinstance(nested, dict):
-        bulk_file = str(nested.get("file_path") or "")
-    observed_states = {
-        str(bulk.get(key) or "")
-        for key in ("status", "state", "execution_status", "task_status")
-        if bulk.get(key)
-    }
-    lifecycle = {"queued", "running", "completed"} <= observed_states
-    e05_ok = lifecycle and not bulk_file
     loop.settle(
         "E05",
-        "PASS" if e05_ok else "NOT-IMPLEMENTED",
-        (
-            f"task e05 states={sorted(observed_states) or ['<none>']} "
-            f"immediate_file={bool(bulk_file)} success={bulk.get('success')}"
-        ),
+        e05_verdict,
+        f"task e05 checked={checked}; no queued→running→completed async export",
         task_id="e05",
     )
 
@@ -1139,11 +1424,20 @@ def _execute_closed_loop(loop: Acceptance) -> None:
         f"task e19 rows={len(idem_rows)} first={first.get('success')} second={second.get('success')}",
         task_id="e19",
     )
-    third = loop.call(
-        "customers",
-        "create",
-        {"unit_name": "闭环幂等客户己", "idempotency_key": key, "contact_phone": "13800000019"},
-        loop.context("e19", idempotency_key=key),
+    third_params = {
+        "unit_name": "闭环幂等客户己",
+        "idempotency_key": key,
+        "contact_phone": "13800000019",
+    }
+    third_ctx = loop.context("e19", idempotency_key=key)
+    third = loop.call("customers", "create", third_params, third_ctx)
+    from app.application.agent_orchestrator.tool_permission import idempotency_scope_key
+
+    scope = idempotency_scope_key(third_ctx, "customers", "create", third_params)
+    stored_scope = _idempotency_scope(loop.tmp / "idempotency.sqlite", scope, key)
+    retry_task_id = resolve_retry_task_id(
+        invoked=str(third_ctx.get("task_id") or ""),
+        scope_key=stored_scope or scope,
     )
     e20_ok = (
         third.get("success") is True
@@ -1153,8 +1447,11 @@ def _execute_closed_loop(loop: Acceptance) -> None:
     loop.settle(
         "E20",
         "PASS" if e20_ok else "FAIL",
-        f"task e19 retry id={(third.get('data') or {}).get('id')} original={(first.get('data') or {}).get('id')}",
-        task_id="e19",
+        (
+            f"task {retry_task_id} retry id={(third.get('data') or {}).get('id')} "
+            f"original={(first.get('data') or {}).get('id')} scope={stored_scope or scope}"
+        ),
+        task_id=retry_task_id,
     )
 
     ctx = multiprocessing.get_context("spawn")
@@ -1335,6 +1632,16 @@ def _execute_closed_loop(loop: Acceptance) -> None:
 
     workspace = loop.tmp / "handoff"
     workspace.mkdir()
+    for employee_id in ("employee-a", "employee-b"):
+        folder = workspace / "employees"
+        folder.mkdir(exist_ok=True)
+        (folder / f"{employee_id}.json").write_text(
+            json.dumps(
+                {"employee_id": employee_id, "tenant_id": "11", "available": True},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
     started = execute_employee_task_local(
         "employee-a",
         "查询本月客户订单，分析销售，生成 Excel，并给出业务摘要",
@@ -1362,7 +1669,10 @@ def _execute_closed_loop(loop: Acceptance) -> None:
             "user_id": "11",
             "task_id": parent_id,
             "target_employee": "employee-b",
-            "permissions": ["customers.query", "sales.query"],
+            "permissions": ["sales.query", "customers.query"],
+            "delegated_tool": "customers",
+            "delegated_action": "query",
+            "delegated_params": {"keyword": "闭环指定客户甲"},
             "effect": {"goal": started.get("task", {}).get("goal")},
         },
         workspace_root=str(workspace),
@@ -1436,25 +1746,69 @@ def _execute_closed_loop(loop: Acceptance) -> None:
         task_id=parent_id,
     )
 
-    started_at = time.monotonic()
-    hung = loop.call(
-        "customers",
-        "query",
-        {"keyword": "闭环指定客户甲"},
-        loop.context("e28", deadline_monotonic=0),
-    )
-    elapsed = time.monotonic() - started_at
-    released = hung.get("resources_released") is True
-    e28_ok = hung.get("error_code") == "tool_timeout_unknown" and released and elapsed > 0
-    loop.settle(
-        "E28",
-        "PASS" if e28_ok else "FAIL",
-        (
-            f"task e28 error={hung.get('error_code')} elapsed_s={elapsed:.3f} "
-            f"resources_released={released} execution_status={hung.get('execution_status')}"
-        ),
-        task_id="e28",
-    )
+    ready = loop.tmp / "e28-ready"
+    blocker = _start_blocking_tool(ready)
+    try:
+        started = _wait_until_running(blocker, ready)
+        hung = loop.executor.execute(
+            AgentStep(
+                node_id="hang",
+                tool_id="customers",
+                action="query",
+                params={"keyword": "闭环指定客户甲"},
+            ),
+            runtime_context=loop.context("e28", deadline_monotonic=0),
+        )
+        exited = blocker.poll() is not None
+        released = hung.get("resources_released") is True and exited
+        task_state = str(hung.get("execution_status") or hung.get("error_code") or "")
+        e28_verdict = judge_tool_timeout(
+            process_started=started,
+            process_exited=exited,
+            resources_released=released,
+            task_state=task_state,
+        )
+        loop.chain.append(
+            {
+                "at": _now(),
+                "task_id": "e28",
+                "parent_task_id": "",
+                "child_task_id": "",
+                "tool_call_id": "",
+                "employee_id": "employee-a",
+                "tool_id": "customers",
+                "tool_version": "",
+                "action": "query",
+                "tenant_id": "11",
+                "idempotency_key": "",
+                "approval_id": "",
+                "request": {"deadline_monotonic": 0},
+                "response": {
+                    "error_code": hung.get("error_code"),
+                    "process_started": started,
+                    "process_exited": exited,
+                    "pid": blocker.pid,
+                },
+                "execution_status": task_state,
+                "database_before": {},
+                "database_after": {},
+                "artifact_hash": "",
+                "audit_log": None,
+            }
+        )
+        loop.settle(
+            "E28",
+            e28_verdict,
+            (
+                f"task e28 started={started} exited={exited} resources_released={released} "
+                f"product_status={task_state} error={hung.get('error_code')} pid={blocker.pid}"
+            ),
+            task_id="e28",
+        )
+    finally:
+        if blocker.poll() is None:
+            blocker.kill()
+            blocker.wait(timeout=5)
 
     from app.application.agent_orchestrator.task_execution_repository import (
         InMemoryTaskExecutionRepository,
@@ -1479,17 +1833,26 @@ def _execute_closed_loop(loop: Acceptance) -> None:
         {"unit_name": committed_name, "contact_phone": "13800000029"},
         loop.context("e29-committed"),
     )
-    committed = any(row["customer_name"] == committed_name for row in _units(engine))
-    verified = committed_name in json.dumps(cancelled_states, ensure_ascii=False)
-    e29_ok = committed and verified
+    cancelled_id = run.run_id
+    final = cancel_queue.get(cancelled_id)
+    task_state = "" if final is None else str(final.state)
+    db_row = _customer_row(engine, committed_name)
+    receipt_customer_id = getattr(final, "verified_customer_id", None)
+    e29_verdict = judge_cancel(
+        task_id=cancelled_id,
+        task_state=task_state,
+        db_row=db_row,
+        receipt_customer_id=receipt_customer_id,
+    )
     loop.settle(
         "E29",
-        "PASS" if e29_ok else "FAIL",
+        e29_verdict,
         (
-            f"task e29-committed transitions={cancelled_states} committed={committed} "
-            f"cancel_verified_committed_row={verified}"
+            f"task {cancelled_id} state={task_state} "
+            f"db_id={None if db_row is None else db_row.get('id')} "
+            f"receipt_customer_id={receipt_customer_id} transitions={cancelled_states}"
         ),
-        task_id="e29-committed",
+        task_id=cancelled_id,
     )
 
     restarted = execute_employee_task_local(
@@ -1506,19 +1869,23 @@ def _execute_closed_loop(loop: Acceptance) -> None:
         workspace_root=str(workspace),
     )
     _note_runtime(loop, restarted, task_id=parent_id, action="restart")
-    reloaded = InMemoryTaskExecutionRepository()
-    original_id = cancel_queue.get(run.run_id).run_id
-    restored = reloaded.get(original_id)
-    recovered_calls = list((restarted.get("restart") or {}).get("inflight_recovered") or [])
-    e30_ok = restored is not None and bool(recovered_calls)
+    from app.application.employee_runtime.task_continuity import ledger_path
+
+    sql_state, tool_status, replayed, sql_task_id = _restart_sql_task(engine, workspace, restarted)
+    e30_verdict = judge_restart(
+        repository_kind="sql",
+        restored_state=sql_state,
+        tool_status=tool_status,
+        replayed=replayed,
+    )
     loop.settle(
         "E30",
-        "PASS" if e30_ok else "FAIL",
+        e30_verdict,
         (
-            f"task {parent_id} reloaded.get({original_id})={restored} "
-            f"inflight_recovered={recovered_calls} ledger={any(workspace.rglob('*.json'))}"
+            f"task {sql_task_id or parent_id} sql_state={sql_state} tool_status={tool_status} "
+            f"replayed={replayed} ledger={ledger_path(workspace).is_file()}"
         ),
-        task_id=parent_id,
+        task_id=sql_task_id or parent_id,
     )
 
     grade = _grade(loop.items)
@@ -1563,3 +1930,144 @@ def test_closed_loop_record_is_this_run(loop: Acceptance) -> None:
 def test_closed_loop_item_live_pass(loop: Acceptance, item_id: str) -> None:
     item = loop.items[item_id]
     assert item["verdict"] == "PASS", item["summary"]
+
+
+def test_sync_export_is_not_async_completed() -> None:
+    entries = [{"name": "customers.export", "async": False, "detail": "sync file write"}]
+    verdict = judge_async_export(
+        entries, phases={"queued", "running", "completed"}, file_ready=True
+    )
+    assert verdict == "NOT-IMPLEMENTED"
+    ready = judge_async_export(
+        [{"name": "customers.export_job", "async": True}],
+        phases={"queued", "running", "completed"},
+        file_ready=True,
+    )
+    assert ready == "PASS"
+    assert (
+        judge_async_export(
+            [{"name": "customers.export_job", "async": True}],
+            phases={"completed"},
+            file_ready=True,
+        )
+        == "FAIL"
+    )
+
+
+def test_e28_timeout_before_start_is_not_success() -> None:
+    early = judge_tool_timeout(
+        process_started=False,
+        process_exited=False,
+        resources_released=False,
+        task_state="timeout",
+    )
+    assert early == "FAIL"
+    still_running = judge_tool_timeout(
+        process_started=True,
+        process_exited=False,
+        resources_released=False,
+        task_state="timeout",
+    )
+    assert still_running == "FAIL"
+    unknown = judge_tool_timeout(
+        process_started=True,
+        process_exited=True,
+        resources_released=True,
+        task_state="tool_timeout_unknown",
+    )
+    assert unknown == "FAIL"
+    assert (
+        judge_tool_timeout(
+            process_started=True,
+            process_exited=True,
+            resources_released=True,
+            task_state="timed_out",
+        )
+        == "PASS"
+    )
+
+
+def test_e29_json_name_search_is_not_verification() -> None:
+    name = "闭环已提交不可当取消"
+    blob = json.dumps(
+        {"cancelled_states": [["queued", "cancelled"]], "name": name}, ensure_ascii=False
+    )
+    assert name in blob
+    row = {"id": 7, "customer_name": name}
+    assert (
+        judge_cancel(task_id="run-1", task_state="cancelled", db_row=row, receipt_customer_id=blob)
+        == "FAIL"
+    )
+    assert (
+        judge_cancel(task_id="run-1", task_state="cancelled", db_row=row, receipt_customer_id=name)
+        == "FAIL"
+    )
+    assert (
+        judge_cancel(task_id="run-1", task_state="cancelled", db_row=row, receipt_customer_id=None)
+        == "FAIL"
+    )
+    assert (
+        judge_cancel(task_id="", task_state="cancelled", db_row=row, receipt_customer_id=7)
+        == "FAIL"
+    )
+    assert (
+        judge_cancel(task_id="run-1", task_state="cancelled", db_row=row, receipt_customer_id=7)
+        == "PASS"
+    )
+
+
+def test_e30_memory_repository_is_not_restore() -> None:
+    assert (
+        judge_restart(
+            repository_kind="memory",
+            restored_state="running",
+            tool_status="recovering",
+            replayed=False,
+        )
+        == "FAIL"
+    )
+    assert (
+        judge_restart(repository_kind="sql", restored_state=None, tool_status=None, replayed=False)
+        == "FAIL"
+    )
+    assert (
+        judge_restart(
+            repository_kind="sql",
+            restored_state="running",
+            tool_status="recovering",
+            replayed=True,
+        )
+        == "FAIL"
+    )
+    assert (
+        judge_restart(
+            repository_kind="sql",
+            restored_state="running",
+            tool_status="recovering",
+            replayed=False,
+        )
+        == "PASS"
+    )
+
+
+def test_retry_task_id_comes_from_idempotency_scope() -> None:
+    assert (
+        resolve_retry_task_id(invoked="e19", scope_key="11:e19:customers:create:e19-same-key")
+        == "e19"
+    )
+    assert (
+        resolve_retry_task_id(invoked="e19", scope_key="11:e20:customers:create:e19-same-key")
+        == "e20"
+    )
+
+
+def test_live_run_rejects_use_after_teardown() -> None:
+    run = ClosedLoopRun()
+    book = run.open_resources()
+    assert book.tmp.is_dir()
+    assert run.require() is book
+    held = book.tmp
+    run.close()
+    with pytest.raises(RuntimeError, match="after fixture teardown"):
+        run.require()
+    assert not held.exists()

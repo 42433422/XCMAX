@@ -52,12 +52,21 @@ def customers_db(tmp_path, monkeypatch):
     return engine
 
 
-def _card(workspace: Path, employee: str, *, available: bool = True) -> None:
+def _card(
+    workspace: Path,
+    employee: str,
+    *,
+    available: bool = True,
+    tenant_id: str = "11",
+    identity: bool = True,
+) -> None:
     folder = workspace / "employees"
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{employee}.json").write_text(
-        json.dumps({"available": available}), encoding="utf-8"
-    )
+    body: dict = {"available": available}
+    if identity:
+        body["employee_id"] = employee
+        body["tenant_id"] = tenant_id
+    (folder / f"{employee}.json").write_text(json.dumps(body), encoding="utf-8")
 
 
 def _start(workspace: Path) -> dict:
@@ -85,6 +94,14 @@ def _handoff(workspace: Path, task_id: str, **extra) -> dict:
         "task_id": task_id,
         "target_employee": "employee-b",
         "permissions": ["customers.query", "sales.query"],
+        "delegated_tool": "customers",
+        "delegated_action": "query",
+        "delegated_params": {
+            "keyword": CUSTOMER,
+            "customer_id": 42,
+            "date_from": "2026-11-01",
+            "date_to": "2026-11-30",
+        },
         "effect": {"keyword": CUSTOMER},
     }
     payload.update(extra)
@@ -122,6 +139,11 @@ def test_employee_a_hands_off_to_employee_b(customers_db, tmp_path: Path) -> Non
     assert payload["parent_task_id"] == parent_id
     assert child_id and child_id != parent_id
     assert payload["execution_status"] == "completed"
+    assert payload["result"]["tool_id"] == "customers"
+    assert payload["result"]["action"] == "query"
+    assert payload["result"]["params"]["customer_id"] == 42
+    assert payload["result"]["params"]["date_from"] == "2026-11-01"
+    assert payload["result"]["params"]["date_to"] == "2026-11-30"
     assert CUSTOMER in json.dumps(payload["result"], ensure_ascii=False)
     assert child_id in handed["task"]["child_task_ids"]
     assert handed["business_success"] is False
@@ -159,12 +181,19 @@ def test_unauthorized_handoff_is_rejected(customers_db, tmp_path: Path) -> None:
     _card(workspace, "employee-b")
     started = _start(workspace)
     handed = _handoff(
-        workspace, started["task_id"], permissions=["not_a_tool.query"]
+        workspace,
+        started["task_id"],
+        permissions=["not_a_tool.query"],
+        delegated_tool="not_a_tool",
+        delegated_action="query",
     )
     assert handed["handoff"]["error_code"] == "tool_contract_unavailable"
     assert handed["business_success"] is False
     assert handed["task"]["status"] == "failed"
     assert _children(workspace, started["task_id"]) == []
+    state = load_employee_task_ledger(workspace)
+    state["tasks"][started["task_id"]]["grants"]["employee-a"] = ["sales.query"]
+    ledger_path(workspace).write_text(json.dumps(state), encoding="utf-8")
     raw = json.loads(
         execute_workflow_tool(
             "handoff_commit",
@@ -175,10 +204,19 @@ def test_unauthorized_handoff_is_rejected(customers_db, tmp_path: Path) -> None:
                 "source": "employee-a",
                 "target": "employee-b",
                 "permissions": ["customers.query"],
-                "parent_grant": ["sales.query"],
+                "parent_grant": ["*"],
+                "delegated_tool": "customers",
+                "delegated_action": "query",
+                "delegated_params": {},
                 "goal": "越权交接",
             },
             str(workspace),
+            runtime_context={
+                "tenant_id": "11",
+                "user_id": "11",
+                "employee_id": "employee-a",
+                "task_id": started["task_id"],
+            },
         )
     )
     assert raw["success"] is False
@@ -190,9 +228,9 @@ def test_cross_tenant_handoff_is_blocked(customers_db, tmp_path: Path) -> None:
     workspace = tmp_path / "tenant"
     workspace.mkdir()
     _card(workspace, "employee-a")
-    _card(workspace, "employee-b")
+    _card(workspace, "employee-b", tenant_id="22")
     started = _start(workspace)
-    handed = _handoff(workspace, started["task_id"], target_tenant_id="22")
+    handed = _handoff(workspace, started["task_id"], target_tenant_id="11")
     assert handed["handoff"]["error_code"] == "handoff_cross_tenant"
     assert handed["business_success"] is False
     assert handed["task"]["status"] == "failed"
@@ -281,3 +319,124 @@ print(json.dumps({
     assert found["handoff_status"] == "completed"
     assert found["execution_status"] == "completed"
     assert found["saw_customer"] is True
+
+
+def test_empty_roster_and_unverifiable_employee_are_rejected(customers_db, tmp_path: Path) -> None:
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    started = _start(empty)
+    handed = _handoff(empty, started["task_id"])
+    assert handed["handoff"]["error_code"] == "handoff_identity_unverified"
+    assert handed["business_success"] is False
+    assert handed["task"]["status"] == "failed"
+    assert _children(empty, started["task_id"]) == []
+
+    unavailable = tmp_path / "unavailable"
+    unavailable.mkdir()
+    _card(unavailable, "employee-a")
+    _card(unavailable, "employee-b", available=False)
+    started = _start(unavailable)
+    handed = _handoff(unavailable, started["task_id"])
+    assert handed["handoff"]["status"] == "failed"
+    assert handed["handoff"]["error_code"] in {"employee_unavailable", "handoff_unknown_employee"}
+    assert handed["business_success"] is False
+    assert handed["task"]["status"] == "failed"
+
+    unverified = tmp_path / "unverified"
+    unverified.mkdir()
+    _card(unverified, "employee-a")
+    _card(unverified, "employee-b", identity=False)
+    started = _start(unverified)
+    handed = _handoff(unverified, started["task_id"])
+    assert handed["handoff"]["error_code"] == "handoff_identity_unverified"
+    assert handed["business_success"] is False
+    assert handed["task"]["status"] == "failed"
+    assert _children(unverified, started["task_id"]) == []
+
+
+def _direct(workspace: Path, task_id: str, **extra) -> dict:
+    args = {
+        "tenant_id": "11",
+        "user_id": "11",
+        "task_id": task_id,
+        "source": "employee-a",
+        "target": "employee-b",
+        "permissions": ["customers.query"],
+        "delegated_tool": "customers",
+        "delegated_action": "query",
+        "delegated_params": {"keyword": CUSTOMER, "customer_id": 42},
+        "parent_grant": ["*"],
+        "target_tenant_id": "11",
+    }
+    args.update(extra)
+    context = {
+        "tenant_id": "11",
+        "user_id": "11",
+        "employee_id": str(extra.get("source") or "employee-a"),
+        "task_id": task_id,
+    }
+    if "context_task_id" in extra:
+        context["task_id"] = str(extra["context_task_id"])
+    if "context_employee_id" in extra:
+        context["employee_id"] = str(extra["context_employee_id"])
+    if "context_tenant_id" in extra:
+        context["tenant_id"] = str(extra["context_tenant_id"])
+    return json.loads(
+        execute_workflow_tool("handoff_commit", args, str(workspace), runtime_context=context)
+    )
+
+
+def test_forged_handoff_identity_is_rejected(customers_db, tmp_path: Path) -> None:
+    workspace = tmp_path / "forged"
+    workspace.mkdir()
+    _card(workspace, "employee-a")
+    _card(workspace, "employee-b")
+    first = _start(workspace)
+    second = _start(workspace)
+    forged_task = _direct(workspace, second["task_id"], context_task_id=first["task_id"])
+    assert forged_task["success"] is False
+    assert forged_task["error_code"] == "handoff_unauthorized"
+    assert _children(workspace, first["task_id"]) == []
+    assert _children(workspace, second["task_id"]) == []
+
+    forged_employee = _direct(
+        workspace, first["task_id"], source="employee-b", context_employee_id="employee-b"
+    )
+    assert forged_employee["success"] is False
+    assert forged_employee["error_code"] == "handoff_unauthorized"
+    assert not forged_employee.get("child_task_id")
+
+    forged_tenant = _direct(workspace, first["task_id"], tenant_id="22", target_tenant_id="22")
+    assert forged_tenant["success"] is False
+    assert forged_tenant["error_code"] == "handoff_unauthorized"
+    assert _children(workspace, first["task_id"]) == []
+
+
+def test_permission_order_does_not_change_the_delegated_call(customers_db, tmp_path: Path) -> None:
+    params = {
+        "keyword": CUSTOMER,
+        "customer_id": 42,
+        "date_from": "2026-11-01",
+        "date_to": "2026-11-30",
+    }
+    executed = []
+    for name, permissions in (
+        ("forward", ["customers.query", "sales.query"]),
+        ("reverse", ["sales.query", "customers.query"]),
+    ):
+        workspace = tmp_path / name
+        workspace.mkdir()
+        _card(workspace, "employee-a")
+        _card(workspace, "employee-b")
+        started = _start(workspace)
+        handed = _handoff(
+            workspace,
+            started["task_id"],
+            permissions=permissions,
+            delegated_params=params,
+        )
+        payload = handed["handoff"]["result_payload"]["result"]
+        assert payload["parent_task_id"] == started["task_id"]
+        assert CUSTOMER in json.dumps(payload["final_output"], ensure_ascii=False)
+        executed.append((payload["tool_id"], payload["action"], payload["params"]))
+    assert executed[0] == executed[1] == ("customers", "query", params)
