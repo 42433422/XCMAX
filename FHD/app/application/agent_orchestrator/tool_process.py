@@ -66,6 +66,27 @@ def _worker(
 
     try:
         data = json.loads(payload)
+        business_db_url = str(data.get("business_db_url") or "")
+        if business_db_url and not _bind_worker_business_db(business_db_url):
+            Path(folder, "result").write_text(
+                json.dumps(
+                    {
+                        "output": {
+                            "success": False,
+                            "error_code": "business_db_unbound",
+                            "outcome": "unknown",
+                            "retryable": False,
+                            "reconciliation_required": True,
+                            "message": "工具进程未能绑定调用方业务库",
+                        },
+                        "uncertain": [],
+                        "llm_route_metadata": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            done.set()
+            return
         from app.application.agent_orchestrator.catalog_product_worker import (
             restore_catalog_claim,
             restore_catalog_worker_profile,
@@ -159,11 +180,69 @@ def _ignore_missing_cleanup_entry(_function, _path, error):
         raise error[1]
 
 
+def _caller_business_db_url() -> str:
+    """URL of the caller's customer session. Empty when it cannot be read."""
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    try:
+        from app.application.customer_app_service import get_customers_session
+
+        session = get_customers_session()
+    except RECOVERABLE_ERRORS:
+        return ""
+    try:
+        bind = session.get_bind()
+        return str(bind.url.render_as_string(hide_password=False) or "")
+    except RECOVERABLE_ERRORS + (SQLAlchemyError, AttributeError):
+        return ""
+    finally:
+        close = getattr(session, "close", None)
+        if callable(close):
+            close()
+
+
+def _bind_worker_business_db(url: str) -> bool:
+    """Point this worker's customer session at the caller's business database."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import NullPool
+
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    try:
+        engine = create_engine(
+            url,
+            connect_args={"check_same_thread": False} if url.startswith("sqlite") else {},
+            poolclass=NullPool,
+        )
+        factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+        def open_session():
+            return factory()
+
+        import app.application.customer_app_service as customers
+
+        customers.get_customers_session = open_session
+    except RECOVERABLE_ERRORS + (SQLAlchemyError,):
+        return False
+    return True
+
+
 def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     from app.infrastructure.llm.client import capture_worker_llm_scope, record_worker_route_metadata
 
     try:
-        payload = json.dumps({"step": step.to_dict(), "context": context}, allow_nan=False)
+        payload = json.dumps(
+            {
+                "step": step.to_dict(),
+                "context": context,
+                "business_db_url": _caller_business_db_url(),
+            },
+            allow_nan=False,
+        )
     except (ValueError, TypeError):
         return {
             "success": False,

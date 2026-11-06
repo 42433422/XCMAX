@@ -297,13 +297,21 @@ class AgentToolExecutor:
                 "tool_id": validation.tool_id,
                 "action": validation.action or step.action,
             }
-        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+        from app.application.agent_orchestrator.tool_permission import (
+            actor_tool_denial,
+            approval_execution_denial,
+        )
 
         denied = actor_tool_denial(
             validation.tool_id, validation.action or step.action, dict(runtime_context or {})
         )
         if denied is not None:
             return denied
+        approval_denied = approval_execution_denial(
+            validation.tool_id, validation.action or step.action, dict(runtime_context or {})
+        )
+        if approval_denied is not None:
+            return approval_denied
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
         reviewed_query = (validation.tool_id, validation.action) in _REVIEWED_QUERY_ACTIONS

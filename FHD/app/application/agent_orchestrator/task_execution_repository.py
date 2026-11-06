@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
 import random
 import threading
+import weakref
 from datetime import datetime
 from typing import cast
 
@@ -44,6 +46,7 @@ class InMemoryTaskExecutionRepository:
         from app.domain.task_lifecycle.control import MemoryBook
 
         self._book = MemoryBook()
+        remember_open_repository(self)
 
     def enqueue(
         self,
@@ -413,6 +416,31 @@ class InMemoryTaskExecutionRepository:
 
 
 _task_execution_repository: TaskExecutionRepository | None = None
+_OPEN_REPOSITORIES: weakref.WeakSet = weakref.WeakSet()
+
+
+def remember_open_repository(repository: object) -> None:
+    """Keep a live queue visible to the executor without a second state machine."""
+    _OPEN_REPOSITORIES.add(repository)
+
+
+def locate_task_execution(run_id: str):
+    """Return the open queue row for this task, or nothing when no lifecycle exists."""
+    wanted = str(run_id or "")
+    if not wanted:
+        return None, None
+    for repository in list(_OPEN_REPOSITORIES):
+        row = repository.get(wanted)
+        if row is not None:
+            return repository, row
+    if _task_execution_repository is not None:
+        row = _task_execution_repository.get(wanted)
+        if row is not None:
+            return _task_execution_repository, row
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return None, None
+    repository = get_task_execution_repository()
+    return repository, repository.get(wanted)
 
 
 def get_task_execution_repository() -> TaskExecutionRepository:
@@ -437,6 +465,8 @@ def set_task_execution_repository_for_tests(
 ) -> None:
     global _task_execution_repository
     _task_execution_repository = repository
+    if repository is not None:
+        remember_open_repository(repository)
 
 
 __all__ = [
