@@ -73,6 +73,13 @@ class CompatChatApplication:
         context = self.admission.context(request, body.context, body.message)
         self.assert_access(request)
         context = self.admission.with_tier(context, self.resolve_tier(request))
+        from app.application.ai_chat.dialogue_memory import try_dialogue_memory_reply
+
+        dialogue = await try_dialogue_memory_reply(body.message, context)
+        if dialogue is not None:
+            return self._attach(
+                dialogue, ChatTurn(body, body.message, context, "compat_chat_dialogue_memory")
+            )
         issue = await self.fast_paths.issue(request, context, body.message)
         if issue is not None:
             return self._attach(

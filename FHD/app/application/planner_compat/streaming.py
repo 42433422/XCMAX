@@ -53,6 +53,22 @@ class CompatStream:
         self, request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
     ) -> AsyncGenerator[bytes, None]:
         context = self.admission.context(request, body.context, body.message)
+        from app.application.ai_chat.dialogue_memory import try_dialogue_memory_reply
+
+        dialogue = await try_dialogue_memory_reply(body.message, context)
+        if dialogue is not None:
+            traced = self.trace(
+                dialogue,
+                message=body.message,
+                runtime_context=context,
+                user_id=body.user_id,
+                source=body.source,
+                channel="compat_chat_stream_dialogue_memory",
+                intent="dialogue_memory",
+            )
+            yield self.encode_event({"type": "token", "text": str(dialogue.get("response") or "")})
+            yield self.encode_event({"type": "done", "result": traced})
+            return
         issue = await self.fast_paths.issue(request, context, body.message)
         if issue is not None:
             text, payload = issue
