@@ -368,7 +368,7 @@ def _bind_worker(db_path: str, idem_path: str):
 
     engine = create_engine(
         f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False},
+        connect_args={"check_same_thread": False, "timeout": 30},
         poolclass=StaticPool,
     )
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
@@ -490,8 +490,9 @@ def _e22_worker(
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 
     try:
-        _bind_worker(db_path, idem_path)
+        engine = _bind_worker(db_path, idem_path)
         worker_permissions.drop_process_idempotency_memory()
+        seen = _customer_version(engine, unit_id)
         barrier.wait(timeout=30)
         result = AgentToolExecutor().execute(
             AgentStep(
@@ -502,6 +503,7 @@ def _e22_worker(
                     "id": unit_id,
                     "contact_phone": phone,
                     "idempotency_key": key,
+                    "expected_version": seen,
                 },
             ),
             runtime_context={
@@ -517,6 +519,7 @@ def _e22_worker(
                 "success": result.get("success"),
                 "error_code": result.get("error_code"),
                 "pid": os.getpid(),
+                "version": seen,
             }
         )
     except BrokenBarrierError:
@@ -548,7 +551,7 @@ class ClosedLoopRun:
         permissions.clear_idempotent_replay_for_tests()
         engine = create_engine(
             f"sqlite:///{root / 'business.sqlite'}",
-            connect_args={"check_same_thread": False},
+            connect_args={"check_same_thread": False, "timeout": 30},
             poolclass=StaticPool,
         )
         self.engine = engine
@@ -715,6 +718,16 @@ def _wait_until_running(proc: subprocess.Popen, ready: Path, timeout: float = 10
             return proc.poll() is None
         time.sleep(0.05)
     return False
+
+
+def _customer_version(engine, unit_id: int) -> int:
+    with Session(engine) as db:
+        value = db.execute(
+            select(PurchaseUnit.version)
+            .where(PurchaseUnit.id == unit_id)
+            .execution_options(skip_tenant_filter=True)
+        ).scalar_one()
+    return int(value)
 
 
 def _customer_row(engine, name: str) -> dict | None:
@@ -1494,6 +1507,7 @@ def _execute_closed_loop(loop: Acceptance) -> None:
     )
 
     victim = next(row for row in _units(engine) if row["customer_name"] == "闭环新建客户乙")
+    left_version = _customer_version(engine, int(victim["id"]))
     barrier = ctx.Barrier(2)
     receiver, sender = ctx.Pipe(duplex=False)
     contested = ctx.Process(
@@ -1518,7 +1532,12 @@ def _execute_closed_loop(loop: Acceptance) -> None:
         left = loop.call(
             "customers",
             "update",
-            {"id": victim["id"], "contact_phone": "13800001111", "idempotency_key": "e22-left"},
+            {
+                "id": victim["id"],
+                "contact_phone": "13800001111",
+                "idempotency_key": "e22-left",
+                "expected_version": left_version,
+            },
             loop.context("e22-left"),
         )
     remote = (
@@ -1528,12 +1547,16 @@ def _execute_closed_loop(loop: Acceptance) -> None:
     final_phone = next(row["contact_phone"] for row in _units(engine) if row["id"] == victim["id"])
     left_code = left.get("error_code")
     right_code = remote.get("error_code")
-    both_success = left.get("success") is True and remote.get("success") is True
-    conflict = (not both_success) and (
-        left_code in {"version_conflict", "lock_conflict"}
-        or right_code in {"version_conflict", "lock_conflict"}
+    winner = ""
+    if left.get("success") is True and remote.get("success") is not True:
+        winner = "13800001111"
+    elif remote.get("success") is True and left.get("success") is not True:
+        winner = "13800002222"
+    loser_conflict = (left.get("success") is not True and left_code == "version_conflict") or (
+        remote.get("success") is not True and right_code == "version_conflict"
     )
-    phone_held = final_phone == victim["contact_phone"]
+    conflict = bool(winner) and loser_conflict and remote.get("version") == left_version
+    phone_held = final_phone == winner
     loop.chain.append(
         {
             "at": _now(),
@@ -1559,7 +1582,7 @@ def _execute_closed_loop(loop: Acceptance) -> None:
     )
     loop.settle(
         "E22",
-        "PASS" if conflict and phone_held else "FAIL",
+        "PASS" if conflict and phone_held and contested.exitcode == 0 else "FAIL",
         (
             f"task e22 left={left.get('success')}:{left_code} "
             f"right={remote.get('success')}:{right_code} "
