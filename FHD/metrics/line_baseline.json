@@ -1,5 +1,5 @@
 {
-  "lines": 2419917,
+  "lines": 2419929,
   "updated": "2026-11-06",
-  "note": "变基到 main 4e62f298（#3022 ERP 侧栏/连点）后重测净删除基线。本 PR A31–A40 多轮交接连续性保留；2419890 → 2419917。"
+  "note": "Raise G11 for the new task continuity module and record its source-growth review."
 }

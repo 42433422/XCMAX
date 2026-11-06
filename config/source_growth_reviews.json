@@ -12,6 +12,18 @@
       "validation": "MODstore unit tests for mimo_tts decode/progress plus chat stream contract tests.",
       "follow_up": "Split TTS helpers out of agent_butler_api_merged once stream contract stabilizes.",
       "review_owner": "@42433422"
+    },
+    "FHD/app/application/employee_runtime/task_continuity.py": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "6b94c3e2aca11b7591832ba3e2c55be29d4ebc36",
+      "before_lines": 0,
+      "after_lines": 1655,
+      "reason": "New employee-runtime handoff layer keeps multi-turn task context, resume tokens, and continuity decisions out of the growing agent.py runtime.",
+      "boundary": "Only the new task_continuity module under employee_runtime; no new public HTTP routes.",
+      "validation": "Task continuity acceptance coverage for multi-turn handoff, resume, and context restore.",
+      "follow_up": "Split resume-token and context-store helpers from task_continuity once the A31-A40 contract is stable.",
+      "review_owner": "@42433422"
     }
   }
 }
