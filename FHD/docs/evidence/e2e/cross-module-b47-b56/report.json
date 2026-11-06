@@ -1,0 +1,129 @@
+{
+  "verdict": "PARTIAL PASS",
+  "scenarios": {
+    "S01": "PASS",
+    "S02": "PASS",
+    "S03": "PASS",
+    "S04": "PASS"
+  },
+  "http": {
+    "submit": {
+      "status": 202,
+      "deduplicated": false,
+      "status_text": "waiting_user"
+    },
+    "duplicate": {
+      "status": 202,
+      "deduplicated": true,
+      "run_id": "run_c626a64b397b4f9a8f1d201434355392"
+    },
+    "rows_after_duplicate_submit": [],
+    "approve": {
+      "status": 200,
+      "success": true,
+      "stored_status_before": "pending",
+      "snapshot_in_db_before": true,
+      "memory_cleared_before": true,
+      "request_no": "0412a526a9df447e89e27739b0b8d51c"
+    },
+    "rows_after_approve": [
+      [
+        "HX-1",
+        "15.00"
+      ],
+      [
+        "HX-2",
+        "30.00"
+      ]
+    ],
+    "approval_status_after": "approved",
+    "download": {
+      "status": 200,
+      "sha256": "41e9db38551f9b925db6f6f1110ad6e2742c4d7f1ea50e9d4dbf50e074fe5d23",
+      "file_sha256": "41e9db38551f9b925db6f6f1110ad6e2742c4d7f1ea50e9d4dbf50e074fe5d23",
+      "bytes": 5751
+    },
+    "history": {
+      "task_status": 200,
+      "audit_status": 200,
+      "file_status": 200,
+      "task_id": "task-http-b47",
+      "trace_id": "69cc2514f0bd4d1fb4f9b72b28eb85fa"
+    },
+    "holes": {
+      "1_http_entry": true,
+      "2_persisted_approval": true,
+      "3_http_download_sha": true,
+      "4_duplicate_submit": true,
+      "5_second_session": true
+    }
+  },
+  "checks": {
+    "HTTP-01": {
+      "status": "PASS",
+      "detail": 202
+    },
+    "HTTP-02": {
+      "status": "PASS",
+      "detail": "approved"
+    },
+    "HTTP-03": {
+      "status": "PASS",
+      "detail": "41e9db38551f9b925db6f6f1110ad6e2742c4d7f1ea50e9d4dbf50e074fe5d23"
+    },
+    "HTTP-04": {
+      "status": "PASS",
+      "detail": 202
+    },
+    "HTTP-05": {
+      "status": "PASS",
+      "detail": {
+        "task_status": 200,
+        "audit_status": 200,
+        "file_status": 200,
+        "task_id": "task-http-b47",
+        "trace_id": "69cc2514f0bd4d1fb4f9b72b28eb85fa"
+      }
+    },
+    "S04-original-unchanged": {
+      "status": "PASS",
+      "detail": "1c7a353de27b43c98e301408b39086005fc26810c72e44376d0c53ccad01a5cc"
+    },
+    "S04-partial-anomalies": {
+      "status": "PASS",
+      "detail": "导入 2 条，异常 2 条"
+    },
+    "B47-B56-harness": {
+      "status": "NOT TESTED",
+      "detail": "Previous matrix was only run_cross_module_acceptance. Not marked PASS on this HTTP path."
+    }
+  },
+  "failed": [],
+  "ids": {
+    "task_id": "task-http-b47",
+    "trace_id": "69cc2514f0bd4d1fb4f9b72b28eb85fa",
+    "run_id": "run_c626a64b397b4f9a8f1d201434355392",
+    "approval_request_db_id": 1,
+    "request_no": "0412a526a9df447e89e27739b0b8d51c",
+    "original_sha256": "1c7a353de27b43c98e301408b39086005fc26810c72e44376d0c53ccad01a5cc",
+    "result_sha256": "41e9db38551f9b925db6f6f1110ad6e2742c4d7f1ea50e9d4dbf50e074fe5d23"
+  },
+  "verification": {
+    "status": "partial",
+    "success": false,
+    "summary": "导入 2 条，异常 2 条",
+    "stored_rows": [
+      [
+        "HX-1",
+        "15.00"
+      ],
+      [
+        "HX-2",
+        "30.00"
+      ]
+    ],
+    "source_unchanged": true,
+    "anomalies_reported": true
+  },
+  "note": "PARTIAL PASS"
+}
