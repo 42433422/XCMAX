@@ -172,7 +172,8 @@ def _build_candidate_previews(body, review, proposal):
 
 
 async def _body(file, *, allow_legacy=False):
-    extensions = (".xlsx", ".xls") if allow_legacy else (".xlsx",)
+    # archive-classify uses allow_legacy=True so docking can take XLS and statement Word.
+    extensions = (".xlsx", ".xls", ".docx") if allow_legacy else (".xlsx",)
     if not (file.filename or "").lower().endswith(extensions):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx；其他格式暂不能保证保真")
     body = await file.read(MAX_BYTES + 1)

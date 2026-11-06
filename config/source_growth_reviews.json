@@ -111,14 +111,14 @@
     },
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
-      "base_blob": "50f148433afe741af0249c9185faa543b9f1e629",
-      "head_blob": "cb04307e32f833a023ff1cccb6123027ca4ae0e2",
-      "before_lines": 2026,
-      "after_lines": 2032,
-      "reason": "Classification records that have not called the model may use deterministic physical-region slices; stale versions and incomplete model results remain rejected.",
-      "boundary": "Only the existing _auto_slices selector changes. Source loading still enforces tenant/owner identity, and model-derived slices retain their existing coverage and confirmation checks.",
-      "validation": "Reviewed-excel and ETL regression tests cover unknown templates, two physical tables, formulas, hidden sheets, corrupt input, and preserved source identity.",
-      "follow_up": "Keep deterministic and model-based slice policies in their application modules; move the selector behind the existing application boundary if the route gains another selection policy.",
+      "base_blob": "cb04307e32f833a023ff1cccb6123027ca4ae0e2",
+      "head_blob": "f65ab3ae3b8c168351457c1f5af1c2b0faef4ae6",
+      "before_lines": 2032,
+      "after_lines": 2033,
+      "reason": "Archive-classify may accept Word (.docx) statements so they can be derived into a workbook and sent through platform-model analyze.",
+      "boundary": "Only the allowed upload extensions for the existing archive-classify body parser. Model-required write gates are unchanged.",
+      "validation": "tests/test_application/test_reviewed_excel_docx.py covers Word intake, a missing model session that cannot write, and a confirmed model template that can.",
+      "follow_up": "Keep Word conversion in reviewed_excel_docx; do not grow this route with additional format adapters.",
       "review_owner": "@42433422"
     }
   }
