@@ -480,6 +480,9 @@ def decide_product_issue(
             None,
         )
     evidence["resolution"] = resolution
+    from modstore_server.customer_ticket_loop import note_customer_decision
+
+    note_customer_decision(evidence, body.decision)
     evidence["customer_decisions"] = [
         *decisions,
         {

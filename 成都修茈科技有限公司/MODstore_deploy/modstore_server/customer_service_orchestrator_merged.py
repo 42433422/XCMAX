@@ -742,7 +742,7 @@ def handle_customer_message(
     open_ticket = (
         db.query(_facade().CustomerServiceTicket)
         .filter(_facade().CustomerServiceTicket.session_id == session.id)
-        .filter(_facade().CustomerServiceTicket.status.in_(["open", "waiting_user", "processing"]))
+        .filter(_facade().CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
         .order_by(_facade().CustomerServiceTicket.id.desc())
         .first()
     )
@@ -912,6 +912,20 @@ def handle_customer_message(
                 ev["followups"] = followups[-20:]
                 ev["user_confirmed_domain"] = extracted.get("user_confirmed_domain")
             ticket.evidence_json = _facade().json_dumps(ev)
+    from modstore_server.customer_ticket_loop import apply_loop_status, record_supplement
+
+    if (
+        open_ticket
+        and ticket.id == open_ticket.id
+        and not _facade()._is_escalate_only(text)
+        and _facade()._looks_like_concrete_issue(text)
+    ):
+        record_supplement(db, ticket, user, text)
+    apply_loop_status(ticket)
+    loaded = _facade().json_loads(ticket.evidence_json, {})
+    public = loaded.get("loop_public") if isinstance(loaded, dict) else None
+    if isinstance(public, dict) and public.get("conclusion"):
+        reply = f"{reply} {public['conclusion']}"
     assistant_msg = _facade().CustomerServiceMessage(
         session_id=session.id,
         ticket_id=ticket.id,
@@ -1045,7 +1059,7 @@ def ensure_ticket(
     existing = (
         db.query(_facade().CustomerServiceTicket)
         .filter(_facade().CustomerServiceTicket.session_id == session.id)
-        .filter(_facade().CustomerServiceTicket.status.in_(["open", "waiting_user", "processing"]))
+        .filter(_facade().CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
         .order_by(_facade().CustomerServiceTicket.id.desc())
         .first()
     )
@@ -1210,6 +1224,16 @@ def _attach_image_to_ticket(ticket: _facade().CustomerServiceTicket, *, message_
     ticket.updated_at = _facade().datetime.now(_facade().timezone.utc)
 
 
+_ACTIVE_TICKET_STATUSES = (
+    "open",
+    "waiting_user",
+    "processing",
+    "pending_assignment",
+    "waiting_approval",
+    "failed",
+)
+
+
 def plan_actions(
     db: _facade().Session,
     *,
@@ -1219,38 +1243,10 @@ def plan_actions(
     extracted: _facade().Dict[str, _facade().Any],
 ) -> list[_facade().Any]:
     actions: list[_facade().Any] = []
-    if decision.decision == "accepted" and ticket.intent == "product_issue":
-        diag = _facade().build_action(
-            db,
-            ticket_id=ticket.id,
-            decision_id=decision.id,
-            user_id=user.id,
-            action_type="ticket.diagnose",
-            target_type="ticket",
-            target_id=str(ticket.id),
-            request={"ticket_id": int(ticket.id), "user_id": int(user.id)},
-        )
-        _facade().execute_action(db, diag, user)
-        actions.append(diag)
-        if diag.status == "completed":
-            parsed = _facade().json_loads(diag.result_json, {})
-            report = _facade().build_action(
-                db,
-                ticket_id=ticket.id,
-                decision_id=decision.id,
-                user_id=user.id,
-                action_type="ticket.report_diagnosis",
-                target_type="ticket",
-                target_id=str(parsed.get("ticket_no") or ticket.id),
-                request={
-                    "ticket_id": int(ticket.id),
-                    "ticket_no": parsed.get("ticket_no"),
-                    "user_id": int(user.id),
-                },
-            )
-            _facade().execute_action(db, report, user)
-            actions.append(report)
-        return actions
+    if decision.decision == "accepted" and ticket.intent in {"product_issue", "account_support"}:
+        from modstore_server.customer_ticket_loop import run_ticket_loop
+
+        return run_ticket_loop(db, ticket, user, decision_id=decision.id)
     if decision.decision != "approved":
         return []
     if ticket.intent == "refund":

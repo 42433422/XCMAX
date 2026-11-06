@@ -304,6 +304,80 @@ async def reply_to_ticket_as_admin(
     return reply_to_ticket(db, user, ticket_id, body)
 
 
+class LoopApprovalBody(BaseModel):
+    approval_id: str = Field(min_length=4, max_length=64)
+
+
+class TicketSupplementBody(BaseModel):
+    note: str = Field(min_length=4, max_length=2000)
+    attachment_name: str = Field(default="", max_length=120)
+
+
+@router.post("/tickets/{ticket_id}/loop/resume")
+async def resume_ticket_assignment(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_admin),
+):
+    from modstore_server.customer_ticket_loop import resume_ticket_loop
+
+    ticket = _visible_ticket_or_404(db, user, ticket_id)
+    result = resume_ticket_loop(db, ticket, user)
+    if result.get("reason") == "still_offline":
+        raise HTTPException(409, "负责员工仍不可用，未再次派单")
+    if not result.get("ok"):
+        raise HTTPException(409, "当前工单不在待派单")
+    db.commit()
+    return {"ticket": ticket_payload(ticket), **result}
+
+
+@router.post("/tickets/{ticket_id}/loop/approve")
+async def approve_ticket_change(
+    ticket_id: int,
+    body: LoopApprovalBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_admin),
+):
+    from modstore_server.customer_ticket_loop import approve_ticket_loop
+
+    ticket = _visible_ticket_or_404(db, user, ticket_id)
+    result = approve_ticket_loop(db, ticket, user, body.approval_id)
+    db.commit()
+    return {"ticket": ticket_payload(ticket), **result}
+
+
+@router.post("/tickets/{ticket_id}/supplement")
+async def supplement_ticket(
+    ticket_id: int,
+    body: TicketSupplementBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    from modstore_server.customer_ticket_loop import record_supplement
+
+    ticket = _visible_ticket_or_404(db, user, ticket_id)
+    if ticket.user_id != user.id:
+        raise HTTPException(403, "只能补充自己的工单")
+    result = record_supplement(db, ticket, user, body.note, body.attachment_name)
+    if not result.get("ok"):
+        raise HTTPException(422, "补充内容无效")
+    db.commit()
+    view = ticket_payload if user.is_admin else customer_view.customer_ticket_row
+    return {"ticket": view(ticket), **result}
+
+
+@router.get("/tickets/{ticket_id}/audit")
+async def export_ticket_audit_log(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    from modstore_server.customer_ticket_loop import export_ticket_audit
+
+    ticket = _visible_ticket_or_404(db, user, ticket_id)
+    return export_ticket_audit(db, ticket)
+
+
 @router.post("/tickets/{ticket_id}/close")
 async def close_ticket_as_admin(
     ticket_id: int,

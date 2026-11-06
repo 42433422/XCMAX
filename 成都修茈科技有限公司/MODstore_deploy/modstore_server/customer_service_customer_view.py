@@ -30,6 +30,7 @@ EVIDENCE_KEYS = (
     "issue_domain_label",
     "reason",
     "classification_status",
+    "loop_public",
 )
 INTENT_KEYS = (
     "intent",
@@ -54,6 +55,13 @@ BUSINESS_ACTIONS = frozenset(
         "llm.model_capability.propose",
         "ticket.diagnose",
         "ticket.report_diagnosis",
+        "ticket.read",
+        "ticket.observe_status",
+        "ticket.verify",
+        "ticket.assign",
+        "ticket.apply_change",
+        "account.lookup",
+        "tool.registry",
     }
 )
 

@@ -165,6 +165,18 @@ def execute_action(db: Session, action: CustomerServiceAction, user: User) -> Cu
     try:
         if action.action_type == "ticket.diagnose":
             result = _diagnose_ticket(db, action, request)
+        elif action.action_type == "ticket.read":
+            result = _read_ticket(db, action, request)
+        elif action.action_type == "ticket.observe_status":
+            result = _observe_status(db, action, request)
+        elif action.action_type == "ticket.verify":
+            result = _verify_ticket(db, action, request)
+        elif action.action_type == "ticket.assign":
+            result = _assign_employee(db, action, request)
+        elif action.action_type == "account.lookup":
+            result = _lookup_account(db, action, request)
+        elif action.action_type == "tool.registry":
+            result = _read_tool_registry(db, action, request)
         elif action.action_type == "ticket.report_diagnosis":
             result = _report_diagnosis(db, action, request)
         elif action.action_type == "refund.apply":
@@ -248,6 +260,187 @@ def _diagnose_ticket(
         "summary": (row.summary or "")[:500],
         "status": row.status,
         "user_id": int(row.user_id or 0),
+        "observed_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _employee_denied(request: dict[str, Any], tool: str) -> dict[str, Any] | None:
+    if request.get("granted") is False:
+        return _reject_tool("员工无权调用该工具", "tool_forbidden")
+    from modstore_server.customer_ticket_loop import employee_can
+
+    if not employee_can(str(request.get("employee_id") or ""), tool):
+        return _reject_tool("员工不具备该工具能力", "tool_forbidden")
+    return None
+
+
+def _owned_ticket(
+    db: Session, action: CustomerServiceAction, request: dict[str, Any]
+) -> tuple[Any, dict[str, Any] | None]:
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    path = str(request.get("file_path") or "")
+    if path and (".." in path or path.startswith(("/", "\\")) or ":\\" in path):
+        return None, _reject_tool("非法路径，拒绝执行", "illegal_path")
+    try:
+        ticket_id = int(request.get("ticket_id"))
+    except (TypeError, ValueError):
+        return None, _reject_tool("工单编号缺失或类型错误", "invalid_ticket_id")
+    if ticket_id <= 0 or ticket_id != int(action.ticket_id or 0):
+        return None, _reject_tool("工单编号与当前任务不一致", "ticket_mismatch")
+    row = db.get(CustomerServiceTicket, ticket_id)
+    if row is None:
+        return None, _reject_tool("工单不存在或不属于当前用户", "ticket_missing")
+    owner = request.get("user_id")
+    if owner not in (None, "") and int(owner) != int(row.user_id or 0):
+        return None, _reject_tool("用户与工单不一致", "user_mismatch")
+    return row, None
+
+
+def _read_ticket(
+    db: Session, action: CustomerServiceAction, request: dict[str, Any]
+) -> dict[str, Any]:
+    denied = _employee_denied(request, "ticket.read")
+    if denied:
+        return denied
+    row, error = _owned_ticket(db, action, request)
+    if error:
+        return error
+    return {
+        "ok": True,
+        "executed": True,
+        "tool": "ticket.read",
+        "ticket_id": int(row.id),
+        "ticket_no": row.ticket_no,
+        "intent": row.intent,
+        "status": row.status,
+        "user_id": int(row.user_id or 0),
+        "observed_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _observe_status(
+    db: Session, action: CustomerServiceAction, request: dict[str, Any]
+) -> dict[str, Any]:
+    denied = _employee_denied(request, "ticket.observe_status")
+    if denied:
+        return denied
+    if not str(request.get("ticket_no") or "").strip():
+        return _reject_tool("缺少前序读取的工单号", "missing_dependency")
+    row, error = _owned_ticket(db, action, request)
+    if error:
+        return error
+    if str(row.ticket_no or "") != str(request.get("ticket_no")):
+        return _reject_tool("前序工单号与数据库记录不一致", "ticket_mismatch")
+    return {
+        "ok": True,
+        "executed": True,
+        "tool": "ticket.observe_status",
+        "ticket_id": int(row.id),
+        "ticket_no": row.ticket_no,
+        "status": row.status,
+        "observed_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _verify_ticket(
+    db: Session, action: CustomerServiceAction, request: dict[str, Any]
+) -> dict[str, Any]:
+    """第二次读取原单。只有编号、分类和用户都对得上，才算核验通过。"""
+    denied = _employee_denied(request, "ticket.verify")
+    if denied:
+        return denied
+    row, error = _owned_ticket(db, action, request)
+    if error:
+        return error
+    matched = (
+        str(row.ticket_no or "") == str(request.get("ticket_no") or "")
+        and str(row.intent or "") == str(request.get("intent") or "")
+        and int(row.user_id or 0) == int(request.get("user_id") or 0)
+        and request.get("fail_verify") is not True
+    )
+    return {
+        "ok": matched,
+        "executed": True,
+        "matched": matched,
+        "tool": "ticket.verify",
+        "ticket_id": int(row.id),
+        "ticket_no": row.ticket_no,
+        "intent": row.intent,
+        "observed_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _assign_employee(
+    db: Session, action: CustomerServiceAction, request: dict[str, Any]
+) -> dict[str, Any]:
+    from modstore_server.customer_ticket_loop import employee_lane
+
+    denied = _employee_denied(request, "ticket.assign")
+    if denied:
+        return denied
+    _row, error = _owned_ticket(db, action, request)
+    if error:
+        return error
+    employee_id = str(request.get("employee_id") or "")
+    if request.get("online") is False:
+        return _reject_tool("负责员工不在线，任务保留待重派", "employee_offline")
+    if not employee_lane(employee_id, str(request.get("lane") or "")):
+        return _reject_tool("员工职责与工单不符", "employee_unqualified")
+    return {
+        "ok": True,
+        "executed": True,
+        "tool": "ticket.assign",
+        "employee_id": employee_id,
+        "lane": request.get("lane"),
+        "observed_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _lookup_account(
+    db: Session, action: CustomerServiceAction, request: dict[str, Any]
+) -> dict[str, Any]:
+    denied = _employee_denied(request, "account.lookup")
+    if denied:
+        return denied
+    row, error = _owned_ticket(db, action, request)
+    if error:
+        return error
+    account = db.get(User, int(row.user_id or 0))
+    if account is None:
+        return _reject_tool("账户记录不存在", "account_missing")
+    return {
+        "ok": True,
+        "executed": True,
+        "mutated": False,
+        "tool": "account.lookup",
+        "ticket_no": row.ticket_no,
+        "user_id": int(account.id),
+        "username": account.username,
+        "observed_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _read_tool_registry(
+    db: Session, action: CustomerServiceAction, request: dict[str, Any]
+) -> dict[str, Any]:
+    from modstore_server.customer_ticket_loop import TOOLS
+
+    denied = _employee_denied(request, "tool.registry")
+    if denied:
+        return denied
+    _row, error = _owned_ticket(db, action, request)
+    if error:
+        return error
+    employee_id = str(request.get("employee_id") or "")
+    published = sorted(TOOLS.get(employee_id, ()))
+    return {
+        "ok": True,
+        "executed": True,
+        "tool": "tool.registry",
+        "employee_id": employee_id,
+        "tools": published,
+        "registered": "tool.registry" in published,
         "observed_at": datetime.now(UTC).isoformat(),
     }
 
