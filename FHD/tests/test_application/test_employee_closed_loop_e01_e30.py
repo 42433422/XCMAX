@@ -1610,14 +1610,23 @@ def _execute_closed_loop(loop: Acceptance) -> None:
         },
         loop.context("e23", idempotency_key="e23-lost"),
     )
-    e23_readback = "purchase_units" in json.dumps(retry_lost, ensure_ascii=False)
+    after_lost = [row for row in _units(engine) if row["customer_name"] == "闭环丢失回执客户"]
+    retry_data = retry_lost.get("data") if isinstance(retry_lost.get("data"), dict) else {}
+    e23_readback = (
+        len(lost_rows) == 1
+        and len(after_lost) == 1
+        and after_lost[0]["id"] == lost_rows[0]["id"]
+        and retry_data.get("id") == lost_rows[0]["id"]
+        and retry_data.get("customer_name") == lost_rows[0]["customer_name"]
+        and retry_data.get("contact_phone") == lost_rows[0]["contact_phone"]
+        and int(lost_rows[0]["tenant_id"]) == 11
+        and int(retry_data.get("tenant_id") or 0) == 11
+    )
     e23_ok = (
         crash.exitcode == 23
-        and len(lost_rows) == 1
-        and retry_lost.get("outcome") == "unknown"
-        and len([row for row in _units(engine) if row["customer_name"] == "闭环丢失回执客户"]) == 1
-        and e23_readback
         and retry_lost.get("success") is True
+        and not retry_lost.get("error_code")
+        and e23_readback
     )
     loop.settle(
         "E23",
