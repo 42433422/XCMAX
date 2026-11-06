@@ -338,6 +338,11 @@ def _registered_router_sales(
             keyword=str(params.get("keyword") or params.get("search") or "").strip() or None,
             page=int(params.get("page") or 1),
             per_page=int(params.get("per_page") or 20),
+            start_date=params.get("start_date"),
+            end_date=params.get("end_date"),
+            payment_state=params.get("payment_state"),
+            min_amount_exclusive=params.get("min_amount_exclusive"),
+            region=params.get("region"),
         )
     if action == "quote":
         return svc.quote(dict(params or {}))
@@ -378,7 +383,15 @@ def _registered_router_reports(
 
     svc = ReportService()
     filters = {
-        "sales": ("start_date", "end_date", "group_by", "customer_id"),
+        "sales": (
+            "start_date",
+            "end_date",
+            "group_by",
+            "customer_id",
+            "payment_state",
+            "min_amount_exclusive",
+            "region",
+        ),
         "inventory": ("warehouse_id", "category", "model_number"),
         "purchase": ("start_date", "end_date", "group_by"),
     }

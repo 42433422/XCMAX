@@ -454,6 +454,19 @@ def _validate_schema_payload(
                     )
                     if not nested_ok:
                         return False, nested_message
+    options = schema.get("anyOf")
+    if isinstance(options, list) and options:
+        last = ""
+        matched = False
+        for option in options:
+            if not isinstance(option, dict):
+                continue
+            ok, last = _validate_schema_payload(option, payload, subject=subject)
+            if ok:
+                matched = True
+                break
+        if not matched:
+            return False, last or f"{subject} 未满足任一必填组合"
     return True, ""
 
 

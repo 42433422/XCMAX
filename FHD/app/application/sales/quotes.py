@@ -8,10 +8,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.db.models import SalesOrder, SalesOrderItem
+from app.db.models import Customer, SalesOrder, SalesOrderItem
 
 from .contracts import SessionFactory
 from .idempotency import CLOSED_LOOP_FP_PREFIX
@@ -19,6 +19,21 @@ from .idempotency import CLOSED_LOOP_FP_PREFIX
 
 def generate_order_no() -> str:
     return f"SO{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+
+def inclusive_bound(value: Any, *, end: bool) -> datetime | None:
+    """日期字符串按自然日闭合；结束日包含当天最后一秒。"""
+    if value is None or isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    if len(text) == 10:
+        day = datetime.fromisoformat(text)
+        if end:
+            return day.replace(hour=23, minute=59, second=59)
+        return day
+    return datetime.fromisoformat(text)
 
 
 class SalesQuotes:
@@ -40,8 +55,14 @@ class SalesQuotes:
         keyword: str | None = None,
         page: int = 1,
         per_page: int = 20,
+        *,
+        start_date: Any = None,
+        end_date: Any = None,
+        payment_state: str | None = None,
+        min_amount_exclusive: Any = None,
+        region: str | None = None,
     ) -> dict[str, Any]:
-        """按状态/客户/关键字查询销售订单列表。"""
+        """按状态、客户、日期、收款、金额和地址查询销售订单。"""
         with self._sessions() as db:
             q = db.query(SalesOrder)
             if status:
@@ -53,7 +74,24 @@ class SalesQuotes:
             if keyword:
                 like = f"%{keyword}%"
                 q = q.filter(SalesOrder.order_no.like(like) | SalesOrder.customer_name.like(like))
+            start = inclusive_bound(start_date, end=False)
+            end = inclusive_bound(end_date, end=True)
+            if start is not None:
+                q = q.filter(SalesOrder.created_at >= start)
+            if end is not None:
+                q = q.filter(SalesOrder.created_at <= end)
+            if payment_state:
+                q = q.filter(SalesOrder.payment_state == payment_state)
+            if min_amount_exclusive is not None:
+                q = q.filter(SalesOrder.total_amount > Decimal(str(min_amount_exclusive)))
+            if region:
+                q = q.join(Customer, SalesOrder.customer_id == Customer.id).filter(
+                    Customer.contact_address.contains(str(region))
+                )
             total = q.count()
+            amount = q.with_entities(func.coalesce(func.sum(SalesOrder.total_amount), 0)).scalar()
+            unpaid = q.filter(SalesOrder.payment_state == "unpaid").count()
+            paid = q.filter(SalesOrder.payment_state == "paid").count()
             orders = (
                 q.order_by(SalesOrder.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
             )
@@ -63,6 +101,12 @@ class SalesQuotes:
                 "total": total,
                 "page": page,
                 "per_page": per_page,
+                "summary": {
+                    "count": total,
+                    "amount": float(amount or 0),
+                    "unpaid": unpaid,
+                    "paid": paid,
+                },
             }
 
     def quote(self, data: dict[str, Any], *, db: Session | None = None) -> dict[str, Any]:
