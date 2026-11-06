@@ -269,6 +269,72 @@ def test_closed_loop_sentence_is_not_replaced_by_order_query():
     assert any(node.tool_id == "sales" and node.action == "execute_closed_loop" for node in plan.nodes)
 
 
+def test_twenty_closed_loops_invoice_collect_and_replay_without_new_rows(tmp_path, monkeypatch):
+    from tests.test_services.test_erp_absorb_e2e import (
+        _count_business_rows,
+        _patch_sessionlocal,
+        _run_approved_closed_loop,
+        _seed_tenant,
+    )
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'loops.db'}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    _patch_sessionlocal(monkeypatch, factory)
+    _seed_tenant(factory, 1, "WH-A", ledger_qty=1000)
+    planner = object.__new__(LLMWorkflowPlanner)
+    sentences = [f"把 A 产品卖给客户B，{qty} 个，单价 100，开票收款" for qty in range(1, 21)]
+    with tenant_scope(1):
+        for sentence in sentences:
+            plan = planner._fallback_plan("wp-loop", sentence, get_tool_registry(), {"today": TODAY})
+            assert plan.nodes[0].action == "execute_closed_loop"
+            result, _approval = _run_approved_closed_loop(plan, {}, {"message": sentence})
+            assert result.success, getattr(result, "message", result)
+        counts = _count_business_rows(factory, 1)
+        assert counts["orders"] == 20
+        assert counts["items"] == 20
+        assert counts["alloc"] == 20
+        replay = planner._fallback_plan(
+            "wp-loop", sentences[0], get_tool_registry(), {"today": TODAY}
+        )
+        again, _approval = _run_approved_closed_loop(replay, {}, {"message": sentences[0]})
+        assert again.success
+        assert _count_business_rows(factory, 1) == counts
+    engine.dispose()
+
+
+def test_timeout_is_retried_and_interrupted_export_resumes_without_requerying():
+    from app.application.workflow.checkpointer import WorkflowCheckpointer
+
+    calls: list[str] = []
+    export_timeouts = {"left": 3}
+
+    def dispatch(*, tool_id: str, action: str, params: dict):
+        calls.append(f"{tool_id}.{action}")
+        if action == "export" and export_timeouts["left"]:
+            export_timeouts["left"] -= 1
+            raise TimeoutError("export timed out")
+        return {"success": True, "data": []}
+
+    plan = _plan(SENTENCE)
+    engine = WorkflowEngine(tool_dispatcher=dispatch)
+    store = WorkflowCheckpointer()
+    failed = engine.run(plan, checkpointer=store, max_retries=1)
+    assert failed.success is False
+    assert "export timed out" in failed.message
+    assert calls.count("sales.query") == 1
+    checkpoint = store.latest_checkpoint(plan.plan_id)
+    resumed = engine.resume_run(
+        plan, checkpoint["checkpoint_id"], checkpointer=store, max_retries=1
+    )
+    assert resumed.success
+    assert calls.count("sales.query") == 1
+    assert calls.count("reports.export") == 4
+
+
 def _count(factory) -> int:
     with tenant_scope(1):
         db = factory()
