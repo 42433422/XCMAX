@@ -28,9 +28,9 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py",
       "base_blob": "a8c8e75937f969d0d4d43818b3335b78fea44c82",
-      "head_blob": "3d4503c819995af11bbcf1bf7d60948a6f97fe61",
+      "head_blob": "d83daa85136fe3ad4a7cd715e14a4a347b609362",
       "before_lines": 2240,
-      "after_lines": 2475,
+      "after_lines": 2377,
       "reason": "Ticket-loop resume, supplement, and recover handling now lives on the existing customer-service orchestrator, which was already over the 800-line advisory cap.",
       "boundary": "Only customer_service_orchestrator_merged.py under MODstore customer service; no new public HTTP router module.",
       "validation": "Ticket-loop acceptance coverage for diagnose, resume, recover, and supplement flows.",

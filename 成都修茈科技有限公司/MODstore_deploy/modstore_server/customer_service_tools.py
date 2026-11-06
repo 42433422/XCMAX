@@ -97,9 +97,7 @@ def build_action(
 ) -> CustomerServiceAction:
     key = f"{ticket_id}:{action_type}:{target_type}:{target_id}"
     existing = (
-        db.query(CustomerServiceAction)
-        .filter(CustomerServiceAction.idempotency_key == key)
-        .first()
+        db.query(CustomerServiceAction).filter(CustomerServiceAction.idempotency_key == key).first()
     )
     if existing:
         return existing
@@ -129,14 +127,10 @@ _FORBIDDEN_ACTION_TYPES = frozenset(
 )
 
 
-def execute_action(
-    db: Session, action: CustomerServiceAction, user: User
-) -> CustomerServiceAction:
+def execute_action(db: Session, action: CustomerServiceAction, user: User) -> CustomerServiceAction:
     if action.status in {"completed", "skipped"}:
         return action
-    if action.status == "failed" and str(action.error or "").startswith(
-        "approval_rejected"
-    ):
+    if action.status == "failed" and str(action.error or "").startswith("approval_rejected"):
         return action
     action_type = str(action.action_type or "").strip().lower()
     # 硬闸：任何提权/管理员动作一律拒绝执行（即使误建 action）
@@ -147,9 +141,7 @@ def execute_action(
         or "privilege.escalate" in action_type
     ):
         action.status = "failed"
-        action.error = (
-            "forbidden: customer service cannot grant admin or escalate privileges"
-        )
+        action.error = "forbidden: customer service cannot grant admin or escalate privileges"
         action.result_json = json_dumps(
             {"ok": False, "message": "拒绝执行：客服通道禁止提权/开通管理员"}
         )
@@ -208,9 +200,7 @@ def execute_action(
             }
         action.status = "completed" if result.get("ok") else "failed"
         action.result_json = json_dumps(result)
-        action.error = (
-            "" if result.get("ok") else str(result.get("message") or "动作执行失败")
-        )
+        action.error = "" if result.get("ok") else str(result.get("message") or "动作执行失败")
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 动作失败需写审计，不向外抛破坏会话
         action.status = "failed"
         action.error = str(exc)
@@ -480,9 +470,7 @@ def _report_diagnosis(
         "ticket_id": int(row.id),
         "ticket_no": row.ticket_no,
         "intent": row.intent,
-        "diagnosis": (
-            f"已核对工单 {row.ticket_no}，分类 {row.intent}，当前状态 {row.status}"
-        ),
+        "diagnosis": (f"已核对工单 {row.ticket_no}，分类 {row.intent}，当前状态 {row.status}"),
         "observed_at": datetime.now(UTC).isoformat(),
     }
 
@@ -491,9 +479,7 @@ def _execute_gated_change(
     db: Session, action: CustomerServiceAction, user: User, request: dict[str, Any]
 ) -> CustomerServiceAction:
     """写入类动作必须先有一次性审批。拒绝后不能靠重试绕过。"""
-    approval = (
-        request.get("approval") if isinstance(request.get("approval"), dict) else {}
-    )
+    approval = request.get("approval") if isinstance(request.get("approval"), dict) else {}
     decision = str(approval.get("decision") or "")
     now = datetime.now(UTC)
     if decision == "rejected":
@@ -617,9 +603,7 @@ def _apply_refund(
         return {"ok": False, "message": "订单不存在或不属于当前用户"}
     if str(order.get("status") or "").lower() != "paid":
         return {"ok": False, "message": "只有已支付订单可申请退款"}
-    existing = (
-        db.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
-    )
+    existing = db.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
     if existing:
         return {
             "ok": True,
