@@ -26,7 +26,7 @@ def test_sql_queue_claim_is_atomic_renewable_and_recoverable(tmp_path) -> None:
     claimed = first.claim("worker-1", lease_seconds=10, now=claim_time.isoformat())
 
     assert claimed is not None
-    assert claimed.state == "claimed"
+    assert claimed.state == "running"
     assert claimed.lease_owner == "worker-1"
     assert claimed.execution_count == 1
     assert second.claim("worker-2", lease_seconds=10, now=claim_time.isoformat()) is None
@@ -46,7 +46,7 @@ def test_sql_queue_claim_is_atomic_renewable_and_recoverable(tmp_path) -> None:
 
     completed = first.finish(run.run_id, "worker-2", "completed")
     assert completed is not None
-    assert completed.state == "completed"
+    assert completed.state == "succeeded"
     assert completed.tenant_id == "tenant-a"
     assert completed.task_id == "task-atomic"
     assert completed.finished_at
@@ -113,12 +113,12 @@ def test_expired_owner_cannot_renew_or_finish_before_replacement(tmp_path, monke
     monkeypatch.setattr(sql_repo, "utc_now_iso", lambda: expired)
     assert not repository.heartbeat(run.run_id, "old", lease_seconds=60)
     assert repository.finish(run.run_id, "old", "completed") is None
-    assert repository.get(run.run_id).state == "claimed"
+    assert repository.get(run.run_id).state == "running"
     replacement = repository.claim("new", lease_seconds=60)
     assert replacement and replacement.lease_owner == "new"
     assert repository.finish(run.run_id, "old", "failed") is None
     assert repository.get(run.run_id).lease_owner == "new"
-    assert repository.finish(run.run_id, "new", "completed").state == "completed"
+    assert repository.finish(run.run_id, "new", "completed").state == "succeeded"
     engine.dispose()
 
 

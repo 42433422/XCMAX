@@ -167,3 +167,47 @@ def test_approval_run_and_queue_share_commit_boundary(tmp_path, failure_after):
             assert claimed is not None and claimed.run_id == run.run_id
     finally:
         engine.dispose()
+
+
+def test_rejected_queue_cannot_be_approved_into_execution(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator.approval_grant import (
+        ApprovalGrantError,
+        issue_approval_grant,
+    )
+    from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
+    from app.application.agent_orchestrator.run_models import AgentStep
+
+    monkeypatch.setenv("SECRET_KEY", "reject-approval-test-" * 4)
+    engine = create_engine(f"sqlite:///{tmp_path / 'rejected.db'}")
+    factory = sessionmaker(bind=engine)
+    runs = SQLAlchemyAgentRunRepository(session_factory=factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    run = AgentRun(
+        user_id="owner",
+        message="approve",
+        status="waiting_user",
+        steps=[
+            AgentStep(node_id="node", tool_id="sales", action="create_order", status="waiting_user")
+        ],
+    )
+    runs.save(run)
+    queue.enqueue(run)
+    assert queue.claim("worker", lease_seconds=30) is not None
+    assert queue.transition(run.run_id, "paused") is not None
+    assert queue.transition(run.run_id, "rejected") is not None
+    AgentApprovalConsumption.__table__.create(engine, checkfirst=True)
+    token = issue_approval_grant(run, principal_id="owner")["grant"]
+    try:
+        with pytest.raises(ApprovalGrantError, match="已结束"):
+            approve_and_enqueue(
+                runs,
+                queue,
+                run_id=run.run_id,
+                token=token,
+                principal_id="owner",
+                runtime_context={},
+            )
+        assert queue.get(run.run_id).state == "rejected"
+        assert runs.get(run.run_id).status == "waiting_user"
+    finally:
+        engine.dispose()

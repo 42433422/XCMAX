@@ -105,7 +105,7 @@ def test_dispatcher_runs_two_tasks_concurrently_with_stable_idempotency_keys() -
     assert all(
         str(context["idempotency_key"]).startswith("agent:run_") for context in executor.contexts
     )
-    assert all(queue.get(run.run_id).state == "completed" for run in runs)  # type: ignore[union-attr]
+    assert all(queue.get(run.run_id).state == "succeeded" for run in runs)  # type: ignore[union-attr]
 
 
 def test_expired_idempotent_step_recovers_but_non_idempotent_step_fails_closed() -> None:
@@ -232,7 +232,7 @@ def test_dispatcher_restart_claims_expired_lease_and_completes_idempotent_task()
     execution = queue.get(run.run_id)
     recovered = repository.get(run.run_id)
     assert execution is not None and execution.recovery_count == 1
-    assert execution.state == "completed"
+    assert execution.state == "succeeded"
     assert recovered is not None and len(recovered.tool_calls) == 2
     assert recovered.tool_calls[0].error == "worker_lease_expired"
 
@@ -263,7 +263,13 @@ def test_timeout_unknown_releases_worker_slot_and_prevents_repair_replay(monkeyp
     )
     dispatcher.start()
     try:
-        assert _wait_until(lambda: all(queue.get(run.run_id).state == "blocked" for run in runs))
+        assert _wait_until(
+            lambda: all(
+                queue.get(run.run_id).state == "failed"
+                and queue.get(run.run_id).last_error_code == "needs_verification"
+                for run in runs
+            )
+        )
         assert _wait_until(lambda: dispatcher.snapshot()["active_count"] == 0)
         assert len(calls) == 2 and len(set(calls)) == 2
         for run in runs:

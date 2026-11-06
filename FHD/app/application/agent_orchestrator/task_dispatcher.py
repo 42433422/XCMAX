@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import os
 import threading
@@ -23,6 +24,17 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_open_effect: contextvars.ContextVar[object | None] = contextvars.ContextVar(
+    "task_open_effect", default=None
+)
+
+
+def note_open_effect(run_id: str, effect_id: str) -> None:
+    """Record a side effect only while a worker is inside a real tool call."""
+    repo = _open_effect.get()
+    marker = getattr(repo, "mark_open_effect", None)
+    if marker is not None:
+        marker(run_id, effect_id)
 
 
 @dataclass
@@ -204,6 +216,7 @@ class AgentTaskDispatcher:
             repository = ClaimedRunRepository(repository, execution, owner_id)
         error_code = ""
         state = "failed"
+        effect_token = _open_effect.set(self._execution_repo)
         try:
             orchestrator = self._orchestrator_factory(repository)
             scope = (
@@ -220,18 +233,27 @@ class AgentTaskDispatcher:
                 error_code = "worker_run_unavailable"
             else:
                 state = {
-                    "completed": "completed",
+                    "completed": "succeeded",
+                    "succeeded": "succeeded",
                     "failed": "failed",
+                    "timed_out": "timed_out",
                     "cancelled": "cancelled",
-                    "paused": "paused",
-                    "blocked": "blocked",
-                    "waiting_user": "blocked",
+                    "paused": "waiting_approval",
+                    "waiting_approval": "waiting_approval",
+                    "blocked": "failed",
+                    "waiting_user": "waiting_approval",
+                    "rejected": "rejected",
                 }.get(run.status, "failed")
-                if state == "failed" and run.status != "failed":
+                if run.status == "blocked":
+                    error_code = "needs_verification"
+                elif state == "failed" and run.status != "failed":
                     error_code = "worker_incomplete_state"
         except WorkerLeaseLost:
             error_code = "worker_lease_lost"
             logger.info("worker stopped after lease loss for run %s", execution.run_id)
+        except TimeoutError:
+            error_code = "timeout"
+            logger.exception("agent task worker timed out for run %s", execution.run_id)
         except (
             RECOVERABLE_ERRORS
         ):  # thread boundary: preserve the worker pool and persist safe evidence
@@ -242,6 +264,7 @@ class AgentTaskDispatcher:
             except RECOVERABLE_ERRORS:
                 logger.exception("agent task failure receipt could not be persisted")
         finally:
+            _open_effect.reset(effect_token)
             self._execution_repo.finish(
                 execution.run_id,
                 owner_id,

@@ -5,6 +5,7 @@ from app.db.models.agent import (
     AgentTaskRecord,
 )
 from app.db.models.agent_approval import AgentApprovalConsumption
+from app.db.models.task_lifecycle import TaskLifecycleIdempotency, TaskLifecycleRecord
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.employee_run_log import EmployeeRunLog
@@ -110,6 +111,8 @@ __all__ = [
     "SALES_ORDER_STATUS_FLOW",
     "AgentRunRecord",
     "AgentApprovalConsumption",
+    "TaskLifecycleRecord",
+    "TaskLifecycleIdempotency",
     "AgentTaskRecord",
     "AgentTaskCommandRecord",
     "AgentTaskExecutionRecord",

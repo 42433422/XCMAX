@@ -194,6 +194,11 @@ def register_routes(
                 employee_execution.local_employee_execute,
             ),
             ("/local/employees/{employee_id}/runs", "GET", employee_execution.local_employee_runs),
+            (
+                "/local/employees/{employee_id}/runs/{run_id}/decision",
+                "POST",
+                employee_execution.local_employee_decision,
+            ),
             ("/local/employees/{employee_id}/manifest", "GET", employees.local_employee_manifest),
             ("/admin/modules", "GET", catalog.list_modules),
             ("/admin/daily-digests", "GET", digest.list_daily_digests),

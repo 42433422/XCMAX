@@ -223,9 +223,44 @@ def get_run(run_id: int, _user=Depends(_require_admin)):
         return _handle_app_error(exc)
 
 
+class WorkflowRunDecision(BaseModel):
+    decision: str = Field(..., min_length=1)
+    actor: str = Field(..., min_length=1)
+
+
+class WorkflowRunFailure(BaseModel):
+    error_code: str = Field(default="timeout")
+    attempts: int = Field(default=1, ge=1, le=3)
+
+
 @router.post("/runs/{run_id}/cancel")
 def cancel_run(run_id: int, _user=Depends(_require_admin)):
     try:
         return {"success": True, "data": get_workflow_definition_app_service().cancel_run(run_id)}
+    except AppError as exc:
+        return _handle_app_error(exc)
+
+
+@router.post("/runs/{run_id}/fail")
+def fail_run(run_id: int, body: WorkflowRunFailure, _user=Depends(_require_admin)):
+    try:
+        data = get_workflow_definition_app_service().fail_run(
+            run_id, error_code=body.error_code, attempts=body.attempts
+        )
+        return {"success": True, "data": data}
+    except AppError as exc:
+        return _handle_app_error(exc)
+
+
+@router.post("/runs/{run_id}/decision")
+def decide_run(run_id: int, body: WorkflowRunDecision, _user=Depends(_require_admin)):
+    try:
+        if body.decision == "request":
+            data = get_workflow_definition_app_service().request_approval(run_id, body.actor)
+        else:
+            data = get_workflow_definition_app_service().decide_run(
+                run_id, body.decision, body.actor
+            )
+        return {"success": True, "data": data}
     except AppError as exc:
         return _handle_app_error(exc)

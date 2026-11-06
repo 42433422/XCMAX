@@ -294,6 +294,19 @@ class WorkflowDefinitionAppService:
             )
             session.add(run)
             session.flush()  # 拿到 run.id
+            from app.domain.task_lifecycle.control import SessionBook, remember
+
+            book = SessionBook(session)
+            body = book.get("workflow", str(definition.tenant_id), str(run.id))
+            remember(
+                body,
+                at=datetime.now(UTC).isoformat(),
+                source="created",
+                target="pending",
+                code=triggered_by,
+                actor=str(definition.tenant_id),
+            )
+            book.put("workflow", str(definition.tenant_id), str(run.id), body)
 
             # 为每个 node 创建 pending WorkflowRunStep
             for node in nodes_snapshot:
@@ -366,18 +379,38 @@ class WorkflowDefinitionAppService:
                     message=f"工作流运行不存在: {run_id}",
                     status_code=404,
                 )
-            terminal = {
-                WorkflowRunStatus.SUCCEEDED.value,
-                WorkflowRunStatus.FAILED.value,
-                WorkflowRunStatus.CANCELLED.value,
-            }
-            if run.status in terminal:
+            from app.domain.task_lifecycle.adapters import (
+                LegacyTransitionError,
+                legacy_transition_allowed,
+            )
+
+            try:
+                allowed = legacy_transition_allowed(
+                    "workflow", run.status, WorkflowRunStatus.CANCELLED.value
+                )
+            except LegacyTransitionError:
+                allowed = False
+            if run.status == WorkflowRunStatus.CANCELLED.value or not allowed:
                 raise WorkflowError(
                     message=f"运行已处于终态，无法取消: {run.status}",
                     status_code=409,
                 )
+            from app.domain.task_lifecycle.control import SessionBook, remember
+
+            previous = run.status
             run.status = WorkflowRunStatus.CANCELLED.value
             run.finished_at = datetime.now(UTC).replace(tzinfo=None)
+            book = SessionBook(session)
+            body = book.get("workflow", str(run.tenant_id), str(run.id))
+            remember(
+                body,
+                at=datetime.now(UTC).isoformat(),
+                source=previous,
+                target="cancelled",
+                code="cancel",
+                actor=str(run.tenant_id),
+            )
+            book.put("workflow", str(run.tenant_id), str(run.id), body)
             # 未完成 step 标 skipped
             for step in run.steps:
                 if step.status not in {
@@ -396,6 +429,167 @@ class WorkflowDefinitionAppService:
             session.rollback()
             logger.exception("取消工作流运行失败")
             raise WorkflowError(message=f"取消工作流运行失败: {exc}") from exc
+        finally:
+            session.close()
+
+    def request_approval(self, run_id: int, approver: str) -> dict[str, Any]:
+        return self._move_run(
+            run_id,
+            "awaiting_approval",
+            code="approval_requested",
+            approver=approver,
+        )
+
+    def decide_run(self, run_id: int, decision: str, actor: str) -> dict[str, Any]:
+        target = {"approve": WorkflowRunStatus.PENDING.value, "reject": "rejected"}.get(decision)
+        if target is None:
+            raise WorkflowError(message="未知审批决定", status_code=422)
+        return self._move_run(run_id, target, code=decision, actor=actor)
+
+    def fail_run(self, run_id: int, *, error_code: str, attempts: int = 1) -> dict[str, Any]:
+        from app.domain.task_lifecycle.control import settle_target
+
+        target, code = settle_target(
+            WorkflowRunStatus.FAILED.value, error_code, attempts, open_effects=False
+        )
+        status = {
+            "queued": WorkflowRunStatus.PENDING.value,
+            "timed_out": WorkflowRunStatus.TIMED_OUT.value,
+            "rejected": WorkflowRunStatus.REJECTED.value,
+        }.get(target, WorkflowRunStatus.FAILED.value)
+        return self._move_run(
+            run_id,
+            status,
+            code=code,
+            retryable=status == WorkflowRunStatus.PENDING.value,
+            attempts=attempts,
+        )
+
+    def expire_approvals(self, *, timeout_seconds: float) -> int:
+        session = self._get_session()
+        now = datetime.now(UTC)
+        expired = 0
+        try:
+            from app.domain.task_lifecycle.control import SessionBook, remember
+
+            rows = (
+                session.query(WorkflowRun)
+                .filter(WorkflowRun.status == WorkflowRunStatus.AWAITING_APPROVAL.value)
+                .all()
+            )
+            book = SessionBook(session)
+            for run in rows:
+                body = book.get("workflow", str(run.tenant_id), str(run.id))
+                started = str(body.get("approval_requested_at") or "")
+                if not started:
+                    continue
+                age = (now - datetime.fromisoformat(started)).total_seconds()
+                if age < timeout_seconds:
+                    continue
+                previous = run.status
+                run.status = "rejected"
+                run.finished_at = now.replace(tzinfo=None)
+                remember(
+                    body,
+                    at=now.isoformat(),
+                    source=previous,
+                    target="rejected",
+                    code="approval_timeout",
+                    actor="",
+                )
+                book.put("workflow", str(run.tenant_id), str(run.id), body)
+                expired += 1
+            session.commit()
+            return expired
+        finally:
+            session.close()
+
+    def lifecycle(self, run_id: int) -> dict[str, Any]:
+        session = self._get_session()
+        try:
+            from app.domain.task_lifecycle.control import SessionBook
+
+            run = session.get(WorkflowRun, run_id)
+            if run is None:
+                return {}
+            return SessionBook(session).get("workflow", str(run.tenant_id), str(run.id))
+        finally:
+            session.close()
+
+    def _move_run(
+        self,
+        run_id: int,
+        target: str,
+        *,
+        code: str,
+        approver: str = "",
+        actor: str = "",
+        retryable: bool = False,
+        attempts: int = 1,
+    ) -> dict[str, Any]:
+        from app.domain.task_lifecycle.control import (
+            SessionBook,
+            TaskLifecycleError,
+            approval_actor_allowed,
+            jittered_delay,
+            remember,
+        )
+
+        session = self._get_session()
+        try:
+            run = session.get(WorkflowRun, run_id)
+            if run is None:
+                raise WorkflowError(message=f"工作流运行不存在: {run_id}", status_code=404)
+            book = SessionBook(session)
+            body = book.get("workflow", str(run.tenant_id), str(run.id))
+            if approver:
+                body["approver"] = approver
+            if actor and not approval_actor_allowed(body, actor):
+                raise WorkflowError(message="无权审批该任务", status_code=403)
+            current = run.status
+            checked = WorkflowRunStatus.FAILED.value if retryable else target
+            try:
+                from app.domain.task_lifecycle.adapters import (
+                    LegacyTransitionError,
+                    assert_legacy_transition,
+                )
+
+                assert_legacy_transition("workflow", current, checked, retryable=retryable)
+            except (LegacyTransitionError, TaskLifecycleError) as exc:
+                raise WorkflowError(message=str(exc), status_code=409) from exc
+            if retryable:
+                import random
+                from datetime import timedelta
+
+                delay = jittered_delay(attempts, jitter_ratio=0.2, rng=random.Random(run_id))
+                body["available_at"] = (datetime.now(UTC) + timedelta(seconds=delay)).isoformat()
+            previous = run.status
+            run.status = target
+            if target in {
+                WorkflowRunStatus.FAILED.value,
+                WorkflowRunStatus.CANCELLED.value,
+                "rejected",
+            }:
+                run.finished_at = datetime.now(UTC).replace(tzinfo=None)
+            else:
+                run.finished_at = None
+            if target == WorkflowRunStatus.AWAITING_APPROVAL.value:
+                body["approval_requested_at"] = datetime.now(UTC).isoformat()
+            remember(
+                body,
+                at=datetime.now(UTC).isoformat(),
+                source=previous,
+                target=target,
+                code=code,
+                actor=actor or approver,
+            )
+            book.put("workflow", str(run.tenant_id), str(run.id), body)
+            session.commit()
+            session.refresh(run)
+            return cast("dict[str, Any]", run.to_dict())
+        except AppError:
+            session.rollback()
+            raise
         finally:
             session.close()
 

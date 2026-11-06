@@ -116,6 +116,10 @@ class StepExecution:
                 "action": step.action,
             }
         else:
+            if not step.idempotent:
+                from app.application.agent_orchestrator.task_dispatcher import note_open_effect
+
+                note_open_effect(run.run_id, step.step_id)
             try:
                 from app.application.agent_orchestrator.tool_executor import (
                     execute_with_tool_deadline,

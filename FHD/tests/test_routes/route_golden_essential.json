@@ -549,6 +549,7 @@
   "/api/xcmax/local/employees/{employee_id}/execute",
   "/api/xcmax/local/employees/{employee_id}/manifest",
   "/api/xcmax/local/employees/{employee_id}/runs",
+  "/api/xcmax/local/employees/{employee_id}/runs/{run_id}/decision",
   "/api/xcmax/local/employees/{employee_id}/status",
   "/api/xcmax/local/ops/self-maintenance/governance-review",
   "/api/xcmax/local/ops/self-maintenance/status",

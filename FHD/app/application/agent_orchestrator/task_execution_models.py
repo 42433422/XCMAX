@@ -10,12 +10,17 @@ from app.application.agent_orchestrator.run_models import AgentRun
 
 ExecutionState = Literal[
     "queued",
+    "running",
+    "waiting_approval",
+    "succeeded",
+    "failed",
+    "timed_out",
+    "cancelled",
+    "rejected",
     "claimed",
     "paused",
     "blocked",
     "completed",
-    "failed",
-    "cancelled",
 ]
 
 
