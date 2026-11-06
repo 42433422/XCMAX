@@ -257,7 +257,8 @@ export const agentRunsApi = {
   },
 
   listTasks(params: { limit?: number; include_archived?: boolean } = {}): Promise<AgentTaskListResponse> {
-    return api.get<AgentTaskListResponse>('/api/agent/tasks', params, { timeoutMs: 8000 })
+    // 冷启动期任务列表（limit=200 约 340KB）常超过 8s；放宽上限并静默降级，避免启动期误报警。
+    return api.get<AgentTaskListResponse>('/api/agent/tasks', params, { timeoutMs: 30_000, quiet: true })
   },
 
   getTask(taskId: string): Promise<AgentTaskResponse> {
