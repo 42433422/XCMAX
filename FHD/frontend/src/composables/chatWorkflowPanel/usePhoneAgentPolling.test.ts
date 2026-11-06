@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, h, ref } from 'vue'
+import { mount } from '@vue/test-utils'
 import { usePhoneAgentPolling, type PhoneAgentPollingDeps } from './usePhoneAgentPolling'
 
 const fetchMock = vi.fn()
@@ -72,5 +74,44 @@ describe('phone agent polling and recovery', () => {
     expect(poll.isPollActive()).toBe(false)
     poll.stopPhoneAgentStatusPoll()
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('stops the two-second phone poll when the cached chat page is left', async () => {
+    const visible = ref(true)
+    let poll!: ReturnType<typeof usePhoneAgentPolling>
+    const Child = defineComponent({
+      setup() {
+        const deps = {
+          getModsForUi: () => [{ id: 'phone-mod', workflow_employees: [{ id: 'enabled', label: 'enabled', phone_agent_base_path: 'enabled' }] }] as ReturnType<PhoneAgentPollingDeps['getModsForUi']>,
+          readWorkflowEmployeeEnabledMap: () => ({ enabled: true }),
+          resolveWorkflowEmployeePanelMeta: () => ({ title: 'enabled', summary: 'enabled' }),
+          onStatusUpdate: vi.fn(),
+          resolvePhoneChannelByEmployee: () => 'adb' as const,
+          getPhoneAgentApiBase: () => '/api/mod/phone/',
+        }
+        poll = usePhoneAgentPolling(deps)
+        poll.startPhoneAgentStatusPoll()
+        return () => h('div')
+      },
+    })
+    const Root = defineComponent({
+      components: { Child },
+      setup() { return { visible } },
+      template: '<keep-alive><Child v-if="visible" /></keep-alive>',
+    })
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ success: true, data: { running: true } }), { status: 200 })))
+    const wrapper = mount(Root)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(poll.isPollActive()).toBe(true)
+    const calls = fetchMock.mock.calls.length
+    visible.value = false
+    await wrapper.vm.$nextTick()
+    expect(poll.isPollActive()).toBe(false)
+    await vi.advanceTimersByTimeAsync(8000)
+    expect(fetchMock.mock.calls.length).toBe(calls)
+    visible.value = true
+    await wrapper.vm.$nextTick()
+    expect(poll.isPollActive()).toBe(true)
+    wrapper.unmount()
   })
 })

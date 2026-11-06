@@ -355,3 +355,37 @@ def test_backup_restore_keeps_rows_mods_and_config(tmp_path, monkeypatch):
 
 def json_ok(text: str) -> bool:
     return text.startswith("{") and "sample-mod" in text
+
+
+def test_newer_schema_refuses_blind_downgrade_and_keeps_rows(tmp_path, monkeypatch):
+    """库内迁移戳比当前包新时，升级路径保持原戳，不重放、不改已有行、Mod 和配置。"""
+    from app.desktop_runtime.migrate import repair_unknown_stamped_revision, run_alembic_upgrade
+
+    _reset_desktop_env(monkeypatch)
+    dirs = ensure_desktop_dirs(tmp_path)
+    db_path = dirs["data"] / "xcagi.db"
+    _create_test_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute(
+            "INSERT INTO alembic_version (version_num) VALUES ('2099_01_01_future_irreversible')"
+        )
+        conn.commit()
+    mod_file = dirs["mods"] / "sample-mod" / "mod.json"
+    mod_file.parent.mkdir(parents=True)
+    mod_file.write_text('{"id":"sample-mod","keep":true}', encoding="utf-8")
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"sku":"enterprise"}', encoding="utf-8")
+
+    repair = repair_unknown_stamped_revision(tmp_path)
+    assert repair is not None
+    assert repair["action"] == "newer_than_package"
+    run_alembic_upgrade(tmp_path)
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
+            "2099_01_01_future_irreversible"
+        )
+        assert conn.execute("SELECT customer FROM orders ORDER BY id").fetchall() == [("alice",), ("bob",)]
+    assert mod_file.read_text(encoding="utf-8").startswith("{")
+    assert config_file.read_text(encoding="utf-8").startswith("{")

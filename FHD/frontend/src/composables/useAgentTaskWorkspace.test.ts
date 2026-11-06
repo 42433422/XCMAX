@@ -1,6 +1,6 @@
 vi.mock('@/utils/authenticatedEventStream', () => ({ AuthenticatedEventStream: class { constructor(url: string) { return new EventSource(url) } } }))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h, ref } from 'vue'
+import { defineComponent, h, onMounted, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import AgentTaskRuntimePanel from '@/components/chat/AgentTaskRuntimePanel.vue'
 import type { AgentRun } from '@/api/agentRuns'
@@ -327,6 +327,58 @@ describe('useAgentTaskWorkspace', () => {
     state.workspace.stop()
     expect(state.workspace.taskControlStates.value).toEqual({})
     expect(state.workspace.taskSyncState.value.lastVerifiedAt).toBe(0)
+  })
+
+  it('stops the task poll and event stream when a cached chat page is left', async () => {
+    class FakeEventSource {
+      static instances: FakeEventSource[] = []
+      closed = false
+      constructor(readonly url: string) { FakeEventSource.instances.push(this) }
+      addEventListener(): void {}
+      close(): void { this.closed = true }
+    }
+    globalThis.EventSource = FakeEventSource as unknown as typeof EventSource
+    vi.useFakeTimers()
+    const visible = ref(true)
+    const Child = defineComponent({
+      setup() {
+        const workspace = useAgentTaskWorkspace({
+          taskList: ref<TaskItem[]>([]),
+          activeTaskId: ref(''),
+          expandedTaskIds: ref<string[]>([]),
+          sortTaskList: () => undefined,
+        })
+        onMounted(() => workspace.start())
+        return () => h('div')
+      },
+    })
+    const Root = defineComponent({
+      setup() { return { visible } },
+      components: { Child },
+      template: '<keep-alive><Child v-if="visible" /></keep-alive>',
+    })
+    const wrapper = mount(Root)
+    await vi.advanceTimersByTimeAsync(0)
+    await Promise.resolve()
+    expect(apiMock.listTasks).toHaveBeenCalled()
+    const stream = FakeEventSource.instances[0]
+    expect(stream?.closed).toBe(false)
+    await vi.advanceTimersByTimeAsync(15_000)
+    const whileVisible = apiMock.listTasks.mock.calls.length
+    expect(whileVisible).toBeGreaterThan(1)
+
+    visible.value = false
+    await wrapper.vm.$nextTick()
+    expect(stream?.closed).toBe(true)
+    const whileHidden = apiMock.listTasks.mock.calls.length
+    await vi.advanceTimersByTimeAsync(45_000)
+    expect(apiMock.listTasks.mock.calls.length).toBe(whileHidden)
+
+    visible.value = true
+    await wrapper.vm.$nextTick()
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(apiMock.listTasks.mock.calls.length).toBeGreaterThan(whileHidden)
+    wrapper.unmount()
   })
 
 })

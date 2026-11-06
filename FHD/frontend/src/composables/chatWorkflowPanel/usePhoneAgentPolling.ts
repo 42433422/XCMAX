@@ -1,6 +1,7 @@
 /**
  * useChatWorkflowPanel 拆分：电话员工（phone-agent）状态拉取与轮询。
  */
+import { getCurrentInstance, onActivated, onDeactivated } from 'vue'
 import { listPhoneAgentEmployeeIds } from '@/utils/modWorkflowEmployees'
 import type { useModsStore } from '@/stores/mods'
 import type { PhoneAgentStatusPayload } from './phoneAgentStatus'
@@ -131,6 +132,19 @@ export function usePhoneAgentPolling(deps: PhoneAgentPollingDeps) {
 
   function isPollActive(): boolean {
     return phoneAgentPollTimer != null
+  }
+
+  let resumePollAfterActivate = false
+  if (getCurrentInstance()) {
+    onDeactivated(() => {
+      resumePollAfterActivate = phoneAgentPollTimer != null
+      if (resumePollAfterActivate) stopPhoneAgentStatusPoll()
+    })
+    onActivated(() => {
+      if (!resumePollAfterActivate) return
+      resumePollAfterActivate = false
+      startPhoneAgentStatusPoll()
+    })
   }
 
   return {

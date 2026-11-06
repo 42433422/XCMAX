@@ -1,5 +1,5 @@
 import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
-import { ref, type Ref } from 'vue'
+import { getCurrentInstance, onActivated, onDeactivated, ref, type Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
 import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import type { AgentTaskSummary } from '@/api/agentRuns'
@@ -155,12 +155,29 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     refreshInFlight = null
     taskControlStates.value = {}
     taskSyncState.value = { checking: false, stale: true, lastVerifiedAt: 0, error: '' }
+    releaseHiddenPageTimers()
+  }
+
+  function releaseHiddenPageTimers(): void {
     if (refreshTimer !== null) window.clearInterval(refreshTimer)
     if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
     taskStream?.close()
     taskStream = null
     refreshTimer = null
     reconnectTimer = null
+  }
+
+  let resumeAfterPageShow = false
+  if (getCurrentInstance()) {
+    onDeactivated(() => {
+      resumeAfterPageShow = refreshTimer !== null || reconnectTimer !== null || taskStream !== null
+      if (resumeAfterPageShow) releaseHiddenPageTimers()
+    })
+    onActivated(() => {
+      if (!resumeAfterPageShow) return
+      resumeAfterPageShow = false
+      start()
+    })
   }
 
   async function selectTask(task: TaskItem): Promise<void> {
