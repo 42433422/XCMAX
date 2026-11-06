@@ -60,7 +60,7 @@ def _pid_is_alive(pid: int) -> bool:
 
         synchronize = 0x00100000
         wait_timeout = 0x00000102
-        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         handle = kernel32.OpenProcess(synchronize, False, pid)
         if not handle:
             return False
