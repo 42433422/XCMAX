@@ -1,5 +1,6 @@
 import { inject, onActivated, onBeforeUnmount, onDeactivated, ref, type InjectionKey } from 'vue'
 import { captureAuthSession } from '@/utils/authSessionCache'
+import { routeChunkErrorPath } from '@/utils/routeLoadState'
 
 export const STARTUP_READY_TIMEOUT_MS = 20_000
 
@@ -73,6 +74,10 @@ export function useStartupSplash() {
     attempt = new AbortController()
     const request = generation
     const current = () => !disposed && request === generation
+    if (routeChunkErrorPath.value) {
+      startupVisible.value = false
+      return
+    }
     startupVisible.value = true
     appReady.value = false
     startupError.value = ''

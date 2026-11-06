@@ -83,12 +83,20 @@ function resumeIfSignedIn(): void {
 }
 
 watch(() => account.localUserId || account.marketUserId, (id) => {
-  if (id) store.resumeAfterLogin()
+  if (id && shellReadyForTaskPolling()) store.resumeAfterLogin()
 })
+function shellReadyForTaskPolling(): boolean {
+  const root = document.getElementById('app')
+  // No shell root (unit tests): keep the previous immediate start.
+  if (!root) return true
+  return root.dataset.startupReady === 'true'
+}
+
 onMounted(() => {
   // 登录成功会先写入账号再回到工作台，组件挂上时 id 已经有值，watcher 不会再触发。
-  resumeIfSignedIn()
-  store.start()
+  // 启动遮罩还在、或 ready 标记还没写上时，先不拉 200 条任务，避免堵住当前页。
+  if (shellReadyForTaskPolling()) resumeIfSignedIn()
+  else window.addEventListener('xcagi:startup-ready', () => resumeIfSignedIn(), { once: true })
 })
 onBeforeUnmount(() => store.stop())
 watch(tutorialScopeKey, (next, previous) => {

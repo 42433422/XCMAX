@@ -32,10 +32,12 @@ const DEFAULT_NAV_TIMEOUT_MS = 12_000
 
 let intentSeq = 0
 let activeIntent: AppNavIntent | null = null
+let pushesInFlight = 0
 
 export function resetAppNavigationForTests(): void {
   intentSeq = 0
   activeIntent = null
+  pushesInFlight = 0
 }
 
 export function getActiveAppNavIntent(): AppNavIntent | null {
@@ -138,12 +140,15 @@ export async function pushWithAppNavIntent(
   }
 
   // Already on the target: treat as successful duplicate, not an error.
-  if (routeMatchesTarget(router, match)) {
+  // A click that returns to this page while another push is still in flight must
+  // push again, otherwise the older navigation lands after the user has chosen.
+  if (routeMatchesTarget(router, match) && pushesInFlight === 0) {
     return outcome('duplicate', intent, '已在目标页面')
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined
   let staleTimer: ReturnType<typeof setInterval> | undefined
+  pushesInFlight += 1
   // Vue Router 4 resolves NavigationFailure instead of rejecting in most cases.
   const pushPromise = Promise.resolve(router.push(location)).then(
     (value) => {
@@ -166,7 +171,13 @@ export async function pushWithAppNavIntent(
     staleTimer = setInterval(() => {
       if (isStale()) finish({ kind: 'stale' })
     }, 16)
-    void pushPromise.then((result) => finish(result))
+    // Decrement only after this push's history write finishes. An earlier
+    // stale/timeout return must not look like "no push in flight", or a
+    // follow-up click back to the page we started from is dropped.
+    void pushPromise.then((result) => {
+      pushesInFlight = Math.max(0, pushesInFlight - 1)
+      finish(result)
+    })
   })
 
   if (raced.kind === 'stale' || isStale()) {

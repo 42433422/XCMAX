@@ -622,8 +622,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (!scope.isCurrent() || options.isCurrent?.() === false) return
     applyPersistedTaskPanelStateForSession(scope.sessionId)
     // Tasks have their own stale/error recovery and are not required to read the current conversation.
-    if (options.required) void agentTaskRuntime.refreshTasks().catch(() => {})
-    else await agentTaskRuntime.refreshTasks()
+    // During the startup splash this list (limit 200) occupies the only worker and
+    // pushes the page the user is opening past the cold-load budget.
+    const shellReady = document.getElementById('app')?.dataset.startupReady === 'true'
+    if (options.required) {
+      if (!document.getElementById('app') || shellReady) void agentTaskRuntime.refreshTasks().catch(() => {})
+    } else await agentTaskRuntime.refreshTasks()
   }
   executeRemoteChatRoundRef.fn = executeRemoteChatRound
 

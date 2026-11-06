@@ -37,4 +37,13 @@ describe('window state', () => {
     )
     expect(clamped).toEqual({ x: 0, y: 25, width: 1280, height: 775 })
   })
+
+  it('keeps an 800 by 640 window when the work area is larger', () => {
+    const clamped = clampWindowBounds(
+      { x: 10, y: 10, width: 800, height: 640 },
+      { x: 0, y: 0, width: 1440, height: 900 },
+    )
+    expect(clamped.width).toBe(800)
+    expect(clamped.height).toBe(640)
+  })
 })

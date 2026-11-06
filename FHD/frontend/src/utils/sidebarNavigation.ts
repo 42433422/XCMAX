@@ -32,6 +32,11 @@ export type NavigateFromSidebarOptions = {
 }
 
 let sidebarNavGeneration = 0
+let userSidebarNavigationCount = 0
+
+export function hasUserSidebarNavigation(): boolean {
+  return userSidebarNavigationCount > 0
+}
 type SidebarNavigationRequest = {
   router: Router
   key: string
@@ -49,6 +54,9 @@ export function resetSidebarNavigationForTests(): void {
   queuedSidebarNavigation = null
   activeSidebarNavigation = null
   sidebarNavGeneration = 0
+  userSidebarNavigationCount = 0
+  if (urlSyncTimer) clearInterval(urlSyncTimer)
+  urlSyncTimer = undefined
   resetAppNavigationForTests()
 }
 
@@ -272,6 +280,41 @@ function drainSidebarNavigationQueue(): void {
     )
 }
 
+let urlSyncTimer: ReturnType<typeof setInterval> | undefined
+
+function syncBrowserUrlWithRouter(router: Router): boolean {
+  const fullPath = router.currentRoute.value.fullPath
+  if (!fullPath || typeof window === 'undefined') return true
+  const browser = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  if (browser === fullPath) return true
+  const current = window.history.state
+  const state = current && typeof current === 'object'
+    ? { ...current, current: fullPath }
+    : { back: null, current: fullPath, forward: null, position: window.history.length, replaced: true, scroll: null }
+  // Relative replaceState is ignored once the session history is capped (~50).
+  // Vue Router itself pushes absolute URLs; match that or the address bar sticks.
+  const absolute = new URL(fullPath, window.location.origin).href
+  window.history.replaceState(state, '', absolute)
+  const after = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  return after === fullPath
+}
+
+function scheduleBrowserUrlSync(router: Router): void {
+  if (urlSyncTimer) clearInterval(urlSyncTimer)
+  let ticks = 0
+  let stable = 0
+  urlSyncTimer = setInterval(() => {
+    const matched = syncBrowserUrlWithRouter(router)
+    stable = matched ? stable + 1 : 0
+    ticks += 1
+    // In-flight pushes keep rewriting the URL for a moment after the last click.
+    if (stable >= 5 || ticks >= 200) {
+      clearInterval(urlSyncTimer)
+      urlSyncTimer = undefined
+    }
+  }, 40)
+}
+
 function finishSidebarNavigation(
   request: SidebarNavigationRequest,
   applied: boolean,
@@ -280,6 +323,7 @@ function finishSidebarNavigation(
   intentId?: number,
 ): void {
   if (activeSidebarNavigation !== request) return
+  if (intentId == null || isAppNavIntentCurrent(intentId)) scheduleBrowserUrlSync(request.router)
   activeSidebarNavigation = null
   if (intentId != null) clearAppNavIntentIfCurrent(intentId)
   if (failed) request.reject(error)
@@ -304,6 +348,7 @@ export function navigateFromSidebarKey(router: Router, viewKey: string, options:
   if (!normalized) return Promise.resolve(false)
 
   sidebarNavGeneration += 1
+  userSidebarNavigationCount += 1
   beginAppNavIntent(normalized, options.source || 'sidebar')
   const hadActiveNavigation = activeSidebarNavigation != null
   queuedSidebarNavigation?.resolve(false)

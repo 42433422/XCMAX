@@ -229,6 +229,16 @@ router.beforeEach(async (to, _from, finish) => {
       next({ path: '/', query: to.query, hash: to.hash, replace: true })
       return
     }
+    // Mod routes register after the first navigation. A cold load of a real
+    // business URL must wait for that registration instead of being sent home.
+    const { ensureGlobModRoutes } = await import('@/router/registerModRoutes')
+    if (typeof ensureGlobModRoutes === 'function') {
+      await ensureGlobModRoutes(router).catch(() => undefined)
+    }
+    if (router.resolve(to.fullPath).matched.length > 0) {
+      next({ path: to.path, query: to.query, hash: to.hash, replace: true })
+      return
+    }
     next({ path: '/', replace: true })
     return
   }
@@ -488,7 +498,7 @@ router.afterEach((to) => {
 // 管理端：懒加载页面文件失败时（断网 / 刚发版旧分包已下线）给出可见提示和刷新入口，
 // 不再停在原页面无反馈。只影响展示，不改守卫与权限。
 router.onError((error, to) => {
-  if (isAdminConsoleSpa() && isChunkLoadError(error)) markRouteChunkError(to?.fullPath)
+  if (isChunkLoadError(error)) markRouteChunkError(to?.fullPath)
 })
 // 加载失败只走 onError、不会触发 afterEach；之后任何一次导航（含点当前页）都收起提示
 router.afterEach(() => {

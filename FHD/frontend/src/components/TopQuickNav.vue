@@ -179,6 +179,18 @@ function onKeydown(event) {
   z-index: 40;
 }
 
+@media (max-width: 900px) {
+  .top-quick-nav {
+    position: static;
+    transform: none;
+    width: auto;
+    flex: 1 1 140px;
+    min-width: 0;
+    max-width: 220px;
+    margin: 0 8px;
+  }
+}
+
 .top-quick-nav__icon {
   position: absolute;
   left: 10px;

@@ -69,6 +69,10 @@
           <div class="label">{{ entityName }}总数</div>
         </div>
       </div>
+      <p v-if="loadError" class="customers-load-error" role="alert">
+        {{ loadError }}
+        <button type="button" class="btn btn-secondary" @click="retryLoadCustomers">重试</button>
+      </p>
       <div class="card">
         <DataTable
           :columns="columns"
@@ -205,7 +209,7 @@ import { useCustomers } from './customers/useCustomers'
 
 const {
   pageNavTitle, entityName, productsNavLabel, shipmentNavLabel,
-  customers, purchaseUnitOptions, selectedPurchaseUnit, loading, selectedIds,
+  customers, purchaseUnitOptions, selectedPurchaseUnit, loading, loadError, retryLoadCustomers, selectedIds,
   totalCustomers, hasMore, importFileInput,
   showEditModal, showDeleteConfirm, showBatchDeleteConfirm, showAddModal,
   addForm, itemToDelete, templateOptions, selectedTemplateId, loadingTemplateOptions,
