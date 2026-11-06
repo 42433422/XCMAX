@@ -357,9 +357,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         )
         return cast("AgentRun | None", self._repo.save(run))
 
-    def reject_waiting_step(
-        self, run_id: str, *, rejector: str, reason: str
-    ) -> AgentRun | None:
+    def reject_waiting_step(self, run_id: str, *, rejector: str, reason: str) -> AgentRun | None:
         """Stop a waiting sensitive step. Rejection records who, when, and why, and does not execute."""
         run = self._repo.get(run_id)
         if run is None or run.status != "waiting_user":
@@ -420,7 +418,11 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         )
 
         stored = dict(parent.metadata.get("runtime_context") or {})
-        task = parent.metadata.get("task_context") if isinstance(parent.metadata.get("task_context"), dict) else {}
+        task = (
+            parent.metadata.get("task_context")
+            if isinstance(parent.metadata.get("task_context"), dict)
+            else {}
+        )
         parent_task_id = str(task.get("task_id") or stored.get("task_id") or parent.run_id)
         context = handoff_runtime_context(
             stored,

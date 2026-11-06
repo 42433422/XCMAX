@@ -248,7 +248,9 @@ class AgentToolExecutor:
             params.pop(control_key, None)
         context = dict(runtime_context or {})
         spec = get_tool_action_spec(step.tool_id, step.action)
-        required = set((spec.input_schema or {}).get("required") or []) if spec is not None else set()
+        required = (
+            set((spec.input_schema or {}).get("required") or []) if spec is not None else set()
+        )
         if "user_id" in required and context.get("user_id") not in (None, ""):
             params["user_id"] = str(context["user_id"])
         if "tenant_id" in required and context.get("tenant_id") not in (None, ""):
@@ -348,7 +350,9 @@ class AgentToolExecutor:
                     begin_idempotent_replay(
                         params["_runtime_context"], validation.tool_id, action, params
                     )
-                    if client_key or context_key or (validation.spec is not None and validation.spec.idempotent)
+                    if client_key
+                    or context_key
+                    or (validation.spec is not None and validation.spec.idempotent)
                     else ("", None)
                 )
                 if replay is not None:

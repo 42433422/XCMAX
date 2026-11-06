@@ -143,7 +143,9 @@ def test_employee_allowlist_rejects_named_tool_and_tenants_do_not_share_keys(
 ):
     _wallet(monkeypatch, tmp_path)
     repo = InMemoryAgentRunRepository()
-    reader = trusted_actor(user_id=43, tenant_id=11, role="reader", permissions=["tool.ocr.request"])
+    reader = trusted_actor(
+        user_id=43, tenant_id=11, role="reader", permissions=["tool.ocr.request"]
+    )
     context = dict(reader.context)
     context["employee_id"] = "employee-reader"
     context["employee_tool_allowlist"] = ["excel_analysis"]
@@ -161,9 +163,10 @@ def test_employee_allowlist_rejects_named_tool_and_tenants_do_not_share_keys(
     left = _run_context(trusted_actor(user_id=44, tenant_id=11, role="t11", permissions=[]))
     right = _run_context(trusted_actor(user_id=45, tenant_id=12, role="t12", permissions=[]))
     step = AgentStep(node_id="n", tool_id="ocr", action="request")
-    assert task_execution_context(left, step)["idempotency_key"] != task_execution_context(
-        right, step
-    )["idempotency_key"]
+    assert (
+        task_execution_context(left, step)["idempotency_key"]
+        != task_execution_context(right, step)["idempotency_key"]
+    )
     assert ":11:" in task_execution_context(left, step)["idempotency_key"]
     assert ":12:" in task_execution_context(right, step)["idempotency_key"]
 
@@ -226,9 +229,7 @@ def test_thirty_real_calls_match_sqlite_and_do_not_replay_side_effects(
     def emit_ocr_requested(**payload):
         code = str(payload.get("request_id") or "")
         with write_lock:
-            connection.execute(
-                "insert into effects(code, tenant) values (?, ?)", (code, "50")
-            )
+            connection.execute("insert into effects(code, tenant) values (?, ?)", (code, "50"))
             connection.commit()
         return True
 

@@ -54,7 +54,11 @@ def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         if getattr(run, "status", "") == "waiting_user":
-            output = {"success": False, "error_code": "approval_required", "message": "工具执行需要用户确认"}
+            output = {
+                "success": False,
+                "error_code": "approval_required",
+                "message": "工具执行需要用户确认",
+            }
         else:
             output = {"success": getattr(run, "status", "") == "completed"}
     if not output.get("success"):
@@ -64,7 +68,11 @@ def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
         # only a validated HTTP status because route adapters need to distinguish
         # validation/not-found/unavailable failures without exposing raw details.
         raw_error_code = str(output.get("error_code") or "tool_failed")[:64]
-        if raw_error_code in {"tool_permission_denied", "tool_identity_required", "approval_required"}:
+        if raw_error_code in {
+            "tool_permission_denied",
+            "tool_identity_required",
+            "approval_required",
+        }:
             return {
                 "success": False,
                 "message": "工具执行需要用户确认"

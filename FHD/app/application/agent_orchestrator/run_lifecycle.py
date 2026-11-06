@@ -299,7 +299,9 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                         "task_id": str(
                             (run.metadata.get("runtime_context") or {}).get("task_id") or run.run_id
                         ),
-                        "tenant_id": str((run.metadata.get("runtime_context") or {}).get("tenant_id") or ""),
+                        "tenant_id": str(
+                            (run.metadata.get("runtime_context") or {}).get("tenant_id") or ""
+                        ),
                         "trace_id": run.run_id,
                     },
                 )

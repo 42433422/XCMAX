@@ -99,9 +99,7 @@ def _denial(
     }
 
 
-def _allowlist_denial(
-    spec: ToolActionSpecV2, context: dict[str, Any]
-) -> dict[str, Any] | None:
+def _allowlist_denial(spec: ToolActionSpecV2, context: dict[str, Any]) -> dict[str, Any] | None:
     raw = context.get("employee_tool_allowlist")
     if raw is None:
         return None
@@ -147,7 +145,9 @@ def clear_tenant_tools_for_tests() -> None:
     _TENANT_TOOLS.clear()
 
 
-def _tenant_tool_denial(tool_id: str, action: str, context: dict[str, Any]) -> dict[str, Any] | None:
+def _tenant_tool_denial(
+    tool_id: str, action: str, context: dict[str, Any]
+) -> dict[str, Any] | None:
     owners = _TENANT_TOOLS.get(str(tool_id))
     if not owners:
         return None
@@ -172,7 +172,10 @@ def actor_tool_denial(
     if tenant_denial is not None:
         return tenant_denial
     spec = get_tool_action_spec(tool_id, action)
-    if not isinstance(ctx.get("_actor_authorization"), dict) and "employee_tool_allowlist" not in ctx:
+    if (
+        not isinstance(ctx.get("_actor_authorization"), dict)
+        and "employee_tool_allowlist" not in ctx
+    ):
         return None
     if spec is None:
         return _denial(
@@ -625,7 +628,9 @@ def handoff_runtime_context(
     }
 
 
-def overlay_resume_context(stored: dict[str, Any] | None, incoming: dict[str, Any] | None) -> dict[str, Any]:
+def overlay_resume_context(
+    stored: dict[str, Any] | None, incoming: dict[str, Any] | None
+) -> dict[str, Any]:
     """Resume may add notes. It cannot replace tenant, actor, or employee authority."""
     merged = dict(stored or {})
     for key, value in dict(incoming or {}).items():
