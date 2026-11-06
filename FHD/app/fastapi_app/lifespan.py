@@ -60,7 +60,11 @@ def _pid_is_alive(pid: int) -> bool:
 
         synchronize = 0x00100000
         wait_timeout = 0x00000102
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        # Linux CI mypy stubs omit WinDLL; resolve at runtime on Windows only.
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return False
+        kernel32 = win_dll("kernel32", use_last_error=True)
         handle = kernel32.OpenProcess(synchronize, False, pid)
         if not handle:
             return False

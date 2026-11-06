@@ -1,5 +1,5 @@
 {
-  "lines": 2416621,
+  "lines": 2416964,
   "updated": "2026-11-06",
-  "note": "chat TTS progress after rebase onto #3015"
+  "note": "rebase #2988 onto #3019 tip 20dfeaf3"
 }
