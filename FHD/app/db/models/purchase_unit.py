@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.db_base import Base
@@ -16,6 +16,7 @@ class PurchaseUnit(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Ba
     contact_phone: Mapped[Optional[str]] = mapped_column(String(50))
     address: Mapped[Optional[str]] = mapped_column(String(500))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     # tenant_id 由 TenantScopedMixin 提供（多租户数据隔离作用域）
 
     def to_dict(self):
@@ -25,6 +26,7 @@ class PurchaseUnit(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Ba
             "contact_person": self.contact_person or "",
             "contact_phone": self.contact_phone or "",
             "contact_address": self.address or "",
+            "version": int(self.version or 1),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

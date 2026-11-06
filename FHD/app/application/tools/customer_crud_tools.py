@@ -50,6 +50,9 @@ def _normalize_customer_fields(fields: dict[str, Any]) -> dict[str, Any]:
     elif "address" in fields:
         out["contact_address"] = fields["address"]
 
+    if "expected_version" in fields:
+        out["expected_version"] = fields["expected_version"]
+
     # 丢弃 None 值，避免覆盖 service 层 None 校验
     return {k: v for k, v in out.items() if v is not None}
 
@@ -84,6 +87,8 @@ def update_customer(args: dict[str, Any]) -> dict[str, Any]:
         }
 
     normalized = _normalize_customer_fields(fields)
+    if "expected_version" in args:
+        normalized["expected_version"] = args["expected_version"]
     if not normalized:
         return {"success": False, "error": "no supported fields in fields dict"}
 
