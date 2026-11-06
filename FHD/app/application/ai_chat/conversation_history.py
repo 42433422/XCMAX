@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from typing import Any, Protocol
@@ -22,6 +23,40 @@ class ConversationStore(Protocol):
         metadata: str,
         idempotency_key: str,
     ) -> Any: ...
+
+
+def apply_history_fault(payload: dict[str, Any]) -> dict[str, Any]:
+    """开发机故障注入。未设置 XCAGI_HISTORY_FAULT_FILE 时原样返回。"""
+    import time
+    from pathlib import Path
+
+    from fastapi import HTTPException
+
+    spec_path = os.environ.get("XCAGI_HISTORY_FAULT_FILE", "").strip()
+    if not spec_path:
+        return payload
+    try:
+        spec = Path(spec_path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return payload
+    if spec.startswith("delay:"):
+        time.sleep(min(float(spec.split(":", 1)[1] or 0), 30))
+        return payload
+    if spec in {"500", "502", "504"}:
+        raise HTTPException(status_code=int(spec), detail=f"history fault {spec}")
+    if spec == "empty":
+        cloned = dict(payload)
+        cloned["messages"] = []
+        cloned["sessions"] = []
+        return cloned
+    if spec == "partial":
+        cloned = dict(payload)
+        messages = list(cloned.get("messages") or [])
+        sessions = list(cloned.get("sessions") or [])
+        cloned["messages"] = messages[:1]
+        cloned["sessions"] = sessions[:1]
+        return cloned
+    return payload
 
 
 def persist_chat_turn(
@@ -77,6 +112,7 @@ def persist_chat_turn(
     summary = {
         "success": bool(response_data.get("success")),
         "action": inner.get("action"),
+        "status": inner.get("status") or inner_payload.get("status"),
         "intent": intent,
         "toolCall": tool_call or None,
         "plan_id": inner_payload.get("plan_id"),

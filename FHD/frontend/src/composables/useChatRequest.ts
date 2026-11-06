@@ -51,9 +51,9 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     body: Record<string, unknown>
   } {
     const user_id = resolveChatUserId(scope)
-    const compactHistory = (scope?.messages || messages.value || []).slice(-6).map((m) => ({
+    const compactHistory = (scope?.messages || messages.value || []).slice(-40).map((m) => ({
       role: m.role,
-      content: plainTextFromChatHtml(m.content).slice(0, 500),
+      content: plainTextFromChatHtml(m.content).slice(0, 4000),
     }))
     const scopedSessionId = String(scope?.sessionId || sessionId?.value || '').trim()
     const turnId = String(scope?.turnId || '').trim() || createBusinessHarnessId('turn')
@@ -121,9 +121,9 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     scope?: ChatRequestScope,
   ): Promise<ChatPlannerPayload> {
     const user_id = resolveChatUserId(scope)
-    const compactHistory = (scope?.messages || messages.value || []).slice(-6).map((m) => ({
+    const compactHistory = (scope?.messages || messages.value || []).slice(-40).map((m) => ({
       role: m.role,
-      content: plainTextFromChatHtml(m.content).slice(0, 500),
+      content: plainTextFromChatHtml(m.content).slice(0, 4000),
     }))
     const scopedSessionId = String(scope?.sessionId || sessionId?.value || '').trim()
     const turnId = String(scope?.turnId || '').trim() || createBusinessHarnessId('turn')

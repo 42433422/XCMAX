@@ -71,10 +71,14 @@ def conversations_get(request: Request, session_id: str, limit: int = Query(defa
     from app.application.task_conversation_store import task_conversation_store
     from app.request_active_mod_ctx import get_request_active_mod_id
 
-    return task_conversation_store.get_history(
-        session_id=session_id.strip(),
-        user_id=int(_history_actor(request)),
-        mod_id=get_request_active_mod_id() or "",
+    from app.application.ai_chat.conversation_history import apply_history_fault
+
+    return apply_history_fault(
+        task_conversation_store.get_history(
+            session_id=session_id.strip(),
+            user_id=int(_history_actor(request)),
+            mod_id=get_request_active_mod_id() or "",
+        )
     )
 
 

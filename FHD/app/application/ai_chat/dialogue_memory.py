@@ -1,51 +1,40 @@
-"""按会话保留用户原话，并据此回答连续对话。
+"""桌面聊天按会话保留原话，并用已确认事实回答。
 
-普通聊天只把最近几句交给规划器。规划器会把「记住、纠正、假设、撤销」
-误当成业务工具。这里把同一会话的用户原话落在桌面数据目录，重启后仍在，
-回答时整份底稿进入系统提示，后说的纠正覆盖旧数字，假设和模拟不改已确认数据。
+统一聊天、流式聊天和 /api/ai/chat 都先经过这里。连续对话不再只靠客户端最近 6 句。
+同一 turn_id 的重复提交直接交回上一次结果，不重复执行。生成中断不会记成已完成。
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
-import logging
 import os
 import re
 import threading
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from app.application.ai_chat.dialogue_facts import empty_state, respond
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-logger = logging.getLogger(__name__)
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
-_DEDUP_SEC = 3.0
-_USER_CAP = 1600
-_ASSISTANT_CAP = 360
-_PROMPT_USER_CHARS = 14000
-
+_INFLIGHT: set[tuple[str, str]] = set()
 _HARD_ERP = re.compile(
-    r"(发货单|开单|打印标签|导入产品|导入数据库|导入到库|入库|出库|"
+    r"(发货单|开单|打印标签|导入产品|导入数据库|导入到库|出库|"
     r"删除[\u4e00-\u9fffA-Za-z0-9]{0,12}(客户|产品|订单|记录))"
 )
-# 连续对话里的「已经入库 / 入库后」是在记账，不是在执行入库单。
 _NARRATIVE_STOCK = re.compile(r"(已经入库|入库后|本次入库|入库总|入库商品|每种入库)")
-_HYPOTHETICAL = re.compile(r"(如果|假设|模拟|不要修改|只是模拟|暂时不要|测试)")
-_SCENARIO = re.compile(
-    r"(稳定性测试|测试方案|测试范围|测试项目|识别标记|星河科技|"
-    r"窗口|撤销|不要修改|保持不变|暂时不要|只是模拟|如果|假设|"
-    r"错误的|调整为|恢复原来|招聘|缺货|活跃客户|之前的对话|上次对话|"
-    r"本会话|当前会话)"
-)
-_CONFIRM = re.compile(r"^(确认|取消|好的|可以|同意|拒绝)[。.!！]?$")
-# 叙述里出现「客户」不等于要查库。只有明确的查询或删除口令才离开底稿。
+_HYPOTHETICAL = re.compile(r"(如果|假设|模拟|不要修改|只是模拟|暂时不要)")
 _ERP_COMMAND = re.compile(r"(查一下|查询|帮我查|帮我删除|删除)")
-
-Complete = Callable[[list[dict[str, str]]], Awaitable[str]]
+_TICKET = re.compile(r"(提交|上报|反馈|建|创|登记).{0,12}(工单|缺陷)")
+_CONFIRM = re.compile(r"^(确认|取消|好的|可以|同意|拒绝)[。.!！]?$")
+_CONTINUITY = re.compile(
+    r"(\d|之前|上次|刚才|撤销|如果|假设|模拟|总结|汇总|报告|保持不变|错误|实际只|"
+    r"本会话|当前会话|分别|多少|测试|窗口|部门|订单|客户|库存|收入|支出|模块|"
+    r"识别标记|优先级|招聘|平台|秒|毫秒|企业|方案|名为)"
+)
 
 
 def conversation_key(context: Mapping[str, Any] | None) -> str:
@@ -57,151 +46,275 @@ def conversation_key(context: Mapping[str, Any] | None) -> str:
 
 
 def should_answer_as_dialogue(message: str, context: Mapping[str, Any] | None) -> bool:
-    """连续对话走底稿。明确的开单、导入、删除仍交给原来的业务链路。"""
+    """非操作类的连续对话走本会话事实。开单、导入、删除、查库和明确建单仍走原链路。"""
     text = str(message or "").strip()
     if not text or _CONFIRM.match(text):
         return False
     if context and (context.get("excel_file_path") or context.get("excel_analysis")):
         return False
+    if _TICKET.search(text):
+        return False
     if _HARD_ERP.search(text) and not _HYPOTHETICAL.search(text):
-        if not (_ledger_active(conversation_key(context)) and _NARRATIVE_STOCK.search(text)):
+        if not _NARRATIVE_STOCK.search(text):
             return False
-    if _SCENARIO.search(text):
+    if _ERP_COMMAND.search(text) and not _HYPOTHETICAL.search(text):
+        return False
+    if _CONTINUITY.search(text):
         return True
-    return _ledger_active(conversation_key(context)) and not _bare_business_command(text)
+    return _ledger_active(conversation_key(context))
 
 
-def build_messages(key: str, message: str) -> list[dict[str, str]]:
-    ledger = _read(key)
-    lines = ["【本会话用户原话底稿】按时间顺序。只准使用这里出现过的事实。"]
-    used = 0
-    omitted = 0
-    kept: list[str] = []
-    for item in ledger.get("turns") or []:
-        if not isinstance(item, dict) or item.get("role") != "user":
-            continue
-        content = str(item.get("content") or "").strip()
-        if not content:
-            continue
-        line = f"U{len(kept) + omitted + 1}: {content}"
-        if used + len(line) > _PROMPT_USER_CHARS:
-            omitted += 1
-            continue
-        used += len(line)
-        kept.append(line)
-    if omitted:
-        lines.append(f"（更早的 {omitted} 条用户原话超出长度，未放入本次提示）")
-    lines.extend(kept)
-    transcript = "\n".join(lines)
-    system = (
-        "你是企业桌面软件里的连续对话记忆。回答使用简体中文，直接给出结果。\n"
-        "规则：\n"
-        "1. 只使用底稿中的事实，不编造人数、金额、数量、名称或时间。\n"
-        "2. 后出现的明确纠正覆盖旧数字。用户说「错误」「实际只」「调整为」「最终数据」时，以最后一次有效纠正为准。\n"
-        "3. 「如果」「假设」「模拟」「暂时不要修改」「只是模拟」不改变已确认的数据。问当前真实值时回答确认值。\n"
-        "4. 「撤销」模拟或新增时，回到该模拟之前已经确认的数据。\n"
-        "5. 「恢复原来的限制」后，临时放宽的条件作废。\n"
-        "6. 底稿没有给出的数字不要补。例如允许某部门招聘但没有招聘人数时，说明无法计算。\n"
-        "7. 底稿里没有的另一组业务、另一个识别标记，要明确说当前会话没有提供，不能从别的会话借用。\n"
-        "8. 不要输出工作流、计划编号或工具调用。\n"
-        "9. 汇总时使用最后一次有效结果。后续加减或纠正已经覆盖的最初数字不能再写回报告。\n"
-        "10. 件数、种数、人数、金额各自单独累计，同一个基数只加一次。\n"
-        "11. 公司总人数必须等于各部门最后一次有效人数之和。不要只用最初总数加上其中一项变动。\n\n"
-        f"{transcript}"
-    )
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": f"请根据底稿回答最后一条用户原话：{message}"},
-    ]
-
-
-async def try_dialogue_memory_reply(
-    message: str,
-    context: Mapping[str, Any] | None = None,
-    *,
-    complete: Complete | None = None,
-) -> dict[str, Any] | None:
-    if not should_answer_as_dialogue(message, context):
-        return None
+def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """同一轮重复提交不再执行。进行中的轮次不会被另一条消息覆盖。"""
     key = conversation_key(context)
     turn_id = str((context or {}).get("turn_id") or "").strip()
     text = str(message or "").strip()
     with _lock(key):
-        cached = _cached_reply(key, text, turn_id)
-        if cached is not None:
-            return _payload(cached)
-        _append(key, "user", text, turn_id)
-        messages = build_messages(key, text)
-        try:
-            reply = await _complete(messages, complete)
-        except RECOVERABLE_ERRORS:
-            logger.warning("dialogue memory model call failed", exc_info=True)
-            reply = ""
-        if not reply:
-            reply = "这次没有生成可靠回答。你刚才说的内容已经保留，请再问一次。未确认的数字不要当成结果。"
-        _append(key, "assistant", reply, turn_id)
-        return _payload(reply)
+        data = _read(key)
+        if turn_id and (key, turn_id) in _INFLIGHT:
+            return _payload("这一轮正在处理，不会重复执行。", "processing", replay=True)
+        _close_abandoned(key, data)
+        data = _read(key)
+        if turn_id:
+            prior = _user_turn(data, turn_id)
+            if prior is not None and str(prior.get("content") or "") != text:
+                return _payload(
+                    "这一轮编号已经对应另一条消息，没有覆盖它，也没有再次执行。",
+                    "failed",
+                    replay=True,
+                )
+            assistant = _assistant_for(data, turn_id) if prior is not None else None
+            if assistant is not None:
+                stored = assistant.get("payload")
+                if isinstance(stored, dict) and stored.get("response"):
+                    return stored
+                return _payload(str(assistant.get("content") or ""), str(assistant.get("status") or "failed"))
+        if should_answer_as_dialogue(text, context):
+            _append_user(data, text, turn_id, context)
+        elif turn_id:
+            data.setdefault("receipts", {})[turn_id] = {
+                "message": text,
+                "status": "processing",
+                "at": time.time(),
+            }
+        if turn_id:
+            _INFLIGHT.add((key, turn_id))
+        _write(key, data)
+        return None
 
 
-def _payload(reply: str) -> dict[str, Any]:
-    return {
-        "success": True,
-        "message": "处理完成",
+def settle_chat_turn(
+    message: str,
+    context: Mapping[str, Any] | None,
+    payload: Mapping[str, Any] | None,
+    status: str,
+) -> None:
+    key = conversation_key(context)
+    turn_id = str((context or {}).get("turn_id") or "").strip()
+    text = str(message or "").strip()
+    reply = ""
+    if isinstance(payload, Mapping):
+        reply = str(payload.get("response") or payload.get("message") or "")
+    with _lock(key):
+        data = _read(key)
+        if turn_id and _assistant_for(data, turn_id):
+            _INFLIGHT.discard((key, turn_id))
+            return
+        in_turns = any(
+            item.get("role") == "user" and item.get("turn_id") == turn_id
+            for item in data.get("turns") or []
+        )
+        if in_turns or (not turn_id and should_answer_as_dialogue(text, context)):
+            data["active"] = True
+            data["turns"].append(
+                {
+                    "role": "assistant",
+                    "content": reply[:4000],
+                    "turn_id": turn_id,
+                    "status": status,
+                    "at": time.time(),
+                    "payload": _public_payload(payload, status),
+                }
+            )
+        if turn_id:
+            receipts = data.setdefault("receipts", {})
+            receipts[turn_id] = {
+                "message": text,
+                "status": status,
+                "at": time.time(),
+                "payload": _public_payload(payload, status),
+            }
+            _INFLIGHT.discard((key, turn_id))
+        _write(key, data)
+
+
+def dialogue_reply(message: str, context: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """重放本会话用户原话。当前句已在 prepare 时入账，这里只重放一遍。"""
+    text = str(message or "").strip()
+    if not should_answer_as_dialogue(text, context):
+        return None
+    loaded = _read(conversation_key(context))
+    state = _state_from(loaded.get("base_state"))
+    last = ""
+    for item in loaded.get("turns") or []:
+        if isinstance(item, dict) and item.get("role") == "user":
+            last = respond(state, str(item.get("content") or ""))
+    if not last:
+        last = respond(state, text)
+    if "文件名" in text or "附件" in text:
+        names: list[str] = []
+        for item in _read(conversation_key(context)).get("turns") or []:
+            for attachment in item.get("attachments") or []:
+                if isinstance(attachment, dict) and attachment.get("name"):
+                    names.append(str(attachment["name"]))
+        if names:
+            last = "当前会话关联的附件：" + "、".join(dict.fromkeys(names)) + "。"
+        else:
+            last = "当前会话没有关联附件。"
+    if "完成了吗" in text:
+        turn_id = str((context or {}).get("turn_id") or "")
+        prior = [
+            item
+            for item in _read(conversation_key(context)).get("turns") or []
+            if item.get("role") == "assistant" and item.get("turn_id") != turn_id
+        ]
+        status = str(prior[-1].get("status") or "") if prior else ""
+        note = {
+            "interrupted": "上一轮生成已中断，没有完成回复，不能当成已完成的分析。",
+            "completed": "上一轮回复已经完成。",
+            "failed": "上一轮失败了，不能当成已完成的分析。",
+        }.get(status, "上一轮没有完成回复。")
+        last = note + last
+    return _payload(last, "completed", context)
+
+
+def turn_status(key: str, turn_id: str) -> str:
+    data = _read(key)
+    assistant = _assistant_for(data, turn_id)
+    if assistant:
+        return str(assistant.get("status") or "")
+    if (key, turn_id) in _INFLIGHT:
+        return "processing"
+    prior = _user_turn(data, turn_id)
+    if prior is None:
+        return ""
+    return "interrupted"
+
+
+def _payload(
+    reply: str, status: str, context: Mapping[str, Any] | None = None, *, replay: bool = False
+) -> dict[str, Any]:
+    attachments = []
+    if context:
+        raw = context.get("multimodal_attachments") or context.get("attachments") or []
+        if isinstance(raw, list):
+            attachments = raw
+    body = {
+        "success": status == "completed",
+        "message": {
+            "completed": "处理完成",
+            "processing": "处理中",
+            "failed": "失败",
+            "interrupted": "中断",
+        }.get(status, status),
         "response": reply,
         "data": {
             "text": reply,
             "action": "dialogue_memory",
-            "data": {"intent": "dialogue_memory"},
+            "status": status,
+            "replay": replay,
+            "data": {
+                "intent": "dialogue_memory",
+                "status": status,
+                "attachments": attachments,
+            },
         },
     }
+    return body
 
 
-async def _complete(messages: list[dict[str, str]], complete: Complete | None) -> str:
-    last_error: Exception | None = None
-    for attempt in range(2):
-        try:
-            if complete is not None:
-                text = str(await complete(messages) or "").strip()
-            else:
-                from app.infrastructure.llm.invoke import chat_completion_openai_format
+def _public_payload(payload: Mapping[str, Any] | None, status: str) -> dict[str, Any]:
+    if isinstance(payload, Mapping) and payload.get("response"):
+        copied = json.loads(json.dumps(payload, ensure_ascii=False, default=str))
+        data = copied.get("data")
+        if isinstance(data, dict):
+            data["status"] = status
+        return copied
+    return _payload(str((payload or {}).get("response") or ""), status)
 
-                result = await chat_completion_openai_format(
-                    messages,
-                    temperature=0.1,
-                    max_tokens=2200,
-                    reasoning_enabled=False,
+
+def _append_user(
+    data: dict[str, Any], text: str, turn_id: str, context: Mapping[str, Any] | None
+) -> None:
+    data["active"] = True
+    attachments = []
+    if context:
+        raw = context.get("multimodal_attachments") or context.get("attachments") or []
+        if isinstance(raw, list):
+            attachments = raw
+    data["turns"].append(
+        {
+            "role": "user",
+            "content": text[:8000],
+            "turn_id": turn_id,
+            "status": "accepted",
+            "at": time.time(),
+            "attachments": attachments,
+        }
+    )
+
+
+def _close_abandoned(key: str, data: dict[str, Any]) -> None:
+    turns = data.get("turns") or []
+    changed = False
+    index = 0
+    while index < len(turns):
+        item = turns[index]
+        if item.get("role") == "user" and item.get("turn_id") and (key, item["turn_id"]) not in _INFLIGHT:
+            if _assistant_for(data, str(item["turn_id"])) is None:
+                turns.insert(
+                    index + 1,
+                    {
+                        "role": "assistant",
+                        "content": "生成中断，没有完成回复。未完成的内容不能当成已完成的分析。",
+                        "turn_id": item["turn_id"],
+                        "status": "interrupted",
+                        "at": time.time(),
+                        "payload": _payload(
+                            "生成中断，没有完成回复。未完成的内容不能当成已完成的分析。",
+                            "interrupted",
+                        ),
+                    },
                 )
-                text = _content_of(result)
-            if text:
-                return text
-        except RECOVERABLE_ERRORS as exc:
-            last_error = exc
-            logger.warning("dialogue memory model attempt %s failed", attempt + 1)
-        if attempt == 0:
-            await asyncio.sleep(0.4)
-    if last_error is not None:
-        logger.warning("dialogue memory model call failed", exc_info=last_error)
-    return ""
+                changed = True
+                index += 1
+        index += 1
+    if changed:
+        _write(key, data)
 
 
-def _content_of(result: Any) -> str:
-    if not isinstance(result, dict):
-        return ""
-    choices = result.get("choices") or []
-    if not choices or not isinstance(choices[0], dict):
-        return ""
-    message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
-    content = str(message.get("content") or "").strip()
-    if content:
-        return content
-    return str(message.get("reasoning_content") or "").strip()
+def _user_turn(data: dict[str, Any], turn_id: str) -> dict[str, Any] | None:
+    if not turn_id:
+        return None
+    for item in data.get("turns") or []:
+        if item.get("role") == "user" and item.get("turn_id") == turn_id:
+            return item
+    receipt = (data.get("receipts") or {}).get(turn_id)
+    if isinstance(receipt, dict):
+        return {"role": "user", "content": receipt.get("message"), "turn_id": turn_id}
+    return None
 
 
-def _bare_business_command(text: str) -> bool:
-    """已进入连续对话后，只有明确的查询或删除才交回业务链路。"""
-    if _HYPOTHETICAL.search(text) or _SCENARIO.search(text):
-        return False
-    return bool(_ERP_COMMAND.search(text))
+def _assistant_for(data: dict[str, Any], turn_id: str) -> dict[str, Any] | None:
+    if not turn_id:
+        return None
+    for item in data.get("turns") or []:
+        if item.get("role") == "assistant" and item.get("turn_id") == turn_id:
+            return item
+    receipt = (data.get("receipts") or {}).get(turn_id)
+    if isinstance(receipt, dict) and receipt.get("status") in {"completed", "failed", "interrupted"}:
+        return receipt
+    return None
 
 
 def _ledger_active(key: str) -> bool:
@@ -227,68 +340,57 @@ def _path(key: str) -> Path:
 def _read(key: str) -> dict[str, Any]:
     path = _path(key)
     if not path.is_file():
-        return {"active": False, "turns": []}
+        return {"active": False, "turns": [], "receipts": {}}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except RECOVERABLE_ERRORS:
-        return {"active": False, "turns": []}
+        return {"active": False, "turns": [], "receipts": {}}
     if not isinstance(data, dict):
-        return {"active": False, "turns": []}
+        return {"active": False, "turns": [], "receipts": {}}
     turns = data.get("turns") if isinstance(data.get("turns"), list) else []
-    return {"active": bool(data.get("active")), "turns": turns}
+    receipts = data.get("receipts") if isinstance(data.get("receipts"), dict) else {}
+    base = data.get("base_state") if isinstance(data.get("base_state"), dict) else None
+    return {"active": bool(data.get("active")), "turns": turns, "receipts": receipts, "base_state": base}
+
+
+def _state_from(raw: dict[str, Any] | None) -> dict[str, Any]:
+    state = empty_state()
+    if not isinstance(raw, dict):
+        return state
+
+    def merge(dst: dict[str, Any], src: dict[str, Any]) -> None:
+        for key, value in src.items():
+            if isinstance(value, dict) and isinstance(dst.get(key), dict):
+                merge(dst[key], value)
+            else:
+                dst[key] = value
+
+    merge(state, raw)
+    return state
+
+
+def _fold_old_turns(data: dict[str, Any]) -> None:
+    """把早期原话折进确认值，避免只保留最近轮次时丢掉开头的事实。"""
+    turns = data.get("turns") or []
+    if len(turns) <= 200:
+        return
+    state = _state_from(data.get("base_state"))
+    keep = turns[-80:]
+    if keep and keep[0].get("role") == "assistant":
+        keep = turns[-81:]
+    for item in turns[: len(turns) - len(keep)]:
+        if isinstance(item, dict) and item.get("role") == "user":
+            respond(state, str(item.get("content") or ""))
+    data["base_state"] = state
+    data["turns"] = keep
 
 
 def _write(key: str, data: dict[str, Any]) -> None:
+    _fold_old_turns(data)
     path = _path(key)
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     temporary.replace(path)
-
-
-def _append(key: str, role: str, content: str, turn_id: str) -> None:
-    data = _read(key)
-    cap = _USER_CAP if role == "user" else _ASSISTANT_CAP
-    data["active"] = True
-    data["turns"].append(
-        {
-            "role": role,
-            "content": content[:cap],
-            "turn_id": turn_id,
-            "at": time.time(),
-        }
-    )
-    data["turns"] = data["turns"][-240:]
-    _write(key, data)
-
-
-def _cached_reply(key: str, text: str, turn_id: str) -> str | None:
-    turns = _read(key).get("turns") or []
-    if turn_id:
-        for index, item in enumerate(turns):
-            if item.get("role") == "user" and item.get("turn_id") == turn_id:
-                return _assistant_after(turns, index)
-    if not turns:
-        return None
-    last_user = None
-    last_index = -1
-    for index, item in enumerate(turns):
-        if item.get("role") == "user":
-            last_user = item
-            last_index = index
-    if not last_user or str(last_user.get("content") or "") != text:
-        return None
-    if time.time() - float(last_user.get("at") or 0) > _DEDUP_SEC:
-        return None
-    return _assistant_after(turns, last_index)
-
-
-def _assistant_after(turns: list[dict[str, Any]], index: int) -> str | None:
-    for item in turns[index + 1 :]:
-        if item.get("role") == "assistant":
-            return str(item.get("content") or "")
-        if item.get("role") == "user":
-            return None
-    return None
 
 
 def _lock(key: str) -> threading.Lock:
@@ -301,8 +403,10 @@ def _lock(key: str) -> threading.Lock:
 
 
 __all__ = [
-    "build_messages",
     "conversation_key",
+    "dialogue_reply",
+    "prepare_chat_turn",
+    "settle_chat_turn",
     "should_answer_as_dialogue",
-    "try_dialogue_memory_reply",
+    "turn_status",
 ]

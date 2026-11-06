@@ -320,6 +320,18 @@ def _prepare_compat_chat_body(request: Request, body: XcagiCompatChatBody) -> Xc
     return body.model_copy(update={"context": context})
 
 
+def _settle_dialogue_turn(body: XcagiCompatChatBody, payload: dict[str, Any], status: str) -> None:
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    if data.get("replay") or data.get("status") == "processing":
+        return
+    from app.application.ai_chat.dialogue_memory import settle_chat_turn
+
+    try:
+        settle_chat_turn(body.message, body.context, payload, status)
+    except RECOVERABLE_ERRORS:
+        logger.warning("dialogue turn settle failed", exc_info=True)
+
+
 def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]) -> None:
     from app.application import get_ai_chat_app_service
     from app.application.task_conversation_store import durable_user_id
@@ -353,9 +365,9 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Pa
                 if isinstance(exc.detail, dict)
                 else "对话执行失败"
             )
-            _persist_compat_chat_turn(
-                body, {"success": False, "response": message, "route_metadata": metadata}
-            )
+            failure = {"success": False, "response": message, "route_metadata": metadata}
+            _persist_compat_chat_turn(body, failure)
+            _settle_dialogue_turn(body, failure, "failed")
             raise HTTPException(
                 status_code=exc.status_code,
                 detail={"message": message, "route_metadata": metadata},
@@ -366,6 +378,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Pa
     if metadata:
         payload["route_metadata"] = metadata
     _persist_compat_chat_turn(body, payload)
+    _settle_dialogue_turn(body, payload, "completed" if payload.get("success") else "failed")
     return payload
 
 
@@ -424,17 +437,22 @@ async def compat_chat_stream_async(
                             if metadata:
                                 item["result"]["route_metadata"] = metadata
                             _persist_compat_chat_turn(body, item["result"])
+                            outcome = "completed" if item["result"].get("success", True) else "failed"
+                            _settle_dialogue_turn(body, item["result"], outcome)
                         elif item.get("type") == "error":
                             if metadata:
                                 item["route_metadata"] = metadata
-                            _persist_compat_chat_turn(
-                                body,
-                                {
-                                    "success": False,
-                                    "response": str(item.get("message") or "对话执行失败"),
-                                    **({"route_metadata": metadata} if metadata else {}),
-                                },
+                            failure = {
+                                "success": False,
+                                "response": str(item.get("message") or "对话执行失败"),
+                                "data": {"status": item.get("status") or "failed"},
+                                **({"route_metadata": metadata} if metadata else {}),
+                            }
+                            _persist_compat_chat_turn(body, failure)
+                            error_status = (
+                                "interrupted" if item.get("status") == "interrupted" else "failed"
                             )
+                            _settle_dialogue_turn(body, failure, error_status)
                         encoded = _sse_event(item)
                     yield encoded
     if pending:

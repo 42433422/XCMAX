@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator, Callable
 from contextlib import aclosing
 from dataclasses import dataclass
@@ -53,10 +54,89 @@ class CompatStream:
         self, request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
     ) -> AsyncGenerator[bytes, None]:
         context = self.admission.context(request, body.context, body.message)
-        from app.application.ai_chat.dialogue_memory import try_dialogue_memory_reply
+        from app.application.ai_chat.dialogue_memory import (
+            dialogue_reply,
+            prepare_chat_turn,
+            settle_chat_turn,
+        )
 
-        dialogue = await try_dialogue_memory_reply(body.message, context)
+        prepared = prepare_chat_turn(body.message, context)
+        if prepared is not None:
+            traced = self.trace(
+                prepared,
+                message=body.message,
+                runtime_context=context,
+                user_id=body.user_id,
+                source=body.source,
+                channel="compat_chat_stream_dialogue_memory",
+                intent="dialogue_memory",
+            )
+            yield self.encode_event({"type": "done", "result": traced})
+            return
+        dialogue = dialogue_reply(body.message, context)
         if dialogue is not None:
+            reply = str(dialogue.get("response") or "")
+            sent: list[str] = []
+            try:
+                for start in range(0, max(len(reply), 1), 80):
+                    if await request.is_disconnected():
+                        partial = "".join(sent)
+                        settle_chat_turn(
+                            body.message,
+                            context,
+                            {
+                                "success": False,
+                                "response": partial,
+                                "message": "中断",
+                                "data": {"status": "interrupted", "text": partial, "action": "dialogue_memory"},
+                            },
+                            "interrupted",
+                        )
+                        yield self.encode_event(
+                            {
+                                "type": "error",
+                                "message": "生成已中断，未完成的内容不能当成已完成的分析。",
+                                "status": "interrupted",
+                            }
+                        )
+                        return
+                    piece = reply[start : start + 80]
+                    sent.append(piece)
+                    if piece:
+                        yield self.encode_event({"type": "token", "text": piece})
+                    await asyncio.sleep(0.05)
+                    if await request.is_disconnected():
+                        partial = "".join(sent)
+                        settle_chat_turn(
+                            body.message,
+                            context,
+                            {
+                                "success": False,
+                                "response": partial,
+                                "message": "中断",
+                                "data": {"status": "interrupted", "text": partial, "action": "dialogue_memory"},
+                            },
+                            "interrupted",
+                        )
+                        yield self.encode_event(
+                            {
+                                "type": "error",
+                                "message": "生成已中断，未完成的内容不能当成已完成的分析。",
+                                "status": "interrupted",
+                            }
+                        )
+                        return
+            except (GeneratorExit, asyncio.CancelledError):
+                settle_chat_turn(
+                    body.message,
+                    context,
+                    {"success": False, "response": "".join(sent), "data": {"status": "interrupted"}},
+                    "interrupted",
+                )
+                raise
+            except Exception:
+                settle_chat_turn(body.message, context, {"success": False, "response": ""}, "failed")
+                raise
             traced = self.trace(
                 dialogue,
                 message=body.message,
@@ -66,7 +146,6 @@ class CompatStream:
                 channel="compat_chat_stream_dialogue_memory",
                 intent="dialogue_memory",
             )
-            yield self.encode_event({"type": "token", "text": str(dialogue.get("response") or "")})
             yield self.encode_event({"type": "done", "result": traced})
             return
         issue = await self.fast_paths.issue(request, context, body.message)
