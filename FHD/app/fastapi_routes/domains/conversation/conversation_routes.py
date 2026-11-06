@@ -70,14 +70,13 @@ def _history_actor(request: Request) -> str:
 def conversations_active(request: Request):
     """The conversation this owner last finished, so a restart reopens that id."""
     from app.application.ai_chat.active_conversation import active_conversation_for
-    from app.infrastructure.auth.tenant_context import resolve_tenant_id
-    from app.request_active_mod_ctx import get_request_active_mod_id
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
 
-    tenant = resolve_tenant_id(request)
+    context = request_runtime_context(request, {})
     conversation_id = active_conversation_for(
-        _history_actor(request),
-        tenant_id="" if tenant is None else str(tenant),
-        mod_id=get_request_active_mod_id() or "",
+        context.get("local_user_id") or context.get("actor_id") or context.get("user_id"),
+        tenant_id=str(context.get("tenant_id") or ""),
+        mod_id=str(context.get("mod_id") or ""),
     )
     return {"success": True, "conversation_id": conversation_id}
 
