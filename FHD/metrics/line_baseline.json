@@ -1,5 +1,5 @@
 {
-  "lines": 2441057,
+  "lines": 2441255,
   "updated": "2026-11-06",
-  "note": "用户要求执行 E01–E30 AI 工具与员工执行闭环验收。新增验收测试 tests/test_application/test_employee_closed_loop_e01_e30.py（约 1368 行）和客户/销售租户隔离与导出、拒绝审计修复（净增约 48 行）及一行变更说明；证据 JSON 在 docs/evidence 不计入。实测当前 2441057，较基线 2439642 净增 1415 行。不删除无关代码凑数。此记录为公开增长原因，须与 PR 一并评审，不代表额外人工审批。"
+  "note": "闭环验收 harness 将当次判定写入新证据，不再覆盖 2026-11-06 记录。测试净增约 198 行。closed-loop harness records live verdicts separately from the 2026-11-06 evidence"
 }

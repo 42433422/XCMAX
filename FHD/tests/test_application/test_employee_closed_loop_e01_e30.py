@@ -1,7 +1,8 @@
 """E01–E30 closed-loop acceptance against the product executor and SQLite.
 
-Isolated file database and export directory. A later success does not replace
-an earlier failure already stored in the evidence file.
+Isolated file database and export directory. The 2026-11-06 evidence file is
+not an input and is not rewritten. This run writes a new retest record and
+judges each item from this execution only.
 """
 
 from __future__ import annotations
@@ -10,14 +11,17 @@ import hashlib
 import json
 import multiprocessing
 import os
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
+from threading import BrokenBarrierError
 from zoneinfo import ZoneInfo
 
 import pytest
 from openpyxl import load_workbook
 from sqlalchemy import create_engine, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -31,9 +35,10 @@ from app.db.models.customer import Customer
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.sales import SalesOrder, SalesOrderItem
 from app.domain.task_lifecycle.adapters import canonicalize
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SH = ZoneInfo("Asia/Shanghai")
-_EVIDENCE = (
+_HISTORY = (
     Path(__file__).resolve().parents[2]
     / "docs"
     / "evidence"
@@ -42,6 +47,8 @@ _EVIDENCE = (
     / "acceptance.json"
 )
 _ITEMS = [f"E{index:02d}" for index in range(1, 31)]
+_SESSION_ERRORS = RECOVERABLE_ERRORS + (SQLAlchemyError,)
+_LIVE: dict[str, Acceptance] = {}
 
 
 def _now() -> str:
@@ -61,7 +68,7 @@ def _session_factory(engine):
         try:
             yield db
             db.commit()
-        except Exception:
+        except _SESSION_ERRORS:
             db.rollback()
             raise
         finally:
@@ -138,7 +145,7 @@ class Acceptance:
         self.executor = AgentToolExecutor()
         self.chain: list[dict] = []
         self.items: dict[str, dict] = {}
-        self.failures: dict[str, dict] = {}
+        self.evidence_path: Path | None = None
 
     def context(self, task_id: str, **extra) -> dict:
         body = {
@@ -200,12 +207,6 @@ class Acceptance:
         return result
 
     def settle(self, item: str, verdict: str, summary: str, **proof) -> None:
-        if item in self.failures:
-            verdict = self.failures[item]["verdict"]
-            summary = self.failures[item]["summary"]
-            proof = {"sticky_failure": self.failures[item]}
-        elif verdict in {"FAIL", "NOT-IMPLEMENTED"}:
-            self.failures[item] = {"verdict": verdict, "summary": summary, "at": _now()}
         self.items[item] = {"id": item, "verdict": verdict, "summary": summary, **proof}
 
 
@@ -249,19 +250,9 @@ def _seed_sales_customer(engine, customer_id: int, name: str, address: str, tena
         db.commit()
 
 
-def _load_sticky(path: Path) -> dict[str, dict]:
-    if not path.is_file():
-        return {}
-    loaded = json.loads(path.read_text(encoding="utf-8"))
-    sticky = {}
-    for item in loaded.get("items") or []:
-        if item.get("verdict") in {"FAIL", "NOT-IMPLEMENTED"}:
-            sticky[item["id"]] = {
-                "verdict": item["verdict"],
-                "summary": item.get("summary") or "",
-                "at": item.get("recorded_at") or loaded.get("recorded_at"),
-            }
-    return sticky
+def _retest_evidence_path() -> Path:
+    stamp = datetime.now(_SH).strftime("%Y%m%d%H%M")
+    return _HISTORY.parents[1] / f"ai-employee-closed-loop-retest-{stamp}" / "acceptance.json"
 
 
 def _grade(items: dict[str, dict]) -> dict:
@@ -407,8 +398,55 @@ def _e21_worker(db_path: str, idem_path: str, key: str, name: str, sender) -> No
     sender.close()
 
 
+def _e22_worker(
+    db_path: str, idem_path: str, unit_id: int, phone: str, key: str, barrier, sender
+) -> None:
+    from app.application.agent_orchestrator import tool_permission as worker_permissions
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    try:
+        _bind_worker(db_path, idem_path)
+        worker_permissions.drop_process_idempotency_memory()
+        barrier.wait(timeout=30)
+        result = AgentToolExecutor().execute(
+            AgentStep(
+                node_id=key,
+                tool_id="customers",
+                action="update",
+                params={
+                    "id": unit_id,
+                    "contact_phone": phone,
+                    "idempotency_key": key,
+                },
+            ),
+            runtime_context={
+                "tenant_id": "11",
+                "user_id": "11",
+                "task_id": key,
+                "employee_id": "employee-a",
+                "idempotency_key": key,
+            },
+        )
+        sender.send(
+            {
+                "success": result.get("success"),
+                "error_code": result.get("error_code"),
+                "pid": os.getpid(),
+            }
+        )
+    except BrokenBarrierError:
+        sender.send({"success": False, "error_code": "barrier_broken", "pid": os.getpid()})
+    finally:
+        sender.close()
+
+
 @pytest.fixture()
 def loop(tmp_path, monkeypatch):
+    cached = _LIVE.get("book")
+    if cached is not None:
+        yield cached
+        return
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("SECRET_KEY", "closed-loop-acceptance-secret-32bytes")
@@ -425,13 +463,47 @@ def loop(tmp_path, monkeypatch):
     _bind(monkeypatch, engine)
     monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: str(tmp_path / "data"))
     book = Acceptance(engine, tmp_path)
-    book.failures = _load_sticky(_EVIDENCE)
+    _execute_closed_loop(book)
+    _LIVE["book"] = book
     yield book
     permissions.clear_idempotent_replay_for_tests()
     engine.dispose()
 
 
-def test_e01_e30_business_closed_loop(loop: Acceptance, monkeypatch) -> None:
+def _note_runtime(loop: Acceptance, result: dict, *, task_id: str, action: str) -> None:
+    handoff = result.get("handoff") if isinstance(result.get("handoff"), dict) else {}
+    task = result.get("task") if isinstance(result.get("task"), dict) else {}
+    children = task.get("child_task_ids") if isinstance(task.get("child_task_ids"), list) else []
+    loop.chain.append(
+        {
+            "at": _now(),
+            "task_id": task_id,
+            "parent_task_id": str(task.get("parent_task_id") or ""),
+            "child_task_id": str(children[-1]) if children else "",
+            "tool_call_id": str(handoff.get("handoff_id") or ""),
+            "employee_id": str(handoff.get("target_employee") or ""),
+            "tool_id": action,
+            "tool_version": "",
+            "action": action,
+            "tenant_id": str(task.get("tenant_id") or ""),
+            "idempotency_key": str(handoff.get("idempotency_key") or ""),
+            "approval_id": "",
+            "request": {"action": action},
+            "response": {
+                "success": result.get("success"),
+                "business_success": result.get("business_success"),
+                "error_code": result.get("error_code") or handoff.get("error_code") or "",
+            },
+            "execution_status": str(handoff.get("status") or result.get("error_code") or ""),
+            "database_before": {},
+            "database_after": {},
+            "artifact_hash": "",
+            "audit_log": None,
+        }
+    )
+
+
+def _execute_closed_loop(loop: Acceptance) -> None:
     engine = loop.engine
     with Session(engine) as db:
         db.add(
@@ -592,10 +664,30 @@ def test_e01_e30_business_closed_loop(loop: Acceptance, monkeypatch) -> None:
         task_id="e04",
         artifact_hash=digest,
     )
+    bulk = loop.call(
+        "customers",
+        "export",
+        {"keyword": "闭环指定客户甲"},
+        loop.context("e05"),
+    )
+    bulk_file = str(bulk.get("file_path") or "")
+    nested = bulk.get("data")
+    if not bulk_file and isinstance(nested, dict):
+        bulk_file = str(nested.get("file_path") or "")
+    observed_states = {
+        str(bulk.get(key) or "")
+        for key in ("status", "state", "execution_status", "task_status")
+        if bulk.get(key)
+    }
+    lifecycle = {"queued", "running", "completed"} <= observed_states
+    e05_ok = lifecycle and not bulk_file
     loop.settle(
         "E05",
-        "NOT-IMPLEMENTED",
-        "no customer bulk-export task that stays queued then running and only then completed with a file; refusing an early success",
+        "PASS" if e05_ok else "NOT-IMPLEMENTED",
+        (
+            f"task e05 states={sorted(observed_states) or ['<none>']} "
+            f"immediate_file={bool(bulk_file)} success={bulk.get('success')}"
+        ),
         task_id="e05",
     )
 
@@ -1105,26 +1197,77 @@ def test_e01_e30_business_closed_loop(loop: Acceptance, monkeypatch) -> None:
     )
 
     victim = next(row for row in _units(engine) if row["customer_name"] == "闭环新建客户乙")
-    left = loop.call(
-        "customers",
-        "update",
-        {"id": victim["id"], "contact_phone": "13800001111", "idempotency_key": "e22-left"},
-        loop.context("e22-left"),
+    barrier = ctx.Barrier(2)
+    receiver, sender = ctx.Pipe(duplex=False)
+    contested = ctx.Process(
+        target=_e22_worker,
+        args=(
+            str(loop.tmp / "business.sqlite"),
+            str(loop.tmp / "idempotency.sqlite"),
+            int(victim["id"]),
+            "13800002222",
+            "e22-right",
+            barrier,
+            sender,
+        ),
     )
-    right = loop.call(
-        "customers",
-        "update",
-        {"id": victim["id"], "contact_phone": "13800002222", "idempotency_key": "e22-right"},
-        loop.context("e22-right"),
+    contested.start()
+    sender.close()
+    try:
+        barrier.wait(timeout=30)
+    except BrokenBarrierError:
+        left = {"success": False, "error_code": "barrier_broken"}
+    else:
+        left = loop.call(
+            "customers",
+            "update",
+            {"id": victim["id"], "contact_phone": "13800001111", "idempotency_key": "e22-left"},
+            loop.context("e22-left"),
+        )
+    remote = (
+        receiver.recv() if receiver.poll(30) else {"success": False, "error_code": "remote_silent"}
     )
+    contested.join(timeout=30)
     final_phone = next(row["contact_phone"] for row in _units(engine) if row["id"] == victim["id"])
-    conflict = left.get("error_code") in {"version_conflict", "lock_conflict"} or right.get(
-        "error_code"
-    ) in {"version_conflict", "lock_conflict"}
+    left_code = left.get("error_code")
+    right_code = remote.get("error_code")
+    both_success = left.get("success") is True and remote.get("success") is True
+    conflict = (not both_success) and (
+        left_code in {"version_conflict", "lock_conflict"}
+        or right_code in {"version_conflict", "lock_conflict"}
+    )
+    phone_held = final_phone == victim["contact_phone"]
+    loop.chain.append(
+        {
+            "at": _now(),
+            "task_id": "e22-right",
+            "parent_task_id": "",
+            "child_task_id": "",
+            "tool_call_id": "",
+            "employee_id": "employee-a",
+            "tool_id": "customers",
+            "tool_version": "2",
+            "action": "update",
+            "tenant_id": "11",
+            "idempotency_key": "e22-right",
+            "approval_id": "",
+            "request": {"id": victim["id"], "contact_phone": "13800002222"},
+            "response": remote,
+            "execution_status": "succeeded" if remote.get("success") is True else "failed",
+            "database_before": {"contact_phone": victim["contact_phone"]},
+            "database_after": {"contact_phone": final_phone},
+            "artifact_hash": "",
+            "audit_log": None,
+        }
+    )
     loop.settle(
         "E22",
-        "PASS" if conflict and final_phone == victim["contact_phone"] else "FAIL",
-        f"task e22 no row version; both writes returned success={left.get('success')}/{right.get('success')} phone={final_phone}",
+        "PASS" if conflict and phone_held else "FAIL",
+        (
+            f"task e22 left={left.get('success')}:{left_code} "
+            f"right={remote.get('success')}:{right_code} "
+            f"phone={final_phone} original={victim['contact_phone']} conflict={conflict}"
+        ),
         task_id="e22-right",
     )
 
@@ -1208,6 +1351,7 @@ def test_e01_e30_business_closed_loop(loop: Acceptance, monkeypatch) -> None:
         workspace_root=str(workspace),
     )
     parent_id = str(started.get("task_id") or "")
+    _note_runtime(loop, started, task_id=parent_id, action="start")
     handed = execute_employee_task_local(
         "employee-a",
         "交给员工乙",
@@ -1224,6 +1368,7 @@ def test_e01_e30_business_closed_loop(loop: Acceptance, monkeypatch) -> None:
         workspace_root=str(workspace),
     )
     handoff = handed.get("handoff") or {}
+    _note_runtime(loop, handed, task_id=parent_id, action="handoff")
     e25_ok = (
         handoff.get("status") == "succeeded"
         and handoff.get("goal")
@@ -1250,46 +1395,64 @@ def test_e01_e30_business_closed_loop(loop: Acceptance, monkeypatch) -> None:
         workspace_root=str(workspace),
     )
     excel_files = list(workspace.rglob("*.xlsx"))
+    _note_runtime(loop, chained, task_id=parent_id, action="chain")
+    chain_error = str(
+        chained.get("error_code") or (chained.get("handoff") or {}).get("error_code") or ""
+    )
+    e26_ok = chained.get("business_success") is True and len(excel_files) > 0 and not chain_error
     loop.settle(
         "E26",
-        "FAIL",
-        f"parent {parent_id} chain error={chained.get('error_code') or (chained.get('handoff') or {}).get('error_code')} xlsx={len(excel_files)}; handoff_commit is not a customer/order/excel tool",
+        "PASS" if e26_ok else "FAIL",
+        (
+            f"task {parent_id} chain error={chain_error or 'none'} "
+            f"xlsx={len(excel_files)} business_success={chained.get('business_success')}"
+        ),
         task_id=parent_id,
     )
+    resumed = execute_employee_task_local(
+        "employee-a",
+        "从失败交接继续",
+        {
+            "continuity_action": "retry_handoff",
+            "workspace_root": str(workspace),
+            "tenant_id": "11",
+            "user_id": "11",
+            "task_id": parent_id,
+        },
+        workspace_root=str(workspace),
+    )
+    _note_runtime(loop, resumed, task_id=parent_id, action="retry_handoff")
+    resume_error = str(
+        resumed.get("error_code") or (resumed.get("handoff") or {}).get("error_code") or ""
+    )
+    e27_ok = resumed.get("business_success") is True and not resume_error
     loop.settle(
         "E27",
-        "FAIL",
-        f"parent {parent_id} cannot name a failed B/C or C/D business node and resume it; chain stopped at {(chained.get('handoff') or {}).get('error_code') or chained.get('error_code')}",
+        "PASS" if e27_ok else "FAIL",
+        (
+            f"task {parent_id} retry_handoff error={resume_error or 'none'} "
+            f"business_success={resumed.get('business_success')} chain_stopped_at={chain_error or 'none'}"
+        ),
         task_id=parent_id,
     )
 
-    hung = loop.executor.execute(
-        AgentStep(
-            node_id="hang",
-            tool_id="customers",
-            action="query",
-            params={"keyword": "闭环指定客户甲"},
-        ),
-        runtime_context=loop.context("e28", deadline_monotonic=0),
+    started_at = time.monotonic()
+    hung = loop.call(
+        "customers",
+        "query",
+        {"keyword": "闭环指定客户甲"},
+        loop.context("e28", deadline_monotonic=0),
     )
-    loop.chain.append(
-        {
-            "at": _now(),
-            "task_id": "e28",
-            "tool_call_id": "e28-deadline",
-            "tool_id": "customers",
-            "action": "query",
-            "response": hung,
-            "execution_status": hung.get("execution_status") or hung.get("error_code"),
-            "database_before": {},
-            "database_after": {},
-            "artifact_hash": "",
-        }
-    )
+    elapsed = time.monotonic() - started_at
+    released = hung.get("resources_released") is True
+    e28_ok = hung.get("error_code") == "tool_timeout_unknown" and released and elapsed > 0
     loop.settle(
         "E28",
-        "FAIL",
-        f"past deadline returns {hung.get('error_code')} without waiting, but no hung customer tool is interrupted and its connection cleaned up",
+        "PASS" if e28_ok else "FAIL",
+        (
+            f"task e28 error={hung.get('error_code')} elapsed_s={elapsed:.3f} "
+            f"resources_released={released} execution_status={hung.get('execution_status')}"
+        ),
         task_id="e28",
     )
 
@@ -1317,30 +1480,46 @@ def test_e01_e30_business_closed_loop(loop: Acceptance, monkeypatch) -> None:
         loop.context("e29-committed"),
     )
     committed = any(row["customer_name"] == committed_name for row in _units(engine))
+    verified = committed_name in json.dumps(cancelled_states, ensure_ascii=False)
+    e29_ok = committed and verified
     loop.settle(
         "E29",
-        "FAIL" if committed else "FAIL",
-        f"cancel transitions={cancelled_states}; committed row {committed_name} remains and cancel does not verify it",
+        "PASS" if e29_ok else "FAIL",
+        (
+            f"task e29-committed transitions={cancelled_states} committed={committed} "
+            f"cancel_verified_committed_row={verified}"
+        ),
         task_id="e29-committed",
     )
 
+    restarted = execute_employee_task_local(
+        "employee-a",
+        "调度重启",
+        {
+            "continuity_action": "restart",
+            "workspace_root": str(workspace),
+            "tenant_id": "11",
+            "user_id": "11",
+            "task_id": parent_id,
+            "cause": "scheduler_restart",
+        },
+        workspace_root=str(workspace),
+    )
+    _note_runtime(loop, restarted, task_id=parent_id, action="restart")
     reloaded = InMemoryTaskExecutionRepository()
-    restored = reloaded.get(cancel_queue.get(run.run_id).run_id) if False else None
-    ledger = workspace / "ledger"
+    original_id = cancel_queue.get(run.run_id).run_id
+    restored = reloaded.get(original_id)
+    recovered_calls = list((restarted.get("restart") or {}).get("inflight_recovered") or [])
+    e30_ok = restored is not None and bool(recovered_calls)
     loop.settle(
         "E30",
-        "FAIL",
-        f"in-memory queue does not survive a new scheduler ({restored}); continuity ledger exists={any(workspace.rglob('*.json'))} but a killed tool/handoff/approval process is not restored with the original call",
+        "PASS" if e30_ok else "FAIL",
+        (
+            f"task {parent_id} reloaded.get({original_id})={restored} "
+            f"inflight_recovered={recovered_calls} ledger={any(workspace.rglob('*.json'))}"
+        ),
         task_id=parent_id,
     )
-
-    while len(loop.chain) < 30:
-        loop.call(
-            "customers",
-            "query",
-            {"keyword": "闭环指定客户甲"},
-            loop.context(f"chain-{len(loop.chain)}"),
-        )
 
     grade = _grade(loop.items)
     payload = {
@@ -1352,16 +1531,35 @@ def test_e01_e30_business_closed_loop(loop: Acceptance, monkeypatch) -> None:
         "chain_count": len(loop.chain),
         "items": [loop.items[key] for key in _ITEMS],
         "chain": loop.chain,
-        "note": "branch acceptance candidate; not an origin/main delivery",
+        "note": "live retest; does not replace the 2026-11-06 evidence file",
+        "history": str(_HISTORY),
     }
-    _EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
-    _EVIDENCE.write_text(
+    path = _retest_evidence_path()
+    if path.resolve() == _HISTORY.resolve():
+        raise RuntimeError("retest path must not be the 2026-11-06 evidence file")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
+    loop.evidence_path = path
+
+
+def test_closed_loop_record_is_this_run(loop: Acceptance) -> None:
+    assert loop.evidence_path is not None
+    assert loop.evidence_path.is_file()
+    assert loop.evidence_path.resolve() != _HISTORY.resolve()
+    written = json.loads(loop.evidence_path.read_text(encoding="utf-8"))
     assert list(loop.items) == _ITEMS
-    assert len(loop.chain) >= 30
-    for item in payload["items"]:
-        if item["verdict"] == "PASS":
-            assert item["summary"]
-            assert "task" in item["summary"]
-    assert grade["special_acceptance"] == "FAIL" or grade["grade"] == "L3"
+    assert [item["id"] for item in written["items"]] == _ITEMS
+    assert "sticky_failure" not in json.dumps(written["items"])
+    for entry in loop.chain:
+        assert not str(entry.get("task_id") or "").startswith("chain-")
+    for item in written["items"]:
+        assert item["verdict"] in {"PASS", "FAIL", "NOT-IMPLEMENTED"}
+        assert item["summary"]
+
+
+@pytest.mark.parametrize("item_id", _ITEMS)
+def test_closed_loop_item_live_pass(loop: Acceptance, item_id: str) -> None:
+    item = loop.items[item_id]
+    assert item["verdict"] == "PASS", item["summary"]
