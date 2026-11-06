@@ -5,7 +5,7 @@ import { networkInterfaces } from 'node:os'
 import { APP_NAME, DEFAULT_PORT, readPackagedAppVersion } from './desktop-config'
 import { desktopRuntime } from './runtime-state'
 import { isTrustedIpcSender } from './ipc-sender-guard'
-import { broadcastToRenderer } from './window-manager'
+import { broadcastToRenderer, desktopWindowCount, openAuxiliaryWindow } from './window-manager'
 import { runBackendMigrationWithRollback, stopBackend, writeBackendLog } from './backend-process'
 import {
   captureFullScreenScreenshot,
@@ -44,12 +44,21 @@ function getLanIPv4(): string {
  * 拒绝非主窗口、子 frame 与导航后外部来源的调用；密钥/剪贴板/路径打开/
  * 更新安装等高权限 handler 不再无条件信任任意 webContents。
  */
+function senderIsTrusted(event: IpcMainInvokeEvent): boolean {
+  return isTrustedIpcSender(
+    event,
+    desktopRuntime.mainWindow,
+    { port: DEFAULT_PORT, splashUrl: desktopRuntime.splashUrl },
+    [...desktopRuntime.auxiliaryWindows],
+  )
+}
+
 function handleTrusted<T extends unknown[]>(
   channel: string,
   handler: (event: IpcMainInvokeEvent, ...args: T) => unknown,
 ): void {
   ipcMain.handle(channel, (event: IpcMainInvokeEvent, ...args: unknown[]) => {
-    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow, { port: DEFAULT_PORT, splashUrl: desktopRuntime.splashUrl })) {
+    if (!senderIsTrusted(event)) {
       writeBackendLog(`[ipc] rejected call from untrusted sender channel=${channel}\n`)
       return { ok: false, reason: 'untrusted_sender' }
     }
@@ -154,7 +163,7 @@ export function registerDesktopIpcHandlers(): void {
       `http://127.0.0.1:${DEFAULT_PORT}/`,
       (process.env.SESSION_COOKIE_NAME || 'session_id').trim(),
     )
-    if (!isTrustedIpcSender(event, desktopRuntime.mainWindow, { port: DEFAULT_PORT, splashUrl: desktopRuntime.splashUrl })) {
+    if (!senderIsTrusted(event)) {
       return { ok: false, reason: 'untrusted_sender' }
     }
     return result
@@ -220,6 +229,13 @@ export function registerDesktopIpcHandlers(): void {
       )
     },
   )
+
+  handleTrusted('xcagi:open-window', (_event, payload: { url?: string } | undefined) => {
+    const requested = payload && typeof payload.url === 'string' ? payload.url.trim() : ''
+    const url = requested || `http://127.0.0.1:${DEFAULT_PORT}/`
+    const opened = openAuxiliaryWindow(url)
+    return { ok: Boolean(opened), windows: desktopWindowCount() }
+  })
 
   // 首次引导 + 更新日志。
   handleTrusted('xcagi:consume-release-notes', () => consumeReleaseNotes())

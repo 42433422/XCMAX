@@ -8,7 +8,10 @@ failed，并同步 ``agent_tasks``，使界面口径与存储口径一致。
 边界（不得越权）：
 - 只收敛 planning/running/retrying 等在途状态。``queued`` 属于可恢复的持久队列，
   由 ``task_dispatcher`` 的 claim()/重认领负责，启动对账失败它会破坏队列。
-- 仍持有**未过期租约**的 run 交给既有租约+重认领机制，启动对账不改写。
+- 服务端仍持有**未过期租约**的 run 交给既有租约+重认领机制，启动对账不改写。
+- 桌面单进程（``XCAGI_DESKTOP_MODE``）没有第二个 worker。进程已经退出，租约
+  即使未过期也属于死租约；启动时把在途 run 标为失败并关闭执行行，避免重启后
+  把未完成任务自动重放。
 - 不推断业务成功、不解除权益或审批门禁；未确认的非幂等调用需人工核对后才能重试。
 """
 
@@ -16,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -68,6 +72,11 @@ def _task_identity(payload: dict[str, Any], run_id: str) -> tuple[str, str]:
     return str(context.get("task_id") or run_id), str(runtime.get("tenant_id") or "")
 
 
+def _desktop_single_process() -> bool:
+    raw = os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def reconcile_stale_running_runs(
     *,
     stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
@@ -84,7 +93,7 @@ def reconcile_stale_running_runs(
         return 0
 
     current = str(now or utc_now_iso())
-    cutoff = _stale_cutoff(current, stale_after_seconds)
+    desktop = _desktop_single_process()
     reconciled = 0
     with repository.transaction() as db:
         from app.db.models.agent import (
@@ -93,22 +102,21 @@ def reconcile_stale_running_runs(
             AgentTaskRecord,
         )
 
-        records = (
-            db.query(AgentRunRecord)
-            .filter(
-                AgentRunRecord.status.in_(IN_FLIGHT_RUN_STATUSES),
-                AgentRunRecord.updated_at <= cutoff,
+        filters = [AgentRunRecord.status.in_(IN_FLIGHT_RUN_STATUSES)]
+        if not desktop:
+            filters.append(
+                AgentRunRecord.updated_at <= _stale_cutoff(current, stale_after_seconds)
             )
-            .all()
-        )
+        records = db.query(AgentRunRecord).filter(*filters).all()
         for record in records:
             execution = db.get(AgentTaskExecutionRecord, record.run_id)
             if (
-                execution is not None
+                not desktop
+                and execution is not None
                 and execution.state == "claimed"
                 and str(execution.lease_expires_at or "") > current
             ):
-                # 租约仍有效：交由既有重认领机制处理，启动对账不越权改写。
+                # 服务端租约仍有效：交由既有重认领机制处理，启动对账不越权改写。
                 continue
             payload = _load_payload(record.payload_json)
             payload["status"] = "failed"
@@ -159,12 +167,25 @@ def reconcile_stale_running_runs(
                 task_record.status = "failed"
                 task_record.attention_state = "failed"
                 task_record.updated_at = current
+            if (
+                desktop
+                and execution is not None
+                and str(execution.state or "") in {"queued", "claimed"}
+            ):
+                # 桌面没有第二个 worker。先关掉执行行，dispatcher 不能把这条租约再认领。
+                execution.state = "failed"
+                execution.last_error_code = INTERRUPTED_ERROR_CODE
+                execution.lease_owner = ""
+                execution.lease_expires_at = current
+                execution.finished_at = current
+                execution.updated_at = current
             reconciled += 1
     if reconciled:
         logger.warning(
-            "agent run startup reconciliation: %s interrupted run(s) marked failed (error_code=%s)",
+            "agent run startup reconciliation: %s interrupted run(s) marked failed (error_code=%s desktop=%s)",
             reconciled,
             INTERRUPTED_ERROR_CODE,
+            desktop,
         )
     return reconciled
 

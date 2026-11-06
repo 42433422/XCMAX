@@ -41,7 +41,8 @@ vi.mock('./desktop-navigation', () => ({
 }))
 
 import { clampWindowBounds } from './window-state'
-import { createWindow, showMainWindow, toggleMainWindow } from './window-manager'
+import { isTrustedDesktopOrigin } from './desktop-navigation'
+import { createWindow, desktopWindowCount, MAX_DESKTOP_WINDOWS, openAuxiliaryWindow, showMainWindow, toggleMainWindow } from './window-manager'
 import { desktopRuntime } from './runtime-state'
 import { checkPendingRollback } from './rollback'
 import { reportRendererError } from './desktop-resilience'
@@ -70,7 +71,9 @@ beforeEach(() => {
   desktopRuntime.splashUrl = ''
   desktopRuntime.mainWindow = null
   desktopRuntime.mainApplicationReady = null
+  desktopRuntime.auxiliaryWindows.clear()
   vi.mocked(BrowserWindow).mockReset()
+  vi.mocked(isTrustedDesktopOrigin).mockReset()
 })
 
 describe('showMainWindow（语音唤起专用：只显示聚焦，绝不隐藏）', () => {
@@ -307,4 +310,56 @@ it.each(['paint', 'aborted', 'failed'])('keeps splash paint readiness across %s 
   expect(win.focus).toHaveBeenCalledTimes(focusBeforePaint + (outcome === 'failed' ? 0 : 1))
   onReadyToShow?.()
   expect(win.show).toHaveBeenCalledTimes(1)
+})
+
+describe('同一进程附加窗口', () => {
+  function fakeAux() {
+    const listeners: Record<string, Array<() => void>> = {}
+    const win = {
+      isDestroyed: vi.fn(() => false),
+      on: vi.fn((event: string, cb: () => void) => {
+        ;(listeners[event] ||= []).push(cb)
+      }),
+      destroy: vi.fn(() => {
+        win.isDestroyed.mockReturnValue(true)
+        for (const cb of listeners.closed || []) cb()
+      }),
+      getBounds: vi.fn(() => ({ x: 10, y: 10, width: 1200, height: 800 })),
+      loadURL: vi.fn(async () => undefined),
+      webContents: {
+        on: vi.fn(),
+        setWindowOpenHandler: vi.fn(),
+        session: { on: vi.fn() },
+        downloadURL: vi.fn(),
+      },
+    }
+    return win
+  }
+
+  it('打开到上限后拒绝，关闭后不再占用进程内窗口名额', () => {
+    vi.mocked(isTrustedDesktopOrigin).mockReturnValue(true)
+    desktopRuntime.mainWindow = makeWindow()
+    const created: ReturnType<typeof fakeAux>[] = []
+    vi.mocked(BrowserWindow).mockImplementation(function () {
+      const win = fakeAux()
+      created.push(win)
+      return win as unknown as BrowserWindow
+    })
+    const url = 'http://127.0.0.1:17500/'
+    for (let i = 0; i < MAX_DESKTOP_WINDOWS - 1; i += 1) {
+      expect(openAuxiliaryWindow(url)).not.toBeNull()
+    }
+    expect(desktopWindowCount()).toBe(MAX_DESKTOP_WINDOWS)
+    expect(openAuxiliaryWindow(url)).toBeNull()
+    created[0].destroy()
+    expect(desktopWindowCount()).toBe(MAX_DESKTOP_WINDOWS - 1)
+    expect(openAuxiliaryWindow(url)).not.toBeNull()
+  })
+
+  it('拒绝不可信地址，且不创建窗口', () => {
+    vi.mocked(isTrustedDesktopOrigin).mockReturnValue(false)
+    expect(openAuxiliaryWindow('https://evil.example/')).toBeNull()
+    expect(BrowserWindow).not.toHaveBeenCalled()
+    expect(desktopWindowCount()).toBe(0)
+  })
 })

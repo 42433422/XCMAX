@@ -194,6 +194,41 @@ def test_recoverable_queue_and_live_lease_are_left_alone(tmp_path) -> None:
         engine.dispose()
 
 
+def test_desktop_restart_interrupts_fresh_lease_without_reclaim(tmp_path, monkeypatch) -> None:
+    """桌面进程重启不得把仍标着有效租约的在途任务自动重放。"""
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    engine, factory, repo = _make_repo(tmp_path, "desktop-restart.db")
+    try:
+        set_agent_run_repository_for_tests(repo)
+        from app.application.agent_orchestrator.run_models import AgentStep
+
+        run = AgentRun(user_id="u1", message="生成送货单", status="running")
+        run.steps = [AgentStep("write", "sales", "shipment", status="running", idempotent=True)]
+        run.metadata["task_context"] = {"task_id": "task-live"}
+        repo.save(run)
+        executions = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+        executions.enqueue(run)
+        claimed = executions.claim("owner-dead", lease_seconds=600)
+        assert claimed is not None and claimed.recovery_count == 0
+
+        assert reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso()) == 1
+        stored = repo.get(run.run_id)
+        assert stored is not None
+        assert stored.status == "failed"
+        assert stored.metadata["interrupted"]["error_code"] == "interrupted_by_restart"
+        assert repo.get_task(user_id="u1", task_id="task-live", tenant_id="").status == "failed"
+        again = executions.claim("owner-new", lease_seconds=30)
+        assert again is None
+        parked = executions.get(run.run_id)
+        assert parked is not None
+        assert parked.state == "failed"
+        assert parked.last_error_code == "interrupted_by_restart"
+        assert parked.recovery_count == 0
+    finally:
+        set_agent_run_repository_for_tests(None)
+        engine.dispose()
+
+
 def test_dispatcher_reconciles_before_it_starts_dispatching(monkeypatch) -> None:
     """对账必须发生在 dispatcher 开始认领执行之前，否则中断任务会被并发改写。"""
     calls: list[str] = []
@@ -304,6 +339,7 @@ def test_startup_recovery_requires_both_persisted_and_current_replay_safety(
 def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute(
     tmp_path, monkeypatch, previous_recovery
 ):
+    monkeypatch.delenv("XCAGI_DESKTOP_MODE", raising=False)
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
 

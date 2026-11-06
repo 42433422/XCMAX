@@ -73,6 +73,13 @@ describe('isTrustedIpcSender（审计 R02 来源校验）', () => {
     }
   })
 
+  it('接受本进程附加窗口的主框架', () => {
+    const auxFrame = { url: 'http://127.0.0.1:17500/chat' }
+    const aux = fakeWindow(2, auxFrame)
+    expect(checkSender(fakeEvent(2, auxFrame), window, policy, [aux])).toBe(true)
+    expect(checkSender(fakeEvent(9, auxFrame), window, policy, [aux])).toBe(false)
+  })
+
   it('主窗口销毁或不存在时一律拒绝', () => {
     expect(isTrustedIpcSender(fakeEvent(1, mainFrame), null)).toBe(false)
     const destroyed: TrustedSenderWindow = {
