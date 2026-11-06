@@ -90,7 +90,6 @@ const workspaceStatSub = computed(() => {
 
 onMounted(() => {
   if (showManagementLoopPanels.value) {
-    // SSOT 派生：触发后端 /api/system/duty-roster 加载（失败时 composable 自动回退到构建时硬编码常量）
     void ensureDutyRosterLoaded()
   }
   void resolveEnterpriseModStack().then((stack) => {

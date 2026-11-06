@@ -14,7 +14,6 @@ import {
 
 const props = withDefaults(
   defineProps<{
-    /** 副窗「一键托管」是否启用该员工：未启用仅显示工位层 */
     enabled: boolean
     /** 已启用且快照为忙时，使用 staff-busy */
     busy: boolean
